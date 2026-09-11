@@ -18,6 +18,8 @@ defmodule Longx.Application do
        repos: Application.fetch_env!(:longx, :ecto_repos), skip: skip_migrations?()},
       {DNSCluster, query: Application.get_env(:longx, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Longx.PubSub},
+      # reference-id memory for codex web search (Longx.AI.Search)
+      Longx.AI.Search.Refs,
       # Start a worker by calling: Longx.Worker.start_link(arg)
       # {Longx.Worker, arg},
       # Start to serve requests, typically the last entry

@@ -50,3 +50,31 @@ unless deepseek_key do
     "seeds: DEEPSEEK_API_KEY is not set — the deepseek provider has no key; the AI gateway will answer 503 until one is configured"
   )
 end
+
+# Web search for codex's `web.run` tool: Tavily, key from TAVILY_API_KEY.
+tavily_key = System.get_env("TAVILY_API_KEY")
+
+search_provider =
+  case AI.get_search_provider_by_slug("tavily") do
+    {:ok, %AI.SearchProvider{} = sp} ->
+      if tavily_key, do: AI.update_search_provider!(sp, %{api_key: tavily_key}), else: sp
+
+    {:error, _} ->
+      AI.create_search_provider!(%{
+        name: "Tavily",
+        slug: "tavily",
+        kind: :tavily,
+        api_key: tavily_key
+      })
+  end
+
+case AI.default_search_provider!() do
+  nil -> AI.make_default_search_provider!(search_provider)
+  _ -> :ok
+end
+
+unless tavily_key do
+  IO.puts(
+    "seeds: TAVILY_API_KEY is not set — web search stays disabled until a key is configured"
+  )
+end

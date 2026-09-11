@@ -1,9 +1,9 @@
-defmodule Longx.AI.Provider do
+defmodule Longx.AI.SearchProvider do
   @moduledoc """
-  An upstream model provider that speaks the OpenAI Responses API
-  (OpenAI, DeepSeek, GLM, …). Holds the base URL and the API key; the key is
-  encrypted at rest with `Longx.Vault` and only decrypted when explicitly
-  loaded (`Ash.load(provider, :api_key)`).
+  A web-search backend for codex's standalone `web.run` tool (served by our
+  `/ai/v1/alpha/search`, see `Longx.AI.Search`). The API key is encrypted at
+  rest like `Longx.AI.Provider`'s. Only Tavily for now; `kind` is an enum so
+  Brave & co. can follow without a migration.
   """
 
   use Ash.Resource,
@@ -13,7 +13,7 @@ defmodule Longx.AI.Provider do
     extensions: [AshCloak]
 
   sqlite do
-    table "ai_providers"
+    table "ai_search_providers"
     repo Longx.Repo
   end
 
@@ -29,7 +29,7 @@ defmodule Longx.AI.Provider do
 
     create :create do
       primary? true
-      accept [:name, :slug, :base_url, :api_key]
+      accept [:name, :slug, :kind, :base_url, :api_key]
     end
 
     update :update do
@@ -41,6 +41,17 @@ defmodule Longx.AI.Provider do
       argument :slug, :string, allow_nil?: false
       get? true
       filter expr(slug == ^arg(:slug))
+    end
+
+    read :default do
+      get? true
+      filter expr(default == true)
+    end
+
+    update :make_default do
+      require_atomic? false
+      change set_attribute(:default, true)
+      change Longx.AI.SearchProvider.Changes.ClearOtherDefaults
     end
   end
 
@@ -56,16 +67,22 @@ defmodule Longx.AI.Provider do
     attribute :name, :string, allow_nil?: false, public?: true
     attribute :slug, :string, allow_nil?: false, public?: true
 
-    # Root of the OpenAI-compatible API, e.g. https://api.deepseek.com/v1
-    attribute :base_url, :string, allow_nil?: false, public?: true
+    attribute :kind, :atom do
+      allow_nil? false
+      public? true
+      constraints one_of: [:tavily]
+    end
+
+    attribute :base_url, :string do
+      allow_nil? false
+      public? true
+      default "https://api.tavily.com"
+    end
 
     attribute :api_key, :string, sensitive?: true
+    attribute :default, :boolean, allow_nil?: false, default: false, public?: true
 
     timestamps()
-  end
-
-  relationships do
-    has_many :models, Longx.AI.Model
   end
 
   calculations do

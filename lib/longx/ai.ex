@@ -7,7 +7,7 @@ defmodule Longx.AI do
 
   use Ash.Domain, otp_app: :longx
 
-  alias Longx.AI.{Model, Provider, Target}
+  alias Longx.AI.{Model, Provider, SearchProvider, SearchTarget, Target}
 
   resources do
     resource Provider do
@@ -23,6 +23,19 @@ defmodule Longx.AI do
       define :list_models, action: :read, default_options: [load: [:provider]]
       define :default_model, action: :default, default_options: [not_found_error?: false]
       define :make_default_model, action: :make_default
+    end
+
+    resource SearchProvider do
+      define :create_search_provider, action: :create
+      define :update_search_provider, action: :update
+      define :list_search_providers, action: :read
+      define :get_search_provider_by_slug, action: :by_slug, args: [:slug]
+
+      define :default_search_provider,
+        action: :default,
+        default_options: [not_found_error?: false]
+
+      define :make_default_search_provider, action: :make_default
     end
   end
 
@@ -47,6 +60,34 @@ defmodule Longx.AI do
     end
   end
 
+  @doc "The web-search backend for codex's `web.run` tool: the default search provider and its key."
+  @spec resolve_search_target() ::
+          {:ok, SearchTarget.t()} | {:error, :no_search_provider | {:missing_api_key, String.t()}}
+  def resolve_search_target do
+    with {:ok, %SearchProvider{} = sp} <- fetch_default_search_provider(),
+         %SearchProvider{} = sp <- Ash.load!(sp, :api_key),
+         {:ok, api_key} <- fetch_api_key(sp) do
+      {:ok,
+       %SearchTarget{
+         kind: sp.kind,
+         base_url: sp.base_url,
+         api_key: api_key,
+         provider_slug: sp.slug
+       }}
+    end
+  end
+
+  @doc "Whether codex should be offered web search at all."
+  @spec search_configured?() :: boolean
+  def search_configured?, do: match?({:ok, _}, resolve_search_target())
+
+  defp fetch_default_search_provider do
+    case default_search_provider() do
+      {:ok, nil} -> {:error, :no_search_provider}
+      other -> other
+    end
+  end
+
   defp fetch_default_model do
     case default_model() do
       {:ok, nil} -> {:error, :no_default_model}
@@ -54,6 +95,6 @@ defmodule Longx.AI do
     end
   end
 
-  defp fetch_api_key(%Provider{api_key: key}) when is_binary(key) and key != "", do: {:ok, key}
-  defp fetch_api_key(%Provider{slug: slug}), do: {:error, {:missing_api_key, slug}}
+  defp fetch_api_key(%{api_key: key}) when is_binary(key) and key != "", do: {:ok, key}
+  defp fetch_api_key(%{slug: slug}), do: {:error, {:missing_api_key, slug}}
 end

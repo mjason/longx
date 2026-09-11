@@ -34,6 +34,7 @@ defmodule LongxWeb.AI.ResponsesControllerTest do
     # seeds leave a default DeepSeek model behind; each test configures its own
     Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(AI.SearchProvider, :destroy, %{}, authorize?: false)
 
     bypass = Bypass.open()
     n = System.unique_integer([:positive])
@@ -114,7 +115,7 @@ defmodule LongxWeb.AI.ResponsesControllerTest do
       assert_receive {:upstream, headers, body}
       assert {"authorization", "Bearer sk-upstream"} in headers
       assert body["model"] == "real-model"
-      assert [%{"type" => "function"}] = body["tools"]
+      assert body["tools"] == @request["tools"]
     end
 
     test "passes upstream client errors through so codex can show them", %{

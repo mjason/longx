@@ -8,6 +8,7 @@ defmodule Longx.AITest do
   setup do
     Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(AI.SearchProvider, :destroy, %{}, authorize?: false)
     :ok
   end
 
@@ -111,6 +112,91 @@ defmodule Longx.AITest do
       create_model!(provider)
 
       assert [%{provider: %AI.Provider{}} | _] = AI.list_models!()
+    end
+  end
+
+  describe "search providers" do
+    test "tavily is the only kind for now and the key is encrypted" do
+      sp =
+        AI.create_search_provider!(%{
+          name: "Tavily",
+          slug: "tavily-#{uniq()}",
+          kind: :tavily,
+          api_key: "tvly-x"
+        })
+
+      assert sp.kind == :tavily
+      assert sp.base_url == "https://api.tavily.com"
+      assert %Ash.NotLoaded{} = sp.api_key
+      refute sp.encrypted_api_key =~ "tvly-x"
+      assert Ash.load!(sp, :api_key).api_key == "tvly-x"
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_search_provider(%{
+                 name: "Bing",
+                 slug: "bing-#{uniq()}",
+                 kind: :bing,
+                 api_key: "k"
+               })
+    end
+
+    test "exactly one search provider is the default" do
+      a =
+        AI.create_search_provider!(%{name: "A", slug: "a-#{uniq()}", kind: :tavily, api_key: "k"})
+
+      b =
+        AI.create_search_provider!(%{name: "B", slug: "b-#{uniq()}", kind: :tavily, api_key: "k"})
+
+      assert {:ok, nil} = AI.default_search_provider()
+      AI.make_default_search_provider!(a)
+      AI.make_default_search_provider!(b)
+
+      assert {:ok, %{id: id}} = AI.default_search_provider()
+      assert id == b.id
+      refute Ash.get!(AI.SearchProvider, a.id).default
+    end
+
+    test "resolve_search_target/0" do
+      assert {:error, :no_search_provider} = AI.resolve_search_target()
+
+      keyless = AI.create_search_provider!(%{name: "K", slug: "k-#{uniq()}", kind: :tavily})
+      AI.make_default_search_provider!(keyless)
+      assert {:error, {:missing_api_key, slug}} = AI.resolve_search_target()
+      assert slug == keyless.slug
+
+      sp =
+        AI.create_search_provider!(%{
+          name: "T",
+          slug: "t-#{uniq()}",
+          kind: :tavily,
+          api_key: "tvly-x"
+        })
+
+      AI.make_default_search_provider!(sp)
+
+      assert {:ok,
+              %AI.SearchTarget{
+                kind: :tavily,
+                api_key: "tvly-x",
+                base_url: "https://api.tavily.com"
+              }} =
+               AI.resolve_search_target()
+    end
+
+    test "search_configured?/0 is true only with a default provider that has a key" do
+      refute AI.search_configured?()
+
+      sp =
+        AI.create_search_provider!(%{
+          name: "T",
+          slug: "t-#{uniq()}",
+          kind: :tavily,
+          api_key: "tvly-x"
+        })
+
+      refute AI.search_configured?()
+      AI.make_default_search_provider!(sp)
+      assert AI.search_configured?()
     end
   end
 
