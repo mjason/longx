@@ -20,8 +20,24 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
   Windows support is via `CREATE_NEW_PROCESS_GROUP` + CTRL_BREAK + `taskkill /T`.
 - `lib/longx/codex/` (to be created) — Codex app-server client on top of `Longx.Shim`.
   `codex app-server` (`~/.local/bin/codex`, v0.153.x) speaks newline-delimited JSON-RPC over
-  stdio (responses omit `"jsonrpc":"2.0"`); the client does line buffering + `Jason`, pairs
-  request ids with callers, and fans notifications out over `Phoenix.PubSub`.
+  stdio (messages omit `"jsonrpc":"2.0"`). Protocol facts that shape the design:
+  - Handshake: `initialize` (params `clientInfo{name,version}`, optional `capabilities`
+    incl. `optOutNotificationMethods`, `experimentalApi`) → then send the `initialized`
+    notification. Nothing else is accepted before that.
+  - **Bidirectional**: besides notifications the server sends *requests* we must answer by
+    id — approvals (`item/commandExecution/requestApproval`, `item/fileChange/requestApproval`,
+    `item/permissions/requestApproval`), `item/tool/call`, `item/tool/requestUserInput`,
+    `mcpServer/elicitation/request`, `account/chatgptAuthTokens/refresh`. The client must
+    route these to a handler (UI via PubSub) and reply, with a timeout → `cancel`/`decline`.
+  - One app-server hosts many threads (`thread/start|resume|fork|list`); turns via
+    `turn/start|steer|interrupt`. Notifications carry `threadId`/`turnId`/`itemId` → PubSub
+    topic per thread. Item types (`agentMessage`, `reasoning`, `commandExecution`,
+    `fileChange`, `plan`, `webSearch`, `mcpToolCall`…) plus `item/*/delta` streams map
+    onto AI Elements components.
+  - Docs: https://learn.chatgpt.com/docs/app-server. The exact schema for the installed
+    version is authoritative over the docs: `codex app-server generate-json-schema --out DIR`
+    (also `generate-ts` for the React side). Regenerate into the scratchpad/`tmp/`, don't
+    commit the 4 MB output.
 - `lib/longx_web/` — Phoenix web layer. Two entry points:
   - React SPA: `assets/js/index.tsx` mounts at `#app`, served with the `spa_root` layout
     (`PageController.index`). Agent chat UI lives here.
