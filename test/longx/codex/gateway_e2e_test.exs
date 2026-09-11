@@ -208,4 +208,51 @@ defmodule Longx.Codex.GatewayE2ETest do
 
     CodexClient.stop(shim)
   end
+
+  test "web_search: :hosted hands the upstream its own web_search tool and nothing of ours", %{
+    home_dir: home_dir,
+    gateway_url: gateway_url
+  } do
+    {:ok, home} = Home.prepare(dir: home_dir, gateway_url: gateway_url, web_search: :hosted)
+
+    upstream = Bypass.open()
+    test_pid = self()
+
+    provider =
+      AI.create_provider!(%{
+        name: "Fake OpenAI",
+        slug: "openai-#{System.unique_integer([:positive])}",
+        base_url: "http://localhost:#{upstream.port}/v1",
+        api_key: "sk-fake",
+        supports_hosted_web_search: true
+      })
+
+    AI.create_model!(%{name: "Fake", upstream_id: "fake-model", provider_id: provider.id})
+    |> AI.make_default_model!()
+
+    Bypass.expect(upstream, "POST", "/v1/responses", fn conn ->
+      {:ok, raw, conn} = Plug.Conn.read_body(conn, length: 50_000_000)
+      send(test_pid, {:upstream_request, Jason.decode!(raw)})
+
+      send_sse(
+        conn,
+        ResponsesFixture.assistant_message("Hosted search would have happened upstream.")
+      )
+    end)
+
+    {shim, thread_id} = CodexClient.start_thread(home)
+    turn = CodexClient.run_turn(shim, thread_id, "hi")
+    assert turn["status"] == "completed", "turn did not complete: #{inspect(turn)}"
+
+    assert_receive {:upstream_request, body}, 5_000
+
+    assert Enum.any?(
+             body["tools"],
+             &match?(%{"type" => "web_search", "external_web_access" => true}, &1)
+           )
+
+    refute Enum.any?(body["tools"], &(&1["type"] == "namespace" and &1["name"] == "web"))
+
+    CodexClient.stop(shim)
+  end
 end

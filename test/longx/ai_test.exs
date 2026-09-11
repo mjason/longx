@@ -74,6 +74,11 @@ defmodule Longx.AITest do
       assert updated.api_key == "sk-rotated"
     end
 
+    test "supports_hosted_web_search defaults to false (only OpenAI runs web_search server-side)" do
+      refute create_provider!().supports_hosted_web_search
+      assert create_provider!(%{supports_hosted_web_search: true}).supports_hosted_web_search
+    end
+
     test "base_url must be http(s)" do
       assert {:error, %Ash.Error.Invalid{}} =
                AI.create_provider(%{name: "bad", slug: "bad-#{uniq()}", base_url: "ftp://nope"})
@@ -200,6 +205,60 @@ defmodule Longx.AITest do
     end
   end
 
+  describe "web_search_mode/0" do
+    test ":disabled when nothing is configured" do
+      assert AI.web_search_mode() == :disabled
+    end
+
+    test ":disabled when the search provider has no key" do
+      keyless = AI.create_search_provider!(%{name: "K", slug: "k-#{uniq()}", kind: :tavily})
+      AI.make_default_search_provider!(keyless)
+      assert AI.web_search_mode() == :disabled
+    end
+
+    test ":standalone when a search provider with a key is the default" do
+      sp =
+        AI.create_search_provider!(%{
+          name: "T",
+          slug: "t-#{uniq()}",
+          kind: :tavily,
+          api_key: "tvly"
+        })
+
+      AI.make_default_search_provider!(sp)
+      assert AI.web_search_mode() == :standalone
+    end
+
+    test ":hosted when the default model's provider natively supports web search, even with Tavily configured" do
+      sp =
+        AI.create_search_provider!(%{
+          name: "T",
+          slug: "t-#{uniq()}",
+          kind: :tavily,
+          api_key: "tvly"
+        })
+
+      AI.make_default_search_provider!(sp)
+
+      openai = create_provider!(%{slug: "openai-#{uniq()}", supports_hosted_web_search: true})
+      AI.make_default_model!(create_model!(openai))
+
+      assert AI.web_search_mode() == :hosted
+    end
+
+    test "a hosted-capable provider without a key falls back to what is left" do
+      openai =
+        create_provider!(%{
+          slug: "openai-#{uniq()}",
+          supports_hosted_web_search: true,
+          api_key: nil
+        })
+
+      AI.make_default_model!(create_model!(openai))
+      assert AI.web_search_mode() == :disabled
+    end
+  end
+
   describe "resolve_target/0" do
     test "combines the default model with its provider's credentials" do
       provider = create_provider!(%{base_url: "https://api.deepseek.com/v1", api_key: "sk-ds"})
@@ -211,7 +270,8 @@ defmodule Longx.AITest do
                 model: "deepseek-v4-pro",
                 base_url: "https://api.deepseek.com/v1",
                 api_key: "sk-ds",
-                context_window: 64_000
+                context_window: 64_000,
+                hosted_web_search?: false
               }} = AI.resolve_target()
     end
 

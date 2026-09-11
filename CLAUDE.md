@@ -48,9 +48,15 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     by filtering here. `stream/2` relays the upstream SSE chunk-for-chunk with a
     **selective receive on the Req async ref** (a bare `receive` would eat the connection
     process's other messages). Upstream 4xx/5xx pass through so codex shows the message.
-  - **Web search**: codex's *standalone* search (`ext/web-search` in the codex repo). With
+  - **Web search** has three modes, decided by `Longx.AI.web_search_mode/0` (pattern-matched
+    on the resolved model target and search target — never an `&&`/`||` chain at the call
+    site) and written into codex's config by `Home.prepare/1` (default option):
+    `:hosted` when the default model's provider has `supports_hosted_web_search` (OpenAI —
+    the Responses API runs `web_search` inside the provider; config `web_search = "live"`),
+    else `:standalone` when a search provider with a key is configured, else `:disabled`.
+    Standalone = codex's `ext/web-search`: with
     `supports_standalone_web_search = true` + `[features] standalone_web_search = true`
-    (`Home.prepare(web_search: :standalone)`) codex offers a `web.run` namespace tool and,
+    codex offers a `web.run` namespace tool and,
     when the model calls it, POSTs the commands to `<base_url>/alpha/search` with the
     gateway bearer. `LongxWeb.AI.SearchController` → `Longx.AI.Search` executes them
     (`search_query`, `open`, `time`; the rest answer "not supported") against the default

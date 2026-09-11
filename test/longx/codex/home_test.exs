@@ -1,10 +1,14 @@
 defmodule Longx.Codex.HomeTest do
-  use ExUnit.Case, async: true
+  use Longx.DataCase, async: false
 
   alias Longx.AI.Gateway.Token
   alias Longx.Codex.Home
 
   setup do
+    Ash.bulk_destroy!(Longx.AI.Model, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(Longx.AI.Provider, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(Longx.AI.SearchProvider, :destroy, %{}, authorize?: false)
+
     dir = Path.join(System.tmp_dir!(), "longx-codex-home-#{System.unique_integer([:positive])}")
     on_exit(fn -> File.rm_rf!(dir) end)
     %{dir: dir}
@@ -47,6 +51,22 @@ defmodule Longx.Codex.HomeTest do
     refute config =~ ~s(web_search = "disabled")
     assert config =~ "supports_standalone_web_search = true"
     assert config =~ "[features]\nstandalone_web_search = true"
+  end
+
+  test "web_search: :hosted lets codex use the upstream's own web_search tool", %{dir: dir} do
+    {:ok, home} =
+      Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1", web_search: :hosted)
+
+    config = File.read!(home.config_path)
+
+    assert config =~ ~s(web_search = "live")
+    refute config =~ "standalone_web_search"
+  end
+
+  test "without an explicit option the mode comes from Longx.AI.web_search_mode/0", %{dir: dir} do
+    # nothing configured in the (sandboxed, cleared) DB → disabled
+    {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
+    assert File.read!(home.config_path) =~ ~s(web_search = "disabled")
   end
 
   test "the env hands codex the home and the current gateway token", %{dir: dir} do

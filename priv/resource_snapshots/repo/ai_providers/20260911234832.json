@@ -1,0 +1,108 @@
+{
+  "attributes": [
+    {
+      "default": "nil",
+      "size": null,
+      "type": "uuid",
+      "source": "id",
+      "references": null,
+      "primary_key?": true,
+      "allow_nil?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "name",
+      "references": null,
+      "primary_key?": false,
+      "allow_nil?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "slug",
+      "references": null,
+      "primary_key?": false,
+      "allow_nil?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "base_url",
+      "references": null,
+      "primary_key?": false,
+      "allow_nil?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "boolean",
+      "source": "supports_hosted_web_search",
+      "references": null,
+      "primary_key?": false,
+      "allow_nil?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "utc_datetime_usec",
+      "source": "inserted_at",
+      "references": null,
+      "primary_key?": false,
+      "allow_nil?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "utc_datetime_usec",
+      "source": "updated_at",
+      "references": null,
+      "primary_key?": false,
+      "allow_nil?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "binary",
+      "source": "encrypted_api_key",
+      "references": null,
+      "primary_key?": false,
+      "allow_nil?": true,
+      "generated?": false
+    }
+  ],
+  "table": "ai_providers",
+  "hash": "393B486836705495615963A19E54182E1A07DBB54725FB6F245CE78A7A0592B7",
+  "multitenancy": {
+    "global": null,
+    "strategy": null,
+    "attribute": null
+  },
+  "identities": [
+    {
+      "name": "unique_slug",
+      "keys": [
+        "slug"
+      ],
+      "index_name": "ai_providers_unique_slug_index",
+      "base_filter": null,
+      "nils_distinct?": true
+    }
+  ],
+  "repo": "Elixir.Longx.Repo",
+  "strict?": false,
+  "base_filter": null,
+  "custom_indexes": [],
+  "custom_statements": [],
+  "has_create_action": true
+}

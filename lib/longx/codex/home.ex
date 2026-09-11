@@ -46,15 +46,14 @@ defmodule Longx.Codex.Home do
   returns the paths plus the environment to spawn codex with.
 
   Options: `:dir` (default `default_dir/0`), `:gateway_url` (default
-  `default_gateway_url/0`), `:web_search` — `:disabled` (default) or
-  `:standalone` to have codex offer its `web.run` tool and call our
-  `/alpha/search` endpoint (see `Longx.AI.Search`).
+  `default_gateway_url/0`), `:web_search` — a `t:Longx.AI.web_search_mode/0`
+  (default: `Longx.AI.web_search_mode/0`, i.e. whatever is configured).
   """
   @spec prepare(keyword) :: {:ok, t} | {:error, File.posix()}
   def prepare(opts \\ []) do
     dir = Keyword.get(opts, :dir, default_dir()) |> Path.expand()
     gateway_url = Keyword.get(opts, :gateway_url, default_gateway_url())
-    web_search = Keyword.get(opts, :web_search, :disabled)
+    web_search = Keyword.get_lazy(opts, :web_search, &Longx.AI.web_search_mode/0)
     config_path = Path.join(dir, "config.toml")
 
     with :ok <- File.mkdir_p(dir),
@@ -69,7 +68,7 @@ defmodule Longx.Codex.Home do
   end
 
   @doc "The `config.toml` codex boots with."
-  @spec config_toml(String.t(), :disabled | :standalone) :: String.t()
+  @spec config_toml(String.t(), Longx.AI.web_search_mode()) :: String.t()
   def config_toml(gateway_url, web_search \\ :disabled) do
     [
       """
@@ -96,11 +95,13 @@ defmodule Longx.Codex.Home do
     |> IO.iodata_to_binary()
   end
 
-  # Hosted (OpenAI-side) web search is never wanted: either codex's standalone
-  # `web.run` tool backed by our /alpha/search, or nothing.
+  # :hosted   → the upstream's built-in web_search tool, live web access
+  # :standalone → codex's web.run tool, executed by our /alpha/search
+  # :disabled → no search tool at all
+  defp web_search_toml(:hosted), do: ~s(web_search = "live"\n)
   defp web_search_toml(:standalone), do: "\n[features]\nstandalone_web_search = true\n"
   defp web_search_toml(:disabled), do: ~s(web_search = "disabled"\n)
 
   defp provider_web_search_toml(:standalone), do: "supports_standalone_web_search = true\n"
-  defp provider_web_search_toml(:disabled), do: ""
+  defp provider_web_search_toml(_), do: ""
 end
