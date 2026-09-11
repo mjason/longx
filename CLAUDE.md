@@ -18,9 +18,23 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
   `Mix.Tasks.Compile.Shim` into `priv/bin/` (gitignored) on `mix compile`; **Go must be on
   PATH**. `mix precommit` also runs `gofmt`, `go vet`, `go test` in `native/shim`.
   Windows support is via `CREATE_NEW_PROCESS_GROUP` + CTRL_BREAK + `taskkill /T`.
-- `lib/longx/codex/` (to be created) — Codex app-server client on top of `Longx.Shim`.
-  `codex app-server` (`~/.local/bin/codex`, v0.153.x) speaks newline-delimited JSON-RPC over
-  stdio (messages omit `"jsonrpc":"2.0"`). Protocol facts that shape the design:
+- `lib/longx/codex/runtime.ex` — `Longx.Codex.Runtime`: the **bundled** `codex-app-server`.
+  Never use the machine's `codex`. Pinned to upstream release `rust-v0.154.0`; the
+  `codex-app-server-package-<target>.tar.gz` asset (bare binary + `bwrap`/`rg`/`zsh` the
+  Linux sandbox needs; the only variant with published SHA256s) is downloaded by
+  `mix codex.fetch`, checksum-verified against hashes pinned in the module, and unpacked to
+  `priv/codex/<target>/` (gitignored; `priv` ships in `mix release`, so CI runs
+  `mix codex.fetch [--target …]` before `mix release`). `mix setup` runs it too.
+  `Longx.Codex.Runtime.executable/0` resolves the binary; `LONGX_CODEX_APP_SERVER` overrides.
+  Bumping the version = change `@version` + the six `@sha256` entries from the release's
+  `codex-package_SHA256SUMS`, then `mix codex.fetch --force`.
+- `lib/longx/platform.ex` — `Longx.Platform`: runtime-safe os/arch detection and the Rust
+  triple / GOOS-GOARCH naming for it. Anything that resolves a binary path at runtime goes
+  through this, never through `Mix.*` (Mix is absent in releases).
+- `lib/longx/codex/` (client, to be created) — Codex app-server client on top of
+  `Longx.Shim`, launching `Longx.Codex.Runtime.executable/0`. The app-server speaks
+  newline-delimited JSON-RPC over stdio (messages omit `"jsonrpc":"2.0"`). Protocol facts
+  that shape the design:
   - Handshake: `initialize` (params `clientInfo{name,version}`, optional `capabilities`
     incl. `optOutNotificationMethods`, `experimentalApi`) → then send the `initialized`
     notification. Nothing else is accepted before that.
@@ -34,8 +48,9 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     topic per thread. Item types (`agentMessage`, `reasoning`, `commandExecution`,
     `fileChange`, `plan`, `webSearch`, `mcpToolCall`…) plus `item/*/delta` streams map
     onto AI Elements components.
-  - Docs: https://learn.chatgpt.com/docs/app-server. The exact schema for the installed
-    version is authoritative over the docs: `codex app-server generate-json-schema --out DIR`
+  - Docs: https://learn.chatgpt.com/docs/app-server. The exact schema for the bundled
+    version is authoritative over the docs:
+    `priv/codex/<target>/bin/codex-app-server generate-json-schema --out DIR`
     (also `generate-ts` for the React side). Regenerate into the scratchpad/`tmp/`, don't
     commit the 4 MB output.
 - `lib/longx_web/` — Phoenix web layer. Two entry points:
@@ -74,6 +89,8 @@ Where tests live / what to use:
   `Phoenix.LiveViewTest` + `LazyHTML`; assert on element IDs, not raw HTML.
 - `Longx.Shim` → `test/longx/shim_test.exs` drives real OS processes (`cat`, `sh -c …`);
   the Go side has its own `go test` suite in `native/shim` with an in-memory host harness.
+- `Longx.Codex.Runtime` → tests install from a locally built fake package tarball
+  (`source: {:file, …}`); the real download is never exercised in the unit suite.
 - Codex client → unit-test against a fake app-server (a tiny script that echoes JSON-RPC),
   never against the real `codex` binary in the unit suite. Real-Codex tests are
   `@tag :integration`, excluded by default (`test_helper.exs`); run them with

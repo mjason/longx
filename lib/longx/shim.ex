@@ -114,7 +114,7 @@ defmodule Longx.Shim do
   @doc "Path to the shim binary for this platform."
   @spec executable() :: Path.t()
   def executable do
-    Application.app_dir(:longx, ["priv", "bin", Mix.Tasks.Compile.Shim.executable_name()])
+    Application.app_dir(:longx, ["priv", "bin", Longx.Platform.shim_executable_name()])
   end
 
   @doc "OS pid of the child. On unix this is also its process group id."

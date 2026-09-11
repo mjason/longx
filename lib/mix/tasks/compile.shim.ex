@@ -42,11 +42,8 @@ defmodule Mix.Tasks.Compile.Shim do
     :ok
   end
 
-  @doc "File name of the shim binary for `platform` (defaults to the current one)."
-  def executable_name({os, arch} \\ current_platform()) do
-    ext = if os == "windows", do: ".exe", else: ""
-    "shim_#{os}_#{arch}#{ext}"
-  end
+  @doc "File name of the shim binary for the current platform."
+  def executable_name, do: Longx.Platform.shim_executable_name()
 
   defp build(output, {os, arch}) do
     File.mkdir_p!(Path.dirname(output))
@@ -72,46 +69,16 @@ defmodule Mix.Tasks.Compile.Shim do
     end
   end
 
-  defp output_path(platform), do: Path.join("priv/bin", executable_name(platform))
-
   defp target_platform do
     case {System.get_env("SHIM_GOOS"), System.get_env("SHIM_GOARCH")} do
       {os, arch} when is_binary(os) and is_binary(arch) -> {os, arch}
-      _ -> current_platform()
+      _ -> Longx.Platform.go_target(Longx.Platform.current())
     end
   end
 
-  @doc "The `{goos, goarch}` pair the running BEAM was built for."
-  def current_platform do
-    os =
-      case :os.type() do
-        {:win32, _} -> "windows"
-        {:unix, :darwin} -> "darwin"
-        {:unix, _} -> "linux"
-      end
-
-    arch =
-      :erlang.system_info(:system_architecture)
-      |> List.to_string()
-      |> String.split("-")
-      |> hd()
-      |> case do
-        "x86_64" -> "amd64"
-        "amd64" -> "amd64"
-        "aarch64" -> "arm64"
-        "arm64" -> "arm64"
-        "win32" -> windows_arch()
-        other -> other
-      end
-
-    {os, arch}
-  end
-
-  defp windows_arch do
-    case System.get_env("PROCESSOR_ARCHITECTURE", "") |> String.downcase() do
-      "arm64" -> "arm64"
-      _ -> "amd64"
-    end
+  defp output_path({os, arch}) do
+    suffix = if os == "windows", do: ".exe", else: ""
+    Path.join("priv/bin", "shim_#{os}_#{arch}#{suffix}")
   end
 
   defp error(message) do

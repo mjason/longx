@@ -42,3 +42,6 @@ npm-debug.log
 
 # Go shim binaries built by `mix compile` (Mix.Tasks.Compile.Shim)
 /priv/bin/
+
+# Bundled codex-app-server, fetched by `mix codex.fetch` (Longx.Codex.Runtime)
+/priv/codex/
