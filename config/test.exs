@@ -1,4 +1,13 @@
 import Config
+
+# Fixed test key for Longx.Vault (encrypts provider API keys). Never reuse in prod.
+config :longx, Longx.Vault,
+  ciphers: [
+    default:
+      {Cloak.Ciphers.AES.GCM,
+       tag: "AES.GCM.V1", key: Base.decode64!("bG9uZ3gtdGVzdC12YXVsdC1rZXktMTIzNDU2Nzg5YWI=")}
+  ]
+
 config :ash, policies: [show_policy_breakdowns?: true], disable_async?: true
 
 # Configure your database
@@ -23,6 +32,8 @@ config :longx, Longx.Mailer, adapter: Swoosh.Adapters.Test
 
 # Disable swoosh api client as it is only required for production adapters
 config :swoosh, :api_client, false
+
+config :longx, Longx.Codex.Home, dir: Path.expand("../data/codex_home_test", __DIR__)
 
 # Print only warnings and errors during test
 config :logger, level: :warning

@@ -31,10 +31,32 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
 - `lib/longx/platform.ex` — `Longx.Platform`: runtime-safe os/arch detection and the Rust
   triple / GOOS-GOARCH naming for it. Anything that resolves a binary path at runtime goes
   through this, never through `Mix.*` (Mix is absent in releases).
+- **Model access is inverted: codex talks to *our* AI gateway, never to a vendor.**
+  - `lib/longx/ai/` — Ash domain `Longx.AI`: `Provider` (base_url + `api_key` encrypted at
+    rest via `AshCloak` + `Longx.Vault`; key from `LONGX_CLOAK_KEY` in prod, fixed keys in
+    dev/test config) and `Model` (`upstream_id`, `context_window`, one `default`).
+    `Longx.AI.resolve_target/0` = default model + its provider's decrypted key. Seeds
+    (`priv/repo/seeds.exs`, run by `mix ash.setup`/`mix test`) create DeepSeek +
+    `deepseek-flash` as default, taking the key from `DEEPSEEK_API_KEY`.
+  - `LongxWeb.AI.ResponsesController` at `POST /ai/v1/responses` (pipeline `:ai_gateway`,
+    bearer = per-boot `Longx.AI.Gateway.Token`; **no `:accepts` plug** — codex sends
+    `Accept: text/event-stream`). `Longx.AI.Gateway.prepare/2` swaps the placeholder model
+    `longx` for the target's `upstream_id`, drops non-function tools and codex-internal
+    fields, forces `stream: true`; `stream/2` relays the upstream SSE chunk-for-chunk with a
+    **selective receive on the Req async ref** (a bare `receive` would eat the connection
+    process's other messages). Upstream 4xx/5xx pass through so codex shows the message.
+  - Upstreams are all OpenAI **Responses API** (codex 0.154 dropped `wire_api = "chat"`):
+    OpenAI `https://api.openai.com/v1`, DeepSeek `https://api.deepseek.com/v1`, GLM
+    `https://open.bigmodel.cn/api/paas/v4`. Adding a provider = a DB row, no code.
+  - `Longx.Codex.Home` writes our own `CODEX_HOME` (`data/codex_home`, prod
+    `$LONGX_DATA_DIR/codex_home`; never `~/.codex`, never a tmp dir) with a generated
+    `config.toml`: one provider `longx` → `http://127.0.0.1:<port>/ai/v1`,
+    `env_key = LONGX_GATEWAY_TOKEN`, `requires_openai_auth = false` → **codex needs no
+    login**. `Home.prepare/1` returns the env to spawn codex with.
 - `lib/longx/codex/` (client, to be created) — Codex app-server client on top of
-  `Longx.Shim`, launching `Longx.Codex.Runtime.executable/0`. The app-server speaks
-  newline-delimited JSON-RPC over stdio (messages omit `"jsonrpc":"2.0"`). Protocol facts
-  that shape the design:
+  `Longx.Shim`, launching `Longx.Codex.Runtime.executable/0` with `Home.prepare/1`'s env.
+  The app-server speaks newline-delimited JSON-RPC over stdio (messages omit
+  `"jsonrpc":"2.0"`). Protocol facts that shape the design:
   - Handshake: `initialize` (params `clientInfo{name,version}`, optional `capabilities`
     incl. `optOutNotificationMethods`, `experimentalApi`) → then send the `initialized`
     notification. Nothing else is accepted before that.
@@ -45,7 +67,9 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     route these to a handler (UI via PubSub) and reply, with a timeout → `cancel`/`decline`.
   - One app-server hosts many threads (`thread/start|resume|fork|list`); turns via
     `turn/start|steer|interrupt`. Notifications carry `threadId`/`turnId`/`itemId` → PubSub
-    topic per thread. Item types (`agentMessage`, `reasoning`, `commandExecution`,
+    topic per thread. Every request codex makes to the gateway carries `thread-id`
+    (header + `client_metadata`) and the full history (`store: false`), so one app-server
+    per node serves all users; the gateway maps thread → user → model. Item types (`agentMessage`, `reasoning`, `commandExecution`,
     `fileChange`, `plan`, `webSearch`, `mcpToolCall`…) plus `item/*/delta` streams map
     onto AI Elements components.
   - Docs: https://learn.chatgpt.com/docs/app-server. The exact schema for the bundled
@@ -91,6 +115,12 @@ Where tests live / what to use:
   the Go side has its own `go test` suite in `native/shim` with an in-memory host harness.
 - `Longx.Codex.Runtime` → tests install from a locally built fake package tarball
   (`source: {:file, …}`); the real download is never exercised in the unit suite.
+- AI gateway → `Bypass` plays the upstream; `Longx.Test.ResponsesFixture` builds a valid
+  Responses SSE stream. DB tests must clear the seeded rows in `setup` (seeds run before
+  the suite). End-to-end: `test/longx/codex/gateway_e2e_test.exs` (`:integration`, real
+  codex → real endpoint on a random Bandit port → Bypass) and `gateway_live_test.exs`
+  (`:live`, real DeepSeek, needs `DEEPSEEK_API_KEY`); `Longx.Test.CodexClient` drives codex
+  over stdio until `Longx.Codex.Connection` exists.
 - Codex client → unit-test against a fake app-server (a tiny script that echoes JSON-RPC),
   never against the real `codex` binary in the unit suite. Real-Codex tests are
   `@tag :integration`, excluded by default (`test_helper.exs`); run them with

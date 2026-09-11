@@ -43,7 +43,7 @@ metadata:
 ## Searching Documentation
 
 ```sh
-mix usage_rules.search_docs "search term" -p ash -p ash_phoenix -p ash_sqlite -p ash_typescript
+mix usage_rules.search_docs "search term" -p ash -p ash_cloak -p ash_phoenix -p ash_sqlite -p ash_typescript
 ```
 
 ## Available Mix Tasks

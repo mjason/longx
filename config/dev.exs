@@ -1,4 +1,13 @@
 import Config
+
+# Fixed dev key for Longx.Vault (encrypts provider API keys). Never reuse in prod.
+config :longx, Longx.Vault,
+  ciphers: [
+    default:
+      {Cloak.Ciphers.AES.GCM,
+       tag: "AES.GCM.V1", key: Base.decode64!("bG9uZ3gtZGV2LXZhdWx0LWtleS0wMTIzNDU2Nzg5YWI=")}
+  ]
+
 config :ash, policies: [show_policy_breakdowns?: true]
 
 # Configure your database
@@ -49,6 +58,9 @@ config :longx, LongxWeb.Endpoint,
 # If desired, both `http:` and `https:` keys can be
 # configured to run both http and https servers on
 # different ports.
+
+# Where the bundled codex-app-server keeps its state (see Longx.Codex.Home)
+config :longx, Longx.Codex.Home, dir: Path.expand("../data/codex_home", __DIR__)
 
 # Enable dev routes for dashboard and mailbox
 config :longx, dev_routes: true

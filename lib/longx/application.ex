@@ -7,8 +7,12 @@ defmodule Longx.Application do
 
   @impl true
   def start(_type, _args) do
+    # One gateway token per boot; handed to codex-app-server when it is spawned.
+    Longx.AI.Gateway.Token.generate!()
+
     children = [
       LongxWeb.Telemetry,
+      Longx.Vault,
       Longx.Repo,
       {Ecto.Migrator,
        repos: Application.fetch_env!(:longx, :ecto_repos), skip: skip_migrations?()},

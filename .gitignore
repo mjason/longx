@@ -45,3 +45,6 @@ npm-debug.log
 
 # Bundled codex-app-server, fetched by `mix codex.fetch` (Longx.Codex.Runtime)
 /priv/codex/
+
+# Local codex-app-server state (Longx.Codex.Home)
+/data/

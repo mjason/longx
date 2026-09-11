@@ -14,6 +14,13 @@ defmodule LongxWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # OpenAI-compatible surface the bundled codex-app-server talks to. No
+  # `:accepts` here: codex sends `Accept: text/event-stream` and the gateway
+  # decides the response format itself.
+  pipeline :ai_gateway do
+    plug LongxWeb.Plugs.GatewayAuth
+  end
+
   scope "/", LongxWeb do
     pipe_through :browser
 
@@ -21,6 +28,12 @@ defmodule LongxWeb.Router do
     post "/rpc/run", AshTypescriptRpcController, :run
     post "/rpc/validate", AshTypescriptRpcController, :validate
     get "/ash-typescript", PageController, :index
+  end
+
+  scope "/ai/v1", LongxWeb.AI do
+    pipe_through :ai_gateway
+
+    post "/responses", ResponsesController, :create
   end
 
   # Other scopes may use custom stacks.

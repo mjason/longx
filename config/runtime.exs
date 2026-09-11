@@ -63,10 +63,30 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
 
+  cloak_key =
+    System.get_env("LONGX_CLOAK_KEY") ||
+      raise """
+      environment variable LONGX_CLOAK_KEY is missing.
+      It encrypts provider API keys at rest. Generate one with:
+      elixir -e ':crypto.strong_rand_bytes(32) |> Base.encode64() |> IO.puts()'
+      """
+
+  config :longx, Longx.Vault,
+    ciphers: [default: {Cloak.Ciphers.AES.GCM, tag: "AES.GCM.V1", key: Base.decode64!(cloak_key)}]
+
   config :longx, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   # PORT only applies to prod; dev (7788) and test (4002) are fixed in their config files.
   port = String.to_integer(System.get_env("PORT") || "4000")
+
+  data_dir =
+    System.get_env("LONGX_DATA_DIR") ||
+      raise """
+      environment variable LONGX_DATA_DIR is missing.
+      It holds the bundled codex-app-server's state (CODEX_HOME), e.g. /var/lib/longx
+      """
+
+  config :longx, Longx.Codex.Home, dir: Path.join(data_dir, "codex_home")
 
   config :longx, LongxWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
