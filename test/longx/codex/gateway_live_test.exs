@@ -17,6 +17,7 @@ defmodule Longx.Codex.GatewayLiveTest do
 
     Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(AI.SearchProvider, :destroy, %{}, authorize?: false)
 
     provider =
       AI.create_provider!(%{

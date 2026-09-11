@@ -34,6 +34,7 @@ defmodule LongxWeb.AI.ResponsesControllerTest do
     # seeds leave a default DeepSeek model behind; each test configures its own
     Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(AI.SearchProvider, :destroy, %{}, authorize?: false)
 
     bypass = Bypass.open()
     n = System.unique_integer([:positive])

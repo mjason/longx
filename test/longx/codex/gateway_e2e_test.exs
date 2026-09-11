@@ -18,6 +18,7 @@ defmodule Longx.Codex.GatewayE2ETest do
   setup do
     Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(AI.SearchProvider, :destroy, %{}, authorize?: false)
 
     # Serve the real endpoint on a loopback port for codex to call.
     {:ok, bandit} =

@@ -34,6 +34,8 @@ defmodule LongxWeb.Router do
     pipe_through :ai_gateway
 
     post "/responses", ResponsesController, :create
+    # codex standalone web search (`web.run` tool) — see Longx.AI.Search
+    post "/alpha/search", SearchController, :create
   end
 
   # Other scopes may use custom stacks.
