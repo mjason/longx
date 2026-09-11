@@ -39,3 +39,6 @@ npm-debug.log
 *.db
 *.db-*
 
+
+# Go shim binaries built by `mix compile` (Mix.Tasks.Compile.Shim)
+/priv/bin/

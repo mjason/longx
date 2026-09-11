@@ -8,10 +8,20 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
 
 - `lib/longx/` — Ash domains & resources (`AshSqlite`). Business logic lives in Ash actions
   and is called through code interfaces — never in controllers/LiveViews.
-- `lib/longx/codex/` (to be created) — Codex app-server client. Spawns `codex app-server`
-  (`~/.local/bin/codex`, v0.153.x; default transport `stdio://`, also `unix://`, `ws://IP:PORT`)
-  as an OTP-supervised process, speaks JSON-RPC, and fans events out over `Phoenix.PubSub`.
-  Codex processes are children of our BEAM — they must die with it, never be orphaned.
+- `lib/longx/shim.ex` + `native/shim/` (Go) — `Longx.Shim`: runs external programs through
+  our own port middleware (adapted from ex_cmd/odu, see `NOTICE`). Gives back-pressured
+  stdin/stdout, a separate stderr stream, `close_stdin` independent of stdout, and clean
+  termination: `kill/2` SIGTERMs the child's whole process group then SIGKILLs after a grace
+  period; if the owner process or the BEAM dies the shim sees its stdin close and does the
+  same. Protocol is defined twice — `native/shim/proto.go` and `lib/longx/shim/proto.ex` —
+  keep them in sync and bump the version in both when it changes. The binary is built by
+  `Mix.Tasks.Compile.Shim` into `priv/bin/` (gitignored) on `mix compile`; **Go must be on
+  PATH**. `mix precommit` also runs `gofmt`, `go vet`, `go test` in `native/shim`.
+  Windows support is via `CREATE_NEW_PROCESS_GROUP` + CTRL_BREAK + `taskkill /T`.
+- `lib/longx/codex/` (to be created) — Codex app-server client on top of `Longx.Shim`.
+  `codex app-server` (`~/.local/bin/codex`, v0.153.x) speaks newline-delimited JSON-RPC over
+  stdio (responses omit `"jsonrpc":"2.0"`); the client does line buffering + `Jason`, pairs
+  request ids with callers, and fans notifications out over `Phoenix.PubSub`.
 - `lib/longx_web/` — Phoenix web layer. Two entry points:
   - React SPA: `assets/js/index.tsx` mounts at `#app`, served with the `spa_root` layout
     (`PageController.index`). Agent chat UI lives here.
@@ -46,9 +56,12 @@ Where tests live / what to use:
   (`references/ash/testing.md`).
 - Controllers / LiveViews → `test/longx_web/…`, `use LongxWeb.ConnCase`,
   `Phoenix.LiveViewTest` + `LazyHTML`; assert on element IDs, not raw HTML.
-- Codex client → unit-test against a fake app-server (a stub transport or a tiny script
-  that echoes JSON-RPC), never against the real `codex` binary in the unit suite.
-  Real-Codex tests, if any, are `@tag :integration` and excluded by default.
+- `Longx.Shim` → `test/longx/shim_test.exs` drives real OS processes (`cat`, `sh -c …`);
+  the Go side has its own `go test` suite in `native/shim` with an in-memory host harness.
+- Codex client → unit-test against a fake app-server (a tiny script that echoes JSON-RPC),
+  never against the real `codex` binary in the unit suite. Real-Codex tests are
+  `@tag :integration`, excluded by default (`test_helper.exs`); run them with
+  `mix test --include integration`.
 - TypeScript/React → also test-first. Use `vitest` + `@testing-library/react` in `assets/`
   (add on first need: `npm i -D vitest jsdom @testing-library/react --prefix assets`).
 - `mix test` runs `ash.setup --quiet` first; the test DB is `longx_test.db` (SQLite) —

@@ -10,7 +10,7 @@ defmodule Longx.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
-      compilers: [:phoenix_live_view] ++ Mix.compilers(),
+      compilers: [:phoenix_live_view] ++ Mix.compilers() ++ [:shim],
       listeners: [Phoenix.CodeReloader],
       consolidate_protocols: Mix.env() != :dev,
       usage_rules: usage_rules()
@@ -108,7 +108,15 @@ defmodule Longx.MixProject do
         "esbuild longx --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"],
+      precommit: [
+        "compile --warnings-as-errors",
+        "deps.unlock --unused",
+        "format",
+        "cmd --cd native/shim gofmt -l .",
+        "cmd --cd native/shim go vet ./...",
+        "cmd --cd native/shim go test ./...",
+        "test"
+      ],
       "ash.setup": ["ash.setup", "run priv/repo/seeds.exs"]
     ]
   end
@@ -125,12 +133,14 @@ defmodule Longx.MixProject do
         build: [
           "ash-framework": [
             # The description tells people how to use this skill.
-            description: "Use this skill working with Ash Framework or any of its extensions. Always consult this when making any domain changes, features or fixes.",
+            description:
+              "Use this skill working with Ash Framework or any of its extensions. Always consult this when making any domain changes, features or fixes.",
             # Include all Ash dependencies
             usage_rules: [:ash, ~r/^ash_/]
           ],
           "phoenix-framework": [
-            description: "Use this skill working with Phoenix Framework. Consult this when working with the web layer, controllers, views, liveviews etc.",
+            description:
+              "Use this skill working with Phoenix Framework. Consult this when working with the web layer, controllers, views, liveviews etc.",
             # Include all Phoenix dependencies
             usage_rules: [:phoenix, ~r/^phoenix_/]
           ]
