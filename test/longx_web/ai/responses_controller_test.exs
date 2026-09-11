@@ -114,7 +114,7 @@ defmodule LongxWeb.AI.ResponsesControllerTest do
       assert_receive {:upstream, headers, body}
       assert {"authorization", "Bearer sk-upstream"} in headers
       assert body["model"] == "real-model"
-      assert [%{"type" => "function"}] = body["tools"]
+      assert body["tools"] == @request["tools"]
     end
 
     test "passes upstream client errors through so codex can show them", %{

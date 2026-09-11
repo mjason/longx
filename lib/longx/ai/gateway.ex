@@ -28,9 +28,13 @@ defmodule Longx.AI.Gateway do
   @receive_timeout :timer.minutes(10)
 
   @doc """
-  Rewrites a codex Responses request for `target`. The placeholder model is
-  replaced, built-in tools (`web_search`, …) that third-party providers reject
-  are dropped, and streaming is forced since `stream/2` only speaks SSE.
+  Rewrites a codex Responses request for `target`: the placeholder model is
+  replaced and streaming is forced since `stream/2` only speaks SSE.
+
+  Tools are passed through untouched. Which tools codex offers is decided in
+  its config (`Longx.Codex.Home`), not here: DeepSeek/GLM accept `namespace`
+  tools (sub-agents, `web.run`), and OpenAI's hosted `web_search` is never
+  emitted because standalone search is used instead.
   """
   @spec prepare(term, Target.t()) :: {:ok, Upstream.t()} | {:error, :invalid_request}
   def prepare(%{"input" => _} = body, %Target{} = target) do
@@ -39,9 +43,6 @@ defmodule Longx.AI.Gateway do
       |> Map.drop(@internal_fields)
       |> Map.put("model", target.model)
       |> Map.put("stream", true)
-      |> Map.update("tools", nil, &function_tools_only/1)
-      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-      |> Map.new()
 
     {:ok,
      %Upstream{
@@ -56,11 +57,6 @@ defmodule Longx.AI.Gateway do
   end
 
   def prepare(_body, _target), do: {:error, :invalid_request}
-
-  defp function_tools_only(tools) when is_list(tools),
-    do: Enum.filter(tools, &match?(%{"type" => "function"}, &1))
-
-  defp function_tools_only(_), do: nil
 
   @doc """
   Performs the upstream request and relays the response into `conn`.

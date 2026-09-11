@@ -24,7 +24,11 @@ defmodule Longx.AI.GatewayTest do
     ],
     "tools" => [
       %{"type" => "function", "name" => "exec_command", "parameters" => %{}},
-      %{"type" => "web_search"}
+      %{
+        "type" => "namespace",
+        "name" => "web",
+        "tools" => [%{"type" => "function", "name" => "run"}]
+      }
     ],
     "tool_choice" => "auto",
     "parallel_tool_calls" => true,
@@ -62,9 +66,9 @@ defmodule Longx.AI.GatewayTest do
       assert up.body["reasoning"] == %{"summary" => "auto"}
     end
 
-    test "drops built-in (non-function) tools third-party providers reject" do
+    test "passes every tool through untouched — codex decides what to offer via config" do
       {:ok, up} = Gateway.prepare(@codex_body, @target)
-      assert [%{"type" => "function", "name" => "exec_command"}] = up.body["tools"]
+      assert up.body["tools"] == @codex_body["tools"]
     end
 
     test "drops codex-internal fields that are not part of the public API" do

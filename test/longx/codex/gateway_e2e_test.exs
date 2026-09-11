@@ -84,7 +84,8 @@ defmodule Longx.Codex.GatewayE2ETest do
     assert body["client_metadata"] == nil
     assert is_binary(thread_id)
     assert body["stream"] == true
-    assert Enum.all?(body["tools"], &(&1["type"] == "function"))
+    # nothing is filtered: namespace tools (sub-agents, web.run) reach the upstream as-is
+    assert Enum.any?(body["tools"], &(&1["type"] == "namespace"))
 
     CodexClient.stop(shim)
   end

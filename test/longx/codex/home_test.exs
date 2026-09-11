@@ -29,6 +29,26 @@ defmodule Longx.Codex.HomeTest do
     assert config =~ ~s(requires_openai_auth = false)
   end
 
+  test "web search is disabled unless a standalone provider is configured", %{dir: dir} do
+    {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
+    config = File.read!(home.config_path)
+
+    assert config =~ ~s(web_search = "disabled")
+    refute config =~ "supports_standalone_web_search = true"
+    refute config =~ "standalone_web_search = true"
+  end
+
+  test "web_search: :standalone routes codex's web.run tool to our /alpha/search", %{dir: dir} do
+    {:ok, home} =
+      Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1", web_search: :standalone)
+
+    config = File.read!(home.config_path)
+
+    refute config =~ ~s(web_search = "disabled")
+    assert config =~ "supports_standalone_web_search = true"
+    assert config =~ "[features]\nstandalone_web_search = true"
+  end
+
   test "the env hands codex the home and the current gateway token", %{dir: dir} do
     {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
 
