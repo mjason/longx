@@ -99,8 +99,10 @@ defmodule Longx.Test.CodexClient do
   defp record(%{
          "method" => "item/completed",
          "params" => %{"item" => %{"type" => "agentMessage", "text" => text}}
-       }),
-       do: send(self(), {:agent_message, text})
+       }) do
+    if System.get_env("CODEX_CLIENT_DEBUG"), do: IO.puts("agent: " <> text)
+    send(self(), {:agent_message, text})
+  end
 
   defp record(%{
          "method" => "item/completed",

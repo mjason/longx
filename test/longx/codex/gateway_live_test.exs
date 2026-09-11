@@ -94,6 +94,47 @@ defmodule Longx.Codex.GatewayLiveTest do
     CodexClient.stop(shim)
   end
 
+  test "DeepSeek searches the web through Tavily via our /alpha/search", %{home: home} do
+    tavily_key = System.get_env("TAVILY_API_KEY") || flunk("TAVILY_API_KEY not set")
+
+    AI.create_search_provider!(%{
+      name: "Tavily",
+      slug: "tavily",
+      kind: :tavily,
+      api_key: tavily_key
+    })
+    |> AI.make_default_search_provider!()
+
+    {:ok, home} =
+      Home.prepare(dir: home.dir, gateway_url: gateway_url_of(home), web_search: :standalone)
+
+    {shim, thread_id} = CodexClient.start_thread(home)
+
+    turn =
+      CodexClient.run_turn(
+        shim,
+        thread_id,
+        "Search the web: what is the latest stable release version of the Elixir programming language right now? Cite the source URL.",
+        150_000
+      )
+
+    assert turn["status"] == "completed", "turn did not complete: #{inspect(turn)}"
+    assert_received {:item_completed, "webSearch", _}
+
+    # the model does not always inline a URL; the search item above is the proof it browsed
+    messages = collect_agent_messages()
+    assert List.last(messages) =~ ~r/\d+\.\d+/, "no version number in: #{inspect(messages)}"
+
+    CodexClient.stop(shim)
+  end
+
+  defp gateway_url_of(home) do
+    home.config_path
+    |> File.read!()
+    |> then(&Regex.run(~r/base_url = "([^"]+)"/, &1))
+    |> Enum.at(1)
+  end
+
   defp collect_agent_messages(acc \\ []) do
     receive do
       {:agent_message, text} -> collect_agent_messages([text | acc])

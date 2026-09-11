@@ -80,6 +80,59 @@ defmodule Longx.Test.ResponsesFixture do
       }
     ]
 
+    to_sse(events)
+  end
+
+  @doc """
+  A stream whose only output is one function call. `namespace` is set for
+  namespaced tools (e.g. `web` / `run`), exactly as DeepSeek returns them.
+  """
+  @spec function_call(String.t(), String.t() | nil, map, keyword) :: [String.t()]
+  def function_call(name, namespace, arguments, opts \\ []) do
+    model = Keyword.get(opts, :model, "fake-model")
+    call_id = "call_" <> Integer.to_string(System.unique_integer([:positive]))
+    item_id = "fc_" <> Integer.to_string(System.unique_integer([:positive]))
+    resp_id = "resp_" <> Integer.to_string(System.unique_integer([:positive]))
+    args = Jason.encode!(arguments)
+
+    base = %{id: item_id, type: "function_call", call_id: call_id, name: name}
+    base = if namespace, do: Map.put(base, :namespace, namespace), else: base
+    item_done = Map.merge(base, %{status: "completed", arguments: args})
+    response = %{id: resp_id, object: "response", created_at: 1, model: model, output: []}
+
+    to_sse([
+      %{type: "response.created", response: Map.put(response, :status, "in_progress")},
+      %{
+        type: "response.output_item.added",
+        output_index: 0,
+        item: Map.merge(base, %{status: "in_progress", arguments: ""})
+      },
+      %{
+        type: "response.function_call_arguments.delta",
+        item_id: item_id,
+        output_index: 0,
+        delta: args
+      },
+      %{
+        type: "response.function_call_arguments.done",
+        item_id: item_id,
+        output_index: 0,
+        arguments: args
+      },
+      %{type: "response.output_item.done", output_index: 0, item: item_done},
+      %{
+        type: "response.completed",
+        response:
+          Map.merge(response, %{
+            status: "completed",
+            output: [item_done],
+            usage: %{input_tokens: 10, output_tokens: 5, total_tokens: 15}
+          })
+      }
+    ])
+  end
+
+  defp to_sse(events) do
     events
     |> Enum.with_index()
     |> Enum.map(fn {event, seq} ->

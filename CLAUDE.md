@@ -41,10 +41,27 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
   - `LongxWeb.AI.ResponsesController` at `POST /ai/v1/responses` (pipeline `:ai_gateway`,
     bearer = per-boot `Longx.AI.Gateway.Token`; **no `:accepts` plug** — codex sends
     `Accept: text/event-stream`). `Longx.AI.Gateway.prepare/2` swaps the placeholder model
-    `longx` for the target's `upstream_id`, drops non-function tools and codex-internal
-    fields, forces `stream: true`; `stream/2` relays the upstream SSE chunk-for-chunk with a
+    `longx` for the target's `upstream_id`, drops codex-internal fields, forces
+    `stream: true`; **tools pass through untouched** — DeepSeek accepts `type: namespace`
+    tools (sub-agents, `web.run`) and returns `function_call` items with `namespace`, which
+    is what codex's router keys on; which tools codex offers is decided in its config, never
+    by filtering here. `stream/2` relays the upstream SSE chunk-for-chunk with a
     **selective receive on the Req async ref** (a bare `receive` would eat the connection
     process's other messages). Upstream 4xx/5xx pass through so codex shows the message.
+  - **Web search**: codex's *standalone* search (`ext/web-search` in the codex repo). With
+    `supports_standalone_web_search = true` + `[features] standalone_web_search = true`
+    (`Home.prepare(web_search: :standalone)`) codex offers a `web.run` namespace tool and,
+    when the model calls it, POSTs the commands to `<base_url>/alpha/search` with the
+    gateway bearer. `LongxWeb.AI.SearchController` → `Longx.AI.Search` executes them
+    (`search_query`, `open`, `time`; the rest answer "not supported") against the default
+    `Longx.AI.SearchProvider` (Tavily; key encrypted; seeded from `TAVILY_API_KEY`) and
+    replies `{output, results}` — `output` goes to the model, `results` to the UI as a
+    `webSearch` item. `Longx.AI.Search.Refs` (ETS) remembers `turnNsearchM` ids per codex
+    session so `open` can resolve them. Config/key problems are reported inside `output`
+    with 200, never as an HTTP error (codex would fail the tool call). OpenAI's hosted
+    `web_search` tool is never emitted (`web_search = "disabled"` otherwise).
+  - `apply_patch` on third-party models works through `exec_command` (codex installs an
+    `apply_patch` helper on PATH under CODEX_HOME); the `custom`/freeform tool is OpenAI-only.
   - Upstreams are all OpenAI **Responses API** (codex 0.154 dropped `wire_api = "chat"`):
     OpenAI `https://api.openai.com/v1`, DeepSeek `https://api.deepseek.com/v1`, GLM
     `https://open.bigmodel.cn/api/paas/v4`. Adding a provider = a DB row, no code.
@@ -115,8 +132,8 @@ Where tests live / what to use:
   the Go side has its own `go test` suite in `native/shim` with an in-memory host harness.
 - `Longx.Codex.Runtime` → tests install from a locally built fake package tarball
   (`source: {:file, …}`); the real download is never exercised in the unit suite.
-- AI gateway → `Bypass` plays the upstream; `Longx.Test.ResponsesFixture` builds a valid
-  Responses SSE stream. DB tests must clear the seeded rows in `setup` (seeds run before
+- AI gateway → `Bypass` plays the upstream (and Tavily); `Longx.Test.ResponsesFixture`
+  builds valid Responses SSE streams (`assistant_message/1`, `function_call/3`). DB tests must clear the seeded rows in `setup` (seeds run before
   the suite). End-to-end: `test/longx/codex/gateway_e2e_test.exs` (`:integration`, real
   codex → real endpoint on a random Bandit port → Bypass) and `gateway_live_test.exs`
   (`:live`, real DeepSeek, needs `DEEPSEEK_API_KEY`); `Longx.Test.CodexClient` drives codex
