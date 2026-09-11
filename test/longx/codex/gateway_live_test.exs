@@ -12,7 +12,7 @@ defmodule Longx.Codex.GatewayLiveTest do
   @moduletag :live
   @moduletag timeout: 180_000
 
-  test "a real DeepSeek turn completes end to end" do
+  setup do
     key = System.get_env("DEEPSEEK_API_KEY") || flunk("DEEPSEEK_API_KEY not set")
 
     Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
@@ -46,6 +46,10 @@ defmodule Longx.Codex.GatewayLiveTest do
     on_exit(fn -> File.rm_rf!(home_dir) end)
     {:ok, home} = Home.prepare(dir: home_dir, gateway_url: "http://127.0.0.1:#{port}/ai/v1")
 
+    %{home: home}
+  end
+
+  test "a real DeepSeek turn completes end to end", %{home: home} do
     {shim, thread_id} = CodexClient.start_thread(home)
 
     turn =
@@ -56,5 +60,44 @@ defmodule Longx.Codex.GatewayLiveTest do
     assert text =~ "PONG"
 
     CodexClient.stop(shim)
+  end
+
+  test "DeepSeek drives a tool call (exec_command) through codex", %{home: home} do
+    # Something the model cannot guess, so it has to run a command.
+    secret = "LONGX-" <> Base.encode16(:crypto.strong_rand_bytes(6))
+    File.write!(Path.join(home.dir, "secret.txt"), secret <> "\n")
+
+    {shim, thread_id} = CodexClient.start_thread(home)
+
+    turn =
+      CodexClient.run_turn(
+        shim,
+        thread_id,
+        "Read the file secret.txt in the current working directory with a shell command and reply with its exact contents."
+      )
+
+    assert turn["status"] == "completed", "turn did not complete: #{inspect(turn)}"
+
+    assert_received {:command_execution, item}
+    assert item["status"] == "completed"
+    assert item["aggregatedOutput"] =~ secret
+
+    # the model may send a preamble before the tool call; the answer is the last message
+    messages = collect_agent_messages()
+    assert List.last(messages) =~ secret, "no agent message with the secret: #{inspect(messages)}"
+
+    # nothing else was called: no hallucinated web search / mcp tools
+    refute_received {:item_completed, "mcpToolCall", _}
+    refute_received {:item_completed, "webSearch", _}
+
+    CodexClient.stop(shim)
+  end
+
+  defp collect_agent_messages(acc \\ []) do
+    receive do
+      {:agent_message, text} -> collect_agent_messages([text | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
   end
 end

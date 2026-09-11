@@ -68,6 +68,10 @@ defmodule Longx.Test.CodexClient do
     Process.put(:codex_client_buffer, rest)
 
     messages = Enum.map(lines, &Jason.decode!/1)
+
+    if System.get_env("CODEX_CLIENT_DEBUG"),
+      do: Enum.each(messages, &IO.puts("codex <- " <> summarize(&1)))
+
     Enum.each(messages, &record/1)
 
     case Enum.find(messages, pred) do
@@ -75,6 +79,17 @@ defmodule Longx.Test.CodexClient do
       found -> found
     end
   end
+
+  defp summarize(%{"method" => m, "params" => %{"item" => %{"type" => t} = item}}),
+    do: "#{m} item=#{t} #{inspect(Map.take(item, ["status", "command", "id"]))}"
+
+  defp summarize(%{"method" => m, "params" => %{"turn" => %{"status" => s}}}),
+    do: "#{m} turn=#{s}"
+
+  defp summarize(%{"method" => m}), do: m
+
+  defp summarize(%{"id" => id} = msg),
+    do: "response id=#{id} #{if msg["error"], do: inspect(msg["error"]), else: "ok"}"
 
   defp split_lines(buffer) do
     {complete, [rest]} = buffer |> String.split("\n") |> Enum.split(-1)
@@ -86,6 +101,15 @@ defmodule Longx.Test.CodexClient do
          "params" => %{"item" => %{"type" => "agentMessage", "text" => text}}
        }),
        do: send(self(), {:agent_message, text})
+
+  defp record(%{
+         "method" => "item/completed",
+         "params" => %{"item" => %{"type" => "commandExecution"} = item}
+       }),
+       do: send(self(), {:command_execution, item})
+
+  defp record(%{"method" => "item/completed", "params" => %{"item" => %{"type" => type} = item}}),
+    do: send(self(), {:item_completed, type, item})
 
   defp record(%{"method" => "error", "params" => params}),
     do: IO.puts("codex error: #{inspect(params)}")
