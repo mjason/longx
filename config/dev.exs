@@ -15,9 +15,9 @@ config :longx, Longx.Repo,
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
 config :longx, LongxWeb.Endpoint,
-  # Binding to loopback ipv4 address prevents access from other machines.
-  # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {127, 0, 0, 1}],
+  # Bind to all interfaces on port 7788 so the dev server is reachable over the LAN.
+  # See CLAUDE.md "Dev server" — do not change these.
+  http: [ip: {0, 0, 0, 0}, port: 7788],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,

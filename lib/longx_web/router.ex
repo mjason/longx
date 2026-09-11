@@ -18,8 +18,8 @@ defmodule LongxWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
-    post "", AshTypescriptRpcController, :run
-    post "", AshTypescriptRpcController, :validate
+    post "/rpc/run", AshTypescriptRpcController, :run
+    post "/rpc/validate", AshTypescriptRpcController, :validate
     get "/ash-typescript", PageController, :index
   end
 
