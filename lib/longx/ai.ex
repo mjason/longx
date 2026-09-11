@@ -55,7 +55,8 @@ defmodule Longx.AI do
          base_url: provider.base_url,
          api_key: api_key,
          context_window: model.context_window,
-         provider_slug: provider.slug
+         provider_slug: provider.slug,
+         hosted_web_search?: provider.supports_hosted_web_search
        }}
     end
   end
@@ -80,6 +81,25 @@ defmodule Longx.AI do
   @doc "Whether codex should be offered web search at all."
   @spec search_configured?() :: boolean
   def search_configured?, do: match?({:ok, _}, resolve_search_target())
+
+  @typedoc """
+  How codex should do web search, decided from what is configured:
+
+    * `:hosted` — the upstream runs the Responses API's built-in `web_search`
+      tool itself (OpenAI); nothing for us to do
+    * `:standalone` — codex's `web.run` tool, executed by our `/alpha/search`
+      against the default `SearchProvider`
+    * `:disabled` — no search tool offered at all
+  """
+  @type web_search_mode :: :hosted | :standalone | :disabled
+
+  @doc "See `t:web_search_mode/0`. Used by `Longx.Codex.Home` when writing codex's config."
+  @spec web_search_mode() :: web_search_mode
+  def web_search_mode, do: web_search_mode(resolve_target(), resolve_search_target())
+
+  defp web_search_mode({:ok, %Target{hosted_web_search?: true}}, _search), do: :hosted
+  defp web_search_mode(_target, {:ok, %SearchTarget{}}), do: :standalone
+  defp web_search_mode(_target, _search), do: :disabled
 
   defp fetch_default_search_provider do
     case default_search_provider() do

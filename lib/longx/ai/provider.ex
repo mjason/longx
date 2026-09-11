@@ -29,12 +29,12 @@ defmodule Longx.AI.Provider do
 
     create :create do
       primary? true
-      accept [:name, :slug, :base_url, :api_key]
+      accept [:name, :slug, :base_url, :api_key, :supports_hosted_web_search]
     end
 
     update :update do
       primary? true
-      accept [:name, :base_url, :api_key]
+      accept [:name, :base_url, :api_key, :supports_hosted_web_search]
     end
 
     read :by_slug do
@@ -60,6 +60,13 @@ defmodule Longx.AI.Provider do
     attribute :base_url, :string, allow_nil?: false, public?: true
 
     attribute :api_key, :string, sensitive?: true
+
+    # The Responses API's built-in `web_search` tool runs inside the provider
+    # (OpenAI); third-party providers don't have it and get standalone search.
+    attribute :supports_hosted_web_search, :boolean,
+      allow_nil?: false,
+      default: false,
+      public?: true
 
     timestamps()
   end

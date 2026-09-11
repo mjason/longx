@@ -51,6 +51,24 @@ unless deepseek_key do
   )
 end
 
+# OpenAI: not the default, but present so its hosted web_search is one click
+# away; key from OPENAI_API_KEY when set.
+openai_key = System.get_env("OPENAI_API_KEY")
+
+case AI.get_provider_by_slug("openai") do
+  {:ok, %AI.Provider{} = openai} ->
+    if openai_key, do: AI.update_provider!(openai, %{api_key: openai_key})
+
+  {:error, _} ->
+    AI.create_provider!(%{
+      name: "OpenAI",
+      slug: "openai",
+      base_url: "https://api.openai.com/v1",
+      api_key: openai_key,
+      supports_hosted_web_search: true
+    })
+end
+
 # Web search for codex's `web.run` tool: Tavily, key from TAVILY_API_KEY.
 tavily_key = System.get_env("TAVILY_API_KEY")
 
