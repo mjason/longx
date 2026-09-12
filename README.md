@@ -105,6 +105,21 @@ codex 是 project 的资源，`Longx.Projects` 上可以管：
 | `reset_codex_home/1` | 整个目录删掉重建 |
 | 归档 project | 停 worker，目录留着；`delete_project/2` 要 `confirm: true`，删目录，**永远不碰工作目录** |
 
+### 内存：不设上限，但排好死的顺序
+
+大任务就是要吃内存，所以默认**没有硬上限**。Longx 做的是让系统缺内存时先死该死的：
+
+* Linux：每个 codex 进程树的 `oom_score_adj` 是 +500（BEAM 保持原值）。OOM killer 按
+  「RSS + 分数」挑，先杀那个吃了 20 GB 的命令，其次 codex（那一轮标 failed，其他 project 无感），
+  BEAM 永远排最后。生产用 systemd 跑时再加 `OOMScoreAdjust=-900` 更稳。
+* Windows：没有 OOM killer，内存耗尽时谁分配谁崩——所以 codex 树放进一个 Job 对象，
+  想限制时用 Job 的内存上限让**任务自己**分配失败，而不是拖垮 BEAM。Job 也让树杀变可靠。
+* 真想限制某个 project 就设 `memory_limit_mb`（Linux 是地址空间上限 RLIMIT_AS，JVM/Go/BEAM
+  这类预留地址空间的运行时要给得宽）。
+* 每 5 分钟 `Longx.Codex.Recycler` 看一遍所有 codex 进程：空闲且跑了 12 小时 / 树的 RSS 超 2 GB /
+  跑过 200 轮的就停掉，下次用再起（codex 长时间运行会持续涨内存）。有 turn 在跑的绝不碰。
+  每次采样也发 telemetry `[:longx, :codex, :worker, :sample]`，UI 可以画资源曲线。
+
 沙箱由 codex 自己做（Linux 用包里的 bubblewrap，需要非特权 user namespace；WSL1、多数容器不行）。
 启动时 `Longx.Codex.Sandbox` 会探测一次，不可用的话 UI 会常驻提示。`workspace_write` 沙箱默认断网，
 要装依赖的项目把 `network_access` 打开。

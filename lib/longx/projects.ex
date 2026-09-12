@@ -167,12 +167,15 @@ defmodule Longx.Projects do
   ## Which codex
 
   # `conn:` when the caller has one (tests); else the project's pooled codex
-  defp project_connection(%Project{id: project_id}, opts) do
+  defp project_connection(%Project{} = project, opts) do
     case Keyword.fetch(opts, :conn) do
       {:ok, conn} -> {:ok, conn}
-      :error -> Pool.connection(project_id)
+      :error -> Pool.connection(project.id, shim: shim_options(project))
     end
   end
+
+  defp shim_options(%Project{memory_limit_mb: nil}), do: []
+  defp shim_options(%Project{memory_limit_mb: mb}), do: [memory_limit: mb * 1024 * 1024]
 
   # `conn:` when given; else the codex hosting the thread — after a restart
   # nobody hosts it yet, so it is resumed on the project's codex first
@@ -183,9 +186,9 @@ defmodule Longx.Projects do
     end
   end
 
-  defp resume_on_pool(%Thread{codex_thread_id: codex_id, project_id: project_id}) do
+  defp resume_on_pool(%Thread{codex_thread_id: codex_id, project: project}) do
     with {:error, :no_connection} <- Pool.connection_for_thread(codex_id),
-         {:ok, conn} <- Pool.connection(project_id),
+         {:ok, conn} <- Pool.connection(project.id, shim: shim_options(project)),
          {:ok, _} <- Longx.Codex.Thread.resume(codex_id, conn: conn) do
       {:ok, conn}
     end
@@ -473,7 +476,8 @@ defmodule Longx.Projects do
 
   @doc "Stops (forced) and starts the project's codex again."
   @spec restart_codex(Project.t()) :: {:ok, pid} | {:error, term}
-  def restart_codex(%Project{id: project_id}), do: Pool.restart(project_id)
+  def restart_codex(%Project{id: project_id} = project),
+    do: Pool.restart(project_id, shim: shim_options(project))
 
   @doc """
   Forgets everything codex knows about this project: stops the worker and

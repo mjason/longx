@@ -14,10 +14,23 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
   termination: `kill/2` SIGTERMs the child's whole process group then SIGKILLs after a grace
   period; if the owner process or the BEAM dies the shim sees its stdin close and does the
   same. Protocol is defined twice — `native/shim/proto.go` and `lib/longx/shim/proto.ex` —
-  keep them in sync and bump the version in both when it changes. The binary is built by
-  `Mix.Tasks.Compile.Shim` into `priv/bin/` (gitignored) on `mix compile`; **Go must be on
-  PATH**. `mix precommit` also runs `gofmt`, `go vet`, `go test` in `native/shim`.
-  Windows support is via `CREATE_NEW_PROCESS_GROUP` + CTRL_BREAK + `taskkill /T`.
+  keep them in sync and bump the version in both when it changes (now 3). The binary is
+  built by `Mix.Tasks.Compile.Shim` into `priv/bin/` (gitignored) on `mix compile`; **Go must
+  be on PATH**. `mix precommit` also runs `gofmt`, `go vet`, `go test` in `native/shim`;
+  Windows/macOS code is `GOOS=windows|darwin go vet`-checked (no machine here to run it).
+  Windows support is via `CREATE_NEW_PROCESS_GROUP` + CTRL_BREAK + `taskkill /T`, plus a
+  **Job object** per child (`guard_windows.go`: `KILL_ON_JOB_CLOSE` makes tree kills reliable).
+  **Resource guards** (`native/shim/guard_*.go`, options `oom_score_adj:` / `memory_limit:`,
+  `Shim.stats/1`): Linux writes `oom_score_adj` to the shim itself before spawning so the
+  whole tree inherits it (raising needs no privilege; the BEAM stays at its own value — under
+  memory pressure the kernel kills the fattest process of a codex tree first, never the BEAM);
+  `memory_limit` is `RLIMIT_AS` via `prlimit(2)` on the child (Linux) or the Job's memory
+  limit (Windows; allocations fail inside the job — Windows has no OOM killer, so this is
+  the only way to keep commit for the BEAM), ignored on macOS. **RLIMIT_AS counts address
+  space**: runtimes that reserve it up front (a BEAM: 1 GiB carrier + scheduler stacks; JVM,
+  Go) need generous caps — the test fake needs 16 GiB. `stats/1` answers with the tree's
+  process count, RSS and CPU (Linux: `/proc` walk by parent pid; Windows: Job accounting +
+  working sets; macOS: `ps`).
 - `lib/longx/codex/runtime.ex` — `Longx.Codex.Runtime`: the **bundled** `codex-app-server`.
   Never use the machine's `codex`. Pinned to upstream release `rust-v0.154.0`; the
   `codex-app-server-package-<target>.tar.gz` asset (bare binary + `bwrap`/`rg`/`zsh` the
@@ -213,6 +226,28 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     unregisters first, then broadcasts `:down`. Shim or reader death → pending callers get
     `{:error, :connection_reset}`, process stops with `{:shutdown, :codex_exited}` and its
     worker restarts it. `Longx.Codex.Framing` / `Longx.Codex.Message` are the pure wire pieces.
+  - `Longx.Codex.Recycler` — every `tick` (5 min) it samples each running worker
+    (`Connection.info/1`: tree `stats`, `turns` since start, `active_turns`, uptime) as
+    telemetry `[:longx, :codex, :worker, :sample]` and **stops idle workers** past
+    `max_uptime_ms` (12 h) / `max_rss_bytes` (2 GiB, whole tree) / `max_turns` (200) — the
+    next use starts a fresh process (openai/codex#42738: a days-old app-server at 11 GB).
+    A worker with a turn in flight is never touched. `Recycler.sweep/0` runs one now.
+    `Pool.connection/2` takes `shim: [memory_limit: bytes]` (from `Project.memory_limit_mb`,
+    optional, min 64, off by default — a big task may use all the memory it needs; the OOM
+    ordering is what protects the BEAM); every codex tree gets `oom_score_adj: 500`
+    (`config :longx, Longx.Codex.Pool, oom_score_adj:`). `Home.prepare/1` sets
+    `TOKIO_WORKER_THREADS` (default 4, `config :longx, Longx.Codex.Home,
+    tokio_worker_threads:`): codex builds its tokio runtime with the default builder, which
+    honours it; its Linux musl build showed allocator lock storms with one worker per core
+    (openai/codex#43170; 0.154 switched musl to jemalloc, the cap stays as belt and braces).
+  - **Hard rules for codex's config** (`Longx.Codex.Home`): the generated `config.toml`
+    enables nothing beyond the gateway provider and web search — no computer use, no
+    `code_mode_host`, no `node_repl`/`js_repl`, no remote control, no MCP servers, no
+    plugins: every process leak and runaway-memory report against the desktop app comes
+    from those (openai/codex#43471, #44917, #35485, #38948). `data/` (CODEX_HOME, sqlite in
+    WAL mode) must be a local disk — never NFS/SMB (#44950, #35217). Codex stays pinned
+    (0.154.0); an upgrade is a pin change + `mix test --include integration` green, never
+    an alpha.
   - `Longx.Codex.Sandbox` — codex sandboxes commands itself (Linux bubblewrap from the
     bundle, macOS seatbelt, Windows restricted token); bubblewrap needs unprivileged user
     namespaces (WSL1, most containers, hardened distros refuse → codex rejects every sandboxed
@@ -309,8 +344,9 @@ Where tests live / what to use:
   (`references/ash/testing.md`).
 - Controllers / LiveViews → `test/longx_web/…`, `use LongxWeb.ConnCase`,
   `Phoenix.LiveViewTest` + `LazyHTML`; assert on element IDs, not raw HTML.
-- `Longx.Shim` → `test/longx/shim_test.exs` drives real OS processes (`cat`, `sh -c …`);
-  the Go side has its own `go test` suite in `native/shim` with an in-memory host harness.
+- `Longx.Shim` → `test/longx/shim_test.exs` drives real OS processes (`cat`, `sh -c …`;
+  the guard tests need `python3`); the Go side has its own `go test` suite in `native/shim`
+  with an in-memory host harness (`guard_test.go` is Linux-only).
 - `Longx.Codex.Runtime` / `Longx.Git.Runtime` → tests install from locally built fake
   tarballs (`source: {:file, …}`); the real download is never exercised in the unit suite.
 - `Longx.Git` → `test/longx/git_test.exs` runs the *bundled* git on temp repos in the default

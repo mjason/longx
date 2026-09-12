@@ -97,8 +97,13 @@ defmodule Longx.Codex.PoolE2ETest do
 
     home = Pool.home_dir(project_id)
     assert File.exists?(Path.join(home, "config.toml"))
-    assert %{worker: %{os_pid: os_pid}} = Projects.codex_info(project)
+    assert %{worker: %{os_pid: os_pid, stats: stats}} = Projects.codex_info(project)
     assert is_integer(os_pid)
+    # the guard rails reach the real binary: tree stats and the OOM preference
+    assert %{processes: n, rss_bytes: rss} = stats
+    assert n >= 1 and rss > 10 * 1024 * 1024
+    assert File.read!("/proc/#{os_pid}/oom_score_adj") |> String.trim() == "500"
+    assert File.read!("/proc/#{os_pid}/environ") =~ "TOKIO_WORKER_THREADS=4"
 
     {:ok, turn} = Projects.send_message(thread, "hi")
     assert_receive {:upstream, %{"model" => "real-upstream"}}, 60_000

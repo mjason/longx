@@ -29,6 +29,58 @@ defmodule Longx.ShimTest do
     end
   end
 
+  describe "resource guards (Linux)" do
+    test "stats/1 sums the child's process tree; empty after exit" do
+      {:ok, shim} =
+        Shim.start_link(
+          sh("python3 -c 'import time; b = bytearray(32*1024*1024); time.sleep(30)' & sleep 30")
+        )
+
+      assert eventually(fn ->
+               match?(
+                 {:ok, %{processes: n, rss_bytes: rss}} when n >= 3 and rss >= 32 * 1024 * 1024,
+                 Shim.stats(shim)
+               )
+             end)
+
+      assert {:ok, %{cpu_ms: cpu}} = Shim.stats(shim)
+      assert is_integer(cpu) and cpu >= 0
+
+      :ok = Shim.kill(shim, 1_000)
+      assert {:ok, _} = Shim.await_exit(shim, 5_000)
+    end
+
+    test "oom_score_adj: is inherited by the child" do
+      beam_before = File.read!("/proc/self/oom_score_adj")
+      {:ok, shim} = Shim.start_link(["sleep", "30"], oom_score_adj: 500)
+      pid = Shim.os_pid(shim)
+      assert File.read!("/proc/#{pid}/oom_score_adj") |> String.trim() == "500"
+      # the BEAM itself is untouched
+      assert File.read!("/proc/self/oom_score_adj") == beam_before
+      :ok = Shim.kill(shim, 1_000)
+      assert {:ok, _} = Shim.await_exit(shim, 5_000)
+    end
+
+    test "memory_limit: makes allocations fail inside the tree, not in the BEAM" do
+      {:ok, %{status: status, stdout: out}} =
+        Shim.run(["python3", "-c", "b = bytearray(512*1024*1024); print('allocated')"],
+          memory_limit: 256 * 1024 * 1024,
+          stderr: :disable
+        )
+
+      refute out =~ "allocated"
+      refute status == 0
+    end
+
+    test "invalid guard options are rejected up front" do
+      assert {:error, {:invalid_option, {:oom_score_adj, 5000}}} =
+               Shim.start_link(["true"], oom_score_adj: 5000)
+
+      assert {:error, {:invalid_option, {:memory_limit, -1}}} =
+               Shim.start_link(["true"], memory_limit: -1)
+    end
+  end
+
   describe "stdout" do
     test "reads output until eof and reports exit status" do
       {:ok, shim} = Shim.start_link(["echo", "hello"])

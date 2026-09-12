@@ -17,6 +17,13 @@ type config struct {
 	Dir    string
 	Stderr string        // "stream" | "console" | "disable" | "redirect_to_stdout"
 	Grace  time.Duration // SIGTERM → SIGKILL grace used when the host disappears
+	// OOMScoreAdj (Linux) is applied to the shim before the child is spawned, so
+	// the whole tree inherits it: with a positive value the kernel's OOM killer
+	// prefers this tree (fattest process first) over the BEAM.
+	OOMScoreAdj int
+	// MemoryLimit in bytes caps the child tree (Linux: RLIMIT_AS on the child,
+	// Windows: the Job's memory limit); 0 = none.
+	MemoryLimit uint64
 }
 
 // frameWriter serialises packets to the host. Any write error means the host
@@ -236,6 +243,9 @@ func readHost(hostIn io.Reader, child *child, inputCh chan<- []byte, termCh chan
 				close(inputCh)
 			}
 
+		case TagSendStats:
+			out.write(TagStats, encodeStats(child.stats()))
+
 		case TagSendOutput:
 			n, err := decodeUint32(pkt.Data)
 			if err != nil {
@@ -301,6 +311,7 @@ type child struct {
 	stderr  *stream // nil unless Stderr == "stream"
 	streams []*stream
 	waitErr error
+	guard   guard // platform resource guard (Job object on Windows)
 }
 
 // startChild launches cfg.Args with our own os.Pipe()s rather than
@@ -357,6 +368,9 @@ func startChild(cfg config, env []string) (*child, error) {
 		return nil, fmt.Errorf("invalid stderr mode %q", cfg.Stderr)
 	}
 
+	if err := beforeStart(cfg); err != nil {
+		logf("resource guard: %v", err)
+	}
 	err = proc.Start()
 	// The child holds its own copies now; ours must go so EOF can propagate.
 	stdinR.Close()
@@ -370,6 +384,9 @@ func startChild(cfg config, env []string) (*child, error) {
 			s.r.Close()
 		}
 		return nil, err
+	}
+	if err := afterStart(c, cfg); err != nil {
+		logf("resource guard: %v", err)
 	}
 	return c, nil
 }
@@ -401,5 +418,6 @@ func (c *child) terminate(grace time.Duration, waitDone <-chan struct{}) {
 	case <-time.After(grace):
 		logf("grace expired; hard-killing child tree")
 		hardKillTree(c.proc.Process)
+		c.guard.kill()
 	}
 }

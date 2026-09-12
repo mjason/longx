@@ -11,7 +11,12 @@ defmodule Longx.Codex.Pool do
   Configuration (`config :longx, Longx.Codex.Pool`):
     * `command:` — launch this instead of the bundled binary (tests)
     * `connection:` — extra `Longx.Codex.Connection` options
+    * `oom_score_adj:` — Linux OOM preference for every codex tree (default
+      500: under memory pressure the kernel kills the fattest process of a
+      codex tree — a runaway command, then codex — long before the BEAM)
   """
+
+  @default_oom_score_adj 500
 
   alias Longx.Codex.{Connection, Home, Worker}
 
@@ -28,12 +33,16 @@ defmodule Longx.Codex.Pool do
     }
   end
 
-  @doc "The project's connection, starting its codex if needed."
-  @spec connection(project_id) :: {:ok, pid} | {:error, term}
-  def connection(project_id) when is_binary(project_id) do
+  @doc """
+  The project's connection, starting its codex if needed. Options apply to a
+  start only (a running worker keeps what it was started with):
+  `shim: [memory_limit: bytes]` caps the codex tree.
+  """
+  @spec connection(project_id, keyword) :: {:ok, pid} | {:error, term}
+  def connection(project_id, opts \\ []) when is_binary(project_id) do
     case lookup(project_id) do
       {:ok, pid} -> {:ok, pid}
-      :error -> start(project_id)
+      :error -> start(project_id, opts)
     end
   end
 
@@ -79,10 +88,10 @@ defmodule Longx.Codex.Pool do
   end
 
   @doc "Stops and starts the project's codex; returns the new connection."
-  @spec restart(project_id) :: {:ok, pid} | {:error, term}
-  def restart(project_id) do
+  @spec restart(project_id, keyword) :: {:ok, pid} | {:error, term}
+  def restart(project_id, opts \\ []) do
     :ok = stop(project_id)
-    start(project_id)
+    start(project_id, opts)
   end
 
   @doc "The project's `CODEX_HOME`."
@@ -98,8 +107,10 @@ defmodule Longx.Codex.Pool do
     end
   end
 
-  defp start(project_id, attempts \\ 2) do
-    spec = {Worker, project_id: project_id, home_dir: home_dir(project_id), connection: launch()}
+  defp start(project_id, opts, attempts \\ 2) do
+    home = home_dir(project_id)
+    File.mkdir_p!(home)
+    spec = {Worker, project_id: project_id, home_dir: home, connection: launch(home, opts)}
 
     case DynamicSupervisor.start_child(@supervisor, spec) do
       {:ok, worker} ->
@@ -109,7 +120,7 @@ defmodule Longx.Codex.Pool do
       # way out (restart budget exhausted, or being stopped) — wait and see
       {:error, {:already_started, worker}} ->
         case await_connection(project_id, worker) do
-          {:error, :worker_exited} when attempts > 0 -> start(project_id, attempts - 1)
+          {:error, :worker_exited} when attempts > 0 -> start(project_id, opts, attempts - 1)
           other -> other
         end
 
@@ -146,15 +157,20 @@ defmodule Longx.Codex.Pool do
     end
   end
 
-  defp launch do
+  # the process runs inside its home either way (a configured `command:` —
+  # the test fake — gets no Home.prepare, so the cwd is all it has)
+  defp launch(home, opts) do
     config = Application.get_env(:longx, __MODULE__, [])
 
-    case Keyword.fetch(config, :command) do
-      {:ok, command} ->
-        Keyword.merge([command: command, env: []], Keyword.get(config, :connection, []))
+    shim =
+      [oom_score_adj: Keyword.get(config, :oom_score_adj, @default_oom_score_adj)]
+      |> Keyword.merge(Keyword.get(opts, :shim, []))
 
-      :error ->
-        Keyword.get(config, :connection, [])
+    extra = Keyword.merge([shim: shim], Keyword.get(config, :connection, []))
+
+    case Keyword.fetch(config, :command) do
+      {:ok, command} -> Keyword.merge([command: command, env: [], cd: home], extra)
+      :error -> extra
     end
   end
 

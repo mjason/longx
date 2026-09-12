@@ -16,19 +16,20 @@ import (
 )
 
 // ProtocolVersion must match Longx.Shim.Proto on the Elixir side.
-const ProtocolVersion = "2"
+const ProtocolVersion = "3"
 
 // Packets sent by the host to the shim.
 const (
-	TagInput       uint8 = 1 // payload: bytes for the child's stdin
-	TagCloseInput  uint8 = 2 // close the child's stdin
-	TagSendOutput  uint8 = 3 // payload: max::32 — read at most `max` bytes from stdout once
-	TagSendStderr  uint8 = 4 // payload: max::32 — same for stderr
-	TagCloseOutput uint8 = 5 // stop reading stdout
-	TagCloseStderr uint8 = 6 // stop reading stderr
-	TagKill        uint8 = 7 // payload: grace_ms::32 — terminate the tree, SIGKILL after grace
-	TagSignal      uint8 = 8 // payload: signum::32 — forward a signal to the child
-	TagCommandEnv  uint8 = 9 // payload: [len::16, "K=V"]* — must be the first packet
+	TagInput       uint8 = 1  // payload: bytes for the child's stdin
+	TagCloseInput  uint8 = 2  // close the child's stdin
+	TagSendOutput  uint8 = 3  // payload: max::32 — read at most `max` bytes from stdout once
+	TagSendStderr  uint8 = 4  // payload: max::32 — same for stderr
+	TagCloseOutput uint8 = 5  // stop reading stdout
+	TagCloseStderr uint8 = 6  // stop reading stderr
+	TagKill        uint8 = 7  // payload: grace_ms::32 — terminate the tree, SIGKILL after grace
+	TagSignal      uint8 = 8  // payload: signum::32 — forward a signal to the child
+	TagCommandEnv  uint8 = 9  // payload: [len::16, "K=V"]* — must be the first packet
+	TagSendStats   uint8 = 10 // answer with one Stats packet for the child's process tree
 )
 
 // Packets sent by the shim to the host.
@@ -41,6 +42,7 @@ const (
 	TagExitStatus uint8 = 21 // payload: status::32-signed
 	TagStartError uint8 = 22 // payload: reason string; the child never started
 	TagSendInput  uint8 = 23 // the child is ready for one more Input packet
+	TagStats      uint8 = 24 // payload: JSON {"processes","rss_bytes","cpu_ms"} (answer to SendStats)
 )
 
 // MaxPayload is the largest payload that fits in a single packet. Kept at

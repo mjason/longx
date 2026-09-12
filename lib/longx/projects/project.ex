@@ -38,6 +38,7 @@ defmodule Longx.Projects.Project do
         :tools,
         :dirty_start,
         :network_access,
+        :memory_limit_mb,
         :model_id
       ]
 
@@ -60,6 +61,7 @@ defmodule Longx.Projects.Project do
         :tools,
         :dirty_start,
         :network_access,
+        :memory_limit_mb,
         :model_id
       ]
 
@@ -121,6 +123,14 @@ defmodule Longx.Projects.Project do
     # (codex `sandbox_workspace_write.network_access`); read-only and
     # danger-full-access ignore it.
     attribute :network_access, :boolean, allow_nil?: false, default: false, public?: true
+
+    # Optional cap on the codex process tree (Linux RLIMIT_AS / Windows Job
+    # memory). Off by default: a task that needs 30 GB gets 30 GB; the OOM
+    # ordering (Longx.Codex.Pool) protects the BEAM instead.
+    attribute :memory_limit_mb, :integer do
+      public? true
+      constraints min: 64
+    end
 
     attribute :archived_at, :utc_datetime_usec, public?: true
 

@@ -34,6 +34,15 @@ defmodule Longx.Codex.Home do
     "http://127.0.0.1:#{port}/ai/v1"
   end
 
+  @default_tokio_worker_threads 4
+
+  @doc "`config :longx, Longx.Codex.Home, tokio_worker_threads:` (default 4)."
+  @spec tokio_worker_threads() :: pos_integer
+  def tokio_worker_threads do
+    Application.get_env(:longx, __MODULE__, [])
+    |> Keyword.get(:tokio_worker_threads, @default_tokio_worker_threads)
+  end
+
   @doc "Configured home directory."
   @spec default_dir() :: Path.t()
   def default_dir do
@@ -62,7 +71,13 @@ defmodule Longx.Codex.Home do
        %__MODULE__{
          dir: dir,
          config_path: config_path,
-         env: [{"CODEX_HOME", dir}, {Token.env_var(), Token.current()}]
+         env: [
+           {"CODEX_HOME", dir},
+           {Token.env_var(), Token.current()},
+           # tokio honours this; codex's musl build contends on its allocator
+           # with one worker per core on big machines (openai/codex#43170)
+           {"TOKIO_WORKER_THREADS", Integer.to_string(tokio_worker_threads())}
+         ]
        }}
     end
   end

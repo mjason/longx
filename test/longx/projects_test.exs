@@ -29,6 +29,7 @@ defmodule Longx.ProjectsTest do
       assert project.tools == []
       assert project.dirty_start == :commit
       assert project.network_access == false
+      assert project.memory_limit_mb == nil
       assert project.model_id == nil
       assert project.archived_at == nil
     end
@@ -112,6 +113,16 @@ defmodule Longx.ProjectsTest do
       assert info.files["state_5.sqlite"] == 2_048
       assert info.files["thread_history_1.sqlite"] == 4_096
       assert %{pid: ^conn, phase: _, started_at: %DateTime{}} = info.worker
+    end
+
+    test "memory_limit_mb caps the project's codex tree", %{project: project} do
+      assert {:error, %Ash.Error.Invalid{}} =
+               Projects.update_project(project, %{memory_limit_mb: 10})
+
+      # (address-space cap; the fake app-server is a BEAM and needs room to map its carrier)
+      project = Projects.update_project!(project, %{memory_limit_mb: 16_384})
+      {:ok, _} = Projects.start_thread(project)
+      assert %{worker: %{memory_limit: 17_179_869_184}} = Projects.codex_info(project)
     end
 
     test "stop_codex/2 and restart_codex/1 drive the worker", %{project: project} do
