@@ -85,6 +85,30 @@ lib/longx/tools/           给 codex 的 Elixir 工具 —— 见下文
 disabled 也按模型的 provider 决定，而不是全局一个。换模型重做某一轮时只换得了 effort / summary，
 上下文窗口和搜索模式还是线程开始时那个模型的。
 
+## 每个 project 一个 codex
+
+Longx 不是一个 codex 服务所有会话：**每个 project 有自己的 codex-app-server 进程和自己的
+`CODEX_HOME`**（`data/codex_home/<project id>/`，codex 的 sqlite、会话都在里面）。第一次用到时
+才启动，坏一个只坏一个：某个 project 的 codex 崩溃/挂起，其他 project 完全无感。
+
+崩溃时的收尾是自动的：正在跑的那一轮标成 `failed`（"codex restarted…"），线程标 `disconnected`，
+codex 重启后自动 `thread/resume` 接回来；接不回来的标 `unrecoverable`。一轮超过 10 分钟没有任何
+事件会被打断（`config :longx, Longx.Projects.Tracker, stall_after:`）。
+
+codex 是 project 的资源，`Longx.Projects` 上可以管：
+
+| 函数 | 作用 |
+| --- | --- |
+| `codex_info/1` | home 路径和大小、sqlite 文件、worker 状态（pid / 启动时间） |
+| `stop_codex/2` / `restart_codex/1` | 停/重启；有 turn 在跑时要 `force: true` |
+| `clear_codex_history/1` | 清掉 codex 的状态（对话历史没了，线程标 `unrecoverable`），保留我们的配置 |
+| `reset_codex_home/1` | 整个目录删掉重建 |
+| 归档 project | 停 worker，目录留着；`delete_project/2` 要 `confirm: true`，删目录，**永远不碰工作目录** |
+
+沙箱由 codex 自己做（Linux 用包里的 bubblewrap，需要非特权 user namespace；WSL1、多数容器不行）。
+启动时 `Longx.Codex.Sandbox` 会探测一次，不可用的话 UI 会常驻提示。`workspace_write` 沙箱默认断网，
+要装依赖的项目把 `network_access` 打开。
+
 ## 扩展指南：给 agent 添加 Elixir 工具
 
 codex 自带 shell、文件编辑、联网搜索等工具。Longx 在此之上允许你用 Elixir 写工具，
@@ -145,6 +169,16 @@ end
 | `namespace/0` | `"builtin"` | 分组；模型按 `namespace.name` 区分同名工具 |
 | `available?/1` | `true` | 按 thread 决定是否声明这个工具（比如需要有 project 才有意义） |
 | `timeout/0` | `30_000` ms | 超时会被强制终止并回报给模型 |
+
+### 安全边界：工具跑在沙箱外
+
+codex 自己的命令在它的沙箱里跑；**Elixir 工具没有任何沙箱**，模型给的参数直接进你的代码，
+用的是 Longx 进程的全部权限。所以：
+
+* 不要把模型给的参数拼进 shell（`System.cmd`/`Longx.Shim` 用 argv 列表，不要拼字符串）；
+* 文件路径先 `Path.expand` 再确认在 `ctx.cwd`（project 根目录）之内，越界直接返回错误；
+* 会产生副作用的操作（删除、推送、花钱）用 `{:defer, …}` 走审批，别默认放行；
+* 输出给模型之前截断，别把整个文件/整个响应塞回去。
 
 ### 2. 参数已经校验过了
 

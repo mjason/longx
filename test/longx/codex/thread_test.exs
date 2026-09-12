@@ -135,6 +135,16 @@ defmodule Longx.Codex.ThreadTest do
       assert Thread.fork_params("t", []) == %{"threadId" => "t"}
     end
 
+    test "network_access: true opens the network inside the workspace-write sandbox" do
+      assert Thread.start_params(cwd: "/p", tools: [], network_access: true)["config"] ==
+               %{"sandbox_workspace_write.network_access" => true}
+
+      refute Map.has_key?(
+               Thread.start_params(cwd: "/p", tools: [], network_access: false),
+               "config"
+             )
+    end
+
     test "threads are always paginated (thread/revert needs it)" do
       assert Thread.start_params(cwd: "/p", tools: [])["historyMode"] == "paginated"
     end

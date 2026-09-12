@@ -42,7 +42,7 @@ defmodule Longx.Test.CodexHarness do
         id: {:conn, home.dir}
       )
 
-    assert_receive {:codex_connection, :ready}, 30_000
+    assert_receive {:codex_connection, _, :ready}, 30_000
     conn
   end
 

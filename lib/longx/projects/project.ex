@@ -37,6 +37,7 @@ defmodule Longx.Projects.Project do
         :sandbox,
         :tools,
         :dirty_start,
+        :network_access,
         :model_id
       ]
 
@@ -58,6 +59,7 @@ defmodule Longx.Projects.Project do
         :sandbox,
         :tools,
         :dirty_start,
+        :network_access,
         :model_id
       ]
 
@@ -114,6 +116,11 @@ defmodule Longx.Projects.Project do
       default :commit
       constraints one_of: [:commit, :ask, :off]
     end
+
+    # The workspace-write sandbox has no network unless the project says so
+    # (codex `sandbox_workspace_write.network_access`); read-only and
+    # danger-full-access ignore it.
+    attribute :network_access, :boolean, allow_nil?: false, default: false, public?: true
 
     attribute :archived_at, :utc_datetime_usec, public?: true
 

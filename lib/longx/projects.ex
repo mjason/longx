@@ -15,7 +15,6 @@ defmodule Longx.Projects do
     resource Project do
       define :create_project, action: :create
       define :update_project, action: :update
-      define :archive_project, action: :archive
       define :get_project_by_slug, action: :by_slug, args: [:slug]
       define :list_active_projects, action: :active
       define :list_all_projects, action: :read
@@ -28,6 +27,7 @@ defmodule Longx.Projects do
       define :archive_thread, action: :archive
       define :get_thread_by_codex_id, action: :by_codex_id, args: [:codex_thread_id]
       define :list_threads_for_project, action: :for_project, args: [:project_id]
+      define :list_threads_with_status, action: :with_status, args: [:project_id, :status]
     end
 
     resource Longx.Projects.Turn do
@@ -36,6 +36,7 @@ defmodule Longx.Projects do
       define :set_turn_diff, action: :set_diff
       define :mark_turn_reverted, action: :mark_reverted
       define :get_turn_by_codex_id, action: :by_codex_id, args: [:codex_turn_id]
+      define :list_turns_in_progress, action: :in_progress_for_project, args: [:project_id]
 
       define :list_turns_for_thread,
         action: :for_thread,
@@ -43,6 +44,7 @@ defmodule Longx.Projects do
     end
   end
 
+  alias Longx.Codex.Pool
   alias Longx.Projects.{Thread, Tracker, Turn}
 
   @doc "Threads of a project, most recently active first."
@@ -87,15 +89,17 @@ defmodule Longx.Projects do
     # the model's own settings (context window, reasoning, web search mode);
     # an unknown slug or a missing default is refused before codex is involved
     with {:ok, model_opts} <- Longx.AI.thread_options(model_slug),
+         {:ok, conn} <- project_connection(project, opts),
          codex_opts =
            [
              cwd: project.root_path,
              approval_policy: approval_policy,
              sandbox: sandbox,
-             tools: tools
+             tools: tools,
+             network_access: project.network_access,
+             conn: conn
            ]
-           |> Keyword.merge(model_opts)
-           |> put_if(:conn, Keyword.get(opts, :conn)),
+           |> Keyword.merge(model_opts),
          {:ok, codex_thread_id} <- Longx.Codex.Thread.start(codex_opts),
          {:ok, thread} <-
            create_thread(%{
@@ -130,14 +134,12 @@ defmodule Longx.Projects do
     thread = Ash.get!(Thread, id, load: :project)
     model_slug = Keyword.get(opts, :model, thread.model_slug)
 
-    with {:ok, turn_opts} <- turn_options(model_slug, thread),
+    with :ok <- ensure_usable(thread),
+         {:ok, turn_opts} <- turn_options(model_slug, thread),
+         {:ok, conn} <- thread_connection(thread, opts),
          {:ok, bookmark} <- preflight(thread, text, opts),
          {:ok, codex_turn_id} <-
-           Longx.Codex.Thread.send(
-             thread.codex_thread_id,
-             text,
-             turn_opts |> put_if(:conn, Keyword.get(opts, :conn))
-           ),
+           Longx.Codex.Thread.send(thread.codex_thread_id, text, [{:conn, conn} | turn_opts]),
          {:ok, turn} <-
            create_turn(%{
              codex_turn_id: codex_turn_id,
@@ -155,6 +157,37 @@ defmodule Longx.Projects do
       })
 
       {:ok, turn}
+    end
+  end
+
+  defp ensure_usable(%Thread{status: :unrecoverable}), do: {:error, :thread_unrecoverable}
+  defp ensure_usable(%Thread{status: :archived}), do: {:error, :thread_archived}
+  defp ensure_usable(_thread), do: :ok
+
+  ## Which codex
+
+  # `conn:` when the caller has one (tests); else the project's pooled codex
+  defp project_connection(%Project{id: project_id}, opts) do
+    case Keyword.fetch(opts, :conn) do
+      {:ok, conn} -> {:ok, conn}
+      :error -> Pool.connection(project_id)
+    end
+  end
+
+  # `conn:` when given; else the codex hosting the thread — after a restart
+  # nobody hosts it yet, so it is resumed on the project's codex first
+  defp thread_connection(%Thread{} = thread, opts) do
+    case Keyword.fetch(opts, :conn) do
+      {:ok, conn} -> {:ok, conn}
+      :error -> resume_on_pool(thread)
+    end
+  end
+
+  defp resume_on_pool(%Thread{codex_thread_id: codex_id, project_id: project_id}) do
+    with {:error, :no_connection} <- Pool.connection_for_thread(codex_id),
+         {:ok, conn} <- Pool.connection(project_id),
+         {:ok, _} <- Longx.Codex.Thread.resume(codex_id, conn: conn) do
+      {:ok, conn}
     end
   end
 
@@ -237,10 +270,11 @@ defmodule Longx.Projects do
       |> list_turns!()
       |> Enum.filter(&(DateTime.compare(&1.started_at, turn.started_at) != :lt))
 
-    conn = Keyword.get(opts, :conn)
     model = Keyword.get(opts, :model, thread.model_slug)
 
-    with :ok <- ensure_redoable(turn, later),
+    with :ok <- ensure_usable(thread),
+         {:ok, conn} <- thread_connection(thread, opts),
+         :ok <- ensure_redoable(turn, later),
          :ok <- maybe_restore(turn, Keyword.get(opts, :restore_files, false)),
          {:ok, target} <-
            rewind(Keyword.get(opts, :mode, :revert), thread, turn, later, model, conn) do
@@ -382,6 +416,132 @@ defmodule Longx.Projects do
 
   defp restore(dir, sha, :restore_tree), do: Git.restore_tree(dir, sha)
   defp restore(dir, sha, :reset_hard), do: Git.reset_hard(dir, sha)
+
+  ## The project's codex: process and CODEX_HOME
+
+  # codex's own state inside the home; everything else there is ours (config)
+  @codex_state_globs ~w(*.sqlite *.sqlite-wal *.sqlite-shm sessions logs db-backups archived_sessions memories skills tmp)
+
+  @doc """
+  The project's codex resources: the `CODEX_HOME` directory (path, size,
+  the sqlite files codex keeps there) and the worker (`:stopped` or
+  `Longx.Codex.Connection.info/1`).
+  """
+  @spec codex_info(Project.t()) :: %{
+          home: Path.t(),
+          exists?: boolean,
+          bytes: non_neg_integer,
+          files: %{String.t() => non_neg_integer},
+          worker: :stopped | map
+        }
+  def codex_info(%Project{id: project_id}) do
+    home = Pool.home_dir(project_id)
+    exists? = File.dir?(home)
+
+    files =
+      if exists?,
+        do:
+          home
+          |> Path.join("*.sqlite")
+          |> Path.wildcard()
+          |> Map.new(&{Path.basename(&1), size(&1)}),
+        else: %{}
+
+    %{
+      home: home,
+      exists?: exists?,
+      bytes: if(exists?, do: dir_bytes(home), else: 0),
+      files: files,
+      worker: Pool.status(project_id)
+    }
+  end
+
+  @doc """
+  Stops the project's codex. Refuses with `{:error, {:turn_in_progress, id}}`
+  while a turn runs, unless `force: true` (the turn then fails as "codex
+  restarted", see `Longx.Projects.Tracker`).
+  """
+  @spec stop_codex(Project.t(), keyword) :: :ok | {:error, {:turn_in_progress, String.t()}}
+  def stop_codex(%Project{id: project_id}, opts \\ []) do
+    running = list_turns_in_progress!(project_id)
+
+    case {running, Keyword.get(opts, :force, false)} do
+      {[turn | _], false} -> {:error, {:turn_in_progress, turn.id}}
+      _ -> Pool.stop(project_id)
+    end
+  end
+
+  @doc "Stops (forced) and starts the project's codex again."
+  @spec restart_codex(Project.t()) :: {:ok, pid} | {:error, term}
+  def restart_codex(%Project{id: project_id}), do: Pool.restart(project_id)
+
+  @doc """
+  Forgets everything codex knows about this project: stops the worker and
+  removes codex's state from the home (sqlite databases, sessions, logs…),
+  keeping our config. Our thread and turn rows stay, but the threads become
+  `:unrecoverable` — their conversation is gone.
+  """
+  @spec clear_codex_history(Project.t()) :: :ok
+  def clear_codex_history(%Project{id: project_id}) do
+    :ok = Pool.stop(project_id)
+    home = Pool.home_dir(project_id)
+
+    for glob <- @codex_state_globs,
+        path <- Path.wildcard(Path.join(home, glob), match_dot: true) do
+      File.rm_rf!(path)
+    end
+
+    project_id
+    |> list_threads_for_project!()
+    |> Enum.each(&touch_thread!(&1, %{status: :unrecoverable}))
+
+    :ok
+  end
+
+  @doc "Stops the worker and deletes the whole `CODEX_HOME` (config included)."
+  @spec reset_codex_home(Project.t()) :: :ok
+  def reset_codex_home(%Project{id: project_id}) do
+    :ok = Pool.stop(project_id)
+    File.rm_rf!(Pool.home_dir(project_id))
+    :ok
+  end
+
+  @doc "Archives the project: its codex is stopped, the home is kept."
+  @spec archive_project(Project.t()) :: {:ok, Project.t()} | {:error, term}
+  def archive_project(%Project{id: project_id} = project) do
+    :ok = Pool.stop(project_id)
+    Ash.update(project, %{}, action: :archive)
+  end
+
+  def archive_project!(project) do
+    {:ok, archived} = archive_project(project)
+    archived
+  end
+
+  @doc """
+  Deletes the project, its threads and turns, and its `CODEX_HOME`. The
+  working directory itself is never touched. Needs `confirm: true`.
+  """
+  @spec delete_project(Project.t(), keyword) :: :ok | {:error, :confirmation_required | term}
+  def delete_project(%Project{} = project, opts \\ []) do
+    if Keyword.get(opts, :confirm, false) do
+      :ok = reset_codex_home(project)
+      Ash.destroy(project)
+    else
+      {:error, :confirmation_required}
+    end
+  end
+
+  defp size(path), do: File.stat!(path).size
+
+  defp dir_bytes(dir) do
+    dir
+    |> Path.join("**")
+    |> Path.wildcard(match_dot: true)
+    |> Enum.filter(&File.regular?/1)
+    |> Enum.map(&size/1)
+    |> Enum.sum()
+  end
 
   @doc "Active projects, newest first; `include_archived: true` for all."
   @spec list_projects(keyword) :: {:ok, [Project.t()]} | {:error, term}

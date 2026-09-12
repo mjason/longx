@@ -57,6 +57,12 @@ defmodule Longx.Projects.Thread do
       filter expr(project_id == ^arg(:project_id) and status != :archived)
       prepare build(sort: [last_activity_at: :desc_nils_last, inserted_at: :desc])
     end
+
+    read :with_status do
+      argument :project_id, :uuid, allow_nil?: false
+      argument :status, :atom, allow_nil?: false
+      filter expr(project_id == ^arg(:project_id) and status == ^arg(:status))
+    end
   end
 
   attributes do
@@ -90,7 +96,9 @@ defmodule Longx.Projects.Thread do
       allow_nil? false
       public? true
       default :idle
-      constraints one_of: [:idle, :active, :archived]
+      # :disconnected — its codex died; resumed (→ :idle) when it is back
+      # :unrecoverable — codex no longer knows it; history is gone
+      constraints one_of: [:idle, :active, :disconnected, :unrecoverable, :archived]
     end
 
     attribute :last_activity_at, :utc_datetime_usec, public?: true

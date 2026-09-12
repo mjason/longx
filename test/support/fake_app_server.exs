@@ -13,13 +13,42 @@
 #   "server-notify"    emit a notification without a threadId
 #
 # Requests before the initialize/initialized handshake get "Not initialized".
+#
+# With FAKE_PERSIST=1 the ids of started threads are kept in ./fake_threads.txt
+# (like codex keeps threads on disk), and thread/resume fails for ids that
+# were never started — a restarted fake can then resume real threads only.
 
 defmodule FakeAppServer do
+  @persist_file "fake_threads.txt"
+
   def main do
     # ids unique per server process (like codex's UUIDs): the ETS-backed
     # ThreadState store outlives tests, so two fakes must never share ids
-    loop(%{initialized: false, next: 1, prefix: System.pid(), threads: %{}, pending: %{}})
+    loop(%{
+      initialized: false,
+      next: 1,
+      prefix: System.pid(),
+      threads: %{},
+      pending: %{},
+      persist: System.get_env("FAKE_PERSIST") == "1",
+      known: load_known()
+    })
   end
+
+  defp load_known do
+    case File.read(@persist_file) do
+      {:ok, content} -> content |> String.split("\n", trim: true) |> MapSet.new()
+      _ -> MapSet.new()
+    end
+  end
+
+  # remember a thread id across restarts (FAKE_PERSIST=1)
+  defp remember(%{persist: true, known: known} = state, thread_id) do
+    File.write!(@persist_file, thread_id <> "\n", [:append])
+    %{state | known: MapSet.put(known, thread_id)}
+  end
+
+  defp remember(state, _thread_id), do: state
 
   defp loop(state) do
     case IO.binread(:stdio, :line) do
@@ -86,16 +115,22 @@ defmodule FakeAppServer do
       | next: state.next + 1,
         threads: Map.put(state.threads, thread_id, %{turns: [], params: msg["params"] || %{}})
     }
+    |> remember(thread_id)
   end
 
   defp handle(
          %{"id" => id, "method" => "thread/resume", "params" => %{"threadId" => thread_id}},
          state
        ) do
-    thread = %{"id" => thread_id, "preview" => "", "sessionId" => thread_id}
-    reply(id, %{"thread" => thread})
-    notify("thread/started", %{"thread" => thread})
-    %{state | threads: Map.put_new(state.threads, thread_id, %{turns: []})}
+    if state.persist and not MapSet.member?(state.known, thread_id) do
+      error(id, -32602, "thread not found: #{thread_id}")
+      state
+    else
+      thread = %{"id" => thread_id, "preview" => "", "sessionId" => thread_id}
+      reply(id, %{"thread" => thread})
+      notify("thread/started", %{"thread" => thread})
+      %{state | threads: Map.put_new(state.threads, thread_id, %{turns: []})}
+    end
   end
 
   # thread/revert: drop the given turn and everything after it (codex only allows this on paginated threads)
@@ -165,6 +200,7 @@ defmodule FakeAppServer do
       | next: state.next + 1,
         threads: Map.put(state.threads, new_id, %{turns: Enum.reverse(kept), params: params})
     }
+    |> remember(new_id)
   end
 
   defp handle(

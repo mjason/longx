@@ -5,11 +5,13 @@ defmodule Longx.Codex.Thread do
   subscribe to its `Longx.Codex.ThreadState`.
 
   This is the one place snake_case options are turned into codex's
-  camelCase/kebab-case wire values. Every function takes `conn:` (default
-  `Longx.Codex.Connection`, the node-wide connection).
+  camelCase/kebab-case wire values. Every function takes `conn:`; for an
+  existing thread it defaults to the connection hosting it
+  (`Longx.Codex.Pool.connection_for_thread/1`), so only `start/1` and
+  `resume/2` (a thread no running codex has seen yet) need it.
   """
 
-  alias Longx.Codex.{Connection, ThreadState}
+  alias Longx.Codex.{Connection, Pool, ThreadState}
   alias Longx.Codex.Tool.{Context, Registry}
 
   @type approval_policy :: :never | :on_request | :untrusted
@@ -25,6 +27,7 @@ defmodule Longx.Codex.Thread do
           | {:reasoning_effort, String.t()}
           | {:reasoning_summary, atom}
           | {:web_search, web_search}
+          | {:network_access, boolean}
           | {:tools, [module | String.t()]}
           | {:conn, GenServer.server()}
 
@@ -45,7 +48,7 @@ defmodule Longx.Codex.Thread do
   @spec start([start_option]) :: {:ok, String.t()} | {:error, term}
   def start(opts) do
     with {:ok, %{"thread" => %{"id" => thread_id}}} <-
-           Connection.request(conn(opts), "thread/start", start_params(opts)),
+           Connection.request(Keyword.fetch!(opts, :conn), "thread/start", start_params(opts)),
          # so callers can subscribe/snapshot right away; thread/started fills it in
          {:ok, _} <- ThreadState.ensure(thread_id) do
       {:ok, thread_id}
@@ -55,7 +58,7 @@ defmodule Longx.Codex.Thread do
   @doc "Resumes a stored thread and rebuilds its `ThreadState` from `thread/read`."
   @spec resume(String.t(), keyword) :: {:ok, String.t()} | {:error, term}
   def resume(thread_id, opts \\ []) do
-    conn = conn(opts)
+    conn = Keyword.fetch!(opts, :conn)
     params = %{"threadId" => thread_id} |> put_model(Keyword.get(opts, :model))
 
     with {:ok, _} <- Connection.request(conn, "thread/resume", params),
@@ -77,8 +80,9 @@ defmodule Longx.Codex.Thread do
   """
   @spec send(String.t(), String.t(), keyword) :: {:ok, String.t()} | {:error, term}
   def send(thread_id, text, opts \\ []) do
-    with {:ok, %{"turn" => %{"id" => turn_id}}} <-
-           Connection.request(conn(opts), "turn/start", turn_params(thread_id, text, opts)) do
+    with {:ok, conn} <- conn(thread_id, opts),
+         {:ok, %{"turn" => %{"id" => turn_id}}} <-
+           Connection.request(conn, "turn/start", turn_params(thread_id, text, opts)) do
       {:ok, turn_id}
     end
   end
@@ -92,7 +96,9 @@ defmodule Longx.Codex.Thread do
       "input" => [%{"type" => "text", "text" => text}]
     }
 
-    with {:ok, _} <- Connection.request(conn(opts), "turn/steer", params), do: :ok
+    with {:ok, conn} <- conn(thread_id, opts),
+         {:ok, _} <- Connection.request(conn, "turn/steer", params),
+         do: :ok
   end
 
   @doc """
@@ -105,7 +111,8 @@ defmodule Longx.Codex.Thread do
   def revert(thread_id, turn_id, opts \\ []) do
     params = %{"threadId" => thread_id, "beforeTurnId" => turn_id}
 
-    with {:ok, _} <- Connection.request(conn(opts), "thread/revert", params),
+    with {:ok, conn} <- conn(thread_id, opts),
+         {:ok, _} <- Connection.request(conn, "thread/revert", params),
          {:ok, _} <- ThreadState.ensure(thread_id) do
       turn_ids = Keyword.get_lazy(opts, :turn_ids, fn -> turns_from(thread_id, turn_id) end)
       ThreadState.drop_turns(thread_id, turn_ids)
@@ -128,8 +135,9 @@ defmodule Longx.Codex.Thread do
   """
   @spec fork(String.t(), keyword) :: {:ok, String.t()} | {:error, term}
   def fork(thread_id, opts \\ []) do
-    with {:ok, %{"thread" => %{"id" => new_id}}} <-
-           Connection.request(conn(opts), "thread/fork", fork_params(thread_id, opts)),
+    with {:ok, conn} <- conn(thread_id, opts),
+         {:ok, %{"thread" => %{"id" => new_id}}} <-
+           Connection.request(conn, "thread/fork", fork_params(thread_id, opts)),
          {:ok, _} <- ThreadState.ensure(new_id) do
       {:ok, new_id}
     end
@@ -140,24 +148,31 @@ defmodule Longx.Codex.Thread do
 
   @spec interrupt(String.t(), String.t(), keyword) :: :ok | {:error, term}
   def interrupt(thread_id, turn_id, opts \\ []) do
-    with {:ok, _} <-
-           Connection.request(conn(opts), "turn/interrupt", %{
+    with {:ok, conn} <- conn(thread_id, opts),
+         {:ok, _} <-
+           Connection.request(conn, "turn/interrupt", %{
              "threadId" => thread_id,
              "turnId" => turn_id
            }),
          do: :ok
   end
 
-  @doc "Answers a pending approval (`item/commandExecution/requestApproval` / `item/fileChange/requestApproval`)."
-  @spec respond(term, decision, keyword) :: :ok | {:error, :unknown_request}
+  @doc """
+  Answers a pending approval (`item/commandExecution/requestApproval` /
+  `item/fileChange/requestApproval`). The request lives in one connection:
+  pass `conn:` or `thread_id:` (the thread it belongs to).
+  """
+  @spec respond(term, decision, keyword) :: :ok | {:error, :unknown_request | :no_connection}
   def respond(request_id, decision, opts \\ []) when is_map_key(@decisions, decision) do
-    Connection.respond(conn(opts), request_id, decision(decision))
+    respond_raw(request_id, decision(decision), opts)
   end
 
-  @doc "Answers any pending server request with a raw result map."
-  @spec respond_raw(term, map, keyword) :: :ok | {:error, :unknown_request}
-  def respond_raw(request_id, result, opts \\ []),
-    do: Connection.respond(conn(opts), request_id, result)
+  @doc "Answers any pending server request with a raw result map (`conn:` or `thread_id:`)."
+  @spec respond_raw(term, map, keyword) :: :ok | {:error, :unknown_request | :no_connection}
+  def respond_raw(request_id, result, opts \\ []) do
+    with {:ok, conn} <- conn(Keyword.get(opts, :thread_id), opts),
+         do: Connection.respond(conn, request_id, result)
+  end
 
   @spec snapshot(String.t()) :: ThreadState.snapshot()
   def snapshot(thread_id) do
@@ -246,6 +261,12 @@ defmodule Longx.Codex.Thread do
         mode -> Map.merge(config, Map.fetch!(@web_search_config, mode))
       end
 
+    # only the opt-in is written: codex's default is already "no network"
+    config =
+      if Keyword.get(opts, :network_access, false),
+        do: Map.put(config, "sandbox_workspace_write.network_access", true),
+        else: config
+
     if map_size(config) == 0, do: params, else: Map.put(params, "config", config)
   end
 
@@ -269,5 +290,12 @@ defmodule Longx.Codex.Thread do
   @spec decision(decision) :: map
   def decision(decision), do: %{"decision" => Map.fetch!(@decisions, decision)}
 
-  defp conn(opts), do: Keyword.get(opts, :conn, Connection)
+  # `conn:` when given, else the connection that hosts the thread
+  defp conn(thread_id, opts) do
+    case Keyword.fetch(opts, :conn) do
+      {:ok, conn} -> {:ok, conn}
+      :error when is_binary(thread_id) -> Pool.connection_for_thread(thread_id)
+      :error -> {:error, :no_connection}
+    end
+  end
 end

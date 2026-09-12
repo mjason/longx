@@ -28,6 +28,7 @@ defmodule Longx.ProjectsTest do
       assert project.sandbox == :workspace_write
       assert project.tools == []
       assert project.dirty_start == :commit
+      assert project.network_access == false
       assert project.model_id == nil
       assert project.archived_at == nil
     end
@@ -75,6 +76,99 @@ defmodule Longx.ProjectsTest do
                  root_path: dir,
                  model_id: Ash.UUIDv7.generate()
                })
+    end
+  end
+
+  describe "the project's codex (process + CODEX_HOME)" do
+    alias Longx.Codex.Pool
+
+    setup %{dir: dir} do
+      project = create!(dir)
+      home = Pool.home_dir(project.id)
+      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project.id]) && File.rm_rf!(home) end)
+      %{project: project, home: home}
+    end
+
+    defp fake_home!(home) do
+      File.mkdir_p!(Path.join(home, "sessions/2026/09/12"))
+      File.write!(Path.join(home, "config.toml"), "# generated\n")
+      File.write!(Path.join(home, "state_5.sqlite"), String.duplicate("x", 2_048))
+      File.write!(Path.join(home, "thread_history_1.sqlite"), String.duplicate("y", 4_096))
+      File.write!(Path.join(home, "sessions/2026/09/12/rollout-1.jsonl"), "{}\n")
+    end
+
+    test "codex_info/1 describes the home directory and the worker", %{
+      project: project,
+      home: home
+    } do
+      assert %{home: ^home, exists?: false, bytes: 0, files: %{}, worker: :stopped} =
+               Projects.codex_info(project)
+
+      fake_home!(home)
+      {:ok, conn} = Pool.connection(project.id)
+      info = Projects.codex_info(project)
+      assert info.exists?
+      assert info.bytes > 6_000
+      assert info.files["state_5.sqlite"] == 2_048
+      assert info.files["thread_history_1.sqlite"] == 4_096
+      assert %{pid: ^conn, phase: _, started_at: %DateTime{}} = info.worker
+    end
+
+    test "stop_codex/2 and restart_codex/1 drive the worker", %{project: project} do
+      {:ok, conn} = Pool.connection(project.id)
+      assert :ok = Projects.stop_codex(project)
+      assert Pool.status(project.id) == :stopped
+
+      assert {:ok, again} = Projects.restart_codex(project)
+      refute again == conn
+      assert %{pid: ^again} = Pool.status(project.id)
+    end
+
+    test "stop_codex/2 refuses while a turn is running unless forced", %{project: project} do
+      {:ok, thread} = Projects.start_thread(project)
+      {:ok, _turn} = Projects.send_message(thread, "stall")
+      assert {:error, {:turn_in_progress, _}} = Projects.stop_codex(project)
+      assert :ok = Projects.stop_codex(project, force: true)
+      assert Pool.status(project.id) == :stopped
+    end
+
+    test "clear_codex_history/1 wipes codex's state and marks the threads unrecoverable", %{
+      project: project,
+      home: home
+    } do
+      fake_home!(home)
+      {:ok, thread} = Projects.start_thread(project)
+
+      assert :ok = Projects.clear_codex_history(project)
+      assert Pool.status(project.id) == :stopped
+      refute File.exists?(Path.join(home, "state_5.sqlite"))
+      refute File.exists?(Path.join(home, "sessions"))
+      # the config is ours, it stays
+      assert File.exists?(Path.join(home, "config.toml"))
+      assert Ash.get!(Projects.Thread, thread.id).status == :unrecoverable
+    end
+
+    test "reset_codex_home/1 removes the whole directory", %{project: project, home: home} do
+      fake_home!(home)
+      {:ok, _} = Pool.connection(project.id)
+      assert :ok = Projects.reset_codex_home(project)
+      refute File.exists?(home)
+      assert Pool.status(project.id) == :stopped
+    end
+
+    test "archiving stops the worker and keeps the home; deleting needs confirm and removes it",
+         %{project: project, home: home} do
+      fake_home!(home)
+      {:ok, _} = Pool.connection(project.id)
+
+      assert {:ok, _} = Projects.archive_project(project)
+      assert Pool.status(project.id) == :stopped
+      assert File.exists?(home)
+
+      assert {:error, :confirmation_required} = Projects.delete_project(project)
+      assert :ok = Projects.delete_project(project, confirm: true)
+      refute File.exists?(home)
+      assert {:error, _} = Projects.get_project_by_slug(project.slug)
     end
   end
 

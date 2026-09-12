@@ -43,14 +43,29 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
   Bundle download/verify/extract lives in `Longx.Bundle`, shared with `Codex.Runtime`.
 - `lib/longx/projects/` — Ash domain `Longx.Projects` (single-user; no thread ↔ user mapping):
   - `Project` = a working directory (absolute, existing, unique `root_path`) + defaults for
-    its threads: `approval_policy`, `sandbox`, `tools` (registered `"ns.name"`s), `model_id`
-    (nil → global default), `dirty_start` (`:commit` | `:ask` | `:off`). Whether it is a git
-    repo is read live (`git_info/1`), never stored; `init_git/1` sets git up with
-    `Longx.Git.Ignore.default/0` and a first commit. The UI warns when a project has no git.
+    its threads: `approval_policy`, `sandbox`, `network_access` (the workspace-write sandbox
+    has no network unless this is true → `sandbox_workspace_write.network_access`), `tools`
+    (registered `"ns.name"`s), `model_id` (nil → global default), `dirty_start`
+    (`:commit` | `:ask` | `:off`). Whether it is a git repo is read live (`git_info/1`), never
+    stored; `init_git/1` sets git up with `Longx.Git.Ignore.default/0` and a first commit.
+    The UI warns when a project has no git.
+  - **Each project has its own codex process and its own `CODEX_HOME`**
+    (`Longx.Codex.Pool`, below). `Projects` never needs a `conn:` — `start_thread/2` takes
+    the project's pooled connection, `send_message/3` the connection hosting the thread
+    (resuming it on the project's codex first when nobody hosts it, i.e. after a restart);
+    tests pass `conn:` to use their own fake. The codex is a project resource:
+    `codex_info/1` (home path, size, sqlite files, worker status incl. OS pid), `stop_codex/2`
+    (refuses while a turn runs unless `force: true`), `restart_codex/1`,
+    `clear_codex_history/1` (stop + delete codex's state in the home, keep our config; the
+    threads become `:unrecoverable`), `reset_codex_home/1` (whole directory), archive stops
+    the worker and keeps the home, `delete_project/2` needs `confirm: true` and removes the
+    home (never the working directory).
   - `Thread` = codex thread ↔ project (`codex_thread_id`, `cwd`, the settings it started with,
-    `model_slug`, `preview`, `status`, `last_activity_at`). `start_thread/2` calls
-    `Longx.Codex.Thread.start/1` with the project's settings (model as slug +
-    `model_context_window`) and asks `Longx.Projects.Tracker` to follow the codex topic.
+    `model_slug`, `preview`, `status`, `last_activity_at`). Statuses: `:idle`, `:active`,
+    `:disconnected` (its codex died mid-turn; resumed → `:idle` when it is back),
+    `:unrecoverable` (codex no longer knows it — refuses new messages), `:archived`.
+    `start_thread/2` calls `Longx.Codex.Thread.start/1` with the project's settings (model as
+    slug + `model_context_window`) and asks `Longx.Projects.Tracker` to follow the codex topic.
   - `Turn` = one turn with git bookmarks. `send_message/3` does the **git preflight** first:
     clean tree → `commit_before = HEAD`; dirty → per `dirty_start` (`:commit` makes a
     `longx: before turn — …` commit so every turn starts from a commit; `:off` records
@@ -58,6 +73,13 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     `dirty: :commit | :ignore`), then `turn/start` (with `model:` if switching). The Tracker
     fills `status`/`completed_at`/`commit_after`/`diff` from `turn/completed` and
     `turn/diff/updated`, and the thread `preview` from the first user message.
+  - **When codex dies** (`Longx.Projects.Tracker` on `"codex:connection"`): `:down` → every
+    `:in_progress` turn of that project fails with "codex restarted…", its `:active` threads
+    become `:disconnected`; `:ready` → those are `thread/resume`d on the new process (→
+    `:idle`) or marked `:unrecoverable`. Idle threads are resumed lazily by `send_message/3`.
+    **Stall watchdog**: a turn whose thread produced no event for `stall_after` (default
+    10 min; `config :longx, Longx.Projects.Tracker, stall_after:, tick:`) gets
+    `turn/interrupt` and ends `:interrupted` with error "no progress for N seconds".
   - **Going back**: `restore_proposal/1` (commit, dirty now?, changed files, later turns) is
     what the UI shows; `restore_files/2` needs `confirm: true`, makes a safety commit of any
     uncommitted work first, then `restore_tree` (files back, history untouched — default) or
@@ -165,17 +187,37 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     `env_key = LONGX_GATEWAY_TOKEN`, `requires_openai_auth = false` → **codex needs no
     login**. `Home.prepare/1` returns the env to spawn codex with.
 - `lib/longx/codex/` — the app-server client, layered:
-  - `Longx.Codex.Connection` (one per node, under `Longx.Codex.Supervisor`, autostarted
-    unless `config :longx, Longx.Codex.Connection, autostart: false` — test does that):
-    owns a `Longx.Shim` running `Runtime.executable/0` with `Home.prepare/1`'s env; a linked
+  - **One codex per project** — `Longx.Codex.Pool` (DynamicSupervisor + the
+    `Longx.Codex.Registry`): `Pool.connection(project_id)` returns the project's connection,
+    starting a `Longx.Codex.Worker` (a supervisor with its *own* budget: 3 restarts / 60 s,
+    `restart: :temporary` under the pool) on first use, with `CODEX_HOME =
+    Pool.home_dir(project_id)` = `<Home.default_dir>/<project.id>` (codex's sqlite and
+    sessions live there; id not slug, so renames do not matter). A crash-looping codex kills
+    only its worker; the next `connection/1` starts it afresh (`start/2` waits for a dying
+    worker before starting a new one). `stop/2`, `restart/1`, `status/1`
+    (`:stopped` | `Connection.info/1`), `running/0`. `config :longx, Longx.Codex.Pool,
+    command:` (tests: the fake app-server, run inside the home with `FAKE_PERSIST=1` so it
+    keeps its thread ids across restarts like codex does), `connection:` (extra Connection
+    options; `home: [gateway_url: …]` for integration tests). codex treats
+    `sqlite_home`/CODEX_HOME as local disk — WAL needs it; never NFS.
+  - `Longx.Codex.Connection` (one per codex process): owns a `Longx.Shim` running
+    `Runtime.executable/0` with `Home.prepare/1`'s env (`home_dir:`/`home:` options); a linked
     reader process feeds `{:rpc, msg}`; `initialize` → `initialized` handshake (calls made
     before `:ready` are queued); request/response pairing with per-request timeouts;
     notifications with a `threadId` go to that thread's `ThreadState`, the rest to PubSub
-    `"codex:server"`; `{:codex_connection, :ready | :down}` on `"codex:connection"`. Shim or
-    reader death → pending callers get `{:error, :connection_reset}`, process stops with
-    `{:shutdown, :codex_exited}` and the supervisor restarts it (3 per 60 s, then only this
-    subtree dies — never the web app). `Longx.Codex.Framing` / `Longx.Codex.Message` are the
-    pure wire pieces.
+    `"codex:server"`; `{:codex_connection, tag, :ready | :down}` on `"codex:connection"`
+    (`tag:` = project id, nil for ad-hoc connections). It **registers every thread it hosts**
+    (`{:thread, id}` in the registry, from `thread/start|resume|fork` replies and from
+    notifications) so `Longx.Codex.Thread` functions on an existing thread need no `conn:`
+    (`Pool.connection_for_thread/1`; `start/1` and `resume/2` still do); `terminate/2`
+    unregisters first, then broadcasts `:down`. Shim or reader death → pending callers get
+    `{:error, :connection_reset}`, process stops with `{:shutdown, :codex_exited}` and its
+    worker restarts it. `Longx.Codex.Framing` / `Longx.Codex.Message` are the pure wire pieces.
+  - `Longx.Codex.Sandbox` — codex sandboxes commands itself (Linux bubblewrap from the
+    bundle, macOS seatbelt, Windows restricted token); bubblewrap needs unprivileged user
+    namespaces (WSL1, most containers, hardened distros refuse → codex rejects every sandboxed
+    command at turn time). `probe/0` runs the bundled `bwrap` once at boot (a `Task` in the
+    tree; non-Linux is assumed ok), `report/0`/`status/0` are cached for the UI to warn.
   - **Server → client requests** (approvals, `requestUserInput`, elicitations, tool calls…) go
     through the `Longx.Codex.ServerRequest` behaviour: `{:reply, _}` / `{:error, code, msg}` /
     `{:defer, timeout, fallback}` / `{:async, fun, timeout, fallback}`. `Default` is
@@ -277,7 +319,12 @@ Where tests live / what to use:
   fake app-server through a per-test `Connection` passed as `conn:`.
 - Codex client → `test/support/fake_app_server.exs` is a scripted stand-in for the
   app-server (`say`/`approve`/`stall`/`slow`/`error`/`die`/`server-notify` turns) run under
-  `Longx.Shim` exactly like the real binary; Connection/Thread/ThreadState tests use it.
+  `Longx.Shim` exactly like the real binary; Connection/Thread/ThreadState tests use it, and
+  `thread/read` answers with the `startParams`/`lastTurnParams` it received so tests can
+  assert what was sent. Tests that go through the pool (no `conn:`) are `Longx.DataCase`
+  (the Tracker writes on every `:down`/`:ready`) and clean up with
+  `Longx.Test.PoolHelpers.stop_pool!/1`, which drains the Tracker before the sandbox ends.
+  Project ids must be uuids even in pool-only tests.
   `Longx.Test.CodexHarness` drives the *real* binary through Connection/Thread for the
   `:integration` / `:live` tests (`serve_endpoint!`, `prepare_home!`, `start_connection!`,
   `run_turn!`). In `mix run` scripts the HTTP server is off — use `PHX_SERVER=true` or codex
