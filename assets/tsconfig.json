@@ -16,5 +16,5 @@
     "paths": { "@/*": ["js/*"] },
     "types": ["vitest/globals", "@testing-library/jest-dom", "node"]
   },
-  "include": ["js/**/*", "vite.config.ts", "vitest.setup.ts"]
+  "include": ["js/**/*", "js/**/*.d.ts", "vite.config.ts", "vitest.setup.ts"]
 }

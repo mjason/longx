@@ -16,7 +16,11 @@ defmodule LongxWeb.Router do
     plug :fetch_session
     plug :put_root_layout, html: {LongxWeb.Layouts, :spa_root}
     plug :protect_from_forgery
-    plug :put_secure_browser_headers
+    # Phoenix's default permissions-policy names ad-tech features Chrome does
+    # not recognise (console noise on every page); ours says what we mean.
+    plug :put_secure_browser_headers, %{
+      "permissions-policy" => "camera=(), microphone=(), geolocation=(), payment=()"
+    }
   end
 
   pipeline :api do

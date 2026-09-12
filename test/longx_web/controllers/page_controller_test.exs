@@ -35,6 +35,13 @@ defmodule LongxWeb.PageControllerTest do
       end
     end
 
+    test "security headers name only features browsers know", %{conn: conn} do
+      conn = get(conn, ~p"/")
+      [policy] = get_resp_header(conn, "permissions-policy")
+      refute policy =~ "attribution-reporting"
+      assert policy =~ "camera=()"
+    end
+
     test "the shell carries the PWA bits", %{conn: conn} do
       html = conn |> get(~p"/") |> html_response(200)
       assert html =~ ~s(rel="manifest")

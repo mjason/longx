@@ -9,8 +9,11 @@ defmodule LongxWeb.ViteTest do
   @manifest Jason.decode!(File.read!("test/support/vite_manifest.json"))
 
   describe "tags/3 (pure)" do
-    test "dev server: the HMR client and the raw entry, both from Vite" do
+    test "dev server: React Fast Refresh preamble, the HMR client, then the raw entry — all from Vite" do
+      # backend integration: the page is not Vite's index.html, so the
+      # @vitejs/plugin-react preamble must be loaded by us, before anything else
       assert Vite.tags(%{}, ["js/index.tsx"], "http://localhost:5173") == [
+               {:script, "http://localhost:5173/js/dev/react-refresh.ts"},
                {:script, "http://localhost:5173/@vite/client"},
                {:script, "http://localhost:5173/js/index.tsx"}
              ]

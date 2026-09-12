@@ -50,8 +50,15 @@ defmodule LongxWeb.Vite do
   by Vite; otherwise the manifest says which hashed files an entry needs.
   """
   @spec tags(map, [String.t()], String.t() | nil) :: [tag]
+  # The page is Phoenix's, not Vite's index.html, so the React Fast Refresh
+  # preamble (@vitejs/plugin-react's "can't detect preamble" otherwise) is a
+  # module of ours served by Vite, loaded before the HMR client. Module
+  # scripts with `src` execute in document order.
+  @react_refresh "js/dev/react-refresh.ts"
+
   def tags(_manifest, entries, dev_server) when is_binary(dev_server) do
     [
+      {:script, dev_server <> "/" <> @react_refresh},
       {:script, dev_server <> "/@vite/client"}
       | Enum.map(entries, &{:script, dev_server <> "/" <> &1})
     ]

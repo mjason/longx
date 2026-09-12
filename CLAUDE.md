@@ -342,7 +342,9 @@ React Native client planned on the same core code.
     in the layouts renders, in dev, the HMR client + raw entry from the Vite dev server
     (`config :longx, LongxWeb.Vite, dev_server:`; `LONGX_DEV_HOST=<lan-ip>` for phone
     testing — Vite listens on `0.0.0.0:5173` and the phone loads scripts from it directly),
-    otherwise the hashed files from `priv/static/assets/.vite/manifest.json` (entry css,
+    — first `js/dev/react-refresh.ts` (the React Fast Refresh preamble a non-Vite page must
+    load itself, else "@vitejs/plugin-react can't detect preamble"), then `@vite/client`,
+    then the entry — otherwise the hashed files from `priv/static/assets/.vite/manifest.json` (entry css,
     script, `modulepreload` for imported chunks; cached in `persistent_term`). The dev
     watcher runs `npm run dev` **through `Longx.Shim`** so Vite dies with the BEAM (a plain
     npm watcher leaves node on 5173). `mix assets.build` = compile + `ash_typescript.codegen`
@@ -419,6 +421,11 @@ Where tests live / what to use:
 - Never run the real `codex` binary in the unit suite. Real-Codex tests are
   `@tag :integration`, excluded by default (`test_helper.exs`); run them with
   `mix test --include integration`.
+- **Look at it in a real browser** before calling a screen done: `node scripts/browse.mjs
+  <url> phone|desktop out.png` (playwright, in `assets/`) loads the page as an iPhone 13 or a
+  1280px desktop, prints console/page errors and any element wider than the viewport, and
+  saves a screenshot to read back. Point it at the running dev server (never start a second
+  one on 7788 if it is already up).
 - TypeScript/React → also test-first: vitest + testing-library in `assets/` (`npm test`).
   Pure code in `js/core/` is unit-tested directly; pages render the real route tree with
   `renderAt(path)` from `ui/test-utils.tsx`, mocking `@/ash_rpc` (and `@/core/socket`) with
