@@ -70,6 +70,12 @@ defmodule Longx.Codex.HomeTest do
     assert File.read!(home.config_path) =~ ~s(web_search = "disabled")
   end
 
+  test "the env caps codex's tokio worker threads (musl allocator contention on many cores)",
+       %{dir: dir} do
+    {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
+    assert {"TOKIO_WORKER_THREADS", "4"} in home.env
+  end
+
   test "the env hands codex the home and the current gateway token", %{dir: dir} do
     {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
 

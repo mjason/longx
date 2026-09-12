@@ -34,6 +34,10 @@ defmodule Longx.Shim.ProtoTest do
       assert Proto.encode(:env, []) == <<9>>
     end
 
+    test "send_stats has no payload" do
+      assert Proto.encode(:send_stats) == <<10>>
+    end
+
     test "env rejects entries that do not fit a u16 length" do
       assert_raise ArgumentError, fn ->
         Proto.encode(:env, [{"K", String.duplicate("v", 70_000)}])
@@ -68,6 +72,15 @@ defmodule Longx.Shim.ProtoTest do
 
     test "send_input credit" do
       assert Proto.decode(<<23>>) == :send_input
+    end
+
+    test "stats are a JSON tree summary" do
+      assert Proto.decode(<<24, ~s({"processes":3,"rss_bytes":1048576,"cpu_ms":250})>>) ==
+               {:stats, %{processes: 3, rss_bytes: 1_048_576, cpu_ms: 250}}
+    end
+
+    test "the protocol version is 3 (stats, resource guards)" do
+      assert Proto.version() == "3"
     end
 
     test "unknown tags are reported, not crashed on" do

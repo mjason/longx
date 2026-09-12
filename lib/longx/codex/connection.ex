@@ -50,6 +50,7 @@ defmodule Longx.Codex.Connection do
           | {:tag, term}
           | {:home_dir, Path.t()}
           | {:home, keyword}
+          | {:shim, keyword}
           | {:command, [String.t(), ...]}
           | {:env, [{String.t(), String.t()}]}
           | {:cd, Path.t()}
@@ -69,7 +70,10 @@ defmodule Longx.Codex.Connection do
       :client_info,
       :tag,
       :started_at,
+      :memory_limit,
       threads: MapSet.new(),
+      turns: 0,
+      active_turns: MapSet.new(),
       phase: :handshaking,
       next_id: 1,
       pending: %{},
@@ -139,13 +143,18 @@ defmodule Longx.Codex.Connection do
 
     conn = self()
 
+    # `shim:` — resource guards (oom_score_adj, memory_limit) for the codex tree
+    shim_opts = Keyword.get(opts, :shim, [])
+
     with {:ok, command, env, cd} <- launch_spec(opts),
-         {:ok, shim} <- Shim.start_link(command, env: env, cd: cd, stderr: :console) do
+         {:ok, shim} <-
+           Shim.start_link(command, [env: env, cd: cd, stderr: :console] ++ shim_opts) do
       state = %State{
         shim: shim,
         reader: spawn_link(fn -> read_loop(shim, conn, "") end),
         tag: Keyword.get(opts, :tag),
         started_at: DateTime.utc_now(),
+        memory_limit: Keyword.get(shim_opts, :memory_limit),
         handler: Keyword.get(opts, :server_request_handler, configured_handler()),
         request_timeout: Keyword.get(opts, :request_timeout, @default_request_timeout),
         client_info:
@@ -226,12 +235,18 @@ defmodule Longx.Codex.Connection do
   def handle_call(:status, _from, state), do: {:reply, state.phase, state}
 
   def handle_call(:info, _from, state) do
+    shim_alive? = state.shim && Process.alive?(state.shim)
+
     info = %{
       pid: self(),
       tag: state.tag,
       phase: state.phase,
       started_at: state.started_at,
-      os_pid: state.shim && Process.alive?(state.shim) && Shim.os_pid(state.shim),
+      os_pid: shim_alive? && Shim.os_pid(state.shim),
+      stats: shim_alive? && tree_stats(state.shim),
+      memory_limit: state.memory_limit,
+      turns: state.turns,
+      active_turns: MapSet.size(state.active_turns),
       threads: MapSet.to_list(state.threads)
     }
 
@@ -424,12 +439,31 @@ defmodule Longx.Codex.Connection do
 
   defp dispatch({:notification, method, params}, state) do
     route_notification(method, params)
-    own_thread(state, thread_id_of(method, params))
+
+    state
+    |> own_thread(thread_id_of(method, params))
+    |> count_turn(method, params)
   end
 
   defp dispatch({:unknown, message}, state) do
     Logger.warning("codex: unrecognised message #{inspect(message)}")
     state
+  end
+
+  # how busy / how used this process is (Longx.Codex.Recycler reads it)
+  defp count_turn(%State{} = state, "turn/started", %{"turn" => %{"id" => id}}),
+    do: %State{state | turns: state.turns + 1, active_turns: MapSet.put(state.active_turns, id)}
+
+  defp count_turn(%State{} = state, "turn/completed", %{"turn" => %{"id" => id}}),
+    do: %State{state | active_turns: MapSet.delete(state.active_turns, id)}
+
+  defp count_turn(state, _method, _params), do: state
+
+  defp tree_stats(shim) do
+    case Shim.stats(shim) do
+      {:ok, stats} -> stats
+      {:error, _} -> nil
+    end
   end
 
   # Every thread this process hosts is registered once, so callers can find

@@ -109,6 +109,32 @@ defmodule Longx.Codex.PoolTest do
     assert {:error, :no_connection} = Thread.send("thr_nobody", "say hi")
   end
 
+  test "status/1 reports the process tree and turn counters", %{a: a} do
+    {:ok, conn} = Pool.connection(a)
+    assert_receive {:codex_connection, ^a, :ready}, 15_000
+
+    info = Pool.status(a)
+    assert %{stats: %{processes: n, rss_bytes: rss, cpu_ms: _}} = info
+    assert n >= 1 and rss > 0
+    assert info.turns == 0
+    assert info.active_turns == 0
+    assert info.memory_limit == nil
+
+    {:ok, thread_id} = Thread.start(cwd: "/", tools: [], conn: conn)
+    Thread.subscribe(thread_id)
+    {:ok, _} = Thread.send(thread_id, "say hi", conn: conn)
+    assert_receive {:codex, _, "turn/completed", _}, 10_000
+
+    assert %{turns: 1, active_turns: 0} = Pool.status(a)
+  end
+
+  test "connection/2 passes shim options (a memory cap) to the worker", %{a: a} do
+    # RLIMIT_AS counts address space: the fake is a BEAM, which reserves 1 GiB up front
+    {:ok, _} = Pool.connection(a, shim: [memory_limit: 16 * 1024 * 1024 * 1024])
+    assert_receive {:codex_connection, ^a, :ready}, 15_000
+    assert %{memory_limit: 17_179_869_184} = Pool.status(a)
+  end
+
   test "home_dir/1 is a per-project directory under the configured codex home", %{a: a} do
     assert Pool.home_dir(a) == Path.join(Longx.Codex.Home.default_dir(), a)
   end

@@ -37,6 +37,8 @@ defmodule Longx.Application do
       # its gateway URL, hence after it)
       {Registry, keys: :unique, name: Longx.Codex.Registry},
       Longx.Codex.Pool,
+      # retires idle codex processes that got old or fat; publishes their numbers
+      Longx.Codex.Recycler,
       # is codex's command sandbox going to work here? (result cached, shown in the UI)
       Supervisor.child_spec({Task, &Longx.Codex.Sandbox.probe/0},
         id: :sandbox_probe,

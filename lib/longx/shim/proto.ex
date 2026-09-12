@@ -8,7 +8,7 @@ defmodule Longx.Shim.Proto do
   `version/0` when the format changes.
   """
 
-  @version "2"
+  @version "3"
 
   # host -> shim
   @input 1
@@ -20,6 +20,7 @@ defmodule Longx.Shim.Proto do
   @kill 7
   @signal 8
   @env 9
+  @send_stats 10
 
   # shim -> host
   @pid 16
@@ -30,6 +31,7 @@ defmodule Longx.Shim.Proto do
   @exit_status 21
   @start_error 22
   @send_input 23
+  @stats 24
 
   # 4 byte length prefix + 1 byte tag leaves this much payload in a 64 KiB packet
   @max_chunk 64 * 1024 - 5
@@ -39,6 +41,7 @@ defmodule Longx.Shim.Proto do
           :close_input
           | :close_output
           | :close_stderr
+          | :send_stats
           | {:input, binary}
           | {:send_output, pos_integer}
           | {:send_stderr, pos_integer}
@@ -55,7 +58,15 @@ defmodule Longx.Shim.Proto do
           | {:exit_status, integer}
           | {:start_error, String.t()}
           | :send_input
+          | {:stats, stats}
           | {:unknown, byte, binary}
+
+  @typedoc "The child's whole process tree at one instant."
+  @type stats :: %{
+          processes: non_neg_integer,
+          rss_bytes: non_neg_integer,
+          cpu_ms: non_neg_integer
+        }
 
   @doc "Protocol version the shim must report from `shim -v`."
   @spec version() :: String.t()
@@ -65,10 +76,11 @@ defmodule Longx.Shim.Proto do
   @spec max_chunk() :: pos_integer
   def max_chunk, do: @max_chunk
 
-  @spec encode(:close_input | :close_output | :close_stderr) :: binary
+  @spec encode(:close_input | :close_output | :close_stderr | :send_stats) :: binary
   def encode(:close_input), do: <<@close_input>>
   def encode(:close_output), do: <<@close_output>>
   def encode(:close_stderr), do: <<@close_stderr>>
+  def encode(:send_stats), do: <<@send_stats>>
 
   @spec encode(atom, term) :: binary
   def encode(:input, data) when is_binary(data) and byte_size(data) <= @max_chunk,
@@ -110,5 +122,17 @@ defmodule Longx.Shim.Proto do
   def decode(<<@exit_status, status::signed-big-32>>), do: {:exit_status, status}
   def decode(<<@start_error, reason::binary>>), do: {:start_error, reason}
   def decode(<<@send_input>>), do: :send_input
+
+  def decode(<<@stats, json::binary>>) do
+    case Jason.decode(json) do
+      {:ok, %{"processes" => p, "rss_bytes" => rss, "cpu_ms" => cpu}}
+      when is_integer(p) and is_integer(rss) and is_integer(cpu) ->
+        {:stats, %{processes: p, rss_bytes: rss, cpu_ms: cpu}}
+
+      _ ->
+        {:unknown, @stats, json}
+    end
+  end
+
   def decode(<<tag, rest::binary>>), do: {:unknown, tag, rest}
 end

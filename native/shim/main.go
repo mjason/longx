@@ -17,6 +17,8 @@ func main() {
 	stderr := flag.String("stderr", "stream", "stderr handling: stream|console|disable|redirect_to_stdout")
 	logTarget := flag.String("log", "", "shim diagnostics: stderr or a file path")
 	grace := flag.Duration("grace", 5*time.Second, "soft-kill grace period used when the host disappears")
+	oomScoreAdj := flag.Int("oom_score_adj", 0, "Linux: oom_score_adj for the shim and its child tree (-1000..1000)")
+	memoryLimit := flag.Uint64("memory_limit", 0, "cap the child tree's memory in bytes (0 = none)")
 	protocol := flag.String("protocol_version", "", "protocol version expected by the host")
 	version := flag.Bool("v", false, "print protocol version and exit")
 	flag.Parse()
@@ -36,7 +38,14 @@ func main() {
 		die(usage)
 	}
 
-	cfg := config{Args: flag.Args(), Dir: *dir, Stderr: *stderr, Grace: *grace}
+	cfg := config{
+		Args:        flag.Args(),
+		Dir:         *dir,
+		Stderr:      *stderr,
+		Grace:       *grace,
+		OOMScoreAdj: *oomScoreAdj,
+		MemoryLimit: *memoryLimit,
+	}
 	os.Exit(run(os.Stdin, os.Stdout, cfg))
 }
 

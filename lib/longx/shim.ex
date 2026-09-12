@@ -43,6 +43,8 @@ defmodule Longx.Shim do
           | {:stderr, stderr_mode}
           | {:grace, non_neg_integer}
           | {:log, :stderr | Path.t()}
+          | {:oom_score_adj, -1000..1000}
+          | {:memory_limit, pos_integer}
 
   @type read_result :: {:ok, binary} | :eof | {:error, :pending_read | :closed}
 
@@ -65,7 +67,8 @@ defmodule Longx.Shim do
       exit_status: nil,
       exit_waiters: [],
       awaited?: false,
-      shim_exited?: false
+      shim_exited?: false,
+      stats_waiters: []
     ]
   end
 
@@ -87,7 +90,9 @@ defmodule Longx.Shim do
          {:ok, cd} <- normalize_cd(opts[:cd]),
          {:ok, stderr} <- normalize_stderr(opts[:stderr]),
          {:ok, env} <- normalize_env(opts[:env]),
-         {:ok, log} <- normalize_log(opts[:log]) do
+         {:ok, log} <- normalize_log(opts[:log]),
+         {:ok, oom_score_adj} <- normalize_oom_score_adj(opts[:oom_score_adj]),
+         {:ok, memory_limit} <- normalize_memory_limit(opts[:memory_limit]) do
       spec = %{
         cmd: [path | args],
         cd: cd,
@@ -95,6 +100,8 @@ defmodule Longx.Shim do
         env: env,
         log: log,
         grace: Keyword.get(opts, :grace, @default_grace_ms),
+        oom_score_adj: oom_score_adj,
+        memory_limit: memory_limit,
         caller: self()
       }
 
@@ -169,6 +176,14 @@ defmodule Longx.Shim do
   @doc "OS pid of the child. On unix this is also its process group id."
   @spec os_pid(GenServer.server()) :: pos_integer
   def os_pid(shim), do: GenServer.call(shim, :os_pid)
+
+  @doc """
+  Process count, resident memory and CPU time of the child's whole process
+  tree (Linux: /proc walk by parent pid; Windows: the Job object; macOS:
+  `ps`). Zeros once the child has exited.
+  """
+  @spec stats(GenServer.server(), timeout) :: {:ok, Proto.stats()} | {:error, :closed}
+  def stats(shim, timeout \\ 5_000), do: GenServer.call(shim, :stats, timeout)
 
   @doc """
   Reads at most `max` bytes from stdout, blocking until the child produces
@@ -266,6 +281,14 @@ defmodule Longx.Shim do
 
   @impl true
   def handle_call(:os_pid, _from, state), do: {:reply, state.os_pid, state}
+
+  def handle_call(:stats, _from, %State{shim_exited?: true} = state),
+    do: {:reply, {:error, :closed}, state}
+
+  def handle_call(:stats, from, %State{} = state) do
+    if state.stats_waiters == [], do: command(state, Proto.encode(:send_stats))
+    {:noreply, %State{state | stats_waiters: [from | state.stats_waiters]}}
+  end
 
   def handle_call({:read, name, max}, from, state) do
     stream = stream(state, name)
@@ -370,8 +393,10 @@ defmodule Longx.Shim do
   end
 
   defp shim_gone(%State{} = state) do
+    Enum.each(state.stats_waiters, &GenServer.reply(&1, {:error, :closed}))
+
     state =
-      %State{state | shim_exited?: true}
+      %State{state | shim_exited?: true, stats_waiters: []}
       |> reply_all_writes({:error, :closed})
       |> reply_pending_read(
         :stdout,
@@ -403,6 +428,11 @@ defmodule Longx.Shim do
   defp handle_event({:stderr, data}, state), do: reply_pending_read(state, :stderr, {:ok, data})
   defp handle_event(:output_eof, state), do: mark_eof(state, :stdout)
   defp handle_event(:stderr_eof, state), do: mark_eof(state, :stderr)
+
+  defp handle_event({:stats, stats}, %State{} = state) do
+    Enum.each(state.stats_waiters, &GenServer.reply(&1, {:ok, stats}))
+    %State{state | stats_waiters: []}
+  end
 
   defp handle_event(:send_input, %State{} = state),
     do: maybe_send_input(%State{state | credit: true})
@@ -548,6 +578,8 @@ defmodule Longx.Shim do
       ] ++
         if(spec.cd, do: ["-cd", spec.cd], else: []) ++
         if(spec.log, do: ["-log", spec.log], else: []) ++
+        if(spec.oom_score_adj, do: ["-oom_score_adj", "#{spec.oom_score_adj}"], else: []) ++
+        if(spec.memory_limit, do: ["-memory_limit", "#{spec.memory_limit}"], else: []) ++
         ["--" | spec.cmd]
 
     Port.open({:spawn_executable, executable()}, [
@@ -568,6 +600,15 @@ defmodule Longx.Shim do
       path -> {:ok, path}
     end
   end
+
+  defp normalize_oom_score_adj(nil), do: {:ok, nil}
+  defp normalize_oom_score_adj(0), do: {:ok, nil}
+  defp normalize_oom_score_adj(n) when is_integer(n) and n in -1000..1000, do: {:ok, n}
+  defp normalize_oom_score_adj(n), do: {:error, {:invalid_option, {:oom_score_adj, n}}}
+
+  defp normalize_memory_limit(nil), do: {:ok, nil}
+  defp normalize_memory_limit(n) when is_integer(n) and n > 0, do: {:ok, n}
+  defp normalize_memory_limit(n), do: {:error, {:invalid_option, {:memory_limit, n}}}
 
   defp normalize_cd(nil), do: {:ok, nil}
 
