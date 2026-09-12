@@ -34,8 +34,12 @@ defmodule Longx.Projects do
       define :create_turn, action: :create
       define :complete_turn, action: :complete
       define :set_turn_diff, action: :set_diff
+      define :mark_turn_reverted, action: :mark_reverted
       define :get_turn_by_codex_id, action: :by_codex_id, args: [:codex_turn_id]
-      define :list_turns_for_thread, action: :for_thread, args: [:thread_id]
+
+      define :list_turns_for_thread,
+        action: :for_thread,
+        args: [:thread_id, {:optional, :include_reverted}]
     end
   end
 
@@ -49,11 +53,12 @@ defmodule Longx.Projects do
     threads
   end
 
-  @doc "Turns of a thread, oldest first."
-  def list_turns(%Thread{id: id}), do: list_turns_for_thread(id)
+  @doc "Turns of a thread, oldest first; reverted ones only with `include_reverted: true`."
+  def list_turns(%Thread{id: id}, opts \\ []),
+    do: list_turns_for_thread(id, Keyword.get(opts, :include_reverted, false))
 
-  def list_turns!(thread) do
-    {:ok, turns} = list_turns(thread)
+  def list_turns!(thread, opts \\ []) do
+    {:ok, turns} = list_turns(thread, opts)
     turns
   end
 
@@ -176,6 +181,115 @@ defmodule Longx.Projects do
 
       :ask ->
         {:error, {:dirty_tree, changes}}
+    end
+  end
+
+  ## Redoing a turn
+
+  @type redo_option ::
+          {:model, String.t()}
+          | {:text, String.t()}
+          | {:restore_files, boolean}
+          | {:mode, :revert | :fork}
+          | {:conn, GenServer.server()}
+
+  @doc """
+  Runs turn N again, typically with another model. Steps, each visible in
+  git or in the thread:
+
+    1. refuse while a turn is running (`{:error, {:turn_in_progress, id}}`) or
+       if this turn was already reverted
+    2. `restore_files: true` → `restore_files/2` (safety commit, files back to
+       `commit_before`)
+    3. `mode: :revert` (default) → `thread/revert` from this turn: it and
+       every later turn leave the conversation and the projection, and their
+       rows are marked `:reverted`. `mode: :fork` → a new thread holding the
+       history *before* this turn (`forked_from`), the original untouched
+    4. a new turn with `text:` (default: the original message) and `model:`
+       (default: the thread's), through the normal git preflight
+
+  Returns the new turn.
+  """
+  @spec redo_turn(Turn.t(), [redo_option]) ::
+          {:ok, Turn.t()} | {:error, {:turn_in_progress, String.t()} | :turn_reverted | term}
+  def redo_turn(%Turn{} = turn, opts \\ []) do
+    turn = Ash.get!(Turn, turn.id)
+    thread = Ash.get!(Thread, turn.thread_id, load: :project)
+
+    later =
+      thread
+      |> list_turns!()
+      |> Enum.filter(&(DateTime.compare(&1.started_at, turn.started_at) != :lt))
+
+    conn = Keyword.get(opts, :conn)
+    model = Keyword.get(opts, :model, thread.model_slug)
+
+    with :ok <- ensure_redoable(turn, later),
+         :ok <- maybe_restore(turn, Keyword.get(opts, :restore_files, false)),
+         {:ok, target} <-
+           rewind(Keyword.get(opts, :mode, :revert), thread, turn, later, model, conn) do
+      send_message(
+        target,
+        Keyword.get(opts, :text, turn.user_text),
+        [model: model] |> put_if(:conn, conn)
+      )
+    end
+  end
+
+  defp ensure_redoable(%Turn{status: :reverted}, _later), do: {:error, :turn_reverted}
+
+  defp ensure_redoable(_turn, later) do
+    case Enum.find(later, &(&1.status == :in_progress)) do
+      nil -> :ok
+      running -> {:error, {:turn_in_progress, running.id}}
+    end
+  end
+
+  defp maybe_restore(_turn, false), do: :ok
+
+  defp maybe_restore(turn, true) do
+    with {:ok, _} <- restore_files(turn, confirm: true), do: :ok
+  end
+
+  # revert in place: codex forgets from this turn on; so do we
+  defp rewind(:revert, thread, turn, later, _model, conn) do
+    turn_ids = Enum.map(later, & &1.codex_turn_id)
+    revert_opts = [turn_ids: turn_ids] |> put_if(:conn, conn)
+
+    with :ok <- Longx.Codex.Thread.revert(thread.codex_thread_id, turn.codex_turn_id, revert_opts) do
+      Enum.each(later, &mark_turn_reverted!/1)
+      {:ok, thread}
+    end
+  end
+
+  # fork: a sibling thread with the history before this turn
+  defp rewind(:fork, thread, turn, _later, model, conn) do
+    previous =
+      thread
+      |> list_turns!()
+      |> Enum.filter(&(DateTime.compare(&1.started_at, turn.started_at) == :lt))
+      |> List.last()
+
+    fork_opts =
+      []
+      |> put_if(:last_turn_id, previous && previous.codex_turn_id)
+      |> put_if(:model, model)
+      |> put_if(:conn, conn)
+
+    with {:ok, codex_thread_id} <- Longx.Codex.Thread.fork(thread.codex_thread_id, fork_opts),
+         {:ok, forked} <-
+           create_thread(%{
+             codex_thread_id: codex_thread_id,
+             project_id: thread.project_id,
+             cwd: thread.cwd,
+             model_slug: model,
+             approval_policy: thread.approval_policy,
+             sandbox: thread.sandbox,
+             tools: thread.tools,
+             forked_from_id: thread.id
+           }) do
+      :ok = Tracker.track(codex_thread_id)
+      {:ok, forked}
     end
   end
 

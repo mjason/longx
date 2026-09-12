@@ -201,6 +201,128 @@ defmodule Longx.Projects.ThreadsTest do
     end
   end
 
+  describe "redo_turn/2 — from turn N again, with another model" do
+    setup %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      Longx.Codex.Thread.subscribe(thread.codex_thread_id)
+      {:ok, t1} = Projects.send_message(thread, "say one", conn: conn)
+      eventually(turn_done(t1.id))
+      {:ok, t2} = Projects.send_message(thread, "say two", conn: conn)
+      eventually(turn_done(t2.id))
+      {:ok, t3} = Projects.send_message(thread, "say three", conn: conn)
+      eventually(turn_done(t3.id))
+      # the agent left a mess after turn 2
+      File.write!(Path.join(dir, "a.txt"), "broken\n")
+      %{project: project, thread: thread, t1: t1, t2: t2, t3: t3}
+    end
+
+    test "revert mode: drops turn N and later in codex and the projection, marks rows, re-runs with the new model",
+         %{conn: conn, thread: thread, t1: t1, t2: t2, t3: t3} do
+      assert {:ok, %Turn{} = redo} = Projects.redo_turn(t2, model: "glm-5", conn: conn)
+
+      assert redo.user_text == "say two"
+      assert redo.model_slug == "glm-5"
+      assert Ash.get!(Turn, t2.id).status == :reverted
+      assert Ash.get!(Turn, t3.id).status == :reverted
+      assert Ash.get!(Turn, t1.id).status == :completed
+
+      # the thread's projection only has turn 1 plus the redo
+      assert_receive {:codex, _, "thread/reverted", %{"turnIds" => ids}}, 5_000
+      assert Enum.sort(ids) == Enum.sort([t2.codex_turn_id, t3.codex_turn_id])
+      done = eventually(turn_done(redo.id))
+      assert done.status == :completed
+
+      turn_ids =
+        Longx.Codex.Thread.snapshot(thread.codex_thread_id).items
+        |> Enum.map(& &1["turnId"])
+        |> Enum.uniq()
+
+      assert turn_ids == [t1.codex_turn_id, redo.codex_turn_id]
+
+      # and codex's own history agrees
+      {:ok, read} =
+        Connection.request(conn, "thread/read", %{
+          "threadId" => thread.codex_thread_id,
+          "includeTurns" => true
+        })
+
+      assert Enum.map(read["thread"]["turns"], & &1["id"]) == [
+               t1.codex_turn_id,
+               redo.codex_turn_id
+             ]
+
+      # listing shows the live turns only, unless asked
+      assert Enum.map(Projects.list_turns!(thread), & &1.id) == [t1.id, redo.id]
+      assert length(Projects.list_turns!(thread, include_reverted: true)) == 4
+      assert Ash.get!(Thread, thread.id).model_slug == "glm-5"
+    end
+
+    test "text: replaces the user message; restore_files: true puts the tree back first", %{
+      conn: conn,
+      dir: dir,
+      t2: t2
+    } do
+      assert {:ok, redo} =
+               Projects.redo_turn(t2, text: "say two-but-better", restore_files: true, conn: conn)
+
+      assert redo.user_text == "say two-but-better"
+      refute redo.dirty_start
+      # the mess is gone (restored to before turn 2, then the preflight found a clean tree)
+      assert File.read!(Path.join(dir, "a.txt")) == "v1\n"
+
+      assert [%{subject: subject} | _] =
+               Git.log(dir, limit: 2) |> Enum.reject(&(&1.subject =~ "before turn"))
+
+      assert subject =~ "longx: before restoring"
+    end
+
+    test "fork mode: a new thread with the history before N; the original is untouched", %{
+      conn: conn,
+      thread: thread,
+      t1: t1,
+      t2: t2
+    } do
+      assert {:ok, redo} = Projects.redo_turn(t2, mode: :fork, model: "glm-5", conn: conn)
+      forked = Ash.get!(Thread, redo.thread_id)
+      refute forked.id == thread.id
+      assert forked.forked_from_id == thread.id
+      assert forked.model_slug == "glm-5"
+      assert forked.project_id == thread.project_id
+
+      eventually(turn_done(redo.id))
+
+      {:ok, read} =
+        Connection.request(conn, "thread/read", %{
+          "threadId" => forked.codex_thread_id,
+          "includeTurns" => true
+        })
+
+      assert Enum.map(read["thread"]["turns"], & &1["id"]) == [
+               t1.codex_turn_id,
+               redo.codex_turn_id
+             ]
+
+      # nothing happened to the original
+      assert Ash.get!(Turn, t2.id).status == :completed
+      assert length(Projects.list_turns!(thread)) == 3
+    end
+
+    test "refuses while a turn is in progress", %{conn: conn, thread: thread, t2: t2} do
+      {:ok, running} = Projects.send_message(thread, "stall", conn: conn)
+      assert {:error, {:turn_in_progress, id}} = Projects.redo_turn(t2, conn: conn)
+      assert id == running.id
+      :ok = Connection.notify(conn, "fake/continue", %{})
+      eventually(turn_done(running.id))
+    end
+
+    test "a reverted turn cannot be redone again", %{conn: conn, t2: t2, t3: t3} do
+      {:ok, redo} = Projects.redo_turn(t2, conn: conn)
+      eventually(turn_done(redo.id))
+      assert {:error, :turn_reverted} = Projects.redo_turn(t3, conn: conn)
+    end
+  end
+
   describe "restoring the files a turn started from" do
     setup %{dir: dir, conn: conn} do
       project = git_project!(dir)

@@ -273,6 +273,34 @@ defmodule Longx.Codex.ThreadStateTest do
       assert ThreadState.snapshot(thread_id).pending_requests == []
     end
 
+    test "drop_turns/2 removes those turns' items and broadcasts thread/reverted with the ids", %{
+      thread_id: thread_id
+    } do
+      ThreadState.subscribe(thread_id)
+
+      ThreadState.ingest(thread_id, "item/started", %{
+        "turnId" => "t1",
+        "item" => %{"id" => "a", "type" => "userMessage"}
+      })
+
+      ThreadState.ingest(thread_id, "item/started", %{
+        "turnId" => "t2",
+        "item" => %{"id" => "b", "type" => "userMessage"}
+      })
+
+      ThreadState.ingest(thread_id, "item/started", %{
+        "turnId" => "t3",
+        "item" => %{"id" => "c", "type" => "userMessage"}
+      })
+
+      :ok = ThreadState.drop_turns(thread_id, ["t2", "t3"])
+
+      assert_receive {:codex, 4, "thread/reverted",
+                      %{"threadId" => ^thread_id, "turnIds" => ["t2", "t3"]}}
+
+      assert Enum.map(ThreadState.snapshot(thread_id).items, & &1["id"]) == ["a"]
+    end
+
     test "backfill seeds the view", %{thread_id: thread_id} do
       ThreadState.backfill(thread_id, %{
         "thread" => %{

@@ -52,8 +52,9 @@ defmodule Longx.Codex.Thread do
   @spec resume(String.t(), keyword) :: {:ok, String.t()} | {:error, term}
   def resume(thread_id, opts \\ []) do
     conn = conn(opts)
+    params = %{"threadId" => thread_id} |> put_model(Keyword.get(opts, :model))
 
-    with {:ok, _} <- Connection.request(conn, "thread/resume", %{"threadId" => thread_id}),
+    with {:ok, _} <- Connection.request(conn, "thread/resume", params),
          {:ok, read} <-
            Connection.request(conn, "thread/read", %{
              "threadId" => thread_id,
@@ -93,6 +94,53 @@ defmodule Longx.Codex.Thread do
 
     with {:ok, _} <- Connection.request(conn(opts), "turn/steer", params), do: :ok
   end
+
+  @doc """
+  Removes `turn_id` and every later turn from the conversation
+  (`thread/revert`) and from the `ThreadState`. Pass the ids of the dropped
+  turns as `turn_ids:` when you know them (codex does not report them);
+  otherwise every ThreadState item from `turn_id` on is dropped by order.
+  """
+  @spec revert(String.t(), String.t(), keyword) :: :ok | {:error, term}
+  def revert(thread_id, turn_id, opts \\ []) do
+    params = %{"threadId" => thread_id, "beforeTurnId" => turn_id}
+
+    with {:ok, _} <- Connection.request(conn(opts), "thread/revert", params),
+         {:ok, _} <- ThreadState.ensure(thread_id) do
+      turn_ids = Keyword.get_lazy(opts, :turn_ids, fn -> turns_from(thread_id, turn_id) end)
+      ThreadState.drop_turns(thread_id, turn_ids)
+    end
+  end
+
+  # the reverted turn and everything that arrived after it, from the projection
+  defp turns_from(thread_id, turn_id) do
+    ThreadState.snapshot(thread_id).items
+    |> Enum.map(& &1["turnId"])
+    |> Enum.uniq()
+    |> Enum.drop_while(&(&1 != turn_id))
+  end
+
+  @doc """
+  Forks the thread into a new one (`thread/fork`): history up to and
+  including `last_turn_id:` (all of it when omitted), optionally with a
+  different `model:`. Returns the new thread id.
+  """
+  @spec fork(String.t(), keyword) :: {:ok, String.t()} | {:error, term}
+  def fork(thread_id, opts \\ []) do
+    params =
+      %{"threadId" => thread_id}
+      |> put_if("lastTurnId", Keyword.get(opts, :last_turn_id))
+      |> put_model(Keyword.get(opts, :model))
+
+    with {:ok, %{"thread" => %{"id" => new_id}}} <-
+           Connection.request(conn(opts), "thread/fork", params),
+         {:ok, _} <- ThreadState.ensure(new_id) do
+      {:ok, new_id}
+    end
+  end
+
+  defp put_if(map, _key, nil), do: map
+  defp put_if(map, key, value), do: Map.put(map, key, value)
 
   @spec interrupt(String.t(), String.t(), keyword) :: :ok | {:error, term}
   def interrupt(thread_id, turn_id, opts \\ []) do
@@ -134,6 +182,8 @@ defmodule Longx.Codex.Thread do
   def start_params(opts) do
     base = %{
       "cwd" => Keyword.fetch!(opts, :cwd),
+      # paginated history is what thread/revert requires (experimental field; experimentalApi is on)
+      "historyMode" => "paginated",
       "approvalPolicy" =>
         Map.fetch!(@approval_policies, Keyword.get(opts, :approval_policy, :on_request)),
       "sandbox" => Map.fetch!(@sandboxes, Keyword.get(opts, :sandbox, :workspace_write))

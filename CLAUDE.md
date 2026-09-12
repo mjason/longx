@@ -61,8 +61,18 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
   - **Going back**: `restore_proposal/1` (commit, dirty now?, changed files, later turns) is
     what the UI shows; `restore_files/2` needs `confirm: true`, makes a safety commit of any
     uncommitted work first, then `restore_tree` (files back, history untouched — default) or
-    `reset_hard`. Conversation revert (`thread/revert`) is a separate, later step. Nothing
-    here touches ignored files or side effects outside the repo; say so in the UI.
+    `reset_hard`. Nothing here touches ignored files or side effects outside the repo; say so
+    in the UI.
+  - **Redo from turn N with another model**: `redo_turn/2` — refuses while a turn runs or if
+    the turn is already `:reverted`; optional `restore_files: true`; `mode: :revert` (default)
+    calls `thread/revert` (needs `historyMode: "paginated"`, which every thread is started
+    with; codex's `thread/reverted` names only the thread, so we pass the dropped turn ids to
+    `ThreadState.drop_turns/2`, which deletes their items from the ETS store and broadcasts
+    `thread/reverted` with `"turnIds"` — clients re-snapshot) and marks the rows `:reverted`
+    (`list_turns/2` hides them unless `include_reverted: true`); `mode: :fork` uses
+    `thread/fork` with the turn before N and creates a sibling `Thread` (`forked_from_id`).
+    Then `send_message/3` with `text:`/`model:` through the normal git preflight. Worktree
+    isolation was considered and dropped: knowing the commit after each turn is enough.
 - `lib/longx/platform.ex` — `Longx.Platform`: runtime-safe os/arch detection and the Rust
   triple / GOOS-GOARCH naming for it. Anything that resolves a binary path at runtime goes
   through this, never through `Mix.*` (Mix is absent in releases).

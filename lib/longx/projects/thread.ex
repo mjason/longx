@@ -29,7 +29,8 @@ defmodule Longx.Projects.Thread do
         :model_slug,
         :approval_policy,
         :sandbox,
-        :tools
+        :tools,
+        :forked_from_id
       ]
     end
 
@@ -99,6 +100,8 @@ defmodule Longx.Projects.Thread do
 
   relationships do
     belongs_to :project, Longx.Projects.Project, allow_nil?: false, public?: true
+    # set when this thread was created by a redo in fork mode
+    belongs_to :forked_from, Longx.Projects.Thread, public?: true
     has_many :turns, Longx.Projects.Turn
   end
 

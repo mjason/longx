@@ -21,6 +21,7 @@ defmodule Longx.Codex.ThreadTest do
              ) ==
                %{
                  "cwd" => "/p",
+                 "historyMode" => "paginated",
                  "approvalPolicy" => "never",
                  "sandbox" => "read-only",
                  "config" => %{"model_context_window" => 64_000}
@@ -32,7 +33,12 @@ defmodule Longx.Codex.ThreadTest do
                sandbox: :workspace_write,
                tools: []
              ) ==
-               %{"cwd" => "/p", "approvalPolicy" => "on-request", "sandbox" => "workspace-write"}
+               %{
+                 "cwd" => "/p",
+                 "historyMode" => "paginated",
+                 "approvalPolicy" => "on-request",
+                 "sandbox" => "workspace-write"
+               }
 
       assert Thread.start_params(
                cwd: "/p",
@@ -68,6 +74,10 @@ defmodule Longx.Codex.ThreadTest do
                "deepseek-flash"
 
       refute Map.has_key?(Thread.start_params(cwd: "/p", tools: []), "model")
+    end
+
+    test "threads are always paginated (thread/revert needs it)" do
+      assert Thread.start_params(cwd: "/p", tools: [])["historyMode"] == "paginated"
     end
 
     test "defaults: on-request approvals in a workspace-write sandbox" do
@@ -141,6 +151,55 @@ defmodule Longx.Codex.ThreadTest do
       assert text =~ "tool true:"
       assert text =~ "thread: #{thread_id}"
       assert text =~ "userMessage: 1"
+    end
+
+    test "revert/3 drops a turn and everything after it, in codex and in the ThreadState", %{
+      conn: conn
+    } do
+      {:ok, thread_id} = Thread.start(cwd: "/", tools: [], conn: conn)
+      Thread.subscribe(thread_id)
+      {:ok, t1} = Thread.send(thread_id, "say one", conn: conn)
+      assert_receive {:codex, _, "turn/completed", %{"turn" => %{"id" => ^t1}}}, 10_000
+      {:ok, t2} = Thread.send(thread_id, "say two", conn: conn)
+      assert_receive {:codex, _, "turn/completed", %{"turn" => %{"id" => ^t2}}}, 10_000
+
+      assert :ok = Thread.revert(thread_id, t2, conn: conn)
+
+      assert_receive {:codex, seq, "thread/reverted",
+                      %{"threadId" => ^thread_id, "turnIds" => [^t2]}},
+                     5_000
+
+      assert is_integer(seq)
+
+      snapshot = Thread.snapshot(thread_id)
+      assert Enum.all?(snapshot.items, &(&1["turnId"] == t1))
+
+      {:ok, read} =
+        Connection.request(conn, "thread/read", %{"threadId" => thread_id, "includeTurns" => true})
+
+      assert Enum.map(read["thread"]["turns"], & &1["id"]) == [t1]
+    end
+
+    test "fork/3 branches the history into a new thread", %{conn: conn} do
+      {:ok, thread_id} = Thread.start(cwd: "/", tools: [], conn: conn)
+      Thread.subscribe(thread_id)
+      {:ok, t1} = Thread.send(thread_id, "say one", conn: conn)
+      assert_receive {:codex, _, "turn/completed", %{"turn" => %{"id" => ^t1}}}, 10_000
+      {:ok, t2} = Thread.send(thread_id, "say two", conn: conn)
+      assert_receive {:codex, _, "turn/completed", %{"turn" => %{"id" => ^t2}}}, 10_000
+
+      assert {:ok, forked} = Thread.fork(thread_id, last_turn_id: t1, model: "glm-5", conn: conn)
+      refute forked == thread_id
+
+      {:ok, read} =
+        Connection.request(conn, "thread/read", %{"threadId" => forked, "includeTurns" => true})
+
+      assert Enum.map(read["thread"]["turns"], & &1["id"]) == [t1]
+      # the original is untouched
+      {:ok, read} =
+        Connection.request(conn, "thread/read", %{"threadId" => thread_id, "includeTurns" => true})
+
+      assert Enum.map(read["thread"]["turns"], & &1["id"]) == [t1, t2]
     end
 
     test "respond/3 answers a pending approval by id", %{conn: conn} do

@@ -89,6 +89,14 @@ defmodule Longx.Codex.ThreadState do
   def backfill(thread_id, thread_read_result),
     do: GenServer.call(via(thread_id), {:backfill, thread_read_result})
 
+  @doc """
+  Forgets the given turns after a `thread/revert` and tells subscribers with
+  a `thread/reverted` event carrying `"turnIds"` (codex's own notification
+  only names the thread). Clients should re-snapshot.
+  """
+  @spec drop_turns(String.t(), [String.t()]) :: :ok
+  def drop_turns(thread_id, turn_ids), do: GenServer.call(via(thread_id), {:drop_turns, turn_ids})
+
   @doc "Reads the stored view directly from ETS."
   @spec snapshot(String.t()) :: snapshot
   def snapshot(thread_id), do: Store.snapshot(thread_id)
@@ -131,6 +139,12 @@ defmodule Longx.Codex.ThreadState do
   @impl true
   def handle_call({:backfill, result}, _from, thread_id) do
     {:reply, Store.backfill(thread_id, result), thread_id}
+  end
+
+  def handle_call({:drop_turns, turn_ids}, _from, thread_id) do
+    Store.delete_turns(thread_id, turn_ids)
+    broadcast(thread_id, "thread/reverted", %{"threadId" => thread_id, "turnIds" => turn_ids})
+    {:reply, :ok, thread_id}
   end
 
   defp broadcast(thread_id, method, params) do

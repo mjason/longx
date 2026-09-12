@@ -119,6 +119,46 @@ defmodule Longx.Projects.E2ETest do
     assert File.read!(Path.join(dir, "README.md")) == "hello edited\n"
   end
 
+  test "redo a turn with another model: codex history is reverted, the new model is used", %{
+    conn: conn,
+    project: project
+  } do
+    {:ok, thread} = Projects.start_thread(project, conn: conn)
+    Longx.Codex.Thread.subscribe(thread.codex_thread_id)
+
+    {:ok, t1} = Projects.send_message(thread, "first question", conn: conn)
+    assert_receive {:codex, _, "turn/completed", _}, 60_000
+    wait_until(fn -> Ash.get!(Projects.Turn, t1.id) end, &(&1.status != :in_progress))
+    {:ok, t2} = Projects.send_message(thread, "second question", conn: conn)
+    assert_receive {:codex, _, "turn/completed", _}, 60_000
+    wait_until(fn -> Ash.get!(Projects.Turn, t2.id) end, &(&1.status != :in_progress))
+    assert_receive {:upstream_model, "project-upstream"}
+    assert_receive {:upstream_model, "project-upstream"}
+
+    {:ok, redo} =
+      Projects.redo_turn(t2, model: "default-model", text: "second question, redone", conn: conn)
+
+    assert_receive {:codex, _, "thread/reverted", %{"turnIds" => [_]}}, 5_000
+    assert_receive {:codex, _, "turn/completed", _}, 60_000
+    # the redo went to the other model, with a history that no longer has the reverted turn
+    assert_receive {:upstream_model, "default-upstream"}, 5_000
+    done = wait_until(fn -> Ash.get!(Projects.Turn, redo.id) end, &(&1.status != :in_progress))
+    assert done.status == :completed
+    assert Ash.get!(Projects.Turn, t2.id).status == :reverted
+
+    {:ok, read} =
+      Longx.Codex.Connection.request(conn, "thread/read", %{
+        "threadId" => thread.codex_thread_id,
+        "includeTurns" => true
+      })
+
+    assert Enum.map(read["thread"]["turns"], & &1["id"]) == [t1.codex_turn_id, redo.codex_turn_id]
+
+    assert Longx.Codex.Thread.snapshot(thread.codex_thread_id).items
+           |> Enum.map(& &1["turnId"])
+           |> Enum.uniq() == [t1.codex_turn_id, redo.codex_turn_id]
+  end
+
   defp wait_until(fetch, pred, attempts \\ 100) do
     value = fetch.()
 

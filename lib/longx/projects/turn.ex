@@ -42,6 +42,11 @@ defmodule Longx.Projects.Turn do
       accept [:diff]
     end
 
+    # the turn was removed from the conversation by a redo; kept for the record
+    update :mark_reverted do
+      change set_attribute(:status, :reverted)
+    end
+
     read :by_codex_id do
       argument :codex_turn_id, :string, allow_nil?: false
       get? true
@@ -50,7 +55,12 @@ defmodule Longx.Projects.Turn do
 
     read :for_thread do
       argument :thread_id, :uuid, allow_nil?: false
-      filter expr(thread_id == ^arg(:thread_id))
+      argument :include_reverted, :boolean, default: false
+
+      filter expr(
+               thread_id == ^arg(:thread_id) and (^arg(:include_reverted) or status != :reverted)
+             )
+
       prepare build(sort: [started_at: :asc, inserted_at: :asc])
     end
   end
@@ -66,7 +76,7 @@ defmodule Longx.Projects.Turn do
       allow_nil? false
       public? true
       default :in_progress
-      constraints one_of: [:in_progress, :completed, :failed, :interrupted]
+      constraints one_of: [:in_progress, :completed, :failed, :interrupted, :reverted]
     end
 
     attribute :started_at, :utc_datetime_usec, allow_nil?: false, public?: true

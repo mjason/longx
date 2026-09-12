@@ -92,6 +92,75 @@ defmodule FakeAppServer do
     %{state | threads: Map.put_new(state.threads, thread_id, %{turns: []})}
   end
 
+  # thread/revert: drop the given turn and everything after it (codex only allows this on paginated threads)
+  defp handle(
+         %{
+           "id" => id,
+           "method" => "thread/revert",
+           "params" => %{"threadId" => thread_id, "beforeTurnId" => before}
+         },
+         state
+       ) do
+    turns = state.threads |> Map.get(thread_id, %{turns: []}) |> Map.get(:turns) |> Enum.reverse()
+
+    case Enum.find_index(turns, &(&1["id"] == before)) do
+      nil ->
+        error(id, -32600, "unknown turn #{before}")
+        state
+
+      idx ->
+        kept = Enum.take(turns, idx)
+
+        reply(id, %{
+          "thread" => %{"id" => thread_id, "turns" => []},
+          "turnsBackwardsCursor" => nil,
+          "itemsBackwardsCursor" => nil
+        })
+
+        notify("thread/reverted", %{"threadId" => thread_id})
+        put_in(state, [:threads, thread_id, :turns], Enum.reverse(kept))
+    end
+  end
+
+  # thread/fork: a new thread with the history up to and including lastTurnId
+  defp handle(
+         %{
+           "id" => id,
+           "method" => "thread/fork",
+           "params" => %{"threadId" => thread_id} = params
+         },
+         state
+       ) do
+    turns = state.threads |> Map.get(thread_id, %{turns: []}) |> Map.get(:turns) |> Enum.reverse()
+
+    kept =
+      case params["lastTurnId"] do
+        nil ->
+          turns
+
+        last ->
+          Enum.take_while(turns, &(&1["id"] != last)) ++ Enum.filter(turns, &(&1["id"] == last))
+      end
+
+    new_id = "thr_#{state.prefix}_#{state.next}"
+
+    thread = %{
+      "id" => new_id,
+      "preview" => "",
+      "sessionId" => new_id,
+      "forkedFromId" => thread_id
+    }
+
+    reply(id, %{"thread" => thread})
+    notify("thread/started", %{"thread" => thread})
+
+    %{
+      state
+      | next: state.next + 1,
+        threads: Map.put(state.threads, new_id, %{turns: Enum.reverse(kept)})
+    }
+  end
+
   defp handle(
          %{"id" => id, "method" => "thread/read", "params" => %{"threadId" => thread_id}},
          state

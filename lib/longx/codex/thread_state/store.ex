@@ -126,6 +126,18 @@ defmodule Longx.Codex.ThreadState.Store do
     :ok
   end
 
+  @doc "Removes every item belonging to the given turns (a `thread/revert`)."
+  @spec delete_turns(String.t(), [String.t()]) :: :ok
+  def delete_turns(thread_id, turn_ids) do
+    turn_ids = MapSet.new(turn_ids)
+
+    @items
+    |> :ets.match_object({{thread_id, :_}, :_, :_})
+    |> Enum.each(fn {key, _order, item} ->
+      if MapSet.member?(turn_ids, item["turnId"]), do: :ets.delete(@items, key)
+    end)
+  end
+
   ## folding notifications
 
   @doc "Applies one codex notification to the thread's stored view."
