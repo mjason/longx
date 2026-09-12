@@ -158,6 +158,23 @@ defmodule Longx.Projects.ThreadsTest do
       assert params["config"]["model_context_window"] == 128_000
     end
 
+    test "network_access: true opens the workspace-write sandbox's network", %{
+      dir: dir,
+      conn: conn
+    } do
+      closed = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(closed, conn: conn)
+      %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      refute Map.has_key?(params["config"], "sandbox_workspace_write.network_access")
+
+      sub = Path.join(dir, "open")
+      File.mkdir_p!(sub)
+      open = Projects.create_project!(%{name: "Open", root_path: sub, network_access: true})
+      {:ok, thread} = Projects.start_thread(open, conn: conn)
+      %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      assert params["config"]["sandbox_workspace_write.network_access"] == true
+    end
+
     test "an unknown model is refused before codex is involved", %{dir: dir, conn: conn} do
       project = git_project!(dir)
 

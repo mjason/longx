@@ -35,8 +35,12 @@ config :swoosh, :api_client, false
 
 config :longx, Longx.Codex.Home, dir: Path.expand("../data/codex_home_test", __DIR__)
 
-# Tests start their own Longx.Codex.Connection against a fake app-server.
-config :longx, Longx.Codex.Connection, autostart: false
+# Tests start their own Longx.Codex.Connection against a fake app-server;
+# the per-project pool launches the same fake instead of the real binary.
+config :longx, Longx.Codex.Pool,
+  command: ["elixir", Path.expand("../test/support/fake_app_server.exs", __DIR__)],
+  # the fake remembers its threads in the project's home, like codex does
+  connection: [env: [{"FAKE_PERSIST", "1"}]]
 
 # Print only warnings and errors during test
 config :logger, level: :warning

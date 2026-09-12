@@ -43,6 +43,11 @@ defmodule Longx.Projects.Turn do
     end
 
     # the turn was removed from the conversation by a redo; kept for the record
+    read :in_progress_for_project do
+      argument :project_id, :uuid, allow_nil?: false
+      filter expr(status == :in_progress and thread.project_id == ^arg(:project_id))
+    end
+
     update :mark_reverted do
       change set_attribute(:status, :reverted)
     end

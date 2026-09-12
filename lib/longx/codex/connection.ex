@@ -9,10 +9,14 @@ defmodule Longx.Codex.Connection do
   hands every notification to the thread's `Longx.Codex.ThreadState` (or to
   the `"codex:server"` topic when it carries no `threadId`).
 
-  One connection per node: the app-server hosts any number of threads.
+  One connection per codex process; `Longx.Codex.Pool` runs one per project.
+  A connection carries a `tag:` (the project id) that goes on its
+  broadcasts, and registers every thread it hosts in `Longx.Codex.Registry`
+  (`{:thread, id}`) so `Longx.Codex.Thread` can find the connection for a
+  thread without being told.
 
   Topics:
-    * `"codex:connection"` — `{:codex_connection, :ready | :down}`
+    * `"codex:connection"` — `{:codex_connection, tag, :ready | :down}`
     * `"codex:server"` — `{:codex, method, params}` for thread-less notifications
     * `"codex:thread:<id>"` — see `Longx.Codex.ThreadState`
   """
@@ -43,12 +47,17 @@ defmodule Longx.Codex.Connection do
 
   @type option ::
           {:name, GenServer.name() | nil}
+          | {:tag, term}
+          | {:home_dir, Path.t()}
+          | {:home, keyword}
           | {:command, [String.t(), ...]}
           | {:env, [{String.t(), String.t()}]}
           | {:cd, Path.t()}
           | {:server_request_handler, module}
           | {:request_timeout, timeout}
           | {:client_info, map}
+
+  @registry Longx.Codex.Registry
 
   defmodule State do
     @moduledoc false
@@ -58,6 +67,9 @@ defmodule Longx.Codex.Connection do
       :handler,
       :request_timeout,
       :client_info,
+      :tag,
+      :started_at,
+      threads: MapSet.new(),
       phase: :handshaking,
       next_id: 1,
       pending: %{},
@@ -71,11 +83,12 @@ defmodule Longx.Codex.Connection do
 
   @doc """
   Starts the connection. Without `:command`/`:env` it launches the bundled
-  app-server with our own `CODEX_HOME` (`Home.prepare/1`).
+  app-server with our own `CODEX_HOME` (`Home.prepare/1`, in `:home_dir`
+  when given). `:tag` (a project id) marks its broadcasts.
   """
   @spec start_link([option]) :: GenServer.on_start()
   def start_link(opts \\ []) do
-    {name, opts} = Keyword.pop(opts, :name, __MODULE__)
+    {name, opts} = Keyword.pop(opts, :name, nil)
 
     if name,
       do: GenServer.start_link(__MODULE__, opts, name: name),
@@ -114,6 +127,10 @@ defmodule Longx.Codex.Connection do
   @spec status(GenServer.server()) :: :handshaking | :ready
   def status(conn), do: GenServer.call(conn, :status)
 
+  @doc "Phase, tag, OS pid of the app-server, start time, hosted thread ids."
+  @spec info(GenServer.server()) :: map
+  def info(conn), do: GenServer.call(conn, :info)
+
   ## Server
 
   @impl true
@@ -127,6 +144,8 @@ defmodule Longx.Codex.Connection do
       state = %State{
         shim: shim,
         reader: spawn_link(fn -> read_loop(shim, conn, "") end),
+        tag: Keyword.get(opts, :tag),
+        started_at: DateTime.utc_now(),
         handler: Keyword.get(opts, :server_request_handler, configured_handler()),
         request_timeout: Keyword.get(opts, :request_timeout, @default_request_timeout),
         client_info:
@@ -153,8 +172,14 @@ defmodule Longx.Codex.Connection do
         {:ok, command, Keyword.get(opts, :env, []), Keyword.get(opts, :cd)}
 
       :error ->
+        # `home_dir:` places the CODEX_HOME; `home:` are further Home.prepare/1 options
+        home_opts =
+          opts
+          |> Keyword.get(:home, [])
+          |> Keyword.merge(Enum.map(Keyword.take(opts, [:home_dir]), fn {_, d} -> {:dir, d} end))
+
         with {:ok, exe} <- Runtime.executable(),
-             {:ok, home} <- Home.prepare() do
+             {:ok, home} <- Home.prepare(home_opts) do
           {:ok, [exe], home.env, home.dir}
         end
     end
@@ -199,6 +224,19 @@ defmodule Longx.Codex.Connection do
   end
 
   def handle_call(:status, _from, state), do: {:reply, state.phase, state}
+
+  def handle_call(:info, _from, state) do
+    info = %{
+      pid: self(),
+      tag: state.tag,
+      phase: state.phase,
+      started_at: state.started_at,
+      os_pid: state.shim && Process.alive?(state.shim) && Shim.os_pid(state.shim),
+      threads: MapSet.to_list(state.threads)
+    }
+
+    {:reply, info, state}
+  end
 
   @impl true
   def handle_info({:rpc, message}, state) do
@@ -301,8 +339,11 @@ defmodule Longx.Codex.Connection do
 
   @impl true
   def terminate(_reason, state) do
+    # stop being findable first: shutting the shim down below can take a
+    # while, and nobody should be handed a connection that is on its way out
+    disown(state)
     fail_pending(state, {:error, :connection_reset})
-    PubSub.broadcast(@pubsub, "codex:connection", {:codex_connection, :down})
+    PubSub.broadcast(@pubsub, "codex:connection", {:codex_connection, state.tag, :down})
 
     if state.shim && Process.alive?(state.shim) do
       Shim.kill(state.shim, 5_000)
@@ -326,8 +367,11 @@ defmodule Longx.Codex.Connection do
 
       {%{timer: timer, from: from}, pending} ->
         Process.cancel_timer(timer)
+        # a thread/start|resume|fork reply names a thread we now host: own it
+        # before the caller gets the reply, so a follow-up call finds us
+        state = own_thread(%State{state | pending: pending}, thread_id_of_result(result))
         GenServer.reply(from, result)
-        %State{state | pending: pending}
+        state
     end
   end
 
@@ -380,13 +424,40 @@ defmodule Longx.Codex.Connection do
 
   defp dispatch({:notification, method, params}, state) do
     route_notification(method, params)
-    state
+    own_thread(state, thread_id_of(method, params))
   end
 
   defp dispatch({:unknown, message}, state) do
     Logger.warning("codex: unrecognised message #{inspect(message)}")
     state
   end
+
+  # Every thread this process hosts is registered once, so callers can find
+  # the connection by thread id (`Longx.Codex.Pool.connection_for_thread/1`).
+  # The registration dies with the process; a restarted codex re-registers
+  # threads as it touches them again.
+  defp own_thread(state, nil), do: state
+
+  defp own_thread(%State{threads: threads} = state, thread_id) do
+    if MapSet.member?(threads, thread_id) do
+      state
+    else
+      Registry.register(@registry, {:thread, thread_id}, state.tag)
+      %State{state | threads: MapSet.put(threads, thread_id)}
+    end
+  end
+
+  defp disown(%State{tag: tag, threads: threads}) do
+    if tag, do: Registry.unregister(@registry, {:connection, tag})
+    Enum.each(threads, &Registry.unregister(@registry, {:thread, &1}))
+  end
+
+  defp thread_id_of_result({:ok, %{"thread" => %{"id" => id}}}) when is_binary(id), do: id
+  defp thread_id_of_result(_), do: nil
+
+  defp thread_id_of(_method, %{"threadId" => id}) when is_binary(id), do: id
+  defp thread_id_of("thread/started", %{"thread" => %{"id" => id}}) when is_binary(id), do: id
+  defp thread_id_of(_method, _params), do: nil
 
   defp route_notification(method, %{"threadId" => thread_id} = params)
        when is_binary(thread_id) do
@@ -418,7 +489,7 @@ defmodule Longx.Codex.Connection do
 
   defp finish_handshake({:ok, _result}, %State{} = state) do
     write(state, Message.notification("initialized", %{}))
-    PubSub.broadcast(@pubsub, "codex:connection", {:codex_connection, :ready})
+    PubSub.broadcast(@pubsub, "codex:connection", {:codex_connection, state.tag, :ready})
     flush_queue(%State{state | phase: :ready})
   end
 

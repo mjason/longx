@@ -48,7 +48,7 @@ defmodule Longx.Codex.ConnectionTest do
          request_timeout: 5_000}
       )
 
-    assert_receive {:codex_connection, :ready}, 15_000
+    assert_receive {:codex_connection, nil, :ready}, 15_000
     %{conn: conn}
   end
 
@@ -236,7 +236,7 @@ defmodule Longx.Codex.ConnectionTest do
       end)
 
     assert {:error, :connection_reset} = Task.await(task, 10_000)
-    assert_receive {:codex_connection, :down}, 5_000
+    assert_receive {:codex_connection, nil, :down}, 5_000
     assert_receive {:DOWN, ^ref, :process, ^conn, {:shutdown, :codex_exited}}, 5_000
   end
 

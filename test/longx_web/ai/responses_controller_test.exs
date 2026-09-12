@@ -306,38 +306,36 @@ defmodule LongxWeb.AI.ResponsesControllerTest do
   end
 
   describe "provider limits" do
-    test "an upstream that stays silent past request_timeout_ms is a 504", %{
-      conn: conn,
-      bypass: bypass,
-      provider: provider
-    } do
-      AI.update_provider!(provider, %{request_timeout_ms: 1_000})
-      configure_default!(provider)
-      test_pid = self()
+    test "an upstream that stays silent past request_timeout_ms is a 504", %{conn: conn} do
+      # a bare socket that accepts and never answers (Bypass would fail the
+      # test when the gateway hangs up on its handler)
+      {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+      {:ok, port} = :inet.port(listener)
 
-      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
-        # the upstream never answers; the gateway must give up on its own
-        send(test_pid, {:upstream_stuck, self()})
+      acceptor =
+        spawn(fn ->
+          {:ok, socket} = :gen_tcp.accept(listener)
 
-        receive do
-          :release ->
-            # the gateway has hung up by now; let the handler end cleanly either way
-            try do
-              Plug.Conn.send_resp(up, 200, "")
-            rescue
-              _ -> up
-            after
-              send(test_pid, :handler_done)
-            end
-        end
-      end)
+          receive do
+            :close -> :gen_tcp.close(socket)
+          end
+        end)
+
+      on_exit(fn -> send(acceptor, :close) && :gen_tcp.close(listener) end)
+
+      silent =
+        AI.create_provider!(%{
+          name: "Silent",
+          slug: "silent-#{System.unique_integer([:positive])}",
+          base_url: "http://127.0.0.1:#{port}/v1",
+          api_key: "sk-silent",
+          request_timeout_ms: 1_000
+        })
+
+      configure_default!(silent)
 
       conn = conn |> authed() |> post_json(@request)
       assert json_response(conn, 504)["error"]["message"] =~ "timed out"
-
-      assert_received {:upstream_stuck, handler}
-      send(handler, :release)
-      assert_receive :handler_done, 5_000
     end
 
     test "max_concurrent_requests: one more request than allowed is a 429 codex retries", %{
