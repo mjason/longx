@@ -8,6 +8,7 @@ defmodule Longx.AI do
   use Ash.Domain, otp_app: :longx
 
   alias Longx.AI.{Model, Provider, SearchProvider, SearchTarget, Target}
+  alias Longx.Codex.Tool.Registry
 
   resources do
     resource Provider do
@@ -36,6 +37,81 @@ defmodule Longx.AI do
         default_options: [not_found_error?: false]
 
       define :make_default_search_provider, action: :make_default
+    end
+
+    resource Longx.AI.Tool do
+      define :create_tool, action: :create
+      define :set_tool_enabled, action: :set_enabled
+      define :get_tool, action: :by_qualified_name, args: [:namespace, :name]
+      define :enabled_tools, action: :enabled
+    end
+  end
+
+  ## Agent tools: the registry says what exists, the DB says what is on
+
+  @doc """
+  Every registered tool with its switch. Syncs the DB to the registry first:
+  new tools are inserted disabled, tools gone from the code are removed.
+  """
+  @spec list_tools() :: {:ok, [map]} | {:error, term}
+  def list_tools do
+    registered = Registry.all()
+    known = MapSet.new(registered, &{&1.namespace, &1.name})
+
+    Enum.each(registered, &create_tool!(%{namespace: &1.namespace, name: &1.name}))
+
+    Longx.AI.Tool
+    |> Ash.read!()
+    |> Enum.reject(&MapSet.member?(known, {&1.namespace, &1.name}))
+    |> Enum.each(&Ash.destroy!/1)
+
+    rows = Longx.AI.Tool |> Ash.read!() |> Map.new(&{{&1.namespace, &1.name}, &1})
+
+    {:ok,
+     registered
+     |> Enum.sort_by(&{&1.namespace, &1.name})
+     |> Enum.map(fn tool ->
+       row = Map.fetch!(rows, {tool.namespace, tool.name})
+
+       %{
+         id: row.id,
+         namespace: tool.namespace,
+         name: tool.name,
+         qualified_name: "#{tool.namespace}.#{tool.name}",
+         description: tool.description,
+         input_schema: tool.input_schema,
+         enabled: row.enabled
+       }
+     end)}
+  end
+
+  def list_tools! do
+    {:ok, tools} = list_tools()
+    tools
+  end
+
+  @doc "Qualified names (`\"ns.name\"`) of the globally enabled tools — what a thread gets when it does not choose."
+  @spec enabled_tool_names() :: [String.t()]
+  def enabled_tool_names do
+    enabled_tools!()
+    |> Enum.map(&"#{&1.namespace}.#{&1.name}")
+    |> Enum.filter(&match?({:ok, _}, Registry.fetch_qualified(&1)))
+    |> Enum.sort()
+  end
+
+  @spec enable_tool(String.t()) :: {:ok, Longx.AI.Tool.t()} | {:error, :unknown_tool | term}
+  def enable_tool(qualified_name), do: switch_tool(qualified_name, true)
+
+  @spec disable_tool(String.t()) :: {:ok, Longx.AI.Tool.t()} | {:error, :unknown_tool | term}
+  def disable_tool(qualified_name), do: switch_tool(qualified_name, false)
+
+  defp switch_tool(qualified_name, enabled) do
+    with {:ok, %{namespace: namespace, name: name}} <- Registry.fetch_qualified(qualified_name),
+         {:ok, row} <- create_tool(%{namespace: namespace, name: name}) do
+      set_tool_enabled(row, %{enabled: enabled})
+    else
+      :error -> {:error, :unknown_tool}
+      other -> other
     end
   end
 

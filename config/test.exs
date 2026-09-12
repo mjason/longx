@@ -35,6 +35,9 @@ config :swoosh, :api_client, false
 
 config :longx, Longx.Codex.Home, dir: Path.expand("../data/codex_home_test", __DIR__)
 
+# Tests start their own Longx.Codex.Connection against a fake app-server.
+config :longx, Longx.Codex.Connection, autostart: false
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

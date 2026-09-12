@@ -76,25 +76,70 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     `config.toml`: one provider `longx` → `http://127.0.0.1:<port>/ai/v1`,
     `env_key = LONGX_GATEWAY_TOKEN`, `requires_openai_auth = false` → **codex needs no
     login**. `Home.prepare/1` returns the env to spawn codex with.
-- `lib/longx/codex/` (client, to be created) — Codex app-server client on top of
-  `Longx.Shim`, launching `Longx.Codex.Runtime.executable/0` with `Home.prepare/1`'s env.
-  The app-server speaks newline-delimited JSON-RPC over stdio (messages omit
-  `"jsonrpc":"2.0"`). Protocol facts that shape the design:
-  - Handshake: `initialize` (params `clientInfo{name,version}`, optional `capabilities`
-    incl. `optOutNotificationMethods`, `experimentalApi`) → then send the `initialized`
-    notification. Nothing else is accepted before that.
-  - **Bidirectional**: besides notifications the server sends *requests* we must answer by
-    id — approvals (`item/commandExecution/requestApproval`, `item/fileChange/requestApproval`,
-    `item/permissions/requestApproval`), `item/tool/call`, `item/tool/requestUserInput`,
-    `mcpServer/elicitation/request`, `account/chatgptAuthTokens/refresh`. The client must
-    route these to a handler (UI via PubSub) and reply, with a timeout → `cancel`/`decline`.
-  - One app-server hosts many threads (`thread/start|resume|fork|list`); turns via
-    `turn/start|steer|interrupt`. Notifications carry `threadId`/`turnId`/`itemId` → PubSub
-    topic per thread. Every request codex makes to the gateway carries `thread-id`
-    (header + `client_metadata`) and the full history (`store: false`), so one app-server
-    per node serves all users; the gateway maps thread → user → model. Item types (`agentMessage`, `reasoning`, `commandExecution`,
-    `fileChange`, `plan`, `webSearch`, `mcpToolCall`…) plus `item/*/delta` streams map
-    onto AI Elements components.
+- `lib/longx/codex/` — the app-server client, layered:
+  - `Longx.Codex.Connection` (one per node, under `Longx.Codex.Supervisor`, autostarted
+    unless `config :longx, Longx.Codex.Connection, autostart: false` — test does that):
+    owns a `Longx.Shim` running `Runtime.executable/0` with `Home.prepare/1`'s env; a linked
+    reader process feeds `{:rpc, msg}`; `initialize` → `initialized` handshake (calls made
+    before `:ready` are queued); request/response pairing with per-request timeouts;
+    notifications with a `threadId` go to that thread's `ThreadState`, the rest to PubSub
+    `"codex:server"`; `{:codex_connection, :ready | :down}` on `"codex:connection"`. Shim or
+    reader death → pending callers get `{:error, :connection_reset}`, process stops with
+    `{:shutdown, :codex_exited}` and the supervisor restarts it (3 per 60 s, then only this
+    subtree dies — never the web app). `Longx.Codex.Framing` / `Longx.Codex.Message` are the
+    pure wire pieces.
+  - **Server → client requests** (approvals, `requestUserInput`, elicitations, tool calls…) go
+    through the `Longx.Codex.ServerRequest` behaviour: `{:reply, _}` / `{:error, code, msg}` /
+    `{:defer, timeout, fallback}` / `{:async, fun, timeout, fallback}`. `Default` is
+    exhaustive over the 10 known methods: defers anything a person should decide with a "no"
+    fallback (`decline` / `timed_out` / empty answers / `cancel`) so a turn never hangs, runs
+    `item/tool/call` async, refuses the two ChatGPT-login-only requests
+    (`account/chatgptAuthTokens/refresh`, `attestation/generate`) explicitly, and logs a
+    warning for anything unknown (a codex upgrade will show up there). `Connection.respond/3`
+    (or `Thread.respond/3`) answers deferred ones by request id. Configure with
+    `server_request_handler:`.
+  - `Longx.Codex.ThreadState.Store` owns three public ETS tables (meta / items / requests)
+    holding every thread's materialised view; it is a long-lived process so the data outlives
+    the per-thread writers, and swapping to DETS/Mnesia later touches only this module.
+    `Longx.Codex.ThreadState` (Registry + DynamicSupervisor, one per live thread) is the
+    **single writer**: it folds each notification into the Store (deltas append in place,
+    `item/completed` replaces), allocates a strictly increasing `seq`, and broadcasts
+    `{:codex, seq, method, params}` on `"codex:thread:<id>"`. Reads (`snapshot/1`) go straight
+    to ETS — no process hop, works even when the writer is stopped, and a restarted writer
+    continues the sequence. Pending server requests are in the view with a `"requestId"`.
+    **Page refresh / late join protocol: `subscribe` → `snapshot` (has `seq`) → render → apply
+    only events with `seq > snapshot.seq`.** `Thread.resume/2` rebuilds the view from
+    `thread/read`. Nothing is persisted to the DB yet; codex's own sqlite in CODEX_HOME is the
+    history. Single-user system: no thread ↔ user mapping; a thread ↔ project mapping is the
+    likely future addition.
+  - `Longx.Codex.Thread` is the API to use: `start/1` (`cwd:`, `approval_policy:
+    :never | :on_request | :untrusted`, `sandbox: :read_only | :workspace_write |
+    :danger_full_access`, `model_context_window:`, `tools: ["ns.name" | module]` — default:
+    the globally enabled tools),
+    `resume/2`, `send/3`, `steer/4`, `interrupt/3`, `respond/3`, `snapshot/1`,
+    `subscribe/1`. It is the only place snake_case is turned into codex's camelCase/kebab-case.
+  - **Elixir tools for the agent** (codex *dynamic tools*; README has the developer guide):
+    one module per tool implementing the `Longx.Codex.Tool` behaviour (`name/0`,
+    `namespace/0` default `"builtin"`, `description/0`, `input_schema/0`, `call/2`; optional
+    `available?/1`, `timeout/0`), living under `lib/longx/tools/<namespace>/`. Built-ins use
+    the `builtin` namespace and follow exactly the same rules as a fork's tools.
+    `Longx.Codex.Tool.Registry` discovers implementations by behaviour at boot (plus
+    `config :longx, Longx.Codex.Tool, extra:/disabled:`; duplicate `ns.name` raises) and
+    produces the `dynamicTools` specs (namespace-grouped) that `Thread.start/1` declares —
+    which needs `capabilities.experimentalApi: true` in the handshake. **Registered ≠
+    injected**: `Longx.AI.Tool` rows (synced from the registry by `Longx.AI.list_tools/0`,
+    new tools `enabled: false`) are the global switch (`enable_tool/1`, `disable_tool/1`);
+    `Thread.start(tools: ["ns.name", …])` is the per-thread choice the UI makes; no `tools:`
+    means the globally enabled set — never "everything registered". `Longx.Codex.Tool.Runner`
+    executes `item/tool/call`: validate arguments with `ex_json_schema` (errors + schema go
+    back to the model so it can fix them), build `Tool.Context` (ids, `cwd`, lazy thread
+    `snapshot`), run `call/2` in `Longx.Codex.TaskSupervisor` under the tool's timeout,
+    normalise to `DynamicToolCallResponse`. **Every failure is `success: false` with a
+    readable message, never a JSON-RPC error.** `ServerRequest.Default` routes it via the
+    `{:async, fun, timeout, fallback}` outcome, which `Connection` runs off-process (task
+    reply / crash / timeout → reply or fallback). Telemetry `[:longx, :codex, :tool, *]`.
+  - The app-server speaks newline-delimited JSON-RPC over stdio (messages omit
+    `"jsonrpc":"2.0"`). Protocol facts that shape the design:
   - Docs: https://learn.chatgpt.com/docs/app-server. The exact schema for the bundled
     version is authoritative over the docs:
     `priv/codex/<target>/bin/codex-app-server generate-json-schema --out DIR`
@@ -138,14 +183,20 @@ Where tests live / what to use:
   the Go side has its own `go test` suite in `native/shim` with an in-memory host harness.
 - `Longx.Codex.Runtime` → tests install from a locally built fake package tarball
   (`source: {:file, …}`); the real download is never exercised in the unit suite.
+- Codex client → `test/support/fake_app_server.exs` is a scripted stand-in for the
+  app-server (`say`/`approve`/`stall`/`slow`/`error`/`die`/`server-notify` turns) run under
+  `Longx.Shim` exactly like the real binary; Connection/Thread/ThreadState tests use it.
+  `Longx.Test.CodexHarness` drives the *real* binary through Connection/Thread for the
+  `:integration` / `:live` tests (`serve_endpoint!`, `prepare_home!`, `start_connection!`,
+  `run_turn!`). In `mix run` scripts the HTTP server is off — use `PHX_SERVER=true` or codex
+  cannot reach the gateway.
 - AI gateway → `Bypass` plays the upstream (and Tavily); `Longx.Test.ResponsesFixture`
-  builds valid Responses SSE streams (`assistant_message/1`, `function_call/3`). DB tests must clear the seeded rows in `setup` (seeds run before
-  the suite). End-to-end: `test/longx/codex/gateway_e2e_test.exs` (`:integration`, real
-  codex → real endpoint on a random Bandit port → Bypass) and `gateway_live_test.exs`
-  (`:live`, real DeepSeek, needs `DEEPSEEK_API_KEY`); `Longx.Test.CodexClient` drives codex
-  over stdio until `Longx.Codex.Connection` exists.
-- Codex client → unit-test against a fake app-server (a tiny script that echoes JSON-RPC),
-  never against the real `codex` binary in the unit suite. Real-Codex tests are
+  builds valid Responses SSE streams (`assistant_message/1`, `function_call/3`). DB tests
+  must clear the seeded rows in `setup` (seeds run before the suite). End-to-end:
+  `test/longx/codex/gateway_e2e_test.exs` (`:integration`, real codex → real endpoint on a
+  random Bandit port → Bypass) and `gateway_live_test.exs` (`:live`, real DeepSeek + Tavily,
+  needs `DEEPSEEK_API_KEY` / `TAVILY_API_KEY`).
+- Never run the real `codex` binary in the unit suite. Real-Codex tests are
   `@tag :integration`, excluded by default (`test_helper.exs`); run them with
   `mix test --include integration`.
 - TypeScript/React → also test-first. Use `vitest` + `@testing-library/react` in `assets/`
