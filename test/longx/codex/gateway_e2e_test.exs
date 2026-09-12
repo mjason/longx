@@ -1,16 +1,16 @@
 defmodule Longx.Codex.GatewayE2ETest do
   @moduledoc """
-  The whole chain: bundled codex-app-server → our /ai/v1/responses → upstream.
-
-  Upstream is a Bypass returning a canned stream. Excluded by default:
-  `mix test --include integration`. See `Longx.Codex.GatewayLiveTest` for the
-  same flow against the real DeepSeek.
+  The whole chain through the real client: bundled codex-app-server ⇄
+  Longx.Codex.Connection, and codex → our /ai/v1/* → a Bypass upstream.
+  Excluded by default: `mix test --include integration`.
   """
   use Longx.DataCase, async: false
 
+  import Longx.Test.CodexHarness
+
   alias Longx.AI
-  alias Longx.Codex.Home
-  alias Longx.Test.{CodexClient, ResponsesFixture}
+  alias Longx.Codex.Thread
+  alias Longx.Test.ResponsesFixture
 
   @moduletag :integration
   @moduletag timeout: 120_000
@@ -19,23 +19,7 @@ defmodule Longx.Codex.GatewayE2ETest do
     Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.SearchProvider, :destroy, %{}, authorize?: false)
-
-    # Serve the real endpoint on a loopback port for codex to call.
-    {:ok, bandit} =
-      start_supervised(
-        {Bandit, plug: LongxWeb.Endpoint, scheme: :http, ip: {127, 0, 0, 1}, port: 0}
-      )
-
-    {:ok, {_ip, port}} = ThousandIsland.listener_info(bandit)
-
-    home_dir =
-      Path.join(Path.expand("data"), "codex_home_e2e_#{System.unique_integer([:positive])}")
-
-    on_exit(fn -> File.rm_rf!(home_dir) end)
-    gateway_url = "http://127.0.0.1:#{port}/ai/v1"
-    {:ok, home} = Home.prepare(dir: home_dir, gateway_url: gateway_url)
-
-    %{home: home, home_dir: home_dir, gateway_url: gateway_url}
+    %{gateway_url: serve_endpoint!()}
   end
 
   defp send_sse(conn, frames) do
@@ -48,81 +32,72 @@ defmodule Longx.Codex.GatewayE2ETest do
     end)
   end
 
-  test "a turn completes through the gateway with the configured upstream model", %{home: home} do
-    bypass = Bypass.open()
-    test_pid = self()
-
+  defp fake_provider!(bypass, attrs \\ %{}) do
     provider =
-      AI.create_provider!(%{
-        name: "Fake",
-        slug: "fake-#{System.unique_integer([:positive])}",
-        base_url: "http://localhost:#{bypass.port}/v1",
-        api_key: "sk-fake"
-      })
+      AI.create_provider!(
+        Map.merge(
+          %{
+            name: "Fake",
+            slug: "fake-#{System.unique_integer([:positive])}",
+            base_url: "http://localhost:#{bypass.port}/v1",
+            api_key: "sk-fake"
+          },
+          attrs
+        )
+      )
 
     AI.create_model!(%{name: "Fake", upstream_id: "fake-model", provider_id: provider.id})
     |> AI.make_default_model!()
+
+    provider
+  end
+
+  test "a turn completes through the gateway with the configured upstream model", %{
+    gateway_url: gateway_url
+  } do
+    bypass = Bypass.open()
+    fake_provider!(bypass)
+    test_pid = self()
 
     Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
       {:ok, raw, conn} = Plug.Conn.read_body(conn, length: 50_000_000)
       send(test_pid, {:upstream_request, conn.req_headers, Jason.decode!(raw)})
-
-      conn =
-        conn
-        |> Plug.Conn.put_resp_content_type("text/event-stream")
-        |> Plug.Conn.send_chunked(200)
-
-      Enum.reduce(
-        ResponsesFixture.assistant_message("Hello from the fake upstream."),
-        conn,
-        fn frame, conn ->
-          {:ok, conn} = Plug.Conn.chunk(conn, frame)
-          conn
-        end
-      )
+      send_sse(conn, ResponsesFixture.assistant_message("Hello from the fake upstream."))
     end)
 
-    {shim, thread_id} = CodexClient.start_thread(home)
-    turn = CodexClient.run_turn(shim, thread_id, "hi")
+    home = prepare_home!(gateway_url)
+    conn = start_connection!(home)
+    thread_id = start_thread!(conn, home)
 
-    assert turn["status"] == "completed", "turn did not complete: #{inspect(turn)}"
-    assert_received {:agent_message, "Hello from the fake upstream."}
+    {turn, items} = run_turn!(conn, thread_id, "hi")
+    assert turn["status"] == "completed", inspect(turn)
+    assert agent_messages(items) == ["Hello from the fake upstream."]
+
+    # the projection agrees with the stream
+    snapshot = Thread.snapshot(thread_id)
+    assert snapshot.turn["status"] == "completed"
+
+    assert Enum.any?(
+             snapshot.items,
+             &(&1["type"] == "agentMessage" and &1["text"] == "Hello from the fake upstream.")
+           )
 
     assert_receive {:upstream_request, headers, body}, 5_000
     assert {"authorization", "Bearer sk-fake"} in headers
-    # codex's own routing headers stay between codex and the gateway
     refute List.keymember?(headers, "thread-id", 0)
     assert body["model"] == "fake-model"
     assert body["client_metadata"] == nil
-    assert is_binary(thread_id)
     assert body["stream"] == true
-    # nothing is filtered: namespace tools (sub-agents, web.run) reach the upstream as-is
     assert Enum.any?(body["tools"], &(&1["type"] == "namespace"))
-
-    CodexClient.stop(shim)
   end
 
   test "web.run goes through our /alpha/search and back into the turn", %{
-    home_dir: home_dir,
     gateway_url: gateway_url
   } do
-    # standalone web search on: codex offers `web.run` and calls our endpoint
-    {:ok, home} = Home.prepare(dir: home_dir, gateway_url: gateway_url, web_search: :standalone)
-
     upstream = Bypass.open()
     tavily = Bypass.open()
     test_pid = self()
-
-    provider =
-      AI.create_provider!(%{
-        name: "Fake",
-        slug: "fake-#{System.unique_integer([:positive])}",
-        base_url: "http://localhost:#{upstream.port}/v1",
-        api_key: "sk-fake"
-      })
-
-    AI.create_model!(%{name: "Fake", upstream_id: "fake-model", provider_id: provider.id})
-    |> AI.make_default_model!()
+    fake_provider!(upstream)
 
     AI.create_search_provider!(%{
       name: "Fake Tavily",
@@ -153,7 +128,6 @@ defmodule Longx.Codex.GatewayE2ETest do
       )
     end)
 
-    # 1st model call: ask for a web search; 2nd: answer using the tool output
     {:ok, calls} = Agent.start_link(fn -> 0 end)
 
     Bypass.expect(upstream, "POST", "/v1/responses", fn conn ->
@@ -181,54 +155,38 @@ defmodule Longx.Codex.GatewayE2ETest do
       end
     end)
 
-    {shim, thread_id} = CodexClient.start_thread(home)
-    turn = CodexClient.run_turn(shim, thread_id, "what's new in elixir 1.19?")
+    # web_search mode is resolved from the DB: a search provider exists → :standalone
+    assert AI.web_search_mode() == :standalone
+    home = prepare_home!(gateway_url)
+    conn = start_connection!(home)
+    thread_id = start_thread!(conn, home)
 
-    assert turn["status"] == "completed", "turn did not complete: #{inspect(turn)}"
+    {turn, items} = run_turn!(conn, thread_id, "what's new in elixir 1.19?")
+    assert turn["status"] == "completed", inspect(turn)
 
-    # codex offered web.run as a namespace tool and the upstream saw it
     assert_receive {:upstream_request, 1, first}, 5_000
     assert Enum.any?(first["tools"], &(&1["type"] == "namespace" and &1["name"] == "web"))
     refute Enum.any?(first["tools"], &(&1["type"] == "web_search"))
 
-    # our search endpoint ran the query against "Tavily"
     assert_receive {:tavily_request, %{"query" => "elixir 1.19 release"}}, 5_000
 
-    # and the tool output made it back into the second model call
     assert_receive {:upstream_request, 2, second}, 5_000
 
-    assert Enum.any?(second["input"], fn item ->
-             item["type"] == "function_call_output" and
-               inspect(item["output"]) =~ "elixir-lang.org/blog/1.19"
-           end)
+    assert Enum.any?(
+             second["input"],
+             &(&1["type"] == "function_call_output" and
+                 inspect(&1["output"]) =~ "elixir-lang.org/blog/1.19")
+           )
 
-    # codex surfaced it as a webSearch item
-    assert_received {:item_completed, "webSearch", %{"query" => query}}
-    assert query =~ "elixir 1.19"
-
-    CodexClient.stop(shim)
+    assert Enum.any?(items, &(&1["type"] == "webSearch" and &1["query"] =~ "elixir 1.19"))
   end
 
   test "web_search: :hosted hands the upstream its own web_search tool and nothing of ours", %{
-    home_dir: home_dir,
     gateway_url: gateway_url
   } do
-    {:ok, home} = Home.prepare(dir: home_dir, gateway_url: gateway_url, web_search: :hosted)
-
     upstream = Bypass.open()
     test_pid = self()
-
-    provider =
-      AI.create_provider!(%{
-        name: "Fake OpenAI",
-        slug: "openai-#{System.unique_integer([:positive])}",
-        base_url: "http://localhost:#{upstream.port}/v1",
-        api_key: "sk-fake",
-        supports_hosted_web_search: true
-      })
-
-    AI.create_model!(%{name: "Fake", upstream_id: "fake-model", provider_id: provider.id})
-    |> AI.make_default_model!()
+    fake_provider!(upstream, %{supports_hosted_web_search: true})
 
     Bypass.expect(upstream, "POST", "/v1/responses", fn conn ->
       {:ok, raw, conn} = Plug.Conn.read_body(conn, length: 50_000_000)
@@ -240,9 +198,13 @@ defmodule Longx.Codex.GatewayE2ETest do
       )
     end)
 
-    {shim, thread_id} = CodexClient.start_thread(home)
-    turn = CodexClient.run_turn(shim, thread_id, "hi")
-    assert turn["status"] == "completed", "turn did not complete: #{inspect(turn)}"
+    assert AI.web_search_mode() == :hosted
+    home = prepare_home!(gateway_url)
+    conn = start_connection!(home)
+    thread_id = start_thread!(conn, home)
+
+    {turn, _items} = run_turn!(conn, thread_id, "hi")
+    assert turn["status"] == "completed", inspect(turn)
 
     assert_receive {:upstream_request, body}, 5_000
 
@@ -252,7 +214,5 @@ defmodule Longx.Codex.GatewayE2ETest do
            )
 
     refute Enum.any?(body["tools"], &(&1["type"] == "namespace" and &1["name"] == "web"))
-
-    CodexClient.stop(shim)
   end
 end

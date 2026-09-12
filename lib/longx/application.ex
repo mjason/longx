@@ -27,6 +27,8 @@ defmodule Longx.Application do
       # {Longx.Worker, arg},
       # Start to serve requests, typically the last entry
       LongxWeb.Endpoint
+      # The bundled codex-app-server needs the endpoint's port for its gateway URL
+      | codex_children(codex_autostart?())
     ]
 
     # See https://elixir.hexdocs.pm/Supervisor.html
@@ -42,6 +44,15 @@ defmodule Longx.Application do
     LongxWeb.Endpoint.config_change(changed, removed)
     :ok
   end
+
+  # config :longx, Longx.Codex.Connection, autostart: false (test) keeps codex out
+  # of the tree; tests start their own connections against a fake server.
+  defp codex_autostart? do
+    :longx |> Application.get_env(Longx.Codex.Connection, []) |> Keyword.get(:autostart, true)
+  end
+
+  defp codex_children(true), do: [Longx.Codex.Supervisor]
+  defp codex_children(false), do: []
 
   defp skip_migrations?() do
     # By default, sqlite migrations are run when using a release

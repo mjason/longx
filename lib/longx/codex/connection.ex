@@ -133,7 +133,15 @@ defmodule Longx.Codex.Connection do
 
       {:ok, state, {:continue, :handshake}}
     else
-      {:error, reason} -> {:stop, {:codex_launch_failed, reason}}
+      {:error, :not_installed} ->
+        Logger.error(
+          "codex-app-server is not installed; run `mix codex.fetch`. Codex features are disabled."
+        )
+
+        :ignore
+
+      {:error, reason} ->
+        {:stop, {:codex_launch_failed, reason}}
     end
   end
 
