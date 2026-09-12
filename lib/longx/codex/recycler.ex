@@ -87,17 +87,25 @@ defmodule Longx.Codex.Recycler do
   end
 
   defp sample(project_id, info) do
-    :telemetry.execute(
-      [:longx, :codex, :worker, :sample],
-      %{
-        rss_bytes: rss(info),
-        processes: (info.stats || %{})[:processes] || 0,
-        cpu_ms: (info.stats || %{})[:cpu_ms] || 0,
-        uptime_ms: uptime_ms(info),
-        turns: info.turns,
-        active_turns: info.active_turns
-      },
-      %{project_id: project_id, os_pid: info.os_pid}
+    measurements = %{
+      rss_bytes: rss(info),
+      processes: (info.stats || %{})[:processes] || 0,
+      cpu_ms: (info.stats || %{})[:cpu_ms] || 0,
+      uptime_ms: uptime_ms(info),
+      turns: info.turns,
+      active_turns: info.active_turns
+    }
+
+    :telemetry.execute([:longx, :codex, :worker, :sample], measurements, %{
+      project_id: project_id,
+      os_pid: info.os_pid
+    })
+
+    # the project page shows the same numbers live (LongxWeb.ProjectChannel)
+    Phoenix.PubSub.broadcast(
+      Longx.PubSub,
+      "project:" <> project_id,
+      {:codex_sample, project_id, measurements}
     )
   end
 

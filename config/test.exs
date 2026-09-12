@@ -55,3 +55,8 @@ config :phoenix_live_view,
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# The SPA shell renders tags from a fixed manifest; no dev server in tests
+config :longx, LongxWeb.Vite,
+  dev_server: nil,
+  manifest: Path.expand("../test/support/vite_manifest.json", __DIR__)

@@ -10,7 +10,7 @@ defmodule Longx.AI.Provider do
     otp_app: :longx,
     domain: Longx.AI,
     data_layer: AshSqlite.DataLayer,
-    extensions: [AshCloak]
+    extensions: [AshCloak, AshTypescript.Resource]
 
   sqlite do
     table "ai_providers"
@@ -22,6 +22,12 @@ defmodule Longx.AI.Provider do
     attributes([:api_key])
     decrypt_by_default([])
     encrypt_nil?(false)
+  end
+
+  typescript do
+    type_name "Provider"
+    # the key itself never leaves the server; the UI only learns whether one is set
+    field_names has_api_key?: "hasApiKey"
   end
 
   actions do
@@ -138,7 +144,7 @@ defmodule Longx.AI.Provider do
     attribute :last_error, :string, public?: true
     attribute :last_error_at, :utc_datetime_usec, public?: true
 
-    timestamps()
+    timestamps public?: true
   end
 
   relationships do
@@ -146,7 +152,9 @@ defmodule Longx.AI.Provider do
   end
 
   calculations do
-    calculate :has_api_key?, :boolean, expr(not is_nil(encrypted_api_key))
+    calculate :has_api_key?, :boolean, expr(not is_nil(encrypted_api_key)) do
+      public? true
+    end
   end
 
   identities do

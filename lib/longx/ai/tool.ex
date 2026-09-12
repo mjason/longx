@@ -13,11 +13,16 @@ defmodule Longx.AI.Tool do
   use Ash.Resource,
     otp_app: :longx,
     domain: Longx.AI,
-    data_layer: AshSqlite.DataLayer
+    data_layer: AshSqlite.DataLayer,
+    extensions: [AshTypescript.Resource]
 
   sqlite do
     table "ai_tools"
     repo Longx.Repo
+  end
+
+  typescript do
+    type_name "Tool"
   end
 
   actions do
@@ -46,6 +51,23 @@ defmodule Longx.AI.Tool do
     read :enabled do
       filter expr(enabled == true)
     end
+
+    # the catalogue with its switches: registry (code) joined with the rows
+    action :catalogue, {:array, :map} do
+      constraints items: [
+                    fields: [
+                      id: [type: :uuid, allow_nil?: false],
+                      namespace: [type: :string, allow_nil?: false],
+                      name: [type: :string, allow_nil?: false],
+                      qualified_name: [type: :string, allow_nil?: false],
+                      description: [type: :string, allow_nil?: false],
+                      input_schema: [type: :map, allow_nil?: false],
+                      enabled: [type: :boolean, allow_nil?: false]
+                    ]
+                  ]
+
+      run fn _input, _ -> Longx.AI.list_tools() end
+    end
   end
 
   attributes do
@@ -53,7 +75,7 @@ defmodule Longx.AI.Tool do
     attribute :namespace, :string, allow_nil?: false, public?: true
     attribute :name, :string, allow_nil?: false, public?: true
     attribute :enabled, :boolean, allow_nil?: false, default: false, public?: true
-    timestamps()
+    timestamps public?: true
   end
 
   identities do

@@ -62,15 +62,6 @@ defmodule Longx.MixProject do
       {:phoenix_live_view, "~> 1.2.0"},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:phoenix_live_dashboard, "~> 0.8.3"},
-      {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
-      {:tailwind, "~> 0.5", runtime: Mix.env() == :dev},
-      {:heroicons,
-       github: "tailwindlabs/heroicons",
-       tag: "v2.2.0",
-       sparse: "optimized",
-       app: false,
-       compile: false,
-       depth: 1},
       {:daisyui,
        github: "saadeghi/daisyui",
        tag: "v5.5.20",
@@ -108,17 +99,9 @@ defmodule Longx.MixProject do
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ash.setup --quiet", "test"],
-      "assets.setup": [
-        "tailwind.install --if-missing",
-        "esbuild.install --if-missing",
-        "ash_typescript.npm_install"
-      ],
-      "assets.build": ["compile", "tailwind longx", "esbuild longx"],
-      "assets.deploy": [
-        "tailwind longx --minify",
-        "esbuild longx --minify",
-        "phx.digest"
-      ],
+      "assets.setup": ["cmd --cd assets npm install"],
+      "assets.build": ["compile", "ash_typescript.codegen", "cmd --cd assets npm run build"],
+      "assets.deploy": ["assets.build"],
       precommit: [
         "compile --warnings-as-errors",
         "deps.unlock --unused",
@@ -126,6 +109,8 @@ defmodule Longx.MixProject do
         "cmd --cd native/shim gofmt -l .",
         "cmd --cd native/shim go vet ./...",
         "cmd --cd native/shim go test ./...",
+        "ash_typescript.codegen --check",
+        "cmd --cd assets npm run check",
         "test"
       ],
       "ash.setup": ["ash.setup", "run priv/repo/seeds.exs"]

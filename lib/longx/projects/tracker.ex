@@ -103,12 +103,20 @@ defmodule Longx.Projects.Tracker do
       })
 
       Projects.touch_thread!(thread, %{status: :idle, last_activity_at: DateTime.utc_now()})
+      Projects.broadcast_changed(thread.project_id)
     end
   end
 
-  defp handle_event("turn/diff/updated", %{"turnId" => turn_id, "diff" => diff}) do
+  defp handle_event("turn/diff/updated", %{
+         "threadId" => codex_thread_id,
+         "turnId" => turn_id,
+         "diff" => diff
+       }) do
     with {:ok, %Turn{} = row} <- Projects.get_turn_by_codex_id(turn_id),
-         do: Projects.set_turn_diff!(row, %{diff: diff})
+         {:ok, %Thread{} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id) do
+      Projects.set_turn_diff!(row, %{diff: diff})
+      Projects.broadcast_changed(thread.project_id)
+    end
   end
 
   defp handle_event("item/completed", %{
@@ -118,6 +126,7 @@ defmodule Longx.Projects.Tracker do
     with {:ok, %Thread{preview: nil} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id),
          text when is_binary(text) <- user_text(item) do
       Projects.touch_thread!(thread, %{preview: String.slice(text, 0, 200)})
+      Projects.broadcast_changed(thread.project_id)
     end
   end
 
@@ -141,6 +150,8 @@ defmodule Longx.Projects.Tracker do
     for thread <- Projects.list_threads_with_status!(project_id, :active) do
       Projects.touch_thread!(thread, %{status: :disconnected})
     end
+
+    Projects.broadcast_changed(project_id)
   rescue
     e -> Logger.error("projects tracker: codex down cleanup failed: #{Exception.message(e)}")
   end
@@ -160,6 +171,8 @@ defmodule Longx.Projects.Tracker do
             Projects.touch_thread!(thread, %{status: :unrecoverable})
         end
       end
+
+      Projects.broadcast_changed(project_id)
     end
   rescue
     e -> Logger.error("projects tracker: resume after restart failed: #{Exception.message(e)}")
@@ -191,6 +204,7 @@ defmodule Longx.Projects.Tracker do
         })
 
         Longx.Codex.Thread.interrupt(thread.codex_thread_id, turn.codex_turn_id)
+        Projects.broadcast_changed(thread.project_id)
         MapSet.put(acc, thread.codex_thread_id)
       end)
 

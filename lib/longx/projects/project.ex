@@ -13,7 +13,8 @@ defmodule Longx.Projects.Project do
   use Ash.Resource,
     otp_app: :longx,
     domain: Longx.Projects,
-    data_layer: AshSqlite.DataLayer
+    data_layer: AshSqlite.DataLayer,
+    extensions: [AshTypescript.Resource]
 
   alias Longx.Projects.Project.{Changes, Validations}
 
@@ -22,15 +23,49 @@ defmodule Longx.Projects.Project do
     repo Longx.Repo
   end
 
+  typescript do
+    type_name "Project"
+  end
+
+  # what the SPA gets for git_info / init_git
+  @git_info [
+    repository: [type: :boolean, allow_nil?: false],
+    head: [type: :string],
+    clean: [type: :boolean],
+    changes: [type: :integer, allow_nil?: false],
+    lfs: [type: :boolean, allow_nil?: false]
+  ]
+
+  # what the SPA gets for codex_info: the home and the worker (nil = stopped)
+  @codex_info [
+    home: [type: :string, allow_nil?: false],
+    exists: [type: :boolean, allow_nil?: false],
+    bytes: [type: :integer, allow_nil?: false],
+    files: [type: :map, allow_nil?: false],
+    worker: [type: :map]
+  ]
+
   actions do
     defaults [:read, :destroy]
+
+    # what the UI calls: deliberate, and the home directory goes with the project
+    destroy :delete do
+      require_atomic? false
+      argument :confirm, :boolean, default: false
+
+      validate argument_equals(:confirm, true),
+        message: "confirm: true is required to delete a project"
+
+      change Changes.StopCodex
+      change Changes.ResetCodexHome
+    end
 
     create :create do
       primary? true
 
+      # the slug is derived from the name (rename via update)
       accept [
         :name,
-        :slug,
         :description,
         :root_path,
         :approval_policy,
@@ -69,7 +104,65 @@ defmodule Longx.Projects.Project do
     end
 
     update :archive do
+      require_atomic? false
+      change Changes.StopCodex
       change set_attribute(:archived_at, &DateTime.utc_now/0)
+    end
+
+    ## Generic actions the SPA calls (typed through ash_typescript)
+
+    action :git_info, :map do
+      constraints fields: @git_info
+      argument :id, :uuid, allow_nil?: false
+      run fn input, _ -> with {:ok, project} <- fetch(input), do: {:ok, git_info_map(project)} end
+    end
+
+    action :init_git, :map do
+      constraints fields: @git_info
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input),
+             {:ok, _sha} <- Longx.Projects.init_git(project),
+             do: {:ok, git_info_map(project)}
+      end
+    end
+
+    action :codex_info, :map do
+      constraints fields: @codex_info
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input), do: {:ok, codex_info_map(project)}
+      end
+    end
+
+    action :stop_codex do
+      argument :id, :uuid, allow_nil?: false
+      argument :force, :boolean, default: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input),
+             do: Longx.Projects.stop_codex(project, force: input.arguments.force)
+      end
+    end
+
+    action :restart_codex do
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input),
+             {:ok, _pid} <- Longx.Projects.restart_codex(project),
+             do: :ok
+      end
+    end
+
+    action :clear_codex_history do
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input), do: Longx.Projects.clear_codex_history(project)
+      end
     end
 
     read :by_slug do
@@ -134,13 +227,41 @@ defmodule Longx.Projects.Project do
 
     attribute :archived_at, :utc_datetime_usec, public?: true
 
-    timestamps()
+    timestamps public?: true
   end
 
   relationships do
     belongs_to :model, Longx.AI.Model, public?: true
     has_many :threads, Longx.Projects.Thread
   end
+
+  # generic actions above resolve the project themselves (no record context)
+  defp fetch(input), do: Ash.get(__MODULE__, input.arguments.id)
+
+  defp git_info_map(project) do
+    %{repository?: repo, head: head, clean?: clean, changes: changes, lfs?: lfs} =
+      Longx.Projects.git_info(project)
+
+    %{repository: repo, head: head, clean: clean, changes: changes, lfs: lfs}
+  end
+
+  defp codex_info_map(project) do
+    info = Longx.Projects.codex_info(project)
+
+    %{
+      home: info.home,
+      exists: info.exists?,
+      bytes: info.bytes,
+      files: info.files,
+      worker: worker(info.worker)
+    }
+  end
+
+  defp worker(:stopped), do: nil
+
+  defp worker(info),
+    do:
+      Map.take(info, [:phase, :started_at, :os_pid, :stats, :memory_limit, :turns, :active_turns])
 
   identities do
     identity :unique_slug, [:slug]

@@ -7,9 +7,12 @@ codex 的工具能力可以用 Elixir 直接扩展。
 ## 启动
 
 ```sh
-mix setup            # deps、数据库、前端资源、下载内置的 codex-app-server（priv/codex/）
-mix phx.server       # 0.0.0.0:7788
+mix setup            # deps、数据库、npm install + 前端构建、下载内置的 codex-app-server 和 git
+mix phx.server       # 0.0.0.0:7788；开发时前端资源由 Vite dev server（5173）热更新
 ```
+
+手机连 LAN 调试时页面从 `http://<lan-ip>:7788` 打开，脚本要能到达 Vite：
+`LONGX_DEV_HOST=<lan-ip> mix phx.server`。
 
 环境变量：`DEEPSEEK_API_KEY`（seeds 会把它写进 DeepSeek provider）、`TAVILY_API_KEY`（联网搜索）、`OPENAI_API_KEY`（可选）。
 生产环境另需 `LONGX_CLOAK_KEY`（加密 provider 密钥）和 `LONGX_DATA_DIR`（codex 的状态目录）。
@@ -23,6 +26,9 @@ lib/longx/codex/home.ex    我们自己的 CODEX_HOME 和 config.toml（codex �
 lib/longx/ai/              模型 provider / 搜索 provider（密钥加密存库）、网关、Tavily 搜索
 lib/longx/codex/           app-server 客户端：Connection、ThreadState（ETS 视图）、Thread API、Tool 体系
 lib/longx/tools/           给 codex 的 Elixir 工具 —— 见下文
+lib/longx_web/             SPA 壳（所有路径）、/rpc（ash_typescript）、/socket（thread / project channel）、/ai/v1 网关
+assets/js/core/            不碰 DOM 的前端核心（RPC 客户端、socket、channel、reducer）——以后 React Native 复用
+assets/js/ui/              React DOM：路由、页面、shadcn 组件；移动端优先
 ```
 
 ## 模型 provider：一个 provider 用一把 key，不要用号池

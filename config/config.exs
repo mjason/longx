@@ -17,6 +17,12 @@ config :ash_typescript,
   require_tenant_parameters: false,
   generate_zod_schemas: false,
   generate_phx_channel_rpc_actions: false,
+  # CSRF (and later auth) headers on every call, see assets/js/core/rpcHooks.ts
+  rpc_action_before_request_hook: "RpcHooks.beforeRequest",
+  rpc_validation_before_request_hook: "RpcHooks.beforeValidationRequest",
+  rpc_action_hook_context_type: "RpcHooks.ActionHookContext",
+  rpc_validation_hook_context_type: "RpcHooks.ValidationHookContext",
+  import_into_generated: [%{import_name: "RpcHooks", file: "assets/js/core/rpcHooks"}],
   generate_validation_functions: true,
   zod_import_path: "zod",
   zod_schema_suffix: "ZodSchema",
@@ -74,7 +80,7 @@ config :spark,
 config :longx,
   ecto_repos: [Longx.Repo],
   generators: [timestamp_type: :utc_datetime],
-  ash_domains: [Longx.AI, Longx.Projects]
+  ash_domains: [Longx.AI, Longx.Projects, Longx.System]
 
 # Configure the endpoint
 config :longx, LongxWeb.Endpoint,
@@ -101,47 +107,11 @@ config :phoenix_live_view,
 # at the `config/runtime.exs`.
 config :longx, Longx.Mailer, adapter: Swoosh.Adapters.Local
 
-# Configure esbuild (the version is required)
-config :esbuild,
-  version: "0.25.4",
-  longx: [
-    args:
-      ~w(js/index.tsx js/app.js --bundle --target=es2022 --outdir=../priv/static/assets --external:/fonts/* --external:/images/* --alias:@=. --splitting --format=esm),
-    cd: Path.expand("../assets", __DIR__),
-    env: %{
-      "NODE_PATH" =>
-        Enum.join(
-          [
-            Path.expand("../deps", __DIR__),
-            Path.expand(Mix.Project.build_path()),
-            Path.expand("../_build/dev", __DIR__)
-          ],
-          ":"
-        )
-    }
-  ]
-
-# Configure tailwind (the version is required)
-config :tailwind,
-  version: "4.3.0",
-  longx: [
-    args: ~w(
-      --input=assets/css/app.css
-      --output=priv/static/assets/css/app.css
-    ),
-    cd: Path.expand("..", __DIR__),
-    env: %{
-      "NODE_PATH" =>
-        Enum.join(
-          [
-            Path.expand("../deps", __DIR__),
-            Path.expand(Mix.Project.build_path()),
-            Path.expand("../_build/dev", __DIR__)
-          ],
-          ":"
-        )
-    }
-  ]
+# Assets are built by Vite (assets/vite.config.ts); LongxWeb.Vite renders the
+# tags — the dev server's in dev, the manifest's in prod.
+config :longx, LongxWeb.Vite,
+  manifest: {:priv, "static/assets/.vite/manifest.json"},
+  entries: ["js/index.tsx"]
 
 # Configure Elixir's Logger
 config :logger, :default_formatter,
