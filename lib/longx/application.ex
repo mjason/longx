@@ -20,7 +20,9 @@ defmodule Longx.Application do
       {Phoenix.PubSub, name: Longx.PubSub},
       # reference-id memory for codex web search (Longx.AI.Search)
       Longx.AI.Search.Refs,
-      # per-thread materialised codex state (Longx.Codex.ThreadState)
+      # per-thread materialised codex state (Longx.Codex.ThreadState); the ETS
+      # store outlives the per-thread writer processes
+      Longx.Codex.ThreadState.Store,
       {Registry, keys: :unique, name: Longx.Codex.ThreadRegistry},
       {DynamicSupervisor, name: Longx.Codex.ThreadState.Supervisor, strategy: :one_for_one},
       # Start a worker by calling: Longx.Worker.start_link(arg)

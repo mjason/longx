@@ -2,93 +2,80 @@ defmodule Longx.Codex.ThreadStateTest do
   use ExUnit.Case, async: true
 
   alias Longx.Codex.ThreadState
-  alias Longx.Codex.ThreadState.View
+  alias Longx.Codex.ThreadState.Store
 
-  defp item_started(item, turn \\ "turn-1"),
-    do: {"item/started", %{"threadId" => "t", "turnId" => turn, "item" => item}}
+  defp new_thread, do: "thread-#{System.unique_integer([:positive])}"
 
-  defp item_completed(item, turn \\ "turn-1"),
-    do: {"item/completed", %{"threadId" => "t", "turnId" => turn, "item" => item}}
+  defp item_started(t, item, turn \\ "turn-1"),
+    do: Store.fold(t, "item/started", %{"threadId" => t, "turnId" => turn, "item" => item})
 
-  describe "View.fold/3 (pure)" do
+  defp item_completed(t, item, turn \\ "turn-1"),
+    do: Store.fold(t, "item/completed", %{"threadId" => t, "turnId" => turn, "item" => item})
+
+  describe "Store (ETS-backed view)" do
     test "thread and turn lifecycle" do
-      view =
-        View.new("t")
-        |> View.fold("thread/started", %{"thread" => %{"id" => "t", "preview" => ""}})
-        |> View.fold("turn/started", %{"turn" => %{"id" => "turn-1", "status" => "inProgress"}})
+      t = new_thread()
+      Store.fold(t, "thread/started", %{"thread" => %{"id" => t, "preview" => ""}})
+      Store.fold(t, "turn/started", %{"turn" => %{"id" => "turn-1", "status" => "inProgress"}})
 
-      assert view.thread["id"] == "t"
-      assert view.turn == %{"id" => "turn-1", "status" => "inProgress"}
+      assert Store.meta(t).thread["id"] == t
+      assert Store.meta(t).turn == %{"id" => "turn-1", "status" => "inProgress"}
 
-      view =
-        View.fold(view, "turn/completed", %{
-          "turn" => %{"id" => "turn-1", "status" => "completed"}
-        })
-
-      assert view.turn["status"] == "completed"
+      Store.fold(t, "turn/completed", %{"turn" => %{"id" => "turn-1", "status" => "completed"}})
+      assert Store.meta(t).turn["status"] == "completed"
     end
 
     test "agent message deltas accumulate into the item; completion replaces it" do
-      view =
-        View.new("t")
-        |> View.fold(item_started(%{"id" => "m1", "type" => "agentMessage", "text" => ""}))
-        |> View.fold("item/agentMessage/delta", %{"itemId" => "m1", "delta" => "Hel"})
-        |> View.fold("item/agentMessage/delta", %{"itemId" => "m1", "delta" => "lo"})
+      t = new_thread()
+      item_started(t, %{"id" => "m1", "type" => "agentMessage", "text" => ""})
+      Store.fold(t, "item/agentMessage/delta", %{"itemId" => "m1", "delta" => "Hel"})
+      Store.fold(t, "item/agentMessage/delta", %{"itemId" => "m1", "delta" => "lo"})
 
-      assert [%{"id" => "m1", "text" => "Hello", "turnId" => "turn-1"}] = View.items(view)
+      assert [%{"id" => "m1", "text" => "Hello", "turnId" => "turn-1"}] = Store.items(t)
 
-      view =
-        View.fold(
-          view,
-          item_completed(%{"id" => "m1", "type" => "agentMessage", "text" => "Hello!"})
-        )
-
-      assert [%{"text" => "Hello!"}] = View.items(view)
+      item_completed(t, %{"id" => "m1", "type" => "agentMessage", "text" => "Hello!"})
+      assert [%{"text" => "Hello!"}] = Store.items(t)
     end
 
     test "reasoning, command output and plan deltas accumulate" do
-      view =
-        View.new("t")
-        |> View.fold(item_started(%{"id" => "r1", "type" => "reasoning"}))
-        |> View.fold("item/reasoning/summaryTextDelta", %{"itemId" => "r1", "delta" => "think"})
-        |> View.fold("item/reasoning/textDelta", %{"itemId" => "r1", "delta" => "raw"})
-        |> View.fold(
-          item_started(%{"id" => "c1", "type" => "commandExecution", "command" => "ls"})
-        )
-        |> View.fold("item/commandExecution/outputDelta", %{"itemId" => "c1", "delta" => "a\n"})
-        |> View.fold("item/commandExecution/outputDelta", %{"itemId" => "c1", "delta" => "b\n"})
-        |> View.fold(item_started(%{"id" => "p1", "type" => "plan"}))
-        |> View.fold("item/plan/delta", %{"itemId" => "p1", "delta" => "1. x"})
+      t = new_thread()
+      item_started(t, %{"id" => "r1", "type" => "reasoning"})
+      Store.fold(t, "item/reasoning/summaryTextDelta", %{"itemId" => "r1", "delta" => "think"})
+      Store.fold(t, "item/reasoning/textDelta", %{"itemId" => "r1", "delta" => "raw"})
+      item_started(t, %{"id" => "c1", "type" => "commandExecution", "command" => "ls"})
+      Store.fold(t, "item/commandExecution/outputDelta", %{"itemId" => "c1", "delta" => "a\n"})
+      Store.fold(t, "item/commandExecution/outputDelta", %{"itemId" => "c1", "delta" => "b\n"})
+      item_started(t, %{"id" => "p1", "type" => "plan"})
+      Store.fold(t, "item/plan/delta", %{"itemId" => "p1", "delta" => "1. x"})
 
       assert [
                %{"id" => "r1", "summary" => "think", "content" => "raw"},
                %{"id" => "c1", "aggregatedOutput" => "a\nb\n"},
                %{"id" => "p1", "text" => "1. x"}
-             ] =
-               View.items(view)
+             ] = Store.items(t)
     end
 
     test "a delta for an item we never saw creates a placeholder so nothing is lost" do
-      view =
-        View.fold(View.new("t"), "item/agentMessage/delta", %{"itemId" => "ghost", "delta" => "x"})
-
-      assert [%{"id" => "ghost", "text" => "x"}] = View.items(view)
+      t = new_thread()
+      Store.fold(t, "item/agentMessage/delta", %{"itemId" => "ghost", "delta" => "x"})
+      assert [%{"id" => "ghost", "text" => "x"}] = Store.items(t)
     end
 
-    test "items keep arrival order across turns" do
-      view =
-        View.new("t")
-        |> View.fold(item_started(%{"id" => "a", "type" => "userMessage"}, "turn-1"))
-        |> View.fold(item_started(%{"id" => "b", "type" => "agentMessage"}, "turn-1"))
-        |> View.fold(item_started(%{"id" => "c", "type" => "userMessage"}, "turn-2"))
+    test "items keep arrival order across turns and are isolated per thread" do
+      t = new_thread()
+      other = new_thread()
+      item_started(t, %{"id" => "a", "type" => "userMessage"}, "turn-1")
+      item_started(other, %{"id" => "zzz", "type" => "userMessage"})
+      item_started(t, %{"id" => "b", "type" => "agentMessage"}, "turn-1")
+      item_started(t, %{"id" => "c", "type" => "userMessage"}, "turn-2")
 
-      assert Enum.map(View.items(view), & &1["id"]) == ["a", "b", "c"]
+      assert Enum.map(Store.items(t), & &1["id"]) == ["a", "b", "c"]
+      assert Enum.map(Store.items(other), & &1["id"]) == ["zzz"]
     end
 
     test "pending server requests are tracked until resolved" do
-      view =
-        View.new("t")
-        |> View.put_request(9, "item/commandExecution/requestApproval", %{"command" => "rm -rf /"})
+      t = new_thread()
+      Store.put_request(t, 9, "item/commandExecution/requestApproval", %{"command" => "rm -rf /"})
 
       assert [
                %{
@@ -96,32 +83,37 @@ defmodule Longx.Codex.ThreadStateTest do
                  method: "item/commandExecution/requestApproval",
                  params: %{"command" => "rm -rf /"}
                }
-             ] = View.pending_requests(view)
+             ] = Store.requests(t)
 
-      assert View.pending_requests(View.resolve_request(view, 9)) == []
+      Store.delete_request(t, 9)
+      assert Store.requests(t) == []
     end
 
     test "token usage and thread status are kept" do
-      view =
-        View.new("t")
-        |> View.fold("thread/tokenUsage/updated", %{"tokenUsage" => %{"total" => 12}})
-        |> View.fold("thread/status/changed", %{
-          "status" => %{"type" => "active", "activeFlags" => ["waitingOnApproval"]}
-        })
+      t = new_thread()
+      Store.fold(t, "thread/tokenUsage/updated", %{"tokenUsage" => %{"total" => 12}})
 
-      assert view.token_usage == %{"total" => 12}
-      assert view.status == %{"type" => "active", "activeFlags" => ["waitingOnApproval"]}
+      Store.fold(t, "thread/status/changed", %{
+        "status" => %{"type" => "active", "activeFlags" => ["waitingOnApproval"]}
+      })
+
+      assert Store.meta(t).token_usage == %{"total" => 12}
+      assert Store.meta(t).status == %{"type" => "active", "activeFlags" => ["waitingOnApproval"]}
     end
 
-    test "unknown notifications are ignored" do
-      view = View.new("t")
-      assert View.fold(view, "something/new", %{"x" => 1}) == view
+    test "unknown notifications change nothing" do
+      t = new_thread()
+      before = Store.snapshot(t)
+      Store.fold(t, "something/new", %{"x" => 1})
+      assert Store.snapshot(t) == before
     end
 
     test "backfill/2 loads turns and items from a thread/read result" do
-      read = %{
+      t = new_thread()
+
+      Store.backfill(t, %{
         "thread" => %{
-          "id" => "t",
+          "id" => t,
           "turns" => [
             %{
               "id" => "turn-1",
@@ -138,24 +130,32 @@ defmodule Longx.Codex.ThreadStateTest do
             }
           ]
         }
-      }
+      })
 
-      view = View.backfill(View.new("t"), read)
-
-      assert Enum.map(View.items(view), &{&1["id"], &1["turnId"]}) == [
+      assert Enum.map(Store.items(t), &{&1["id"], &1["turnId"]}) == [
                {"u1", "turn-1"},
                {"m1", "turn-1"},
                {"u2", "turn-2"}
              ]
 
-      assert view.turn["id"] == "turn-2"
-      assert view.thread["id"] == "t"
+      assert Store.meta(t).turn["id"] == "turn-2"
+      assert Store.meta(t).thread["id"] == t
+    end
+
+    test "delete/1 drops everything for the thread" do
+      t = new_thread()
+      item_started(t, %{"id" => "a", "type" => "userMessage"})
+      Store.put_request(t, 1, "m", %{})
+      Store.delete(t)
+      assert Store.items(t) == []
+      assert Store.requests(t) == []
+      assert Store.snapshot(t).seq == 0
     end
   end
 
   describe "ThreadState process" do
     setup do
-      thread_id = "thread-#{System.unique_integer([:positive])}"
+      thread_id = new_thread()
       {:ok, pid} = ThreadState.ensure(thread_id)
       on_exit(fn -> if Process.alive?(pid), do: ThreadState.stop(thread_id) end)
       %{thread_id: thread_id, pid: pid}
@@ -194,8 +194,31 @@ defmodule Longx.Codex.ThreadStateTest do
       assert [%{"id" => "m1", "text" => "hi"}] = snapshot.items
     end
 
+    test "snapshot reads ETS directly: it works even when the thread process is gone", %{
+      thread_id: thread_id
+    } do
+      ThreadState.ingest(thread_id, "item/started", %{
+        "turnId" => "t",
+        "item" => %{"id" => "m1", "type" => "agentMessage", "text" => "kept"}
+      })
+
+      ThreadState.subscribe(thread_id)
+      assert_receive {:codex, 1, "item/started", _}
+
+      ThreadState.stop(thread_id)
+      assert ThreadState.whereis(thread_id) == nil
+      assert [%{"text" => "kept"}] = ThreadState.snapshot(thread_id).items
+      assert ThreadState.snapshot(thread_id).seq == 1
+
+      # and a restarted process continues the sequence instead of restarting it
+      {:ok, _} = ThreadState.ensure(thread_id)
+
+      ThreadState.ingest(thread_id, "item/agentMessage/delta", %{"itemId" => "m1", "delta" => "!"})
+
+      assert_receive {:codex, 2, "item/agentMessage/delta", _}
+    end
+
     test "subscribe-then-snapshot never loses or duplicates events", %{thread_id: thread_id} do
-      # a producer streams deltas while a late client connects mid-stream
       producer =
         Task.async(fn ->
           for i <- 1..50 do
@@ -227,11 +250,8 @@ defmodule Longx.Codex.ThreadStateTest do
         live |> Enum.filter(fn {seq, _} -> seq > snapshot.seq end) |> Enum.map(&elem(&1, 1))
 
       [%{"text" => text}] = snapshot.items
-      rebuilt = text <> Enum.join(applied)
+      assert text <> Enum.join(applied) == Enum.map_join(1..50, &"#{&1},")
 
-      assert rebuilt == Enum.map_join(1..50, &"#{&1},")
-
-      # strictly consecutive seqs on the wire
       seqs = Enum.map(live, &elem(&1, 0))
       assert seqs == Enum.to_list(hd(seqs)..List.last(seqs)//1)
     end

@@ -1,10 +1,13 @@
 defmodule Longx.Codex.ThreadState do
   @moduledoc """
-  One process per live codex thread. It is the single place events for that
-  thread pass through, so it can (1) fold them into a
-  `Longx.Codex.ThreadState.View`, (2) stamp each with a strictly increasing
-  `seq`, and (3) broadcast `{:codex, seq, method, params}` on
-  `"codex:thread:<id>"`.
+  The single writer for one codex thread's materialised state.
+
+  Every event for the thread passes through this process so it can (1) fold
+  it into the ETS-backed `Longx.Codex.ThreadState.Store`, (2) stamp it with a
+  strictly increasing `seq`, and (3) broadcast `{:codex, seq, method, params}`
+  on `"codex:thread:<id>"`. Reads (`snapshot/1`) go straight to ETS and work
+  whether or not this process is alive; the sequence continues where it left
+  off when the process is restarted.
 
   A client that must survive a page refresh does, in this order:
 
@@ -19,7 +22,7 @@ defmodule Longx.Codex.ThreadState do
 
   use GenServer
 
-  alias Longx.Codex.ThreadState.View
+  alias Longx.Codex.ThreadState.Store
   alias Phoenix.PubSub
 
   @registry Longx.Codex.ThreadRegistry
@@ -42,7 +45,7 @@ defmodule Longx.Codex.ThreadState do
   @spec topic(String.t()) :: String.t()
   def topic(thread_id), do: "codex:thread:" <> thread_id
 
-  @doc "Starts the process for `thread_id` unless it already runs."
+  @doc "Starts the writer for `thread_id` unless it already runs."
   @spec ensure(String.t()) :: {:ok, pid} | {:error, term}
   def ensure(thread_id) do
     case DynamicSupervisor.start_child(@supervisor, {__MODULE__, thread_id}) do
@@ -55,6 +58,7 @@ defmodule Longx.Codex.ThreadState do
   @spec whereis(String.t()) :: pid | nil
   def whereis(thread_id), do: GenServer.whereis(via(thread_id))
 
+  @doc "Stops the writer; the stored view stays in ETS."
   @spec stop(String.t()) :: :ok
   def stop(thread_id) do
     case whereis(thread_id) do
@@ -85,8 +89,9 @@ defmodule Longx.Codex.ThreadState do
   def backfill(thread_id, thread_read_result),
     do: GenServer.call(via(thread_id), {:backfill, thread_read_result})
 
+  @doc "Reads the stored view directly from ETS."
   @spec snapshot(String.t()) :: snapshot
-  def snapshot(thread_id), do: GenServer.call(via(thread_id), :snapshot)
+  def snapshot(thread_id), do: Store.snapshot(thread_id)
 
   def start_link(thread_id), do: GenServer.start_link(__MODULE__, thread_id, name: via(thread_id))
 
@@ -102,51 +107,34 @@ defmodule Longx.Codex.ThreadState do
   ## Server
 
   @impl true
-  def init(thread_id), do: {:ok, %{view: View.new(thread_id), seq: 0}}
+  def init(thread_id), do: {:ok, thread_id}
 
   @impl true
-  def handle_cast({:ingest, method, params}, state) do
-    {:noreply, state |> update_view(&View.fold(&1, method, params)) |> broadcast(method, params)}
+  def handle_cast({:ingest, method, params}, thread_id) do
+    Store.fold(thread_id, method, params)
+    broadcast(thread_id, method, params)
+    {:noreply, thread_id}
   end
 
-  def handle_cast({:put_request, id, method, params}, state) do
-    {:noreply,
-     state
-     |> update_view(&View.put_request(&1, id, method, params))
-     |> broadcast(method, Map.put(params, "requestId", id))}
+  def handle_cast({:put_request, id, method, params}, thread_id) do
+    Store.put_request(thread_id, id, method, params)
+    broadcast(thread_id, method, Map.put(params, "requestId", id))
+    {:noreply, thread_id}
   end
 
-  def handle_cast({:resolve_request, id}, state) do
-    {:noreply,
-     state
-     |> update_view(&View.resolve_request(&1, id))
-     |> broadcast("serverRequest/resolved", %{"requestId" => id})}
+  def handle_cast({:resolve_request, id}, thread_id) do
+    Store.delete_request(thread_id, id)
+    broadcast(thread_id, "serverRequest/resolved", %{"requestId" => id})
+    {:noreply, thread_id}
   end
 
   @impl true
-  def handle_call({:backfill, result}, _from, state) do
-    {:reply, :ok, update_view(state, &View.backfill(&1, result))}
+  def handle_call({:backfill, result}, _from, thread_id) do
+    {:reply, Store.backfill(thread_id, result), thread_id}
   end
 
-  def handle_call(:snapshot, _from, %{view: view, seq: seq} = state) do
-    {:reply,
-     %{
-       seq: seq,
-       thread_id: view.thread_id,
-       thread: view.thread,
-       turn: view.turn,
-       status: view.status,
-       token_usage: view.token_usage,
-       items: View.items(view),
-       pending_requests: View.pending_requests(view)
-     }, state}
-  end
-
-  defp update_view(state, fun), do: %{state | view: fun.(state.view)}
-
-  defp broadcast(%{seq: seq, view: view} = state, method, params) do
-    seq = seq + 1
-    PubSub.broadcast(@pubsub, topic(view.thread_id), {:codex, seq, method, params})
-    %{state | seq: seq}
+  defp broadcast(thread_id, method, params) do
+    seq = Store.next_seq(thread_id)
+    PubSub.broadcast(@pubsub, topic(thread_id), {:codex, seq, method, params})
   end
 end

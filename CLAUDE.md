@@ -94,14 +94,20 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     "no" fallback (`decline` / `timed_out` / empty answers / `cancel`) so a turn never hangs;
     `Connection.respond/3` (or `Thread.respond/3`) answers by request id. Configure with
     `server_request_handler:`.
-  - `Longx.Codex.ThreadState` (Registry + DynamicSupervisor, one per live thread) folds every
-    notification into `ThreadState.View` (deltas append in place, `item/completed` replaces),
-    stamps a strictly increasing `seq`, and broadcasts `{:codex, seq, method, params}` on
-    `"codex:thread:<id>"`; pending server requests are in the view with a `"requestId"`.
+  - `Longx.Codex.ThreadState.Store` owns three public ETS tables (meta / items / requests)
+    holding every thread's materialised view; it is a long-lived process so the data outlives
+    the per-thread writers, and swapping to DETS/Mnesia later touches only this module.
+    `Longx.Codex.ThreadState` (Registry + DynamicSupervisor, one per live thread) is the
+    **single writer**: it folds each notification into the Store (deltas append in place,
+    `item/completed` replaces), allocates a strictly increasing `seq`, and broadcasts
+    `{:codex, seq, method, params}` on `"codex:thread:<id>"`. Reads (`snapshot/1`) go straight
+    to ETS — no process hop, works even when the writer is stopped, and a restarted writer
+    continues the sequence. Pending server requests are in the view with a `"requestId"`.
     **Page refresh / late join protocol: `subscribe` → `snapshot` (has `seq`) → render → apply
     only events with `seq > snapshot.seq`.** `Thread.resume/2` rebuilds the view from
-    `thread/read`. Nothing is persisted on our side yet; codex's own sqlite in CODEX_HOME is
-    the history.
+    `thread/read`. Nothing is persisted to the DB yet; codex's own sqlite in CODEX_HOME is the
+    history. Single-user system: no thread ↔ user mapping; a thread ↔ project mapping is the
+    likely future addition.
   - `Longx.Codex.Thread` is the API to use: `start/1` (`cwd:`, `approval_policy:
     :never | :on_request | :untrusted`, `sandbox: :read_only | :workspace_write |
     :danger_full_access`, `model_context_window:`), `resume/2`, `send/3`, `steer/4`,
