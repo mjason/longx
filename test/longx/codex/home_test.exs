@@ -38,8 +38,9 @@ defmodule Longx.Codex.HomeTest do
     config = File.read!(home.config_path)
 
     assert config =~ ~s(web_search = "disabled")
-    refute config =~ "supports_standalone_web_search = true"
-    refute config =~ "standalone_web_search = true"
+    # the provider is always declared capable: threads switch modes per model
+    assert config =~ "supports_standalone_web_search = true"
+    refute config =~ "[features]\nstandalone_web_search = true"
   end
 
   test "web_search: :standalone routes codex's web.run tool to our /alpha/search", %{dir: dir} do
@@ -60,7 +61,7 @@ defmodule Longx.Codex.HomeTest do
     config = File.read!(home.config_path)
 
     assert config =~ ~s(web_search = "live")
-    refute config =~ "standalone_web_search"
+    refute config =~ "[features]\nstandalone_web_search = true"
   end
 
   test "without an explicit option the mode comes from Longx.AI.web_search_mode/0", %{dir: dir} do

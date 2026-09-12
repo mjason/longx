@@ -15,12 +15,16 @@ defmodule Longx.Codex.Thread do
   @type approval_policy :: :never | :on_request | :untrusted
   @type sandbox :: :read_only | :workspace_write | :danger_full_access
   @type decision :: :accept | :accept_for_session | :decline | :cancel
+  @type web_search :: :hosted | :standalone | :disabled
   @type start_option ::
           {:cwd, Path.t()}
           | {:approval_policy, approval_policy}
           | {:sandbox, sandbox}
           | {:model, String.t()}
           | {:model_context_window, pos_integer}
+          | {:reasoning_effort, String.t()}
+          | {:reasoning_summary, atom}
+          | {:web_search, web_search}
           | {:tools, [module | String.t()]}
           | {:conn, GenServer.server()}
 
@@ -68,17 +72,13 @@ defmodule Longx.Codex.Thread do
 
   @doc """
   Starts a turn with a text message. Returns the turn id; progress arrives
-  on the thread topic. `model:` (a `Longx.AI.Model` slug) switches the model
-  for this and subsequent turns.
+  on the thread topic. `model:` (a `Longx.AI.Model` slug), `effort:` and
+  `summary:` (reasoning) apply to this and subsequent turns.
   """
   @spec send(String.t(), String.t(), keyword) :: {:ok, String.t()} | {:error, term}
   def send(thread_id, text, opts \\ []) do
-    params =
-      %{"threadId" => thread_id, "input" => [%{"type" => "text", "text" => text}]}
-      |> put_model(Keyword.get(opts, :model))
-
     with {:ok, %{"turn" => %{"id" => turn_id}}} <-
-           Connection.request(conn(opts), "turn/start", params) do
+           Connection.request(conn(opts), "turn/start", turn_params(thread_id, text, opts)) do
       {:ok, turn_id}
     end
   end
@@ -123,17 +123,13 @@ defmodule Longx.Codex.Thread do
   @doc """
   Forks the thread into a new one (`thread/fork`): history up to and
   including `last_turn_id:` (all of it when omitted), optionally with a
-  different `model:`. Returns the new thread id.
+  different `model:` and the same model settings as `start/1`. Returns the
+  new thread id.
   """
   @spec fork(String.t(), keyword) :: {:ok, String.t()} | {:error, term}
   def fork(thread_id, opts \\ []) do
-    params =
-      %{"threadId" => thread_id}
-      |> put_if("lastTurnId", Keyword.get(opts, :last_turn_id))
-      |> put_model(Keyword.get(opts, :model))
-
     with {:ok, %{"thread" => %{"id" => new_id}}} <-
-           Connection.request(conn(opts), "thread/fork", params),
+           Connection.request(conn(opts), "thread/fork", fork_params(thread_id, opts)),
          {:ok, _} <- ThreadState.ensure(new_id) do
       {:ok, new_id}
     end
@@ -190,17 +186,10 @@ defmodule Longx.Codex.Thread do
     }
 
     base =
-      case Keyword.get(opts, :model_context_window) do
-        nil -> base
-        window -> Map.put(base, "config", %{"model_context_window" => window})
-      end
-
-    # a Longx.AI.Model slug; absent means codex's configured placeholder (global default)
-    base =
-      case Keyword.get(opts, :model) do
-        nil -> base
-        model -> Map.put(base, "model", model)
-      end
+      base
+      # a Longx.AI.Model slug; absent means codex's configured placeholder (global default)
+      |> put_model(Keyword.get(opts, :model))
+      |> put_config(opts)
 
     selection = Keyword.get_lazy(opts, :tools, &Longx.AI.enabled_tool_names/0)
 
@@ -209,6 +198,61 @@ defmodule Longx.Codex.Thread do
       specs -> Map.put(base, "dynamicTools", specs)
     end
   end
+
+  @doc false
+  @spec turn_params(String.t(), String.t(), keyword) :: map
+  def turn_params(thread_id, text, opts) do
+    %{"threadId" => thread_id, "input" => [%{"type" => "text", "text" => text}]}
+    |> put_model(Keyword.get(opts, :model))
+    |> put_if("effort", Keyword.get(opts, :effort))
+    |> put_if("summary", opts |> Keyword.get(:summary) |> wire_atom())
+  end
+
+  @doc false
+  @spec fork_params(String.t(), keyword) :: map
+  def fork_params(thread_id, opts) do
+    %{"threadId" => thread_id}
+    |> put_if("lastTurnId", Keyword.get(opts, :last_turn_id))
+    |> put_model(Keyword.get(opts, :model))
+    |> put_config(opts)
+  end
+
+  # Per-thread config overrides: the same dotted keys as `codex -c key=value`.
+  @config_keys [
+    model_context_window: "model_context_window",
+    reasoning_effort: "model_reasoning_effort",
+    reasoning_summary: "model_reasoning_summary"
+  ]
+
+  # `web_search` is the mode (live = allowed); with the standalone feature on
+  # and a provider that `supports_standalone_web_search`, codex offers its
+  # `web.run` tool instead of the provider-hosted one.
+  @web_search_config %{
+    hosted: %{"web_search" => "live", "features.standalone_web_search" => false},
+    standalone: %{"web_search" => "live", "features.standalone_web_search" => true},
+    disabled: %{"web_search" => "disabled", "features.standalone_web_search" => false}
+  }
+
+  defp put_config(params, opts) do
+    config =
+      for {opt, key} <- @config_keys,
+          {:ok, value} <- [Keyword.fetch(opts, opt)],
+          into: %{},
+          do: {key, wire_atom(value)}
+
+    config =
+      case Keyword.get(opts, :web_search) do
+        nil -> config
+        mode -> Map.merge(config, Map.fetch!(@web_search_config, mode))
+      end
+
+    if map_size(config) == 0, do: params, else: Map.put(params, "config", config)
+  end
+
+  # enum-like options travel as strings; booleans/numbers/strings as they are
+  defp wire_atom(value) when is_boolean(value) or is_nil(value), do: value
+  defp wire_atom(value) when is_atom(value), do: Atom.to_string(value)
+  defp wire_atom(value), do: value
 
   # Elixir tools offered to the model on this thread (see `Longx.Codex.Tool`).
   # The caller picks them (`"ns.name"` strings or modules); without a choice

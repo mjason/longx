@@ -137,6 +137,42 @@ defmodule Longx.AI.GatewayTest do
       assert up.body["reasoning"] == %{"summary" => "auto"}
     end
 
+    test "provider-hosted web_search tools only reach a provider that runs them" do
+      body =
+        Map.put(@codex_body, "tools", [
+          %{"type" => "function", "name" => "exec_command", "parameters" => %{}},
+          %{"type" => "web_search"},
+          %{"type" => "web_search_preview", "search_context_size" => "low"}
+        ])
+
+      {:ok, up} = Gateway.prepare(body, @target)
+      assert Enum.map(up.body["tools"], & &1["type"]) == ["function"]
+
+      hosted = %Target{@target | hosted_web_search?: true}
+      {:ok, up} = Gateway.prepare(body, hosted)
+      assert up.body["tools"] == body["tools"]
+    end
+
+    test "the model's max_output_tokens is applied unless codex set one" do
+      {:ok, up} = Gateway.prepare(@codex_body, @target)
+      refute Map.has_key?(up.body, "max_output_tokens")
+
+      capped = %Target{@target | max_output_tokens: 4_096}
+      {:ok, up} = Gateway.prepare(@codex_body, capped)
+      assert up.body["max_output_tokens"] == 4_096
+
+      {:ok, up} = Gateway.prepare(Map.put(@codex_body, "max_output_tokens", 100), capped)
+      assert up.body["max_output_tokens"] == 100
+    end
+
+    test "the upstream carries the provider's timeout and concurrency limit" do
+      target = %Target{@target | request_timeout_ms: 30_000, max_concurrent_requests: 2}
+      {:ok, up} = Gateway.prepare(@codex_body, target)
+      assert up.receive_timeout == 30_000
+      assert up.max_concurrent == 2
+      assert up.provider_slug == "deepseek"
+    end
+
     test "passes every tool through untouched — codex decides what to offer via config" do
       {:ok, up} = Gateway.prepare(@codex_body, @target)
       assert up.body["tools"] == @codex_body["tools"]

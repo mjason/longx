@@ -21,13 +21,33 @@ defmodule Longx.AI.Model do
 
     create :create do
       primary? true
-      accept [:name, :slug, :upstream_id, :context_window, :provider_id]
+
+      accept [
+        :name,
+        :slug,
+        :upstream_id,
+        :context_window,
+        :provider_id,
+        :reasoning_effort,
+        :reasoning_summary,
+        :max_output_tokens
+      ]
+
       change Longx.AI.Model.Changes.DeriveSlug
     end
 
     update :update do
       primary? true
-      accept [:name, :slug, :upstream_id, :context_window]
+
+      accept [
+        :name,
+        :slug,
+        :upstream_id,
+        :context_window,
+        :reasoning_effort,
+        :reasoning_summary,
+        :max_output_tokens
+      ]
     end
 
     read :by_slug do
@@ -76,6 +96,24 @@ defmodule Longx.AI.Model do
     end
 
     attribute :default, :boolean, allow_nil?: false, default: false, public?: true
+
+    # Reasoning controls codex applies per thread/turn (`model_reasoning_*`),
+    # both optional: nil leaves codex's own default in place. Effort is
+    # whatever the model advertises ("low", "high", "xhigh", …); the summary
+    # is codex's closed enum.
+    attribute :reasoning_effort, :string, public?: true
+
+    attribute :reasoning_summary, :atom do
+      public? true
+      constraints one_of: [:auto, :concise, :detailed, :none]
+    end
+
+    # Cap on one response, applied by the gateway (`max_output_tokens` on the
+    # Responses request) when codex sets none; nil = the provider's default.
+    attribute :max_output_tokens, :integer do
+      public? true
+      constraints min: 1
+    end
 
     timestamps()
   end

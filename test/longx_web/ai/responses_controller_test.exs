@@ -115,6 +115,29 @@ defmodule LongxWeb.AI.ResponsesControllerTest do
       assert_receive {:upstream, headers, body}
       assert {"authorization", "Bearer sk-upstream"} in headers
       assert body["model"] == "real-model"
+      # this provider has no hosted search: codex's web_search tool is not forwarded
+      assert body["tools"] == [
+               %{"type" => "function", "name" => "exec_command", "parameters" => %{}}
+             ]
+    end
+
+    test "a provider with hosted web search gets the web_search tool", %{
+      conn: conn,
+      bypass: bypass,
+      provider: provider
+    } do
+      AI.update_provider!(provider, %{supports_hosted_web_search: true})
+      configure_default!(provider)
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        {:ok, raw, up} = Plug.Conn.read_body(up)
+        send(test_pid, {:upstream, Jason.decode!(raw)})
+        Plug.Conn.send_resp(up, 200, "")
+      end)
+
+      conn |> authed() |> post_json(@request)
+      assert_receive {:upstream, body}
       assert body["tools"] == @request["tools"]
     end
 
@@ -279,6 +302,98 @@ defmodule LongxWeb.AI.ResponsesControllerTest do
 
       conn = conn |> authed() |> post_json(Map.put(@request, "input", @reasoning_input))
       assert json_response(conn, 400)["error"]["message"] =~ "encrypted_content"
+    end
+  end
+
+  describe "provider limits" do
+    test "an upstream that stays silent past request_timeout_ms is a 504", %{
+      conn: conn,
+      bypass: bypass,
+      provider: provider
+    } do
+      AI.update_provider!(provider, %{request_timeout_ms: 1_000})
+      configure_default!(provider)
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        # the upstream never answers; the gateway must give up on its own
+        send(test_pid, {:upstream_stuck, self()})
+
+        receive do
+          :release ->
+            # the gateway has hung up by now; let the handler end cleanly either way
+            try do
+              Plug.Conn.send_resp(up, 200, "")
+            rescue
+              _ -> up
+            after
+              send(test_pid, :handler_done)
+            end
+        end
+      end)
+
+      conn = conn |> authed() |> post_json(@request)
+      assert json_response(conn, 504)["error"]["message"] =~ "timed out"
+
+      assert_received {:upstream_stuck, handler}
+      send(handler, :release)
+      assert_receive :handler_done, 5_000
+    end
+
+    test "max_concurrent_requests: one more request than allowed is a 429 codex retries", %{
+      conn: conn,
+      bypass: bypass,
+      provider: provider
+    } do
+      AI.update_provider!(provider, %{max_concurrent_requests: 1})
+      configure_default!(provider)
+      test_pid = self()
+
+      Bypass.expect(bypass, "POST", "/v1/responses", fn up ->
+        send(test_pid, {:in_flight, self()})
+
+        receive do
+          :release -> Plug.Conn.send_resp(up, 200, "")
+        end
+      end)
+
+      first = Task.async(fn -> conn |> authed() |> post_json(@request) end)
+      assert_receive {:in_flight, handler}, 5_000
+
+      second = conn |> authed() |> post_json(@request)
+      assert second.status == 429
+      assert get_resp_header(second, "retry-after") == ["1"]
+      assert json_response(second, 429)["error"]["message"] =~ "concurrent"
+
+      send(handler, :release)
+      assert %{status: 200} = Task.await(first)
+
+      # the slot is free again
+      third = Task.async(fn -> conn |> authed() |> post_json(@request) end)
+      assert_receive {:in_flight, handler}, 5_000
+      send(handler, :release)
+      assert %{status: 200} = Task.await(third)
+    end
+
+    test "an upstream authentication error is remembered on the provider", %{
+      conn: conn,
+      bypass: bypass,
+      provider: provider
+    } do
+      configure_default!(provider)
+
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(401, ~s({"error":{"message":"Authentication Fails"}}))
+      end)
+
+      conn |> authed() |> post_json(@request)
+
+      {:ok, seen} = AI.get_provider_by_slug(provider.slug)
+      assert seen.last_error =~ "401"
+      assert seen.last_error =~ "Authentication Fails"
+      assert %DateTime{} = seen.last_error_at
     end
   end
 

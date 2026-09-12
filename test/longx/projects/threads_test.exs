@@ -31,6 +31,37 @@ defmodule Longx.Projects.ThreadsTest do
     )
   end
 
+  # a second model codex can be switched to; "deepseek-flash" (the default) comes from the seeds
+  defp glm!(attrs \\ %{}) do
+    case Longx.AI.get_model_by_slug("glm-5") do
+      {:ok, model} ->
+        model
+
+      {:error, _} ->
+        provider =
+          Longx.AI.create_provider!(%{
+            name: "GLM",
+            slug: "glm-#{System.unique_integer([:positive])}",
+            base_url: "https://open.bigmodel.cn/api/paas/v4",
+            api_key: "sk-glm"
+          })
+
+        Longx.AI.create_model!(
+          Map.merge(
+            %{name: "GLM 5", upstream_id: "glm-5", slug: "glm-5", provider_id: provider.id},
+            attrs
+          )
+        )
+    end
+  end
+
+  defp read_thread!(conn, codex_thread_id) do
+    {:ok, %{"thread" => thread}} =
+      Connection.request(conn, "thread/read", %{"threadId" => codex_thread_id})
+
+    thread
+  end
+
   defp plain_project!(dir),
     do:
       Projects.create_project!(%{
@@ -90,6 +121,50 @@ defmodule Longx.Projects.ThreadsTest do
       assert thread.sandbox == :danger_full_access
       assert thread.tools == []
       assert thread.model_slug == "deepseek-flash"
+    end
+
+    test "the chosen model's settings reach codex, not the project default's", %{
+      dir: dir,
+      conn: conn
+    } do
+      glm!(%{context_window: 200_000, reasoning_effort: "high", reasoning_summary: :auto})
+
+      # no search provider → this model gets no web search at all
+      Ash.bulk_destroy!(Longx.AI.SearchProvider, :destroy, %{}, authorize?: false)
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn, model: "glm-5")
+
+      %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      assert params["model"] == "glm-5"
+
+      assert params["config"] == %{
+               "model_context_window" => 200_000,
+               "model_reasoning_effort" => "high",
+               "model_reasoning_summary" => "auto",
+               "web_search" => "disabled",
+               "features.standalone_web_search" => false
+             }
+    end
+
+    test "the default model's settings apply without naming it (codex keeps its placeholder)", %{
+      dir: dir,
+      conn: conn
+    } do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+
+      %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      refute Map.has_key?(params, "model")
+      assert params["config"]["model_context_window"] == 128_000
+    end
+
+    test "an unknown model is refused before codex is involved", %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+
+      assert {:error, {:unknown_model, "nope"}} =
+               Projects.start_thread(project, conn: conn, model: "nope")
+
+      assert Projects.list_threads!(project) == []
     end
   end
 
@@ -178,7 +253,11 @@ defmodule Longx.Projects.ThreadsTest do
       assert done.commit_after == nil
     end
 
-    test "model: switches the model for this and later turns", %{dir: dir, conn: conn} do
+    test "model: switches the model for this and later turns, with its reasoning settings", %{
+      dir: dir,
+      conn: conn
+    } do
+      glm!(%{reasoning_effort: "low", reasoning_summary: :concise})
       project = git_project!(dir)
       {:ok, thread} = Projects.start_thread(project, conn: conn)
       {:ok, turn} = Projects.send_message(thread, "say a", conn: conn, model: "glm-5")
@@ -186,8 +265,16 @@ defmodule Longx.Projects.ThreadsTest do
       assert Ash.get!(Thread, thread.id).model_slug == "glm-5"
       eventually(turn_done(turn.id))
 
+      %{"lastTurnParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      assert params["model"] == "glm-5"
+      assert params["effort"] == "low"
+      assert params["summary"] == "concise"
+
       {:ok, turn2} = Projects.send_message(thread, "say b", conn: conn)
       assert turn2.model_slug == "glm-5"
+
+      assert {:error, {:unknown_model, "nope"}} =
+               Projects.send_message(thread, "say c", conn: conn, model: "nope")
     end
 
     test "turns are listed oldest first", %{dir: dir, conn: conn} do
@@ -203,6 +290,7 @@ defmodule Longx.Projects.ThreadsTest do
 
   describe "redo_turn/2 — from turn N again, with another model" do
     setup %{dir: dir, conn: conn} do
+      glm!()
       project = git_project!(dir)
       {:ok, thread} = Projects.start_thread(project, conn: conn)
       Longx.Codex.Thread.subscribe(thread.codex_thread_id)

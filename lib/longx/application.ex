@@ -20,6 +20,8 @@ defmodule Longx.Application do
       {Phoenix.PubSub, name: Longx.PubSub},
       # reference-id memory for codex web search (Longx.AI.Search)
       Longx.AI.Search.Refs,
+      # per-provider in-flight counters (Provider.max_concurrent_requests)
+      Longx.AI.Gateway.Limiter,
       # per-thread materialised codex state (Longx.Codex.ThreadState); the ETS
       # store outlives the per-thread writer processes
       Longx.Codex.ThreadState.Store,

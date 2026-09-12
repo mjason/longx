@@ -79,18 +79,47 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
 - **Model access is inverted: codex talks to *our* AI gateway, never to a vendor.**
   - `lib/longx/ai/` — Ash domain `Longx.AI`: `Provider` (base_url + `api_key` encrypted at
     rest via `AshCloak` + `Longx.Vault`; key from `LONGX_CLOAK_KEY` in prod, fixed keys in
-    dev/test config) and `Model` (`upstream_id`, `context_window`, one `default`).
+    dev/test config; `kind`, derived from the base_url unless given —
+    `Provider.kind_for_base_url/1`; `request_timeout_ms` (default 10 min) and
+    `max_concurrent_requests` (nil = unlimited) that the gateway enforces; `last_error` /
+    `last_error_at` / `last_checked_at` written by `check_model/1` and by the gateway on
+    upstream 401/403) and `Model` (`upstream_id`, `slug`, `context_window`, one `default`,
+    plus optional `reasoning_effort` (free string, what the model advertises),
+    `reasoning_summary` (codex's enum) and `max_output_tokens`).
     `Longx.AI.resolve_target/0` = default model + its provider's decrypted key. Seeds
     (`priv/repo/seeds.exs`, run by `mix ash.setup`/`mix test`) create DeepSeek +
-    `deepseek-flash` as default, taking the key from `DEEPSEEK_API_KEY`.
+    `deepseek-flash` as default, taking the key from `DEEPSEEK_API_KEY`. Columns added
+    after rows existed get a backfill migration (`kind` for api.openai.com rows, `slug` from
+    `upstream_id`) — a new NOT NULL column needs a `default:` in the migration (SQLite).
+  - **What codex is told about a model** comes from the row, per thread:
+    `Longx.AI.thread_options/1` (slug or nil for the default → `model:` only when explicit,
+    `model_context_window:`, `reasoning_effort:`, `reasoning_summary:`, `web_search:`) is
+    what `Longx.Projects.start_thread/2` and fork pass to `Longx.Codex.Thread.start/1`, which
+    turns them into `thread/start.config` overrides — the same dotted keys as `codex -c`
+    (`model_reasoning_effort`, `web_search`, `features.standalone_web_search`, …; verified
+    against the bundled binary in `gateway_e2e_test`). `turn_options/1` (`model:`, `effort:`,
+    `summary:`) goes on `turn/start` when a turn switches models. `max_output_tokens` is not
+    a codex knob any more: the gateway puts it on the Responses request when codex sets none.
+    Unknown slugs are refused in `Longx.Projects` before codex is involved. Not covered:
+    config overrides are per thread, so a mid-thread model switch (`redo_turn` in revert
+    mode) changes effort/summary but keeps the first model's context window and search mode.
+  - **Provider health / limits**: `Longx.AI.check_model/1` sends one tiny non-streaming
+    request (16 output tokens, 30 s) and records the outcome on the provider. In the gateway,
+    `Longx.AI.Gateway.Limiter` (ETS counters, in the supervision tree) caps in-flight
+    requests per provider → 429 + `retry-after: 1` (codex backs off and retries, like an
+    upstream rate limit); an upstream that stays silent past `request_timeout_ms` → 504;
+    401/403 → `record_provider_error`.
   - `LongxWeb.AI.ResponsesController` at `POST /ai/v1/responses` (pipeline `:ai_gateway`,
     bearer = per-boot `Longx.AI.Gateway.Token`; **no `:accepts` plug** — codex sends
     `Accept: text/event-stream`). `Longx.AI.Gateway.prepare/2` swaps the placeholder model
     `longx` for the target's `upstream_id`, drops codex-internal fields, forces
-    `stream: true`; **tools pass through untouched** — DeepSeek accepts `type: namespace`
-    tools (sub-agents, `web.run`) and returns `function_call` items with `namespace`, which
-    is what codex's router keys on; which tools codex offers is decided in its config, never
-    by filtering here. `stream/2` relays the upstream SSE chunk-for-chunk with a
+    `stream: true`; **function and namespace tools pass through untouched** — DeepSeek
+    accepts `type: namespace` tools (sub-agents, `web.run`) and returns `function_call` items
+    with `namespace`, which is what codex's router keys on; which tools codex offers is
+    decided in its config, never by filtering here. The one exception: the provider-hosted
+    `web_search` / `web_search_preview` tool only exists inside providers with
+    `supports_hosted_web_search`, so it is dropped for any other target rather than failing
+    the request. `stream/2` relays the upstream SSE chunk-for-chunk with a
     **selective receive on the Req async ref** (a bare `receive` would eat the connection
     process's other messages). Upstream 4xx/5xx pass through so codex shows the message.
   - **Reasoning items never cross providers.** `reasoning.encrypted_content` is an opaque
@@ -104,15 +133,18 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     target answering 4xx about `encrypted`/`reasoning` gets **one** retry with
     `Gateway.strip_all_encrypted/1` (logged as a warning) — the conversation survives,
     only reasoning continuity is lost for that turn.
-  - **Web search** has three modes, decided by `Longx.AI.web_search_mode/0` (pattern-matched
-    on the resolved model target and search target — never an `&&`/`||` chain at the call
-    site) and written into codex's config by `Home.prepare/1` (default option):
-    `:hosted` when the default model's provider has `supports_hosted_web_search` (OpenAI —
+  - **Web search** has three modes, decided by `Longx.AI.web_search_mode/0` for the global
+    default (written into codex's config by `Home.prepare/1`) and `web_search_mode/1` per
+    model (a thread's `config` override, via `thread_options/1`) — pattern-matched on the
+    resolved model target and search target, never an `&&`/`||` chain at the call site:
+    `:hosted` when the model's provider has `supports_hosted_web_search` (OpenAI —
     the Responses API runs `web_search` inside the provider; config `web_search = "live"`),
     else `:standalone` when a search provider with a key is configured, else `:disabled`.
-    Standalone = codex's `ext/web-search`: with
-    `supports_standalone_web_search = true` + `[features] standalone_web_search = true`
-    codex offers a `web.run` namespace tool and,
+    The provider block always declares `supports_standalone_web_search = true` (a capability,
+    not a switch); what a thread gets is `web_search` (`"live"`/`"disabled"`) +
+    `features.standalone_web_search` — standalone needs `web_search = "live"` too.
+    Standalone = codex's `ext/web-search`: with the feature on codex offers a `web.run`
+    namespace tool and,
     when the model calls it, POSTs the commands to `<base_url>/alpha/search` with the
     gateway bearer. `LongxWeb.AI.SearchController` → `Longx.AI.Search` executes them
     (`search_query`, `open`, `time`; the rest answer "not supported") against the default

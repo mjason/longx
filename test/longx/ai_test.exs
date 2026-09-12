@@ -88,6 +88,57 @@ defmodule Longx.AITest do
                })
     end
 
+    test "kind is derived from the base_url when not given: api.openai.com is :openai" do
+      assert create_provider!(%{base_url: "https://api.openai.com/v1"}).kind == :openai
+
+      assert create_provider!(%{base_url: "https://api.deepseek.com/v1"}).kind ==
+               :openai_compatible
+
+      # an explicit choice always wins (a proxy in front of OpenAI is not OpenAI)
+      assert create_provider!(%{base_url: "https://api.openai.com/v1", kind: :openai_compatible}).kind ==
+               :openai_compatible
+    end
+
+    test "request_timeout_ms defaults to ten minutes; max_concurrent_requests is unlimited (nil)" do
+      provider = create_provider!()
+      assert provider.request_timeout_ms == 600_000
+      assert provider.max_concurrent_requests == nil
+
+      tuned = create_provider!(%{request_timeout_ms: 30_000, max_concurrent_requests: 2})
+      assert tuned.request_timeout_ms == 30_000
+      assert tuned.max_concurrent_requests == 2
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_provider(%{
+                 name: "bad",
+                 slug: "bad-#{uniq()}",
+                 base_url: "https://x/v1",
+                 max_concurrent_requests: 0
+               })
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_provider(%{
+                 name: "bad",
+                 slug: "bad-#{uniq()}",
+                 base_url: "https://x/v1",
+                 request_timeout_ms: 10
+               })
+    end
+
+    test "record_provider_error/2 and clear_provider_error/1 keep the last problem seen on the wire" do
+      provider = create_provider!()
+      assert provider.last_error == nil
+      assert provider.last_error_at == nil
+
+      {:ok, failed} = AI.record_provider_error(provider, "401 Authentication Fails")
+      assert failed.last_error == "401 Authentication Fails"
+      assert %DateTime{} = failed.last_error_at
+
+      {:ok, cleared} = AI.clear_provider_error(failed)
+      assert cleared.last_error == nil
+      assert cleared.last_error_at == nil
+    end
+
     test "supports_hosted_web_search defaults to false (only OpenAI runs web_search server-side)" do
       refute create_provider!().supports_hosted_web_search
       assert create_provider!(%{supports_hosted_web_search: true}).supports_hosted_web_search
@@ -155,6 +206,42 @@ defmodule Longx.AITest do
       assert {:ok, %{id: id}} = AI.default_model()
       assert id == b.id
       refute Ash.get!(AI.Model, a.id).default
+    end
+
+    test "reasoning and output settings are per model, all optional" do
+      provider = create_provider!()
+      plain = create_model!(provider)
+      assert plain.reasoning_effort == nil
+      assert plain.reasoning_summary == nil
+      assert plain.max_output_tokens == nil
+
+      tuned =
+        create_model!(provider, %{
+          reasoning_effort: "high",
+          reasoning_summary: :detailed,
+          max_output_tokens: 8_192
+        })
+
+      assert tuned.reasoning_effort == "high"
+      assert tuned.reasoning_summary == :detailed
+      assert tuned.max_output_tokens == 8_192
+
+      # codex's ReasoningSummary is a closed enum; effort is whatever the model advertises
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_model(%{
+                 name: "bad",
+                 upstream_id: "bad-#{uniq()}",
+                 provider_id: provider.id,
+                 reasoning_summary: :verbose
+               })
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_model(%{
+                 name: "bad",
+                 upstream_id: "bad-#{uniq()}",
+                 provider_id: provider.id,
+                 max_output_tokens: 0
+               })
     end
 
     test "list_models/0 loads the provider" do
@@ -343,6 +430,177 @@ defmodule Longx.AITest do
     end
   end
 
+  describe "web_search_mode/1 (per model, for the thread being started)" do
+    test "follows the model's provider, not the global default" do
+      sp =
+        AI.create_search_provider!(%{
+          name: "T",
+          slug: "t-#{uniq()}",
+          kind: :tavily,
+          api_key: "tvly"
+        })
+
+      AI.make_default_search_provider!(sp)
+
+      deepseek = create_provider!(%{slug: "deepseek-#{uniq()}"})
+      AI.make_default_model!(create_model!(deepseek, %{slug: "ds-#{uniq()}"}))
+      openai = create_provider!(%{slug: "openai-#{uniq()}", supports_hosted_web_search: true})
+      gpt = create_model!(openai, %{slug: "gpt-#{uniq()}"})
+
+      assert AI.web_search_mode() == :standalone
+      assert AI.web_search_mode(nil) == :standalone
+      assert AI.web_search_mode("longx") == :standalone
+      assert AI.web_search_mode(gpt.slug) == :hosted
+      # unknown model: nothing hosted to rely on, whatever is left applies
+      assert AI.web_search_mode("nope") == :standalone
+    end
+  end
+
+  describe "thread_options/1 and turn_options/1 (what codex gets for a model)" do
+    test "the default model contributes its settings but no model name (codex's placeholder stays)" do
+      provider = create_provider!()
+
+      model =
+        create_model!(provider, %{
+          slug: "ds-#{uniq()}",
+          context_window: 64_000,
+          reasoning_effort: "medium",
+          reasoning_summary: :auto,
+          max_output_tokens: 4_096
+        })
+
+      AI.make_default_model!(model)
+
+      assert {:ok, opts} = AI.thread_options(nil)
+      refute Keyword.has_key?(opts, :model)
+      assert opts[:model_context_window] == 64_000
+      assert opts[:reasoning_effort] == "medium"
+      assert opts[:reasoning_summary] == :auto
+      assert opts[:web_search] == :disabled
+      # not codex's business: the gateway applies it (see resolve_target)
+      refute Keyword.has_key?(opts, :max_output_tokens)
+      assert {:ok, %AI.Target{max_output_tokens: 4_096}} = AI.resolve_target()
+
+      assert AI.thread_options("longx") == AI.thread_options(nil)
+
+      assert {:ok, turn} = AI.turn_options(nil)
+      refute Keyword.has_key?(turn, :model)
+      assert turn[:effort] == "medium"
+      assert turn[:summary] == :auto
+    end
+
+    test "a slug names the model explicitly and unset settings are simply absent" do
+      provider = create_provider!(%{supports_hosted_web_search: true})
+      model = create_model!(provider, %{slug: "gpt-#{uniq()}", context_window: 400_000})
+
+      assert {:ok, opts} = AI.thread_options(model.slug)
+      assert opts[:model] == model.slug
+      assert opts[:model_context_window] == 400_000
+      assert opts[:web_search] == :hosted
+      refute Keyword.has_key?(opts, :reasoning_effort)
+      refute Keyword.has_key?(opts, :reasoning_summary)
+
+      assert {:ok, [model: slug]} = AI.turn_options(model.slug)
+      assert slug == model.slug
+    end
+
+    test "unknown slugs and a missing default are errors" do
+      assert {:error, {:unknown_model, "nope"}} = AI.thread_options("nope")
+      assert {:error, {:unknown_model, "nope"}} = AI.turn_options("nope")
+      assert {:error, :no_default_model} = AI.thread_options(nil)
+      assert {:error, :no_default_model} = AI.turn_options(nil)
+    end
+  end
+
+  describe "check_model/1 (does the provider answer with this key?)" do
+    setup do
+      bypass = Bypass.open()
+
+      provider =
+        create_provider!(%{base_url: "http://localhost:#{bypass.port}/v1", api_key: "sk-ok"})
+
+      model = create_model!(provider, %{upstream_id: "real-model"})
+      %{bypass: bypass, provider: provider, model: model}
+    end
+
+    test "a 200 records a successful check and clears any earlier error", %{
+      bypass: bypass,
+      provider: provider,
+      model: model
+    } do
+      {:ok, _} = AI.record_provider_error(provider, "old problem")
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        {:ok, raw, up} = Plug.Conn.read_body(up)
+        send(test_pid, {:upstream, up.req_headers, Jason.decode!(raw)})
+
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(200, ~s({"id":"resp_1","object":"response","status":"completed"}))
+      end)
+
+      assert {:ok, %{latency_ms: ms}} = AI.check_model(model)
+      assert is_integer(ms) and ms >= 0
+
+      assert_receive {:upstream, headers, body}
+      assert {"authorization", "Bearer sk-ok"} in headers
+      assert body["model"] == "real-model"
+      assert body["stream"] == false
+      assert body["store"] == false
+      assert is_integer(body["max_output_tokens"])
+
+      {:ok, checked} = AI.get_provider_by_slug(provider.slug)
+      assert %DateTime{} = checked.last_checked_at
+      assert checked.last_error == nil
+    end
+
+    test "a non-2xx is the error, recorded on the provider", %{
+      bypass: bypass,
+      provider: provider,
+      model: model
+    } do
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(401, ~s({"error":{"message":"Authentication Fails"}}))
+      end)
+
+      assert {:error, {:status, 401, message}} = AI.check_model(model)
+      assert message =~ "Authentication Fails"
+
+      {:ok, checked} = AI.get_provider_by_slug(provider.slug)
+      assert %DateTime{} = checked.last_checked_at
+      assert checked.last_error =~ "401"
+      assert checked.last_error =~ "Authentication Fails"
+    end
+
+    test "an unreachable host is {:error, {:unreachable, reason}}", %{
+      bypass: bypass,
+      provider: provider,
+      model: model
+    } do
+      Bypass.down(bypass)
+      assert {:error, {:unreachable, _}} = AI.check_model(model)
+      {:ok, checked} = AI.get_provider_by_slug(provider.slug)
+      assert checked.last_error =~ "unreachable"
+    end
+
+    test "a provider without a key fails before any request", %{model: model, provider: provider} do
+      AI.update_provider!(provider, %{api_key: nil})
+      assert {:error, {:missing_api_key, _}} = AI.check_model(model)
+    end
+
+    test "accepts a slug too", %{bypass: bypass, model: model} do
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        Plug.Conn.send_resp(up, 200, "{}")
+      end)
+
+      assert {:ok, _} = AI.check_model(model.slug)
+      assert {:error, {:unknown_model, "nope"}} = AI.check_model("nope")
+    end
+  end
+
   describe "resolve_target/1 (by the model name codex sends)" do
     test "\"longx\" is the global default; a slug picks that model; unknown is an error" do
       provider = create_provider!(%{api_key: "sk-a"})
@@ -376,7 +634,9 @@ defmodule Longx.AITest do
                 api_key: "sk-ds",
                 context_window: 64_000,
                 hosted_web_search?: false,
-                kind: :openai_compatible
+                kind: :openai_compatible,
+                request_timeout_ms: 600_000,
+                max_concurrent_requests: nil
               }} = AI.resolve_target()
     end
 

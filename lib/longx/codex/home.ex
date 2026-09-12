@@ -89,8 +89,10 @@ defmodule Longx.Codex.Home do
       wire_api = "responses"
       requires_openai_auth = false
       stream_idle_timeout_ms = 600000
-      """,
-      provider_web_search_toml(web_search)
+      # capability only: whether web.run is offered is the per-thread
+      # `features.standalone_web_search` override (Longx.Codex.Thread)
+      supports_standalone_web_search = true
+      """
     ]
     |> IO.iodata_to_binary()
   end
@@ -101,7 +103,4 @@ defmodule Longx.Codex.Home do
   defp web_search_toml(:hosted), do: ~s(web_search = "live"\n)
   defp web_search_toml(:standalone), do: "\n[features]\nstandalone_web_search = true\n"
   defp web_search_toml(:disabled), do: ~s(web_search = "disabled"\n)
-
-  defp provider_web_search_toml(:standalone), do: "supports_standalone_web_search = true\n"
-  defp provider_web_search_toml(_), do: ""
 end

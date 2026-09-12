@@ -74,12 +74,18 @@ defmodule FakeAppServer do
     state
   end
 
-  defp handle(%{"id" => id, "method" => "thread/start"}, state) do
+  defp handle(%{"id" => id, "method" => "thread/start"} = msg, state) do
     thread_id = "thr_#{state.prefix}_#{state.next}"
     thread = %{"id" => thread_id, "preview" => "", "sessionId" => thread_id}
     reply(id, %{"thread" => thread})
     notify("thread/started", %{"thread" => thread})
-    %{state | next: state.next + 1, threads: Map.put(state.threads, thread_id, %{turns: []})}
+
+    # the params are kept so tests can read back (thread/read) what a client sent
+    %{
+      state
+      | next: state.next + 1,
+        threads: Map.put(state.threads, thread_id, %{turns: [], params: msg["params"] || %{}})
+    }
   end
 
   defp handle(
@@ -157,7 +163,7 @@ defmodule FakeAppServer do
     %{
       state
       | next: state.next + 1,
-        threads: Map.put(state.threads, new_id, %{turns: Enum.reverse(kept)})
+        threads: Map.put(state.threads, new_id, %{turns: Enum.reverse(kept), params: params})
     }
   end
 
@@ -165,8 +171,19 @@ defmodule FakeAppServer do
          %{"id" => id, "method" => "thread/read", "params" => %{"threadId" => thread_id}},
          state
        ) do
-    turns = state.threads |> Map.get(thread_id, %{turns: []}) |> Map.get(:turns) |> Enum.reverse()
-    reply(id, %{"thread" => %{"id" => thread_id, "turns" => turns}})
+    entry = Map.get(state.threads, thread_id, %{turns: []})
+    turns = entry |> Map.get(:turns) |> Enum.reverse()
+
+    reply(id, %{
+      "thread" => %{
+        "id" => thread_id,
+        "turns" => turns,
+        # not part of codex's protocol: what this fake was asked for
+        "startParams" => Map.get(entry, :params, %{}),
+        "lastTurnParams" => Map.get(entry, :last_turn)
+      }
+    })
+
     state
   end
 
@@ -174,13 +191,22 @@ defmodule FakeAppServer do
          %{
            "id" => id,
            "method" => "turn/start",
-           "params" => %{"threadId" => thread_id, "input" => input}
+           "params" => %{"threadId" => thread_id, "input" => input} = params
          },
          state
        ) do
     text = input |> List.first(%{}) |> Map.get("text", "")
     turn_id = "turn_#{state.prefix}_#{state.next}"
-    state = %{state | next: state.next + 1}
+
+    threads =
+      Map.update(
+        state.threads,
+        thread_id,
+        %{turns: [], last_turn: params},
+        &Map.put(&1, :last_turn, params)
+      )
+
+    state = %{state | next: state.next + 1, threads: threads}
     run_turn(text, id, thread_id, turn_id, state)
   end
 

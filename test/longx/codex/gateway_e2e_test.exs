@@ -270,4 +270,51 @@ defmodule Longx.Codex.GatewayE2ETest do
 
     refute Enum.any?(body["tools"], &(&1["type"] == "namespace" and &1["name"] == "web"))
   end
+
+  test "per-thread overrides win over the global config: search mode and reasoning settings", %{
+    gateway_url: gateway_url
+  } do
+    upstream = Bypass.open()
+    test_pid = self()
+    fake_provider!(upstream, %{supports_hosted_web_search: true})
+    {:ok, model} = AI.default_model()
+    AI.update_model!(model, %{max_output_tokens: 4_096})
+
+    Bypass.expect(upstream, "POST", "/v1/responses", fn conn ->
+      {:ok, raw, conn} = Plug.Conn.read_body(conn, length: 50_000_000)
+      send(test_pid, {:upstream_request, Jason.decode!(raw)})
+      send_sse(conn, ResponsesFixture.assistant_message("ok"))
+    end)
+
+    # codex boots with search disabled globally…
+    home = prepare_home!(gateway_url, web_search: :disabled)
+    conn = start_connection!(home)
+
+    # …but this thread asks for standalone search and a specific reasoning setup
+    standalone =
+      start_thread!(conn, home,
+        web_search: :standalone,
+        reasoning_effort: "high",
+        reasoning_summary: :detailed
+      )
+
+    {turn, _} = run_turn!(conn, standalone, "hi")
+    assert turn["status"] == "completed", inspect(turn)
+    assert_receive {:upstream_request, body}, 5_000
+    assert Enum.any?(body["tools"], &(&1["type"] == "namespace" and &1["name"] == "web"))
+    refute Enum.any?(body["tools"], &(&1["type"] == "web_search"))
+    assert body["reasoning"] == %{"effort" => "high", "summary" => "detailed"}
+    # the model's cap, added by the gateway
+    assert body["max_output_tokens"] == 4_096
+
+    # and another thread on the same connection gets hosted search
+    hosted = start_thread!(conn, home, web_search: :hosted)
+    {turn, _} = run_turn!(conn, hosted, "hi")
+    assert turn["status"] == "completed", inspect(turn)
+    assert_receive {:upstream_request, body}, 5_000
+    assert Enum.any?(body["tools"], &(&1["type"] == "web_search"))
+    refute Enum.any?(body["tools"], &(&1["type"] == "namespace" and &1["name"] == "web"))
+    # codex's own reasoning defaults for a thread that set none
+    refute body["reasoning"]["effort"] == "high"
+  end
 end

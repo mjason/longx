@@ -9,6 +9,7 @@ defmodule Longx.AI.Gateway do
   stream chunk by chunk into the Plug connection.
   """
 
+  alias Longx.AI.Gateway.Limiter
   alias Longx.AI.Target
 
   require Logger
@@ -16,31 +17,45 @@ defmodule Longx.AI.Gateway do
   defmodule Upstream do
     @moduledoc false
     @enforce_keys [:url, :headers, :body]
-    defstruct [:url, :headers, :body, kind: :openai_compatible, degraded?: false]
+    defstruct [
+      :url,
+      :headers,
+      :body,
+      :provider_slug,
+      kind: :openai_compatible,
+      degraded?: false,
+      receive_timeout: :timer.minutes(10),
+      max_concurrent: nil
+    ]
 
     @type t :: %__MODULE__{
             url: String.t(),
             headers: [{String.t(), String.t()}],
             body: map,
+            provider_slug: String.t() | nil,
             kind: :openai | :openai_compatible,
-            degraded?: boolean
+            degraded?: boolean,
+            receive_timeout: pos_integer,
+            max_concurrent: pos_integer | nil
           }
   end
 
   # Not part of the public Responses API; codex-internal telemetry.
   @internal_fields ["client_metadata"]
 
-  # Codex may need minutes of silence while a model thinks.
-  @receive_timeout :timer.minutes(10)
+  # The Responses API's provider-hosted search tools (run inside OpenAI).
+  @hosted_search_tools ["web_search", "web_search_preview"]
 
   @doc """
   Rewrites a codex Responses request for `target`: the placeholder model is
   replaced and streaming is forced since `stream/2` only speaks SSE.
 
-  Tools are passed through untouched. Which tools codex offers is decided in
-  its config (`Longx.Codex.Home`), not here: DeepSeek/GLM accept `namespace`
-  tools (sub-agents, `web.run`), and OpenAI's hosted `web_search` is never
-  emitted because standalone search is used instead.
+  Function and `namespace` tools pass through untouched — which of those
+  codex offers is decided in its config (`Longx.Codex.Home` /
+  `Longx.Codex.Thread`), not here: DeepSeek/GLM accept `namespace` tools
+  (sub-agents, `web.run`). The one exception is the provider-hosted
+  `web_search` tool: it only exists inside providers that run it, so it is
+  dropped for any other target instead of failing the whole request.
   """
   @spec prepare(term, Target.t()) :: {:ok, Upstream.t()} | {:error, :invalid_request}
   def prepare(%{"input" => input} = body, %Target{} = target) when is_list(input) do
@@ -50,6 +65,8 @@ defmodule Longx.AI.Gateway do
       |> Map.put("model", target.model)
       |> Map.put("stream", true)
       |> Map.put("input", sanitize_reasoning(input, target.kind))
+      |> drop_hosted_search(target)
+      |> put_max_output_tokens(target)
 
     {:ok,
      %Upstream{
@@ -60,11 +77,27 @@ defmodule Longx.AI.Gateway do
          {"accept", "text/event-stream"}
        ],
        body: body,
-       kind: target.kind
+       provider_slug: target.provider_slug,
+       kind: target.kind,
+       receive_timeout: target.request_timeout_ms,
+       max_concurrent: target.max_concurrent_requests
      }}
   end
 
   def prepare(_body, _target), do: {:error, :invalid_request}
+
+  # The model's output cap, unless codex asked for one itself.
+  defp put_max_output_tokens(body, %Target{max_output_tokens: nil}), do: body
+
+  defp put_max_output_tokens(body, %Target{max_output_tokens: max}),
+    do: Map.put_new(body, "max_output_tokens", max)
+
+  defp drop_hosted_search(body, %Target{hosted_web_search?: true}), do: body
+
+  defp drop_hosted_search(%{"tools" => tools} = body, _target) when is_list(tools),
+    do: Map.put(body, "tools", Enum.reject(tools, &(&1["type"] in @hosted_search_tools)))
+
+  defp drop_hosted_search(body, _target), do: body
 
   ## Reasoning items: a provider only ever receives its own opaque data
 
@@ -125,13 +158,33 @@ defmodule Longx.AI.Gateway do
   """
   @spec stream(Upstream.t(), Plug.Conn.t()) :: Plug.Conn.t()
   def stream(%Upstream{} = up, conn) do
+    # the slot covers the whole relay; a retry (degraded) happens inside it
+    case Limiter.run(up.provider_slug, up.max_concurrent, fn -> relay_upstream(up, conn) end) do
+      {:ok, conn} ->
+        conn
+
+      :busy ->
+        Logger.info(
+          "ai gateway: provider #{up.provider_slug} at its limit of #{up.max_concurrent} concurrent requests"
+        )
+
+        conn
+        |> Plug.Conn.put_resp_header("retry-after", "1")
+        |> error(
+          429,
+          "provider #{up.provider_slug} is at its limit of #{up.max_concurrent} concurrent requests"
+        )
+    end
+  end
+
+  defp relay_upstream(%Upstream{} = up, conn) do
     request =
       Req.new(
         url: up.url,
         headers: up.headers,
         json: up.body,
         retry: false,
-        receive_timeout: @receive_timeout,
+        receive_timeout: up.receive_timeout,
         into: :self
       )
 
@@ -141,7 +194,7 @@ defmodule Longx.AI.Gateway do
         |> Plug.Conn.put_resp_content_type("text/event-stream")
         |> Plug.Conn.put_resp_header("cache-control", "no-cache")
         |> Plug.Conn.send_chunked(200)
-        |> relay(resp)
+        |> relay(resp, up.receive_timeout)
 
       {:ok, %Req.Response{status: status} = resp} ->
         body = collect(resp)
@@ -154,16 +207,30 @@ defmodule Longx.AI.Gateway do
             "ai gateway: OpenAI rejected replayed reasoning (#{String.slice(body, 0, 200)}); retrying without encrypted reasoning"
           )
 
-          stream(%Upstream{up | body: strip_all_encrypted(up.body), degraded?: true}, conn)
+          relay_upstream(
+            %Upstream{up | body: strip_all_encrypted(up.body), degraded?: true},
+            conn
+          )
         else
           Logger.warning(
             "ai gateway: upstream #{up.url} answered #{status}: #{String.slice(body, 0, 500)}"
           )
 
+          remember_auth_error(up, status, body)
+
           conn
           |> Plug.Conn.put_resp_content_type(content_type(resp))
           |> Plug.Conn.send_resp(status, body)
         end
+
+      {:error, %Req.TransportError{reason: :timeout}} ->
+        Logger.error("ai gateway: upstream #{up.url} timed out after #{up.receive_timeout}ms")
+
+        error(
+          conn,
+          504,
+          "upstream timed out after #{up.receive_timeout}ms (provider request_timeout_ms)"
+        )
 
       {:error, exception} ->
         Logger.error(
@@ -173,6 +240,18 @@ defmodule Longx.AI.Gateway do
         error(conn, 502, "upstream request failed: #{Exception.message(exception)}")
     end
   end
+
+  # A refused key is worth surfacing in the UI, not only in a log line.
+  defp remember_auth_error(%Upstream{provider_slug: slug}, status, body)
+       when is_binary(slug) and status in [401, 403] do
+    with {:ok, provider} <- Longx.AI.get_provider_by_slug(slug) do
+      Longx.AI.record_provider_error(provider, "#{status} #{String.slice(body, 0, 200)}")
+    end
+
+    :ok
+  end
+
+  defp remember_auth_error(_up, _status, _body), do: :ok
 
   # Only OpenAI, only once, only when the error is about the reasoning we sent.
   defp retry_without_reasoning?(%Upstream{kind: :openai, degraded?: false}, status, body)
@@ -195,20 +274,20 @@ defmodule Longx.AI.Gateway do
 
   # Only consume this response's messages (`{ref, _}`); anything else in the
   # connection process's mailbox is not ours to touch.
-  defp relay(conn, %Req.Response{body: %Req.Response.Async{ref: ref}} = resp) do
+  defp relay(conn, %Req.Response{body: %Req.Response.Async{ref: ref}} = resp, idle_timeout) do
     receive do
       {^ref, _} = message ->
         case Req.parse_message(resp, message) do
           {:ok, chunks} ->
-            relay_chunks(conn, resp, chunks)
+            relay_chunks(conn, resp, chunks, idle_timeout)
 
           {:error, reason} ->
             Logger.warning("ai gateway: upstream stream error: #{inspect(reason)}")
             conn
         end
     after
-      @receive_timeout ->
-        Logger.warning("ai gateway: upstream stream idle for #{@receive_timeout}ms; closing")
+      idle_timeout ->
+        Logger.warning("ai gateway: upstream stream idle for #{idle_timeout}ms; closing")
         Req.cancel_async_response(resp)
         conn
     end
@@ -216,12 +295,12 @@ defmodule Longx.AI.Gateway do
 
   # A message may carry several chunks; keep receiving until :done or the
   # client goes away.
-  defp relay_chunks(conn, resp, []), do: relay(conn, resp)
+  defp relay_chunks(conn, resp, [], idle_timeout), do: relay(conn, resp, idle_timeout)
 
-  defp relay_chunks(conn, resp, [{:data, data} | rest]) do
+  defp relay_chunks(conn, resp, [{:data, data} | rest], idle_timeout) do
     case Plug.Conn.chunk(conn, data) do
       {:ok, conn} ->
-        relay_chunks(conn, resp, rest)
+        relay_chunks(conn, resp, rest, idle_timeout)
 
       {:error, _closed} ->
         Req.cancel_async_response(resp)
@@ -229,8 +308,10 @@ defmodule Longx.AI.Gateway do
     end
   end
 
-  defp relay_chunks(conn, _resp, [:done | _]), do: conn
-  defp relay_chunks(conn, resp, [{:trailers, _} | rest]), do: relay_chunks(conn, resp, rest)
+  defp relay_chunks(conn, _resp, [:done | _], _idle_timeout), do: conn
+
+  defp relay_chunks(conn, resp, [{:trailers, _} | rest], idle_timeout),
+    do: relay_chunks(conn, resp, rest, idle_timeout)
 
   # Non-200 bodies are small JSON errors: gather them whole.
   defp collect(%Req.Response{body: %Req.Response.Async{ref: ref}} = resp, acc \\ []) do
