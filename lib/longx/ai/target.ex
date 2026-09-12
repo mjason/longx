@@ -15,7 +15,10 @@ defmodule Longx.AI.Target do
     hosted_web_search?: false,
     # :openai is the only provider whose reasoning items may be replayed to it
     # with their encrypted_content (see Longx.AI.Gateway)
-    kind: :openai_compatible
+    kind: :openai_compatible,
+    request_timeout_ms: 600_000,
+    max_concurrent_requests: nil,
+    max_output_tokens: nil
   ]
 
   @type t :: %__MODULE__{
@@ -25,7 +28,10 @@ defmodule Longx.AI.Target do
           context_window: pos_integer,
           provider_slug: String.t() | nil,
           hosted_web_search?: boolean,
-          kind: :openai | :openai_compatible
+          kind: :openai | :openai_compatible,
+          request_timeout_ms: pos_integer,
+          max_concurrent_requests: pos_integer | nil,
+          max_output_tokens: pos_integer | nil
         }
 
   defimpl Inspect do

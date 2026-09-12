@@ -60,6 +60,30 @@ lib/longx/tools/           给 codex 的 Elixir 工具 —— 见下文
   而不是在同一个 provider 里悄悄轮换。
 * 号池类的中转服务请标成 `:openai_compatible`：网关不会给它回放任何 `encrypted_content`，
   也不会触发上面的重试，行为反而更可预期（代价是没有推理连续性）。
+  `kind` 不填时按 `base_url` 推断：只有 `api.openai.com` 是 `:openai`。
+
+### provider 上还能配什么
+
+| 字段 | 作用 |
+| --- | --- |
+| `request_timeout_ms`（默认 10 分钟） | 上游多久不吭声算超时，网关回 504；模型思考很久是正常的，别设太短 |
+| `max_concurrent_requests`（默认不限） | 同时在途的请求数上限，超出网关回 429 + `retry-after`，codex 会退避重试 |
+| `last_error` / `last_error_at` | 网关在线上遇到 401/403 时记下来，UI 据此提示「key 不对」 |
+| `last_checked_at` | `Longx.AI.check_model/1` 的健康检查：发一个 16 token 的小请求，成功清掉 `last_error` |
+
+### model 上的设置
+
+| 字段 | 去向 |
+| --- | --- |
+| `context_window` | codex 的 `model_context_window`（压缩时机） |
+| `reasoning_effort`（自由字符串，模型自己认什么就填什么） | codex 的 `model_reasoning_effort`，随请求的 `reasoning.effort` 发给上游 |
+| `reasoning_summary`（`auto` / `concise` / `detailed` / `none`） | codex 的 `model_reasoning_summary` |
+| `max_output_tokens` | 网关加到请求上的 `max_output_tokens`（codex 自己不设） |
+
+这些都是**按线程**生效的：开线程时按所选模型（没选就是全局默认）算好，作为 `thread/start.config`
+覆盖传给 codex，所以不同线程可以同时跑不同模型、不同搜索模式；`web_search` 的 hosted / standalone /
+disabled 也按模型的 provider 决定，而不是全局一个。换模型重做某一轮时只换得了 effort / summary，
+上下文窗口和搜索模式还是线程开始时那个模型的。
 
 ## 扩展指南：给 agent 添加 Elixir 工具
 

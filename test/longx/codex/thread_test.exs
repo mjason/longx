@@ -76,6 +76,65 @@ defmodule Longx.Codex.ThreadTest do
       refute Map.has_key?(Thread.start_params(cwd: "/p", tools: []), "model")
     end
 
+    test "web_search: sets the thread's search mode as config overrides (dotted keys, like -c)" do
+      assert Thread.start_params(cwd: "/p", tools: [], web_search: :hosted)["config"] ==
+               %{"web_search" => "live", "features.standalone_web_search" => false}
+
+      assert Thread.start_params(cwd: "/p", tools: [], web_search: :standalone)["config"] ==
+               %{"web_search" => "live", "features.standalone_web_search" => true}
+
+      assert Thread.start_params(cwd: "/p", tools: [], web_search: :disabled)["config"] ==
+               %{"web_search" => "disabled", "features.standalone_web_search" => false}
+
+      refute Map.has_key?(Thread.start_params(cwd: "/p", tools: []), "config")
+    end
+
+    test "model settings become codex config overrides next to the context window" do
+      config =
+        Thread.start_params(
+          cwd: "/p",
+          tools: [],
+          model: "gpt-x",
+          model_context_window: 400_000,
+          reasoning_effort: "high",
+          reasoning_summary: :detailed
+        )["config"]
+
+      assert config == %{
+               "model_context_window" => 400_000,
+               "model_reasoning_effort" => "high",
+               "model_reasoning_summary" => "detailed"
+             }
+    end
+
+    test "turn_params/3: text input, optional model / effort / summary for this turn onwards" do
+      assert Thread.turn_params("t", "hi", []) ==
+               %{"threadId" => "t", "input" => [%{"type" => "text", "text" => "hi"}]}
+
+      params = Thread.turn_params("t", "hi", model: "gpt-x", effort: "low", summary: :none)
+      assert params["model"] == "gpt-x"
+      assert params["effort"] == "low"
+      assert params["summary"] == "none"
+    end
+
+    test "fork_params/2 carries the same model settings as a start" do
+      params =
+        Thread.fork_params("t",
+          last_turn_id: "u1",
+          model: "gpt-x",
+          model_context_window: 400_000,
+          web_search: :hosted
+        )
+
+      assert params["threadId"] == "t"
+      assert params["lastTurnId"] == "u1"
+      assert params["model"] == "gpt-x"
+      assert params["config"]["model_context_window"] == 400_000
+      assert params["config"]["web_search"] == "live"
+
+      assert Thread.fork_params("t", []) == %{"threadId" => "t"}
+    end
+
     test "threads are always paginated (thread/revert needs it)" do
       assert Thread.start_params(cwd: "/p", tools: [])["historyMode"] == "paginated"
     end

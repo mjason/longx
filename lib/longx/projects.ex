@@ -84,13 +84,19 @@ defmodule Longx.Projects do
     approval_policy = Keyword.get(opts, :approval_policy, project.approval_policy)
     sandbox = Keyword.get(opts, :sandbox, project.sandbox)
 
-    codex_opts =
-      [cwd: project.root_path, approval_policy: approval_policy, sandbox: sandbox, tools: tools]
-      |> put_if(:model, model_slug)
-      |> put_if(:model_context_window, project.model && project.model.context_window)
-      |> put_if(:conn, Keyword.get(opts, :conn))
-
-    with {:ok, codex_thread_id} <- Longx.Codex.Thread.start(codex_opts),
+    # the model's own settings (context window, reasoning, web search mode);
+    # an unknown slug or a missing default is refused before codex is involved
+    with {:ok, model_opts} <- Longx.AI.thread_options(model_slug),
+         codex_opts =
+           [
+             cwd: project.root_path,
+             approval_policy: approval_policy,
+             sandbox: sandbox,
+             tools: tools
+           ]
+           |> Keyword.merge(model_opts)
+           |> put_if(:conn, Keyword.get(opts, :conn)),
+         {:ok, codex_thread_id} <- Longx.Codex.Thread.start(codex_opts),
          {:ok, thread} <-
            create_thread(%{
              codex_thread_id: codex_thread_id,
@@ -124,12 +130,13 @@ defmodule Longx.Projects do
     thread = Ash.get!(Thread, id, load: :project)
     model_slug = Keyword.get(opts, :model, thread.model_slug)
 
-    with {:ok, bookmark} <- preflight(thread, text, opts),
+    with {:ok, turn_opts} <- turn_options(model_slug, thread),
+         {:ok, bookmark} <- preflight(thread, text, opts),
          {:ok, codex_turn_id} <-
            Longx.Codex.Thread.send(
              thread.codex_thread_id,
              text,
-             [model: model_slug] |> put_if(:conn, Keyword.get(opts, :conn))
+             turn_opts |> put_if(:conn, Keyword.get(opts, :conn))
            ),
          {:ok, turn} <-
            create_turn(%{
@@ -150,6 +157,15 @@ defmodule Longx.Projects do
       {:ok, turn}
     end
   end
+
+  # The model to name on turn/start (with its reasoning settings): only when
+  # this turn switches models — a thread on the default model keeps codex's
+  # placeholder, and an unchanged explicit model needs no repeating.
+  defp turn_options(nil, _thread), do: {:ok, []}
+
+  defp turn_options(slug, %Thread{model_slug: slug}), do: {:ok, []}
+
+  defp turn_options(slug, _thread), do: Longx.AI.turn_options(slug)
 
   # Where the working tree stands when the turn begins.
   defp preflight(%Thread{cwd: dir, project: project}, text, opts) do
@@ -270,13 +286,12 @@ defmodule Longx.Projects do
       |> Enum.filter(&(DateTime.compare(&1.started_at, turn.started_at) == :lt))
       |> List.last()
 
-    fork_opts =
-      []
-      |> put_if(:last_turn_id, previous && previous.codex_turn_id)
-      |> put_if(:model, model)
-      |> put_if(:conn, conn)
-
-    with {:ok, codex_thread_id} <- Longx.Codex.Thread.fork(thread.codex_thread_id, fork_opts),
+    with {:ok, model_opts} <- Longx.AI.thread_options(model),
+         fork_opts =
+           model_opts
+           |> put_if(:last_turn_id, previous && previous.codex_turn_id)
+           |> put_if(:conn, conn),
+         {:ok, codex_thread_id} <- Longx.Codex.Thread.fork(thread.codex_thread_id, fork_opts),
          {:ok, forked} <-
            create_thread(%{
              codex_thread_id: codex_thread_id,

@@ -16,6 +16,9 @@ defmodule Longx.AI do
       define :update_provider, action: :update
       define :list_providers, action: :read
       define :get_provider_by_slug, action: :by_slug, args: [:slug]
+      define :record_provider_error, action: :record_error, args: [:message]
+      define :clear_provider_error, action: :clear_error
+      define :record_provider_check, action: :record_check, args: [:error]
     end
 
     resource Model do
@@ -159,10 +162,154 @@ defmodule Longx.AI do
          context_window: model.context_window,
          provider_slug: provider.slug,
          hosted_web_search?: provider.supports_hosted_web_search,
-         kind: provider.kind
+         kind: provider.kind,
+         request_timeout_ms: provider.request_timeout_ms,
+         max_concurrent_requests: provider.max_concurrent_requests,
+         max_output_tokens: model.max_output_tokens
        }}
     end
   end
+
+  ## What codex is told about a model
+
+  @typedoc "`Longx.Codex.Thread.start/1` options derived from a model row."
+  @type thread_options :: [
+          {:model, String.t()}
+          | {:model_context_window, pos_integer}
+          | {:reasoning_effort, String.t()}
+          | {:reasoning_summary, atom}
+          | {:web_search, web_search_mode}
+        ]
+
+  @doc """
+  The per-model options for starting (or forking) a codex thread: `nil` /
+  `"longx"` is the global default model, whose name is *not* passed (codex
+  keeps its placeholder); a slug names the model explicitly. Settings left
+  unset on the model are absent, so codex's defaults apply. The web search
+  mode is decided for this model, not the global default. (`max_output_tokens`
+  is not codex's business: the gateway applies it, see `Longx.AI.Target`.)
+  """
+  @spec thread_options(String.t() | nil) ::
+          {:ok, thread_options} | {:error, :no_default_model | {:unknown_model, String.t()}}
+  def thread_options(slug) do
+    with {:ok, model, explicit?} <- fetch_model(slug) do
+      opts =
+        []
+        |> put_if(:model, explicit? && model.slug)
+        |> Keyword.put(:model_context_window, model.context_window)
+        |> put_if(:reasoning_effort, model.reasoning_effort)
+        |> put_if(:reasoning_summary, model.reasoning_summary)
+        |> Keyword.put(:web_search, web_search_mode(model))
+
+      {:ok, Enum.reverse(opts)}
+    end
+  end
+
+  @doc """
+  The per-model options for a turn (`Longx.Codex.Thread.send/3`): the model
+  to switch to (absent for the default) and its reasoning effort / summary,
+  which codex applies from this turn on.
+  """
+  @spec turn_options(String.t() | nil) ::
+          {:ok, keyword} | {:error, :no_default_model | {:unknown_model, String.t()}}
+  def turn_options(slug) do
+    with {:ok, model, explicit?} <- fetch_model(slug) do
+      opts =
+        []
+        |> put_if(:model, explicit? && model.slug)
+        |> put_if(:effort, model.reasoning_effort)
+        |> put_if(:summary, model.reasoning_summary)
+
+      {:ok, Enum.reverse(opts)}
+    end
+  end
+
+  # {:ok, model, named explicitly?}
+  defp fetch_model(nil), do: fetch_model(@placeholder_model)
+
+  defp fetch_model(@placeholder_model) do
+    with {:ok, model} <- fetch_default_model(), do: {:ok, model, false}
+  end
+
+  defp fetch_model(slug) when is_binary(slug) do
+    case get_model_by_slug(slug) do
+      {:ok, %Model{} = model} -> {:ok, model, true}
+      {:error, _} -> {:error, {:unknown_model, slug}}
+    end
+  end
+
+  defp put_if(opts, _key, nil), do: opts
+  defp put_if(opts, _key, false), do: opts
+  defp put_if(opts, key, value), do: [{key, value} | opts]
+
+  ## Health check
+
+  # enough for the model to answer "ok"; keeps the check cheap
+  @check_max_output_tokens 16
+  @check_timeout :timer.seconds(30)
+
+  @doc """
+  Sends one tiny non-streaming Responses request through the model's provider
+  and records the outcome on the provider (`last_checked_at`, `last_error`).
+  Answers `{:ok, %{latency_ms: n}}`, `{:error, {:status, code, message}}`
+  (the upstream refused), `{:error, {:unreachable, reason}}`, or the usual
+  configuration errors before any request is made.
+  """
+  @spec check_model(Model.t() | String.t()) ::
+          {:ok, %{latency_ms: non_neg_integer}} | {:error, term}
+  def check_model(%Model{} = model) do
+    with {:ok, %Target{} = target} <- target_for(model),
+         {:ok, provider} <- get_provider_by_slug(target.provider_slug) do
+      result = probe(target)
+      {:ok, _} = record_provider_check(provider, check_error(result))
+      result
+    end
+  end
+
+  def check_model(slug) when is_binary(slug) do
+    case get_model_by_slug(slug) do
+      {:ok, %Model{} = model} -> check_model(model)
+      {:error, _} -> {:error, {:unknown_model, slug}}
+    end
+  end
+
+  defp probe(%Target{} = target) do
+    started = System.monotonic_time(:millisecond)
+
+    request =
+      Req.new(
+        url: String.trim_trailing(target.base_url, "/") <> "/responses",
+        auth: {:bearer, target.api_key},
+        json: %{
+          model: target.model,
+          input: "Reply with the single word: ok",
+          max_output_tokens: @check_max_output_tokens,
+          stream: false,
+          store: false
+        },
+        retry: false,
+        receive_timeout: @check_timeout
+      )
+
+    case Req.post(request) do
+      {:ok, %Req.Response{status: status}} when status in 200..299 ->
+        {:ok, %{latency_ms: System.monotonic_time(:millisecond) - started}}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:status, status, error_message(body)}}
+
+      {:error, exception} ->
+        {:error, {:unreachable, Exception.message(exception)}}
+    end
+  end
+
+  defp error_message(%{"error" => %{"message" => message}}) when is_binary(message), do: message
+  defp error_message(body) when is_binary(body), do: String.slice(body, 0, 500)
+  defp error_message(body), do: body |> inspect() |> String.slice(0, 500)
+
+  defp check_error({:ok, _}), do: nil
+  defp check_error({:error, {:status, status, message}}), do: "#{status} #{message}"
+  defp check_error({:error, {:unreachable, reason}}), do: "unreachable: #{reason}"
 
   @doc "The web-search backend for codex's `web.run` tool: the default search provider and its key."
   @spec resolve_search_target() ::
@@ -196,9 +343,20 @@ defmodule Longx.AI do
   """
   @type web_search_mode :: :hosted | :standalone | :disabled
 
-  @doc "See `t:web_search_mode/0`. Used by `Longx.Codex.Home` when writing codex's config."
+  @doc "See `t:web_search_mode/0`, for the global default model. `Longx.Codex.Home` writes it into codex's config."
   @spec web_search_mode() :: web_search_mode
   def web_search_mode, do: web_search_mode(resolve_target(), resolve_search_target())
+
+  @doc """
+  The web search mode for one model (by slug; `nil`/`"longx"` = the default),
+  what a thread started on that model gets as config override. An unknown
+  slug has nothing hosted to offer, so what is left applies.
+  """
+  @spec web_search_mode(String.t() | nil | Model.t()) :: web_search_mode
+  def web_search_mode(%Model{} = model),
+    do: web_search_mode(target_for(model), resolve_search_target())
+
+  def web_search_mode(slug), do: web_search_mode(resolve_target(slug), resolve_search_target())
 
   defp web_search_mode({:ok, %Target{hosted_web_search?: true}}, _search), do: :hosted
   defp web_search_mode(_target, {:ok, %SearchTarget{}}), do: :standalone
