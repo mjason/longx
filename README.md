@@ -25,6 +25,42 @@ lib/longx/codex/           app-server 客户端：Connection、ThreadState（ETS
 lib/longx/tools/           给 codex 的 Elixir 工具 —— 见下文
 ```
 
+## 模型 provider：一个 provider 用一把 key，不要用号池
+
+模型在数据库里配置（`Longx.AI.Provider` + `Longx.AI.Model`），每个 provider 一条记录，
+一个 `base_url` 和一把 `api_key`。同一个 thread 可以按轮次换模型（`turn/start.model`、fork），
+网关（`Longx.AI.Gateway`）负责让不同上游能接着同一段历史继续跑，其中最麻烦的是推理块：
+
+* OpenAI 返回的 `reasoning.encrypted_content` 是**真正的密文**，只有 OpenAI 自己解得开；
+  DeepSeek 一类的只是一个引用 token。不管哪家，别家的东西一律不出网关：
+  目标是 OpenAI（`Provider.kind = :openai`）时只保留它自己产生的 `rs_` 推理项，
+  其余目标（`:openai_compatible`，默认）收到的历史里没有任何 `encrypted_content`。
+  可读的 `summary` / `reasoning_text` 保留，清空后什么都不剩的推理项直接丢掉。
+* **降级路径**：OpenAI 目标如果对我们回放的推理块答 4xx（正文里提到 `encrypted` /
+  `reasoning`），网关会把历史里**所有** `encrypted_content` 去掉再重试**一次**，
+  并打一条 warning。对话不受影响，只是这一轮少了推理的连续性。逻辑在
+  `lib/longx/ai/gateway.ex`：
+
+  ```elixir
+  defp retry_without_reasoning?(%Upstream{kind: :openai, degraded?: false}, status, body)
+       when status in 400..422 do
+    body =~ ~r/encrypted|reasoning/i
+  end
+  ```
+
+  `degraded?` 保证只退一步：重试后仍失败就原样透传给 codex 显示。
+
+这条降级路径是**兜底**，不是常态。OpenAI 的密文和产生它的账号/订阅绑定，换一把 key
+回放上一轮的推理就解不开——如果 provider 背后是一个号池（多把 key 轮换、多个账号混用），
+几乎每一轮都会先吃一个 4xx、再降级重试：延迟翻倍、推理连续性全丢、日志里全是 warning，
+而且不同 key 的额度/模型可用性还不一致，表现会很不稳定。所以：
+
+* **一个 provider 对应一把固定的 key**：官方统一 API，或者一份独立的订阅。
+* 想用多个账号，就建多个 provider / model 记录，让用户在线程级别明确选择，
+  而不是在同一个 provider 里悄悄轮换。
+* 号池类的中转服务请标成 `:openai_compatible`：网关不会给它回放任何 `encrypted_content`，
+  也不会触发上面的重试，行为反而更可预期（代价是没有推理连续性）。
+
 ## 扩展指南：给 agent 添加 Elixir 工具
 
 codex 自带 shell、文件编辑、联网搜索等工具。Longx 在此之上允许你用 Elixir 写工具，
