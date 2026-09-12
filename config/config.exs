@@ -74,7 +74,7 @@ config :spark,
 config :longx,
   ecto_repos: [Longx.Repo],
   generators: [timestamp_type: :utc_datetime],
-  ash_domains: [Longx.AI]
+  ash_domains: [Longx.AI, Longx.Projects]
 
 # Configure the endpoint
 config :longx, LongxWeb.Endpoint,
