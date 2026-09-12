@@ -93,6 +93,17 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     by filtering here. `stream/2` relays the upstream SSE chunk-for-chunk with a
     **selective receive on the Req async ref** (a bare `receive` would eat the connection
     process's other messages). Upstream 4xx/5xx pass through so codex shows the message.
+  - **Reasoning items never cross providers.** `reasoning.encrypted_content` is an opaque
+    blob only its producer can read (OpenAI: real ciphertext; DeepSeek: a reference token).
+    `Provider.kind` is `:openai` or `:openai_compatible` (default); `Gateway.prepare/2`
+    lets an `:openai` target keep only its own `rs_`-prefixed items intact and strips
+    `encrypted_content` from everything else; every other target gets **no**
+    `encrypted_content` at all. Readable `summary`/`reasoning_text` stay; an item with
+    nothing readable is dropped. When codex switches models mid-thread (`model:` per
+    turn/fork) this is what keeps the history replayable. Degraded path: an `:openai`
+    target answering 4xx about `encrypted`/`reasoning` gets **one** retry with
+    `Gateway.strip_all_encrypted/1` (logged as a warning) — the conversation survives,
+    only reasoning continuity is lost for that turn.
   - **Web search** has three modes, decided by `Longx.AI.web_search_mode/0` (pattern-matched
     on the resolved model target and search target — never an `&&`/`||` chain at the call
     site) and written into codex's config by `Home.prepare/1` (default option):

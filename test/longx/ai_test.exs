@@ -75,6 +75,19 @@ defmodule Longx.AITest do
       assert updated.api_key == "sk-rotated"
     end
 
+    test "kind: :openai_compatible by default; :openai marks the one provider with real encrypted reasoning" do
+      assert create_provider!().kind == :openai_compatible
+      assert create_provider!(%{kind: :openai}).kind == :openai
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_provider(%{
+                 name: "x",
+                 slug: "k-#{uniq()}",
+                 base_url: "https://x/v1",
+                 kind: :anthropic
+               })
+    end
+
     test "supports_hosted_web_search defaults to false (only OpenAI runs web_search server-side)" do
       refute create_provider!().supports_hosted_web_search
       assert create_provider!(%{supports_hosted_web_search: true}).supports_hosted_web_search
@@ -362,7 +375,8 @@ defmodule Longx.AITest do
                 base_url: "https://api.deepseek.com/v1",
                 api_key: "sk-ds",
                 context_window: 64_000,
-                hosted_web_search?: false
+                hosted_web_search?: false,
+                kind: :openai_compatible
               }} = AI.resolve_target()
     end
 

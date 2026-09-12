@@ -158,7 +158,8 @@ defmodule Longx.AI do
          api_key: api_key,
          context_window: model.context_window,
          provider_slug: provider.slug,
-         hosted_web_search?: provider.supports_hosted_web_search
+         hosted_web_search?: provider.supports_hosted_web_search,
+         kind: provider.kind
        }}
     end
   end

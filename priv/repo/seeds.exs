@@ -63,6 +63,7 @@ case AI.get_provider_by_slug("openai") do
     AI.create_provider!(%{
       name: "OpenAI",
       slug: "openai",
+      kind: :openai,
       base_url: "https://api.openai.com/v1",
       api_key: openai_key,
       supports_hosted_web_search: true

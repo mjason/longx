@@ -16,9 +16,15 @@ defmodule Longx.AI.Gateway do
   defmodule Upstream do
     @moduledoc false
     @enforce_keys [:url, :headers, :body]
-    defstruct [:url, :headers, :body]
+    defstruct [:url, :headers, :body, kind: :openai_compatible, degraded?: false]
 
-    @type t :: %__MODULE__{url: String.t(), headers: [{String.t(), String.t()}], body: map}
+    @type t :: %__MODULE__{
+            url: String.t(),
+            headers: [{String.t(), String.t()}],
+            body: map,
+            kind: :openai | :openai_compatible,
+            degraded?: boolean
+          }
   end
 
   # Not part of the public Responses API; codex-internal telemetry.
@@ -37,12 +43,13 @@ defmodule Longx.AI.Gateway do
   emitted because standalone search is used instead.
   """
   @spec prepare(term, Target.t()) :: {:ok, Upstream.t()} | {:error, :invalid_request}
-  def prepare(%{"input" => _} = body, %Target{} = target) do
+  def prepare(%{"input" => input} = body, %Target{} = target) when is_list(input) do
     body =
       body
       |> Map.drop(@internal_fields)
       |> Map.put("model", target.model)
       |> Map.put("stream", true)
+      |> Map.put("input", sanitize_reasoning(input, target.kind))
 
     {:ok,
      %Upstream{
@@ -52,11 +59,62 @@ defmodule Longx.AI.Gateway do
          {"content-type", "application/json"},
          {"accept", "text/event-stream"}
        ],
-       body: body
+       body: body,
+       kind: target.kind
      }}
   end
 
   def prepare(_body, _target), do: {:error, :invalid_request}
+
+  ## Reasoning items: a provider only ever receives its own opaque data
+
+  # `reasoning.encrypted_content` is a black box only its producer can read
+  # (OpenAI: real ciphertext; DeepSeek & co.: a reference token they ignore on
+  # input). Whatever the target, nothing produced elsewhere crosses the
+  # gateway: OpenAI gets only its own `rs_` items intact, everyone else gets
+  # none at all. Readable summaries / reasoning text stay; an item left with
+  # nothing readable is dropped.
+  @openai_reasoning_prefix "rs_"
+
+  @spec sanitize_reasoning([map], :openai | :openai_compatible) :: [map]
+  def sanitize_reasoning(input, kind) do
+    Enum.flat_map(input, fn
+      %{"type" => "reasoning"} = item -> sanitize_reasoning_item(item, kind)
+      item -> [item]
+    end)
+  end
+
+  defp sanitize_reasoning_item(%{"id" => @openai_reasoning_prefix <> _} = item, :openai),
+    do: [item]
+
+  defp sanitize_reasoning_item(item, _kind), do: without_encrypted(item)
+
+  defp without_encrypted(item), do: item |> Map.delete("encrypted_content") |> keep_if_readable()
+
+  defp keep_if_readable(item) do
+    if readable?(item["summary"]) or readable?(item["content"]), do: [item], else: []
+  end
+
+  defp readable?(parts) when is_list(parts),
+    do: Enum.any?(parts, &(is_map(&1) and is_binary(&1["text"]) and &1["text"] != ""))
+
+  defp readable?(text) when is_binary(text), do: text != ""
+  defp readable?(_), do: false
+
+  @doc "The degraded form of a request: no encrypted reasoning at all, not even the target's own."
+  @spec strip_all_encrypted(map) :: map
+  def strip_all_encrypted(%{"input" => input} = body) when is_list(input) do
+    Map.put(
+      body,
+      "input",
+      Enum.flat_map(input, fn
+        %{"type" => "reasoning"} = item -> without_encrypted(item)
+        item -> [item]
+      end)
+    )
+  end
+
+  def strip_all_encrypted(body), do: body
 
   @doc """
   Performs the upstream request and relays the response into `conn`.
@@ -88,13 +146,24 @@ defmodule Longx.AI.Gateway do
       {:ok, %Req.Response{status: status} = resp} ->
         body = collect(resp)
 
-        Logger.warning(
-          "ai gateway: upstream #{up.url} answered #{status}: #{String.slice(body, 0, 500)}"
-        )
+        if retry_without_reasoning?(up, status, body) do
+          # OpenAI could not use the reasoning we replayed (rotated key, expired,
+          # model change…): once more without any encrypted reasoning. The
+          # conversation is intact; only reasoning continuity is lost this once.
+          Logger.warning(
+            "ai gateway: OpenAI rejected replayed reasoning (#{String.slice(body, 0, 200)}); retrying without encrypted reasoning"
+          )
 
-        conn
-        |> Plug.Conn.put_resp_content_type(content_type(resp))
-        |> Plug.Conn.send_resp(status, body)
+          stream(%Upstream{up | body: strip_all_encrypted(up.body), degraded?: true}, conn)
+        else
+          Logger.warning(
+            "ai gateway: upstream #{up.url} answered #{status}: #{String.slice(body, 0, 500)}"
+          )
+
+          conn
+          |> Plug.Conn.put_resp_content_type(content_type(resp))
+          |> Plug.Conn.send_resp(status, body)
+        end
 
       {:error, exception} ->
         Logger.error(
@@ -104,6 +173,14 @@ defmodule Longx.AI.Gateway do
         error(conn, 502, "upstream request failed: #{Exception.message(exception)}")
     end
   end
+
+  # Only OpenAI, only once, only when the error is about the reasoning we sent.
+  defp retry_without_reasoning?(%Upstream{kind: :openai, degraded?: false}, status, body)
+       when status in 400..422 do
+    body =~ ~r/encrypted|reasoning/i
+  end
+
+  defp retry_without_reasoning?(_up, _status, _body), do: false
 
   @doc "Sends a Responses-style JSON error."
   @spec error(Plug.Conn.t(), pos_integer, String.t()) :: Plug.Conn.t()

@@ -186,6 +186,102 @@ defmodule LongxWeb.AI.ResponsesControllerTest do
     end
   end
 
+  describe "OpenAI degraded retry" do
+    @reasoning_input [
+      %{
+        "type" => "message",
+        "role" => "user",
+        "content" => [%{"type" => "input_text", "text" => "hi"}]
+      },
+      %{
+        "type" => "reasoning",
+        "id" => "rs_old",
+        "summary" => [%{"type" => "summary_text", "text" => "s"}],
+        "encrypted_content" => "gAAAA-stale"
+      }
+    ]
+
+    defp openai_provider!(bypass) do
+      p =
+        AI.create_provider!(%{
+          name: "OpenAI",
+          slug: "openai-#{System.unique_integer([:positive])}",
+          kind: :openai,
+          base_url: "http://localhost:#{bypass.port}/v1",
+          api_key: "sk-oa"
+        })
+
+      configure_default!(p)
+      p
+    end
+
+    test "an OpenAI 400 about encrypted reasoning is retried once with every encrypted_content stripped",
+         %{conn: conn, bypass: bypass} do
+      openai_provider!(bypass)
+      test_pid = self()
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+      Bypass.expect(bypass, "POST", "/v1/responses", fn up ->
+        {:ok, raw, up} = Plug.Conn.read_body(up)
+        n = Agent.get_and_update(calls, &{&1 + 1, &1 + 1})
+        send(test_pid, {:attempt, n, Jason.decode!(raw)["input"]})
+
+        case n do
+          1 ->
+            up
+            |> Plug.Conn.put_resp_content_type("application/json")
+            |> Plug.Conn.send_resp(
+              400,
+              ~s({"error":{"message":"Invalid encrypted_content: could not decrypt reasoning item rs_old","type":"invalid_request_error"}})
+            )
+
+          _ ->
+            up =
+              up
+              |> Plug.Conn.put_resp_content_type("text/event-stream")
+              |> Plug.Conn.send_chunked(200)
+
+            {:ok, up} = Plug.Conn.chunk(up, hd(@sse))
+            up
+        end
+      end)
+
+      conn = conn |> authed() |> post_json(Map.put(@request, "input", @reasoning_input))
+      assert conn.status == 200
+
+      assert_receive {:attempt, 1, first}
+      assert Enum.any?(first, &(&1["encrypted_content"] == "gAAAA-stale"))
+      assert_receive {:attempt, 2, second}
+      refute Enum.any?(second, &Map.has_key?(&1, "encrypted_content"))
+    end
+
+    test "any other OpenAI 400 passes through untouched (no retry)", %{conn: conn, bypass: bypass} do
+      openai_provider!(bypass)
+
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(400, ~s({"error":{"message":"Unsupported parameter: foo"}}))
+      end)
+
+      conn = conn |> authed() |> post_json(Map.put(@request, "input", @reasoning_input))
+      assert json_response(conn, 400)["error"]["message"] =~ "Unsupported parameter"
+    end
+
+    test "a non-OpenAI provider never retries", %{conn: conn, bypass: bypass, provider: provider} do
+      configure_default!(provider)
+
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(400, ~s({"error":{"message":"encrypted_content is invalid"}}))
+      end)
+
+      conn = conn |> authed() |> post_json(Map.put(@request, "input", @reasoning_input))
+      assert json_response(conn, 400)["error"]["message"] =~ "encrypted_content"
+    end
+  end
+
   describe "configuration problems" do
     test "503 when no default model is configured", %{conn: conn} do
       conn = conn |> authed() |> post_json(@request)

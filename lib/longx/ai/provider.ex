@@ -29,12 +29,12 @@ defmodule Longx.AI.Provider do
 
     create :create do
       primary? true
-      accept [:name, :slug, :base_url, :api_key, :supports_hosted_web_search]
+      accept [:name, :slug, :kind, :base_url, :api_key, :supports_hosted_web_search]
     end
 
     update :update do
       primary? true
-      accept [:name, :base_url, :api_key, :supports_hosted_web_search]
+      accept [:name, :kind, :base_url, :api_key, :supports_hosted_web_search]
     end
 
     read :by_slug do
@@ -60,6 +60,15 @@ defmodule Longx.AI.Provider do
     attribute :base_url, :string, allow_nil?: false, public?: true
 
     attribute :api_key, :string, sensitive?: true
+
+    # :openai is the one provider whose reasoning items carry real ciphertext
+    # that only it can read; every other Responses API host is :openai_compatible
+    attribute :kind, :atom do
+      allow_nil? false
+      public? true
+      default :openai_compatible
+      constraints one_of: [:openai, :openai_compatible]
+    end
 
     # The Responses API's built-in `web_search` tool runs inside the provider
     # (OpenAI); third-party providers don't have it and get standalone search.
