@@ -28,6 +28,19 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
   `Longx.Codex.Runtime.executable/0` resolves the binary; `LONGX_CODEX_APP_SERVER` overrides.
   Bumping the version = change `@version` + the six `@sha256` entries from the release's
   `codex-package_SHA256SUMS`, then `mix codex.fetch --force`.
+- **Git is bundled too, and it is real git.** `Longx.Git.Runtime` pins GitHub Desktop's
+  portable build (`desktop/dugite-native` v2.53.0-4: git 2.53.0 + git-lfs + git-remote-https,
+  six targets, sha256 per target) fetched by `mix git.fetch` into `priv/git/<target>/`
+  (gitignored; in `mix setup`). Every repository operation goes through `Longx.Git`, which
+  runs the bundled binary with dugite's environment (`GIT_EXEC_PATH`, bundle gitconfig and
+  templates, Linux CA bundle, Windows `mingw64` PATH; plus `GIT_TERMINAL_PROMPT=0`,
+  `LC_ALL=C`) via `Longx.Shim.run/2` (stdout/stderr separate, tree killed on timeout). Never
+  reach for the machine's `git`, never a reimplementation (go-git/gitoxide/libgit2 lack
+  hooks/LFS fidelity — evaluated and rejected). `Longx.Git`: `repository?/toplevel/init/head`,
+  `status` (porcelain v1 -z), `commit_all` (falls back to a Longx identity when the user has
+  none), `log`, `diff`, `restore_tree` (files back to a commit, branch untouched),
+  `reset_hard`, `worktree_add/remove/list`, `lfs?`. `LONGX_GIT` overrides the binary.
+  Bundle download/verify/extract lives in `Longx.Bundle`, shared with `Codex.Runtime`.
 - `lib/longx/platform.ex` — `Longx.Platform`: runtime-safe os/arch detection and the Rust
   triple / GOOS-GOARCH naming for it. Anything that resolves a binary path at runtime goes
   through this, never through `Mix.*` (Mix is absent in releases).
@@ -181,8 +194,11 @@ Where tests live / what to use:
   `Phoenix.LiveViewTest` + `LazyHTML`; assert on element IDs, not raw HTML.
 - `Longx.Shim` → `test/longx/shim_test.exs` drives real OS processes (`cat`, `sh -c …`);
   the Go side has its own `go test` suite in `native/shim` with an in-memory host harness.
-- `Longx.Codex.Runtime` → tests install from a locally built fake package tarball
-  (`source: {:file, …}`); the real download is never exercised in the unit suite.
+- `Longx.Codex.Runtime` / `Longx.Git.Runtime` → tests install from locally built fake
+  tarballs (`source: {:file, …}`); the real download is never exercised in the unit suite.
+- `Longx.Git` → `test/longx/git_test.exs` runs the *bundled* git on temp repos in the default
+  suite (it is a dev prerequisite like Go: `mix setup` fetches it; missing → raises with
+  "run `mix git.fetch`").
 - Codex client → `test/support/fake_app_server.exs` is a scripted stand-in for the
   app-server (`say`/`approve`/`stall`/`slow`/`error`/`die`/`server-notify` turns) run under
   `Longx.Shim` exactly like the real binary; Connection/Thread/ThreadState tests use it.

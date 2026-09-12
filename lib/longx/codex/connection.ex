@@ -483,8 +483,9 @@ defmodule Longx.Codex.Connection do
             {:ok, message} ->
               send(conn, {:rpc, message})
 
+            # codex prints notices like "SIGTERM received" on stdout; not protocol, not an error
             {:error, _} ->
-              Logger.warning("codex: undecodable line #{inspect(String.slice(line, 0, 200))}")
+              Logger.debug("codex: non-JSON line #{inspect(String.slice(line, 0, 200))}")
           end
         end)
 
