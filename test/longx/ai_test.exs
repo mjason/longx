@@ -9,6 +9,7 @@ defmodule Longx.AITest do
     Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.SearchProvider, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(AI.Tool, :destroy, %{}, authorize?: false)
     :ok
   end
 
@@ -202,6 +203,45 @@ defmodule Longx.AITest do
       refute AI.search_configured?()
       AI.make_default_search_provider!(sp)
       assert AI.search_configured?()
+    end
+  end
+
+  describe "agent tools (which registered tools a thread may get)" do
+    test "list_tools/0 mirrors the registry into the DB: every tool present, new ones disabled" do
+      tools = AI.list_tools!()
+      names = Enum.map(tools, &{&1.namespace, &1.name})
+
+      assert {"builtin", "echo"} in names
+      assert {"builtin", "thread_status"} in names
+      assert {"test", "echo"} in names
+      assert Enum.all?(tools, &(&1.enabled == false))
+      # description comes from the code, not the DB
+      assert Enum.find(tools, &(&1.name == "thread_status")).description =~ "thread"
+    end
+
+    test "nothing is enabled by default, so nothing is injected" do
+      assert AI.enabled_tool_names() == []
+    end
+
+    test "enable/disable by qualified name, kept across syncs" do
+      assert {:ok, %{enabled: true}} = AI.enable_tool("builtin.thread_status")
+      assert AI.enabled_tool_names() == ["builtin.thread_status"]
+
+      # a re-sync (list) must not flip it back
+      AI.list_tools!()
+      assert AI.enabled_tool_names() == ["builtin.thread_status"]
+
+      assert {:ok, %{enabled: false}} = AI.disable_tool("builtin.thread_status")
+      assert AI.enabled_tool_names() == []
+    end
+
+    test "enabling an unregistered tool is an error" do
+      assert {:error, :unknown_tool} = AI.enable_tool("nope.nothing")
+    end
+
+    test "a tool removed from the code disappears from the list" do
+      AI.create_tool!(%{namespace: "gone", name: "tool"})
+      refute Enum.any?(AI.list_tools!(), &(&1.namespace == "gone"))
     end
   end
 

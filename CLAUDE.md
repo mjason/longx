@@ -114,7 +114,8 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     likely future addition.
   - `Longx.Codex.Thread` is the API to use: `start/1` (`cwd:`, `approval_policy:
     :never | :on_request | :untrusted`, `sandbox: :read_only | :workspace_write |
-    :danger_full_access`, `model_context_window:`, `tools: :auto | [] | [modules]`),
+    :danger_full_access`, `model_context_window:`, `tools: ["ns.name" | module]` — default:
+    the globally enabled tools),
     `resume/2`, `send/3`, `steer/4`, `interrupt/3`, `respond/3`, `snapshot/1`,
     `subscribe/1`. It is the only place snake_case is turned into codex's camelCase/kebab-case.
   - **Elixir tools for the agent** (codex *dynamic tools*; README has the developer guide):
@@ -125,7 +126,11 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     `Longx.Codex.Tool.Registry` discovers implementations by behaviour at boot (plus
     `config :longx, Longx.Codex.Tool, extra:/disabled:`; duplicate `ns.name` raises) and
     produces the `dynamicTools` specs (namespace-grouped) that `Thread.start/1` declares —
-    which needs `capabilities.experimentalApi: true` in the handshake. `Longx.Codex.Tool.Runner`
+    which needs `capabilities.experimentalApi: true` in the handshake. **Registered ≠
+    injected**: `Longx.AI.Tool` rows (synced from the registry by `Longx.AI.list_tools/0`,
+    new tools `enabled: false`) are the global switch (`enable_tool/1`, `disable_tool/1`);
+    `Thread.start(tools: ["ns.name", …])` is the per-thread choice the UI makes; no `tools:`
+    means the globally enabled set — never "everything registered". `Longx.Codex.Tool.Runner`
     executes `item/tool/call`: validate arguments with `ex_json_schema` (errors + schema go
     back to the model so it can fix them), build `Tool.Context` (ids, `cwd`, lazy thread
     `snapshot`), run `call/2` in `Longx.Codex.TaskSupervisor` under the tool's timeout,

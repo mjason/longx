@@ -52,6 +52,17 @@ defmodule Longx.Codex.Tool.RegistryTest do
            } = echo
   end
 
+  test "specs/2 only: accepts qualified names as well as modules" do
+    [ns] = Registry.specs(%Context{}, only: ["test.echo"])
+    assert ns["name"] == "test"
+    assert Enum.map(ns["tools"], & &1["name"]) == ["echo"]
+
+    [ns] = Registry.specs(%Context{}, only: [Longx.Tools.Builtin.Echo])
+    assert ns["name"] == "builtin"
+
+    assert Registry.specs(%Context{}, only: ["nope.nope"]) == []
+  end
+
   test "disabled tools (config) are neither listed nor callable" do
     with_config([disabled: ["test.echo"]], fn ->
       refute Enum.any?(Registry.all(), &(&1.namespace == "test" and &1.name == "echo"))

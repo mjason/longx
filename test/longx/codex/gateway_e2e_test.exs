@@ -209,7 +209,7 @@ defmodule Longx.Codex.GatewayE2ETest do
 
     home = prepare_home!(gateway_url)
     conn = start_connection!(home)
-    thread_id = start_thread!(conn, home)
+    thread_id = start_thread!(conn, home, tools: ["builtin.echo"])
 
     {turn, items} = run_turn!(conn, thread_id, "use the echo tool")
     assert turn["status"] == "completed", inspect(turn)

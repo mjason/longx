@@ -96,3 +96,6 @@ unless tavily_key do
     "seeds: TAVILY_API_KEY is not set — web search stays disabled until a key is configured"
   )
 end
+
+# Mirror the registered agent tools into the DB (all disabled until someone turns them on).
+AI.list_tools!()

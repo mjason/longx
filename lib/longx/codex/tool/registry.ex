@@ -34,6 +34,15 @@ defmodule Longx.Codex.Tool.Registry do
     end
   end
 
+  @doc "Looks a tool up by its `\"namespace.name\"`."
+  @spec fetch_qualified(String.t()) :: {:ok, entry} | :error
+  def fetch_qualified(qualified_name) when is_binary(qualified_name) do
+    case String.split(qualified_name, ".", parts: 2) do
+      [namespace, name] -> fetch(namespace, name)
+      _ -> :error
+    end
+  end
+
   @spec fetch(String.t(), String.t()) :: {:ok, entry} | :error
   def fetch(namespace, name) do
     case Enum.find(all(), &(&1.namespace == namespace and &1.name == name)) do
@@ -44,8 +53,8 @@ defmodule Longx.Codex.Tool.Registry do
 
   @doc """
   The `dynamicTools` value for `thread/start`: one namespace spec per
-  namespace, only tools available in `ctx`. `only: [modules]` restricts to
-  those modules.
+  namespace, only tools available in `ctx`. `only:` restricts to a list of
+  modules and/or `"namespace.name"` strings.
   """
   @spec specs(Context.t(), keyword) :: [map]
   def specs(%Context{} = ctx, opts \\ []) do
@@ -73,7 +82,12 @@ defmodule Longx.Codex.Tool.Registry do
   end
 
   defp restrict(tools, nil), do: tools
-  defp restrict(tools, modules), do: Enum.filter(tools, &(&1.module in modules))
+
+  defp restrict(tools, selection) when is_list(selection) do
+    Enum.filter(tools, fn tool ->
+      tool.module in selection or "#{tool.namespace}.#{tool.name}" in selection
+    end)
+  end
 
   @doc "Rebuilds the registry from the application's modules and config."
   @spec reload!() :: [entry]

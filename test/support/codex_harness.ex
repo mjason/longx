@@ -47,9 +47,11 @@ defmodule Longx.Test.CodexHarness do
   end
 
   @doc "Starts a thread (never asks for approvals, read-only sandbox) and subscribes the caller."
-  def start_thread!(conn, home) do
+  def start_thread!(conn, home, opts \\ []) do
     {:ok, thread_id} =
-      Thread.start(cwd: home.dir, approval_policy: :never, sandbox: :read_only, conn: conn)
+      [cwd: home.dir, approval_policy: :never, sandbox: :read_only, tools: [], conn: conn]
+      |> Keyword.merge(opts)
+      |> Thread.start()
 
     :ok = Thread.subscribe(thread_id)
     thread_id

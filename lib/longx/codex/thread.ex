@@ -20,7 +20,7 @@ defmodule Longx.Codex.Thread do
           | {:approval_policy, approval_policy}
           | {:sandbox, sandbox}
           | {:model_context_window, pos_integer}
-          | {:tools, :auto | [module]}
+          | {:tools, [module | String.t()]}
           | {:conn, GenServer.server()}
 
   @approval_policies %{never: "never", on_request: "on-request", untrusted: "untrusted"}
@@ -138,17 +138,21 @@ defmodule Longx.Codex.Thread do
         window -> Map.put(base, "config", %{"model_context_window" => window})
       end
 
-    case dynamic_tools(Keyword.get(opts, :tools, :auto), %Context{cwd: base["cwd"]}) do
+    selection = Keyword.get_lazy(opts, :tools, &Longx.AI.enabled_tool_names/0)
+
+    case dynamic_tools(selection, %Context{cwd: base["cwd"]}) do
       [] -> base
       specs -> Map.put(base, "dynamicTools", specs)
     end
   end
 
-  # Elixir tools offered to the model on this thread (see `Longx.Codex.Tool`):
-  # every registered tool available in the context, or an explicit list.
-  defp dynamic_tools(:auto, ctx), do: Registry.specs(ctx)
+  # Elixir tools offered to the model on this thread (see `Longx.Codex.Tool`).
+  # The caller picks them (`"ns.name"` strings or modules); without a choice
+  # the globally enabled set from the DB applies — never "everything".
   defp dynamic_tools([], _ctx), do: []
-  defp dynamic_tools(modules, ctx) when is_list(modules), do: Registry.specs(ctx, only: modules)
+
+  defp dynamic_tools(selection, ctx) when is_list(selection),
+    do: Registry.specs(ctx, only: selection)
 
   @doc false
   @spec decision(decision) :: map

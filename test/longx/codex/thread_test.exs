@@ -1,9 +1,14 @@
 defmodule Longx.Codex.ThreadTest do
-  use ExUnit.Case, async: false
+  use Longx.DataCase, async: false
 
   alias Longx.Codex.{Connection, Thread, ThreadState}
 
   @fake Path.expand("test/support/fake_app_server.exs")
+
+  setup do
+    Ash.bulk_destroy!(Longx.AI.Tool, :destroy, %{}, authorize?: false)
+    :ok
+  end
 
   describe "params/1 (pure)" do
     test "snake_case options become codex's camelCase / kebab-case values" do
@@ -36,21 +41,26 @@ defmodule Longx.Codex.ThreadTest do
              )["sandbox"] == "danger-full-access"
     end
 
-    test "tools: :auto declares every available registered tool as dynamicTools" do
-      params = Thread.start_params(cwd: "/p", tools: :auto)
-      namespaces = Enum.map(params["dynamicTools"], & &1["name"])
-      assert "builtin" in namespaces
-      assert "test" in namespaces
-      builtin = Enum.find(params["dynamicTools"], &(&1["name"] == "builtin"))
-      assert Enum.any?(builtin["tools"], &(&1["name"] == "thread_status"))
-    end
-
-    test "tools: [] declares nothing; tools: [modules] only those" do
+    test "tools: [\"ns.name\"] declares exactly those; tools: [] nothing" do
       refute Map.has_key?(Thread.start_params(cwd: "/p", tools: []), "dynamicTools")
 
-      [only] = Thread.start_params(cwd: "/p", tools: [Longx.Tools.Builtin.Echo])["dynamicTools"]
+      [only] = Thread.start_params(cwd: "/p", tools: ["builtin.echo"])["dynamicTools"]
       assert only["name"] == "builtin"
       assert Enum.map(only["tools"], & &1["name"]) == ["echo"]
+
+      names =
+        Thread.start_params(cwd: "/p", tools: ["builtin.echo", "test.echo"])["dynamicTools"]
+        |> Enum.map(& &1["name"])
+
+      assert names == ["builtin", "test"]
+    end
+
+    test "without tools: the globally enabled set from the DB is used (empty by default)" do
+      refute Map.has_key?(Thread.start_params(cwd: "/p"), "dynamicTools")
+
+      {:ok, _} = Longx.AI.enable_tool("builtin.thread_status")
+      [ns] = Thread.start_params(cwd: "/p")["dynamicTools"]
+      assert Enum.map(ns["tools"], & &1["name"]) == ["thread_status"]
     end
 
     test "defaults: on-request approvals in a workspace-write sandbox" do
@@ -116,7 +126,7 @@ defmodule Longx.Codex.ThreadTest do
 
     test "a builtin tool round-trips through the connection (thread_status sees its own thread)",
          %{conn: conn} do
-      {:ok, thread_id} = Thread.start(cwd: "/", conn: conn)
+      {:ok, thread_id} = Thread.start(cwd: "/", tools: ["builtin.thread_status"], conn: conn)
       Thread.subscribe(thread_id)
       {:ok, _} = Thread.send(thread_id, "call builtin.thread_status {}", conn: conn)
       assert_receive {:codex, _, "turn/completed", _}, 10_000

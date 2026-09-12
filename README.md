@@ -135,8 +135,15 @@ config :longx, Longx.Codex.Tool,
 ```
 
 同一个 `namespace.name` 出现两次会在启动时直接报错，不会静默覆盖。
-每个 thread 声明哪些工具由 `Longx.Codex.Thread.start/1` 的 `tools:` 决定：`:auto`（默认，所有 `available?/1` 的工具）、
-`[]`、或模块列表。
+
+**注册 ≠ 注入。** 注册表只是目录；一个工具要真的出现在 agent 面前，必须被选中：
+
+- **全局开关**：`Longx.AI.list_tools/0` 把注册表同步进数据库（`ai_tools` 表，新工具一律 `enabled: false`），
+  `Longx.AI.enable_tool("acme.weather")` / `disable_tool/1` 打开关闭——这就是设置页面要用的接口。
+- **按 thread 选择**：`Longx.Codex.Thread.start(cwd: …, tools: ["acme.weather", "builtin.thread_status"])`
+  精确指定这个 thread 能用的工具（页面上勾选后传进来）；`tools: []` 一个都不给；
+  **不传 `tools:` 时取全局打开的那些**——默认什么都没打开，所以默认什么都不注入。
+- `available?/1` 是最后一道过滤：即使被选中，上下文不满足也不会声明。
 
 ### 6. 观测
 
