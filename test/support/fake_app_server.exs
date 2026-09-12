@@ -16,7 +16,9 @@
 
 defmodule FakeAppServer do
   def main do
-    loop(%{initialized: false, next: 1, threads: %{}, pending: %{}})
+    # ids unique per server process (like codex's UUIDs): the ETS-backed
+    # ThreadState store outlives tests, so two fakes must never share ids
+    loop(%{initialized: false, next: 1, prefix: System.pid(), threads: %{}, pending: %{}})
   end
 
   defp loop(state) do
@@ -73,7 +75,7 @@ defmodule FakeAppServer do
   end
 
   defp handle(%{"id" => id, "method" => "thread/start"}, state) do
-    thread_id = "thr_#{state.next}"
+    thread_id = "thr_#{state.prefix}_#{state.next}"
     thread = %{"id" => thread_id, "preview" => "", "sessionId" => thread_id}
     reply(id, %{"thread" => thread})
     notify("thread/started", %{"thread" => thread})
@@ -108,7 +110,7 @@ defmodule FakeAppServer do
          state
        ) do
     text = input |> List.first(%{}) |> Map.get("text", "")
-    turn_id = "turn_#{state.next}"
+    turn_id = "turn_#{state.prefix}_#{state.next}"
     state = %{state | next: state.next + 1}
     run_turn(text, id, thread_id, turn_id, state)
   end

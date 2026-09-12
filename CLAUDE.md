@@ -41,6 +41,28 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
   none), `log`, `diff`, `restore_tree` (files back to a commit, branch untouched),
   `reset_hard`, `worktree_add/remove/list`, `lfs?`. `LONGX_GIT` overrides the binary.
   Bundle download/verify/extract lives in `Longx.Bundle`, shared with `Codex.Runtime`.
+- `lib/longx/projects/` — Ash domain `Longx.Projects` (single-user; no thread ↔ user mapping):
+  - `Project` = a working directory (absolute, existing, unique `root_path`) + defaults for
+    its threads: `approval_policy`, `sandbox`, `tools` (registered `"ns.name"`s), `model_id`
+    (nil → global default), `dirty_start` (`:commit` | `:ask` | `:off`). Whether it is a git
+    repo is read live (`git_info/1`), never stored; `init_git/1` sets git up with
+    `Longx.Git.Ignore.default/0` and a first commit. The UI warns when a project has no git.
+  - `Thread` = codex thread ↔ project (`codex_thread_id`, `cwd`, the settings it started with,
+    `model_slug`, `preview`, `status`, `last_activity_at`). `start_thread/2` calls
+    `Longx.Codex.Thread.start/1` with the project's settings (model as slug +
+    `model_context_window`) and asks `Longx.Projects.Tracker` to follow the codex topic.
+  - `Turn` = one turn with git bookmarks. `send_message/3` does the **git preflight** first:
+    clean tree → `commit_before = HEAD`; dirty → per `dirty_start` (`:commit` makes a
+    `longx: before turn — …` commit so every turn starts from a commit; `:off` records
+    `dirty_start: true`; `:ask` returns `{:error, {:dirty_tree, changes}}` unless
+    `dirty: :commit | :ignore`), then `turn/start` (with `model:` if switching). The Tracker
+    fills `status`/`completed_at`/`commit_after`/`diff` from `turn/completed` and
+    `turn/diff/updated`, and the thread `preview` from the first user message.
+  - **Going back**: `restore_proposal/1` (commit, dirty now?, changed files, later turns) is
+    what the UI shows; `restore_files/2` needs `confirm: true`, makes a safety commit of any
+    uncommitted work first, then `restore_tree` (files back, history untouched — default) or
+    `reset_hard`. Conversation revert (`thread/revert`) is a separate, later step. Nothing
+    here touches ignored files or side effects outside the repo; say so in the UI.
 - `lib/longx/platform.ex` — `Longx.Platform`: runtime-safe os/arch detection and the Rust
   triple / GOOS-GOARCH naming for it. Anything that resolves a binary path at runtime goes
   through this, never through `Mix.*` (Mix is absent in releases).
@@ -198,7 +220,8 @@ Where tests live / what to use:
   tarballs (`source: {:file, …}`); the real download is never exercised in the unit suite.
 - `Longx.Git` → `test/longx/git_test.exs` runs the *bundled* git on temp repos in the default
   suite (it is a dev prerequisite like Go: `mix setup` fetches it; missing → raises with
-  "run `mix git.fetch`").
+  "run `mix git.fetch`"). `Longx.Projects` thread/turn tests combine temp git repos with the
+  fake app-server through a per-test `Connection` passed as `conn:`.
 - Codex client → `test/support/fake_app_server.exs` is a scripted stand-in for the
   app-server (`say`/`approve`/`stall`/`slow`/`error`/`die`/`server-notify` turns) run under
   `Longx.Shim` exactly like the real binary; Connection/Thread/ThreadState tests use it.
