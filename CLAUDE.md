@@ -28,6 +28,51 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
   `Longx.Codex.Runtime.executable/0` resolves the binary; `LONGX_CODEX_APP_SERVER` overrides.
   Bumping the version = change `@version` + the six `@sha256` entries from the release's
   `codex-package_SHA256SUMS`, then `mix codex.fetch --force`.
+- **Git is bundled too, and it is real git.** `Longx.Git.Runtime` pins GitHub Desktop's
+  portable build (`desktop/dugite-native` v2.53.0-4: git 2.53.0 + git-lfs + git-remote-https,
+  six targets, sha256 per target) fetched by `mix git.fetch` into `priv/git/<target>/`
+  (gitignored; in `mix setup`). Every repository operation goes through `Longx.Git`, which
+  runs the bundled binary with dugite's environment (`GIT_EXEC_PATH`, bundle gitconfig and
+  templates, Linux CA bundle, Windows `mingw64` PATH; plus `GIT_TERMINAL_PROMPT=0`,
+  `LC_ALL=C`) via `Longx.Shim.run/2` (stdout/stderr separate, tree killed on timeout). Never
+  reach for the machine's `git`, never a reimplementation (go-git/gitoxide/libgit2 lack
+  hooks/LFS fidelity — evaluated and rejected). `Longx.Git`: `repository?/toplevel/init/head`,
+  `status` (porcelain v1 -z), `commit_all` (falls back to a Longx identity when the user has
+  none), `log`, `diff`, `restore_tree` (files back to a commit, branch untouched),
+  `reset_hard`, `worktree_add/remove/list`, `lfs?`. `LONGX_GIT` overrides the binary.
+  Bundle download/verify/extract lives in `Longx.Bundle`, shared with `Codex.Runtime`.
+- `lib/longx/projects/` — Ash domain `Longx.Projects` (single-user; no thread ↔ user mapping):
+  - `Project` = a working directory (absolute, existing, unique `root_path`) + defaults for
+    its threads: `approval_policy`, `sandbox`, `tools` (registered `"ns.name"`s), `model_id`
+    (nil → global default), `dirty_start` (`:commit` | `:ask` | `:off`). Whether it is a git
+    repo is read live (`git_info/1`), never stored; `init_git/1` sets git up with
+    `Longx.Git.Ignore.default/0` and a first commit. The UI warns when a project has no git.
+  - `Thread` = codex thread ↔ project (`codex_thread_id`, `cwd`, the settings it started with,
+    `model_slug`, `preview`, `status`, `last_activity_at`). `start_thread/2` calls
+    `Longx.Codex.Thread.start/1` with the project's settings (model as slug +
+    `model_context_window`) and asks `Longx.Projects.Tracker` to follow the codex topic.
+  - `Turn` = one turn with git bookmarks. `send_message/3` does the **git preflight** first:
+    clean tree → `commit_before = HEAD`; dirty → per `dirty_start` (`:commit` makes a
+    `longx: before turn — …` commit so every turn starts from a commit; `:off` records
+    `dirty_start: true`; `:ask` returns `{:error, {:dirty_tree, changes}}` unless
+    `dirty: :commit | :ignore`), then `turn/start` (with `model:` if switching). The Tracker
+    fills `status`/`completed_at`/`commit_after`/`diff` from `turn/completed` and
+    `turn/diff/updated`, and the thread `preview` from the first user message.
+  - **Going back**: `restore_proposal/1` (commit, dirty now?, changed files, later turns) is
+    what the UI shows; `restore_files/2` needs `confirm: true`, makes a safety commit of any
+    uncommitted work first, then `restore_tree` (files back, history untouched — default) or
+    `reset_hard`. Nothing here touches ignored files or side effects outside the repo; say so
+    in the UI.
+  - **Redo from turn N with another model**: `redo_turn/2` — refuses while a turn runs or if
+    the turn is already `:reverted`; optional `restore_files: true`; `mode: :revert` (default)
+    calls `thread/revert` (needs `historyMode: "paginated"`, which every thread is started
+    with; codex's `thread/reverted` names only the thread, so we pass the dropped turn ids to
+    `ThreadState.drop_turns/2`, which deletes their items from the ETS store and broadcasts
+    `thread/reverted` with `"turnIds"` — clients re-snapshot) and marks the rows `:reverted`
+    (`list_turns/2` hides them unless `include_reverted: true`); `mode: :fork` uses
+    `thread/fork` with the turn before N and creates a sibling `Thread` (`forked_from_id`).
+    Then `send_message/3` with `text:`/`model:` through the normal git preflight. Worktree
+    isolation was considered and dropped: knowing the commit after each turn is enough.
 - `lib/longx/platform.ex` — `Longx.Platform`: runtime-safe os/arch detection and the Rust
   triple / GOOS-GOARCH naming for it. Anything that resolves a binary path at runtime goes
   through this, never through `Mix.*` (Mix is absent in releases).
@@ -48,6 +93,17 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     by filtering here. `stream/2` relays the upstream SSE chunk-for-chunk with a
     **selective receive on the Req async ref** (a bare `receive` would eat the connection
     process's other messages). Upstream 4xx/5xx pass through so codex shows the message.
+  - **Reasoning items never cross providers.** `reasoning.encrypted_content` is an opaque
+    blob only its producer can read (OpenAI: real ciphertext; DeepSeek: a reference token).
+    `Provider.kind` is `:openai` or `:openai_compatible` (default); `Gateway.prepare/2`
+    lets an `:openai` target keep only its own `rs_`-prefixed items intact and strips
+    `encrypted_content` from everything else; every other target gets **no**
+    `encrypted_content` at all. Readable `summary`/`reasoning_text` stay; an item with
+    nothing readable is dropped. When codex switches models mid-thread (`model:` per
+    turn/fork) this is what keeps the history replayable. Degraded path: an `:openai`
+    target answering 4xx about `encrypted`/`reasoning` gets **one** retry with
+    `Gateway.strip_all_encrypted/1` (logged as a warning) — the conversation survives,
+    only reasoning continuity is lost for that turn.
   - **Web search** has three modes, decided by `Longx.AI.web_search_mode/0` (pattern-matched
     on the resolved model target and search target — never an `&&`/`||` chain at the call
     site) and written into codex's config by `Home.prepare/1` (default option):
@@ -181,8 +237,12 @@ Where tests live / what to use:
   `Phoenix.LiveViewTest` + `LazyHTML`; assert on element IDs, not raw HTML.
 - `Longx.Shim` → `test/longx/shim_test.exs` drives real OS processes (`cat`, `sh -c …`);
   the Go side has its own `go test` suite in `native/shim` with an in-memory host harness.
-- `Longx.Codex.Runtime` → tests install from a locally built fake package tarball
-  (`source: {:file, …}`); the real download is never exercised in the unit suite.
+- `Longx.Codex.Runtime` / `Longx.Git.Runtime` → tests install from locally built fake
+  tarballs (`source: {:file, …}`); the real download is never exercised in the unit suite.
+- `Longx.Git` → `test/longx/git_test.exs` runs the *bundled* git on temp repos in the default
+  suite (it is a dev prerequisite like Go: `mix setup` fetches it; missing → raises with
+  "run `mix git.fetch`"). `Longx.Projects` thread/turn tests combine temp git repos with the
+  fake app-server through a per-test `Connection` passed as `conn:`.
 - Codex client → `test/support/fake_app_server.exs` is a scripted stand-in for the
   app-server (`say`/`approve`/`stall`/`slow`/`error`/`die`/`server-notify` turns) run under
   `Longx.Shim` exactly like the real binary; Connection/Thread/ThreadState tests use it.

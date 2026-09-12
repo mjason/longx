@@ -24,6 +24,7 @@ defmodule Longx.AI do
       define :list_models, action: :read, default_options: [load: [:provider]]
       define :default_model, action: :default, default_options: [not_found_error?: false]
       define :make_default_model, action: :make_default
+      define :get_model_by_slug, action: :by_slug, args: [:slug]
     end
 
     resource SearchProvider do
@@ -115,15 +116,40 @@ defmodule Longx.AI do
     end
   end
 
+  @placeholder_model "longx"
+
+  @doc "The model name codex is configured with; it means \"the global default model\"."
+  @spec placeholder_model() :: String.t()
+  def placeholder_model, do: @placeholder_model
+
   @doc """
-  The upstream the gateway should forward to right now: the default model
-  plus its provider's base URL and decrypted key.
+  The upstream to forward a request to, by the model name codex sent:
+  `"longx"` (or nothing) is the global default model, anything else a
+  `Longx.AI.Model` slug. Carries the provider's base URL and decrypted key.
   """
+  @spec resolve_target(String.t() | nil) ::
+          {:ok, Target.t()}
+          | {:error,
+             :no_default_model | {:unknown_model, String.t()} | {:missing_api_key, String.t()}}
+  def resolve_target(nil), do: resolve_target()
+  def resolve_target(@placeholder_model), do: resolve_target()
+
+  def resolve_target(slug) when is_binary(slug) do
+    case get_model_by_slug(slug) do
+      {:ok, %Model{} = model} -> target_for(model)
+      {:error, _} -> {:error, {:unknown_model, slug}}
+    end
+  end
+
+  @doc "The global default model's target."
   @spec resolve_target() ::
           {:ok, Target.t()} | {:error, :no_default_model | {:missing_api_key, String.t()}}
   def resolve_target do
-    with {:ok, %Model{} = model} <- fetch_default_model(),
-         %Model{provider: %Provider{} = provider} <- Ash.load!(model, provider: [:api_key]),
+    with {:ok, %Model{} = model} <- fetch_default_model(), do: target_for(model)
+  end
+
+  defp target_for(%Model{} = model) do
+    with %Model{provider: %Provider{} = provider} <- Ash.load!(model, provider: [:api_key]),
          {:ok, api_key} <- fetch_api_key(provider) do
       {:ok,
        %Target{
@@ -132,7 +158,8 @@ defmodule Longx.AI do
          api_key: api_key,
          context_window: model.context_window,
          provider_slug: provider.slug,
-         hosted_web_search?: provider.supports_hosted_web_search
+         hosted_web_search?: provider.supports_hosted_web_search,
+         kind: provider.kind
        }}
     end
   end

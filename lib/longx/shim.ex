@@ -56,6 +56,7 @@ defmodule Longx.Shim do
     defstruct [
       :port,
       :os_pid,
+      :owner,
       credit: false,
       writes: :queue.new(),
       stdin: :open,
@@ -108,6 +109,54 @@ defmodule Longx.Shim do
             0 -> {:error, {:start_error, "shim did not start"}}
           end
       end
+    end
+  end
+
+  @doc """
+  Runs a command to completion, collecting stdout and stderr separately.
+  Both streams are drained concurrently so a chatty child never deadlocks.
+  Options as `start_link/2`, plus `:input` (written then stdin closed) and
+  `:timeout` (kills the process tree; default 60 s).
+  """
+  @spec run([String.t(), ...], keyword) ::
+          {:ok, %{status: integer, stdout: binary, stderr: binary}} | {:error, term}
+  def run(cmd_with_args, opts \\ []) do
+    {input, opts} = Keyword.pop(opts, :input)
+    {timeout, opts} = Keyword.pop(opts, :timeout, 60_000)
+
+    with {:ok, shim} <- start_link(cmd_with_args, opts) do
+      stdout = Task.async(fn -> drain(shim, &read/3) end)
+      stderr = Task.async(fn -> drain(shim, &read_stderr/3) end)
+
+      if input, do: :ok = write(shim, input)
+      :ok = close_stdin(shim)
+
+      case await_exit(shim, timeout) do
+        {:ok, status} ->
+          {:ok,
+           %{
+             status: status,
+             stdout: Task.await(stdout, timeout),
+             stderr: Task.await(stderr, timeout)
+           }}
+
+        {:error, :timeout} ->
+          kill(shim, 1_000)
+          await_exit(shim, 5_000)
+          Task.shutdown(stdout, :brutal_kill)
+          Task.shutdown(stderr, :brutal_kill)
+          {:error, :timeout}
+
+        {:error, _} = error ->
+          error
+      end
+    end
+  end
+
+  defp drain(shim, reader, acc \\ []) do
+    case reader.(shim, Proto.max_chunk(), :infinity) do
+      {:ok, data} -> drain(shim, reader, [data | acc])
+      _eof_or_closed -> acc |> Enum.reverse() |> IO.iodata_to_binary()
     end
   end
 
@@ -178,6 +227,10 @@ defmodule Longx.Shim do
 
   @impl true
   def init(spec) do
+    # Trap exits: a port dying with :epipe (the child exited while we were
+    # still writing, e.g. close_stdin racing a fast command) must be handled
+    # like any other shim exit, not kill this server and its owner.
+    Process.flag(:trap_exit, true)
     port = open_port(spec)
     Port.command(port, Proto.encode(:env, spec.env))
 
@@ -185,7 +238,7 @@ defmodule Longx.Shim do
       {^port, {:data, data}} ->
         case Proto.decode(data) do
           {:pid, os_pid} ->
-            {:ok, %State{port: port, os_pid: os_pid}}
+            {:ok, %State{port: port, os_pid: os_pid, owner: spec.caller}}
 
           {:start_error, reason} ->
             send(spec.caller, {__MODULE__, :start_error, reason})
@@ -291,6 +344,32 @@ defmodule Longx.Shim do
       Logger.warning("shim exited with status #{code} before reporting the child's exit")
     end
 
+    maybe_stop({:noreply, shim_gone(state)})
+  end
+
+  # The port itself died (typically :epipe after the child exited). Same as
+  # an exit_status we may or may not still receive.
+  def handle_info({:EXIT, port, _reason}, %State{port: port, shim_exited?: false} = state),
+    do: maybe_stop({:noreply, shim_gone(state)})
+
+  def handle_info({:EXIT, port, _reason}, %State{port: port} = state), do: {:noreply, state}
+
+  # The owner died: we are linked on purpose so the child does not outlive it.
+  def handle_info({:EXIT, owner, reason}, %State{owner: owner} = state),
+    do: {:stop, reason, state}
+
+  def handle_info({:await_timeout, from}, %State{} = state) do
+    case List.keytake(state.exit_waiters, from, 0) do
+      {{^from, _timer}, rest} ->
+        GenServer.reply(from, {:error, :timeout})
+        {:noreply, %State{state | exit_waiters: rest}}
+
+      nil ->
+        {:noreply, state}
+    end
+  end
+
+  defp shim_gone(%State{} = state) do
     state =
       %State{state | shim_exited?: true}
       |> reply_all_writes({:error, :closed})
@@ -306,18 +385,7 @@ defmodule Longx.Shim do
         if(state.exit_status, do: {:ok, state.exit_status}, else: {:error, :shim_exited})
       )
 
-    maybe_stop({:noreply, state})
-  end
-
-  def handle_info({:await_timeout, from}, %State{} = state) do
-    case List.keytake(state.exit_waiters, from, 0) do
-      {{^from, _timer}, rest} ->
-        GenServer.reply(from, {:error, :timeout})
-        {:noreply, %State{state | exit_waiters: rest}}
-
-      nil ->
-        {:noreply, state}
-    end
+    state
   end
 
   @impl true

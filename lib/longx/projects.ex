@@ -1,0 +1,440 @@
+defmodule Longx.Projects do
+  @moduledoc """
+  Projects (working directories with defaults), the codex threads run in
+  them, and each thread's turns with their git bookmarks. Git is the safety
+  net: this domain tells the UI when a project has none, can set it up, and
+  records the commit every turn started from so a bad turn can be undone.
+  """
+
+  use Ash.Domain, otp_app: :longx
+
+  alias Longx.Git
+  alias Longx.Projects.Project
+
+  resources do
+    resource Project do
+      define :create_project, action: :create
+      define :update_project, action: :update
+      define :archive_project, action: :archive
+      define :get_project_by_slug, action: :by_slug, args: [:slug]
+      define :list_active_projects, action: :active
+      define :list_all_projects, action: :read
+    end
+
+    resource Longx.Projects.Thread do
+      define :create_thread, action: :create
+      define :touch_thread, action: :touch
+      define :rename_thread, action: :rename
+      define :archive_thread, action: :archive
+      define :get_thread_by_codex_id, action: :by_codex_id, args: [:codex_thread_id]
+      define :list_threads_for_project, action: :for_project, args: [:project_id]
+    end
+
+    resource Longx.Projects.Turn do
+      define :create_turn, action: :create
+      define :complete_turn, action: :complete
+      define :set_turn_diff, action: :set_diff
+      define :mark_turn_reverted, action: :mark_reverted
+      define :get_turn_by_codex_id, action: :by_codex_id, args: [:codex_turn_id]
+
+      define :list_turns_for_thread,
+        action: :for_thread,
+        args: [:thread_id, {:optional, :include_reverted}]
+    end
+  end
+
+  alias Longx.Projects.{Thread, Tracker, Turn}
+
+  @doc "Threads of a project, most recently active first."
+  def list_threads(%Project{id: id}), do: list_threads_for_project(id)
+
+  def list_threads!(project) do
+    {:ok, threads} = list_threads(project)
+    threads
+  end
+
+  @doc "Turns of a thread, oldest first; reverted ones only with `include_reverted: true`."
+  def list_turns(%Thread{id: id}, opts \\ []),
+    do: list_turns_for_thread(id, Keyword.get(opts, :include_reverted, false))
+
+  def list_turns!(thread, opts \\ []) do
+    {:ok, turns} = list_turns(thread, opts)
+    turns
+  end
+
+  ## Threads
+
+  @type start_option ::
+          {:approval_policy, atom}
+          | {:sandbox, atom}
+          | {:tools, [String.t()]}
+          | {:model, String.t()}
+          | {:conn, GenServer.server()}
+
+  @doc """
+  Starts a codex thread in the project directory with the project's
+  defaults (overridable per call) and records it. The project's model
+  (or `model:`) is passed to codex as its slug; nil means the global default.
+  """
+  @spec start_thread(Project.t(), [start_option]) :: {:ok, Thread.t()} | {:error, term}
+  def start_thread(%Project{} = project, opts \\ []) do
+    project = Ash.load!(project, :model)
+    model_slug = Keyword.get(opts, :model) || (project.model && project.model.slug)
+    tools = Keyword.get(opts, :tools, project.tools)
+    approval_policy = Keyword.get(opts, :approval_policy, project.approval_policy)
+    sandbox = Keyword.get(opts, :sandbox, project.sandbox)
+
+    codex_opts =
+      [cwd: project.root_path, approval_policy: approval_policy, sandbox: sandbox, tools: tools]
+      |> put_if(:model, model_slug)
+      |> put_if(:model_context_window, project.model && project.model.context_window)
+      |> put_if(:conn, Keyword.get(opts, :conn))
+
+    with {:ok, codex_thread_id} <- Longx.Codex.Thread.start(codex_opts),
+         {:ok, thread} <-
+           create_thread(%{
+             codex_thread_id: codex_thread_id,
+             project_id: project.id,
+             cwd: project.root_path,
+             model_slug: model_slug,
+             approval_policy: approval_policy,
+             sandbox: sandbox,
+             tools: tools
+           }) do
+      :ok = Tracker.track(codex_thread_id)
+      {:ok, thread}
+    end
+  end
+
+  defp put_if(opts, _key, nil), do: opts
+  defp put_if(opts, key, value), do: Keyword.put(opts, key, value)
+
+  @doc """
+  Sends a user message as a new turn, after the git preflight: on a
+  repository with uncommitted changes the project's `dirty_start` policy
+  applies (`:commit` commits them first, `:off` only records the fact,
+  `:ask` returns `{:error, {:dirty_tree, changes}}` unless `dirty: :commit | :ignore`
+  is given). The turn's `commit_before` is HEAD once that is settled.
+  Options: `model:` (switches the model from here on), `conn:`.
+  """
+  @spec send_message(Thread.t(), String.t(), keyword) ::
+          {:ok, Turn.t()} | {:error, {:dirty_tree, [map]} | term}
+  def send_message(%Thread{id: id}, text, opts \\ []) do
+    # fresh row: the model may have been switched by an earlier turn
+    thread = Ash.get!(Thread, id, load: :project)
+    model_slug = Keyword.get(opts, :model, thread.model_slug)
+
+    with {:ok, bookmark} <- preflight(thread, text, opts),
+         {:ok, codex_turn_id} <-
+           Longx.Codex.Thread.send(
+             thread.codex_thread_id,
+             text,
+             [model: model_slug] |> put_if(:conn, Keyword.get(opts, :conn))
+           ),
+         {:ok, turn} <-
+           create_turn(%{
+             codex_turn_id: codex_turn_id,
+             thread_id: thread.id,
+             user_text: text,
+             model_slug: model_slug,
+             commit_before: bookmark.commit,
+             dirty_start: bookmark.dirty?,
+             started_at: DateTime.utc_now()
+           }) do
+      touch_thread!(thread, %{
+        status: :active,
+        model_slug: model_slug,
+        last_activity_at: DateTime.utc_now()
+      })
+
+      {:ok, turn}
+    end
+  end
+
+  # Where the working tree stands when the turn begins.
+  defp preflight(%Thread{cwd: dir, project: project}, text, opts) do
+    if Git.repository?(dir) do
+      case Git.status(dir) do
+        %{clean?: true} ->
+          {:ok, %{commit: head_or_nil(dir), dirty?: false}}
+
+        %{changes: changes} ->
+          settle_dirty(dir, project.dirty_start, Keyword.get(opts, :dirty), changes, text)
+      end
+    else
+      {:ok, %{commit: nil, dirty?: false}}
+    end
+  end
+
+  defp settle_dirty(dir, policy, override, changes, text) do
+    case override || policy do
+      :commit ->
+        with {:ok, sha} <-
+               Git.commit_all(dir, "longx: before turn — #{String.slice(text, 0, 60)}"),
+             do: {:ok, %{commit: sha, dirty?: false}}
+
+      :off ->
+        {:ok, %{commit: head_or_nil(dir), dirty?: true}}
+
+      :ignore ->
+        {:ok, %{commit: head_or_nil(dir), dirty?: true}}
+
+      :ask ->
+        {:error, {:dirty_tree, changes}}
+    end
+  end
+
+  ## Redoing a turn
+
+  @type redo_option ::
+          {:model, String.t()}
+          | {:text, String.t()}
+          | {:restore_files, boolean}
+          | {:mode, :revert | :fork}
+          | {:conn, GenServer.server()}
+
+  @doc """
+  Runs turn N again, typically with another model. Steps, each visible in
+  git or in the thread:
+
+    1. refuse while a turn is running (`{:error, {:turn_in_progress, id}}`) or
+       if this turn was already reverted
+    2. `restore_files: true` → `restore_files/2` (safety commit, files back to
+       `commit_before`)
+    3. `mode: :revert` (default) → `thread/revert` from this turn: it and
+       every later turn leave the conversation and the projection, and their
+       rows are marked `:reverted`. `mode: :fork` → a new thread holding the
+       history *before* this turn (`forked_from`), the original untouched
+    4. a new turn with `text:` (default: the original message) and `model:`
+       (default: the thread's), through the normal git preflight
+
+  Returns the new turn.
+  """
+  @spec redo_turn(Turn.t(), [redo_option]) ::
+          {:ok, Turn.t()} | {:error, {:turn_in_progress, String.t()} | :turn_reverted | term}
+  def redo_turn(%Turn{} = turn, opts \\ []) do
+    turn = Ash.get!(Turn, turn.id)
+    thread = Ash.get!(Thread, turn.thread_id, load: :project)
+
+    later =
+      thread
+      |> list_turns!()
+      |> Enum.filter(&(DateTime.compare(&1.started_at, turn.started_at) != :lt))
+
+    conn = Keyword.get(opts, :conn)
+    model = Keyword.get(opts, :model, thread.model_slug)
+
+    with :ok <- ensure_redoable(turn, later),
+         :ok <- maybe_restore(turn, Keyword.get(opts, :restore_files, false)),
+         {:ok, target} <-
+           rewind(Keyword.get(opts, :mode, :revert), thread, turn, later, model, conn) do
+      send_message(
+        target,
+        Keyword.get(opts, :text, turn.user_text),
+        [model: model] |> put_if(:conn, conn)
+      )
+    end
+  end
+
+  defp ensure_redoable(%Turn{status: :reverted}, _later), do: {:error, :turn_reverted}
+
+  defp ensure_redoable(_turn, later) do
+    case Enum.find(later, &(&1.status == :in_progress)) do
+      nil -> :ok
+      running -> {:error, {:turn_in_progress, running.id}}
+    end
+  end
+
+  defp maybe_restore(_turn, false), do: :ok
+
+  defp maybe_restore(turn, true) do
+    with {:ok, _} <- restore_files(turn, confirm: true), do: :ok
+  end
+
+  # revert in place: codex forgets from this turn on; so do we
+  defp rewind(:revert, thread, turn, later, _model, conn) do
+    turn_ids = Enum.map(later, & &1.codex_turn_id)
+    revert_opts = [turn_ids: turn_ids] |> put_if(:conn, conn)
+
+    with :ok <- Longx.Codex.Thread.revert(thread.codex_thread_id, turn.codex_turn_id, revert_opts) do
+      Enum.each(later, &mark_turn_reverted!/1)
+      {:ok, thread}
+    end
+  end
+
+  # fork: a sibling thread with the history before this turn
+  defp rewind(:fork, thread, turn, _later, model, conn) do
+    previous =
+      thread
+      |> list_turns!()
+      |> Enum.filter(&(DateTime.compare(&1.started_at, turn.started_at) == :lt))
+      |> List.last()
+
+    fork_opts =
+      []
+      |> put_if(:last_turn_id, previous && previous.codex_turn_id)
+      |> put_if(:model, model)
+      |> put_if(:conn, conn)
+
+    with {:ok, codex_thread_id} <- Longx.Codex.Thread.fork(thread.codex_thread_id, fork_opts),
+         {:ok, forked} <-
+           create_thread(%{
+             codex_thread_id: codex_thread_id,
+             project_id: thread.project_id,
+             cwd: thread.cwd,
+             model_slug: model,
+             approval_policy: thread.approval_policy,
+             sandbox: thread.sandbox,
+             tools: thread.tools,
+             forked_from_id: thread.id
+           }) do
+      :ok = Tracker.track(codex_thread_id)
+      {:ok, forked}
+    end
+  end
+
+  ## Restoring
+
+  @doc """
+  What `restore_files/2` would do for this turn: the commit it started
+  from, whether the tree is dirty now, which files differ, and how many
+  later turns exist. The UI shows this and asks for confirmation.
+  """
+  @spec restore_proposal(Turn.t()) ::
+          {:ok,
+           %{
+             commit: String.t(),
+             dirty_now?: boolean,
+             changed_files: [String.t()],
+             later_turns: non_neg_integer
+           }}
+          | {:error, :no_git | :no_commit}
+  def restore_proposal(%Turn{} = turn) do
+    %Turn{thread: %Thread{cwd: dir} = thread} = Ash.load!(turn, :thread)
+
+    with true <- Git.repository?(dir) || {:error, :no_git},
+         sha when is_binary(sha) <- turn.commit_before || {:error, :no_commit} do
+      later =
+        list_turns!(thread)
+        |> Enum.filter(&(DateTime.compare(&1.started_at, turn.started_at) == :gt))
+        |> length()
+
+      changed = Git.status(dir).changes |> Enum.map(& &1.path)
+      changed_vs_commit = Git.diff(dir, sha) |> diff_paths()
+
+      {:ok,
+       %{
+         commit: sha,
+         dirty_now?: changed != [],
+         changed_files: Enum.uniq(Enum.sort(changed ++ changed_vs_commit)),
+         later_turns: later
+       }}
+    end
+  end
+
+  defp diff_paths(diff) do
+    Regex.scan(~r/^diff --git a\/(.+?) b\//m, diff) |> Enum.map(fn [_, path] -> path end)
+  end
+
+  @doc """
+  Puts the working tree back to how it was before `turn`. Never silent:
+  requires `confirm: true`. Uncommitted work is committed first
+  (`longx: before restoring to <sha>`) so nothing is lost. `mode:` is
+  `:restore_tree` (default — files change, history untouched) or
+  `:reset_hard` (the branch itself goes back; the safety commit stays in
+  the reflog).
+  """
+  @spec restore_files(Turn.t(), keyword) ::
+          {:ok, %{safety_commit: String.t() | nil, head: String.t()}}
+          | {:error, :confirmation_required | :no_git | :no_commit | term}
+  def restore_files(%Turn{} = turn, opts \\ []) do
+    with true <- Keyword.get(opts, :confirm, false) || {:error, :confirmation_required},
+         {:ok, %{commit: sha, dirty_now?: dirty?}} <- restore_proposal(turn) do
+      %Turn{thread: %Thread{cwd: dir}} = Ash.load!(turn, :thread)
+
+      with {:ok, safety} <- safety_commit(dir, sha, dirty?),
+           :ok <- restore(dir, sha, Keyword.get(opts, :mode, :restore_tree)),
+           {:ok, head} <- Git.head(dir) do
+        {:ok, %{safety_commit: safety, head: head}}
+      end
+    end
+  end
+
+  defp safety_commit(_dir, _sha, false), do: {:ok, nil}
+
+  defp safety_commit(dir, sha, true),
+    do: Git.commit_all(dir, "longx: before restoring to #{String.slice(sha, 0, 8)}")
+
+  defp restore(dir, sha, :restore_tree), do: Git.restore_tree(dir, sha)
+  defp restore(dir, sha, :reset_hard), do: Git.reset_hard(dir, sha)
+
+  @doc "Active projects, newest first; `include_archived: true` for all."
+  @spec list_projects(keyword) :: {:ok, [Project.t()]} | {:error, term}
+  def list_projects(opts \\ []) do
+    if Keyword.get(opts, :include_archived, false),
+      do: list_all_projects(),
+      else: list_active_projects()
+  end
+
+  def list_projects!(opts \\ []) do
+    {:ok, projects} = list_projects(opts)
+    projects
+  end
+
+  ## Git
+
+  @type git_info :: %{
+          repository?: boolean,
+          head: String.t() | nil,
+          clean?: boolean | nil,
+          changes: non_neg_integer,
+          lfs?: boolean
+        }
+
+  @doc "Live git state of the project directory — what the UI needs to warn or reassure."
+  @spec git_info(Project.t()) :: git_info
+  def git_info(%Project{root_path: dir}) do
+    case Git.toplevel(dir) do
+      {:ok, _top} ->
+        %{clean?: clean?, changes: changes} = Git.status(dir)
+
+        %{
+          repository?: true,
+          head: head_or_nil(dir),
+          clean?: clean?,
+          changes: length(changes),
+          lfs?: Git.lfs?(dir)
+        }
+
+      {:error, :not_a_repository} ->
+        %{repository?: false, head: nil, clean?: nil, changes: 0, lfs?: false}
+    end
+  end
+
+  defp head_or_nil(dir) do
+    case Git.head(dir) do
+      {:ok, sha} -> sha
+      {:error, _} -> nil
+    end
+  end
+
+  @doc """
+  Turns a project directory into a git repository: `git init`, a default
+  `.gitignore` unless one exists, and a first commit of everything else.
+  """
+  @spec init_git(Project.t()) :: {:ok, git_info} | {:error, :already_a_repository | term}
+  def init_git(%Project{root_path: dir} = project) do
+    ignore = Path.join(dir, ".gitignore")
+
+    with false <- Git.repository?(dir),
+         :ok <- Git.init(dir),
+         :ok <-
+           if(File.exists?(ignore), do: :ok, else: File.write(ignore, Longx.Git.Ignore.default())),
+         {:ok, _sha} <- Git.commit_all(dir, "Initial commit (Longx)") do
+      {:ok, git_info(project)}
+    else
+      true -> {:error, :already_a_repository}
+      {:error, _} = error -> error
+    end
+  end
+end

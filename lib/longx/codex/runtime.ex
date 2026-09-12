@@ -120,80 +120,24 @@ defmodule Longx.Codex.Runtime do
   @spec install(target, keyword) :: {:ok, Path.t()} | {:error, install_error}
   def install(target, opts \\ []) do
     root = dir(opts)
-    dest = Path.join(root, target)
-    staging = Path.join(root, ".staging-#{target}-#{System.unique_integer([:positive])}")
 
     with {:ok, expected} <- expected_sha(target, opts),
-         {:ok, archive} <- fetch(target, opts, staging),
-         :ok <- verify_checksum(archive, expected),
-         :ok <- extract(archive, staging),
-         :ok <- verify_manifest(staging, target),
-         :ok <- replace(staging, dest) do
+         :ok <-
+           Longx.Bundle.install(
+             source: Keyword.get(opts, :source, {:url, asset_url(target)}),
+             sha256: expected,
+             dest: Path.join(root, target),
+             archive_name: asset_name(target),
+             verify: &verify_manifest(&1, target)
+           ) do
       {:ok, entrypoint_path(target, root)}
-    else
-      {:error, _} = error ->
-        File.rm_rf(staging)
-        error
     end
   end
-
-  ## Steps
 
   defp expected_sha(target, opts) do
     case Keyword.fetch(opts, :sha256) do
       {:ok, sha} -> {:ok, sha}
       :error -> sha256(target)
-    end
-  end
-
-  defp fetch(target, opts, staging) do
-    File.mkdir_p!(staging)
-    archive = Path.join(staging, asset_name(target))
-
-    case Keyword.get(opts, :source, {:url, asset_url(target)}) do
-      {:file, path} ->
-        case File.cp(path, archive) do
-          :ok -> {:ok, archive}
-          {:error, reason} -> {:error, {:download_failed, reason}}
-        end
-
-      {:url, url} ->
-        download(url, archive)
-    end
-  end
-
-  defp download(url, archive) do
-    case Req.get(url, into: File.stream!(archive), redirect: true, receive_timeout: 600_000) do
-      {:ok, %Req.Response{status: 200}} -> {:ok, archive}
-      {:ok, %Req.Response{status: status}} -> {:error, {:download_failed, {:status, status}}}
-      {:error, reason} -> {:error, {:download_failed, reason}}
-    end
-  end
-
-  defp verify_checksum(archive, expected) do
-    actual =
-      archive
-      |> File.stream!(1_048_576)
-      |> Enum.reduce(:crypto.hash_init(:sha256), &:crypto.hash_update(&2, &1))
-      |> :crypto.hash_final()
-      |> Base.encode16(case: :lower)
-
-    if actual == String.downcase(expected),
-      do: :ok,
-      else: {:error, {:checksum_mismatch, %{expected: expected, actual: actual}}}
-  end
-
-  defp extract(archive, staging) do
-    case :erl_tar.extract(String.to_charlist(archive), [
-           :compressed,
-           {:cwd, String.to_charlist(staging)}
-         ]) do
-      :ok ->
-        File.rm(archive)
-        :ok
-
-      {:error, reason} ->
-        {:error, {:extract_failed, reason}}
     end
   end
 
@@ -205,16 +149,6 @@ defmodule Longx.Codex.Runtime do
         else: {:error, {:version_mismatch, %{expected: @version, actual: version}}}
     else
       _ -> {:error, {:extract_failed, {:missing_manifest, target}}}
-    end
-  end
-
-  defp replace(staging, dest) do
-    File.rm_rf!(dest)
-    File.mkdir_p!(Path.dirname(dest))
-
-    case File.rename(staging, dest) do
-      :ok -> :ok
-      {:error, reason} -> {:error, {:extract_failed, {:rename, reason}}}
     end
   end
 

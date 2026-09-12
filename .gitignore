@@ -48,3 +48,6 @@ npm-debug.log
 
 # Local codex-app-server state (Longx.Codex.Home)
 /data/
+
+# Bundled git (dugite-native), fetched by `mix git.fetch` (Longx.Git.Runtime)
+/priv/git/

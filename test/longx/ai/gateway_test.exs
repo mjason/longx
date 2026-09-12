@@ -8,7 +8,8 @@ defmodule Longx.AI.GatewayTest do
     base_url: "https://api.deepseek.com/v1",
     api_key: "sk-ds",
     context_window: 128_000,
-    provider_slug: "deepseek"
+    provider_slug: "deepseek",
+    kind: :openai_compatible
   }
 
   # A trimmed copy of what codex 0.154 actually sends
@@ -39,6 +40,76 @@ defmodule Longx.AI.GatewayTest do
     "prompt_cache_key" => "thread-1",
     "client_metadata" => %{"thread_id" => "thread-1"}
   }
+
+  describe "prepare/2 reasoning sanitation — a provider only ever gets its own opaque reasoning" do
+    @openai_item %{
+      "type" => "reasoning",
+      "id" => "rs_abc",
+      "summary" => [%{"type" => "summary_text", "text" => "s"}],
+      "encrypted_content" => "gAAAA-openai"
+    }
+    @deepseek_item %{
+      "type" => "reasoning",
+      "id" => "9c542237-49df-4e72-959e-f854ecb90a13",
+      "content" => [%{"type" => "reasoning_text", "text" => "thinking"}],
+      "summary" => [],
+      "encrypted_content" => "9c542237-49df-4e72-959e-f854ecb90a13-0"
+    }
+    @bare_foreign_item %{
+      "type" => "reasoning",
+      "id" => "9c542237-0000-0000-0000-000000000000",
+      "summary" => [],
+      "encrypted_content" => "opaque"
+    }
+    @message %{
+      "type" => "message",
+      "role" => "user",
+      "content" => [%{"type" => "input_text", "text" => "hi"}]
+    }
+
+    defp with_input(items), do: Map.put(@codex_body, "input", items)
+    defp openai, do: %Target{@target | kind: :openai, provider_slug: "openai"}
+
+    test "OpenAI target: its own rs_ items pass verbatim, other providers' encrypted_content is stripped" do
+      {:ok, up} = Gateway.prepare(with_input([@message, @openai_item, @deepseek_item]), openai())
+
+      assert [@message, @openai_item, deepseek] = up.body["input"]
+      refute Map.has_key?(deepseek, "encrypted_content")
+      assert deepseek["content"] == @deepseek_item["content"]
+    end
+
+    test "non-OpenAI target: every encrypted_content is stripped, including OpenAI's" do
+      {:ok, up} = Gateway.prepare(with_input([@openai_item, @deepseek_item]), @target)
+      assert Enum.all?(up.body["input"], &(not Map.has_key?(&1, "encrypted_content")))
+      # readable reasoning stays
+      assert Enum.any?(up.body["input"], &(&1["id"] == "rs_abc" and &1["summary"] != []))
+    end
+
+    test "a reasoning item left with nothing readable is dropped entirely" do
+      {:ok, up} = Gateway.prepare(with_input([@message, @bare_foreign_item, @message]), openai())
+      assert up.body["input"] == [@message, @message]
+    end
+
+    test "non-reasoning items are never touched" do
+      call = %{
+        "type" => "function_call",
+        "id" => "fc_1",
+        "call_id" => "c",
+        "name" => "f",
+        "arguments" => "{}"
+      }
+
+      {:ok, up} = Gateway.prepare(with_input([@message, call]), openai())
+      assert up.body["input"] == [@message, call]
+    end
+
+    test "strip_all_encrypted/1 is what the degraded retry sends" do
+      body = with_input([@openai_item, @deepseek_item])
+      stripped = Gateway.strip_all_encrypted(body)
+      assert Enum.all?(stripped["input"], &(not Map.has_key?(&1, "encrypted_content")))
+      assert length(stripped["input"]) == 2
+    end
+  end
 
   describe "prepare/2" do
     test "targets <base_url>/responses with the provider's credentials" do

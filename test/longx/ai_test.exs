@@ -75,6 +75,19 @@ defmodule Longx.AITest do
       assert updated.api_key == "sk-rotated"
     end
 
+    test "kind: :openai_compatible by default; :openai marks the one provider with real encrypted reasoning" do
+      assert create_provider!().kind == :openai_compatible
+      assert create_provider!(%{kind: :openai}).kind == :openai
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_provider(%{
+                 name: "x",
+                 slug: "k-#{uniq()}",
+                 base_url: "https://x/v1",
+                 kind: :anthropic
+               })
+    end
+
     test "supports_hosted_web_search defaults to false (only OpenAI runs web_search server-side)" do
       refute create_provider!().supports_hosted_web_search
       assert create_provider!(%{supports_hosted_web_search: true}).supports_hosted_web_search
@@ -94,6 +107,37 @@ defmodule Longx.AITest do
       assert model.provider_id == provider.id
       assert model.context_window == 128_000
       refute model.default
+    end
+
+    test "slug is the codex-facing name: derived from upstream_id, unique, never the placeholder" do
+      provider = create_provider!()
+      model = create_model!(provider, %{upstream_id: "deepseek-flash"})
+      assert model.slug == "deepseek-flash"
+
+      assert %{slug: "custom"} = create_model!(provider, %{upstream_id: "gpt-4o", slug: "custom"})
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_model(%{
+                 name: "dup",
+                 upstream_id: "x",
+                 slug: "deepseek-flash",
+                 provider_id: provider.id
+               })
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_model(%{
+                 name: "ph",
+                 upstream_id: "x",
+                 slug: "longx",
+                 provider_id: provider.id
+               })
+    end
+
+    test "get_model_by_slug/1" do
+      provider = create_provider!()
+      model = create_model!(provider, %{slug: "glm-5-#{uniq()}"})
+      assert {:ok, %{id: id}} = AI.get_model_by_slug(model.slug)
+      assert id == model.id
     end
 
     test "default_model/0 is nil until one is chosen, then exclusive" do
@@ -299,6 +343,26 @@ defmodule Longx.AITest do
     end
   end
 
+  describe "resolve_target/1 (by the model name codex sends)" do
+    test "\"longx\" is the global default; a slug picks that model; unknown is an error" do
+      provider = create_provider!(%{api_key: "sk-a"})
+      default = create_model!(provider, %{upstream_id: "a-default", slug: "a-default"})
+
+      other =
+        create_model!(provider, %{upstream_id: "b-other", slug: "b-other", context_window: 32_000})
+
+      AI.make_default_model!(default)
+
+      assert {:ok, %AI.Target{model: "a-default"}} = AI.resolve_target("longx")
+
+      assert {:ok, %AI.Target{model: "b-other", context_window: 32_000}} =
+               AI.resolve_target(other.slug)
+
+      assert {:error, {:unknown_model, "nope"}} = AI.resolve_target("nope")
+      assert {:ok, %AI.Target{model: "a-default"}} = AI.resolve_target(nil)
+    end
+  end
+
   describe "resolve_target/0" do
     test "combines the default model with its provider's credentials" do
       provider = create_provider!(%{base_url: "https://api.deepseek.com/v1", api_key: "sk-ds"})
@@ -311,7 +375,8 @@ defmodule Longx.AITest do
                 base_url: "https://api.deepseek.com/v1",
                 api_key: "sk-ds",
                 context_window: 64_000,
-                hosted_web_search?: false
+                hosted_web_search?: false,
+                kind: :openai_compatible
               }} = AI.resolve_target()
     end
 
