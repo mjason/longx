@@ -26,6 +26,7 @@ defmodule Longx.Codex.Connection do
   require Logger
 
   @pubsub Longx.PubSub
+  @task_supervisor Longx.Codex.TaskSupervisor
   @default_request_timeout :timer.seconds(60)
   @handshake_timeout :timer.seconds(30)
 
@@ -61,6 +62,7 @@ defmodule Longx.Codex.Connection do
       next_id: 1,
       pending: %{},
       inbound: %{},
+      async: %{},
       queue: :queue.new()
     ]
   end
@@ -162,7 +164,8 @@ defmodule Longx.Codex.Connection do
   def handle_continue(:handshake, state) do
     params = %{
       clientInfo: state.client_info,
-      capabilities: %{optOutNotificationMethods: @opt_out_notifications}
+      # experimentalApi: `thread/start.dynamicTools` (our Elixir tools) is an experimental field
+      capabilities: %{experimentalApi: true, optOutNotificationMethods: @opt_out_notifications}
     }
 
     {:noreply, send_request(state, "initialize", params, :handshake, @handshake_timeout)}
@@ -226,6 +229,56 @@ defmodule Longx.Codex.Connection do
         write_reply(state, id, fallback)
         resolve_in_thread(thread_id, id)
         {:noreply, %State{state | inbound: inbound}}
+    end
+  end
+
+  # {:async, ...} outcomes: the task's reply, its crash, or our timeout
+  def handle_info({ref, result}, %State{async: async} = state) when is_map_key(async, ref) do
+    Process.demonitor(ref, [:flush])
+    {%{id: id, timer: timer, fallback: fallback, method: method}, async} = Map.pop(async, ref)
+    Process.cancel_timer(timer)
+
+    case result do
+      {:reply, _} = reply ->
+        write_reply(state, id, reply)
+
+      {:error, _, _} = reply ->
+        write_reply(state, id, reply)
+
+      other ->
+        Logger.warning(
+          "codex async handler for #{method} returned #{inspect(other)}; sending fallback"
+        )
+
+        write_reply(state, id, fallback)
+    end
+
+    {:noreply, %State{state | async: async}}
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %State{async: async} = state)
+      when is_map_key(async, ref) do
+    {%{id: id, timer: timer, fallback: fallback, method: method}, async} = Map.pop(async, ref)
+    Process.cancel_timer(timer)
+
+    Logger.warning(
+      "codex async handler for #{method} crashed: #{inspect(reason)}; sending fallback"
+    )
+
+    write_reply(state, id, fallback)
+    {:noreply, %State{state | async: async}}
+  end
+
+  def handle_info({:async_timeout, ref}, %State{async: async} = state) do
+    case Map.pop(async, ref) do
+      {nil, _} ->
+        {:noreply, state}
+
+      {%{id: id, fallback: fallback, method: method, task: task}, async} ->
+        Task.shutdown(task, :brutal_kill)
+        Logger.warning("codex async handler for #{method} timed out; sending fallback")
+        write_reply(state, id, fallback)
+        {:noreply, %State{state | async: async}}
     end
   end
 
@@ -295,6 +348,12 @@ defmodule Longx.Codex.Connection do
 
         if ctx.thread_id, do: put_in_thread(ctx.thread_id, id, method, params)
         %State{state | inbound: Map.put(state.inbound, id, entry)}
+
+      {:async, fun, timeout, fallback} ->
+        task = Task.Supervisor.async_nolink(@task_supervisor, fun)
+        timer = Process.send_after(self(), {:async_timeout, task.ref}, timeout)
+        entry = %{id: id, method: method, fallback: fallback, timer: timer, task: task}
+        %State{state | async: Map.put(state.async, task.ref, entry)}
 
       reply ->
         write_reply(state, id, reply)

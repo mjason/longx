@@ -50,6 +50,7 @@ defmodule Longx.MixProject do
       {:ash, "~> 3.0"},
       {:ash_cloak, "~> 0.4"},
       {:cloak, "~> 1.1"},
+      {:ex_json_schema, "~> 0.11"},
       {:bypass, "~> 2.1", only: :test},
       {:igniter, "~> 0.6", only: [:dev, :test]},
       {:phoenix, "~> 1.8.13"},

@@ -10,6 +10,7 @@ defmodule Longx.Codex.Thread do
   """
 
   alias Longx.Codex.{Connection, ThreadState}
+  alias Longx.Codex.Tool.{Context, Registry}
 
   @type approval_policy :: :never | :on_request | :untrusted
   @type sandbox :: :read_only | :workspace_write | :danger_full_access
@@ -19,6 +20,7 @@ defmodule Longx.Codex.Thread do
           | {:approval_policy, approval_policy}
           | {:sandbox, sandbox}
           | {:model_context_window, pos_integer}
+          | {:tools, :auto | [module]}
           | {:conn, GenServer.server()}
 
   @approval_policies %{never: "never", on_request: "on-request", untrusted: "untrusted"}
@@ -130,11 +132,23 @@ defmodule Longx.Codex.Thread do
       "sandbox" => Map.fetch!(@sandboxes, Keyword.get(opts, :sandbox, :workspace_write))
     }
 
-    case Keyword.get(opts, :model_context_window) do
-      nil -> base
-      window -> Map.put(base, "config", %{"model_context_window" => window})
+    base =
+      case Keyword.get(opts, :model_context_window) do
+        nil -> base
+        window -> Map.put(base, "config", %{"model_context_window" => window})
+      end
+
+    case dynamic_tools(Keyword.get(opts, :tools, :auto), %Context{cwd: base["cwd"]}) do
+      [] -> base
+      specs -> Map.put(base, "dynamicTools", specs)
     end
   end
+
+  # Elixir tools offered to the model on this thread (see `Longx.Codex.Tool`):
+  # every registered tool available in the context, or an explicit list.
+  defp dynamic_tools(:auto, ctx), do: Registry.specs(ctx)
+  defp dynamic_tools([], _ctx), do: []
+  defp dynamic_tools(modules, ctx) when is_list(modules), do: Registry.specs(ctx, only: modules)
 
   @doc false
   @spec decision(decision) :: map

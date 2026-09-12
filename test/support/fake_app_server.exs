@@ -195,6 +195,43 @@ defmodule FakeAppServer do
     %{state | next: state.next + 1, pending: Map.put(state.pending, request_id, continuation)}
   end
 
+  defp run_turn("call " <> rest, id, thread_id, turn_id, state) do
+    start_turn(id, thread_id, turn_id, "call " <> rest)
+    [qualified, json] = String.split(rest, " ", parts: 2)
+    [namespace, tool] = String.split(qualified, ".", parts: 2)
+    request_id = "srv_#{state.next}"
+
+    request(request_id, "item/tool/call", %{
+      "threadId" => thread_id,
+      "turnId" => turn_id,
+      "callId" => "call_#{state.next}",
+      "namespace" => namespace,
+      "tool" => tool,
+      "arguments" => JSON.decode!(json)
+    })
+
+    continuation = fn
+      %{"success" => success, "contentItems" => items}, state ->
+        text = Enum.map_join(items, " ", &(&1["text"] || &1["imageUrl"]))
+        stream_message(thread_id, turn_id, ["tool", "#{success}:", text])
+
+        finish_turn(
+          thread_id,
+          turn_id,
+          "completed",
+          state,
+          "call " <> rest,
+          "tool #{success}: #{text}"
+        )
+
+      :error, state ->
+        stream_message(thread_id, turn_id, ["tool", "rpc-error"])
+        finish_turn(thread_id, turn_id, "completed", state, "call " <> rest, "tool rpc-error")
+    end
+
+    %{state | next: state.next + 1, pending: Map.put(state.pending, request_id, continuation)}
+  end
+
   defp run_turn("stall", id, thread_id, turn_id, state) do
     start_turn(id, thread_id, turn_id, "stall")
     item_id = "msg_#{turn_id}"

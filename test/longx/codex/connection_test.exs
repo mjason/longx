@@ -16,7 +16,22 @@ defmodule Longx.Codex.ConnectionTest do
       {:defer, 500, {:reply, %{"decision" => "decline"}}}
     end
 
+    def handle("item/tool/call", %{"namespace" => "async", "tool" => "raise"}, _ctx),
+      do: {:async, fn -> raise "handler boom" end, 1_000, {:reply, fallback()}}
+
+    def handle("item/tool/call", %{"namespace" => "async", "tool" => "stall"}, _ctx),
+      do: {:async, fn -> Process.sleep(10_000) end, 300, {:reply, fallback()}}
+
+    def handle("item/tool/call" = m, params, ctx),
+      do: Longx.Codex.ServerRequest.Default.handle(m, params, ctx)
+
     def handle(m, _params, _ctx), do: {:error, -32601, "#{m} unsupported"}
+
+    defp fallback,
+      do: %{
+        "success" => false,
+        "contentItems" => [%{"type" => "inputText", "text" => "handler fallback"}]
+      }
   end
 
   setup do
@@ -223,6 +238,93 @@ defmodule Longx.Codex.ConnectionTest do
     assert {:error, :connection_reset} = Task.await(task, 10_000)
     assert_receive {:codex_connection, :down}, 5_000
     assert_receive {:DOWN, ^ref, :process, ^conn, {:shutdown, :codex_exited}}, 5_000
+  end
+
+  describe "{:async, ...} server requests (dynamic tool calls)" do
+    test "a tool call is executed off the connection process and answered", %{conn: conn} do
+      thread_id = start_thread(conn)
+
+      {:ok, _} =
+        Connection.request(conn, "turn/start", %{
+          "threadId" => thread_id,
+          "input" => [%{"type" => "text", "text" => ~s(call test.echo {"message":"hey"})}]
+        })
+
+      await_turn_completed(thread_id)
+
+      assert Enum.find(ThreadState.snapshot(thread_id).items, &(&1["type"] == "agentMessage"))[
+               "text"
+             ] == "tool true: echo: hey"
+    end
+
+    test "invalid arguments come back as a failed call the model can read", %{conn: conn} do
+      thread_id = start_thread(conn)
+
+      {:ok, _} =
+        Connection.request(conn, "turn/start", %{
+          "threadId" => thread_id,
+          "input" => [%{"type" => "text", "text" => ~s(call test.echo {"message":5})}]
+        })
+
+      await_turn_completed(thread_id)
+
+      text =
+        Enum.find(ThreadState.snapshot(thread_id).items, &(&1["type"] == "agentMessage"))["text"]
+
+      assert text =~ "tool false:"
+      assert text =~ "invalid arguments"
+    end
+
+    test "a crashing tool does not take the connection down", %{conn: conn} do
+      thread_id = start_thread(conn)
+
+      {:ok, _} =
+        Connection.request(conn, "turn/start", %{
+          "threadId" => thread_id,
+          "input" => [%{"type" => "text", "text" => ~s(call test.boom {})}]
+        })
+
+      await_turn_completed(thread_id)
+
+      assert Enum.find(ThreadState.snapshot(thread_id).items, &(&1["type"] == "agentMessage"))[
+               "text"
+             ] =~ "crashed"
+
+      assert Connection.status(conn) == :ready
+    end
+
+    test "a handler fun that itself crashes or stalls falls back", %{conn: conn} do
+      thread_id = start_thread(conn)
+
+      # AsyncHandler answers item/tool/call with a fun that raises for "raise" and sleeps for "stall"
+      {:ok, _} =
+        Connection.request(conn, "turn/start", %{
+          "threadId" => thread_id,
+          "input" => [%{"type" => "text", "text" => ~s(call async.raise {})}]
+        })
+
+      await_turn_completed(thread_id)
+
+      assert Enum.find(ThreadState.snapshot(thread_id).items, &(&1["type"] == "agentMessage"))[
+               "text"
+             ] == "tool false: handler fallback"
+
+      thread_id = start_thread(conn)
+
+      {:ok, _} =
+        Connection.request(conn, "turn/start", %{
+          "threadId" => thread_id,
+          "input" => [%{"type" => "text", "text" => ~s(call async.stall {})}]
+        })
+
+      await_turn_completed(thread_id)
+
+      assert Enum.find(ThreadState.snapshot(thread_id).items, &(&1["type"] == "agentMessage"))[
+               "text"
+             ] == "tool false: handler fallback"
+
+      assert Connection.status(conn) == :ready
+    end
   end
 
   test "requests made before the handshake completes are queued, not rejected" do

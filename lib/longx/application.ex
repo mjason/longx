@@ -25,6 +25,8 @@ defmodule Longx.Application do
       Longx.Codex.ThreadState.Store,
       {Registry, keys: :unique, name: Longx.Codex.ThreadRegistry},
       {DynamicSupervisor, name: Longx.Codex.ThreadState.Supervisor, strategy: :one_for_one},
+      # dynamic tool calls and other async work for the codex connection
+      {Task.Supervisor, name: Longx.Codex.TaskSupervisor},
       # Start a worker by calling: Longx.Worker.start_link(arg)
       # {Longx.Worker, arg},
       # Start to serve requests, typically the last entry

@@ -11,7 +11,8 @@ defmodule Longx.Codex.ThreadTest do
                cwd: "/p",
                approval_policy: :never,
                sandbox: :read_only,
-               model_context_window: 64_000
+               model_context_window: 64_000,
+               tools: []
              ) ==
                %{
                  "cwd" => "/p",
@@ -23,7 +24,8 @@ defmodule Longx.Codex.ThreadTest do
       assert Thread.start_params(
                cwd: "/p",
                approval_policy: :on_request,
-               sandbox: :workspace_write
+               sandbox: :workspace_write,
+               tools: []
              ) ==
                %{"cwd" => "/p", "approvalPolicy" => "on-request", "sandbox" => "workspace-write"}
 
@@ -32,6 +34,23 @@ defmodule Longx.Codex.ThreadTest do
                sandbox: :danger_full_access,
                approval_policy: :untrusted
              )["sandbox"] == "danger-full-access"
+    end
+
+    test "tools: :auto declares every available registered tool as dynamicTools" do
+      params = Thread.start_params(cwd: "/p", tools: :auto)
+      namespaces = Enum.map(params["dynamicTools"], & &1["name"])
+      assert "builtin" in namespaces
+      assert "test" in namespaces
+      builtin = Enum.find(params["dynamicTools"], &(&1["name"] == "builtin"))
+      assert Enum.any?(builtin["tools"], &(&1["name"] == "thread_status"))
+    end
+
+    test "tools: [] declares nothing; tools: [modules] only those" do
+      refute Map.has_key?(Thread.start_params(cwd: "/p", tools: []), "dynamicTools")
+
+      [only] = Thread.start_params(cwd: "/p", tools: [Longx.Tools.Builtin.Echo])["dynamicTools"]
+      assert only["name"] == "builtin"
+      assert Enum.map(only["tools"], & &1["name"]) == ["echo"]
     end
 
     test "defaults: on-request approvals in a workspace-write sandbox" do
@@ -93,6 +112,18 @@ defmodule Longx.Codex.ThreadTest do
 
       assert_receive {:codex, _, "turn/completed", %{"turn" => %{"status" => "interrupted"}}},
                      5_000
+    end
+
+    test "a builtin tool round-trips through the connection (thread_status sees its own thread)",
+         %{conn: conn} do
+      {:ok, thread_id} = Thread.start(cwd: "/", conn: conn)
+      Thread.subscribe(thread_id)
+      {:ok, _} = Thread.send(thread_id, "call builtin.thread_status {}", conn: conn)
+      assert_receive {:codex, _, "turn/completed", _}, 10_000
+      text = Enum.find(Thread.snapshot(thread_id).items, &(&1["type"] == "agentMessage"))["text"]
+      assert text =~ "tool true:"
+      assert text =~ "thread: #{thread_id}"
+      assert text =~ "userMessage: 1"
     end
 
     test "respond/3 answers a pending approval by id", %{conn: conn} do

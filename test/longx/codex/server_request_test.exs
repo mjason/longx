@@ -20,14 +20,31 @@ defmodule Longx.Codex.ServerRequestTest do
     end
   end
 
-  test "ChatGPT-only requests and unknown methods are rejected with method-not-found" do
-    for method <- [
-          "account/chatgptAuthTokens/refresh",
-          "attestation/generate",
-          "item/tool/call",
-          "something/new"
-        ] do
-      assert {:error, -32601, _} = Default.handle(method, %{}, @ctx)
+  test "dynamic tool calls run asynchronously through the Runner, with a failed-call fallback" do
+    params = %{
+      "tool" => "echo",
+      "namespace" => "test",
+      "arguments" => %{"message" => "x"},
+      "callId" => "c",
+      "threadId" => "t",
+      "turnId" => "u"
+    }
+
+    assert {:async, fun, timeout, {:reply, %{"success" => false}}} =
+             Default.handle("item/tool/call", params, @ctx)
+
+    assert is_integer(timeout)
+    assert {:reply, %{"success" => true, "contentItems" => [%{"text" => "echo: x"}]}} = fun.()
+  end
+
+  test "ChatGPT-only requests are refused explicitly (not as unknown methods)" do
+    for method <- ["account/chatgptAuthTokens/refresh", "attestation/generate"] do
+      assert {:error, -32000, message} = Default.handle(method, %{}, @ctx)
+      assert message =~ "ChatGPT"
     end
+  end
+
+  test "unknown methods are method-not-found" do
+    assert {:error, -32601, _} = Default.handle("something/new", %{}, @ctx)
   end
 end

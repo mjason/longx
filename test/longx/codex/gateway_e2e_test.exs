@@ -181,6 +181,61 @@ defmodule Longx.Codex.GatewayE2ETest do
     assert Enum.any?(items, &(&1["type"] == "webSearch" and &1["query"] =~ "elixir 1.19"))
   end
 
+  test "an Elixir tool (dynamicTools) is offered to the model and executed via item/tool/call", %{
+    gateway_url: gateway_url
+  } do
+    upstream = Bypass.open()
+    test_pid = self()
+    fake_provider!(upstream)
+    {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+    Bypass.expect(upstream, "POST", "/v1/responses", fn conn ->
+      {:ok, raw, conn} = Plug.Conn.read_body(conn, length: 50_000_000)
+      body = Jason.decode!(raw)
+      n = Agent.get_and_update(calls, &{&1 + 1, &1 + 1})
+      send(test_pid, {:upstream_request, n, body})
+
+      case n do
+        1 ->
+          send_sse(
+            conn,
+            ResponsesFixture.function_call("echo", "builtin", %{message: "round trip"})
+          )
+
+        _ ->
+          send_sse(conn, ResponsesFixture.assistant_message("The tool said: round trip"))
+      end
+    end)
+
+    home = prepare_home!(gateway_url)
+    conn = start_connection!(home)
+    thread_id = start_thread!(conn, home)
+
+    {turn, items} = run_turn!(conn, thread_id, "use the echo tool")
+    assert turn["status"] == "completed", inspect(turn)
+
+    # codex advertised our tools to the model as a namespace…
+    assert_receive {:upstream_request, 1, first}, 5_000
+    builtin = Enum.find(first["tools"], &(&1["type"] == "namespace" and &1["name"] == "builtin"))
+
+    assert builtin,
+           "builtin namespace not offered: #{inspect(Enum.map(first["tools"], &{&1["type"], &1["name"]}))}"
+
+    assert Enum.any?(builtin["tools"], &(&1["name"] == "echo"))
+
+    # …executed it through us, and fed the output back into the next model call
+    assert_receive {:upstream_request, 2, second}, 5_000
+
+    assert Enum.any?(
+             second["input"],
+             &(&1["type"] == "function_call_output" and inspect(&1["output"]) =~ "round trip")
+           )
+
+    # and reported it as a dynamicToolCall item
+    assert Enum.any?(items, &(&1["type"] == "dynamicToolCall" and &1["tool"] == "echo"))
+    assert Enum.any?(Thread.snapshot(thread_id).items, &(&1["type"] == "dynamicToolCall"))
+  end
+
   test "web_search: :hosted hands the upstream its own web_search tool and nothing of ours", %{
     gateway_url: gateway_url
   } do

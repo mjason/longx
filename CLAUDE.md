@@ -88,11 +88,15 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     `{:shutdown, :codex_exited}` and the supervisor restarts it (3 per 60 s, then only this
     subtree dies — never the web app). `Longx.Codex.Framing` / `Longx.Codex.Message` are the
     pure wire pieces.
-  - **Server → client requests** (approvals, `requestUserInput`, elicitations…) go through the
-    `Longx.Codex.ServerRequest` behaviour: `{:reply, _}` / `{:error, code, msg}` /
-    `{:defer, timeout, fallback}`. `Default` defers anything a person should decide with a
-    "no" fallback (`decline` / `timed_out` / empty answers / `cancel`) so a turn never hangs;
-    `Connection.respond/3` (or `Thread.respond/3`) answers by request id. Configure with
+  - **Server → client requests** (approvals, `requestUserInput`, elicitations, tool calls…) go
+    through the `Longx.Codex.ServerRequest` behaviour: `{:reply, _}` / `{:error, code, msg}` /
+    `{:defer, timeout, fallback}` / `{:async, fun, timeout, fallback}`. `Default` is
+    exhaustive over the 10 known methods: defers anything a person should decide with a "no"
+    fallback (`decline` / `timed_out` / empty answers / `cancel`) so a turn never hangs, runs
+    `item/tool/call` async, refuses the two ChatGPT-login-only requests
+    (`account/chatgptAuthTokens/refresh`, `attestation/generate`) explicitly, and logs a
+    warning for anything unknown (a codex upgrade will show up there). `Connection.respond/3`
+    (or `Thread.respond/3`) answers deferred ones by request id. Configure with
     `server_request_handler:`.
   - `Longx.Codex.ThreadState.Store` owns three public ETS tables (meta / items / requests)
     holding every thread's materialised view; it is a long-lived process so the data outlives
@@ -110,9 +114,25 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     likely future addition.
   - `Longx.Codex.Thread` is the API to use: `start/1` (`cwd:`, `approval_policy:
     :never | :on_request | :untrusted`, `sandbox: :read_only | :workspace_write |
-    :danger_full_access`, `model_context_window:`), `resume/2`, `send/3`, `steer/4`,
-    `interrupt/3`, `respond/3`, `snapshot/1`, `subscribe/1`. It is the only place snake_case
-    is turned into codex's camelCase/kebab-case.
+    :danger_full_access`, `model_context_window:`, `tools: :auto | [] | [modules]`),
+    `resume/2`, `send/3`, `steer/4`, `interrupt/3`, `respond/3`, `snapshot/1`,
+    `subscribe/1`. It is the only place snake_case is turned into codex's camelCase/kebab-case.
+  - **Elixir tools for the agent** (codex *dynamic tools*; README has the developer guide):
+    one module per tool implementing the `Longx.Codex.Tool` behaviour (`name/0`,
+    `namespace/0` default `"builtin"`, `description/0`, `input_schema/0`, `call/2`; optional
+    `available?/1`, `timeout/0`), living under `lib/longx/tools/<namespace>/`. Built-ins use
+    the `builtin` namespace and follow exactly the same rules as a fork's tools.
+    `Longx.Codex.Tool.Registry` discovers implementations by behaviour at boot (plus
+    `config :longx, Longx.Codex.Tool, extra:/disabled:`; duplicate `ns.name` raises) and
+    produces the `dynamicTools` specs (namespace-grouped) that `Thread.start/1` declares —
+    which needs `capabilities.experimentalApi: true` in the handshake. `Longx.Codex.Tool.Runner`
+    executes `item/tool/call`: validate arguments with `ex_json_schema` (errors + schema go
+    back to the model so it can fix them), build `Tool.Context` (ids, `cwd`, lazy thread
+    `snapshot`), run `call/2` in `Longx.Codex.TaskSupervisor` under the tool's timeout,
+    normalise to `DynamicToolCallResponse`. **Every failure is `success: false` with a
+    readable message, never a JSON-RPC error.** `ServerRequest.Default` routes it via the
+    `{:async, fun, timeout, fallback}` outcome, which `Connection` runs off-process (task
+    reply / crash / timeout → reply or fallback). Telemetry `[:longx, :codex, :tool, *]`.
   - The app-server speaks newline-delimited JSON-RPC over stdio (messages omit
     `"jsonrpc":"2.0"`). Protocol facts that shape the design:
   - Docs: https://learn.chatgpt.com/docs/app-server. The exact schema for the bundled
