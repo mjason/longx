@@ -151,6 +151,41 @@ defmodule LongxWeb.AI.ResponsesControllerTest do
     end
   end
 
+  describe "model routing" do
+    test "the model name codex sends selects the upstream model", %{
+      conn: conn,
+      bypass: bypass,
+      provider: provider
+    } do
+      configure_default!(provider)
+
+      other =
+        AI.create_model!(%{
+          name: "Other",
+          upstream_id: "other-upstream",
+          slug: "other-slug",
+          provider_id: provider.id
+        })
+
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        {:ok, raw, up} = Plug.Conn.read_body(up)
+        send(test_pid, {:model, Jason.decode!(raw)["model"]})
+        up |> Plug.Conn.put_resp_content_type("text/event-stream") |> Plug.Conn.send_chunked(200)
+      end)
+
+      conn |> authed() |> post_json(Map.put(@request, "model", other.slug))
+      assert_receive {:model, "other-upstream"}
+    end
+
+    test "an unknown model name is a 400 codex can display", %{conn: conn, provider: provider} do
+      configure_default!(provider)
+      conn = conn |> authed() |> post_json(Map.put(@request, "model", "no-such-model"))
+      assert json_response(conn, 400)["error"]["message"] =~ "no-such-model"
+    end
+  end
+
   describe "configuration problems" do
     test "503 when no default model is configured", %{conn: conn} do
       conn = conn |> authed() |> post_json(@request)

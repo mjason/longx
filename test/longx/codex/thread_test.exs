@@ -63,6 +63,13 @@ defmodule Longx.Codex.ThreadTest do
       assert Enum.map(ns["tools"], & &1["name"]) == ["thread_status"]
     end
 
+    test "model: sets codex's per-thread model (a Longx.AI.Model slug)" do
+      assert Thread.start_params(cwd: "/p", tools: [], model: "deepseek-flash")["model"] ==
+               "deepseek-flash"
+
+      refute Map.has_key?(Thread.start_params(cwd: "/p", tools: []), "model")
+    end
+
     test "defaults: on-request approvals in a workspace-write sandbox" do
       assert %{"approvalPolicy" => "on-request", "sandbox" => "workspace-write"} =
                Thread.start_params(cwd: "/p")

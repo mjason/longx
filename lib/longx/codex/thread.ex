@@ -19,6 +19,7 @@ defmodule Longx.Codex.Thread do
           {:cwd, Path.t()}
           | {:approval_policy, approval_policy}
           | {:sandbox, sandbox}
+          | {:model, String.t()}
           | {:model_context_window, pos_integer}
           | {:tools, [module | String.t()]}
           | {:conn, GenServer.server()}
@@ -64,10 +65,16 @@ defmodule Longx.Codex.Thread do
     end
   end
 
-  @doc "Starts a turn with a text message. Returns the turn id; progress arrives on the thread topic."
+  @doc """
+  Starts a turn with a text message. Returns the turn id; progress arrives
+  on the thread topic. `model:` (a `Longx.AI.Model` slug) switches the model
+  for this and subsequent turns.
+  """
   @spec send(String.t(), String.t(), keyword) :: {:ok, String.t()} | {:error, term}
   def send(thread_id, text, opts \\ []) do
-    params = %{"threadId" => thread_id, "input" => [%{"type" => "text", "text" => text}]}
+    params =
+      %{"threadId" => thread_id, "input" => [%{"type" => "text", "text" => text}]}
+      |> put_model(Keyword.get(opts, :model))
 
     with {:ok, %{"turn" => %{"id" => turn_id}}} <-
            Connection.request(conn(opts), "turn/start", params) do
@@ -138,6 +145,13 @@ defmodule Longx.Codex.Thread do
         window -> Map.put(base, "config", %{"model_context_window" => window})
       end
 
+    # a Longx.AI.Model slug; absent means codex's configured placeholder (global default)
+    base =
+      case Keyword.get(opts, :model) do
+        nil -> base
+        model -> Map.put(base, "model", model)
+      end
+
     selection = Keyword.get_lazy(opts, :tools, &Longx.AI.enabled_tool_names/0)
 
     case dynamic_tools(selection, %Context{cwd: base["cwd"]}) do
@@ -153,6 +167,9 @@ defmodule Longx.Codex.Thread do
 
   defp dynamic_tools(selection, ctx) when is_list(selection),
     do: Registry.specs(ctx, only: selection)
+
+  defp put_model(params, nil), do: params
+  defp put_model(params, model), do: Map.put(params, "model", model)
 
   @doc false
   @spec decision(decision) :: map
