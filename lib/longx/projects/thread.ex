@@ -38,11 +38,20 @@ defmodule Longx.Projects.Thread do
 
       argument :network_access, :boolean
       argument :web_search, :boolean
+      argument :multi_agent, :boolean
 
       run fn input, _ ->
         opts =
           input.arguments
-          |> Map.take([:model, :tools, :approval_policy, :sandbox, :network_access, :web_search])
+          |> Map.take([
+            :model,
+            :tools,
+            :approval_policy,
+            :sandbox,
+            :network_access,
+            :web_search,
+            :multi_agent
+          ])
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
         with {:ok, project} <- Ash.get(Longx.Projects.Project, input.arguments.project_id),
@@ -153,8 +162,13 @@ defmodule Longx.Projects.Thread do
         :sandbox,
         :network_access,
         :web_search,
+        :multi_agent,
         :tools,
-        :forked_from_id
+        :forked_from_id,
+        :parent_thread_id,
+        :agent_path,
+        :title,
+        :status
       ]
     end
 
@@ -162,6 +176,7 @@ defmodule Longx.Projects.Thread do
       accept [
         :status,
         :preview,
+        :title,
         :model_slug,
         :last_activity_at,
         :sandbox,
@@ -192,8 +207,20 @@ defmodule Longx.Projects.Thread do
 
     read :for_project do
       argument :project_id, :uuid, allow_nil?: false
-      filter expr(project_id == ^arg(:project_id) and status != :archived)
+
+      filter expr(
+               project_id == ^arg(:project_id) and status != :archived and
+                 is_nil(parent_thread_id)
+             )
+
       prepare build(sort: [last_activity_at: :desc_nils_last, inserted_at: :desc])
+    end
+
+    # the sub-agents codex spawned inside a thread's conversation
+    read :subagents_of do
+      argument :parent_thread_id, :uuid, allow_nil?: false
+      filter expr(parent_thread_id == ^arg(:parent_thread_id))
+      prepare build(sort: [inserted_at: :asc])
     end
 
     read :with_status do
@@ -234,6 +261,14 @@ defmodule Longx.Projects.Thread do
     # codex's web.run offered to this thread (fixed at start: a thread/start config)
     attribute :web_search, :boolean, allow_nil?: false, default: true, public?: true
 
+    # codex's sub-agent tools offered to this thread (fixed at start)
+    attribute :multi_agent, :boolean, allow_nil?: false, default: true, public?: true
+
+    # a sub-agent spawned by codex inside `parent_thread_id`'s conversation:
+    # codex's agent path ("/root/reader_a"); such threads never show in the
+    # project's list, they belong to their parent's view
+    attribute :agent_path, :string, public?: true
+
     attribute :tools, {:array, :string}, allow_nil?: false, default: [], public?: true
 
     attribute :status, :atom do
@@ -254,6 +289,7 @@ defmodule Longx.Projects.Thread do
     belongs_to :project, Longx.Projects.Project, allow_nil?: false, public?: true
     # set when this thread was created by a redo in fork mode
     belongs_to :forked_from, Longx.Projects.Thread, public?: true
+    belongs_to :parent_thread, Longx.Projects.Thread, public?: true
     has_many :turns, Longx.Projects.Turn
   end
 

@@ -6,7 +6,7 @@ defmodule Longx.Codex.ThreadState.Store do
   outlives the per-thread `Longx.Codex.ThreadState` writer and readers never
   copy through a GenServer:
 
-    * `meta`     — `{thread_id, %{seq, order, thread, turn, status, token_usage}}`
+    * `meta`     — `{thread_id, %{seq, order, thread, turn, status, token_usage, plan}}`
     * `items`    — `{{thread_id, item_id}, order, item}`; `order` gives arrival order
     * `requests` — `{{thread_id, request_id}, order, method, params}`
 
@@ -21,7 +21,15 @@ defmodule Longx.Codex.ThreadState.Store do
   @items __MODULE__.Items
   @requests __MODULE__.Requests
 
-  @empty_meta %{seq: 0, order: 0, thread: nil, turn: nil, status: nil, token_usage: nil}
+  @empty_meta %{
+    seq: 0,
+    order: 0,
+    thread: nil,
+    turn: nil,
+    status: nil,
+    token_usage: nil,
+    plan: nil
+  }
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
@@ -172,6 +180,13 @@ defmodule Longx.Codex.ThreadState.Store do
   def fold(t, "thread/tokenUsage/updated", %{"tokenUsage" => usage}),
     do: put_meta(t, %{token_usage: usage})
 
+  # the turn's plan (codex's update_plan tool): steps with pending / inProgress / completed
+  def fold(t, "turn/plan/updated", %{"plan" => plan} = params),
+    do:
+      put_meta(t, %{
+        plan: Map.take(params, ["turnId", "explanation", "plan"]) |> Map.put("plan", plan)
+      })
+
   def fold(t, "item/started", %{"item" => %{"id" => _} = item} = params),
     do: put_item(t, with_turn(item, params))
 
@@ -224,6 +239,7 @@ defmodule Longx.Codex.ThreadState.Store do
       turn: meta.turn,
       status: meta.status,
       token_usage: meta.token_usage,
+      plan: meta.plan,
       items: items(thread_id),
       pending_requests: requests(thread_id)
     }

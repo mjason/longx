@@ -22,6 +22,7 @@ defmodule Longx.Projects do
       rpc_action :archive_project, :archive
       rpc_action :delete_project, :delete
       rpc_action :git_info, :git_info
+      rpc_action :search_files, :search_files
       rpc_action :init_git, :init_git
       rpc_action :codex_info, :codex_info
       rpc_action :stop_codex, :stop_codex
@@ -31,6 +32,7 @@ defmodule Longx.Projects do
 
     resource Longx.Projects.Thread do
       rpc_action :list_threads, :for_project
+      rpc_action :list_subagents, :subagents_of
       rpc_action :start_thread, :start_thread
       rpc_action :send_message, :send_message
       rpc_action :interrupt_turn, :interrupt_turn
@@ -68,6 +70,7 @@ defmodule Longx.Projects do
       define :rehost_thread, action: :rehost
       define :list_threads_for_project, action: :for_project, args: [:project_id]
       define :list_threads_with_status, action: :with_status, args: [:project_id, :status]
+      define :list_subagents, action: :subagents_of, args: [:parent_thread_id]
     end
 
     resource Longx.Projects.Turn do
@@ -115,6 +118,7 @@ defmodule Longx.Projects do
           | {:model, String.t()}
           | {:network_access, boolean}
           | {:web_search, boolean}
+          | {:multi_agent, boolean}
           | {:conn, GenServer.server()}
 
   @doc """
@@ -133,6 +137,7 @@ defmodule Longx.Projects do
     sandbox = Keyword.get(opts, :sandbox, project.sandbox)
     network_access = Keyword.get(opts, :network_access, project.network_access)
     web_search = Keyword.get(opts, :web_search, project.web_search)
+    multi_agent = Keyword.get(opts, :multi_agent, project.multi_agent)
 
     # the model's own settings (context window, reasoning, web search mode);
     # an unknown slug or a missing default is refused before codex is involved
@@ -145,6 +150,7 @@ defmodule Longx.Projects do
              sandbox: sandbox,
              tools: tools,
              network_access: network_access,
+             multi_agent: multi_agent,
              conn: conn
            ]
            |> Keyword.merge(model_opts)
@@ -160,6 +166,7 @@ defmodule Longx.Projects do
              sandbox: sandbox,
              network_access: network_access,
              web_search: web_search,
+             multi_agent: multi_agent,
              tools: tools
            }) do
       :ok = Tracker.track(codex_thread_id)
@@ -328,6 +335,7 @@ defmodule Longx.Projects do
              sandbox: thread.sandbox,
              tools: thread.tools,
              network_access: thread.network_access,
+             multi_agent: thread.multi_agent,
              conn: conn
            ]
            |> Keyword.merge(model_opts)
@@ -736,6 +744,59 @@ defmodule Longx.Projects do
     {:ok, projects} = list_projects(opts)
     projects
   end
+
+  ## Files (for the composer's @ mentions)
+
+  @file_matches 20
+
+  @type file_match :: %{
+          path: String.t(),
+          file_name: String.t(),
+          root: String.t(),
+          match_type: String.t(),
+          score: non_neg_integer,
+          indices: [non_neg_integer] | nil
+        }
+
+  @doc """
+  Fuzzy file matches under the project root, from codex's own file index
+  (`fuzzyFileSearch`, the same one its TUI uses for `@`): paths relative to
+  the root, best first. An empty query matches nothing.
+  """
+  @spec search_files(Project.t(), String.t(), keyword) :: {:ok, [file_match]} | {:error, term}
+  def search_files(project, query, opts \\ [])
+
+  def search_files(%Project{}, "", _opts), do: {:ok, []}
+
+  def search_files(%Project{root_path: root} = project, query, opts) when is_binary(query) do
+    with {:ok, conn} <- project_connection(project, opts),
+         {:ok, %{"files" => files}} <-
+           Longx.Codex.Connection.request(conn, "fuzzyFileSearch", %{
+             "query" => query,
+             "roots" => [root]
+           }) do
+      {:ok,
+       files
+       |> Enum.reject(&git_internal?(&1["path"]))
+       |> Enum.take(@file_matches)
+       |> Enum.map(fn f ->
+         %{
+           path: f["path"],
+           file_name: f["file_name"],
+           root: f["root"],
+           match_type: f["match_type"],
+           score: f["score"] || 0,
+           indices: f["indices"]
+         }
+       end)}
+    end
+  end
+
+  # codex's index includes .git; nobody wants to mention those
+  defp git_internal?(path) when is_binary(path),
+    do: path == ".git" or String.starts_with?(path, ".git/") or String.contains?(path, "/.git/")
+
+  defp git_internal?(_), do: false
 
   ## Git
 

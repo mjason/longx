@@ -72,6 +72,12 @@ defmodule Longx.Codex.HomeTest do
     refute config =~ "[features]\nstandalone_web_search = true"
   end
 
+  test "the [agents] limits (sub-agents per session, depth) come from config", %{dir: dir} do
+    {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
+    config = File.read!(home.config_path)
+    assert config =~ "[agents]\nmax_concurrent_threads_per_session = 4\nmax_depth = 2\n"
+  end
+
   test "without an explicit option the mode comes from Longx.AI.web_search_mode/0", %{dir: dir} do
     # nothing configured in the (sandboxed, cleared) DB → standalone (open needs no provider)
     {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")

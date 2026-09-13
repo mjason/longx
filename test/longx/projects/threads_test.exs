@@ -148,7 +148,8 @@ defmodule Longx.Projects.ThreadsTest do
                "model_reasoning_effort" => "high",
                "model_reasoning_summary" => "auto",
                "web_search" => "live",
-               "features.standalone_web_search" => true
+               "features.standalone_web_search" => true,
+               "features.multi_agent_v2" => true
              }
     end
 
@@ -191,6 +192,26 @@ defmodule Longx.Projects.ThreadsTest do
     end
   end
 
+  describe "search_files/3" do
+    test "asks the project's codex for fuzzy file matches under the root", %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      File.mkdir_p!(Path.join(dir, "lib/longx"))
+      File.write!(Path.join(dir, "lib/longx/gateway.ex"), "")
+      File.write!(Path.join(dir, "lib/longx/git.ex"), "")
+
+      assert {:ok, matches} = Projects.search_files(project, "gtw", conn: conn)
+
+      assert [%{path: "lib/longx/gateway.ex", file_name: "gateway.ex", match_type: "file"} | _] =
+               matches
+
+      refute Enum.any?(matches, &(&1.path == "lib/longx/git.ex"))
+      # codex's index sees .git too; nobody mentions those
+      refute Enum.any?(matches, &String.starts_with?(&1.path, ".git/"))
+
+      assert {:ok, []} = Projects.search_files(project, "", conn: conn)
+    end
+  end
+
   describe "send_message/3 and the turn's git bookmarks" do
     test "clean git tree: the turn starts from HEAD and completes with the tracker filling it in",
          %{dir: dir, conn: conn} do
@@ -215,6 +236,22 @@ defmodule Longx.Projects.ThreadsTest do
       assert thread.preview == "say hello there"
       assert %DateTime{} = thread.last_activity_at
       assert thread.status == :idle
+    end
+
+    test "codex naming the thread fills an empty title; a title the person chose stays", %{
+      dir: dir,
+      conn: conn
+    } do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      {:ok, turn} = Projects.send_message(thread, "name Fix the tests", conn: conn)
+      eventually(turn_done(turn.id))
+      assert Ash.get!(Thread, thread.id).title == "Fix the tests"
+
+      {:ok, named} = Projects.rename_thread(Ash.get!(Thread, thread.id), %{title: "Mine"})
+      {:ok, turn2} = Projects.send_message(named, "name Something else", conn: conn)
+      eventually(turn_done(turn2.id))
+      assert Ash.get!(Thread, thread.id).title == "Mine"
     end
 
     test "dirty tree with dirty_start: :commit commits first so the turn starts from a commit", %{
@@ -351,6 +388,22 @@ defmodule Longx.Projects.ThreadsTest do
       quiet = Projects.update_project!(project, %{web_search: false})
       {:ok, inherited} = Projects.start_thread(quiet, conn: conn)
       assert inherited.web_search == false
+    end
+
+    test "multi_agent: false at start keeps codex's sub-agent tools off; the project's default applies otherwise",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      assert project.multi_agent == true
+
+      {:ok, on} = Projects.start_thread(project, conn: conn)
+      assert on.multi_agent == true
+      %{"startParams" => params} = read_thread!(conn, on.codex_thread_id)
+      assert params["config"]["features.multi_agent_v2"] == true
+
+      {:ok, off} = Projects.start_thread(project, conn: conn, multi_agent: false)
+      assert off.multi_agent == false
+      %{"startParams" => params} = read_thread!(conn, off.codex_thread_id)
+      assert params["config"]["features.multi_agent"] == false
     end
 
     test "turns are listed oldest first", %{dir: dir, conn: conn} do

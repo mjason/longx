@@ -121,6 +121,25 @@ defmodule Longx.Codex.ThreadStateTest do
       assert Store.requests(t) == []
     end
 
+    test "the turn's plan (turn/plan/updated) is part of the view" do
+      t = new_thread()
+
+      Store.fold(t, "turn/plan/updated", %{
+        "turnId" => "turn-1",
+        "explanation" => "first",
+        "plan" => [%{"step" => "a", "status" => "inProgress"}]
+      })
+
+      assert %{
+               plan: %{
+                 "turnId" => "turn-1",
+                 "explanation" => "first",
+                 "plan" => [%{"step" => "a"}]
+               }
+             } =
+               Store.snapshot(t)
+    end
+
     test "token usage and thread status are kept" do
       t = new_thread()
       Store.fold(t, "thread/tokenUsage/updated", %{"tokenUsage" => %{"total" => 12}})

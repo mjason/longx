@@ -7,7 +7,9 @@ import {
   type ReasoningMessagePartComponent,
   type ReasoningGroupComponent,
 } from "@assistant-ui/react";
+import { useMemo } from "react";
 import { MarkdownText } from "@/ui/components/assistant-ui/elements/markdown-text";
+import { StreamingText, type Segment } from "@/ui/components/assistant-ui/elements/streaming-text";
 import {
   ANIMATION_DURATION,
   ReasoningRoot as ReasoningRootBase,
@@ -56,7 +58,14 @@ function ReasoningRoot({
   );
 }
 
-const ReasoningImpl: ReasoningMessagePartComponent = () => <MarkdownText />;
+// Longx: while the model is still thinking the words land one by one
+// (streaming-text: newest tinted, caret); settled, the text is markdown.
+const ReasoningImpl: ReasoningMessagePartComponent = ({ text, status }) => {
+  const segments = useMemo<Segment[]>(() => [{ text }], [text]);
+  const count = useMemo(() => text.split(" ").length, [text]);
+  if (status.type !== "running") return <MarkdownText />;
+  return <StreamingText segments={segments} count={count} streaming className="min-h-0 max-w-none text-sm" />;
+};
 
 const ReasoningGroupImpl: ReasoningGroupComponent = ({
   children,

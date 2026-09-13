@@ -13,6 +13,11 @@
 #   "error"            answer turn/start with a JSON-RPC error
 #   "die"              exit immediately (simulates a crash)
 #   "server-notify"    emit a notification without a threadId
+#   "name <title>"     codex names the thread: thread/name/updated, then a message
+#   "spawn <name>"     a sub-agent: turn/plan/updated, subAgentActivity started on
+#                      this thread, a child thread <name> (items on its own id: a
+#                      command and an agentMessage "done by <name>"), a
+#                      collabAgentToolCall wait, subAgentActivity completed
 #
 # Requests before the initialize/initialized handshake get "Not initialized".
 #
@@ -266,10 +271,47 @@ defmodule FakeAppServer do
     state
   end
 
+  # fuzzyFileSearch: the files under the roots whose relative path contains
+  # the query's characters in order (a real subsequence match, like codex)
+  defp handle(
+         %{
+           "id" => id,
+           "method" => "fuzzyFileSearch",
+           "params" => %{"query" => q, "roots" => roots}
+         },
+         state
+       ) do
+    files =
+      for root <- roots,
+          q != "",
+          file <- Path.wildcard(Path.join(root, "**/*"), match_dot: false),
+          File.regular?(file),
+          rel = Path.relative_to(file, root),
+          subsequence?(String.downcase(q), String.downcase(rel)) do
+        %{
+          "root" => root,
+          "path" => rel,
+          "file_name" => Path.basename(rel),
+          "match_type" => "file",
+          "score" => max(1000 - String.length(rel), 1),
+          "indices" => nil
+        }
+      end
+
+    reply(id, %{"files" => Enum.sort_by(files, & &1["score"], :desc)})
+    state
+  end
+
   defp handle(%{"id" => id, "method" => method}, state) do
     error(id, -32601, "Method not found: #{method}")
     state
   end
+
+  defp subsequence?("", _), do: true
+  defp subsequence?(_, ""), do: false
+
+  defp subsequence?(<<c, q::binary>>, <<c, s::binary>>), do: subsequence?(q, s)
+  defp subsequence?(q, <<_, s::binary>>), do: subsequence?(q, s)
 
   defp handle(%{"method" => "fake/continue"}, %{pending: pending} = state) do
     case Map.pop(pending, :continue) do
@@ -462,6 +504,116 @@ defmodule FakeAppServer do
   end
 
   defp run_turn("die", _id, _thread_id, _turn_id, _state), do: System.halt(1)
+
+  defp run_turn("spawn " <> name, id, thread_id, turn_id, state) do
+    start_turn(id, thread_id, turn_id, "spawn " <> name)
+    child_id = "#{thread_id}-#{name}"
+    child_turn = "#{turn_id}-#{name}"
+
+    notify("turn/plan/updated", %{
+      "threadId" => thread_id,
+      "turnId" => turn_id,
+      "explanation" => "delegating",
+      "plan" => [
+        %{"step" => "spawn #{name}", "status" => "completed"},
+        %{"step" => "wait for #{name}", "status" => "inProgress"},
+        %{"step" => "report", "status" => "pending"}
+      ]
+    })
+
+    activity = fn kind, n ->
+      item = %{
+        "id" => "act_#{name}_#{kind}_#{n}",
+        "type" => "subAgentActivity",
+        "agentPath" => "/root/#{name}",
+        "agentThreadId" => child_id,
+        "kind" => kind
+      }
+
+      notify("item/started", %{"threadId" => thread_id, "turnId" => turn_id, "item" => item})
+      notify("item/completed", %{"threadId" => thread_id, "turnId" => turn_id, "item" => item})
+    end
+
+    activity.("started", state.next)
+
+    # the child works on its own thread id (no thread/started for sub-agents)
+    notify("turn/started", %{
+      "threadId" => child_id,
+      "turn" => %{"id" => child_turn, "status" => "inProgress"}
+    })
+
+    cmd = %{
+      "id" => "cmd_#{name}",
+      "type" => "commandExecution",
+      "command" => "echo #{name}",
+      "status" => "completed",
+      "aggregatedOutput" => "#{name}\n",
+      "exitCode" => 0
+    }
+
+    notify("item/started", %{
+      "threadId" => child_id,
+      "turnId" => child_turn,
+      "item" => Map.put(cmd, "status", "inProgress")
+    })
+
+    notify("item/completed", %{"threadId" => child_id, "turnId" => child_turn, "item" => cmd})
+    msg = %{"id" => "msg_#{name}", "type" => "agentMessage", "text" => "done by #{name}"}
+
+    notify("item/started", %{
+      "threadId" => child_id,
+      "turnId" => child_turn,
+      "item" => Map.put(msg, "text", "")
+    })
+
+    notify("item/completed", %{"threadId" => child_id, "turnId" => child_turn, "item" => msg})
+
+    notify("turn/completed", %{
+      "threadId" => child_id,
+      "turn" => %{"id" => child_turn, "status" => "completed"}
+    })
+
+    wait = %{
+      "id" => "collab_#{name}",
+      "type" => "collabAgentToolCall",
+      "tool" => "wait",
+      "status" => "completed",
+      "senderThreadId" => thread_id,
+      "receiverThreadIds" => [child_id],
+      "agentsStates" => %{child_id => %{"status" => "completed", "message" => "done by #{name}"}},
+      "prompt" => nil,
+      "model" => nil
+    }
+
+    notify("item/started", %{
+      "threadId" => thread_id,
+      "turnId" => turn_id,
+      "item" => Map.put(wait, "status", "inProgress")
+    })
+
+    notify("item/completed", %{"threadId" => thread_id, "turnId" => turn_id, "item" => wait})
+    activity.("completed", state.next)
+
+    notify("turn/plan/updated", %{
+      "threadId" => thread_id,
+      "turnId" => turn_id,
+      "explanation" => nil,
+      "plan" => [
+        %{"step" => "spawn #{name}", "status" => "completed"},
+        %{"step" => "wait for #{name}", "status" => "completed"},
+        %{"step" => "report", "status" => "inProgress"}
+      ]
+    })
+
+    stream_message(thread_id, turn_id, ["#{name}", "reported"])
+    finish_turn(thread_id, turn_id, "completed", state, "spawn " <> name, "#{name} reported")
+  end
+
+  defp run_turn("name " <> title, id, thread_id, turn_id, state) do
+    start_turn(id, thread_id, turn_id, "name " <> title)
+    notify("thread/name/updated", %{"threadId" => thread_id, "threadName" => title})
+    finish_turn(thread_id, turn_id, "completed", state, "name " <> title, "named")
+  end
 
   defp run_turn("server-notify", id, thread_id, turn_id, state) do
     start_turn(id, thread_id, turn_id, "server-notify")

@@ -64,9 +64,13 @@ defmodule Longx.AI.Gateway do
       |> Map.drop(@internal_fields)
       |> Map.put("model", target.model)
       |> Map.put("stream", true)
-      |> Map.put("input", sanitize_reasoning(input, target.kind))
+      |> Map.put(
+        "input",
+        input |> sanitize_reasoning(target.kind) |> translate_agent_messages(target.kind)
+      )
       |> drop_hosted_search(target)
       |> put_max_output_tokens(target)
+      |> dump_request()
 
     {:ok,
      %Upstream{
@@ -86,6 +90,22 @@ defmodule Longx.AI.Gateway do
 
   def prepare(_body, _target), do: {:error, :invalid_request}
 
+  # dev aid: `config :longx, Longx.AI.Gateway, dump_requests_to: dir` writes every
+  # prepared request as JSON (what the model actually sees — the way to check
+  # what codex put in front of it, sub-agent envelopes included)
+  defp dump_request(body) do
+    case Application.get_env(:longx, __MODULE__, [])[:dump_requests_to] do
+      nil ->
+        body
+
+      dir ->
+        File.mkdir_p!(dir)
+        name = "#{System.system_time(:millisecond)}-#{System.unique_integer([:positive])}.json"
+        File.write!(Path.join(dir, name), Jason.encode!(body, pretty: true))
+        body
+    end
+  end
+
   # The model's output cap, unless codex asked for one itself.
   defp put_max_output_tokens(body, %Target{max_output_tokens: nil}), do: body
 
@@ -98,6 +118,32 @@ defmodule Longx.AI.Gateway do
     do: Map.put(body, "tools", Enum.reject(tools, &(&1["type"] in @hosted_search_tools)))
 
   defp drop_hosted_search(body, _target), do: body
+
+  ## Sub-agent envelopes: readable for everyone
+
+  # codex hands a spawned sub-agent its task as an `agent_message` item whose
+  # payload is an `encrypted_content` part — plain text, but a content type
+  # only OpenAI's Responses API knows; any other provider ignores it and the
+  # child starts with an empty task. For those targets the item becomes an
+  # ordinary user message with the payload as text.
+  @spec translate_agent_messages([map], :openai | :openai_compatible) :: [map]
+  def translate_agent_messages(input, :openai), do: input
+
+  def translate_agent_messages(input, _kind) do
+    Enum.map(input, fn
+      %{"type" => "agent_message", "content" => content} when is_list(content) ->
+        %{"type" => "message", "role" => "user", "content" => Enum.map(content, &readable_part/1)}
+
+      item ->
+        item
+    end)
+  end
+
+  defp readable_part(%{"type" => "encrypted_content", "encrypted_content" => text})
+       when is_binary(text),
+       do: %{"type" => "input_text", "text" => text}
+
+  defp readable_part(part), do: part
 
   ## Reasoning items: a provider only ever receives its own opaque data
 

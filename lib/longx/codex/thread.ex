@@ -28,6 +28,7 @@ defmodule Longx.Codex.Thread do
           | {:reasoning_summary, atom}
           | {:web_search, web_search}
           | {:network_access, boolean}
+          | {:multi_agent, boolean}
           | {:tools, [module | String.t()]}
           | {:conn, GenServer.server()}
 
@@ -292,6 +293,22 @@ defmodule Longx.Codex.Thread do
       if Keyword.get(opts, :network_access, false),
         do: Map.put(config, "sandbox_workspace_write.network_access", true),
         else: config
+
+    # sub-agents: codex's `spawn_agent` / `wait` / … tools (multi_agent_v2);
+    # the `[agents]` limits come from the global config (Longx.Codex.Home)
+    config =
+      case Keyword.fetch(opts, :multi_agent) do
+        {:ok, true} ->
+          Map.put(config, "features.multi_agent_v2", true)
+
+        {:ok, false} ->
+          config
+          |> Map.put("features.multi_agent", false)
+          |> Map.put("features.multi_agent_v2", false)
+
+        _ ->
+          config
+      end
 
     if map_size(config) == 0, do: params, else: Map.put(params, "config", config)
   end

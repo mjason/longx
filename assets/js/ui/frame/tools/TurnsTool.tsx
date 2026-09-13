@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { relativeTime } from "@/core/format";
 import { fetchRestoreProposal, useModels, useRedoTurn, useRestoreFiles, useTurns, type RestoreProposal } from "@/core/projects";
 import { parseDiff } from "@/ui/chat/toolkit";
+import { CheckpointHistory, type Checkpoint } from "@/ui/components/assistant-ui/elements/checkpoint-history";
 import { CodeDiff } from "@/ui/components/assistant-ui/elements/code-diff";
 import { Button } from "@/ui/components/ui/button";
 import { Checkbox } from "@/ui/components/ui/checkbox";
@@ -43,11 +44,27 @@ export function TurnsTool({ ctx }: { ctx: ProjectContext }) {
   if (turns.isPending) return <Skeleton className="h-16 w-full" />;
   if (turns.isError) return <p className="text-destructive text-sm">{turns.error.message}</p>;
 
+  // every turn that started from a commit is a point to fall back to; "now" is HEAD
+  const checkpoints: Checkpoint[] = turns.data
+    .map((turn, i) => ({ turn, i }))
+    .filter(({ turn }) => turn.commitBefore && turn.status !== "reverted" && turn.status !== "in_progress")
+    .map(({ turn, i }) => ({ id: turn.id, label: t.checkpointBefore(i + 1, turn.userText ?? ""), at: relativeTime(turn.startedAt), files: turn.diff ? splitDiff(turn.diff).length : 0 }));
+
   return (
     <div className="flex flex-col gap-2" data-testid="turns-tool">
       {turns.data.length === 0 ? <p className="text-muted-foreground text-sm">{t.noTurns}</p> : null}
+      {checkpoints.length ? (
+        <CheckpointHistory
+          checkpoints={[...checkpoints, { id: "now", label: t.checkpointNow }]}
+          currentId="now"
+          labels={t.checkpoints}
+          onRestore={(id) => setRestoring(turns.data.find((turn) => turn.id === id) ?? null)}
+          className="max-w-none"
+          data-testid="checkpoints"
+        />
+      ) : null}
       {turns.data.map((turn, i) => (
-        <TurnRow key={turn.id} turn={turn} index={i + 1} onRestore={() => setRestoring(turn)} onRedo={() => setRedoing(turn)} />
+        <TurnRow key={turn.id} turn={turn} index={i + 1} onRedo={() => setRedoing(turn)} />
       ))}
       <RestoreDialog turn={restoring} threadId={threadId} onClose={() => setRestoring(null)} />
       <RedoDialog turn={redoing} threadId={threadId} slug={ctx.slug} onClose={() => setRedoing(null)} />
@@ -55,7 +72,7 @@ export function TurnsTool({ ctx }: { ctx: ProjectContext }) {
   );
 }
 
-function TurnRow({ turn, index, onRestore, onRedo }: { turn: Turn; index: number; onRestore: () => void; onRedo: () => void }) {
+function TurnRow({ turn, index, onRedo }: { turn: Turn; index: number; onRedo: () => void }) {
   const Icon = STATUS_ICON[turn.status] ?? CheckCircle2;
   const files = turn.diff ? splitDiff(turn.diff) : [];
   return (
@@ -91,11 +108,6 @@ function TurnRow({ turn, index, onRestore, onRedo }: { turn: Turn; index: number
       ) : null}
       {turn.status !== "reverted" && turn.status !== "in_progress" ? (
         <div className="mt-2 flex gap-1">
-          {turn.commitBefore ? (
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onRestore}>
-              <Undo2 /> {t.restoreBefore}
-            </Button>
-          ) : null}
           <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onRedo}>
             <RotateCcw /> {t.redo}
           </Button>

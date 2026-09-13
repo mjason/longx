@@ -1403,6 +1403,7 @@ export type CreateProjectInput = {
   dirtyStart?: "ask" | "commit" | "off";
   networkAccess?: boolean;
   webSearch?: boolean;
+  multiAgent?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
   initGit?: boolean | null;
@@ -1867,6 +1868,81 @@ export async function validateRestartCodex(
 }
 
 
+export type SearchFilesInput = {
+  id: UUID;
+  query: string;
+};
+
+export type SearchFilesFields = UnifiedFieldSelection<{path: string, fileName: string, root: string, matchType: string, score: number, indices: Array<number> | null, __type: "TypedMap", __primitiveFields: "path" | "fileName" | "root" | "matchType" | "score" | "indices"}>[];
+
+export type InferSearchFilesResult<
+  Fields extends SearchFilesFields | undefined,
+> = Array<InferResult<{path: string, fileName: string, root: string, matchType: string, score: number, indices: Array<number> | null, __type: "TypedMap", __primitiveFields: "path" | "fileName" | "root" | "matchType" | "score" | "indices"}, Fields>>;
+
+export type SearchFilesResult<Fields extends SearchFilesFields | undefined = undefined> = | { success: true; data: InferSearchFilesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Project
+ *
+ * @ashActionType :action
+ */
+export async function searchFiles<Fields extends SearchFilesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SearchFilesInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SearchFilesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "search_files",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SearchFilesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Project
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSearchFiles(
+  config: {
+  tenant?: string;
+  input: SearchFilesInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "search_files",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type StopCodexInput = {
   id: UUID;
   force?: boolean | null;
@@ -1946,6 +2022,7 @@ export type UpdateProjectInput = {
   dirtyStart?: "ask" | "commit" | "off";
   networkAccess?: boolean;
   webSearch?: boolean;
+  multiAgent?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
 };
@@ -2614,6 +2691,7 @@ export type StartThreadInput = {
   sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
   networkAccess?: boolean | null;
   webSearch?: boolean | null;
+  multiAgent?: boolean | null;
 };
 
 export type StartThreadFields = UnifiedFieldSelection<ThreadResourceSchema>[];
@@ -2675,6 +2753,83 @@ export async function validateStartThread(
 ): Promise<ValidationResult> {
   const payload = {
     action: "start_thread",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ListSubagentsInput = {
+  parentThreadId: UUID;
+};
+
+export type ListSubagentsFields = UnifiedFieldSelection<ThreadResourceSchema>[];
+export type InferListSubagentsResult<
+  Fields extends ListSubagentsFields,
+> = Array<InferResult<ThreadResourceSchema, Fields>>;
+
+export type ListSubagentsResult<Fields extends ListSubagentsFields> = | { success: true; data: InferListSubagentsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Read Thread records
+ *
+ * @ashActionType :read
+ */
+export async function listSubagents<Fields extends ListSubagentsFields>(
+  config: {
+  tenant?: string;
+  input: ListSubagentsInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  filter?: ThreadFilterInput;
+  sort?: SortString<ThreadSortField> | SortString<ThreadSortField>[];
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListSubagentsResult<Fields>> {
+  const payload = {
+    action: "list_subagents",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields }),
+    ...(config.filter && { filter: config.filter }),
+    ...(config.sort && { sort: Array.isArray(config.sort) ? config.sort.join(",") : config.sort })
+  };
+
+  return executeActionRpcRequest<ListSubagentsResult<Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Read Thread records
+ *
+ * @ashActionType :read
+ * @validation true
+ */
+export async function validateListSubagents(
+  config: {
+  tenant?: string;
+  input: ListSubagentsInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_subagents",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };

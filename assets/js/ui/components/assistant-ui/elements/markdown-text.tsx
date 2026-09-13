@@ -13,6 +13,8 @@ import { type FC, memo, useMemo, useRef } from "react";
 import type { TextMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
+import { MermaidDiagram } from "@/ui/components/assistant-ui/elements/mermaid-diagram.aui";
+import { SyntaxHighlighter } from "@/ui/components/assistant-ui/elements/shiki-highlighter.aui";
 import { TooltipIconButton } from "@/ui/components/assistant-ui/elements/tooltip-icon-button";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -52,10 +54,15 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
       remarkPlugins={[remarkGfm]}
       className="aui-md"
       components={markdownComponents}
+      componentsByLanguage={BY_LANGUAGE}
       defer
     />
   );
 };
+
+// Longx: fenced code tokenises with shiki once the part settles; a `mermaid`
+// fence draws the diagram instead of showing its source.
+const BY_LANGUAGE = { mermaid: { SyntaxHighlighter: MermaidDiagram } };
 
 export const MarkdownText = memo(MarkdownTextImpl);
 
@@ -265,4 +272,5 @@ const defaultComponents = memoizeMarkdownComponents({
     );
   },
   CodeHeader,
+  SyntaxHighlighter,
 });

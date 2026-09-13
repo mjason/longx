@@ -12,7 +12,7 @@ import type {
 } from "@assistant-ui/react";
 import { answerRequest, interruptTurn, respond, sendMessage } from "@/ash_rpc";
 import { RpcFailure, unwrap } from "@/core/projects";
-import { requestIdFor, toMessages, type ApprovalDecision } from "./messages";
+import { requestIdFor, toMessages, type ApprovalDecision, type SubViews } from "./messages";
 import { runningTurnId, type ThreadView } from "./thread";
 
 export type ThreadTarget = { threadId: string; codexThreadId: string };
@@ -26,6 +26,8 @@ export type AccessMode = {
   networkAccess: boolean;
   /** codex's web.run (search + open URL, run by Longx, not the sandbox); fixed at thread start */
   webSearch: boolean;
+  /** codex's sub-agent tools (spawn / wait / …); fixed at thread start */
+  multiAgent: boolean;
 };
 /** what to do with uncommitted changes when the project's policy is "ask"; null = don't send */
 export type DirtyDecision = "commit" | "ignore" | null;
@@ -40,6 +42,8 @@ export type AdapterOptions = {
   /** null = no thread open yet: the first message creates one (`createThread`) */
   target: ThreadTarget | null;
   view: ThreadView;
+  /** the live views of the thread's sub-agents (nested conversations; their approvals surface here) */
+  subviews?: SubViews;
   /** the model slug for the next turn (null = the thread's current) */
   model: string | null;
   /** the access mode for the next turn (undefined = the thread's current) */
@@ -79,7 +83,7 @@ export function buildAdapter(opts: AdapterOptions): ExternalStoreAdapter<ThreadM
     },
   };
   return {
-    messages: opts.target ? toMessages(view) : [],
+    messages: opts.target ? toMessages(view, opts.subviews) : [],
     convertMessage: (m) => m,
     isRunning: opts.target ? runningTurnId(view) !== null : false,
     isDisabled: opts.disabled ?? false,

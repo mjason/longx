@@ -14,6 +14,7 @@ import {
   restoreFiles,
   restoreProposal,
   listProjects,
+  listSubagents,
   listThreads,
   restartCodex,
   sandboxStatus,
@@ -33,6 +34,7 @@ export const projectFields = [
   "approvalPolicy",
   "networkAccess",
   "webSearch",
+  "multiAgent",
   "dirtyStart",
   "tools",
   "memoryLimitMb",
@@ -51,9 +53,13 @@ export const threadFields = [
   "approvalPolicy",
   "networkAccess",
   "webSearch",
+  "multiAgent",
   "lastActivityAt",
   "insertedAt",
 ] as const;
+
+/** codex-spawned sub-agents of a thread (their rows live under the parent, never in the project list) */
+export const subagentFields = ["id", "codexThreadId", "title", "preview", "status", "agentPath", "lastActivityAt", "insertedAt"] as const;
 
 export const gitFields = ["repository", "head", "clean", "changes", "lfs"] as const;
 export const codexFields = ["home", "exists", "bytes", "files", "worker"] as const;
@@ -86,6 +92,7 @@ export const queryKeys = {
   sandbox: ["sandbox"] as const,
   models: ["models"] as const,
   turns: (threadId: string) => ["turns", threadId] as const,
+  subagents: (threadId: string) => ["subagents", threadId] as const,
 };
 
 export function useProjects() {
@@ -143,6 +150,14 @@ export const turnFields = [
 ] as const;
 
 /** The turns of a thread, oldest first (reverted ones included when asked). */
+export function useSubagents(threadId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.subagents(threadId ?? ""),
+    enabled: !!threadId,
+    queryFn: async () => unwrap(await listSubagents({ fields: [...subagentFields], input: { parentThreadId: threadId! } })),
+  });
+}
+
 export function useTurns(threadId: string | undefined, includeReverted = false) {
   return useQuery({
     queryKey: [...queryKeys.turns(threadId ?? ""), includeReverted],
@@ -251,7 +266,7 @@ export function useInitGit(id: string) {
   });
 }
 
-export type StartThreadMode = { sandbox: "read_only" | "workspace_write" | "danger_full_access"; approvalPolicy: "never" | "on_request" | "untrusted"; networkAccess: boolean; webSearch: boolean };
+export type StartThreadMode = { sandbox: "read_only" | "workspace_write" | "danger_full_access"; approvalPolicy: "never" | "on_request" | "untrusted"; networkAccess: boolean; webSearch: boolean; multiAgent: boolean };
 
 export function useStartThread(id: string) {
   const client = useQueryClient();

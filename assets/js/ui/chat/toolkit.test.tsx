@@ -203,3 +203,76 @@ describe("WebSearchTool", () => {
     expect(screen.getByRole("link", { name: /Elixir 1.19 released/ })).toHaveAttribute("href", "https://elixir-lang.org/blog/1-19");
   });
 });
+
+describe("agents", () => {
+  test("a sub-agent row shows its state, nests its conversation and lifts the child's approval to the parent", async () => {
+    const { CollabTool, SubagentTool } = await import("./toolkit");
+    const respondToApproval = vi.fn(async () => {});
+    const { rerender } = render(
+      <SubagentTool {...part({ toolName: "subagent", toolCallId: "child-alpha", args: { name: "alpha", path: "/root/alpha", threadId: "child-alpha", kind: "started", request: null } })} />,
+    );
+    expect(screen.getByTestId("tool-subagent")).toHaveTextContent("alpha");
+    expect(screen.getByText("子 agent 工作中")).toBeInTheDocument();
+
+    rerender(
+      <SubagentTool
+        {...part({
+          toolName: "subagent",
+          toolCallId: "child-alpha",
+          args: { name: "alpha", path: "/root/alpha", threadId: "child-alpha", kind: "started", request: { command: "rm -rf x" } },
+          approval: { ...APPROVAL, id: "7", prompt: "子 agent alpha：允许执行这条命令？" },
+          status: { type: "requires-action", reason: "interrupt" },
+          respondToApproval,
+        })}
+      />,
+    );
+    expect(screen.getByText("子 agent alpha：允许执行这条命令？")).toBeInTheDocument();
+    expect(screen.getByText("rm -rf x")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "允许" }));
+    expect(respondToApproval).toHaveBeenCalledWith({ optionId: "accept" });
+
+    rerender(
+      <SubagentTool {...part({ toolName: "subagent", toolCallId: "child-alpha", args: { name: "alpha", path: "/root/alpha", threadId: "child-alpha", kind: "completed", request: null }, result: { kind: "completed" }, status: { type: "complete" } })} />,
+    );
+    expect(screen.getByText("子 agent 完成")).toBeInTheDocument();
+
+    // collaboration: waiting lists the agents with their reported states; a spawn is a handoff
+    render(
+      <CollabTool
+        {...part({
+          toolName: "collab",
+          toolCallId: "collab1",
+          args: { tool: "wait", prompt: null, model: null, agents: [{ threadId: "child-alpha", name: "alpha", kind: "started" }, { threadId: "child-beta", name: "beta", kind: "started" }, { threadId: "child-gamma", name: "gamma", kind: "completed" }] },
+          // real codex completes a wait with empty agentsStates: the agent's own activity decides then
+          result: { status: "completed", agentsStates: { "child-alpha": { status: "completed", message: "done" }, "child-beta": { status: "running", message: null } } },
+          status: { type: "complete" },
+        })}
+      />,
+    );
+    expect(screen.getByTestId("tool-collab")).toHaveTextContent("等到了");
+    fireEvent.click(screen.getByRole("button", { name: /等到了/ }));
+    expect(screen.getByRole("progressbar", { name: "alpha progress" })).toHaveAttribute("aria-valuenow", "100");
+    expect(screen.getByRole("progressbar", { name: "beta progress" })).not.toHaveAttribute("aria-valuenow");
+    expect(screen.getByRole("progressbar", { name: "gamma progress" })).toHaveAttribute("aria-valuenow", "100");
+
+    render(<CollabTool {...part({ toolName: "collab", toolCallId: "spawn1", args: { tool: "spawnAgent", prompt: "read the docs", model: "deepseek-flash", agents: [] } })} />);
+    expect(screen.getByText("正在派出")).toBeInTheDocument();
+    expect(screen.getByText("read the docs")).toBeInTheDocument();
+    expect(screen.getAllByText("新 agent").length).toBeGreaterThan(0);
+  });
+
+  test("a context compaction is a quiet marker", async () => {
+    const { CompactionView } = await import("./toolkit");
+    render(<CompactionView />);
+    expect(screen.getByRole("separator")).toHaveTextContent("上下文已压缩");
+  });
+
+  test("the plan renders codex's step states, not a running index", async () => {
+    const { PlanView } = await import("./toolkit");
+    render(<PlanView explanation="delegating" steps={[{ step: "spawn", status: "completed" }, { step: "wait", status: "inProgress" }, { step: "report", status: "pending" }]} />);
+    expect(screen.getByText("计划")).toBeInTheDocument();
+    expect(screen.getByText("1 / 3")).toBeInTheDocument();
+    expect(screen.getByText("delegating")).toBeInTheDocument();
+    expect(screen.getByText("wait")).toHaveClass("text-foreground/90");
+  });
+});

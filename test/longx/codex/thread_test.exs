@@ -107,6 +107,20 @@ defmodule Longx.Codex.ThreadTest do
              }
     end
 
+    test "start_params/1: multi_agent turns codex's sub-agent tools on for the thread" do
+      config = Thread.start_params(cwd: "/p", tools: [], multi_agent: true)["config"]
+      assert config["features.multi_agent_v2"] == true
+
+      refute Map.has_key?(
+               Thread.start_params(cwd: "/p", tools: [])["config"] || %{},
+               "features.multi_agent_v2"
+             )
+
+      assert Thread.start_params(cwd: "/p", tools: [], multi_agent: false)["config"][
+               "features.multi_agent_v2"
+             ] == false
+    end
+
     test "turn_params/3: text input, optional model / effort / summary for this turn onwards" do
       assert Thread.turn_params("t", "hi", []) ==
                %{"threadId" => "t", "input" => [%{"type" => "text", "text" => "hi"}]}

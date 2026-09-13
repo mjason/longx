@@ -86,7 +86,8 @@ React Native client planned on the same core code.
     `dirty_start: true`; `:ask` returns `{:error, {:dirty_tree, changes}}` unless
     `dirty: :commit | :ignore`), then `turn/start` (with `model:` if switching). The Tracker
     fills `status`/`completed_at`/`commit_after`/`diff` from `turn/completed` and
-    `turn/diff/updated`, and the thread `preview` from the first user message.
+    `turn/diff/updated`, the thread `preview` from the first user message, and an empty
+    `title` from codex's `thread/name/updated` (a title the person chose stays).
     **Access mode per turn**: `send_message/3` takes `sandbox:` / `approval_policy:` /
     `network_access:`; what differs from the thread row goes on `turn/start` as
     `sandboxPolicy` / `approvalPolicy` (codex keeps them for the turns after) and is
@@ -234,6 +235,28 @@ React Native client planned on the same core code.
     The provider block always declares `supports_standalone_web_search = true` (a capability,
     not a switch); what a thread gets is `web_search` (`"live"`/`"disabled"`) +
     `features.standalone_web_search` — standalone needs `web_search = "live"` too.
+  - **Multi-agent (codex sub-agents).** `Thread.start(multi_agent: true)` asks codex for its
+    v2 collaboration tools (`features.multi_agent_v2`: `collaboration.spawn_agent` /
+    `wait_agent` / `send_message` / …); `false` turns v1 and v2 off. `Project.multi_agent`
+    is the default, `Thread.multi_agent` what the thread started with (a `thread/start`
+    config, so a new-chat choice like web search). `[agents]` limits (4 concurrent per
+    session, depth 2) come from `config :longx, Longx.Codex.Home, agents:`. **Sub-agents are
+    threads**: codex runs each on its own thread id (no `thread/started`; its items arrive
+    on that id) and reports on the parent with `subAgentActivity` (`agentPath` "/root/<name>",
+    `agentThreadId`, `kind` started/interacted/interrupted/completed) and
+    `collabAgentToolCall` (`tool`, `receiverThreadIds`, `agentsStates`, `prompt`, `model`).
+    The Tracker turns a parent's first activity into a Thread row under it
+    (`parent_thread_id`, `agent_path`, title = last path segment; hidden from the project's
+    list, `list_subagents/1` / RPC `list_subagents`) and follows its topic, so a child has
+    a ThreadState, a channel and a page like any thread. **The gateway rewrites the child's
+    task**: codex hands it over as an `agent_message` item whose content is an
+    `encrypted_content` part only OpenAI reads — `Gateway.translate_agent_messages/2` turns
+    it into a plain user message for every other provider (without it every sub-agent
+    started with an empty task). A child's approval is a request on the child's thread; the
+    UI answers it through the parent (same connection, request id is what counts).
+    `turn/plan/updated` (codex's `update_plan` tool — not offered to every model) is the
+    thread view's `plan`. Dev aid: `config :longx, Longx.AI.Gateway, dump_requests_to:`
+    writes what the model actually receives.
     Standalone = codex's `ext/web-search`: with the feature on codex offers a `web.run`
     namespace tool and,
     when the model calls it, POSTs the commands to `<base_url>/alpha/search` with the
@@ -426,7 +449,11 @@ React Native client planned on the same core code.
     pending question; items get `startedAtMs`/`completedAtMs` from the client clock),
     `threadChannel.ts` (`thread:<codex id>`; the join reply's `thread_id` is authoritative —
     an empty thread codex could not resume comes back under a new id; `snapshot()` re-pulls
-    in place), `useThreadView.ts` (`refetch`; a `thread/reverted` re-pulls on its own),
+    in place), `useThreadView.ts` (`refetch`; a `thread/reverted` re-pulls on its own;
+    **events fold once per animation frame** — `batch.ts`'s `createBatcher`: codex streams
+    deltas every few ms, and a React commit per delta cannot keep up, which React reads as a
+    commit that always leaves work pending and kills as "Maximum update depth exceeded";
+    test builds fold at once),
     `messages.ts` (codex items → assistant-ui `ThreadMessageLike`: one assistant message per
     turn with `metadata.timing` from the turn's stamps + the last turn's token usage;
     agentMessage/plan → text, reasoning → reasoning, commandExecution / fileChange /
@@ -448,7 +475,11 @@ React Native client planned on the same core code.
     `createMessageQueue` (a message sent while a turn runs waits and goes out when it
     settles; no `cancel`, so a "steer" only means "next" — codex's `turn/steer` is a
     different thing, not wired) + per-turn model + `TurnState`; the router comes in as a
-    callback so React Native can reuse it).
+    callback so React Native can reuse it). **Everything the adapter is built from must be
+    referentially stable while nothing changes** (`runtime.test.tsx`): assistant-ui
+    re-applies the adapter after every render and a "new" adapter notifies the store on
+    every commit — `useMutation`'s result is a new object per render (use `mutateAsync`),
+    the mode object is memoised, callbacks are `useCallback`.
   - `js/ui/` — React DOM, **shaped like an IDE with the chat where the editor would be**
     (IDEA's interactions, not its looks): `pages/WelcomePage` (recent projects, search, one
     door to open/create), `pages/ProjectWizard` (two steps: `components/DirectoryPicker` on
@@ -457,12 +488,16 @@ React Native client planned on the same core code.
     a repository directory is an *open*, anything else may get `init_git: true`),
     `frame/ProjectWindow` (desktop: icon rail + docked resizable tool window + status
     strip; phone: chat full-screen, bottom toolbar, tools as bottom sheets — tool windows:
-    `frame/tools/{Threads,Git,Process,Turns}Tool`; ⌘1–4 toggle them; `core/frame.ts` keeps
+    `frame/tools/{Threads,Git,Process,Turns,Agents}Tool`; ⌘1–5 toggle them; `core/frame.ts` keeps
     the state, remembered per device; `TurnsTool` is the history: the thread's turns with
     status / model / commits, the per-turn diff as `code-diff` per file (`splitDiff`), and
     the restore (proposal → confirm → `restore_files`) and redo (text, model, revert |
     fork, restore first) dialogs over `core/projects.ts`'s `useTurns` / `useRestoreFiles` /
-    `useRedoTurn`), `frame/StatusStrip` (HEAD, codex, memory, sandbox warning),
+    `useRedoTurn`; the points to fall back to — every turn that started from a commit,
+    plus "now" — are the `checkpoint-history` element on top, its restore opening the same
+    dialog; `AgentsTool` is the thread's sub-agents as the `background-inbox`
+    element over `useSubagents` — a finished one opens its own thread page),
+    `frame/StatusStrip` (HEAD, codex, memory, sandbox warning),
     `pages/ProjectSettingsPage` (`/p/:slug/settings`: name, description, the thread
     defaults — sandbox, approval, network, dirty_start, model, memory cap — via
     `update_project`; danger zone: clear codex history, archive, each behind a confirm),
@@ -489,7 +524,14 @@ React Native client planned on the same core code.
     attachments/reload/edit until the runtime offers them), `tool-group.aui`, `reasoning`,
     `markdown-text`, `tool-fallback.aui` (dynamic `ns.tool` calls), `terminal-block`
     (`exitCode`/`exitLabel`/`fullCommand` instead of the demo's fixed "exit 0"),
-    `code-diff`, `web-search` (real urls), `approval-card` (labels/icon props) —
+    `code-diff`, `web-search` (real urls), `approval-card` (labels/icon props);
+    **renderers** (catalog section "Renderers"): `markdown-text` with `shiki-highlighter`
+    for fenced code (tokenises once the part settles; `github-light/dark-default` themes)
+    and `mermaid-diagram` for `mermaid` fences (skeleton while streaming, zoom dialog);
+    `reasoning.aui` streams the thinking through `streaming-text` (newest words tinted, a
+    caret) while the part runs and settles to markdown after; the `generative-ui` renderer
+    is not wired — nothing produces `generative-ui` parts (codex emits none, OpenUI was
+    dropped) —
     `thread-list.aui` (the threads tool is this element over `adapters.threadList`),
     `message-timing.aui` (in the assistant action bar), `elicitation-form` (made
     interactive: `onChange`, labels — codex's questions) — `surfaces.tsx` and
@@ -501,8 +543,16 @@ React Native client planned on the same core code.
     element; the composer rail is Codex's: `ComposerLeading` (`ModePicker` — the access
     mode for the next turn: sandbox / approval / network in a popover, from the thread row
     or the project defaults, sent with every message — and the turn's state) /
-    `ComposerTrailing` (the per-turn model with its reasoning effort) are slots our
-    `thread.aui` copy adds), `toolkit.tsx` (`defineToolkit` with
+    `ComposerTrailing` (the `context-display` ring — codex's last-turn token usage
+    against the `modelContextWindow` it reports, `contextUsage(view)` — and the per-turn
+    model with its reasoning effort) are slots our `thread.aui` copy adds, as are
+    `ComposerPopovers` and `UserText`: **`@` file mentions** — `FileMentions` is the
+    registry's `composer-trigger-popover` over `unstable_useLiveCompletionAdapter` →
+    RPC `search_files` (`Projects.search_files/3`: codex's own `fuzzyFileSearch` index under
+    the project root, `.git` dropped, 20 best); `core/chat/mentions.ts`'s `fileFormatter`
+    writes the pick as `@path` (quoted when it has spaces — what codex's TUI does, the model
+    just sees a path and reads the file itself) and `directive-text` renders it as a chip in
+    the user message), `toolkit.tsx` (`defineToolkit` with
     `type: "backend"`, `display: "standalone"` renderers per codex item type, **all built
     from the registry's Tool-use elements, one visual language**: every invocation is a
     `tool-call` row (verb · mono chip · check/cross; open while running or failed, a click
@@ -511,7 +561,25 @@ React Native client planned on the same core code.
     `code-diff` (file changes; `treeOf`, `parseDiff`), `web-search`; `approval-card` above a
     row that waits on a decision; `elicitation-form` for codex's questions
     (`QuestionsTool`, answers via `s.thread.extras.answerRequest`); reasoning uses the
-    `ghost` variant so it sits with the rows. Registered through
+    `ghost` variant so it sits with the rows. **Agents** (catalog section "Agents"):
+    `messages.ts` folds a sub-agent's `subAgentActivity` items into one `subagent` tool
+    call (id = the child's codex thread id; `args.request` = what the child waits approval
+    for) whose `messages` is the child's own conversation (`toMessages(childView)` →
+    `fromThreadMessageLike`, recursive) — `SubagentTool` renders it as a row with an
+    `agent-status` pill and `MessagePartPrimitive.Messages` over the exported
+    `AssistantParts` of `thread.aui`, so nested commands/diffs look like the parent's;
+    a child's pending approval rides on that part as the parent's `approval`
+    (`approval-card`, answered on the parent thread). `collabAgentToolCall` → `collab`:
+    spawn / send_message are an `agent-handoff`, wait a `subagent-list` (a wait names every
+    agent so far; codex 0.154 completes it with empty `receiverThreadIds`/`agentsStates`, so
+    each agent's state falls back to its own latest `subAgentActivity` kind). The turn's plan is a `data-plan` part
+    at the top of its message (`PlanUI` = `makeAssistantDataUI` + `agent-plan`, mounted in
+    `ChatProvider`, like `CompactionUI` for codex's `contextCompaction` marker). The child views come from `useThreadViews` (one channel per child id
+    named by the parent's activities, transitively) and reach the adapter as `subviews`;
+    a child's requests count as "等待审批" in the turn bar. The `agent-plan`,
+    `subagent-list`, `agent-status`, `agent-handoff`, `background-inbox` copies took
+    label / optional-prop tweaks (states per step, no demo glyphs) — still the registry's
+    look. Registered through
     `AuiConfig({ tools: Tools({ toolkit }) })`, so they win over `ToolFallback` by name;
     approvals answer with `respondToApproval({ optionId })`. **Never draw a tool's UI from
     scratch — pick the element from the catalog first** (https://www.assistant-ui.com/elements,

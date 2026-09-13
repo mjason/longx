@@ -26,10 +26,11 @@ describe("ProjectSettingsPage", () => {
     await user.click(within(form).getByRole("radio", { name: "只读" }));
     await user.click(within(form).getByRole("radio", { name: "从不询问" }));
     await user.click(within(form).getByRole("radio", { name: "先问我" }));
+    await user.click(within(form).getByRole("switch", { name: /子 agent/ }));
     await user.click(within(form).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(updateProject).toHaveBeenCalledWith(
-        expect.objectContaining({ identity: "id-1", input: expect.objectContaining({ sandbox: "read_only", approvalPolicy: "never", dirtyStart: "ask" }) }),
+        expect.objectContaining({ identity: "id-1", input: expect.objectContaining({ sandbox: "read_only", approvalPolicy: "never", dirtyStart: "ask", multiAgent: false }) }),
       ),
     );
   });

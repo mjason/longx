@@ -3,8 +3,8 @@
 // the phone app can share it; the panel width is remembered per device.
 import { useSyncExternalStore } from "react";
 
-export type Tool = "threads" | "git" | "process" | "history";
-export const TOOLS: Tool[] = ["threads", "git", "process", "history"];
+export type Tool = "threads" | "git" | "process" | "history" | "agents";
+export const TOOLS: Tool[] = ["threads", "git", "process", "history", "agents"];
 
 export type FrameState = { tool: Tool | null; panelWidth: number };
 
@@ -28,7 +28,7 @@ export function resizePanel(state: FrameState, width: number): FrameState {
   return { ...state, panelWidth: Math.min(MAX_PANEL, Math.max(MIN_PANEL, Math.round(width))) };
 }
 
-/** ⌘/Ctrl + 1..4 → a tool; null when the key is not a frame shortcut. */
+/** ⌘/Ctrl + 1..5 → a tool; null when the key is not a frame shortcut. */
 export function toolForShortcut(key: string): Tool | null {
   const n = Number.parseInt(key, 10);
   return n >= 1 && n <= TOOLS.length ? TOOLS[n - 1]! : null;

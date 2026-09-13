@@ -36,6 +36,21 @@ defmodule Longx.Codex.Home do
 
   @default_tokio_worker_threads 4
 
+  # `config :longx, Longx.Codex.Home, agents:` — codex's [agents] table: how
+  # many sub-agents a thread may run at once and how deep they may nest.
+  # Every sub-agent is a full model conversation in the same process, so the
+  # cap is also a memory / token cap.
+  @default_agents [max_concurrent_threads_per_session: 4, max_depth: 2]
+
+  @doc "The `[agents]` limits written into config.toml."
+  @spec agents() :: keyword
+  def agents do
+    :longx
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:agents, [])
+    |> then(&Keyword.merge(@default_agents, &1))
+  end
+
   @doc "`config :longx, Longx.Codex.Home, tokio_worker_threads:` (default 4)."
   @spec tokio_worker_threads() :: pos_integer
   def tokio_worker_threads do
@@ -95,6 +110,7 @@ defmodule Longx.Codex.Home do
       model = "#{@placeholder_model}"
       """,
       web_search_toml(web_search),
+      agents_toml(),
       """
 
       [model_providers.#{@provider_id}]
@@ -110,6 +126,11 @@ defmodule Longx.Codex.Home do
       """
     ]
     |> IO.iodata_to_binary()
+  end
+
+  defp agents_toml do
+    lines = for {key, value} <- agents(), do: "#{key} = #{value}\n"
+    ["\n[agents]\n", lines]
   end
 
   # :hosted   → the upstream's built-in web_search tool, live web access

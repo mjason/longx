@@ -5,6 +5,10 @@
 export type CodexItem = { id: string; type: string; turnId?: string } & Record<string, unknown>;
 export type PendingRequest = { id: unknown; method: string; params: Record<string, unknown> };
 
+/** The turn's plan (codex's update_plan tool): steps with pending / inProgress / completed. */
+export type PlanStep = { step: string; status: "pending" | "inProgress" | "completed" };
+export type TurnPlan = { turnId?: string; explanation: string | null; plan: PlanStep[] };
+
 /** What ThreadChannel's join reply / "snapshot" carries (server-side key spelling). */
 export type ThreadSnapshot = {
   seq: number;
@@ -15,6 +19,7 @@ export type ThreadSnapshot = {
   token_usage: Record<string, unknown> | null;
   items: CodexItem[];
   pending_requests: PendingRequest[];
+  plan?: TurnPlan | null;
 };
 
 export type ThreadEvent = { seq: number; method: string; params: Record<string, unknown> };
@@ -28,6 +33,7 @@ export type ThreadView = {
   tokenUsage: Record<string, unknown> | null;
   items: CodexItem[];
   requests: PendingRequest[];
+  plan: TurnPlan | null;
 };
 
 export function fromSnapshot(s: ThreadSnapshot): ThreadView {
@@ -40,11 +46,12 @@ export function fromSnapshot(s: ThreadSnapshot): ThreadView {
     tokenUsage: s.token_usage,
     items: s.items,
     requests: s.pending_requests,
+    plan: s.plan ?? null,
   };
 }
 
 export function emptyView(threadId: string): ThreadView {
-  return { seq: 0, threadId, thread: null, turn: null, status: null, tokenUsage: null, items: [], requests: [] };
+  return { seq: 0, threadId, thread: null, turn: null, status: null, tokenUsage: null, items: [], requests: [], plan: null };
 }
 
 // delta notifications → the item field they extend (mirrors Store.fold);
@@ -80,6 +87,11 @@ function fold(view: ThreadView, method: string, params: Record<string, unknown>,
       return { ...view, status: params["status"] as Record<string, unknown> };
     case "thread/tokenUsage/updated":
       return { ...view, tokenUsage: params["tokenUsage"] as Record<string, unknown> };
+    case "turn/plan/updated":
+      return {
+        ...view,
+        plan: { turnId: params["turnId"] as string | undefined, explanation: (params["explanation"] as string | null | undefined) ?? null, plan: (params["plan"] as PlanStep[] | undefined) ?? [] },
+      };
     case "item/started":
     case "item/completed": {
       const item = params["item"] as CodexItem | undefined;
@@ -146,6 +158,23 @@ function extend(current: unknown, delta: string, index?: number): unknown {
 
 export function sameId(a: unknown, b: unknown): boolean {
   return a === b || String(a) === String(b);
+}
+
+/**
+ * How full the model's context is after the last turn: codex reports the
+ * last turn's usage (its input is the whole conversation) and the window it
+ * was told (`model_context_window`); nothing until both are known.
+ */
+export function contextUsage(view: ThreadView): { modelContextWindow: number; usage: { totalTokens: number; inputTokens: number; cachedInputTokens: number; outputTokens: number; reasoningTokens: number } } | null {
+  const usage = view.tokenUsage;
+  const window = usage?.["modelContextWindow"];
+  const last = usage?.["last"] as Record<string, unknown> | undefined;
+  if (typeof window !== "number" || window <= 0 || !last) return null;
+  const n = (key: string) => (typeof last[key] === "number" ? (last[key] as number) : 0);
+  return {
+    modelContextWindow: window,
+    usage: { totalTokens: n("totalTokens") || n("inputTokens") + n("outputTokens"), inputTokens: n("inputTokens"), cachedInputTokens: n("cachedInputTokens"), outputTokens: n("outputTokens"), reasoningTokens: n("reasoningOutputTokens") },
+  };
 }
 
 /** The turn in flight, if any. */

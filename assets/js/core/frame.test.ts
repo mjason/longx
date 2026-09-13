@@ -18,11 +18,12 @@ describe("frame transitions", () => {
     expect(resizePanel(DEFAULT_FRAME, 400.4).panelWidth).toBe(400);
   });
 
-  test("⌘1..4 map to the tools in rail order", () => {
+  test("⌘1..5 map to the tools in rail order", () => {
     expect(toolForShortcut("1")).toBe("threads");
     expect(toolForShortcut("2")).toBe("git");
     expect(toolForShortcut("4")).toBe("history");
-    expect(toolForShortcut("5")).toBeNull();
+    expect(toolForShortcut("5")).toBe("agents");
+    expect(toolForShortcut("6")).toBeNull();
     expect(toolForShortcut("k")).toBeNull();
   });
 });

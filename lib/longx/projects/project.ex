@@ -77,6 +77,7 @@ defmodule Longx.Projects.Project do
         :dirty_start,
         :network_access,
         :web_search,
+        :multi_agent,
         :memory_limit_mb,
         :model_id
       ]
@@ -102,6 +103,7 @@ defmodule Longx.Projects.Project do
         :dirty_start,
         :network_access,
         :web_search,
+        :multi_agent,
         :memory_limit_mb,
         :model_id
       ]
@@ -121,6 +123,28 @@ defmodule Longx.Projects.Project do
       constraints fields: @git_info
       argument :id, :uuid, allow_nil?: false
       run fn input, _ -> with {:ok, project} <- fetch(input), do: {:ok, git_info_map(project)} end
+    end
+
+    # the composer's @ mentions: codex's fuzzy file index under the root
+    action :search_files, {:array, :map} do
+      constraints items: [
+                    fields: [
+                      path: [type: :string, allow_nil?: false],
+                      file_name: [type: :string, allow_nil?: false],
+                      root: [type: :string, allow_nil?: false],
+                      match_type: [type: :string, allow_nil?: false],
+                      score: [type: :integer, allow_nil?: false],
+                      indices: [type: {:array, :integer}]
+                    ]
+                  ]
+
+      argument :id, :uuid, allow_nil?: false
+      argument :query, :string, allow_nil?: false, constraints: [allow_empty?: true]
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input),
+             do: Longx.Projects.search_files(project, input.arguments.query)
+      end
     end
 
     action :init_git, :map do
@@ -227,6 +251,10 @@ defmodule Longx.Projects.Project do
     # Longx's own gateway — this is separate from the sandbox's network,
     # which only governs commands). Decided at thread start.
     attribute :web_search, :boolean, allow_nil?: false, default: true, public?: true
+
+    # codex's sub-agent tools (multi_agent_v2: spawn / wait / send / …) for
+    # new threads; decided at thread start
+    attribute :multi_agent, :boolean, allow_nil?: false, default: true, public?: true
 
     # Optional cap on the codex process tree (Linux RLIMIT_AS / Windows Job
     # memory). Off by default: a task that needs 30 GB gets 30 GB; the OOM

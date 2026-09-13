@@ -16,7 +16,7 @@ import { Textarea } from "@/ui/components/ui/textarea";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { t } from "@/ui/strings";
 
-type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "webSearch" | "dirtyStart">> & {
+type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "webSearch" | "multiAgent" | "dirtyStart">> & {
   description: string;
   memoryLimitMb: string;
   modelId: string;
@@ -48,6 +48,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
     approvalPolicy: project.approvalPolicy,
     networkAccess: project.networkAccess,
     webSearch: project.webSearch,
+    multiAgent: project.multiAgent,
     dirtyStart: project.dirtyStart,
     memoryLimitMb: project.memoryLimitMb ? String(project.memoryLimitMb) : "",
     modelId: "__default",
@@ -68,6 +69,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
             approvalPolicy: form.approvalPolicy,
             networkAccess: form.networkAccess,
             webSearch: form.webSearch,
+            multiAgent: form.multiAgent,
             dirtyStart: form.dirtyStart,
             memoryLimitMb: form.memoryLimitMb ? Number(form.memoryLimitMb) : null,
             modelId: form.modelId === "__default" ? null : form.modelId,
@@ -149,6 +151,10 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         <div className="flex items-center justify-between gap-4">
           <Label htmlFor="ps-web-search">{t.webSearch}</Label>
           <Switch id="ps-web-search" checked={form.webSearch} onCheckedChange={(v) => set("webSearch", v)} />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="ps-multi-agent">{t.multiAgent}</Label>
+          <Switch id="ps-multi-agent" checked={form.multiAgent} onCheckedChange={(v) => set("multiAgent", v)} />
         </div>
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">{t.dirtyStart}</legend>

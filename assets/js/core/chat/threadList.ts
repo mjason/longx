@@ -14,6 +14,7 @@ export type ThreadRow = {
   approvalPolicy?: string;
   networkAccess?: boolean;
   webSearch?: boolean;
+  multiAgent?: boolean;
 };
 
 export type ThreadListActions = {

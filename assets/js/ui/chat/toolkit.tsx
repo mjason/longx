@@ -7,11 +7,18 @@
 // ToolFallback element. Approvals answer through assistant-ui's
 // `respondToApproval` seam (option id = our decision), questions through
 // the runtime's extras.
-import { AuiConfig, defineToolkit, Tools, useAuiState, type ToolCallMessagePartComponent, type ToolCallMessagePartProps } from "@assistant-ui/react";
+import { AuiConfig, defineToolkit, makeAssistantDataUI, MessagePartPrimitive, MessagePrimitive, Tools, useAuiState, useToolCallElapsed, type ToolCallMessagePartComponent, type ToolCallMessagePartProps } from "@assistant-ui/react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import type { CodexExtras } from "@/core/chat/adapter";
+import type { PlanStep } from "@/core/chat/thread";
+import { AgentHandoff } from "@/ui/components/assistant-ui/elements/agent-handoff";
+import { AgentPlan, type PlanStepState } from "@/ui/components/assistant-ui/elements/agent-plan";
+import { AgentStatus, type AgentState } from "@/ui/components/assistant-ui/elements/agent-status";
 import { ApprovalCard, type ApprovalLabels } from "@/ui/components/assistant-ui/elements/approval-card";
+import { MarkdownText } from "@/ui/components/assistant-ui/elements/markdown-text";
+import { SubagentList } from "@/ui/components/assistant-ui/elements/subagent-list";
+import { AssistantParts } from "@/ui/components/assistant-ui/elements/thread.aui";
 import { CodeDiff, type DiffLine } from "@/ui/components/assistant-ui/elements/code-diff";
 import { ElicitationForm, type ElicitationField } from "@/ui/components/assistant-ui/elements/elicitation-form";
 import { FileTree, type FileTreeNode } from "@/ui/components/assistant-ui/elements/file-tree";
@@ -264,6 +271,136 @@ export const QuestionsTool: ToolCallMessagePartComponent<QuestionsArgs, unknown>
   );
 };
 
+// ---- agents: codex's sub-agents and its collaboration tools (multi-agent v2)
+
+type SubagentArgs = { name: string; path: string; threadId: string; kind: string; request?: { command?: string; paths?: string[] } | null };
+type SubagentResult = { kind: string };
+
+function elapsedLabel(ms: number | undefined): string | undefined {
+  return ms === undefined ? undefined : `${Math.round(ms / 1000)}s`;
+}
+
+// a sub-agent's nested conversation: the child's user turns (its task) and
+// assistant turns rendered with the same parts as the main thread — the
+// toolkit is inherited, so its commands / diffs / approvals look the same
+const NestedUser = () => (
+  <MessagePrimitive.Root data-slot="aui_nested-user-message" className="text-muted-foreground my-1 text-sm">
+    <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+  </MessagePrimitive.Root>
+);
+const NestedAssistant = () => (
+  <MessagePrimitive.Root data-slot="aui_nested-assistant-message" className="my-1 text-sm">
+    <AssistantParts />
+  </MessagePrimitive.Root>
+);
+
+/** One sub-agent: its state pill, the child's approval if it waits on one, and its conversation nested. */
+export const SubagentTool: ToolCallMessagePartComponent<SubagentArgs, SubagentResult> = (p) => {
+  const actions = useApprovalActions(p);
+  const approval = pendingApproval(p);
+  const elapsed = useToolCallElapsed();
+  const kind = p.result?.kind ?? p.args.kind;
+  const done = kind === "completed" || kind === "interrupted";
+  const failed = kind === "interrupted";
+  const state: AgentState = done ? "done" : approval ? "waiting" : "working";
+  const request = p.args.request;
+  return (
+    <>
+      {approval ? (
+        <div className="py-1">
+          <ApprovalCard
+            state="request"
+            title={t.approvalNeeded}
+            subtitle={approval.prompt ?? t.approveCommand}
+            command={request?.command ?? (request?.paths?.length ? <ul>{request.paths.map((path) => <li key={path}>{path}</li>)}</ul> : p.args.name)}
+            labels={APPROVAL_LABELS}
+            {...actions}
+          />
+        </div>
+      ) : null}
+      <ToolRow label={failed ? t.subagentInterrupted : t.subagentDone} activeLabel={t.subagentWorking} query={p.args.name} running={!done} failed={failed} testId="tool-subagent">
+        <div className="flex flex-col gap-2">
+          <AgentStatus state={state} label={approval ? t.subagentNeedsApproval : (t.subagentState[kind] ?? kind)} elapsed={elapsedLabel(elapsed)} action={null} className="self-start pe-3.5" />
+          {p.messages?.length ? (
+            <div className="border-border/60 flex flex-col border-s ps-3" data-testid="subagent-messages">
+              <MessagePartPrimitive.Messages>{({ message }) => (message.role === "user" ? <NestedUser /> : <NestedAssistant />)}</MessagePartPrimitive.Messages>
+            </div>
+          ) : null}
+        </div>
+      </ToolRow>
+    </>
+  );
+};
+
+type CollabAgent = { threadId: string; name: string; kind?: string | null };
+type CollabArgs = { tool?: string; prompt?: string | null; model?: string | null; agents?: CollabAgent[] };
+type CollabResult = { status: string; agentsStates?: Record<string, { status?: string; message?: string | null }> };
+
+const FINISHED_AGENT = new Set(["completed", "errored", "interrupted", "shutdown", "notFound"]);
+// a sub-agent's latest activity as an agent state (codex 0.154 completes a wait with empty agentsStates)
+const KIND_STATE: Record<string, string> = { started: "running", interacted: "running", completed: "completed", interrupted: "interrupted" };
+
+/** codex's collaboration tools: a spawn / message is a handoff, a wait lists the agents and their reported states. */
+export const CollabTool: ToolCallMessagePartComponent<CollabArgs, CollabResult> = (p) => {
+  const tool = p.args.tool ?? "other";
+  const labels = t.collab[tool] ?? t.collab["other"]!;
+  const agents = p.args.agents ?? [];
+  const running = p.result === undefined && p.status.type === "running";
+  const failed = p.isError === true || p.status.type === "incomplete";
+  const names = agents.map((a) => a.name);
+  const query = names.length ? names.join(", ") : tool === "spawnAgent" ? t.newAgent : "";
+  const states = p.result?.agentsStates ?? {};
+  const handoff = tool === "spawnAgent" || tool === "sendMessage";
+  return (
+    <ToolRow label={labels[0]} activeLabel={labels[1]} query={query} running={running} failed={failed} testId="tool-collab">
+      {handoff ? (
+        <AgentHandoff from={t.mainAgent} to={query || t.newAgent} reason={p.args.prompt ?? ""} carried={p.args.model ? [`${t.agentModel}: ${p.args.model}`] : []} carriedLabel={t.agentTask} settled={!running} />
+      ) : (
+        <SubagentList
+          agents={agents.map((a) => {
+            const status = states[a.threadId]?.status ?? (a.kind ? KIND_STATE[a.kind] : undefined);
+            return { name: a.name, ...(status ? { model: t.agentStates[status] ?? status } : {}), done: status !== undefined && FINISHED_AGENT.has(status) };
+          })}
+        />
+      )}
+    </ToolRow>
+  );
+};
+
+// ---- the turn's plan (turn/plan/updated), a data part at the top of its message
+
+const STEP_STATE: Record<PlanStep["status"], PlanStepState> = { completed: "done", inProgress: "active", pending: "pending" };
+
+export function PlanView({ explanation, steps }: { explanation: string | null; steps: PlanStep[] }) {
+  const done = steps.filter((s) => s.status === "completed").length;
+  return (
+    <div className="py-2" data-testid="plan">
+      <AgentPlan steps={steps.map((s) => s.step)} states={steps.map((s) => STEP_STATE[s.status] ?? "pending")} activeIndex={done} title={t.plan} countLabel={t.planProgress} className="max-w-none" />
+      {explanation ? <p className="text-muted-foreground mt-2 text-xs">{explanation}</p> : null}
+    </div>
+  );
+}
+
+/** Registers the plan renderer while mounted (inside the runtime provider). */
+export const PlanUI = makeAssistantDataUI<{ explanation: string | null; steps: PlanStep[] }>({
+  name: "plan",
+  render: ({ data }) => <PlanView explanation={data.explanation} steps={data.steps} />,
+});
+
+// ---- codex compacted the conversation here (older turns summarised away)
+
+export function CompactionView() {
+  return (
+    <div role="separator" aria-label={t.compacted} className="text-muted-foreground my-2 flex items-center gap-2 text-[11px]" data-testid="compaction">
+      <span className="bg-border h-px flex-1" />
+      <span>{t.compacted}</span>
+      <span className="bg-border h-px flex-1" />
+    </div>
+  );
+}
+
+export const CompactionUI = makeAssistantDataUI<{ id: string }>({ name: "compaction", render: () => <CompactionView /> });
+
 // `type: "backend"`: codex runs these; we only render. `display: "standalone"`
 // keeps them out of the collapsible "n tool calls" trace group — what the
 // agent ran and changed is the point of this UI, not a trace to fold away;
@@ -273,6 +410,8 @@ export const codexToolkit = defineToolkit({
   fileChange: { type: "backend", render: FileChangeTool, display: "standalone" },
   webSearch: { type: "backend", render: WebSearchTool, display: "standalone" },
   requestUserInput: { type: "backend", render: QuestionsTool, display: "standalone" },
+  subagent: { type: "backend", render: SubagentTool, display: "standalone" },
+  collab: { type: "backend", render: CollabTool, display: "standalone" },
 });
 
 export const chatConfig = AuiConfig({ tools: Tools({ toolkit: codexToolkit }) });

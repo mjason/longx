@@ -22,7 +22,7 @@ describe("chat adapter", () => {
   });
 
   test("the access mode rides on every message (the backend only records a change)", async () => {
-    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null, mode: { sandbox: "read_only", approvalPolicy: "never", networkAccess: true, webSearch: true } });
+    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null, mode: { sandbox: "read_only", approvalPolicy: "never", networkAccess: true, webSearch: true, multiAgent: true } });
     await adapter.onNew(append("look"));
     expect(sendMessage).toHaveBeenLastCalledWith(
       expect.objectContaining({ input: { threadId: "row-1", text: "look", sandbox: "read_only", approvalPolicy: "never", networkAccess: true } }),
@@ -99,5 +99,27 @@ describe("chat adapter", () => {
 
   test("textOf joins text parts and trims", () => {
     expect(textOf(append(" a "))).toBe("a");
+  });
+});
+
+describe("sub-agents", () => {
+  test("the children's views nest into the parent's messages and a child's approval is answered on the parent thread", async () => {
+    const parent = {
+      ...emptyView("thr_1"),
+      turn: { id: "t1", status: "inProgress" },
+      items: [{ id: "act1", type: "subAgentActivity", turnId: "t1", agentPath: "/root/alpha", agentThreadId: "child-alpha", kind: "started" }],
+    };
+    const child = {
+      ...emptyView("child-alpha"),
+      turn: { id: "ct", status: "inProgress" },
+      items: [{ id: "cc", type: "commandExecution", turnId: "ct", command: "rm -rf x", status: "inProgress" }],
+      requests: [{ id: 7, method: "item/commandExecution/requestApproval", params: { requestId: 7, itemId: "cc" } }],
+    };
+    const adapter = buildAdapter({ target, view: parent, model: null, subviews: { "child-alpha": child } });
+    const sub = (adapter.messages![0]!.content as unknown as { toolName: string; messages?: unknown[]; approval?: { id: string } }[])[0]!;
+    expect(sub.toolName).toBe("subagent");
+    expect(sub.messages).toHaveLength(1);
+    await adapter.onRespondToToolApproval!({ approvalId: sub.approval!.id, approved: true, optionId: "accept" });
+    expect(respond).toHaveBeenLastCalledWith(expect.objectContaining({ input: { threadId: "row-1", requestId: "7", decision: "accept" } }));
   });
 });

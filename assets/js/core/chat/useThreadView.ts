@@ -1,10 +1,11 @@
 // React glue: the live view of one codex thread from its channel.
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { getSocket } from "@/core/socket";
+import { createBatcher } from "./batch";
 import { applyEvent, emptyView, fromSnapshot, type ThreadEvent, type ThreadSnapshot, type ThreadView } from "./thread";
 import { joinThreadChannel, type ThreadChannelHandle } from "./threadChannel";
 
-type Action = { type: "snapshot"; snapshot: ThreadSnapshot } | { type: "event"; event: ThreadEvent } | { type: "error"; reason: unknown } | { type: "reset"; id: string };
+type Action = { type: "snapshot"; snapshot: ThreadSnapshot } | { type: "events"; events: ThreadEvent[] } | { type: "error"; reason: unknown } | { type: "reset"; id: string };
 
 export type ThreadViewState = { view: ThreadView; ready: boolean; error: string | null };
 
@@ -12,8 +13,8 @@ function reduce(state: ThreadViewState, action: Action): ThreadViewState {
   switch (action.type) {
     case "snapshot":
       return { view: fromSnapshot(action.snapshot), ready: true, error: null };
-    case "event":
-      return { ...state, view: applyEvent(state.view, action.event) };
+    case "events":
+      return { ...state, view: action.events.reduce((view, event) => applyEvent(view, event), state.view) };
     case "error":
       return { ...state, error: describe(action.reason) };
     case "reset":
@@ -28,8 +29,9 @@ function describe(reason: unknown): string {
 
 /**
  * Joins `thread:<codexThreadId>` (nothing when undefined) and folds its
- * events. `refetch` re-pulls the snapshot in place; a `thread/reverted`
- * does that on its own (the server dropped items we may still show).
+ * events — a burst of them once per frame (`createBatcher`). `refetch`
+ * re-pulls the snapshot in place; a `thread/reverted` does that on its own
+ * (the server dropped items we may still show).
  */
 export function useThreadView(codexThreadId: string | undefined): ThreadViewState & { refetch: () => Promise<void> } {
   const [state, dispatch] = useReducer(reduce, codexThreadId ?? "", (id) => ({ view: emptyView(id), ready: false, error: null }));
@@ -38,10 +40,14 @@ export function useThreadView(codexThreadId: string | undefined): ThreadViewStat
   useEffect(() => {
     dispatch({ type: "reset", id: codexThreadId ?? "" });
     if (!codexThreadId) return;
+    const events = createBatcher<ThreadEvent>((batch) => dispatch({ type: "events", events: batch }));
     const joined = joinThreadChannel(getSocket(), codexThreadId, {
-      onSnapshot: (snapshot) => dispatch({ type: "snapshot", snapshot }),
+      onSnapshot: (snapshot) => {
+        events.cancel();
+        dispatch({ type: "snapshot", snapshot });
+      },
       onEvent: (event) => {
-        dispatch({ type: "event", event });
+        events.push(event);
         if (event.method === "thread/reverted") void joined.snapshot().catch(() => {});
       },
       onError: (reason) => dispatch({ type: "error", reason }),
@@ -49,6 +55,7 @@ export function useThreadView(codexThreadId: string | undefined): ThreadViewStat
     handle.current = joined;
     return () => {
       handle.current = null;
+      events.cancel();
       joined.leave();
     };
   }, [codexThreadId]);
