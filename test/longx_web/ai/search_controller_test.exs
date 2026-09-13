@@ -78,28 +78,30 @@ defmodule LongxWeb.AI.SearchControllerTest do
     assert result["url"] == "https://elixir-lang.org"
   end
 
-  test "without a configured search provider a search says so (200, not an error), while open still works",
+  test "without a configured search provider a search says so (200, not an error), while open still works through the browser",
        %{conn: conn} do
     conn2 = post_search(conn, @request)
     assert %{"output" => output, "results" => []} = json_response(conn2, 200)
     assert output =~ "no search provider"
 
-    site = Bypass.open()
+    previous = Application.get_env(:longx, Longx.Browser, [])
 
-    Bypass.expect_once(site, "GET", "/p", fn c ->
-      c
-      |> Plug.Conn.put_resp_content_type("text/plain")
-      |> Plug.Conn.send_resp(200, "fetched by longx")
-    end)
+    Application.put_env(
+      :longx,
+      Longx.Browser,
+      Keyword.put(previous, :executable, Path.expand("test/support/fake_obscura.sh"))
+    )
+
+    on_exit(fn -> Application.put_env(:longx, Longx.Browser, previous) end)
 
     conn3 =
       post_search(conn, %{
         "id" => "s",
-        "commands" => %{"open" => [%{"ref_id" => "http://localhost:#{site.port}/p"}]}
+        "commands" => %{"open" => [%{"ref_id" => "https://spa.test/app"}]}
       })
 
     assert %{"output" => output3, "results" => [%{"type" => "open"}]} = json_response(conn3, 200)
-    assert output3 =~ "fetched by longx"
+    assert output3 =~ "<h1>Rendered</h1>"
   end
 
   test "a provider without a key is reported the same way", %{conn: conn, bypass: bypass} do

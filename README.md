@@ -7,7 +7,7 @@ codex 的工具能力可以用 Elixir 直接扩展。
 ## 启动
 
 ```sh
-mix setup            # deps、数据库、npm install + 前端构建、下载内置的 codex-app-server 和 git
+mix setup            # deps、数据库、npm install + 前端构建、下载内置的 codex-app-server、git 和 obscura（无头浏览器）
 mix phx.server       # 0.0.0.0:7788；开发时前端资源由 Vite dev server（5173）热更新
 ```
 
@@ -23,6 +23,7 @@ mix phx.server       # 0.0.0.0:7788；开发时前端资源由 Vite dev server�
 lib/longx/shim*            Go 中间件：带背压、可干净终止的外部进程（codex 通过它启动）
 lib/longx/codex/runtime.ex 内置 codex-app-server 的下载/校验/定位（mix codex.fetch）
 lib/longx/codex/home.ex    我们自己的 CODEX_HOME 和 config.toml（codex 只认识 Longx 网关）
+lib/longx/browser*         内置 obscura 无头浏览器（mix obscura.fetch）：一次一进程、许可池限并发；web.run 的 open 和 builtin.browser_fetch 用它
 lib/longx/ai/              模型 provider / 搜索 provider（密钥加密存库）、网关、Tavily 搜索
 lib/longx/codex/           app-server 客户端：Connection、ThreadState（ETS 视图）、Thread API、Tool 体系
 lib/longx/tools/           给 codex 的 Elixir 工具 —— 见下文

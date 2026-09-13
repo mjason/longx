@@ -5,10 +5,8 @@ defmodule Longx.AI.Search do
   `codex-api/src/search.rs`) against a `Longx.AI.SearchTarget`.
 
   Supported: `search_query` (with `recency`/`domains`), `open` (by reference
-  id from an earlier call in the same session, or a URL — **fetched by us**,
-  `Longx.AI.Search.Fetch`; the provider's extractor is only the fallback when
-  our fetch fails, so opening a URL needs no search provider and costs no
-  credits), `time`. The other
+  id from an earlier call in the same session, or a URL — rendered by the
+  bundled headless browser, `Longx.Browser`, nothing else), `time`. The other
   commands (`image_query`, `click`, `find`, `screenshot`, `finance`,
   `weather`, `sports`) are answered with a "not supported" line so the model
   can adapt instead of retrying.
@@ -18,7 +16,8 @@ defmodule Longx.AI.Search do
   passes through to the UI unchanged.
   """
 
-  alias Longx.AI.Search.{Fetch, Refs, Tavily}
+  alias Longx.AI.Search.{Refs, Tavily}
+  alias Longx.Browser
   alias Longx.AI.SearchTarget
 
   require Logger
@@ -28,7 +27,7 @@ defmodule Longx.AI.Search do
   @default_max_results 5
   @default_output_tokens 4_000
   @chars_per_token 4
-  @max_page_chars 12_000
+  @max_page_chars 24_000
   @concurrency 4
 
   @type result :: map
@@ -206,42 +205,28 @@ defmodule Longx.AI.Search do
     end
   end
 
-  # our own fetch first; the provider's extractor (readability for pages
-  # that block plain clients) only when that fails and one is configured
-  defp fetch_page(url, ref_id, lineno, session, target) do
-    case Fetch.fetch(url) do
-      {:ok, %{title: title, text: text}} ->
-        page(url, ref_id, lineno, session, title, text)
-
-      {:error, reason} ->
-        Logger.info(
-          "web open: own fetch of #{url} failed (#{inspect(reason)}), trying the provider"
-        )
-
-        extract_page(url, ref_id, lineno, session, target, reason)
-    end
-  end
-
-  defp extract_page(url, _ref_id, _lineno, _session, nil, reason) do
-    %{output: "## open: #{url}\nopen failed: #{describe_error(reason)}", results: []}
-  end
-
-  defp extract_page(url, ref_id, lineno, session, target, _reason) do
-    case Tavily.extract(target, [url]) do
-      {:ok, [%{content: content} | _], _failed} ->
-        page(url, ref_id, lineno, session, nil, content)
-
-      {:ok, [], failed} ->
-        %{
-          output: "## open: #{url}\ncould not extract the page (#{Enum.join(failed, ", ")}).",
-          results: []
-        }
+  # the bundled headless browser renders the page (JavaScript run) and the
+  # model gets the main element's html; a failure is reported as such — the
+  # browser ships with every release, so there is nothing to fall back to
+  defp fetch_page(url, ref_id, lineno, session, _target) do
+    case Browser.fetch(url, format: :html, wait_until: :networkidle0) do
+      {:ok, %{title: title, content: content}} ->
+        page(url, ref_id, lineno, session, title, content)
 
       {:error, reason} ->
         Logger.warning("web open failed for #{url}: #{inspect(reason)}")
-        %{output: "## open: #{url}\nopen failed: #{describe_error(reason)}", results: []}
+        %{output: "## open: #{url}\nopen failed: #{describe_browser_error(reason)}", results: []}
     end
   end
+
+  defp describe_browser_error(:unavailable),
+    do: "the headless browser is not installed on this Longx"
+
+  defp describe_browser_error(:busy), do: "the browser is busy; try again in a moment"
+  defp describe_browser_error(:timeout), do: "the page did not finish loading in time"
+  defp describe_browser_error(:invalid_url), do: "only http(s) URLs can be opened"
+  defp describe_browser_error({:navigation, message}), do: message
+  defp describe_browser_error(other), do: inspect(other)
 
   defp page(url, ref_id, lineno, session, title, text) do
     Refs.put(session, ref_id, %{url: url, title: title})

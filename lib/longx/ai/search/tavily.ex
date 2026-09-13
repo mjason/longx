@@ -1,6 +1,6 @@
 defmodule Longx.AI.Search.Tavily do
   @moduledoc """
-  Minimal Tavily client: `POST /search` and `POST /extract`
+  Minimal Tavily client: `POST /search`
   (https://docs.tavily.com/documentation/api-reference).
   """
 
@@ -32,23 +32,6 @@ defmodule Longx.AI.Search.Tavily do
              published_date: r["published_date"]
            }
          end)}
-
-      {:ok, other} ->
-        {:error, {:unexpected_body, other}}
-
-      {:error, _} = error ->
-        error
-    end
-  end
-
-  @spec extract(SearchTarget.t(), [String.t()]) ::
-          {:ok, [page], failed :: [String.t()]} | {:error, term}
-  def extract(%SearchTarget{} = target, urls) do
-    case post(target, "/extract", %{urls: urls, format: "markdown", extract_depth: "basic"}) do
-      {:ok, %{"results" => results} = body} ->
-        pages = for r <- results, do: %{url: r["url"], content: r["raw_content"] || ""}
-        failed = for f <- body["failed_results"] || [], do: f["url"] || inspect(f)
-        {:ok, pages, failed}
 
       {:ok, other} ->
         {:error, {:unexpected_body, other}}

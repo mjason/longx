@@ -360,8 +360,8 @@ defmodule Longx.AI do
     * `:hosted` — the upstream runs the Responses API's built-in `web_search`
       tool itself (OpenAI); nothing for us to do
     * `:standalone` — codex's `web.run` tool, executed by our `/alpha/search`:
-      `open` fetches pages ourselves (`Longx.AI.Search.Fetch`) and needs no
-      provider, `search_query` needs the default `SearchProvider` (told so
+      `open` renders pages with the bundled browser (`Longx.Browser`) and needs
+      no provider, `search_query` needs the default `SearchProvider` (told so
       otherwise) — so this is the mode whenever search is not hosted
     * `:disabled` — no search tool offered at all (an explicit choice; the
       resolver never picks it on its own any more)

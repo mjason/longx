@@ -49,3 +49,5 @@ npm-debug.log
 
 # Bundled git (dugite-native), fetched by `mix git.fetch` (Longx.Git.Runtime)
 /priv/git/
+# bundled obscura (headless browser), fetched by `mix obscura.fetch`
+/priv/obscura/

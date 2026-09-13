@@ -1,7 +1,7 @@
 defmodule Longx.Bundle do
   @moduledoc """
-  Fetches a pinned upstream tarball, verifies its sha256, unpacks it and
-  swaps it into place atomically. Shared by the bundled runtimes
+  Fetches a pinned upstream archive (`.tar.gz`, or `.zip` for Windows
+  builds), verifies its sha256, unpacks it and swaps it into place atomically. Shared by the bundled runtimes
   (`Longx.Codex.Runtime`, `Longx.Git.Runtime`); nothing here knows what is
   inside the archive beyond an optional `:verify` step run on the unpacked
   tree before it goes live.
@@ -92,10 +92,20 @@ defmodule Longx.Bundle do
   end
 
   defp extract(archive, staging) do
-    case :erl_tar.extract(String.to_charlist(archive), [
-           :compressed,
-           {:cwd, String.to_charlist(staging)}
-         ]) do
+    result =
+      if String.ends_with?(archive, ".zip") do
+        case :zip.unzip(String.to_charlist(archive), [{:cwd, String.to_charlist(staging)}]) do
+          {:ok, _files} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+      else
+        :erl_tar.extract(String.to_charlist(archive), [
+          :compressed,
+          {:cwd, String.to_charlist(staging)}
+        ])
+      end
+
+    case result do
       :ok ->
         File.rm(archive)
         :ok
