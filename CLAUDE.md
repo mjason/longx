@@ -318,6 +318,10 @@ React Native client planned on the same core code.
   It answers 404 for non-HTML `Accept`s and file-looking paths (a missing asset must never
   come back as HTML). `/rpc/*`, `/ai/v1/*`, `/socket`, `/dev/*` are matched before it.
   No LiveView pages (the `root` layout remains for the dev dashboard/errors).
+  - `Longx.System` (domain) → `Longx.System.Status` generic actions: `sandbox` and
+    `list_directory` (`Longx.System.Directory`: subdirectories of an absolute path, git
+    flagged, hidden on request, roots home and `/`; arrays of typed maps are untyped in
+    ash_typescript 0.18's field selection, so entries are typed client-side).
   - `LongxWeb.Actor` is the single place an actor comes from (RPC conn, socket params) —
     `nil` today; AshAuthentication plugs in there later without touching the client.
   - **RPC** = ash_typescript: domains `Longx.Projects`, `Longx.AI`, `Longx.System` declare
@@ -359,12 +363,30 @@ React Native client planned on the same core code.
     (`projects.ts`; `RpcFailure` carries field errors), formatters. Thread reducer, the
     codex item → assistant-ui message mapping and the `ExternalStoreRuntime` adapter go
     here too (branch ②).
-  - `js/ui/` — React DOM: `routes.tsx` (react-router, browser history; tests use a memory
-    router via `ui/test-utils.tsx`), `shell/` (Shell, TopBar, Page, BottomBar, banners),
-    `pages/`, `components/ui/` (shadcn, added with `npx shadcn@latest add …` in `assets/`;
-    `components.json` maps `@/ui/components`, `@/lib/utils`), `strings.ts` (all UI copy,
-    zh-CN). The chat uses **assistant-ui** (`@assistant-ui/react`, `ExternalStoreRuntime`;
-    it has an official React Native package) — not AI Elements, not `useChat`.
+  - `js/ui/` — React DOM, **shaped like an IDE with the chat where the editor would be**
+    (IDEA's interactions, not its looks): `pages/WelcomePage` (recent projects, search, one
+    door to open/create), `pages/ProjectWizard` (two steps: `components/DirectoryPicker` on
+    the server's file system — `Longx.System.list_directory`, git repositories marked, hidden
+    toggle, typed path — then name / "initialise git" / advanced sandbox+approval+network;
+    a repository directory is an *open*, anything else may get `init_git: true`),
+    `frame/ProjectWindow` (desktop: icon rail + docked resizable tool window + status
+    strip; phone: chat full-screen, bottom toolbar, tools as bottom sheets — tool windows:
+    `frame/tools/{Threads,Git,Process,Files}Tool`; ⌘1–4 toggle them; `core/frame.ts` keeps
+    the state, remembered per device), `frame/StatusStrip` (HEAD, codex, memory, sandbox
+    warning), `pages/SettingsPage` (categories tree on desktop, list → sub page on phones;
+    sections models / tools / sandbox / appearance, only appearance has content so far),
+    `components/CommandPalette` (⌘K, desktop), `sonner` toasts for codex down/ready.
+    `routes.tsx` (react-router, browser history; tests use a memory router via
+    `ui/test-utils.tsx`, shared `vi.mock` factories in `ui/test-mocks.ts`), `shell/` (Shell,
+    TopBar `wide` for the IDE window, Page, BottomBar, banners), `components/ui/` (shadcn,
+    added with `npx shadcn@latest add …` in `assets/`; `components.json` maps
+    `@/ui/components`, `@/lib/utils`), `strings.ts` (all UI copy, zh-CN). `core/theme.ts`
+    (dark default, light/system), `core/viewport.ts` (phone < 768 ≤ tablet < 1024 ≤ desktop).
+    The chat uses **assistant-ui** (`@assistant-ui/react`, `ExternalStoreRuntime`; it has an
+    official React Native package) — not AI Elements, not `useChat`. Headers and bars are
+    solid (`backdrop-blur` on sticky/fixed bars ghosted text in Chromium screenshots).
+    After `npm install` adds packages while `mix phx.server` runs, restart it: Vite's
+    dependency re-optimisation can otherwise load two copies of React ("Invalid hook call").
   - **Mobile first**: one column; `TopBar` respects the notch (`safe-top`), `Page` keeps
     ≥16 px gutters (`safe-x`), the primary action sits in a fixed `BottomBar` on phones
     (`safe-bottom`) and inline on desktop (`lg:`); touch targets ≥ 44 px (`touch-target`);

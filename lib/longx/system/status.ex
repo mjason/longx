@@ -11,6 +11,30 @@ defmodule Longx.System.Status do
   end
 
   actions do
+    # The directory picker: subdirectories of `path` (home when omitted),
+    # each flagged when it is a git repository. Files are never listed;
+    # dot-directories only with `show_hidden`. Paths must be absolute.
+    action :list_directory, :map do
+      constraints fields: [
+                    path: [type: :string, allow_nil?: false],
+                    parent: [type: :string],
+                    git: [type: :boolean, allow_nil?: false],
+                    # arrays of typed maps are not selectable in ash_typescript 0.18's
+                    # field types; the entry shape (name, path, git) is typed client-side
+                    entries: [type: {:array, :map}, allow_nil?: false],
+                    roots: [type: {:array, :map}, allow_nil?: false]
+                  ]
+
+      argument :path, :string
+      argument :show_hidden, :boolean, default: false
+
+      run fn input, _ ->
+        Longx.System.Directory.list(input.arguments[:path],
+          show_hidden: input.arguments.show_hidden
+        )
+      end
+    end
+
     # Longx.Codex.Sandbox.report/0 for the UI's banner
     action :sandbox, :map do
       constraints fields: [

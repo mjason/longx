@@ -1,6 +1,11 @@
 import { ChevronLeft } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Link, Outlet } from "react-router";
+import { applyTheme } from "@/core/theme";
+import { useViewport } from "@/core/viewport";
+import { CommandPalette } from "@/ui/components/CommandPalette";
+import { Toaster } from "@/ui/components/ui/sonner";
+import { TooltipProvider } from "@/ui/components/ui/tooltip";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { SandboxBanner } from "./SandboxBanner";
 
@@ -9,12 +14,18 @@ import { SandboxBanner } from "./SandboxBanner";
  * banners under it, the page below. Desktop only widens the column.
  */
 export function Shell() {
+  const viewport = useViewport();
+  useEffect(() => applyTheme(), []);
   return (
-    <div className="min-h-dvh flex flex-col">
-      <ConnectionBanner />
-      <SandboxBanner />
-      <Outlet />
-    </div>
+    <TooltipProvider delayDuration={300}>
+      <div className="min-h-dvh flex flex-col">
+        <ConnectionBanner />
+        <SandboxBanner />
+        <Outlet />
+      </div>
+      <Toaster />
+      {viewport === "desktop" ? <CommandPalette /> : null}
+    </TooltipProvider>
   );
 }
 
@@ -22,14 +33,17 @@ export function TopBar({
   title,
   back,
   actions,
+  wide = false,
 }: {
   title: ReactNode;
   back?: string;
   actions?: ReactNode;
+  /** full width (the IDE window); pages are centred at a readable width */
+  wide?: boolean;
 }) {
   return (
-    <header className="safe-top bg-background/90 sticky top-0 z-20 border-b backdrop-blur">
-      <div className="safe-x mx-auto flex h-14 w-full max-w-5xl items-center gap-2">
+    <header className="safe-top bg-background sticky top-0 z-20 border-b">
+      <div className={`safe-x mx-auto flex h-14 w-full items-center gap-2 ${wide ? "" : "max-w-5xl"}`}>
         {back ? (
           <Link to={back} aria-label="返回" className="touch-target -ml-2 flex items-center justify-center rounded-md">
             <ChevronLeft className="size-6" />
@@ -52,7 +66,7 @@ export function Page({ children, className = "" }: { children: ReactNode; classN
 /** Primary action pinned to the bottom on phones; inline at the end on desktop. */
 export function BottomBar({ children }: { children: ReactNode }) {
   return (
-    <div className="safe-bottom bg-background/90 fixed inset-x-0 bottom-0 z-20 border-t backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:backdrop-blur-none">
+    <div className="safe-bottom bg-background fixed inset-x-0 bottom-0 z-20 border-t lg:static lg:border-0 lg:bg-transparent">
       <div className="safe-x mx-auto flex w-full max-w-5xl gap-2 py-3">{children}</div>
     </div>
   );

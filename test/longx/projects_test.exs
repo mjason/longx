@@ -34,6 +34,17 @@ defmodule Longx.ProjectsTest do
       assert project.archived_at == nil
     end
 
+    test "init_git: true sets git up as part of creating the project", %{dir: dir} do
+      project = Projects.create_project!(%{name: "Fresh", root_path: dir, init_git: true})
+      assert %{repository?: true, clean?: true} = Projects.git_info(project)
+
+      # already a repository: nothing to do, no error
+      sub = Path.join(dir, "again")
+      File.mkdir_p!(sub)
+      :ok = Git.init(sub)
+      assert %{id: _} = Projects.create_project!(%{name: "Again", root_path: sub, init_git: true})
+    end
+
     test "root_path must be an existing directory and is unique", %{dir: dir} do
       assert {:error, %Ash.Error.Invalid{} = err} =
                Projects.create_project(%{name: "x", root_path: Path.join(dir, "missing")})
