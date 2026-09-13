@@ -21,7 +21,7 @@ describe("frame transitions", () => {
   test("⌘1..4 map to the tools in rail order", () => {
     expect(toolForShortcut("1")).toBe("threads");
     expect(toolForShortcut("2")).toBe("git");
-    expect(toolForShortcut("4")).toBe("files");
+    expect(toolForShortcut("4")).toBe("history");
     expect(toolForShortcut("5")).toBeNull();
     expect(toolForShortcut("k")).toBeNull();
   });
@@ -32,10 +32,10 @@ describe("frame store", () => {
     const mem = new Map<string, string>();
     const storage = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => mem.set(k, v) };
     const a = createFrameStore(storage);
-    a.open("files");
+    a.open("history");
     a.resize(500);
     const b = createFrameStore(storage);
-    expect(b.get()).toEqual({ tool: "files", panelWidth: 500 });
+    expect(b.get()).toEqual({ tool: "history", panelWidth: 500 });
 
     mem.set("longx:frame", "{not json");
     expect(createFrameStore(storage).get()).toEqual(DEFAULT_FRAME);

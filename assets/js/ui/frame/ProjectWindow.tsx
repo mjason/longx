@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { FolderTree, GitBranch, MessagesSquare, Server, Settings, X } from "lucide-react";
+import { GitBranch, History, MessagesSquare, Server, Settings, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, Outlet, useParams } from "react-router";
 import { toast } from "sonner";
@@ -16,7 +16,7 @@ import { ThemeToggle } from "@/ui/components/ThemeToggle";
 import { ChatProvider } from "@/ui/chat/ChatProvider";
 import { t } from "@/ui/strings";
 import { StatusStrip } from "./StatusStrip";
-import { FilesTool } from "./tools/FilesTool";
+import { TurnsTool } from "./tools/TurnsTool";
 import { GitTool } from "./tools/GitTool";
 import { ProcessTool } from "./tools/ProcessTool";
 import { ThreadsTool } from "./tools/ThreadsTool";
@@ -25,7 +25,7 @@ const ICONS: Record<Tool, typeof MessagesSquare> = {
   threads: MessagesSquare,
   git: GitBranch,
   process: Server,
-  files: FolderTree,
+  history: History,
 };
 
 export type ProjectContext = {
@@ -55,7 +55,10 @@ export function ProjectWindow() {
   useEffect(() => {
     if (!id) return;
     return joinProjectChannel(getSocket(), id, {
-      onChanged: () => client.invalidateQueries({ queryKey: queryKeys.threads(id) }),
+      onChanged: () => {
+        client.invalidateQueries({ queryKey: queryKeys.threads(id) });
+        client.invalidateQueries({ queryKey: ["turns"] });
+      },
       onCodex: (status) => {
         client.invalidateQueries({ queryKey: queryKeys.codex(id) });
         if (status === "down") toast.warning(t.codexDown);
@@ -102,7 +105,11 @@ export function ProjectWindow() {
 
   return (
     // fixed height: the chat scrolls inside its own viewport, not the page
-    <ChatProvider projectId={project.data.id} slug={slug}>
+    <ChatProvider
+      projectId={project.data.id}
+      slug={slug}
+      defaults={{ sandbox: project.data.sandbox, approvalPolicy: project.data.approvalPolicy, networkAccess: project.data.networkAccess }}
+    >
     <div className="flex h-dvh flex-col">
       <TopBar
         wide
@@ -155,8 +162,8 @@ function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
       return <GitTool ctx={ctx} />;
     case "process":
       return <ProcessTool ctx={ctx} />;
-    case "files":
-      return <FilesTool />;
+    case "history":
+      return <TurnsTool ctx={ctx} />;
   }
 }
 

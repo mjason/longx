@@ -1,7 +1,7 @@
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
-import type { DirtyChange, DirtyDecision } from "@/core/chat/adapter";
+import type { AccessMode, DirtyChange, DirtyDecision } from "@/core/chat/adapter";
 import { useCodexRuntime, type CodexRuntime } from "@/core/chat/runtime";
 import { DirtyTreeDialog, type DirtyPrompt } from "./DirtyTreeDialog";
 import { chatConfig } from "./toolkit";
@@ -20,7 +20,7 @@ export function useChat(): CodexRuntime {
  * thread list tool and the chat in the centre share one runtime; the
  * dirty-tree question is the one piece of DOM this needs.
  */
-export function ChatProvider({ projectId, slug, children }: { projectId: string; slug: string; children: ReactNode }) {
+export function ChatProvider({ projectId, slug, defaults, children }: { projectId: string; slug: string; defaults: AccessMode; children: ReactNode }) {
   const { threadId } = useParams();
   const navigate = useNavigate();
   const [dirty, setDirty] = useState<DirtyPrompt | null>(null);
@@ -40,7 +40,7 @@ export function ChatProvider({ projectId, slug, children }: { projectId: string;
     [],
   );
 
-  const chat = useCodexRuntime({ projectId, threadId, onOpenThread, onDirtyTree });
+  const chat = useCodexRuntime({ projectId, defaults, threadId, onOpenThread, onDirtyTree });
 
   return (
     <ChatContext.Provider value={chat}>

@@ -232,11 +232,20 @@ defmodule Longx.Codex.Thread do
   # kebab-case name) — codex keeps it for the turns after this one too
   defp sandbox_policy(opts) do
     case Keyword.get(opts, :sandbox) do
-      nil -> nil
-      :read_only -> %{"type" => "readOnly"}
-      :danger_full_access -> %{"type" => "dangerFullAccess"}
+      nil ->
+        nil
+
+      :read_only ->
+        %{"type" => "readOnly"}
+
+      :danger_full_access ->
+        %{"type" => "dangerFullAccess"}
+
       :workspace_write ->
-        %{"type" => "workspaceWrite", "networkAccess" => Keyword.get(opts, :network_access, false)}
+        %{
+          "type" => "workspaceWrite",
+          "networkAccess" => Keyword.get(opts, :network_access, false)
+        }
     end
   end
 

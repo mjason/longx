@@ -21,6 +21,14 @@ describe("chat adapter", () => {
     expect(adapter.isRunning).toBe(false);
   });
 
+  test("the access mode rides on every message (the backend only records a change)", async () => {
+    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null, mode: { sandbox: "read_only", approvalPolicy: "never", networkAccess: true } });
+    await adapter.onNew(append("look"));
+    expect(sendMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ input: { threadId: "row-1", text: "look", sandbox: "read_only", approvalPolicy: "never", networkAccess: true } }),
+    );
+  });
+
   test("onCancel interrupts the turn in flight only", async () => {
     const idle = buildAdapter({ target, view: emptyView("thr_1"), model: null });
     await idle.onCancel!();

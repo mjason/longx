@@ -3,8 +3,8 @@
 // the phone app can share it; the panel width is remembered per device.
 import { useSyncExternalStore } from "react";
 
-export type Tool = "threads" | "git" | "process" | "files";
-export const TOOLS: Tool[] = ["threads", "git", "process", "files"];
+export type Tool = "threads" | "git" | "process" | "history";
+export const TOOLS: Tool[] = ["threads", "git", "process", "history"];
 
 export type FrameState = { tool: Tool | null; panelWidth: number };
 

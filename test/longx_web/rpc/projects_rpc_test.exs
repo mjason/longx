@@ -312,7 +312,10 @@ defmodule LongxWeb.ProjectsRpcTest do
       on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
 
       %{"success" => true, "data" => %{"id" => thread_id}} =
-        rpc(conn, "start_thread", %{"fields" => ["id"], "input" => %{"projectId" => project["id"]}})
+        rpc(conn, "start_thread", %{
+          "fields" => ["id"],
+          "input" => %{"projectId" => project["id"]}
+        })
 
       %{"success" => true, "data" => %{"id" => turn_id}} =
         rpc(conn, "send_message", %{
@@ -332,12 +335,20 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"turnId" => turn_id}
                })
 
-      assert %{"commit" => ^sha, "dirtyNow" => true, "changedFiles" => ["a.txt"], "laterTurns" => 0} =
+      assert %{
+               "commit" => ^sha,
+               "dirtyNow" => true,
+               "changedFiles" => ["a.txt"],
+               "laterTurns" => 0
+             } =
                proposal
 
       # restoring needs confirm, makes the safety commit, puts a.txt back
       assert %{"success" => false} =
-               rpc(conn, "restore_files", %{"fields" => ["head"], "input" => %{"turnId" => turn_id}})
+               rpc(conn, "restore_files", %{
+                 "fields" => ["head"],
+                 "input" => %{"turnId" => turn_id}
+               })
 
       assert %{"success" => true, "data" => %{"safetyCommit" => safety, "head" => head}} =
                rpc(conn, "restore_files", %{
@@ -370,12 +381,20 @@ defmodule LongxWeb.ProjectsRpcTest do
 
   defp thread_idle(conn, project_id, thread_id, attempts \\ 100) do
     %{"success" => true, "data" => threads} =
-      rpc(conn, "list_threads", %{"fields" => ["id", "status"], "input" => %{"projectId" => project_id}})
+      rpc(conn, "list_threads", %{
+        "fields" => ["id", "status"],
+        "input" => %{"projectId" => project_id}
+      })
 
     case Enum.find(threads, &(&1["id"] == thread_id)) do
-      %{"status" => "idle"} -> :ok
-      _ when attempts > 0 -> Process.sleep(50) && thread_idle(conn, project_id, thread_id, attempts - 1)
-      other -> flunk("thread never idle: #{inspect(other)}")
+      %{"status" => "idle"} ->
+        :ok
+
+      _ when attempts > 0 ->
+        Process.sleep(50) && thread_idle(conn, project_id, thread_id, attempts - 1)
+
+      other ->
+        flunk("thread never idle: #{inspect(other)}")
     end
   end
 
@@ -388,18 +407,31 @@ defmodule LongxWeb.ProjectsRpcTest do
       on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
 
       %{"success" => true, "data" => %{"id" => thread_id}} =
-        rpc(conn, "start_thread", %{"fields" => ["id"], "input" => %{"projectId" => project["id"]}})
+        rpc(conn, "start_thread", %{
+          "fields" => ["id"],
+          "input" => %{"projectId" => project["id"]}
+        })
 
       %{"success" => true} =
-        rpc(conn, "send_message", %{"fields" => ["id"], "input" => %{"threadId" => thread_id, "text" => "say x"}})
+        rpc(conn, "send_message", %{
+          "fields" => ["id"],
+          "input" => %{"threadId" => thread_id, "text" => "say x"}
+        })
 
       # not while the turn runs
-      assert %{"success" => false} = rpc(conn, "delete_thread", %{"input" => %{"threadId" => thread_id}})
+      assert %{"success" => false} =
+               rpc(conn, "delete_thread", %{"input" => %{"threadId" => thread_id}})
+
       thread_idle(conn, project["id"], thread_id)
-      assert %{"success" => true} = rpc(conn, "delete_thread", %{"input" => %{"threadId" => thread_id}})
+
+      assert %{"success" => true} =
+               rpc(conn, "delete_thread", %{"input" => %{"threadId" => thread_id}})
 
       assert %{"success" => true, "data" => []} =
-               rpc(conn, "list_threads", %{"fields" => ["id"], "input" => %{"projectId" => project["id"]}})
+               rpc(conn, "list_threads", %{
+                 "fields" => ["id"],
+                 "input" => %{"projectId" => project["id"]}
+               })
 
       assert Ash.read!(Longx.Projects.Turn) |> Enum.reject(&(&1.thread_id != thread_id)) == []
     end

@@ -1,35 +1,22 @@
-import { Loader2, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
-import { Link, useOutletContext } from "react-router";
-import type { TurnState } from "@/core/chat/runtime";
+import { Loader2, ShieldAlert } from "lucide-react";
 import { useModels } from "@/core/projects";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
-import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
+import { ModePicker } from "./ModePicker";
 
 // codex's reasoning efforts, one character each in the rail
 const EFFORT: Record<string, string> = { minimal: "极低", low: "低", medium: "中", high: "高", xhigh: "极高" };
 
 /**
- * Left of the composer rail (Codex's layout): the access mode the agent
- * runs with — a click goes to the project settings — and what the turn is
- * doing right now.
+ * Left of the composer rail (Codex's layout): the access mode the next
+ * turn runs with, and what the turn is doing right now.
  */
 export function ComposerLeading() {
-  const ctx = useOutletContext<ProjectContext>();
-  const { state } = useChat();
-  const full = ctx.sandbox === "danger_full_access";
-  const Icon = full ? ShieldOff : ctx.sandbox === "read_only" ? ShieldCheck : ShieldAlert;
+  const { state, mode, setMode, disabledReason } = useChat();
   return (
     <div className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs" data-testid="turn-bar">
-      <Link
-        to={`/p/${ctx.slug}/settings`}
-        className={`flex items-center gap-1 rounded-md px-1.5 py-1 hover:bg-accent ${full ? "text-destructive" : ""}`}
-        title={`${t.sandbox}: ${t.sandboxOptions[ctx.sandbox] ?? ctx.sandbox} · ${t.approval}: ${t.approvalOptions[ctx.approvalPolicy] ?? ctx.approvalPolicy}`}
-      >
-        <Icon className="size-3.5" />
-        <span className="truncate">{t.sandboxOptions[ctx.sandbox] ?? ctx.sandbox}</span>
-      </Link>
+      <ModePicker mode={mode} onChange={setMode} disabled={disabledReason !== null} />
       {state === "running" ? (
         <span className="flex items-center gap-1">
           <Loader2 className="size-3.5 animate-spin" /> {t.turnRunning}
