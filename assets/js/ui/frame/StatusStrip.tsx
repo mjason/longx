@@ -1,6 +1,8 @@
 import { AlertTriangle, GitBranch, MemoryStick } from "lucide-react";
 import { formatBytes, shortSha } from "@/core/format";
+import { useFrame } from "@/core/frame";
 import { useCodexInfo, useGitInfo, useSandboxStatus } from "@/core/projects";
+import { t } from "@/ui/strings";
 import type { ProjectContext } from "./ProjectWindow";
 
 /** IDEA's status bar: HEAD, the codex process, memory, warnings. One thin line. */
@@ -10,6 +12,8 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
   const sandbox = useSandboxStatus();
   const worker = codex.data?.worker as { phase?: string; active_turns?: number } | null | undefined;
   const rss = ctx.sample?.rss_bytes ?? (codex.data?.worker as { stats?: { rss_bytes: number } } | null)?.stats?.rss_bytes;
+  const stale = codex.data?.stale ?? [];
+  const frame = useFrame();
 
   return (
     <div className="bg-sidebar border-sidebar-border text-muted-foreground flex h-7 items-center gap-4 overflow-x-auto border-t px-3 text-xs" data-testid="status-strip">
@@ -25,6 +29,11 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
         <span className="flex items-center gap-1 font-mono" title="内存">
           <MemoryStick className="size-3" /> {formatBytes(rss)}
         </span>
+      ) : null}
+      {stale.length ? (
+        <button type="button" className="text-warning flex items-center gap-1 hover:underline" title={t.codexStaleTitle} onClick={() => frame.open("process")}>
+          <AlertTriangle className="size-3" /> {t.codexStale}
+        </button>
       ) : null}
       {sandbox.data?.status === "unavailable" ? (
         <span className="text-warning flex items-center gap-1" title={sandbox.data.reason ?? ""}>

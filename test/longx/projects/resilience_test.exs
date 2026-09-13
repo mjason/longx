@@ -72,6 +72,27 @@ defmodule Longx.Projects.ResilienceTest do
     assert project_id in Pool.running()
   end
 
+  test "codex_info says when the running codex booted with settings that have since changed", %{
+    project: project
+  } do
+    assert Projects.codex_info(project).stale == []
+
+    {:ok, _thread} = Projects.start_thread(project)
+    project_id = project.id
+    assert_receive {:codex_connection, ^project_id, :ready}, 15_000
+    assert Projects.codex_info(project).stale == []
+
+    # a model's window is edited: the catalog this codex read is behind
+    {:ok, model} = Longx.AI.default_model()
+    Longx.AI.update_model!(model, %{context_window: model.context_window + 1})
+    assert Projects.codex_info(project).stale == [:models]
+
+    # a restart writes the home afresh
+    {:ok, _} = Projects.restart_codex(project)
+    assert_receive {:codex_connection, ^project_id, :ready}, 15_000
+    assert Projects.codex_info(project).stale == []
+  end
+
   test "codex dies mid-turn: the turn fails, the thread is disconnected, then resumed when codex is back",
        %{project: project} do
     project_id = project.id

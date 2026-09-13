@@ -151,6 +151,33 @@ defmodule Longx.Codex.HomeTest do
            ]
   end
 
+  test "stale/2 says which of the written files no longer match what prepare would write", %{
+    dir: dir
+  } do
+    models = [%{slug: "longx", context_window: 128_000}]
+    {:ok, _} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1", models: models)
+    assert Home.stale(dir, gateway_url: "http://127.0.0.1:4242/ai/v1", models: models) == []
+
+    # a model's window changed → the catalog on disk is behind
+    assert Home.stale(dir,
+             gateway_url: "http://127.0.0.1:4242/ai/v1",
+             models: [%{slug: "longx", context_window: 1_000_000}]
+           ) == [:models]
+
+    # the search mode changed → the config is behind
+    assert Home.stale(dir,
+             gateway_url: "http://127.0.0.1:4242/ai/v1",
+             models: models,
+             web_search: :hosted
+           ) == [:config]
+
+    # nothing written yet: nothing is stale (there is no process to restart)
+    assert Home.stale(Path.join(dir, "nope"),
+             gateway_url: "http://127.0.0.1:4242/ai/v1",
+             models: models
+           ) == []
+  end
+
   test "without an explicit option the mode comes from Longx.AI.web_search_mode/0", %{dir: dir} do
     # nothing configured in the (sandboxed, cleared) DB → standalone (open needs no provider)
     {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")

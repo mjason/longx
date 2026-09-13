@@ -63,7 +63,7 @@ export const threadFields = [
 export const subagentFields = ["id", "codexThreadId", "title", "preview", "status", "agentPath", "lastActivityAt", "insertedAt"] as const;
 
 export const gitFields = ["repository", "head", "clean", "changes", "lfs"] as const;
-export const codexFields = ["home", "exists", "bytes", "files", "worker"] as const;
+export const codexFields = ["home", "exists", "bytes", "files", "worker", "stale"] as const;
 
 /** An RPC failure as an Error the UI can show; field errors keep their names. */
 export class RpcFailure extends Error {
@@ -123,6 +123,8 @@ export function useCodexInfo(id: string | undefined) {
     queryKey: queryKeys.codex(id ?? ""),
     enabled: !!id,
     queryFn: async () => unwrap(await codexInfo({ fields: [...codexFields], input: { id: id! } })),
+    // `stale` (settings changed under the running codex) is checked server-side per call
+    refetchInterval: 30_000,
   });
 }
 

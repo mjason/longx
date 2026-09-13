@@ -200,9 +200,14 @@ React Native client planned on the same core code.
     (unified-exec shell, byte truncation, `priv/codex_prompt.md` as base instructions —
     the prompt vendored from the pinned release; the `:integration` suite checks the
     bundled binary embeds it verbatim, so a codex bump that changes it fails there) with
-    `context_window` / `max_context_window` from the row. The catalog is written when a
-    codex process starts: a window edit reaches a project after `restart_codex` (or the
-    Recycler). `Projects.resume_thread/2` (the pool's lazy resume and the Tracker's
+    `context_window` / `max_context_window` from the row. The catalog (and config.toml) is read
+    once, when a codex process starts, so an edit is deliberately **not** applied live:
+    `codex_info.stale` (`Home.stale/2`: the files on disk vs what `prepare/1` would write
+    now — `models` for a window edit or a new model, `config` for the search mode) turns
+    the status strip amber ("codex 需要重启", click → the process tool, which names the
+    reason next to its restart button); the person restarts when no turn matters. Both
+    the real launch and the test fake's go through `Home.prepare/1`, so the check works
+    in the suite. `Projects.resume_thread/2` (the pool's lazy resume and the Tracker's
     resume after a codex death) passes the same overrides as a start, so old threads get
     the row's current window on their next resume — verified against the real binary in
     `gateway_e2e_test` (start 128k → 121 600 reported; resume 1M → 950 000). Seeds give

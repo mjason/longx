@@ -128,6 +128,10 @@ export const t = {
   turnRunning: "进行中",
   awaitingApproval: "等待审批",
   codexDown: "codex 已停止",
+  codexStale: "codex 需要重启",
+  codexStaleTitle: "正在运行的 codex 用的还是旧设置",
+  codexStaleReasons: { models: "模型设置改了（上下文窗口、新增的模型）", config: "网页搜索等配置改了" } as Record<string, string>,
+  codexStaleHint: "codex 只在启动时读这些；重启后生效。正在进行的轮次会被打断，所以由你来决定什么时候重启。",
   codexReady: "codex 就绪",
   // chat
   welcomeChat: "让 agent 在这个项目里干活",

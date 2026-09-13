@@ -84,20 +84,18 @@ defmodule Longx.Codex.Home do
   """
   @spec prepare(keyword) :: {:ok, t} | {:error, File.posix()}
   def prepare(opts \\ []) do
-    dir = Keyword.get(opts, :dir, default_dir()) |> Path.expand()
-    gateway_url = Keyword.get(opts, :gateway_url, default_gateway_url())
-    web_search = Keyword.get_lazy(opts, :web_search, &Longx.AI.web_search_mode/0)
-    models = Keyword.get_lazy(opts, :models, &catalog_models/0)
-    config_path = Path.join(dir, "config.toml")
-    catalog_path = Path.join(dir, "model_catalog.json")
+    %{
+      dir: dir,
+      config_path: config_path,
+      catalog_path: catalog_path,
+      config: config,
+      catalog: catalog
+    } =
+      render(opts)
 
     with :ok <- File.mkdir_p(dir),
-         :ok <- File.write(catalog_path, Jason.encode!(model_catalog(models))),
-         :ok <-
-           File.write(
-             config_path,
-             config_toml(gateway_url, web_search, catalog_path: catalog_path)
-           ) do
+         :ok <- File.write(catalog_path, catalog),
+         :ok <- File.write(config_path, config) do
       {:ok,
        %__MODULE__{
          dir: dir,
@@ -111,6 +109,50 @@ defmodule Longx.Codex.Home do
          ]
        }}
     end
+  end
+
+  @doc """
+  What in `dir` no longer matches what `prepare/1` would write now (same
+  options): `:models` when a model's window changed or a model was added
+  (the catalog codex read at boot is behind), `:config` for the rest of
+  `config.toml`. Empty when nothing was written yet — there is no process
+  to be behind. codex reads both once, at start: a non-empty answer means
+  "restart this project's codex".
+  """
+  @spec stale(Path.t(), keyword) :: [:models | :config]
+  def stale(dir, opts \\ []) do
+    %{config_path: config_path, catalog_path: catalog_path, config: config, catalog: catalog} =
+      render(Keyword.put(opts, :dir, dir))
+
+    case File.read(config_path) do
+      {:ok, _} ->
+        for {tag, path, wanted} <- [
+              {:models, catalog_path, catalog},
+              {:config, config_path, config}
+            ],
+            File.read(path) != {:ok, wanted},
+            do: tag
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  # everything prepare/1 writes, from the options (and the DB for what is not given)
+  defp render(opts) do
+    dir = Keyword.get(opts, :dir, default_dir()) |> Path.expand()
+    gateway_url = Keyword.get(opts, :gateway_url, default_gateway_url())
+    web_search = Keyword.get_lazy(opts, :web_search, &Longx.AI.web_search_mode/0)
+    models = Keyword.get_lazy(opts, :models, &catalog_models/0)
+    catalog_path = Path.join(dir, "model_catalog.json")
+
+    %{
+      dir: dir,
+      config_path: Path.join(dir, "config.toml"),
+      catalog_path: catalog_path,
+      config: config_toml(gateway_url, web_search, catalog_path: catalog_path),
+      catalog: Jason.encode!(model_catalog(models))
+    }
   end
 
   @doc "The `config.toml` codex boots with (`catalog_path:` names the model catalog, when written)."

@@ -664,11 +664,13 @@ defmodule Longx.Projects do
           exists?: boolean,
           bytes: non_neg_integer,
           files: %{String.t() => non_neg_integer},
-          worker: :stopped | map
+          worker: :stopped | map,
+          stale: [:models | :config]
         }
   def codex_info(%Project{id: project_id}) do
     home = Pool.home_dir(project_id)
     exists? = File.dir?(home)
+    worker = Pool.status(project_id)
 
     files =
       if exists?,
@@ -684,7 +686,10 @@ defmodule Longx.Projects do
       exists?: exists?,
       bytes: if(exists?, do: dir_bytes(home), else: 0),
       files: files,
-      worker: Pool.status(project_id)
+      worker: worker,
+      # what the running codex read at boot that has changed since (a
+      # model's window, the search mode): it needs a restart to see it
+      stale: if(worker == :stopped, do: [], else: Longx.Codex.Home.stale(home))
     }
   end
 
