@@ -131,6 +131,32 @@ defmodule Longx.Codex.ThreadTest do
       assert params["summary"] == "none"
     end
 
+    test "turn_params/3: images ride along as image inputs after the text" do
+      params = Thread.turn_params("t", "look", images: ["data:image/png;base64,AAAA"])
+
+      assert params["input"] == [
+               %{"type" => "text", "text" => "look"},
+               %{"type" => "image", "url" => "data:image/png;base64,AAAA"}
+             ]
+    end
+
+    test "review_params/2 names the target and delivers the review into the thread" do
+      assert Thread.review_params("t", :uncommitted) == %{
+               "threadId" => "t",
+               "target" => %{"type" => "uncommittedChanges"},
+               "delivery" => "inline"
+             }
+
+      assert Thread.review_params("t", {:commit, "abc"})["target"] ==
+               %{"type" => "commit", "sha" => "abc"}
+
+      assert Thread.review_params("t", {:base_branch, "main"})["target"] ==
+               %{"type" => "baseBranch", "branch" => "main"}
+
+      assert Thread.review_params("t", {:custom, "check the tests"})["target"] ==
+               %{"type" => "custom", "instructions" => "check the tests"}
+    end
+
     test "turn_params/3: the access mode switches for this turn and the ones after" do
       params =
         Thread.turn_params("t", "hi",

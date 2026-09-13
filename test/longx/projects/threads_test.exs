@@ -240,6 +240,61 @@ defmodule Longx.Projects.ThreadsTest do
       assert thread.status == :idle
     end
 
+    test "images go to codex with the text; the turn keeps the text only", %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      url = "data:image/png;base64,iVBORw0KGgo="
+
+      {:ok, turn} = Projects.send_message(thread, "say what is this", conn: conn, images: [url])
+      assert turn.user_text == "say what is this"
+      eventually(turn_done(turn.id))
+
+      %{"lastTurnParams" => params} = read_thread!(conn, thread.codex_thread_id)
+
+      assert params["input"] == [
+               %{"type" => "text", "text" => "say what is this"},
+               %{"type" => "image", "url" => url}
+             ]
+    end
+
+    test "compact_thread/2 asks codex to compact the context; not while a turn runs", %{
+      dir: dir,
+      conn: conn
+    } do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      {:ok, turn} = Projects.send_message(thread, "say hi", conn: conn)
+      eventually(turn_done(turn.id))
+
+      assert :ok = Projects.compact_thread(thread, conn: conn)
+      assert %{"compacted" => 1} = read_thread!(conn, thread.codex_thread_id)
+
+      {:ok, _} = Projects.send_message(thread, "stall", conn: conn)
+      assert {:error, :turn_in_progress} = Projects.compact_thread(thread, conn: conn)
+    end
+
+    test "review_thread/3 starts codex's review as a turn of the thread, with git bookmarks but no commit first",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, head} = Git.head(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      File.write!(Path.join(dir, "a.txt"), "changed\n")
+
+      assert {:ok, %Turn{} = turn} = Projects.review_thread(thread, :uncommitted, conn: conn)
+      assert turn.user_text == "/review"
+      assert turn.commit_before == head
+      assert turn.dirty_start
+      # the changes are what is being reviewed: nothing was committed
+      assert {:ok, ^head} = Git.head(dir)
+
+      done = eventually(turn_done(turn.id))
+      assert done.status == :completed
+
+      %{"lastReview" => review} = read_thread!(conn, thread.codex_thread_id)
+      assert review["target"] == %{"type" => "uncommittedChanges"}
+      assert review["delivery"] == "inline"
+    end
+
     test "codex naming the thread fills an empty title; a title the person chose stays", %{
       dir: dir,
       conn: conn
