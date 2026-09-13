@@ -7,6 +7,7 @@ import { Button } from "@/ui/components/ui/button";
 import { Input } from "@/ui/components/ui/input";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { BottomBar, Page, TopBar } from "@/ui/shell/Shell";
+import { Logo } from "@/ui/components/Logo";
 import { ThemeToggle } from "@/ui/components/ThemeToggle";
 import { t } from "@/ui/strings";
 
@@ -24,7 +25,11 @@ export function WelcomePage() {
   return (
     <>
       <TopBar
-        title={t.app}
+        title={
+          <span className="flex items-center gap-2">
+            <Logo size={26} /> {t.app}
+          </span>
+        }
         actions={
           <>
           <ThemeToggle />

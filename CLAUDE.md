@@ -396,6 +396,10 @@ React Native client planned on the same core code.
     (`safe-bottom`) and inline on desktop (`lg:`); touch targets ≥ 44 px (`touch-target`);
     16 px base font (no iOS zoom); the page never scrolls sideways — wide content scrolls
     inside its own box; dark is the default theme, `[data-theme="light"]` the override.
+    **Brand**: the LX logo (`priv/static/images/logo.png`, designed, transparent) sets the
+    palette — primary is its azure, the dark ground its navy, warning stays amber; favicon,
+    PWA icons, apple-touch-icon and the header mark (`images/logo-mark.png`, `ui/components/Logo`)
+    are regenerated from it with `python3 assets/scripts/icons.py`.
     `css/app.css`: Tailwind v4 with shadcn token names, **no `@apply`**, no daisyUI; only
     `html` gets `overflow-x: hidden` (on body/#app it can steal touch scrolling).
 
