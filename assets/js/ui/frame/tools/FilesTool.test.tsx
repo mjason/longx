@@ -106,7 +106,7 @@ describe("FilesTool", () => {
     vi.mocked(searchFiles).mockResolvedValue(ok([{ path: "lib/deep/gateway.ex", fileName: "gateway.ex", matchType: "file", root: "/", score: 1, indices: null }]) as never);
     const { user, panel } = await openFiles();
     await user.type(within(panel).getByRole("searchbox", { name: "按文件名查找…" }), "gtw");
-    const hit = await within(panel).findByRole("button", { name: /lib\/deep\/gateway\.ex/ });
+    const hit = await within(panel).findByRole("button", { name: /^gateway\.ex\s*lib\/deep$/ });
     await user.click(hit);
     expect(within(await screen.findByTestId("workbench-tabs")).getByRole("tab", { name: /gateway\.ex/ })).toHaveAttribute("aria-selected", "true");
   });

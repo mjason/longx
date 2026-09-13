@@ -162,7 +162,7 @@ export function ProjectWindow() {
               <SheetHeader className="pb-2">
                 <SheetTitle>{frame.tool ? t.tools[frame.tool] : ""}</SheetTitle>
               </SheetHeader>
-              {frame.tool ? <ToolBody tool={frame.tool} ctx={ctx} /> : null}
+              <div className="safe-x pb-2">{frame.tool ? <ToolBody tool={frame.tool} ctx={ctx} /> : null}</div>
             </SheetContent>
           </Sheet>
         </>

@@ -137,7 +137,10 @@ function FilterResults({ projectId, query, git }: { projectId: string; query: st
             }}
           >
             {hit.matchType === "directory" ? <Folder className="text-muted-foreground size-4 shrink-0" /> : <File className="text-muted-foreground size-4 shrink-0" />}
-            <span className="truncate font-mono text-xs">{hit.path}</span>
+            <span className="truncate font-mono text-xs">
+              {hit.fileName}
+              {hit.path.length > hit.fileName.length ? <span className="text-muted-foreground"> {hit.path.slice(0, -hit.fileName.length - 1)}</span> : null}
+            </span>
           </button>
         </li>
       ))}
