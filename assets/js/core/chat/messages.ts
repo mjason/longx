@@ -2,7 +2,7 @@
 // item; everything else a turn produced becomes one assistant message whose
 // parts follow the items in order. Pending approvals ride on the tool-call
 // part they belong to (assistant-ui's `approval` seam). Pure; DOM-free.
-import type { MessageTiming, ThreadMessageLike } from "@assistant-ui/react";
+import { fromThreadMessageLike, type MessageTiming, type ThreadMessage, type ThreadMessageLike } from "@assistant-ui/react";
 import { runningTurnId, sameId, type CodexItem, type PendingRequest, type ThreadView } from "./thread";
 
 export type ApprovalDecision = "accept" | "accept_for_session" | "decline";
@@ -17,14 +17,50 @@ export const APPROVAL_OPTIONS = [
 type Part = Exclude<ThreadMessageLike["content"], string>[number];
 type ToolPart = Extract<Part, { type: "tool-call" }>;
 
-export function toMessages(view: ThreadView): ThreadMessageLike[] {
+/** The live views of a thread's sub-agents, by their codex thread id (for the nested conversations). */
+export type SubViews = Record<string, ThreadView>;
+
+/** One sub-agent as codex's `subAgentActivity` items describe it: its path, thread and latest state. */
+export type SubAgent = { threadId: string; name: string; path: string; kind: string; firstItemId: string; startedAtMs?: number; completedAtMs?: number };
+
+/** The sub-agents a view mentions, in order of first appearance. */
+export function subagentsOf(view: ThreadView): Map<string, SubAgent> {
+  const agents = new Map<string, SubAgent>();
+  for (const item of view.items) {
+    if (item.type !== "subAgentActivity") continue;
+    const threadId = String(item["agentThreadId"] ?? "");
+    if (!threadId) continue;
+    const path = String(item["agentPath"] ?? "");
+    const kind = String(item["kind"] ?? "started");
+    const known = agents.get(threadId);
+    const started = known?.startedAtMs ?? (typeof item["startedAtMs"] === "number" ? (item["startedAtMs"] as number) : undefined);
+    const completed = kind === "completed" || kind === "interrupted" ? (typeof item["completedAtMs"] === "number" ? (item["completedAtMs"] as number) : undefined) : undefined;
+    agents.set(threadId, {
+      threadId,
+      name: path.split("/").filter(Boolean).at(-1) ?? threadId,
+      path,
+      kind,
+      firstItemId: known?.firstItemId ?? item.id,
+      ...(started !== undefined ? { startedAtMs: started } : {}),
+      ...(completed !== undefined ? { completedAtMs: completed } : {}),
+    });
+  }
+  return agents;
+}
+
+export function toMessages(view: ThreadView, subviews: SubViews = {}): ThreadMessageLike[] {
   const running = runningTurnId(view);
   const approvals = approvalsByItem(view.requests);
+  const agents = subagentsOf(view);
   const out: ThreadMessageLike[] = [];
   let current: { turnId: string | undefined; parts: Part[] } | null = null;
 
   const flush = () => {
     if (current && current.parts.length) {
+      // the turn's plan leads its message; codex keeps one plan per turn
+      if (view.plan && current.turnId !== undefined && view.plan.turnId === current.turnId) {
+        current.parts.unshift({ type: "data-plan", data: { explanation: view.plan.explanation, steps: view.plan.plan } } as Part);
+      }
       const timing = timingFor(view, current.turnId, current.parts);
       out.push({
         id: current.turnId ? `turn:${current.turnId}` : `turn:${out.length}`,
@@ -47,7 +83,7 @@ export function toMessages(view: ThreadView): ThreadMessageLike[] {
       flush();
       current = { turnId: item.turnId, parts: [] };
     }
-    const part = toPart(item, approvals.get(item.id));
+    const part = item.type === "subAgentActivity" ? subagentPart(item, agents, subviews) : item.type === "collabAgentToolCall" ? collabPart(item, agents) : toPart(item, approvals.get(item.id));
     if (part) current.parts.push(part);
   }
   flush();
@@ -67,6 +103,65 @@ export function toMessages(view: ThreadView): ThreadMessageLike[] {
     attachPending(out, itemId, toolPart(itemId, "requestUserInput", args, undefined, undefined));
   }
   return out;
+}
+
+// every activity of one sub-agent folds into a single `subagent` call at the
+// place of its first one; the child's own conversation nests in `messages`
+// (assistant-ui's MessagePartPrimitive.Messages) and a child waiting for an
+// approval hands it up to the parent, which answers through the same codex
+function subagentPart(item: CodexItem, agents: Map<string, SubAgent>, subviews: SubViews): ToolPart | null {
+  const agent = agents.get(String(item["agentThreadId"] ?? ""));
+  if (!agent || agent.firstItemId !== item.id) return null;
+  const done = agent.kind === "completed" || agent.kind === "interrupted";
+  const child = subviews[agent.threadId];
+  const pending = child?.requests.find((r) => r.method.endsWith("/requestApproval"));
+  const part = toolPart(
+    agent.threadId,
+    "subagent",
+    { name: agent.name, path: agent.path, threadId: agent.threadId, kind: agent.kind, request: pending ? requestSummary(pending) : null },
+    done ? { kind: agent.kind } : undefined,
+    pending ? { ...pending, params: { ...pending.params, reason: `子 agent ${agent.name}：${approvalPrompt(pending)}` } } : undefined,
+    agent.kind === "interrupted",
+    undefined,
+    agent.startedAtMs !== undefined ? { startedAt: agent.startedAtMs, ...(agent.completedAtMs !== undefined ? { completedAt: agent.completedAtMs } : {}) } : undefined,
+  );
+  if (!child) return part;
+  const messages: ThreadMessage[] = toMessages(child, subviews).map((m, i) => fromThreadMessageLike(m, `${agent.threadId}:${i}`, { type: "complete", reason: "unknown" }));
+  return { ...part, messages };
+}
+
+// what a child asks approval for, so the parent's card can show it
+function requestSummary(request: PendingRequest): { command?: string; paths?: string[] } {
+  const p = request.params;
+  if (typeof p["command"] === "string") return { command: displayCommand(p["command"]) };
+  const changes = Array.isArray(p["changes"]) ? (p["changes"] as { path?: string }[]) : [];
+  return { paths: changes.map((c) => String(c.path ?? "")).filter(Boolean) };
+}
+
+// codex's collaboration tools (spawnAgent / sendMessage / wait / closeAgent…):
+// the agents it addresses by name, the states it reports as the result
+function collabPart(item: CodexItem, agents: Map<string, SubAgent>): ToolPart {
+  const status = item["status"];
+  const done = status === "completed" || status === "failed";
+  // a `wait` names nobody up front; the states it reports (or every agent so far) say who it waited for
+  const states = (item["agentsStates"] as Record<string, unknown> | undefined) ?? {};
+  const named = Array.isArray(item["receiverThreadIds"]) ? (item["receiverThreadIds"] as string[]) : [];
+  const receivers = named.length ? named : Object.keys(states).length ? Object.keys(states) : item["tool"] === "wait" ? [...agents.keys()] : [];
+  return toolPart(
+    item.id,
+    "collab",
+    {
+      tool: item["tool"],
+      prompt: item["prompt"] ?? null,
+      model: item["model"] ?? null,
+      agents: receivers.map((threadId) => ({ threadId, name: agents.get(threadId)?.name ?? threadId })),
+    },
+    done ? { status, agentsStates: states } : undefined,
+    undefined,
+    status === "failed",
+    undefined,
+    timingOf(item),
+  );
 }
 
 function attachPending(out: ThreadMessageLike[], itemId: string, part: ToolPart) {

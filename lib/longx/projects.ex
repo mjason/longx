@@ -31,6 +31,7 @@ defmodule Longx.Projects do
 
     resource Longx.Projects.Thread do
       rpc_action :list_threads, :for_project
+      rpc_action :list_subagents, :subagents_of
       rpc_action :start_thread, :start_thread
       rpc_action :send_message, :send_message
       rpc_action :interrupt_turn, :interrupt_turn

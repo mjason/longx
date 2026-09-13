@@ -98,9 +98,13 @@ describe("ThreadPage", () => {
     const webSearch = await screen.findByRole("switch", { name: /网页搜索/ });
     expect(webSearch).toBeEnabled();
     await user.click(webSearch);
+    // so can the sub-agent tools
+    const multiAgent = screen.getByRole("switch", { name: /子 agent/ });
+    expect(multiAgent).toBeChecked();
+    await user.click(multiAgent);
     await user.keyboard("{Escape}");
     await user.type(screen.getByRole("textbox", { name: "随心输入" }), "start here{Enter}");
-    await waitFor(() => expect(startThread).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ projectId: "id-1", webSearch: false, sandbox: "workspace_write" }) })));
+    await waitFor(() => expect(startThread).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ projectId: "id-1", webSearch: false, multiAgent: false, sandbox: "workspace_write" }) })));
     await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t2", text: "start here" }) })));
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t2"));
   });
@@ -170,6 +174,51 @@ describe("ThreadPage", () => {
     expect(sendMessage).not.toHaveBeenCalled();
     act(() => channel.deliver("codex", { seq: 5, method: "turn/completed", params: { turn: { id: "turn_2", status: "completed" } } }));
     await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "and then this" }) })));
+  });
+
+  test("a sub-agent joins its own thread: its conversation nests under the parent, its approval is answered there, the plan shows", async () => {
+    const user = userEvent.setup();
+    await open();
+    const child = "thr_1-alpha";
+    act(() => {
+      channel.deliverTo("thread:thr_1", "codex", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliverTo("thread:thr_1", "codex", { seq: 5, method: "turn/plan/updated", params: { turnId: "turn_2", explanation: "delegating", plan: [{ step: "spawn alpha", status: "completed" }, { step: "wait for alpha", status: "inProgress" }] } });
+      channel.deliverTo("thread:thr_1", "codex", { seq: 6, method: "item/completed", params: { turnId: "turn_2", item: { id: "act_alpha_started", type: "subAgentActivity", agentPath: "/root/alpha", agentThreadId: child, kind: "started" } } });
+    });
+    // the parent's activity opened the child's channel
+    await waitFor(() => expect(channel.topics).toContain(`thread:${child}`));
+    act(() =>
+      channel.replyTo(`thread:${child}`, "ok", {
+        thread_id: child,
+        seq: 2,
+        thread: null,
+        turn: { id: "turn_2-alpha", status: "inProgress" },
+        status: null,
+        token_usage: null,
+        plan: null,
+        items: [{ id: "cmd_alpha", type: "commandExecution", turnId: "turn_2-alpha", command: "echo alpha", cwd: "/p", status: "inProgress" }],
+        pending_requests: [{ id: 9, method: "item/commandExecution/requestApproval", params: { requestId: 9, itemId: "cmd_alpha", threadId: child, command: "echo alpha" } }],
+      }),
+    );
+    expect(screen.getByTestId("plan")).toHaveTextContent("wait for alpha");
+    const sub = screen.getByTestId("tool-subagent");
+    expect(sub).toHaveTextContent("alpha");
+    expect(within(sub).getByTestId("subagent-messages")).toHaveTextContent("echo alpha");
+    expect(screen.getByTestId("turn-bar")).toHaveTextContent("等待审批");
+    await user.click(screen.getAllByRole("button", { name: "允许" })[0]!);
+    await waitFor(() => expect(respond).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", requestId: "9", decision: "accept" } })));
+
+    act(() => {
+      channel.deliverTo(`thread:${child}`, "codex", { seq: 3, method: "serverRequest/resolved", params: { requestId: 9 } });
+      channel.deliverTo(`thread:${child}`, "codex", { seq: 4, method: "item/completed", params: { turnId: "turn_2-alpha", item: { id: "cmd_alpha", type: "commandExecution", command: "echo alpha", cwd: "/p", status: "completed", exitCode: 0, aggregatedOutput: "alpha\n" } } });
+      channel.deliverTo(`thread:${child}`, "codex", { seq: 5, method: "item/completed", params: { turnId: "turn_2-alpha", item: { id: "msg_alpha", type: "agentMessage", text: "done by alpha" } } });
+      channel.deliverTo(`thread:${child}`, "codex", { seq: 6, method: "turn/completed", params: { turn: { id: "turn_2-alpha", status: "completed" } } });
+      channel.deliverTo("thread:thr_1", "codex", { seq: 7, method: "item/completed", params: { turnId: "turn_2", item: { id: "act_alpha_done", type: "subAgentActivity", agentPath: "/root/alpha", agentThreadId: child, kind: "completed" } } });
+    });
+    // finished, the row folds like any tool; its conversation is a click away
+    expect(screen.getByText("子 agent 完成")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /子 agent 完成/ }));
+    expect(screen.getByText("done by alpha")).toBeInTheDocument();
   });
 
   test("phone: the chat still shows the command block and the bottom toolbar", async () => {

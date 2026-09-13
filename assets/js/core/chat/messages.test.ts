@@ -185,3 +185,115 @@ describe("toMessages", () => {
     expect(userText({ id: "u", type: "userMessage", content: "plain" })).toBe("plain");
   });
 });
+
+describe("multi-agent", () => {
+  const activity = (id: string, kind: string, name = "alpha") => ({ id, type: "subAgentActivity", turnId: "t20", agentPath: `/root/${name}`, agentThreadId: `child-${name}`, kind });
+
+  test("a sub-agent's activities collapse into one `subagent` tool call carrying the child's conversation", () => {
+    const child = view({
+      threadId: "child-alpha",
+      turn: { id: "ct", status: "completed" },
+      items: [
+        { id: "cc", type: "commandExecution", turnId: "ct", command: "echo alpha", status: "completed", exitCode: 0, aggregatedOutput: "alpha\n" },
+        { id: "cm", type: "agentMessage", turnId: "ct", text: "done by alpha" },
+      ],
+    });
+    const msgs = toMessages(
+      view({
+        turn: { id: "t20", status: "completed" },
+        items: [
+          { id: "u20", type: "userMessage", turnId: "t20", content: [{ type: "text", text: "spawn alpha" }] },
+          activity("act1", "started"),
+          { id: "a20", type: "agentMessage", turnId: "t20", text: "waiting" },
+          activity("act2", "interacted"),
+          activity("act3", "completed"),
+        ],
+      }),
+      { "child-alpha": child },
+    );
+    const ps = parts(msgs[1]!);
+    expect(ps.map((p) => p["type"])).toEqual(["tool-call", "text"]);
+    const sub = ps[0] as unknown as { toolCallId: string; toolName: string; args: Record<string, unknown>; result: unknown; messages: { role: string; content: unknown[] }[] };
+    expect(sub).toMatchObject({ toolCallId: "child-alpha", toolName: "subagent", args: { name: "alpha", path: "/root/alpha", threadId: "child-alpha", kind: "completed" }, result: { kind: "completed" } });
+    expect(sub.messages).toHaveLength(1);
+    expect(sub.messages[0]!.role).toBe("assistant");
+    expect(sub.messages[0]!.content.map((p) => (p as { type: string }).type)).toEqual(["tool-call", "text"]);
+  });
+
+  test("a sub-agent still working has no result; without its view the call has no messages", () => {
+    const msgs = toMessages(view({ turn: { id: "t20", status: "inProgress" }, items: [activity("act1", "started")] }));
+    const sub = parts(msgs[0]!)[0]!;
+    expect(sub["result"]).toBeUndefined();
+    expect(sub["messages"]).toBeUndefined();
+    expect(msgs[0]!.status).toEqual({ type: "running" });
+  });
+
+  test("a child's pending approval rides on the sub-agent call so the parent can answer it", () => {
+    const child = view({
+      threadId: "child-alpha",
+      turn: { id: "ct", status: "inProgress" },
+      items: [{ id: "cc", type: "commandExecution", turnId: "ct", command: "rm -rf x", status: "inProgress" }],
+      requests: [{ id: 7, method: "item/commandExecution/requestApproval", params: { requestId: 7, itemId: "cc", command: "rm -rf x" } }],
+    });
+    const msgs = toMessages(view({ turn: { id: "t20", status: "inProgress" }, items: [activity("act1", "started")] }), { "child-alpha": child });
+    const sub = parts(msgs[0]!)[0] as unknown as { approval: { id: string; prompt: string } };
+    expect(sub.approval.id).toBe("7");
+    expect(sub.approval.prompt).toContain("alpha");
+    expect(msgs[0]!.status).toEqual({ type: "requires-action", reason: "interrupt" });
+  });
+
+  test("collabAgentToolCall becomes a `collab` call naming the agents it talks to", () => {
+    const msgs = toMessages(
+      view({
+        turn: { id: "t20", status: "completed" },
+        items: [
+          activity("act1", "started"),
+          activity("act2", "started", "beta"),
+          {
+            id: "collab1",
+            type: "collabAgentToolCall",
+            turnId: "t20",
+            tool: "wait",
+            status: "completed",
+            senderThreadId: "thr_1",
+            receiverThreadIds: ["child-alpha", "child-beta"],
+            agentsStates: { "child-alpha": { status: "completed", message: "done by alpha" }, "child-beta": { status: "running", message: null } },
+            prompt: null,
+            model: null,
+          },
+          { id: "spawn1", type: "collabAgentToolCall", turnId: "t20", tool: "spawnAgent", status: "inProgress", senderThreadId: "thr_1", receiverThreadIds: [], agentsStates: {}, prompt: "read the docs", model: "deepseek-flash" },
+          { id: "wait2", type: "collabAgentToolCall", turnId: "t20", tool: "wait", status: "inProgress", senderThreadId: "thr_1", receiverThreadIds: [], agentsStates: {}, prompt: null, model: null },
+        ],
+      }),
+    );
+    const ps = parts(msgs[0]!);
+    expect(ps.map((p) => p["toolName"])).toEqual(["subagent", "subagent", "collab", "collab", "collab"]);
+    // a wait in flight names nobody yet: it waits for every agent so far
+    expect(ps[4]).toMatchObject({ args: { tool: "wait", agents: [{ name: "alpha" }, { name: "beta" }] } });
+    expect(ps[2]).toMatchObject({
+      toolCallId: "collab1",
+      args: { tool: "wait", agents: [{ threadId: "child-alpha", name: "alpha" }, { threadId: "child-beta", name: "beta" }] },
+      result: { status: "completed", agentsStates: { "child-alpha": { status: "completed" } } },
+    });
+    expect(ps[3]).toMatchObject({ args: { tool: "spawnAgent", prompt: "read the docs", model: "deepseek-flash" } });
+    expect(ps[3]!["result"]).toBeUndefined();
+  });
+
+  test("the turn's plan is a data part at the top of its message", () => {
+    const msgs = toMessages(
+      view({
+        turn: { id: "t21", status: "inProgress" },
+        plan: { turnId: "t21", explanation: "delegating", plan: [{ step: "spawn", status: "completed" }, { step: "wait", status: "inProgress" }] },
+        items: [
+          { id: "u21", type: "userMessage", turnId: "t21", content: [{ type: "text", text: "go" }] },
+          { id: "a21", type: "agentMessage", turnId: "t21", text: "on it" },
+        ],
+      }),
+    );
+    const ps = parts(msgs[1]!);
+    expect(ps[0]).toEqual({ type: "data-plan", data: { explanation: "delegating", steps: [{ step: "spawn", status: "completed" }, { step: "wait", status: "inProgress" }] } });
+    // an older turn's message does not show the current plan
+    const older = toMessages(view({ turn: { id: "t22", status: "inProgress" }, plan: { turnId: "t22", explanation: null, plan: [{ step: "x", status: "pending" }] }, items: [{ id: "a20", type: "agentMessage", turnId: "t20", text: "old" }] }));
+    expect(parts(older[0]!).map((p) => p["type"])).toEqual(["text"]);
+  });
+});

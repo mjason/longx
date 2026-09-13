@@ -9,13 +9,13 @@ export const failed = (message: string, fields: string[] = []) => ({
 
 export const project = (n: number) => ({
   id: `id-${n}`, slug: `app-${n}`, name: `App ${n}`, description: null, rootPath: `/srv/app-${n}`,
-  sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true, dirtyStart: "commit",
+  sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true, multiAgent: true, dirtyStart: "commit",
   tools: [], memoryLimitMb: null, archivedAt: null, updatedAt: "2026-09-12T00:00:00Z",
 });
 
 export const thread = (n: number) => ({
   id: `t${n}`, codexThreadId: `thr_${n}`, title: null, preview: `thread ${n}`, status: "idle", modelSlug: null,
-  sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true,
+  sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true, multiAgent: true,
   lastActivityAt: "2026-09-12T00:00:00Z", insertedAt: "2026-09-12T00:00:00Z",
 });
 
@@ -38,6 +38,7 @@ export function rpcMock() {
     answerRequest: vi.fn(async () => ok(null)),
     deleteThread: vi.fn(async () => ok(null)),
     listTurns: vi.fn(async () => ok([])),
+    listSubagents: vi.fn(async () => ok([])),
     restoreProposal: vi.fn(async () => ok({ commit: "aaaa1111", dirtyNow: false, changedFiles: [], laterTurns: 0 })),
     restoreFiles: vi.fn(async () => ok({ safetyCommit: null, head: "aaaa1111" })),
     redoTurn: vi.fn(async () => ok({ id: "tu9", threadId: "t1" })),
@@ -70,11 +71,16 @@ export const model = (n: number, extra: Partial<{ slug: string; default: boolean
  * A channel double that remembers what was joined and lets a test deliver
  * the join reply (`channel.reply("ok", snapshot)`) and deliver server pushes
  * (`channel.deliver("codex", event)`) — for both the project and thread
- * topics. Client pushes (`push`) are recorded; `answer(status, payload)`
+ * topics; the shared maps hold the most recent join, `replyTo` / `deliverTo`
+ * address one topic when several threads are open (a thread and its
+ * sub-agents). Client pushes (`push`) are recorded; `answer(status, payload)`
  * resolves the last one.
  */
+type TopicState = { handlers: Record<string, (payload: unknown) => void>; replies: Record<string, (payload: unknown) => void> };
+
 export const channel = {
   topics: [] as string[],
+  byTopic: {} as Record<string, TopicState>,
   handlers: {} as Record<string, (payload: unknown) => void>,
   replies: {} as Record<string, (payload: unknown) => void>,
   on: vi.fn((event: string, cb: (payload: unknown) => void) => {
@@ -105,14 +111,21 @@ export const channel = {
   reply(status: string, payload: unknown) {
     channel.replies[status]?.(payload);
   },
+  replyTo(topic: string, status: string, payload: unknown) {
+    channel.byTopic[topic]?.replies[status]?.(payload);
+  },
   answer(status: string, payload: unknown) {
     channel.pushReplies[status]?.(payload);
   },
   deliver(event: string, payload: unknown) {
     channel.handlers[event]?.(payload);
   },
+  deliverTo(topic: string, event: string, payload: unknown) {
+    channel.byTopic[topic]?.handlers[event]?.(payload);
+  },
   reset() {
     channel.topics = [];
+    channel.byTopic = {};
     channel.handlers = {};
     channel.replies = {};
     channel.pushed = [];
@@ -123,6 +136,32 @@ export const channel = {
     channel.leave.mockClear();
   },
 };
+
+// one topic's view of the shared double: records into both
+function topicChannel(topic: string) {
+  const state: TopicState = { handlers: {}, replies: {} };
+  channel.byTopic[topic] = state;
+  return {
+    on: (event: string, cb: (payload: unknown) => void) => {
+      state.handlers[event] = cb;
+      channel.on(event, cb);
+    },
+    join: () => {
+      const shared = channel.join();
+      const receiver = {
+        receive(status: string, cb: (payload: unknown) => void) {
+          state.replies[status] = cb;
+          shared.receive(status, cb);
+          return receiver;
+        },
+      };
+      return receiver;
+    },
+    leave: channel.leave,
+    push: channel.push,
+  };
+}
+
 export function socketMock(status: "open" | "closed" = "open") {
   return {
     socketStatus: () => status,
@@ -130,7 +169,7 @@ export function socketMock(status: "open" | "closed" = "open") {
     getSocket: () => ({
       channel: (topic: string) => {
         channel.topics.push(topic);
-        return channel;
+        return topicChannel(topic);
       },
     }),
   };

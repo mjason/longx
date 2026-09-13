@@ -172,6 +172,34 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"projectId" => project["id"]}
                })
 
+      # a thread's sub-agents (codex-spawned children) are listed under it, never in the project list
+      child =
+        Longx.Projects.create_thread!(%{
+          project_id: project["id"],
+          codex_thread_id: "#{codex_id}-alpha",
+          parent_thread_id: thread_id,
+          agent_path: "/root/alpha",
+          title: "alpha",
+          cwd: dir,
+          sandbox: :workspace_write,
+          approval_policy: :on_request,
+          status: :active
+        })
+
+      assert %{"success" => true, "data" => [%{"id" => child_id, "agentPath" => "/root/alpha"}]} =
+               rpc(conn, "list_subagents", %{
+                 "fields" => ["id", "agentPath", "status"],
+                 "input" => %{"parentThreadId" => thread_id}
+               })
+
+      assert child_id == child.id
+
+      assert %{"success" => true, "data" => [%{"id" => ^thread_id}]} =
+               rpc(conn, "list_threads", %{
+                 "fields" => ["id"],
+                 "input" => %{"projectId" => project["id"]}
+               })
+
       assert %{"success" => true, "data" => [%{"id" => ^turn_id}]} =
                rpc(conn, "list_turns", %{
                  "fields" => ["id"],

@@ -10,9 +10,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { archiveThread, deleteThread, renameThread } from "@/ash_rpc";
 import { queryKeys, unwrap, useStartThread, useThreads } from "@/core/projects";
 import { buildAdapter, type AccessMode, type DirtyChange, type DirtyDecision, type ThreadTarget } from "./adapter";
+import { subagentsOf, type SubViews } from "./messages";
 import { runningTurnId, type ThreadView } from "./thread";
 import { buildThreadListAdapter, type ThreadRow } from "./threadList";
 import { useThreadView } from "./useThreadView";
+import { useThreadViews } from "./useThreadViews";
 
 export type CodexRuntimeOptions = {
   projectId: string;
@@ -32,6 +34,8 @@ export type CodexRuntime = {
   /** the route names a thread the project does not have */
   missing: boolean;
   view: ThreadView;
+  /** the live views of the thread's sub-agents (and theirs), by codex thread id */
+  subviews: SubViews;
   ready: boolean;
   error: string | null;
   state: TurnState;
@@ -47,6 +51,8 @@ export type CodexRuntime = {
 // statuses that end a thread for good vs. a codex on its way back
 const CLOSED = new Set(["unrecoverable", "archived"]);
 
+const subagentIds = (view: ThreadView): string[] => [...subagentsOf(view).keys()];
+
 export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   const { projectId, defaults, threadId, onOpenThread, onDirtyTree } = opts;
   const client = useQueryClient();
@@ -54,6 +60,9 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   const rows = useMemo(() => (threads.data ?? []) as ThreadRow[], [threads.data]);
   const thread = threadId ? rows.find((t) => t.id === threadId) : undefined;
   const { view, ready, error, refetch } = useThreadView(thread?.codexThreadId);
+  // sub-agents work on their own codex threads; the parent's activities name
+  // them, and a child's activities name its own children
+  const subviews = useThreadViews(useMemo(() => subagentIds(view), [view]), subagentIds);
   const [model, setModel] = useState<string | null>(null);
   const start = useStartThread(projectId);
 
@@ -67,6 +76,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         approvalPolicy: thread.approvalPolicy as AccessMode["approvalPolicy"],
         networkAccess: thread.networkAccess ?? false,
         webSearch: thread.webSearch ?? true,
+        multiAgent: thread.multiAgent ?? true,
       }
     : null;
   const mode = modeOverride && modeOverride.threadId === threadId ? modeOverride.mode : (rowMode ?? defaults);
@@ -127,6 +137,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
       buildAdapter({
         target,
         view,
+        subviews,
         model,
         mode,
         disabled: disabledReason !== null,
@@ -140,7 +151,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         queue: queue.adapter,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [target?.threadId, target?.codexThreadId, view, model, mode, disabledReason, thread?.status, ready, error, createThread, onSent, onDirtyTree, refetch, threadList, queue],
+    [target?.threadId, target?.codexThreadId, view, subviews, model, mode, disabledReason, thread?.status, ready, error, createThread, onSent, onDirtyTree, refetch, threadList, queue],
   );
   onNewRef.current = adapter.onNew;
   const runtime = useExternalStoreRuntime(adapter);
@@ -153,13 +164,15 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     wasRunning.current = running;
   }, [running, queue]);
 
-  const state: TurnState = thread && view.requests.length > 0 ? "approval" : thread && runningTurnId(view) ? "running" : "idle";
+  const awaiting = view.requests.length > 0 || Object.values(subviews).some((v) => v.requests.length > 0);
+  const state: TurnState = thread && awaiting ? "approval" : thread && runningTurnId(view) ? "running" : "idle";
 
   return {
     runtime,
     thread,
     missing: threadId !== undefined && !threads.isPending && thread === undefined,
     view,
+    subviews,
     ready,
     error,
     state,

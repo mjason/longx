@@ -85,3 +85,18 @@ describe("thread view", () => {
     expect(v.items.map((i) => i.id)).toEqual(["u1", "a1"]);
   });
 });
+
+describe("plan", () => {
+  test("the snapshot carries the turn's plan and turn/plan/updated replaces it", () => {
+    const v = fromSnapshot({ ...snapshot, plan: { turnId: "turn_1", explanation: null, plan: [{ step: "a", status: "completed" }] } });
+    expect(v.plan).toEqual({ turnId: "turn_1", explanation: null, plan: [{ step: "a", status: "completed" }] });
+    const v2 = applyEvent(v, {
+      seq: 11,
+      method: "turn/plan/updated",
+      params: { turnId: "turn_2", explanation: "next", plan: [{ step: "b", status: "inProgress" }, { step: "c", status: "pending" }] },
+    });
+    expect(v2.plan).toEqual({ turnId: "turn_2", explanation: "next", plan: [{ step: "b", status: "inProgress" }, { step: "c", status: "pending" }] });
+    // a snapshot without a plan (older server, empty thread) is fine
+    expect(fromSnapshot(snapshot).plan).toBeNull();
+  });
+});

@@ -2689,6 +2689,83 @@ export async function validateStartThread(
 }
 
 
+export type ListSubagentsInput = {
+  parentThreadId: UUID;
+};
+
+export type ListSubagentsFields = UnifiedFieldSelection<ThreadResourceSchema>[];
+export type InferListSubagentsResult<
+  Fields extends ListSubagentsFields,
+> = Array<InferResult<ThreadResourceSchema, Fields>>;
+
+export type ListSubagentsResult<Fields extends ListSubagentsFields> = | { success: true; data: InferListSubagentsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Read Thread records
+ *
+ * @ashActionType :read
+ */
+export async function listSubagents<Fields extends ListSubagentsFields>(
+  config: {
+  tenant?: string;
+  input: ListSubagentsInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  filter?: ThreadFilterInput;
+  sort?: SortString<ThreadSortField> | SortString<ThreadSortField>[];
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListSubagentsResult<Fields>> {
+  const payload = {
+    action: "list_subagents",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields }),
+    ...(config.filter && { filter: config.filter }),
+    ...(config.sort && { sort: Array.isArray(config.sort) ? config.sort.join(",") : config.sort })
+  };
+
+  return executeActionRpcRequest<ListSubagentsResult<Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Read Thread records
+ *
+ * @ashActionType :read
+ * @validation true
+ */
+export async function validateListSubagents(
+  config: {
+  tenant?: string;
+  input: ListSubagentsInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_subagents",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ListTurnsInput = {
   threadId: UUID;
   includeReverted?: boolean | null;

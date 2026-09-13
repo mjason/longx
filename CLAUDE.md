@@ -234,6 +234,28 @@ React Native client planned on the same core code.
     The provider block always declares `supports_standalone_web_search = true` (a capability,
     not a switch); what a thread gets is `web_search` (`"live"`/`"disabled"`) +
     `features.standalone_web_search` — standalone needs `web_search = "live"` too.
+  - **Multi-agent (codex sub-agents).** `Thread.start(multi_agent: true)` asks codex for its
+    v2 collaboration tools (`features.multi_agent_v2`: `collaboration.spawn_agent` /
+    `wait_agent` / `send_message` / …); `false` turns v1 and v2 off. `Project.multi_agent`
+    is the default, `Thread.multi_agent` what the thread started with (a `thread/start`
+    config, so a new-chat choice like web search). `[agents]` limits (4 concurrent per
+    session, depth 2) come from `config :longx, Longx.Codex.Home, agents:`. **Sub-agents are
+    threads**: codex runs each on its own thread id (no `thread/started`; its items arrive
+    on that id) and reports on the parent with `subAgentActivity` (`agentPath` "/root/<name>",
+    `agentThreadId`, `kind` started/interacted/interrupted/completed) and
+    `collabAgentToolCall` (`tool`, `receiverThreadIds`, `agentsStates`, `prompt`, `model`).
+    The Tracker turns a parent's first activity into a Thread row under it
+    (`parent_thread_id`, `agent_path`, title = last path segment; hidden from the project's
+    list, `list_subagents/1` / RPC `list_subagents`) and follows its topic, so a child has
+    a ThreadState, a channel and a page like any thread. **The gateway rewrites the child's
+    task**: codex hands it over as an `agent_message` item whose content is an
+    `encrypted_content` part only OpenAI reads — `Gateway.translate_agent_messages/2` turns
+    it into a plain user message for every other provider (without it every sub-agent
+    started with an empty task). A child's approval is a request on the child's thread; the
+    UI answers it through the parent (same connection, request id is what counts).
+    `turn/plan/updated` (codex's `update_plan` tool — not offered to every model) is the
+    thread view's `plan`. Dev aid: `config :longx, Longx.AI.Gateway, dump_requests_to:`
+    writes what the model actually receives.
     Standalone = codex's `ext/web-search`: with the feature on codex offers a `web.run`
     namespace tool and,
     when the model calls it, POSTs the commands to `<base_url>/alpha/search` with the
@@ -457,12 +479,14 @@ React Native client planned on the same core code.
     a repository directory is an *open*, anything else may get `init_git: true`),
     `frame/ProjectWindow` (desktop: icon rail + docked resizable tool window + status
     strip; phone: chat full-screen, bottom toolbar, tools as bottom sheets — tool windows:
-    `frame/tools/{Threads,Git,Process,Turns}Tool`; ⌘1–4 toggle them; `core/frame.ts` keeps
+    `frame/tools/{Threads,Git,Process,Turns,Agents}Tool`; ⌘1–5 toggle them; `core/frame.ts` keeps
     the state, remembered per device; `TurnsTool` is the history: the thread's turns with
     status / model / commits, the per-turn diff as `code-diff` per file (`splitDiff`), and
     the restore (proposal → confirm → `restore_files`) and redo (text, model, revert |
     fork, restore first) dialogs over `core/projects.ts`'s `useTurns` / `useRestoreFiles` /
-    `useRedoTurn`), `frame/StatusStrip` (HEAD, codex, memory, sandbox warning),
+    `useRedoTurn`; `AgentsTool` is the thread's sub-agents as the `background-inbox`
+    element over `useSubagents` — a finished one opens its own thread page),
+    `frame/StatusStrip` (HEAD, codex, memory, sandbox warning),
     `pages/ProjectSettingsPage` (`/p/:slug/settings`: name, description, the thread
     defaults — sandbox, approval, network, dirty_start, model, memory cap — via
     `update_project`; danger zone: clear codex history, archive, each behind a confirm),
@@ -511,7 +535,24 @@ React Native client planned on the same core code.
     `code-diff` (file changes; `treeOf`, `parseDiff`), `web-search`; `approval-card` above a
     row that waits on a decision; `elicitation-form` for codex's questions
     (`QuestionsTool`, answers via `s.thread.extras.answerRequest`); reasoning uses the
-    `ghost` variant so it sits with the rows. Registered through
+    `ghost` variant so it sits with the rows. **Agents** (catalog section "Agents"):
+    `messages.ts` folds a sub-agent's `subAgentActivity` items into one `subagent` tool
+    call (id = the child's codex thread id; `args.request` = what the child waits approval
+    for) whose `messages` is the child's own conversation (`toMessages(childView)` →
+    `fromThreadMessageLike`, recursive) — `SubagentTool` renders it as a row with an
+    `agent-status` pill and `MessagePartPrimitive.Messages` over the exported
+    `AssistantParts` of `thread.aui`, so nested commands/diffs look like the parent's;
+    a child's pending approval rides on that part as the parent's `approval`
+    (`approval-card`, answered on the parent thread). `collabAgentToolCall` → `collab`:
+    spawn / send_message are an `agent-handoff`, wait a `subagent-list` (states from
+    `agentsStates`; a wait names every agent so far). The turn's plan is a `data-plan` part
+    at the top of its message (`PlanUI` = `makeAssistantDataUI` + `agent-plan`, mounted in
+    `ChatProvider`). The child views come from `useThreadViews` (one channel per child id
+    named by the parent's activities, transitively) and reach the adapter as `subviews`;
+    a child's requests count as "等待审批" in the turn bar. The `agent-plan`,
+    `subagent-list`, `agent-status`, `agent-handoff`, `background-inbox` copies took
+    label / optional-prop tweaks (states per step, no demo glyphs) — still the registry's
+    look. Registered through
     `AuiConfig({ tools: Tools({ toolkit }) })`, so they win over `ToolFallback` by name;
     approvals answer with `respondToApproval({ optionId })`. **Never draw a tool's UI from
     scratch — pick the element from the catalog first** (https://www.assistant-ui.com/elements,

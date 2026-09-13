@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { GitBranch, History, MessagesSquare, Server, Settings, X } from "lucide-react";
+import { Bot, GitBranch, History, MessagesSquare, Server, Settings, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, Outlet, useParams } from "react-router";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ import { ThemeToggle } from "@/ui/components/ThemeToggle";
 import { ChatProvider } from "@/ui/chat/ChatProvider";
 import { t } from "@/ui/strings";
 import { StatusStrip } from "./StatusStrip";
+import { AgentsTool } from "./tools/AgentsTool";
 import { TurnsTool } from "./tools/TurnsTool";
 import { GitTool } from "./tools/GitTool";
 import { ProcessTool } from "./tools/ProcessTool";
@@ -26,6 +27,7 @@ const ICONS: Record<Tool, typeof MessagesSquare> = {
   git: GitBranch,
   process: Server,
   history: History,
+  agents: Bot,
 };
 
 export type ProjectContext = {
@@ -58,6 +60,7 @@ export function ProjectWindow() {
       onChanged: () => {
         client.invalidateQueries({ queryKey: queryKeys.threads(id) });
         client.invalidateQueries({ queryKey: ["turns"] });
+        client.invalidateQueries({ queryKey: ["subagents"] });
       },
       onCodex: (status) => {
         client.invalidateQueries({ queryKey: queryKeys.codex(id) });
@@ -76,7 +79,7 @@ export function ProjectWindow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docked]);
 
-  // ⌘/Ctrl+1..4 toggle tool windows (desktop habit; harmless elsewhere)
+  // ⌘/Ctrl+1..5 toggle tool windows (desktop habit; harmless elsewhere)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -108,7 +111,7 @@ export function ProjectWindow() {
     <ChatProvider
       projectId={project.data.id}
       slug={slug}
-      defaults={{ sandbox: project.data.sandbox, approvalPolicy: project.data.approvalPolicy, networkAccess: project.data.networkAccess, webSearch: project.data.webSearch }}
+      defaults={{ sandbox: project.data.sandbox, approvalPolicy: project.data.approvalPolicy, networkAccess: project.data.networkAccess, webSearch: project.data.webSearch, multiAgent: project.data.multiAgent }}
     >
     <div className="flex h-dvh flex-col">
       <TopBar
@@ -164,6 +167,8 @@ function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
       return <ProcessTool ctx={ctx} />;
     case "history":
       return <TurnsTool ctx={ctx} />;
+    case "agents":
+      return <AgentsTool ctx={ctx} />;
   }
 }
 
