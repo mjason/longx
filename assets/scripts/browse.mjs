@@ -13,7 +13,7 @@ const problems = [];
 page.on("console", (m) => { if (["error", "warning"].includes(m.type())) problems.push(`${m.type()}: ${m.text()}`); });
 page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
 await page.goto(url, { waitUntil: "networkidle" });
-await page.waitForTimeout(1500);
+await page.waitForTimeout(3000);
 const overflow = await page.evaluate(() => ({
   scrollWidth: document.documentElement.scrollWidth,
   clientWidth: document.documentElement.clientWidth,

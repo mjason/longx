@@ -7,6 +7,7 @@ import {
   getProject,
   gitInfo,
   initGit,
+  listDirectory,
   listProjects,
   listThreads,
   restartCodex,
@@ -121,7 +122,39 @@ export function useSandboxStatus() {
   });
 }
 
-export type NewProjectInput = { name: string; rootPath: string; description?: string };
+export type NewProjectInput = {
+  name: string;
+  rootPath: string;
+  description?: string;
+  initGit?: boolean;
+  sandbox?: "read_only" | "workspace_write" | "danger_full_access";
+  approvalPolicy?: "never" | "on_request" | "untrusted";
+  networkAccess?: boolean;
+};
+
+export type DirectoryEntry = { name: string; path: string; git: boolean };
+export type DirectoryListing = {
+  path: string;
+  parent: string | null;
+  git: boolean;
+  entries: DirectoryEntry[];
+  roots: DirectoryEntry[];
+};
+
+/** The directory picker's listing; `path` null = the server's home directory. */
+export function useDirectory(path: string | null, showHidden = false) {
+  return useQuery({
+    queryKey: ["directory", path, showHidden] as const,
+    placeholderData: (prev) => prev,
+    queryFn: async () =>
+      unwrap(
+        await listDirectory({
+          fields: ["path", "parent", "git", "entries", "roots"],
+          input: { ...(path ? { path } : {}), showHidden },
+        }),
+      ) as DirectoryListing,
+  });
+}
 
 export function useCreateProject() {
   const client = useQueryClient();

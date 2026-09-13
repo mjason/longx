@@ -18,3 +18,17 @@ if (!window.matchMedia) {
       dispatchEvent: () => false,
     }) as MediaQueryList;
 }
+
+// jsdom has no ResizeObserver (Radix Select / cmdk want one)
+if (!("ResizeObserver" in globalThis)) {
+  class RO {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  (globalThis as unknown as { ResizeObserver: typeof RO }).ResizeObserver = RO;
+}
+// nor scrollIntoView / pointer capture (Radix)
+if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
+if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = () => false;
+if (!Element.prototype.releasePointerCapture) Element.prototype.releasePointerCapture = () => {};

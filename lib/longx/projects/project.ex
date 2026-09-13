@@ -63,6 +63,9 @@ defmodule Longx.Projects.Project do
     create :create do
       primary? true
 
+      # the wizard's "initialise git" checkbox
+      argument :init_git, :boolean, default: false
+
       # the slug is derived from the name (rename via update)
       accept [
         :name,
@@ -79,6 +82,7 @@ defmodule Longx.Projects.Project do
 
       change Changes.NormalizeRootPath
       change Changes.DeriveSlug
+      change Changes.InitGit
       validate Validations.RootPathIsDirectory
       validate Validations.ToolsAreRegistered
     end

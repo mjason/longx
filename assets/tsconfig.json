@@ -12,8 +12,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "baseUrl": ".",
-    "paths": { "@/*": ["js/*"] },
+    "paths": { "@/*": ["./js/*"] },
     "types": ["vitest/globals", "@testing-library/jest-dom", "node"]
   },
   "include": ["js/**/*", "js/**/*.d.ts", "vite.config.ts", "vitest.setup.ts"]

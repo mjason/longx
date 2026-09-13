@@ -184,6 +184,35 @@ defmodule LongxWeb.ProjectsRpcTest do
   end
 
   describe "system" do
+    test "list_directory drives the directory picker", %{conn: conn, dir: dir} do
+      File.mkdir_p!(Path.join(dir, "child/.git"))
+
+      assert %{"success" => true, "data" => data} =
+               rpc(conn, "list_directory", %{
+                 "fields" => ["path", "parent", "git", "entries", "roots"],
+                 "input" => %{"path" => dir}
+               })
+
+      assert data["path"] == dir
+      assert [%{"name" => "child", "git" => true, "path" => child}] = data["entries"]
+      assert child == Path.join(dir, "child")
+      assert Enum.any?(data["roots"], &(&1["path"] == "/"))
+
+      assert %{"success" => false, "errors" => [%{"fields" => ["path"]}]} =
+               rpc(conn, "list_directory", %{"fields" => ["path"], "input" => %{"path" => "nope"}})
+    end
+
+    test "create_project with initGit sets git up", %{conn: conn, dir: dir} do
+      assert %{"success" => true, "data" => %{"id" => id}} =
+               rpc(conn, "create_project", %{
+                 "fields" => ["id"],
+                 "input" => %{"name" => "Init", "rootPath" => dir, "initGit" => true}
+               })
+
+      assert %{"success" => true, "data" => %{"repository" => true}} =
+               rpc(conn, "git_info", %{"fields" => ["repository"], "input" => %{"id" => id}})
+    end
+
     test "sandbox status", %{conn: conn} do
       assert %{"success" => true, "data" => %{"status" => status, "checkedAt" => at}} =
                rpc(conn, "sandbox_status", %{"fields" => ["status", "reason", "checkedAt"]})

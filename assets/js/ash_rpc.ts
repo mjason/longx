@@ -1404,6 +1404,7 @@ export type CreateProjectInput = {
   networkAccess?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
+  initGit?: boolean | null;
 };
 
 export type CreateProjectFields = UnifiedFieldSelection<ProjectResourceSchema>[];
@@ -2538,6 +2539,81 @@ export async function validateListTurns(
 ): Promise<ValidationResult> {
   const payload = {
     action: "list_turns",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ListDirectoryInput = {
+  path?: string | null;
+  showHidden?: boolean | null;
+};
+
+export type ListDirectoryFields = UnifiedFieldSelection<{path: string, parent: string | null, git: boolean, entries: Array<Record<string, any>>, roots: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "path" | "parent" | "git" | "entries" | "roots"}>[];
+
+export type InferListDirectoryResult<
+  Fields extends ListDirectoryFields | undefined,
+> = InferResult<{path: string, parent: string | null, git: boolean, entries: Array<Record<string, any>>, roots: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "path" | "parent" | "git" | "entries" | "roots"}, Fields>;
+
+export type ListDirectoryResult<Fields extends ListDirectoryFields | undefined = undefined> = | { success: true; data: InferListDirectoryResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function listDirectory<Fields extends ListDirectoryFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input?: ListDirectoryInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListDirectoryResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "list_directory",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ListDirectoryResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateListDirectory(
+  config: {
+  tenant?: string;
+  input?: ListDirectoryInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_directory",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };
