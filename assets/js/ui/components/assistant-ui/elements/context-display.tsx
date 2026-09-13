@@ -251,9 +251,10 @@ function ContextDisplayContent({
     <TooltipContent
       side={side}
       sideOffset={8}
+      arrow={false}
       data-slot="context-display-popover"
       className={cn(
-        "bg-popover text-popover-foreground block w-56 border p-3 text-left [&_[data-slot=tooltip-arrow]]:hidden",
+        "bg-popover text-popover-foreground block w-56 border p-3 text-left",
         className,
       )}
     >

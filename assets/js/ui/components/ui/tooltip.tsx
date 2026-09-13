@@ -27,12 +27,15 @@ function TooltipTrigger({
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 
+// Longx: `arrow={false}` for card-style popovers (timing, context usage) —
+// Radix sets `display` inline on the arrow, so a class cannot hide it.
 function TooltipContent({
   className,
   sideOffset = 0,
+  arrow = true,
   children,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+}: React.ComponentProps<typeof TooltipPrimitive.Content> & { arrow?: boolean }) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
@@ -45,7 +48,7 @@ function TooltipContent({
         {...props}
       >
         {children}
-        <TooltipPrimitive.Arrow data-slot="tooltip-arrow" className="z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground" />
+        {arrow ? <TooltipPrimitive.Arrow data-slot="tooltip-arrow" className="z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground" /> : null}
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   )
