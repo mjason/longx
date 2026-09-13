@@ -26,8 +26,9 @@ export function TurnBar({ state, threadModel, model, onModel }: { state: TurnSta
         ) : null}
       </span>
       <Select value={model ?? "__current"} onValueChange={(v) => onModel(v === "__current" ? null : v)}>
-        <SelectTrigger size="sm" aria-label={t.model} className="h-7 max-w-56 gap-1 border-0 bg-transparent px-2 font-mono text-xs shadow-none" data-testid="model-picker">
-          <SelectValue />
+        <SelectTrigger size="sm" aria-label={t.model} className="h-7 gap-1 border-0 bg-transparent px-2 font-mono text-xs shadow-none dark:bg-transparent dark:hover:bg-accent" data-testid="model-picker">
+          {/* the trigger shows the slug only; the items carry the explanation */}
+          <SelectValue>{model ?? current ?? t.defaultModel}</SelectValue>
         </SelectTrigger>
         <SelectContent align="end">
           <SelectItem value="__current" className="font-mono text-xs">
