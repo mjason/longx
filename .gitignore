@@ -51,3 +51,6 @@ npm-debug.log
 /priv/git/
 # bundled obscura (headless browser), fetched by `mix obscura.fetch`
 /priv/obscura/
+
+# dialyzer PLT
+/priv/plts/

@@ -71,9 +71,15 @@ defmodule Longx.Projects.ThreadsTest do
 
   defp eventually(fun, attempts \\ 100) do
     case fun.() do
-      {:ok, value} -> value
-      _ when attempts > 0 -> Process.sleep(30) && eventually(fun, attempts - 1)
-      other -> flunk("condition not met: #{inspect(other)}")
+      {:ok, value} ->
+        value
+
+      _ when attempts > 0 ->
+        Process.sleep(30)
+        eventually(fun, attempts - 1)
+
+      other ->
+        flunk("condition not met: #{inspect(other)}")
     end
   end
 

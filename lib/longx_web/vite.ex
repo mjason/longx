@@ -85,22 +85,26 @@ defmodule LongxWeb.Vite do
       else: [{:script, url(file)}]
   end
 
-  # transitive static imports, each once, in dependency order
-  defp imported_chunks(manifest, chunk, seen \\ MapSet.new()) do
+  # transitive static imports, each once, in dependency order; `seen` holds
+  # manifest keys and travels through the recursion (a plain map: dialyzer
+  # loses track of an opaque MapSet inside the reduce accumulator)
+  defp imported_chunks(manifest, chunk) do
+    {chunks, _seen} = collect_imports(manifest, chunk, %{})
+    chunks
+  end
+
+  defp collect_imports(manifest, chunk, seen) do
     chunk
     |> Map.get("imports", [])
     |> Enum.reduce({[], seen}, fn key, {acc, seen} ->
-      if MapSet.member?(seen, key) do
+      if Map.has_key?(seen, key) do
         {acc, seen}
       else
         imported = Map.fetch!(manifest, key)
-        deeper = imported_chunks(manifest, imported, MapSet.put(seen, key))
-
-        {acc ++ deeper ++ [imported],
-         seen |> MapSet.put(key) |> MapSet.union(MapSet.new(deeper, & &1["file"]))}
+        {deeper, seen} = collect_imports(manifest, imported, Map.put(seen, key, true))
+        {acc ++ deeper ++ [imported], seen}
       end
     end)
-    |> elem(0)
   end
 
   defp url(file), do: "/assets/" <> file

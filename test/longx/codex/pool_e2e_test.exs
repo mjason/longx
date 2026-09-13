@@ -82,9 +82,15 @@ defmodule Longx.Codex.PoolE2ETest do
     value = fun.()
 
     cond do
-      pred.(value) -> value
-      attempts == 0 -> flunk("timed out waiting; last: #{inspect(value)}")
-      true -> Process.sleep(100) && wait_until(fun, pred, attempts - 1)
+      pred.(value) ->
+        value
+
+      attempts == 0 ->
+        flunk("timed out waiting; last: #{inspect(value)}")
+
+      true ->
+        Process.sleep(100)
+        wait_until(fun, pred, attempts - 1)
     end
   end
 

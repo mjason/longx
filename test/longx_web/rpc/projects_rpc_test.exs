@@ -301,9 +301,15 @@ defmodule LongxWeb.ProjectsRpcTest do
         })
 
       cond do
-        Enum.all?(turns, &(&1["status"] == wanted)) and turns != [] -> turns
-        attempts == 0 -> flunk("turns never became #{wanted}: #{inspect(turns)}")
-        true -> Process.sleep(50) && turn_status(conn, thread_id, wanted, attempts - 1)
+        Enum.all?(turns, &(&1["status"] == wanted)) and turns != [] ->
+          turns
+
+        attempts == 0 ->
+          flunk("turns never became #{wanted}: #{inspect(turns)}")
+
+        true ->
+          Process.sleep(50)
+          turn_status(conn, thread_id, wanted, attempts - 1)
       end
     end
 
@@ -391,7 +397,8 @@ defmodule LongxWeb.ProjectsRpcTest do
         :ok
 
       _ when attempts > 0 ->
-        Process.sleep(50) && thread_idle(conn, project_id, thread_id, attempts - 1)
+        Process.sleep(50)
+        thread_idle(conn, project_id, thread_id, attempts - 1)
 
       other ->
         flunk("thread never idle: #{inspect(other)}")

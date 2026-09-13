@@ -141,9 +141,15 @@ defmodule Longx.Codex.PoolTest do
 
   defp wait_until(fun, attempts \\ 50) do
     cond do
-      fun.() -> :ok
-      attempts == 0 -> flunk("condition not met")
-      true -> Process.sleep(100) && wait_until(fun, attempts - 1)
+      fun.() ->
+        :ok
+
+      attempts == 0 ->
+        flunk("condition not met")
+
+      true ->
+        Process.sleep(100)
+        wait_until(fun, attempts - 1)
     end
   end
 end

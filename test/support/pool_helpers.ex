@@ -26,8 +26,12 @@ defmodule Longx.Test.PoolHelpers do
 
   defp wait_tasks(attempts) do
     case Task.Supervisor.children(Longx.Codex.TaskSupervisor) do
-      [] -> :ok
-      _ -> Process.sleep(20) && wait_tasks(attempts - 1)
+      [] ->
+        :ok
+
+      _ ->
+        Process.sleep(20)
+        wait_tasks(attempts - 1)
     end
   end
 end

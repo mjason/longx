@@ -16,9 +16,15 @@ defmodule Longx.ShimTest do
 
   defp eventually(fun, attempts \\ 100) do
     cond do
-      fun.() -> true
-      attempts == 0 -> false
-      true -> Process.sleep(20) && eventually(fun, attempts - 1)
+      fun.() ->
+        true
+
+      attempts == 0 ->
+        false
+
+      true ->
+        Process.sleep(20)
+        eventually(fun, attempts - 1)
     end
   end
 

@@ -572,6 +572,11 @@ motivated it.
 3. Refactor while green, then run the whole suite: `mix test`.
 4. Before declaring done: `mix precommit`
    (`compile --warnings-as-errors`, `deps.unlock --unused`, `format`, `test`).
+   `mix dialyzer` (dialyxir; PLT in `priv/plts/`, mix + ex_unit included) must stay at
+   zero warnings — not part of precommit (minutes), run it before merging. Two habits it
+   enforces: never `Process.sleep(n) && f()` (`:ok && …` is a guard that can never fail —
+   write two lines), and no opaque `MapSet` inside a reduce accumulator (dialyzer loses
+   the opaque type; a plain map works).
 
 Where tests live / what to use:
 

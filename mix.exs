@@ -13,7 +13,9 @@ defmodule Longx.MixProject do
       compilers: [:phoenix_live_view] ++ Mix.compilers() ++ [:shim],
       listeners: [Phoenix.CodeReloader],
       consolidate_protocols: Mix.env() != :dev,
-      usage_rules: usage_rules()
+      usage_rules: usage_rules(),
+      # `mix dialyzer`: mix tasks and test support are part of the app
+      dialyzer: [plt_add_apps: [:mix, :ex_unit], plt_file: {:no_warn, "priv/plts/project.plt"}]
     ]
   end
 
@@ -61,6 +63,7 @@ defmodule Longx.MixProject do
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.2.0"},
       {:lazy_html, ">= 0.1.0"},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:phoenix_live_dashboard, "~> 0.8.3"},
       {:daisyui,
        github: "saadeghi/daisyui",
