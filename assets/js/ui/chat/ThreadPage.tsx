@@ -7,7 +7,6 @@ import { runningTurnId } from "@/core/chat/thread";
 import { useThreadView } from "@/core/chat/useThreadView";
 import { queryKeys, useThreads } from "@/core/projects";
 import { Thread, type ThreadComponents } from "@/ui/components/assistant-ui/elements/thread.aui";
-import { ToolGroupContent, ToolGroupRoot, ToolGroupTrigger } from "@/ui/components/assistant-ui/elements/tool-group.aui";
 import { Alert, AlertDescription } from "@/ui/components/ui/alert";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
@@ -23,17 +22,8 @@ const Welcome = () => (
   </div>
 );
 
-// What the agent ran and changed is the point of this UI: tool groups start
-// open instead of collapsed behind "n tool calls".
-const ToolGroup: ThreadComponents["ToolGroup"] = ({ group, children }) => (
-  <ToolGroupRoot variant="ghost" defaultOpen>
-    <ToolGroupTrigger count={group.indices.length} active={group.status.type === "running"} />
-    <ToolGroupContent>{children}</ToolGroupContent>
-  </ToolGroupRoot>
-);
-
 // module scope: a new object per render would remount every message
-const THREAD_COMPONENTS: ThreadComponents = { Welcome, ToolGroup };
+const THREAD_COMPONENTS: ThreadComponents = { Welcome };
 
 /**
  * The chat: one codex thread, live from its channel, rendered by

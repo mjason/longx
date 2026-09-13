@@ -159,11 +159,14 @@ export const WebSearchTool: ToolCallMessagePartComponent<WebSearchArgs, WebSearc
   );
 };
 
-// `type: "backend"`: codex runs these; we only render.
+// `type: "backend"`: codex runs these; we only render. `display: "standalone"`
+// keeps them out of the collapsible "n tool calls" trace group — what the
+// agent ran and changed is the point of this UI, not a trace to fold away;
+// dynamic `ns.tool` calls stay in the group via ToolFallback.
 export const codexToolkit = defineToolkit({
-  commandExecution: { type: "backend", render: CommandExecutionTool },
-  fileChange: { type: "backend", render: FileChangeTool },
-  webSearch: { type: "backend", render: WebSearchTool },
+  commandExecution: { type: "backend", render: CommandExecutionTool, display: "standalone" },
+  fileChange: { type: "backend", render: FileChangeTool, display: "standalone" },
+  webSearch: { type: "backend", render: WebSearchTool, display: "standalone" },
 });
 
 export const chatConfig = AuiConfig({ tools: Tools({ toolkit: codexToolkit }) });

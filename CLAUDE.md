@@ -447,6 +447,33 @@ React Native client planned on the same core code.
     `css/app.css`: Tailwind v4 with shadcn token names, **no `@apply`**, no daisyUI; only
     `html` gets `overflow-x: hidden` (on body/#app it can steal touch scrolling).
 
+## assistant-ui
+
+This project uses assistant-ui for chat interfaces.
+
+Documentation: https://www.assistant-ui.com/llms-full.txt (the whole docs in one file — fetch
+it into the scratchpad and grep; https://www.assistant-ui.com/llms.txt is the index, and any
+docs page + `.mdx` is raw markdown, e.g. `/docs/runtimes/custom/external-store.mdx`). The
+skills under `.claude/skills/{assistant-ui,elements,tools,primitives,runtime,…}` (installed by
+`npx skills add assistant-ui/skills`, pinned in `skills-lock.json`) are the same material
+sliced by task — start there, fall back to llms-full for what they leave out.
+
+Key patterns:
+- Use AssistantRuntimeProvider at the app root of the chat (`ui/chat/ThreadPage`).
+- Thread component for full chat interface (`elements/thread.aui`, slots via `components`).
+- AssistantModal for floating chat widget (not used here — the chat *is* the centre).
+- Runtime: `useExternalStoreRuntime` over our codex thread view (`core/chat/adapter.ts`) —
+  **not** `useChatRuntime` / AI SDK transport: the model loop lives in codex, the UI only
+  projects its events. The closest published analogue is `@assistant-ui/react-opencode`
+  (ExternalStoreRuntime + RemoteThreadList over a coding-agent server, permissions on the
+  tool-approval contract, questions, `extras` for fork/revert/refresh) — copy its shape,
+  not its package.
+- Capabilities are handler-driven: `onNew` (send), `onCancel` (stop), `setMessages`
+  (branching), `onEdit`, `onReload`, `onRefetchThread`, `adapters.threadList`; a button
+  only appears when its handler exists — never hand-roll one.
+- Tool UI: toolkit `render` per tool name; `display: "standalone"` keeps a tool out of the
+  collapsible trace group (commands / file changes are "informing the user", not a trace).
+
 ## Development workflow — TDD is mandatory
 
 Every change follows red → green → refactor. No production code without a test that
