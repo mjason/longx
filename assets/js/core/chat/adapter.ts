@@ -5,6 +5,8 @@
 // turns its button on, so only what codex can do is wired here.
 import type {
   AppendMessage,
+  AttachmentAdapter,
+  DictationAdapter,
   ExternalStoreAdapter,
   ExternalStoreThreadListAdapter,
   ExternalThreadQueueAdapter,
@@ -62,6 +64,10 @@ export type AdapterOptions = {
   refetch?: () => Promise<void>;
   threadList?: ExternalStoreThreadListAdapter;
   queue?: ExternalThreadQueueAdapter;
+  /** files staged in the composer (images → codex image inputs, text files → text) */
+  attachments?: AttachmentAdapter;
+  /** voice input written into the composer (the browser's speech recognition) */
+  dictation?: DictationAdapter;
 };
 
 export function textOf(message: AppendMessage): string {
@@ -69,6 +75,20 @@ export function textOf(message: AppendMessage): string {
     .map((part) => (part.type === "text" ? part.text : ""))
     .join("")
     .trim();
+}
+
+/** What a message carries for codex: the typed text plus any text attachments, and the images as data urls. */
+export function inputOf(message: AppendMessage): { text: string; images: string[] } {
+  const images: string[] = [];
+  const texts: string[] = [];
+  for (const attachment of message.attachments ?? []) {
+    for (const part of attachment.content ?? []) {
+      if (part.type === "image") images.push(part.image);
+      else if (part.type === "text") texts.push(part.text);
+    }
+  }
+  const text = [textOf(message), ...texts].filter((t) => t.length > 0).join("\n\n");
+  return { text, images };
 }
 
 export function buildAdapter(opts: AdapterOptions): ExternalStoreAdapter<ThreadMessageLike> {
@@ -90,12 +110,16 @@ export function buildAdapter(opts: AdapterOptions): ExternalStoreAdapter<ThreadM
     isSendDisabled: opts.sendDisabled ?? false,
     ...(opts.loading !== undefined ? { isLoading: opts.loading } : {}),
     extras,
-    ...(opts.threadList ? { adapters: { threadList: opts.threadList } } : {}),
+    adapters: {
+      ...(opts.threadList ? { threadList: opts.threadList } : {}),
+      ...(opts.attachments ? { attachments: opts.attachments } : {}),
+      ...(opts.dictation ? { dictation: opts.dictation } : {}),
+    },
     ...(opts.queue ? { queue: opts.queue } : {}),
     ...(opts.refetch ? { onRefetchThread: opts.refetch } : {}),
     onNew: async (message) => {
-      const text = textOf(message);
-      if (!text) return;
+      const { text, images } = inputOf(message);
+      if (!text && images.length === 0) return;
       let target = opts.target;
       if (!target) {
         if (!opts.createThread) throw new Error("no thread to send to");
@@ -107,6 +131,7 @@ export function buildAdapter(opts: AdapterOptions): ExternalStoreAdapter<ThreadM
           input: {
             threadId: target.threadId,
             text,
+            ...(images.length > 0 ? { images } : {}),
             ...(opts.model ? { model: opts.model } : {}),
             ...(opts.mode ? { sandbox: opts.mode.sandbox, approvalPolicy: opts.mode.approvalPolicy, networkAccess: opts.mode.networkAccess } : {}),
             ...(dirty ? { dirty } : {}),

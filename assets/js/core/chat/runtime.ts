@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { archiveThread, deleteThread, renameThread } from "@/ash_rpc";
 import { queryKeys, unwrap, useStartThread, useThreads } from "@/core/projects";
+import { CompositeAttachmentAdapter, SimpleImageAttachmentAdapter, SimpleTextAttachmentAdapter, WebSpeechDictationAdapter } from "@assistant-ui/react";
 import { buildAdapter, type AccessMode, type DirtyChange, type DirtyDecision, type ThreadTarget } from "./adapter";
 import { subagentsOf, type SubViews } from "./messages";
 import { runningTurnId, type ThreadView } from "./thread";
@@ -131,6 +132,11 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   // latest adapter through a ref because the adapter is rebuilt per view
   const onNewRef = useRef<(message: AppendMessage) => Promise<void>>(async () => {});
   const [queue] = useState(() => createMessageQueue({ run: (message) => void onNewRef.current(message) }));
+  // what the composer can take: images (to the model as data urls) and text
+  // files (inlined), and the browser's speech recognition where it exists —
+  // built once, like everything the adapter is made of
+  const [attachments] = useState(() => new CompositeAttachmentAdapter([new SimpleImageAttachmentAdapter(), new SimpleTextAttachmentAdapter()]));
+  const [dictation] = useState(() => (WebSpeechDictationAdapter.isSupported() ? new WebSpeechDictationAdapter({ language: navigator.language, interimResults: true }) : undefined));
 
   const disabledReason = thread && CLOSED.has(thread.status) ? thread.status : null;
   const target = thread ? { threadId: thread.id, codexThreadId: thread.codexThreadId } : null;
@@ -159,9 +165,11 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         refetch,
         threadList,
         queue: queue.adapter,
+        attachments,
+        dictation,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [target?.threadId, target?.codexThreadId, view, subviews, model, mode, disabledReason, thread?.status, ready, error, createThread, onSent, onDirtyTree, refetch, threadList, queue],
+    [target?.threadId, target?.codexThreadId, view, subviews, model, mode, disabledReason, thread?.status, ready, error, createThread, onSent, onDirtyTree, refetch, threadList, queue, attachments, dictation],
   );
   onNewRef.current = adapter.onNew;
   const runtime = useExternalStoreRuntime(adapter);

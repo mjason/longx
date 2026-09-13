@@ -183,6 +183,17 @@ describe("toMessages", () => {
     expect(msgs[1]!.status).toEqual({ type: "requires-action", reason: "interrupt" });
   });
 
+  test("a user message's images are image parts next to its text", () => {
+    const msgs = toMessages({
+      ...emptyView("thr_1"),
+      items: [{ id: "u13", type: "userMessage", turnId: "t13", content: [{ type: "text", text: "what is this" }, { type: "image", url: "data:image/png;base64,AA" }] }],
+    });
+    expect(parts(msgs[0]!)).toEqual([
+      { type: "text", text: "what is this" },
+      { type: "image", image: "data:image/png;base64,AA" },
+    ]);
+  });
+
   test("userText joins text parts", () => {
     expect(userText({ id: "u", type: "userMessage", content: [{ type: "text", text: "a" }, { type: "image" }, { type: "text", text: "b" }] })).toBe("ab");
     expect(userText({ id: "u", type: "userMessage", content: "plain" })).toBe("plain");

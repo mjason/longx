@@ -144,7 +144,8 @@ const Items: FC<ItemsProps> = ({
             {backLabel}
           </ComposerPrimitive.Unstable_TriggerPopoverBack>
 
-          <div className="py-1">
+          {/* the list scrolls inside a cap: the composer can sit mid-screen (a new chat), with little room above */}
+          <div className="max-h-40 overflow-y-auto py-1 md:max-h-[min(40vh,20rem)]">
             {items.map((item, index) => {
               const iconKey =
                 typeof item.metadata?.icon === "string"

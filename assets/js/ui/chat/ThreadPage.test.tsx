@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
@@ -253,6 +253,55 @@ describe("ThreadPage", () => {
     await user.type(box, "{Enter}");
     await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ text: "look at @lib/longx/gateway.ex" }) })));
     r.unmount();
+  });
+
+  test("/ in the composer lists the commands: /review starts a review, /compact compacts, /init sends the prompt, /git opens the tool", async () => {
+    const { compactThread, reviewThread } = await import("@/ash_rpc");
+    const user = userEvent.setup();
+    await open();
+    const box = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(box, "/rev");
+    await user.click(await screen.findByRole("option", { name: /review/ }));
+    await waitFor(() => expect(reviewThread).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", target: "uncommitted" } })));
+    expect(box).toHaveValue("");
+
+    await user.type(box, "/comp");
+    await user.click(await screen.findByRole("option", { name: /compact/ }));
+    await waitFor(() => expect(compactThread).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1" } })));
+
+    await user.type(box, "/init");
+    await user.click(await screen.findByRole("option", { name: /init/ }));
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: expect.stringContaining("AGENTS.md") }) })));
+
+    await user.type(box, "/git");
+    await user.click(await screen.findByRole("option", { name: /git/ }));
+    expect(within(await screen.findByTestId("tool-panel")).getByTestId("git-tool")).toBeInTheDocument();
+  });
+
+  test("an image can be attached (the button, the picker) and goes with the message; a sent image shows in the transcript", async () => {
+    const user = userEvent.setup();
+    await open();
+    // the button opens the native picker (nothing a test can drive); a drop stages the file the same way
+    expect(screen.getByRole("button", { name: "添加附件" })).toBeEnabled();
+    const file = new File([new Uint8Array([137, 80, 78, 71])], "shot.png", { type: "image/png" });
+    const shell = document.querySelector("[data-slot=aui_composer-shell]")!;
+    fireEvent.drop(shell, { dataTransfer: { files: [file], types: ["Files"] } });
+    await screen.findByRole("button", { name: /image attachment/i });
+    const box = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(box, "what is this{Enter}");
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ text: "what is this", images: [expect.stringMatching(/^data:image\/png;base64,/)] }) })));
+
+    act(() => channel.deliver("codex", { seq: 4, method: "item/completed", params: { threadId: "thr_1", turnId: "turn_2", item: { id: "u2", type: "userMessage", content: [{ type: "text", text: "what is this" }, { type: "image", url: "data:image/png;base64,iVBORw0KGgo=" }] } } }));
+    await waitFor(() => expect(document.querySelector("img[src^='data:image/png']")).not.toBeNull());
+  });
+
+  test("↑ on an empty composer recalls the last message sent", async () => {
+    const user = userEvent.setup();
+    await open();
+    const box = screen.getByRole("textbox", { name: "随心输入" });
+    await user.click(box);
+    await user.keyboard("{ArrowUp}");
+    expect(box).toHaveValue("run the tests");
   });
 
   test("renderers: fenced code highlights with shiki, a mermaid fence is a diagram, reasoning streams word by word then settles to markdown", async () => {

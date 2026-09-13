@@ -90,6 +90,26 @@ defmodule Longx.AI.GatewayTest do
       assert up.body["input"] == [@message, @message]
     end
 
+    test "a user message with an image (the composer's attachment) reaches every provider as sent" do
+      with_image = %{
+        "type" => "message",
+        "role" => "user",
+        "content" => [
+          %{"type" => "input_text", "text" => "what colour"},
+          %{
+            "type" => "input_image",
+            "image_url" => "data:image/png;base64,AAAA",
+            "detail" => "auto"
+          }
+        ]
+      }
+
+      {:ok, up} = Gateway.prepare(with_input([with_image]), @target)
+      assert up.body["input"] == [with_image]
+      {:ok, up} = Gateway.prepare(with_input([with_image]), openai())
+      assert up.body["input"] == [with_image]
+    end
+
     test "non-reasoning items are never touched" do
       call = %{
         "type" => "function_call",

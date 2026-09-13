@@ -76,7 +76,7 @@ export function toMessages(view: ThreadView, subviews: SubViews = {}): ThreadMes
   for (const item of view.items) {
     if (item.type === "userMessage") {
       flush();
-      out.push({ id: item.id, role: "user", content: [{ type: "text", text: userText(item) }] });
+      out.push({ id: item.id, role: "user", content: [{ type: "text", text: userText(item) }, ...userImages(item)] });
       continue;
     }
     if (!current || current.turnId !== item.turnId) {
@@ -257,6 +257,13 @@ export function userText(item: CodexItem): string {
       .join("");
   }
   return "";
+}
+
+/** The images a user message carried (codex echoes `image` inputs with their url; a `localImage` is a path we cannot show). */
+function userImages(item: CodexItem): Part[] {
+  const content = item["content"];
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((c: { type?: string; url?: string }) => (c.type === "image" && typeof c.url === "string" ? [{ type: "image", image: c.url } as Part] : []));
 }
 
 function toPart(item: CodexItem, approval: PendingRequest | undefined): Part | null {

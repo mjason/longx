@@ -12,6 +12,7 @@ import { answerRequest, interruptTurn, respond, sendMessage } from "@/ash_rpc";
 
 const target = { threadId: "row-1", codexThreadId: "thr_1" };
 const append = (text: string) => ({ role: "user", content: [{ type: "text", text }], parentId: null, sourceId: null, runConfig: undefined }) as never;
+const base = (text: string) => ({ role: "user", content: [{ type: "text", text }], parentId: null, sourceId: null, runConfig: undefined });
 
 describe("chat adapter", () => {
   test("onNew sends the text (and the chosen model) as a turn", async () => {
@@ -19,6 +20,36 @@ describe("chat adapter", () => {
     await adapter.onNew(append("  hello  "));
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", text: "hello", model: "glm-5" } }));
     expect(adapter.isRunning).toBe(false);
+  });
+
+  test("attachments: images go as data urls, text files are appended to the message", async () => {
+    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null });
+    const message = {
+      ...base("see"),
+      attachments: [
+        { id: "a1", type: "image", name: "shot.png", contentType: "image/png", status: { type: "complete" }, content: [{ type: "image", image: "data:image/png;base64,AAAA" }] },
+        { id: "a2", type: "document", name: "notes.txt", contentType: "text/plain", status: { type: "complete" }, content: [{ type: "text", text: "<attachment name=notes.txt>\nhi\n</attachment>" }] },
+      ],
+    };
+    await adapter.onNew(message as never);
+    expect(sendMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ input: { threadId: "row-1", text: "see\n\n<attachment name=notes.txt>\nhi\n</attachment>", images: ["data:image/png;base64,AAAA"] } }),
+    );
+  });
+
+  test("an image alone is a message too", async () => {
+    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null });
+    const message = { ...base(""), attachments: [{ id: "a1", type: "image", name: "s.png", contentType: "image/png", status: { type: "complete" }, content: [{ type: "image", image: "data:x" }] }] };
+    await adapter.onNew(message as never);
+    expect(sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({ input: { threadId: "row-1", text: "", images: ["data:x"] } }));
+  });
+
+  test("the attachment and dictation adapters given are handed to the runtime", () => {
+    const attachments = { accept: "image/*" } as never;
+    const dictation = { listen: () => ({}) } as never;
+    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null, attachments, dictation });
+    expect(adapter.adapters?.attachments).toBe(attachments);
+    expect(adapter.adapters?.dictation).toBe(dictation);
   });
 
   test("the access mode rides on every message (the backend only records a change)", async () => {
