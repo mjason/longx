@@ -2022,6 +2022,76 @@ export async function validateUpdateProject(
 }
 
 
+export type AnswerRequestInput = {
+  threadId: UUID;
+  requestId: string;
+  answers: Record<string, any>;
+};
+
+export type InferAnswerRequestResult = {};
+
+export type AnswerRequestResult = | { success: true; data: InferAnswerRequestResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function answerRequest(
+  config: {
+  tenant?: string;
+  input: AnswerRequestInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<AnswerRequestResult> {
+  const payload = {
+    action: "answer_request",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<AnswerRequestResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateAnswerRequest(
+  config: {
+  tenant?: string;
+  input: AnswerRequestInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "answer_request",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ArchiveThreadFields = UnifiedFieldSelection<ThreadResourceSchema>[];
 
 export type InferArchiveThreadResult<
@@ -2158,6 +2228,75 @@ export async function validateListThreads(
 ): Promise<ValidationResult> {
   const payload = {
     action: "list_threads",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type InterruptTurnInput = {
+  threadId: UUID;
+  codexTurnId: string;
+};
+
+export type InferInterruptTurnResult = {};
+
+export type InterruptTurnResult = | { success: true; data: InferInterruptTurnResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function interruptTurn(
+  config: {
+  tenant?: string;
+  input: InterruptTurnInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<InterruptTurnResult> {
+  const payload = {
+    action: "interrupt_turn",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<InterruptTurnResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateInterruptTurn(
+  config: {
+  tenant?: string;
+  input: InterruptTurnInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "interrupt_turn",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };

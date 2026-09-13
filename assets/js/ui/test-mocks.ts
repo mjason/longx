@@ -27,6 +27,13 @@ export function rpcMock() {
     initGit: vi.fn(),
     codexInfo: vi.fn(async () => ok({ home: "/x", exists: false, bytes: 0, files: {}, worker: null })),
     listThreads: vi.fn(async () => ok([thread(1)])),
+    listModels: vi.fn(async () => ok([model(1, { slug: "deepseek-flash", default: true }), model(2, { slug: "glm-5" })])),
+    sendMessage: vi.fn(async () => ok({ id: "turn-row" })),
+    interruptTurn: vi.fn(async () => ok(null)),
+    respond: vi.fn(async () => ok(null)),
+    answerRequest: vi.fn(async () => ok(null)),
+    renameThread: vi.fn(async () => ok(thread(1))),
+    archiveThread: vi.fn(async () => ok(thread(1))),
     startThread: vi.fn(async () => ok(thread(2))),
     stopCodex: vi.fn(),
     restartCodex: vi.fn(),
@@ -45,7 +52,77 @@ export function rpcMock() {
   };
 }
 
-export const channel = { on: vi.fn(), join: vi.fn(), leave: vi.fn() };
+export const model = (n: number, extra: Partial<{ slug: string; default: boolean; name: string }> = {}) => ({
+  id: `m${n}`, name: extra.name ?? `Model ${n}`, slug: extra.slug ?? `model-${n}`, default: extra.default ?? n === 1,
+  reasoningEffort: n === 1 ? "medium" : null, provider: { name: "Prov" },
+});
+
+/**
+ * A channel double that remembers what was joined and lets a test deliver
+ * the join reply (`channel.reply("ok", snapshot)`) and deliver server pushes
+ * (`channel.deliver("codex", event)`) — for both the project and thread
+ * topics. Client pushes (`push`) are recorded; `answer(status, payload)`
+ * resolves the last one.
+ */
+export const channel = {
+  topics: [] as string[],
+  handlers: {} as Record<string, (payload: unknown) => void>,
+  replies: {} as Record<string, (payload: unknown) => void>,
+  on: vi.fn((event: string, cb: (payload: unknown) => void) => {
+    channel.handlers[event] = cb;
+  }),
+  join: vi.fn(() => {
+    const receiver = {
+      receive(status: string, cb: (payload: unknown) => void) {
+        channel.replies[status] = cb;
+        return receiver;
+      },
+    };
+    return receiver;
+  }),
+  leave: vi.fn(),
+  pushed: [] as { event: string; payload: unknown }[],
+  pushReplies: {} as Record<string, (payload: unknown) => void>,
+  push: vi.fn((event: string, payload: unknown) => {
+    channel.pushed.push({ event, payload });
+    const receiver = {
+      receive(status: string, cb: (payload: unknown) => void) {
+        channel.pushReplies[status] = cb;
+        return receiver;
+      },
+    };
+    return receiver;
+  }),
+  reply(status: string, payload: unknown) {
+    channel.replies[status]?.(payload);
+  },
+  answer(status: string, payload: unknown) {
+    channel.pushReplies[status]?.(payload);
+  },
+  deliver(event: string, payload: unknown) {
+    channel.handlers[event]?.(payload);
+  },
+  reset() {
+    channel.topics = [];
+    channel.handlers = {};
+    channel.replies = {};
+    channel.pushed = [];
+    channel.pushReplies = {};
+    channel.push.mockClear();
+    channel.on.mockClear();
+    channel.join.mockClear();
+    channel.leave.mockClear();
+  },
+};
 export function socketMock(status: "open" | "closed" = "open") {
-  return { socketStatus: () => status, onSocketStatus: () => () => {}, getSocket: () => ({ channel: () => channel }) };
+  return {
+    socketStatus: () => status,
+    onSocketStatus: () => () => {},
+    getSocket: () => ({
+      channel: (topic: string) => {
+        channel.topics.push(topic);
+        return channel;
+      },
+    }),
+  };
 }

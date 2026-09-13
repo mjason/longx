@@ -1,0 +1,54 @@
+import { Thread, type ThreadComponents } from "@/ui/components/assistant-ui/elements/thread.aui";
+import { Alert, AlertDescription } from "@/ui/components/ui/alert";
+import { t } from "@/ui/strings";
+import { useChat } from "./ChatProvider";
+import { ComposerLeading, ComposerTrailing } from "./TurnBar";
+
+const Welcome = () => (
+  <div className="mb-6 flex flex-col items-center px-4 text-center">
+    <h1 className="text-2xl font-medium tracking-tight">{t.welcomeChat}</h1>
+    <p className="text-muted-foreground mt-2 text-sm">{t.welcomeChatHint}</p>
+  </div>
+);
+
+// module scope: a new object per render would remount every message
+const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing };
+
+/**
+ * The centre of the project window: assistant-ui's Thread element over the
+ * runtime `ChatProvider` mounted — the thread in the route, or a new chat
+ * whose first message creates the thread.
+ */
+export function ThreadPage() {
+  const chat = useChat();
+
+  if (chat.missing) {
+    return (
+      <div className="p-4" data-testid="chat-area">
+        <Alert variant="destructive">
+          <AlertDescription>{t.threadNotFound}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  const disabled = chat.disabledReason ? t.threadDisabled[chat.disabledReason] : chat.thread?.status === "disconnected" ? t.threadDisabled["disconnected"] : null;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col" data-testid="chat-area">
+      {chat.error ? (
+        <Alert variant="destructive" className="m-3 w-auto">
+          <AlertDescription>{t.threadError(chat.error)}</AlertDescription>
+        </Alert>
+      ) : null}
+      {disabled ? (
+        <Alert className="m-3 w-auto">
+          <AlertDescription>{disabled}</AlertDescription>
+        </Alert>
+      ) : null}
+      <div className="min-h-0 flex-1">
+        <Thread components={THREAD_COMPONENTS} autoFocus={false} />
+      </div>
+    </div>
+  );
+}

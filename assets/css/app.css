@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-shimmer";
 @source "../js";
 
 /* Longx — a workbench in dark or light. Tokens follow shadcn's names so
@@ -112,6 +113,23 @@
   --radius-xl: calc(var(--radius) + 4px);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+  /* assistant-ui elements (collapsible tool / reasoning panels) */
+  @keyframes collapsible-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    }
+  }
+  @keyframes collapsible-up {
+    from {
+      height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    }
+    to {
+      height: 0;
+    }
+  }
 }
 
 @layer base {
@@ -161,3 +179,7 @@
   min-height: 44px;
   min-width: 44px;
 }
+
+/* assistant-ui elements: open/closed state variants (Radix data-state or Base UI data-open) */
+@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
+@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));

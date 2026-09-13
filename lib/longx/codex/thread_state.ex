@@ -23,6 +23,8 @@ defmodule Longx.Codex.ThreadState do
   use GenServer
 
   alias Longx.Codex.ThreadState.Store
+
+  require Logger
   alias Phoenix.PubSub
 
   @registry Longx.Codex.ThreadRegistry
@@ -117,11 +119,22 @@ defmodule Longx.Codex.ThreadState do
   @impl true
   def init(thread_id), do: {:ok, thread_id}
 
+  # One event the store cannot fold (a shape codex changed under us) is
+  # dropped with a log line: crashing here would restart this writer for
+  # every delta of the stream and escalate up the tree — never let a single
+  # notification take the codex connection down.
   @impl true
   def handle_cast({:ingest, method, params}, thread_id) do
     Store.fold(thread_id, method, params)
     broadcast(thread_id, method, params)
     {:noreply, thread_id}
+  rescue
+    e ->
+      Logger.error(
+        "thread state #{thread_id}: could not fold #{method}: #{Exception.message(e)}; params: #{inspect(params, limit: 20)}"
+      )
+
+      {:noreply, thread_id}
   end
 
   def handle_cast({:put_request, id, method, params}, thread_id) do
@@ -137,7 +150,14 @@ defmodule Longx.Codex.ThreadState do
   end
 
   @impl true
+  # a backfill means a (new) codex process read the thread from disk: nothing
+  # it was asked before can be answered any more
   def handle_call({:backfill, result}, _from, thread_id) do
+    for %{id: id} <- Store.requests(thread_id) do
+      Store.delete_request(thread_id, id)
+      broadcast(thread_id, "serverRequest/resolved", %{"requestId" => id})
+    end
+
     {:reply, Store.backfill(thread_id, result), thread_id}
   end
 

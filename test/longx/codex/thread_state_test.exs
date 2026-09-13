@@ -55,6 +55,38 @@ defmodule Longx.Codex.ThreadStateTest do
              ] = Store.items(t)
     end
 
+    test "reasoning as codex sends it: summary/content are lists, deltas name their index" do
+      t = new_thread()
+      item_started(t, %{"id" => "r1", "type" => "reasoning", "summary" => [], "content" => []})
+
+      Store.fold(t, "item/reasoning/summaryTextDelta", %{
+        "itemId" => "r1",
+        "delta" => "th",
+        "summaryIndex" => 0
+      })
+
+      Store.fold(t, "item/reasoning/summaryTextDelta", %{
+        "itemId" => "r1",
+        "delta" => "ink",
+        "summaryIndex" => 0
+      })
+
+      Store.fold(t, "item/reasoning/summaryTextDelta", %{
+        "itemId" => "r1",
+        "delta" => "more",
+        "summaryIndex" => 1
+      })
+
+      Store.fold(t, "item/reasoning/textDelta", %{
+        "itemId" => "r1",
+        "delta" => "raw",
+        "contentIndex" => 0
+      })
+
+      assert [%{"id" => "r1", "summary" => ["think", "more"], "content" => ["raw"]}] =
+               Store.items(t)
+    end
+
     test "a delta for an item we never saw creates a placeholder so nothing is lost" do
       t = new_thread()
       Store.fold(t, "item/agentMessage/delta", %{"itemId" => "ghost", "delta" => "x"})
@@ -194,6 +226,38 @@ defmodule Longx.Codex.ThreadStateTest do
       assert [%{"id" => "m1", "text" => "hi"}] = snapshot.items
     end
 
+    test "an event the store cannot fold is logged and skipped; the writer and its seq survive",
+         %{thread_id: thread_id, pid: pid} do
+      ThreadState.subscribe(thread_id)
+
+      ThreadState.ingest(thread_id, "item/started", %{
+        "item" => %{"id" => "m1", "type" => "agentMessage", "text" => 5}
+      })
+
+      # appending to a number raises inside Store.fold
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          ThreadState.ingest(thread_id, "item/agentMessage/delta", %{
+            "itemId" => "m1",
+            "delta" => "hi"
+          })
+
+          ThreadState.ingest(thread_id, "item/agentMessage/delta", %{
+            "itemId" => "m2",
+            "delta" => "ok"
+          })
+
+          assert_receive {:codex, 2, "item/agentMessage/delta", %{"itemId" => "m2"}}, 2_000
+        end)
+
+      assert log =~ "could not fold item/agentMessage/delta"
+      assert Process.alive?(pid)
+      refute_received {:codex, _, "item/agentMessage/delta", %{"itemId" => "m1"}}
+
+      assert [%{"id" => "m1", "text" => 5}, %{"id" => "m2", "text" => "ok"}] =
+               ThreadState.snapshot(thread_id).items
+    end
+
     test "snapshot reads ETS directly: it works even when the thread process is gone", %{
       thread_id: thread_id
     } do
@@ -316,6 +380,18 @@ defmodule Longx.Codex.ThreadStateTest do
       })
 
       assert [%{"id" => "x"}] = ThreadState.snapshot(thread_id).items
+    end
+
+    test "backfill (a resume on a new codex) withdraws requests the old process was waiting on",
+         %{thread_id: thread_id} do
+      ThreadState.subscribe(thread_id)
+      ThreadState.put_request(thread_id, 7, "item/commandExecution/requestApproval", %{})
+      assert_receive {:codex, _, "item/commandExecution/requestApproval", _}
+
+      ThreadState.backfill(thread_id, %{"thread" => %{"id" => thread_id, "turns" => []}})
+
+      assert_receive {:codex, _, "serverRequest/resolved", %{"requestId" => 7}}
+      assert ThreadState.snapshot(thread_id).pending_requests == []
     end
   end
 end

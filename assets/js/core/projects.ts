@@ -8,6 +8,7 @@ import {
   gitInfo,
   initGit,
   listDirectory,
+  listModels,
   listProjects,
   listThreads,
   restartCodex,
@@ -15,6 +16,7 @@ import {
   startThread,
   stopCodex,
   type AshRpcError,
+  type ListModelsFields,
 } from "@/ash_rpc";
 
 export const projectFields = [
@@ -61,7 +63,7 @@ export class RpcFailure extends Error {
   }
 }
 
-function unwrap<T>(result: { success: true; data: T } | { success: false; errors: AshRpcError[] }): T {
+export function unwrap<T>(result: { success: true; data: T } | { success: false; errors: AshRpcError[] }): T {
   if (result.success) return result.data;
   throw new RpcFailure(result.errors);
 }
@@ -73,6 +75,7 @@ export const queryKeys = {
   codex: (id: string) => ["project", id, "codex"] as const,
   threads: (id: string) => ["project", id, "threads"] as const,
   sandbox: ["sandbox"] as const,
+  models: ["models"] as const,
 };
 
 export function useProjects() {
@@ -111,6 +114,17 @@ export function useThreads(id: string | undefined) {
     enabled: !!id,
     queryFn: async () =>
       unwrap(await listThreads({ fields: [...threadFields], input: { projectId: id! } })),
+  });
+}
+
+export const modelFields: ListModelsFields = ["id", "name", "slug", "default", "reasoningEffort", { provider: ["name"] }];
+
+/** The models a turn can pick from (Longx.AI); slug is what codex is told. */
+export function useModels() {
+  return useQuery({
+    queryKey: queryKeys.models,
+    staleTime: 60_000,
+    queryFn: async () => unwrap(await listModels({ fields: modelFields })),
   });
 }
 

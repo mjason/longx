@@ -87,6 +87,13 @@ React Native client planned on the same core code.
     `dirty: :commit | :ignore`), then `turn/start` (with `model:` if switching). The Tracker
     fills `status`/`completed_at`/`commit_after`/`diff` from `turn/completed` and
     `turn/diff/updated`, and the thread `preview` from the first user message.
+  - **Opening a thread** (`LongxWeb.ThreadChannel` join → `Projects.host_thread/1`): a
+    thread nobody hosts is resumed on its project's codex; an *empty* one codex cannot
+    resume (it only writes a thread to disk on its first turn) is started again under a
+    new codex id (`Thread` action `rehost`; the join reply carries the id to follow);
+    `:unrecoverable`/`:archived` threads join read-only. A resume (`ThreadState.backfill`)
+    and a dying connection (`Connection.terminate` → `withdraw_inbound`) both withdraw
+    pending approvals nobody can answer any more.
   - **When codex dies** (`Longx.Projects.Tracker` on `"codex:connection"`): `:down` → every
     `:in_progress` turn of that project fails with "codex restarted…", its `:active` threads
     become `:disconnected`; `:ready` → those are `thread/resume`d on the new process (→
@@ -268,9 +275,12 @@ React Native client planned on the same core code.
     holding every thread's materialised view; it is a long-lived process so the data outlives
     the per-thread writers, and swapping to DETS/Mnesia later touches only this module.
     `Longx.Codex.ThreadState` (Registry + DynamicSupervisor, one per live thread) is the
-    **single writer**: it folds each notification into the Store (deltas append in place,
-    `item/completed` replaces), allocates a strictly increasing `seq`, and broadcasts
-    `{:codex, seq, method, params}` on `"codex:thread:<id>"`. Reads (`snapshot/1`) go straight
+    **single writer**: it folds each notification into the Store (deltas append in place —
+    reasoning `summary`/`content` are `string[]` and `summaryIndex`/`contentIndex` name the
+    entry — `item/completed` replaces), allocates a strictly increasing `seq`, and broadcasts
+    `{:codex, seq, method, params}` on `"codex:thread:<id>"`; an event the Store cannot fold
+    is logged and dropped (one bad notification must never crash the writer for every delta
+    of a stream and escalate up the tree). Reads (`snapshot/1`) go straight
     to ETS — no process hop, works even when the writer is stopped, and a restarted writer
     continues the sequence. Pending server requests are in the view with a `"requestId"`.
     **Page refresh / late join protocol: `subscribe` → `snapshot` (has `seq`) → render → apply
@@ -360,9 +370,37 @@ React Native client planned on the same core code.
     (`ash_rpc.ts`, `ash_types.ts` — **generated** by `mix ash_typescript.codegen`, never
     edited; `codegen --check` runs in precommit), `rpcHooks.ts`, `socket.ts` (one Phoenix
     socket, status for the connection banner), `projectChannel.ts`, TanStack Query hooks
-    (`projects.ts`; `RpcFailure` carries field errors), formatters. Thread reducer, the
-    codex item → assistant-ui message mapping and the `ExternalStoreRuntime` adapter go
-    here too (branch ②).
+    (`projects.ts`; `RpcFailure` carries field errors; `useModels`), formatters, and
+    `core/chat/` — the chat runtime, DOM-free: `thread.ts` (the client half of
+    `Longx.Codex.ThreadState`: snapshot + `applyEvent` with the same fold rules as the
+    server's Store — deltas append, reasoning `summary`/`content` are `string[]` addressed by
+    `summaryIndex`/`contentIndex`, `thread/reverted` drops turns, a `requestId` means a
+    pending question; items get `startedAtMs`/`completedAtMs` from the client clock),
+    `threadChannel.ts` (`thread:<codex id>`; the join reply's `thread_id` is authoritative —
+    an empty thread codex could not resume comes back under a new id; `snapshot()` re-pulls
+    in place), `useThreadView.ts` (`refetch`; a `thread/reverted` re-pulls on its own),
+    `messages.ts` (codex items → assistant-ui `ThreadMessageLike`: one assistant message per
+    turn with `metadata.timing` from the turn's stamps + the last turn's token usage;
+    agentMessage/plan → text, reasoning → reasoning, commandExecution / fileChange /
+    webSearch / `ns.tool` → tool-call parts (`args`/`result`/`artifact`/`timing`) —
+    `displayCommand` strips codex's `zsh -lc '…'` wrapper; a pending `*/requestApproval`
+    rides on its part as assistant-ui's `approval` (accept / accept_for_session / decline), a
+    pending `item/tool/requestUserInput` is a standalone `requestUserInput` part; either
+    makes the message `requires-action`, the only state in which assistant-ui shows the
+    controls), `adapter.ts` (`buildAdapter` → `ExternalStoreAdapter`: `onNew` →
+    `sendMessage` (no thread yet → `createThread` first; a `dirty_tree` RPC error asks
+    `onDirtyTree` for commit / ignore and resends), `onCancel` → `interruptTurn`,
+    `onRespondToToolApproval` → `respond`, `onRefetchThread`, `isLoading` /
+    `isSendDisabled` (disconnected: typing yes, sending no) / `isDisabled`
+    (unrecoverable, archived), `adapters.threadList`, `queue`, `extras.answerRequest` →
+    `answer_request`), `threadList.ts` (`buildThreadListAdapter`: rows → assistant-ui thread
+    data, handlers only for what exists: switch, new, rename, archive), `runtime.ts`
+    (**`useCodexRuntime({ projectId, threadId, onOpenThread })`** — the whole thing as one
+    hook, the shape of `@assistant-ui/react-opencode`: threads query + live view +
+    `createMessageQueue` (a message sent while a turn runs waits and goes out when it
+    settles; no `cancel`, so a "steer" only means "next" — codex's `turn/steer` is a
+    different thing, not wired) + per-turn model + `TurnState`; the router comes in as a
+    callback so React Native can reuse it).
   - `js/ui/` — React DOM, **shaped like an IDE with the chat where the editor would be**
     (IDEA's interactions, not its looks): `pages/WelcomePage` (recent projects, search, one
     door to open/create), `pages/ProjectWizard` (two steps: `components/DirectoryPicker` on
@@ -387,7 +425,42 @@ React Native client planned on the same core code.
     bars cycles them; the CSS also honours `prefers-color-scheme` before JS runs),
     `core/viewport.ts` (phone < 768 ≤ tablet < 1024 ≤ desktop).
     The chat uses **assistant-ui** (`@assistant-ui/react`, `ExternalStoreRuntime`; it has an
-    official React Native package) — not AI Elements, not `useChat`. Headers and bars are
+    official React Native package) — not AI Elements, not `useChat`. **Do not hand-roll
+    chat UI**: find the element in assistant-ui's catalog (the `elements` skill from
+    `npx skills add assistant-ui/skills`, or https://www.assistant-ui.com/elements), then `npx assistant-ui@latest add <item>` in `assets/` (answer "n" to
+    overwriting existing shadcn files). Elements land in
+    `js/ui/components/assistant-ui/elements/` (`*.aui.tsx` read the runtime, the rest are
+    props-driven) and are **source we own and adapt**: `thread.aui` (zh-CN strings, no
+    attachments/reload/edit until the runtime offers them), `tool-group.aui`, `reasoning`,
+    `markdown-text`, `tool-fallback.aui` (dynamic `ns.tool` calls), `terminal-block`
+    (`exitCode`/`exitLabel`/`fullCommand` instead of the demo's fixed "exit 0"),
+    `code-diff`, `web-search` (real urls), `approval-card` (labels/icon props) —
+    `thread-list.aui` (the threads tool is this element over `adapters.threadList`),
+    `message-timing.aui` (in the assistant action bar), `elicitation-form` (made
+    interactive: `onChange`, labels — codex's questions) — `surfaces.tsx` and
+    `../utils/range.ts` are the registry's shared helpers. `ui/chat/`: `ChatProvider`
+    (mounted by `ProjectWindow` around the whole window so the threads tool and the centre
+    share one runtime: `useCodexRuntime` + `AssistantRuntimeProvider` with `chatConfig` +
+    the `DirtyTreeDialog`; `useChat()` reads it), `ThreadPage` (routes `/p/:slug` — a new
+    chat whose first message creates the thread — and `/p/:slug/t/:threadId`; Thread
+    element; the composer rail is Codex's: `ComposerLeading` (the project's access mode →
+    settings, and the turn's state) / `ComposerTrailing` (the per-turn model with its
+    reasoning effort) are slots our `thread.aui` copy adds), `toolkit.tsx` (`defineToolkit` with
+    `type: "backend"`, `display: "standalone"` renderers per codex item type, **all built
+    from the registry's Tool-use elements, one visual language**: every invocation is a
+    `tool-call` row (verb · mono chip · check/cross; open while running or failed, a click
+    away when done — our copy takes `children`/`failed`) whose body is the element for the
+    work — `terminal-block` (commands; `tool-error` when it could not run), `file-tree` +
+    `code-diff` (file changes; `treeOf`, `parseDiff`), `web-search`; `approval-card` above a
+    row that waits on a decision; `elicitation-form` for codex's questions
+    (`QuestionsTool`, answers via `s.thread.extras.answerRequest`); reasoning uses the
+    `ghost` variant so it sits with the rows. Registered through
+    `AuiConfig({ tools: Tools({ toolkit }) })`, so they win over `ToolFallback` by name;
+    approvals answer with `respondToApproval({ optionId })`. **Never draw a tool's UI from
+    scratch — pick the element from the catalog first** (https://www.assistant-ui.com/elements,
+    section "Tool use"). `thread.aui` also shows a
+    stall hint (`unstable_useMessageStallDetection`, 15 s) and the timing badge.
+    `ProjectWindow` is `h-dvh`: the thread scrolls in its own viewport, never the page. Headers and bars are
     solid (`backdrop-blur` on sticky/fixed bars ghosted text in Chromium screenshots).
     After `npm install` adds packages while `mix phx.server` runs, restart it: Vite's
     dependency re-optimisation can otherwise load two copies of React ("Invalid hook call").
@@ -402,6 +475,34 @@ React Native client planned on the same core code.
     are regenerated from it with `python3 assets/scripts/icons.py`.
     `css/app.css`: Tailwind v4 with shadcn token names, **no `@apply`**, no daisyUI; only
     `html` gets `overflow-x: hidden` (on body/#app it can steal touch scrolling).
+
+## assistant-ui
+
+This project uses assistant-ui for chat interfaces.
+
+Documentation: https://www.assistant-ui.com/llms-full.txt (the whole docs in one file — fetch
+it into the scratchpad and grep; https://www.assistant-ui.com/llms.txt is the index, and any
+docs page + `.mdx` is raw markdown, e.g. `/docs/runtimes/custom/external-store.mdx`).
+assistant-ui also publishes the same material as Claude Code skills (`npx skills add
+assistant-ui/skills` → `elements`, `tools`, `primitives`, `runtime`, `markdown`, …); they are
+not vendored here — install them into your own environment when working on the chat, or
+read llms-full directly.
+
+Key patterns:
+- Use AssistantRuntimeProvider at the app root of the chat (`ui/chat/ThreadPage`).
+- Thread component for full chat interface (`elements/thread.aui`, slots via `components`).
+- AssistantModal for floating chat widget (not used here — the chat *is* the centre).
+- Runtime: `useExternalStoreRuntime` over our codex thread view (`core/chat/adapter.ts`) —
+  **not** `useChatRuntime` / AI SDK transport: the model loop lives in codex, the UI only
+  projects its events. The closest published analogue is `@assistant-ui/react-opencode`
+  (ExternalStoreRuntime + RemoteThreadList over a coding-agent server, permissions on the
+  tool-approval contract, questions, `extras` for fork/revert/refresh) — copy its shape,
+  not its package.
+- Capabilities are handler-driven: `onNew` (send), `onCancel` (stop), `setMessages`
+  (branching), `onEdit`, `onReload`, `onRefetchThread`, `adapters.threadList`; a button
+  only appears when its handler exists — never hand-roll one.
+- Tool UI: toolkit `render` per tool name; `display: "standalone"` keeps a tool out of the
+  collapsible trace group (commands / file changes are "informing the user", not a trace).
 
 ## Development workflow — TDD is mandatory
 

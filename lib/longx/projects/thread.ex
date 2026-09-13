@@ -61,8 +61,27 @@ defmodule Longx.Projects.Thread do
           |> Map.take([:model, :dirty])
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
+          case Longx.Projects.send_message(thread, input.arguments.text, opts) do
+            {:error, {:dirty_tree, changes}} ->
+              {:error, Longx.Projects.Errors.DirtyTree.exception(changes: changes)}
+
+            other ->
+              other
+          end
+        end
+      end
+    end
+
+    # stops the turn in flight (the composer's stop button)
+    action :interrupt_turn do
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :codex_turn_id, :string, allow_nil?: false
+
+      run fn input, _ ->
         with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
-             do: Longx.Projects.send_message(thread, input.arguments.text, opts)
+             do:
+               Longx.Codex.Thread.interrupt(thread.codex_thread_id, input.arguments.codex_turn_id)
       end
     end
 
@@ -78,6 +97,24 @@ defmodule Longx.Projects.Thread do
       run fn input, _ ->
         with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
           Longx.Codex.Thread.respond(input.arguments.request_id, input.arguments.decision,
+            thread_id: thread.codex_thread_id
+          )
+        end
+      end
+    end
+
+    # answers a question codex asked (item/tool/requestUserInput): the raw
+    # response map, `%{"answers" => %{question_id => %{"answers" => [..]}}}`
+    action :answer_request do
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :request_id, :string, allow_nil?: false
+      argument :answers, :map, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
+          Longx.Codex.Thread.respond_raw(
+            input.arguments.request_id,
+            %{"answers" => input.arguments.answers},
             thread_id: thread.codex_thread_id
           )
         end
@@ -101,6 +138,12 @@ defmodule Longx.Projects.Thread do
 
     update :touch do
       accept [:status, :preview, :model_slug, :last_activity_at]
+    end
+
+    # an empty thread codex could not resume was started again (new codex id)
+    update :rehost do
+      accept [:codex_thread_id]
+      change set_attribute(:status, :idle)
     end
 
     update :rename do

@@ -32,3 +32,5 @@ if (!("ResizeObserver" in globalThis)) {
 if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
 if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = () => false;
 if (!Element.prototype.releasePointerCapture) Element.prototype.releasePointerCapture = () => {};
+// nor element scrollTo (assistant-ui's thread viewport)
+if (!Element.prototype.scrollTo) Element.prototype.scrollTo = () => {};

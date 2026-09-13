@@ -13,6 +13,7 @@ import { Skeleton } from "@/ui/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/components/ui/tooltip";
 import { TopBar } from "@/ui/shell/Shell";
 import { ThemeToggle } from "@/ui/components/ThemeToggle";
+import { ChatProvider } from "@/ui/chat/ChatProvider";
 import { t } from "@/ui/strings";
 import { StatusStrip } from "./StatusStrip";
 import { FilesTool } from "./tools/FilesTool";
@@ -27,7 +28,15 @@ const ICONS: Record<Tool, typeof MessagesSquare> = {
   files: FolderTree,
 };
 
-export type ProjectContext = { id: string; slug: string; name: string; rootPath: string; sample: CodexSample | null };
+export type ProjectContext = {
+  id: string;
+  slug: string;
+  name: string;
+  rootPath: string;
+  sandbox: string;
+  approvalPolicy: string;
+  sample: CodexSample | null;
+};
 
 /**
  * The IDE frame with chat in the middle. Desktop: icon rail + docked,
@@ -81,10 +90,20 @@ export function ProjectWindow() {
   if (project.isPending) return <Skeleton className="m-4 h-32" />;
   if (project.isError) return <p role="alert" className="text-destructive p-4">{project.error.message}</p>;
 
-  const ctx: ProjectContext = { id: project.data.id, slug, name: project.data.name, rootPath: project.data.rootPath, sample };
+  const ctx: ProjectContext = {
+    id: project.data.id,
+    slug,
+    name: project.data.name,
+    rootPath: project.data.rootPath,
+    sandbox: project.data.sandbox,
+    approvalPolicy: project.data.approvalPolicy,
+    sample,
+  };
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    // fixed height: the chat scrolls inside its own viewport, not the page
+    <ChatProvider projectId={project.data.id} slug={slug}>
+    <div className="flex h-dvh flex-col">
       <TopBar
         wide
         title={project.data.name}
@@ -98,14 +117,14 @@ export function ProjectWindow() {
           </>
         }
       />
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {docked ? <ToolRail active={frame.tool} onToggle={frame.toggle} /> : null}
         {docked && frame.tool ? (
           <DockedPanel width={frame.panelWidth} onResize={frame.resize} title={t.tools[frame.tool]!} onClose={frame.close}>
             <ToolBody tool={frame.tool} ctx={ctx} />
           </DockedPanel>
         ) : null}
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
           <Outlet context={ctx} />
         </main>
       </div>
@@ -124,13 +143,14 @@ export function ProjectWindow() {
         </>
       ) : null}
     </div>
+    </ChatProvider>
   );
 }
 
 function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
   switch (tool) {
     case "threads":
-      return <ThreadsTool ctx={ctx} />;
+      return <ThreadsTool />;
     case "git":
       return <GitTool ctx={ctx} />;
     case "process":
