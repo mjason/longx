@@ -1323,11 +1323,11 @@ export type CodexInfoInput = {
   id: UUID;
 };
 
-export type CodexInfoFields = UnifiedFieldSelection<{home: string, exists: boolean, bytes: number, files: Record<string, any>, worker: Record<string, any> | null, __type: "TypedMap", __primitiveFields: "home" | "exists" | "bytes" | "files" | "worker"}>[];
+export type CodexInfoFields = UnifiedFieldSelection<{home: string, exists: boolean, bytes: number, files: Record<string, any>, worker: Record<string, any> | null, stale: Array<string>, __type: "TypedMap", __primitiveFields: "home" | "exists" | "bytes" | "files" | "worker" | "stale"}>[];
 
 export type InferCodexInfoResult<
   Fields extends CodexInfoFields | undefined,
-> = InferResult<{home: string, exists: boolean, bytes: number, files: Record<string, any>, worker: Record<string, any> | null, __type: "TypedMap", __primitiveFields: "home" | "exists" | "bytes" | "files" | "worker"}, Fields>;
+> = InferResult<{home: string, exists: boolean, bytes: number, files: Record<string, any>, worker: Record<string, any> | null, stale: Array<string>, __type: "TypedMap", __primitiveFields: "home" | "exists" | "bytes" | "files" | "worker" | "stale"}, Fields>;
 
 export type CodexInfoResult<Fields extends CodexInfoFields | undefined = undefined> = | { success: true; data: InferCodexInfoResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }

@@ -3,10 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
-import { channel, rpcMock, socketMock } from "@/ui/test-mocks";
+import { channel, ok, rpcMock, socketMock } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
+import { codexInfo } from "@/ash_rpc";
 
 describe("ProjectWindow", () => {
   beforeEach(() => {
@@ -49,6 +50,19 @@ describe("ProjectWindow", () => {
 
     expect(screen.getByTestId("status-strip")).toHaveTextContent("372bb036");
     expect(screen.getByTestId("status-strip")).toHaveTextContent("codex 未启动");
+  });
+
+  test("a codex that booted with settings since changed is flagged in the status bar and explained in the process tool", async () => {
+    setViewport(1280);
+    vi.mocked(codexInfo).mockResolvedValue(ok({ home: "/x", exists: true, bytes: 10, files: {}, worker: { phase: "ready", active_turns: 0 }, stale: ["models"] }) as never);
+    const user = userEvent.setup();
+    renderAt("/p/app-1/t/t1");
+    const strip = await screen.findByTestId("status-strip");
+    const warning = await within(strip).findByRole("button", { name: /codex 需要重启/ });
+    await user.click(warning);
+    const panel = await screen.findByTestId("tool-panel");
+    expect(within(panel).getByTestId("process-tool")).toHaveTextContent("模型设置改了");
+    expect(within(panel).getByRole("button", { name: "重启" })).toBeEnabled();
   });
 
   test("new thread from the threads tool navigates into it", async () => {

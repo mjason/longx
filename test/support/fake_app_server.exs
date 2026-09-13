@@ -126,7 +126,11 @@ defmodule FakeAppServer do
   end
 
   defp handle(
-         %{"id" => id, "method" => "thread/resume", "params" => %{"threadId" => thread_id}},
+         %{
+           "id" => id,
+           "method" => "thread/resume",
+           "params" => %{"threadId" => thread_id} = params
+         },
          state
        ) do
     if state.persist and not MapSet.member?(state.known, thread_id) do
@@ -136,7 +140,13 @@ defmodule FakeAppServer do
       thread = %{"id" => thread_id, "preview" => "", "sessionId" => thread_id}
       reply(id, %{"thread" => thread})
       notify("thread/started", %{"thread" => thread})
-      %{state | threads: Map.put_new(state.threads, thread_id, %{turns: []})}
+
+      threads =
+        state.threads
+        |> Map.put_new(thread_id, %{turns: []})
+        |> Map.update!(thread_id, &Map.put(&1, :resume_params, params))
+
+      %{state | threads: threads}
     end
   end
 
@@ -223,6 +233,7 @@ defmodule FakeAppServer do
         "turns" => turns,
         # not part of codex's protocol: what this fake was asked for
         "startParams" => Map.get(entry, :params, %{}),
+        "resumeParams" => Map.get(entry, :resume_params),
         "lastTurnParams" => Map.get(entry, :last_turn)
       }
     })

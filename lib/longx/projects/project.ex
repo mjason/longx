@@ -42,7 +42,9 @@ defmodule Longx.Projects.Project do
     exists: [type: :boolean, allow_nil?: false],
     bytes: [type: :integer, allow_nil?: false],
     files: [type: :map, allow_nil?: false],
-    worker: [type: :map]
+    worker: [type: :map],
+    # "models" / "config": what the running codex booted with has changed — restart it
+    stale: [type: {:array, :string}, allow_nil?: false]
   ]
 
   actions do
@@ -292,7 +294,8 @@ defmodule Longx.Projects.Project do
       exists: info.exists?,
       bytes: info.bytes,
       files: info.files,
-      worker: worker(info.worker)
+      worker: worker(info.worker),
+      stale: Enum.map(info.stale, &Atom.to_string/1)
     }
   end
 

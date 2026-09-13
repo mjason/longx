@@ -31,15 +31,14 @@ defmodule Longx.Test.CodexHarness do
   end
 
   @doc "Starts an (unnamed) connection to the bundled binary with `home`'s env and waits for the handshake."
-  def start_connection!(home) do
+  def start_connection!(home, id \\ :conn) do
     {:ok, exe} = Runtime.executable()
     Phoenix.PubSub.subscribe(Longx.PubSub, "codex:connection")
 
     conn =
       start_supervised!(
-        {Connection,
-         name: nil, command: [exe], env: home.env, cd: home.dir, id: {:conn, home.dir}},
-        id: {:conn, home.dir}
+        {Connection, name: nil, command: [exe], env: home.env, cd: home.dir, id: {id, home.dir}},
+        id: {id, home.dir}
       )
 
     assert_receive {:codex_connection, _, :ready}, 30_000

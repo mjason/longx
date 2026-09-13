@@ -233,6 +233,26 @@ defmodule Longx.Codex.ThreadTest do
       assert snapshot.thread["id"] == thread_id
     end
 
+    test "resume carries the model's config overrides like start does", %{conn: conn} do
+      {:ok, thread_id} = Thread.start(cwd: "/", conn: conn)
+      ThreadState.stop(thread_id)
+
+      assert {:ok, ^thread_id} =
+               Thread.resume(thread_id,
+                 conn: conn,
+                 model_context_window: 1_000_000,
+                 reasoning_effort: "high",
+                 web_search: :standalone
+               )
+
+      assert {:ok, %{"thread" => %{"resumeParams" => %{"config" => config}}}} =
+               Connection.request(conn, "thread/read", %{"threadId" => thread_id})
+
+      assert config["model_context_window"] == 1_000_000
+      assert config["model_reasoning_effort"] == "high"
+      assert config["web_search"] == "live"
+    end
+
     test "interrupt ends the turn as interrupted", %{conn: conn} do
       {:ok, thread_id} = Thread.start(cwd: "/", conn: conn)
       Thread.subscribe(thread_id)

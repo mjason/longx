@@ -29,7 +29,7 @@ export function rpcMock() {
     clearCodexHistory: vi.fn(async () => ok(null)),
     gitInfo: vi.fn(async () => ok({ repository: true, head: "372bb0366a5ae41b", clean: true, changes: 0, lfs: false })),
     initGit: vi.fn(),
-    codexInfo: vi.fn(async () => ok({ home: "/x", exists: false, bytes: 0, files: {}, worker: null })),
+    codexInfo: vi.fn(async () => ok({ home: "/x", exists: false, bytes: 0, files: {}, worker: null, stale: [] })),
     listThreads: vi.fn(async () => ok([thread(1)])),
     listModels: vi.fn(async () => ok([model(1, { slug: "deepseek-flash", default: true }), model(2, { slug: "glm-5" })])),
     sendMessage: vi.fn(async () => ok({ id: "turn-row" })),

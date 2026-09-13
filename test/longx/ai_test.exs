@@ -39,6 +39,26 @@ defmodule Longx.AITest do
     )
   end
 
+  describe "seeds (priv/repo/seeds.exs)" do
+    @seeds Path.expand("priv/repo/seeds.exs")
+
+    test "deepseek-flash is created as a 1M-context model; an old 128k seed is corrected, a chosen value kept" do
+      Code.eval_file(@seeds)
+      flash = Enum.find(AI.list_models!(), &(&1.upstream_id == "deepseek-flash"))
+      assert flash.context_window == 1_000_000
+
+      # a row still carrying the old seeded default is lifted on the next run…
+      AI.update_model!(flash, %{context_window: 128_000})
+      Code.eval_file(@seeds)
+      assert Ash.get!(AI.Model, flash.id).context_window == 1_000_000
+
+      # …a value someone chose is theirs
+      AI.update_model!(flash, %{context_window: 200_000})
+      Code.eval_file(@seeds)
+      assert Ash.get!(AI.Model, flash.id).context_window == 200_000
+    end
+  end
+
   describe "providers" do
     test "api_key is stored encrypted and only decrypted when loaded" do
       provider = create_provider!(%{api_key: "sk-plain"})

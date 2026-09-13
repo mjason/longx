@@ -1,5 +1,7 @@
 import { formatBytes, formatDuration } from "@/core/format";
 import { useCodexControls, useCodexInfo } from "@/core/projects";
+import { AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/ui/components/ui/alert";
 import { Badge } from "@/ui/components/ui/badge";
 import { Button } from "@/ui/components/ui/button";
 import { t } from "@/ui/strings";
@@ -20,9 +22,24 @@ export function ProcessTool({ ctx }: { ctx: ProjectContext }) {
   const controls = useCodexControls(ctx.id);
   const worker = codex.data?.worker as Worker | null | undefined;
   const sample = ctx.sample;
+  const stale = codex.data?.stale ?? [];
 
   return (
     <div className="flex flex-col gap-3 text-sm" data-testid="process-tool">
+      {stale.length ? (
+        <Alert>
+          <AlertTriangle className="size-4" />
+          <AlertTitle>{t.codexStaleTitle}</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc ps-4">
+              {stale.map((reason) => (
+                <li key={reason}>{t.codexStaleReasons[reason] ?? reason}</li>
+              ))}
+            </ul>
+            <p>{t.codexStaleHint}</p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className="flex items-center justify-between">
         <span className="font-medium">{t.codex}</span>
         {worker ? (

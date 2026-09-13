@@ -157,8 +157,9 @@ defmodule Longx.Codex.Pool do
     end
   end
 
-  # the process runs inside its home either way (a configured `command:` —
-  # the test fake — gets no Home.prepare, so the cwd is all it has)
+  # the process runs inside its home either way; a configured `command:` (the
+  # test fake) ignores what Home.prepare writes there, but the files are what
+  # `codex_info`'s stale check compares against, so they are written all the same
   defp launch(home, opts) do
     config = Application.get_env(:longx, __MODULE__, [])
 
@@ -169,8 +170,12 @@ defmodule Longx.Codex.Pool do
     extra = Keyword.merge([shim: shim], Keyword.get(config, :connection, []))
 
     case Keyword.fetch(config, :command) do
-      {:ok, command} -> Keyword.merge([command: command, env: [], cd: home], extra)
-      :error -> extra
+      {:ok, command} ->
+        {:ok, _} = Home.prepare(dir: home)
+        Keyword.merge([command: command, env: [], cd: home], extra)
+
+      :error ->
+        extra
     end
   end
 
