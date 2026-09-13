@@ -13,10 +13,10 @@ const EFFORT: Record<string, string> = { minimal: "极低", low: "低", medium: 
  * turn runs with, and what the turn is doing right now.
  */
 export function ComposerLeading() {
-  const { state, mode, setMode, disabledReason } = useChat();
+  const { state, mode, setMode, disabledReason, thread } = useChat();
   return (
     <div className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs" data-testid="turn-bar">
-      <ModePicker mode={mode} onChange={setMode} disabled={disabledReason !== null} />
+      <ModePicker mode={mode} onChange={setMode} disabled={disabledReason !== null} started={thread !== undefined} />
       {state === "running" ? (
         <span className="flex items-center gap-1">
           <Loader2 className="size-3.5 animate-spin" /> {t.turnRunning}

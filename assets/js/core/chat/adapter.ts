@@ -24,6 +24,8 @@ export type AccessMode = {
   sandbox: "read_only" | "workspace_write" | "danger_full_access";
   approvalPolicy: "never" | "on_request" | "untrusted";
   networkAccess: boolean;
+  /** codex's web.run (search + open URL, run by Longx, not the sandbox); fixed at thread start */
+  webSearch: boolean;
 };
 /** what to do with uncommitted changes when the project's policy is "ask"; null = don't send */
 export type DirtyDecision = "commit" | "ignore" | null;
@@ -102,7 +104,7 @@ export function buildAdapter(opts: AdapterOptions): ExternalStoreAdapter<ThreadM
             threadId: target.threadId,
             text,
             ...(opts.model ? { model: opts.model } : {}),
-            ...(opts.mode ?? {}),
+            ...(opts.mode ? { sandbox: opts.mode.sandbox, approvalPolicy: opts.mode.approvalPolicy, networkAccess: opts.mode.networkAccess } : {}),
             ...(dirty ? { dirty } : {}),
           },
         });

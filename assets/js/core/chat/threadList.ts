@@ -13,6 +13,7 @@ export type ThreadRow = {
   sandbox?: string;
   approvalPolicy?: string;
   networkAccess?: boolean;
+  webSearch?: boolean;
 };
 
 export type ThreadListActions = {

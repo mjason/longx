@@ -190,7 +190,14 @@ React Native client planned on the same core code.
     resolved model target and search target, never an `&&`/`||` chain at the call site:
     `:hosted` when the model's provider has `supports_hosted_web_search` (OpenAI —
     the Responses API runs `web_search` inside the provider; config `web_search = "live"`),
-    else `:standalone` when a search provider with a key is configured, else `:disabled`.
+    else `:standalone` — always: `open` needs no provider (below), and a `search_query`
+    without one is told "no search provider" inside the output. `:disabled` is only ever an
+    explicit choice: `Project.web_search` / `Thread.web_search` (a `thread/start` config,
+    so decided when the thread starts — `start_thread(web_search: false)`, the project's
+    default otherwise; the composer's mode picker offers it for a new chat only).
+    **This is separate from the sandbox's network access**, which governs commands inside
+    bubblewrap: `web.run` is executed by the Longx server, so "no network" for the agent's
+    commands does not stop it reading a page through us — hence its own switch.
     The provider block always declares `supports_standalone_web_search = true` (a capability,
     not a switch); what a thread gets is `web_search` (`"live"`/`"disabled"`) +
     `features.standalone_web_search` — standalone needs `web_search = "live"` too.

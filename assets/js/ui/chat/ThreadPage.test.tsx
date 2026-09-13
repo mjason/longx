@@ -88,13 +88,19 @@ describe("ThreadPage", () => {
     expect(screen.getByRole("textbox", { name: "随心输入" })).toBeDisabled();
   });
 
-  test("the project route is a new chat: the first message creates the thread and opens it", async () => {
+  test("the project route is a new chat: the first message creates the thread (in the picked mode, web search included) and opens it", async () => {
     const user = userEvent.setup();
     const { router } = renderAt("/p/app-1");
     await screen.findByText("让 agent 在这个项目里干活");
     expect(channel.topics.filter((t) => t.startsWith("thread:"))).toEqual([]);
+    // web search can only be chosen before the thread exists
+    await user.click(screen.getByTestId("mode-picker"));
+    const webSearch = await screen.findByRole("switch", { name: /网页搜索/ });
+    expect(webSearch).toBeEnabled();
+    await user.click(webSearch);
+    await user.keyboard("{Escape}");
     await user.type(screen.getByRole("textbox", { name: "随心输入" }), "start here{Enter}");
-    await waitFor(() => expect(startThread).toHaveBeenCalled());
+    await waitFor(() => expect(startThread).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ projectId: "id-1", webSearch: false, sandbox: "workspace_write" }) })));
     await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t2", text: "start here" }) })));
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t2"));
   });
@@ -103,6 +109,8 @@ describe("ThreadPage", () => {
     const user = userEvent.setup();
     await open();
     await user.click(screen.getByTestId("mode-picker"));
+    // an existing thread's web search is fixed
+    expect(await screen.findByRole("switch", { name: /网页搜索/ })).toBeDisabled();
     await user.click(await screen.findByRole("radio", { name: "完全访问（危险）" }));
     await user.click(screen.getByRole("radio", { name: "从不询问" }));
     await user.keyboard("{Escape}");

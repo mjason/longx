@@ -1402,6 +1402,7 @@ export type CreateProjectInput = {
   tools?: Array<string>;
   dirtyStart?: "ask" | "commit" | "off";
   networkAccess?: boolean;
+  webSearch?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
   initGit?: boolean | null;
@@ -1944,6 +1945,7 @@ export type UpdateProjectInput = {
   tools?: Array<string>;
   dirtyStart?: "ask" | "commit" | "off";
   networkAccess?: boolean;
+  webSearch?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
 };
@@ -2610,6 +2612,8 @@ export type StartThreadInput = {
   tools?: Array<string> | null;
   approvalPolicy?: "never" | "on_request" | "untrusted" | null;
   sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
+  networkAccess?: boolean | null;
+  webSearch?: boolean | null;
 };
 
 export type StartThreadFields = UnifiedFieldSelection<ThreadResourceSchema>[];

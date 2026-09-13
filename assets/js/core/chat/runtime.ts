@@ -62,17 +62,23 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   useEffect(() => setModel(null), [threadId]);
   const [modeOverride, setModeOverride] = useState<{ threadId: string | undefined; mode: AccessMode } | null>(null);
   const rowMode: AccessMode | null = thread
-    ? { sandbox: thread.sandbox as AccessMode["sandbox"], approvalPolicy: thread.approvalPolicy as AccessMode["approvalPolicy"], networkAccess: thread.networkAccess ?? false }
+    ? {
+        sandbox: thread.sandbox as AccessMode["sandbox"],
+        approvalPolicy: thread.approvalPolicy as AccessMode["approvalPolicy"],
+        networkAccess: thread.networkAccess ?? false,
+        webSearch: thread.webSearch ?? true,
+      }
     : null;
   const mode = modeOverride && modeOverride.threadId === threadId ? modeOverride.mode : (rowMode ?? defaults);
   const setMode = useCallback((next: AccessMode) => setModeOverride({ threadId, mode: next }), [threadId]);
 
   const invalidate = useCallback(() => client.invalidateQueries({ queryKey: queryKeys.threads(projectId) }), [client, projectId]);
 
+  // a new chat starts in the mode picked in the rail (web search is start-only)
   const createThread = useCallback(async (): Promise<ThreadTarget> => {
-    const row = await start.mutateAsync();
+    const row = await start.mutateAsync(mode);
     return { threadId: row.id, codexThreadId: row.codexThreadId };
-  }, [start]);
+  }, [start, mode]);
 
   const threadList = useMemo(
     () =>

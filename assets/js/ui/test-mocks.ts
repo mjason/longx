@@ -9,13 +9,13 @@ export const failed = (message: string, fields: string[] = []) => ({
 
 export const project = (n: number) => ({
   id: `id-${n}`, slug: `app-${n}`, name: `App ${n}`, description: null, rootPath: `/srv/app-${n}`,
-  sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, dirtyStart: "commit",
+  sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true, dirtyStart: "commit",
   tools: [], memoryLimitMb: null, archivedAt: null, updatedAt: "2026-09-12T00:00:00Z",
 });
 
 export const thread = (n: number) => ({
   id: `t${n}`, codexThreadId: `thr_${n}`, title: null, preview: `thread ${n}`, status: "idle", modelSlug: null,
-  sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false,
+  sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true,
   lastActivityAt: "2026-09-12T00:00:00Z", insertedAt: "2026-09-12T00:00:00Z",
 });
 

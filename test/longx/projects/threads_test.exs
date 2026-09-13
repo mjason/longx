@@ -141,8 +141,8 @@ defmodule Longx.Projects.ThreadsTest do
                "model_context_window" => 200_000,
                "model_reasoning_effort" => "high",
                "model_reasoning_summary" => "auto",
-               "web_search" => "disabled",
-               "features.standalone_web_search" => false
+               "web_search" => "live",
+               "features.standalone_web_search" => true
              }
     end
 
@@ -324,6 +324,27 @@ defmodule Longx.Projects.ThreadsTest do
       %{"lastTurnParams" => params2} = read_thread!(conn, thread.codex_thread_id)
       refute Map.has_key?(params2, "sandboxPolicy")
       assert Ash.get!(Thread, thread.id).sandbox == :danger_full_access
+    end
+
+    test "web_search: false at start turns codex's web.run off for the thread; the project's default applies otherwise",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      assert project.web_search == true
+
+      {:ok, on} = Projects.start_thread(project, conn: conn)
+      assert on.web_search == true
+      %{"startParams" => params} = read_thread!(conn, on.codex_thread_id)
+      refute params["config"]["web_search"] == "disabled"
+
+      {:ok, off} = Projects.start_thread(project, conn: conn, web_search: false)
+      assert off.web_search == false
+      %{"startParams" => params} = read_thread!(conn, off.codex_thread_id)
+      assert params["config"]["web_search"] == "disabled"
+      assert params["config"]["features.standalone_web_search"] == false
+
+      quiet = Projects.update_project!(project, %{web_search: false})
+      {:ok, inherited} = Projects.start_thread(quiet, conn: conn)
+      assert inherited.web_search == false
     end
 
     test "turns are listed oldest first", %{dir: dir, conn: conn} do

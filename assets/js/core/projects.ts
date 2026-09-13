@@ -32,6 +32,7 @@ export const projectFields = [
   "sandbox",
   "approvalPolicy",
   "networkAccess",
+  "webSearch",
   "dirtyStart",
   "tools",
   "memoryLimitMb",
@@ -49,6 +50,7 @@ export const threadFields = [
   "sandbox",
   "approvalPolicy",
   "networkAccess",
+  "webSearch",
   "lastActivityAt",
   "insertedAt",
 ] as const;
@@ -249,11 +251,13 @@ export function useInitGit(id: string) {
   });
 }
 
+export type StartThreadMode = { sandbox: "read_only" | "workspace_write" | "danger_full_access"; approvalPolicy: "never" | "on_request" | "untrusted"; networkAccess: boolean; webSearch: boolean };
+
 export function useStartThread(id: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async () =>
-      unwrap(await startThread({ fields: [...threadFields], input: { projectId: id } })),
+    mutationFn: async (mode?: StartThreadMode) =>
+      unwrap(await startThread({ fields: [...threadFields], input: { projectId: id, ...(mode ?? {}) } })),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: queryKeys.threads(id) });
       client.invalidateQueries({ queryKey: queryKeys.codex(id) });

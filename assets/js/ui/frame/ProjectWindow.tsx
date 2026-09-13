@@ -108,7 +108,7 @@ export function ProjectWindow() {
     <ChatProvider
       projectId={project.data.id}
       slug={slug}
-      defaults={{ sandbox: project.data.sandbox, approvalPolicy: project.data.approvalPolicy, networkAccess: project.data.networkAccess }}
+      defaults={{ sandbox: project.data.sandbox, approvalPolicy: project.data.approvalPolicy, networkAccess: project.data.networkAccess, webSearch: project.data.webSearch }}
     >
     <div className="flex h-dvh flex-col">
       <TopBar

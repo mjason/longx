@@ -113,12 +113,16 @@ defmodule Longx.Projects do
           | {:sandbox, atom}
           | {:tools, [String.t()]}
           | {:model, String.t()}
+          | {:network_access, boolean}
+          | {:web_search, boolean}
           | {:conn, GenServer.server()}
 
   @doc """
   Starts a codex thread in the project directory with the project's
   defaults (overridable per call) and records it. The project's model
   (or `model:`) is passed to codex as its slug; nil means the global default.
+  `web_search: false` turns codex's `web.run` off for the thread (a
+  thread/start config, so it cannot change later).
   """
   @spec start_thread(Project.t(), [start_option]) :: {:ok, Thread.t()} | {:error, term}
   def start_thread(%Project{} = project, opts \\ []) do
@@ -128,6 +132,7 @@ defmodule Longx.Projects do
     approval_policy = Keyword.get(opts, :approval_policy, project.approval_policy)
     sandbox = Keyword.get(opts, :sandbox, project.sandbox)
     network_access = Keyword.get(opts, :network_access, project.network_access)
+    web_search = Keyword.get(opts, :web_search, project.web_search)
 
     # the model's own settings (context window, reasoning, web search mode);
     # an unknown slug or a missing default is refused before codex is involved
@@ -142,7 +147,8 @@ defmodule Longx.Projects do
              network_access: network_access,
              conn: conn
            ]
-           |> Keyword.merge(model_opts),
+           |> Keyword.merge(model_opts)
+           |> without_web_search(web_search),
          {:ok, codex_thread_id} <- Longx.Codex.Thread.start(codex_opts),
          {:ok, thread} <-
            create_thread(%{
@@ -153,6 +159,7 @@ defmodule Longx.Projects do
              approval_policy: approval_policy,
              sandbox: sandbox,
              network_access: network_access,
+             web_search: web_search,
              tools: tools
            }) do
       :ok = Tracker.track(codex_thread_id)
@@ -160,6 +167,10 @@ defmodule Longx.Projects do
       {:ok, thread}
     end
   end
+
+  # the model's mode (thread_options) unless the thread wants no web.run at all
+  defp without_web_search(opts, true), do: opts
+  defp without_web_search(opts, false), do: Keyword.put(opts, :web_search, :disabled)
 
   defp put_if(opts, _key, nil), do: opts
   defp put_if(opts, key, value), do: Keyword.put(opts, key, value)
@@ -319,7 +330,8 @@ defmodule Longx.Projects do
              network_access: thread.network_access,
              conn: conn
            ]
-           |> Keyword.merge(model_opts),
+           |> Keyword.merge(model_opts)
+           |> without_web_search(thread.web_search),
          {:ok, codex_thread_id} <- Longx.Codex.Thread.start(codex_opts) do
       thread = rehost_thread!(thread, %{codex_thread_id: codex_thread_id})
       :ok = Tracker.track(codex_thread_id)

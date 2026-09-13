@@ -22,7 +22,7 @@ describe("chat adapter", () => {
   });
 
   test("the access mode rides on every message (the backend only records a change)", async () => {
-    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null, mode: { sandbox: "read_only", approvalPolicy: "never", networkAccess: true } });
+    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null, mode: { sandbox: "read_only", approvalPolicy: "never", networkAccess: true, webSearch: true } });
     await adapter.onNew(append("look"));
     expect(sendMessage).toHaveBeenLastCalledWith(
       expect.objectContaining({ input: { threadId: "row-1", text: "look", sandbox: "read_only", approvalPolicy: "never", networkAccess: true } }),

@@ -33,14 +33,22 @@ defmodule Longx.Codex.HomeTest do
     assert config =~ ~s(requires_openai_auth = false)
   end
 
-  test "web search is disabled unless a standalone provider is configured", %{dir: dir} do
+  test "web search is standalone by default: open fetches pages without any provider", %{
+    dir: dir
+  } do
     {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
     config = File.read!(home.config_path)
 
-    assert config =~ ~s(web_search = "disabled")
+    refute config =~ ~s(web_search = "disabled")
     # the provider is always declared capable: threads switch modes per model
     assert config =~ "supports_standalone_web_search = true"
-    refute config =~ "[features]\nstandalone_web_search = true"
+    assert config =~ "[features]\nstandalone_web_search = true"
+
+    # an explicit :disabled still turns the tool off entirely
+    {:ok, off} =
+      Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1", web_search: :disabled)
+
+    assert File.read!(off.config_path) =~ ~s(web_search = "disabled")
   end
 
   test "web_search: :standalone routes codex's web.run tool to our /alpha/search", %{dir: dir} do
@@ -65,9 +73,9 @@ defmodule Longx.Codex.HomeTest do
   end
 
   test "without an explicit option the mode comes from Longx.AI.web_search_mode/0", %{dir: dir} do
-    # nothing configured in the (sandboxed, cleared) DB → disabled
+    # nothing configured in the (sandboxed, cleared) DB → standalone (open needs no provider)
     {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
-    assert File.read!(home.config_path) =~ ~s(web_search = "disabled")
+    assert File.read!(home.config_path) =~ "[features]\nstandalone_web_search = true"
   end
 
   test "the env caps codex's tokio worker threads (musl allocator contention on many cores)",

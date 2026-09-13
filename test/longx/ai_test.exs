@@ -377,14 +377,14 @@ defmodule Longx.AITest do
   end
 
   describe "web_search_mode/0" do
-    test ":disabled when nothing is configured" do
-      assert AI.web_search_mode() == :disabled
+    test ":standalone even when nothing is configured — open fetches pages without a provider" do
+      assert AI.web_search_mode() == :standalone
     end
 
-    test ":disabled when the search provider has no key" do
+    test ":standalone when the search provider has no key (search_query is told so at call time)" do
       keyless = AI.create_search_provider!(%{name: "K", slug: "k-#{uniq()}", kind: :tavily})
       AI.make_default_search_provider!(keyless)
-      assert AI.web_search_mode() == :disabled
+      assert AI.web_search_mode() == :standalone
     end
 
     test ":standalone when a search provider with a key is the default" do
@@ -426,7 +426,7 @@ defmodule Longx.AITest do
         })
 
       AI.make_default_model!(create_model!(openai))
-      assert AI.web_search_mode() == :disabled
+      assert AI.web_search_mode() == :standalone
     end
   end
 
@@ -476,7 +476,7 @@ defmodule Longx.AITest do
       assert opts[:model_context_window] == 64_000
       assert opts[:reasoning_effort] == "medium"
       assert opts[:reasoning_summary] == :auto
-      assert opts[:web_search] == :disabled
+      assert opts[:web_search] == :standalone
       # not codex's business: the gateway applies it (see resolve_target)
       refute Keyword.has_key?(opts, :max_output_tokens)
       assert {:ok, %AI.Target{max_output_tokens: 4_096}} = AI.resolve_target()

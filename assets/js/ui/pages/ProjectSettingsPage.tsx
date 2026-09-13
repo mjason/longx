@@ -16,7 +16,7 @@ import { Textarea } from "@/ui/components/ui/textarea";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { t } from "@/ui/strings";
 
-type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "dirtyStart">> & {
+type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "webSearch" | "dirtyStart">> & {
   description: string;
   memoryLimitMb: string;
   modelId: string;
@@ -47,6 +47,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
     sandbox: project.sandbox,
     approvalPolicy: project.approvalPolicy,
     networkAccess: project.networkAccess,
+    webSearch: project.webSearch,
     dirtyStart: project.dirtyStart,
     memoryLimitMb: project.memoryLimitMb ? String(project.memoryLimitMb) : "",
     modelId: "__default",
@@ -66,6 +67,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
             sandbox: form.sandbox,
             approvalPolicy: form.approvalPolicy,
             networkAccess: form.networkAccess,
+            webSearch: form.webSearch,
             dirtyStart: form.dirtyStart,
             memoryLimitMb: form.memoryLimitMb ? Number(form.memoryLimitMb) : null,
             modelId: form.modelId === "__default" ? null : form.modelId,
@@ -143,6 +145,10 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         <div className="flex items-center justify-between gap-4">
           <Label htmlFor="ps-network">{t.network}</Label>
           <Switch id="ps-network" checked={form.networkAccess} onCheckedChange={(v) => set("networkAccess", v)} />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="ps-web-search">{t.webSearch}</Label>
+          <Switch id="ps-web-search" checked={form.webSearch} onCheckedChange={(v) => set("webSearch", v)} />
         </div>
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">{t.dirtyStart}</legend>

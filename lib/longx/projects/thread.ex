@@ -36,10 +36,13 @@ defmodule Longx.Projects.Thread do
       argument :sandbox, :atom,
         constraints: [one_of: [:read_only, :workspace_write, :danger_full_access]]
 
+      argument :network_access, :boolean
+      argument :web_search, :boolean
+
       run fn input, _ ->
         opts =
           input.arguments
-          |> Map.take([:model, :tools, :approval_policy, :sandbox])
+          |> Map.take([:model, :tools, :approval_policy, :sandbox, :network_access, :web_search])
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
         with {:ok, project} <- Ash.get(Longx.Projects.Project, input.arguments.project_id),
@@ -149,6 +152,7 @@ defmodule Longx.Projects.Thread do
         :approval_policy,
         :sandbox,
         :network_access,
+        :web_search,
         :tools,
         :forked_from_id
       ]
@@ -226,6 +230,9 @@ defmodule Longx.Projects.Thread do
 
     # the workspace-write sandbox has no network unless this is true
     attribute :network_access, :boolean, allow_nil?: false, default: false, public?: true
+
+    # codex's web.run offered to this thread (fixed at start: a thread/start config)
+    attribute :web_search, :boolean, allow_nil?: false, default: true, public?: true
 
     attribute :tools, {:array, :string}, allow_nil?: false, default: [], public?: true
 
