@@ -84,7 +84,8 @@ export function ProjectWindow() {
   const ctx: ProjectContext = { id: project.data.id, slug, name: project.data.name, rootPath: project.data.rootPath, sample };
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    // fixed height: the chat scrolls inside its own viewport, not the page
+    <div className="flex h-dvh flex-col">
       <TopBar
         wide
         title={project.data.name}
@@ -98,14 +99,14 @@ export function ProjectWindow() {
           </>
         }
       />
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {docked ? <ToolRail active={frame.tool} onToggle={frame.toggle} /> : null}
         {docked && frame.tool ? (
           <DockedPanel width={frame.panelWidth} onResize={frame.resize} title={t.tools[frame.tool]!} onClose={frame.close}>
             <ToolBody tool={frame.tool} ctx={ctx} />
           </DockedPanel>
         ) : null}
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
           <Outlet context={ctx} />
         </main>
       </div>

@@ -288,7 +288,8 @@ defmodule FakeAppServer do
 
   defp run_turn("approve " <> cmd, id, thread_id, turn_id, state) do
     start_turn(id, thread_id, turn_id, "approve " <> cmd)
-    request_id = "srv_#{state.next}"
+    # codex numbers its server → client requests (JSON-RPC integer ids)
+    request_id = state.next
 
     request(request_id, "item/commandExecution/requestApproval", %{
       "threadId" => thread_id,

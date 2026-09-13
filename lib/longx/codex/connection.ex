@@ -151,7 +151,7 @@ defmodule Longx.Codex.Connection do
            Shim.start_link(command, [env: env, cd: cd, stderr: :console] ++ shim_opts) do
       state = %State{
         shim: shim,
-        reader: spawn_link(fn -> read_loop(shim, conn, "") end),
+        reader: spawn_link(fn -> __MODULE__.read_loop(shim, conn, "") end),
         tag: Keyword.get(opts, :tag),
         started_at: DateTime.utc_now(),
         memory_limit: Keyword.get(shim_opts, :memory_limit),
@@ -219,7 +219,11 @@ defmodule Longx.Codex.Connection do
     {:reply, :ok, state}
   end
 
+  # codex numbers its requests; a client that carried the id through JSON /
+  # a form may hand it back as a string
   def handle_call({:respond, id, reply}, _from, %State{} = state) do
+    id = inbound_id(state.inbound, id)
+
     case Map.pop(state.inbound, id) do
       {nil, _} ->
         {:reply, {:error, :unknown_request}, state}
@@ -358,6 +362,7 @@ defmodule Longx.Codex.Connection do
     # while, and nobody should be handed a connection that is on its way out
     disown(state)
     fail_pending(state, {:error, :connection_reset})
+    withdraw_inbound(state)
     PubSub.broadcast(@pubsub, "codex:connection", {:codex_connection, state.tag, :down})
 
     if state.shim && Process.alive?(state.shim) do
@@ -494,24 +499,44 @@ defmodule Longx.Codex.Connection do
   defp thread_id_of(_method, _params), do: nil
 
   defp route_notification(method, %{"threadId" => thread_id} = params)
-       when is_binary(thread_id) do
-    {:ok, _} = ThreadState.ensure(thread_id)
-    ThreadState.ingest(thread_id, method, params)
-  end
+       when is_binary(thread_id),
+       do: ingest(thread_id, method, params)
 
-  defp route_notification("thread/started" = method, %{"thread" => %{"id" => thread_id}} = params) do
-    {:ok, _} = ThreadState.ensure(thread_id)
-    ThreadState.ingest(thread_id, method, params)
-  end
+  defp route_notification(
+         "thread/started" = method,
+         %{"thread" => %{"id" => thread_id}} = params
+       ),
+       do: ingest(thread_id, method, params)
 
   defp route_notification(method, params) do
     PubSub.broadcast(@pubsub, "codex:server", {:codex, method, params})
+  end
+
+  # the thread's writer being unavailable (its supervisor restarting) loses
+  # that one event, never the codex connection
+  defp ingest(thread_id, method, params) do
+    case ThreadState.ensure(thread_id) do
+      {:ok, _} ->
+        ThreadState.ingest(thread_id, method, params)
+
+      {:error, reason} ->
+        Logger.error("codex connection: dropping #{method} for #{thread_id}: #{inspect(reason)}")
+    end
   end
 
   defp put_in_thread(thread_id, id, method, params) do
     {:ok, _} = ThreadState.ensure(thread_id)
     ThreadState.put_request(thread_id, id, method, params)
   end
+
+  defp inbound_id(inbound, id) when is_binary(id) and not is_map_key(inbound, id) do
+    case Integer.parse(id) do
+      {int, ""} -> int
+      _ -> id
+    end
+  end
+
+  defp inbound_id(_inbound, id), do: id
 
   defp resolve_in_thread(nil, _id), do: :ok
 
@@ -577,8 +602,24 @@ defmodule Longx.Codex.Connection do
     :ok
   end
 
-  # Runs in its own process: Shim.read/3 blocks.
-  defp read_loop(shim, conn, buffer) do
+  # the approvals / questions this codex was waiting on: nobody can answer
+  # them any more, so they leave the threads' views (a resumed thread gets
+  # fresh ones from the new process if codex asks again)
+  defp withdraw_inbound(%State{inbound: inbound}) do
+    for {id, %{timer: timer, thread_id: thread_id}} <- inbound do
+      Process.cancel_timer(timer)
+      resolve_in_thread(thread_id, id)
+    end
+
+    :ok
+  end
+
+  # Runs in its own process: Shim.read/3 blocks. Public and recursing through
+  # a fully-qualified call so the loop moves to new code on a hot reload —
+  # a process lingering in purged code is killed, and that took codex down
+  # with every second recompile in dev (`Phoenix.CodeReloader`).
+  @doc false
+  def read_loop(shim, conn, buffer) do
     case Shim.read(shim) do
       {:ok, chunk} ->
         {lines, buffer} = Framing.split(buffer, chunk)
@@ -594,7 +635,7 @@ defmodule Longx.Codex.Connection do
           end
         end)
 
-        read_loop(shim, conn, buffer)
+        __MODULE__.read_loop(shim, conn, buffer)
 
       :eof ->
         send(conn, :reader_eof)

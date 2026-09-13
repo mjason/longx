@@ -87,6 +87,13 @@ React Native client planned on the same core code.
     `dirty: :commit | :ignore`), then `turn/start` (with `model:` if switching). The Tracker
     fills `status`/`completed_at`/`commit_after`/`diff` from `turn/completed` and
     `turn/diff/updated`, and the thread `preview` from the first user message.
+  - **Opening a thread** (`LongxWeb.ThreadChannel` join → `Projects.host_thread/1`): a
+    thread nobody hosts is resumed on its project's codex; an *empty* one codex cannot
+    resume (it only writes a thread to disk on its first turn) is started again under a
+    new codex id (`Thread` action `rehost`; the join reply carries the id to follow);
+    `:unrecoverable`/`:archived` threads join read-only. A resume (`ThreadState.backfill`)
+    and a dying connection (`Connection.terminate` → `withdraw_inbound`) both withdraw
+    pending approvals nobody can answer any more.
   - **When codex dies** (`Longx.Projects.Tracker` on `"codex:connection"`): `:down` → every
     `:in_progress` turn of that project fails with "codex restarted…", its `:active` threads
     become `:disconnected`; `:ready` → those are `thread/resume`d on the new process (→
@@ -268,9 +275,12 @@ React Native client planned on the same core code.
     holding every thread's materialised view; it is a long-lived process so the data outlives
     the per-thread writers, and swapping to DETS/Mnesia later touches only this module.
     `Longx.Codex.ThreadState` (Registry + DynamicSupervisor, one per live thread) is the
-    **single writer**: it folds each notification into the Store (deltas append in place,
-    `item/completed` replaces), allocates a strictly increasing `seq`, and broadcasts
-    `{:codex, seq, method, params}` on `"codex:thread:<id>"`. Reads (`snapshot/1`) go straight
+    **single writer**: it folds each notification into the Store (deltas append in place —
+    reasoning `summary`/`content` are `string[]` and `summaryIndex`/`contentIndex` name the
+    entry — `item/completed` replaces), allocates a strictly increasing `seq`, and broadcasts
+    `{:codex, seq, method, params}` on `"codex:thread:<id>"`; an event the Store cannot fold
+    is logged and dropped (one bad notification must never crash the writer for every delta
+    of a stream and escalate up the tree). Reads (`snapshot/1`) go straight
     to ETS — no process hop, works even when the writer is stopped, and a restarted writer
     continues the sequence. Pending server requests are in the view with a `"requestId"`.
     **Page refresh / late join protocol: `subscribe` → `snapshot` (has `seq`) → render → apply
@@ -360,9 +370,23 @@ React Native client planned on the same core code.
     (`ash_rpc.ts`, `ash_types.ts` — **generated** by `mix ash_typescript.codegen`, never
     edited; `codegen --check` runs in precommit), `rpcHooks.ts`, `socket.ts` (one Phoenix
     socket, status for the connection banner), `projectChannel.ts`, TanStack Query hooks
-    (`projects.ts`; `RpcFailure` carries field errors), formatters. Thread reducer, the
-    codex item → assistant-ui message mapping and the `ExternalStoreRuntime` adapter go
-    here too (branch ②).
+    (`projects.ts`; `RpcFailure` carries field errors; `useModels`), formatters, and
+    `core/chat/`: `thread.ts` (the client half of `Longx.Codex.ThreadState`: snapshot +
+    `applyEvent` with the same fold rules as the server's Store — deltas append, reasoning
+    `summary`/`content` are `string[]` addressed by `summaryIndex`/`contentIndex`,
+    `thread/reverted` drops turns, a `requestId` means a pending question), `threadChannel.ts`
+    (`thread:<codex id>`; the join reply's `thread_id` is authoritative — an empty thread
+    codex could not resume comes back under a new id), `useThreadView.ts`, `messages.ts`
+    (codex items → assistant-ui `ThreadMessageLike`: one assistant message per turn;
+    agentMessage/plan → text, reasoning → reasoning, commandExecution / fileChange /
+    webSearch / `ns.tool` → tool-call parts whose `args`/`result`/`artifact` are what the
+    renderers read, `displayCommand` strips codex's `zsh -lc '…'` wrapper; a pending
+    `*/requestApproval` rides on its part as assistant-ui's `approval` with the options
+    accept / accept_for_session / decline, and that message is `requires-action` — the only
+    state in which assistant-ui shows approval controls), `adapter.ts` (`buildAdapter` →
+    `ExternalStoreAdapter`: `onNew` → `sendMessage` (a `dirty_tree` RPC error asks
+    `onDirtyTree` for commit / ignore and resends), `onCancel` → `interruptTurn`,
+    `onRespondToToolApproval` → `respond` with the option id as the decision).
   - `js/ui/` — React DOM, **shaped like an IDE with the chat where the editor would be**
     (IDEA's interactions, not its looks): `pages/WelcomePage` (recent projects, search, one
     door to open/create), `pages/ProjectWizard` (two steps: `components/DirectoryPicker` on
@@ -387,7 +411,27 @@ React Native client planned on the same core code.
     bars cycles them; the CSS also honours `prefers-color-scheme` before JS runs),
     `core/viewport.ts` (phone < 768 ≤ tablet < 1024 ≤ desktop).
     The chat uses **assistant-ui** (`@assistant-ui/react`, `ExternalStoreRuntime`; it has an
-    official React Native package) — not AI Elements, not `useChat`. Headers and bars are
+    official React Native package) — not AI Elements, not `useChat`. **Do not hand-roll
+    chat UI**: use the assistant-ui skills (`.claude/skills/{elements,tools,primitives,
+    runtime,markdown,…}`, installed with `npx skills add assistant-ui/skills`) to find the
+    element, then `npx assistant-ui@latest add <item>` in `assets/` (answer "n" to
+    overwriting existing shadcn files). Elements land in
+    `js/ui/components/assistant-ui/elements/` (`*.aui.tsx` read the runtime, the rest are
+    props-driven) and are **source we own and adapt**: `thread.aui` (zh-CN strings, no
+    attachments/reload/edit until the runtime offers them), `tool-group.aui`, `reasoning`,
+    `markdown-text`, `tool-fallback.aui` (dynamic `ns.tool` calls), `terminal-block`
+    (`exitCode`/`exitLabel`/`fullCommand` instead of the demo's fixed "exit 0"),
+    `code-diff`, `web-search` (real urls), `approval-card` (labels/icon props) —
+    `surfaces.tsx` and `../utils/range.ts` are the registry's shared helpers. `ui/chat/`:
+    `ThreadPage` (route `/p/:slug/t/:threadId`; `useExternalStoreRuntime(buildAdapter(…))`
+    inside `AssistantRuntimeProvider` with `chatConfig`; per-turn model in `TurnBar`;
+    `DirtyTreeDialog`), `toolkit.tsx` (`defineToolkit` with `type: "backend"` renderers per
+    codex item type — `CommandExecutionTool`, `FileChangeTool` (`parseDiff`),
+    `WebSearchTool` — registered through `AuiConfig({ tools: Tools({ toolkit }) })`, so
+    they win over `ToolFallback` by name; approvals answer with
+    `respondToApproval({ optionId })`). Tool groups start **open** (what the agent ran is
+    the point of this UI). `ProjectWindow` is `h-dvh`: the thread scrolls in its own
+    viewport, never the page. Headers and bars are
     solid (`backdrop-blur` on sticky/fixed bars ghosted text in Chromium screenshots).
     After `npm install` adds packages while `mix phx.server` runs, restart it: Vite's
     dependency re-optimisation can otherwise load two copies of React ("Invalid hook call").

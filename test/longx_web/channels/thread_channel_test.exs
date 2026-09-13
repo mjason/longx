@@ -56,4 +56,68 @@ defmodule LongxWeb.ThreadChannelTest do
   test "joining an unknown thread is refused" do
     assert {:error, %{reason: "unknown thread"}} = join!("thr_nobody")
   end
+
+  describe "a project thread nobody hosts (codex stopped, page opened)" do
+    setup do
+      Ash.bulk_destroy!(Longx.Projects.Thread, :destroy, %{}, authorize?: false)
+      Ash.bulk_destroy!(Longx.Projects.Project, :destroy, %{}, authorize?: false)
+      dir = Path.join(System.tmp_dir!(), "longx-chan-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      project = Longx.Projects.create_project!(%{name: "Chan", root_path: dir})
+      {:ok, thread} = Longx.Projects.start_thread(project)
+      :ok = Longx.Codex.Pool.stop(project.id, force: true)
+
+      on_exit(fn ->
+        Longx.Test.PoolHelpers.stop_pool!([project.id])
+        File.rm_rf!(dir)
+      end)
+
+      %{project: project, thread: thread}
+    end
+
+    test "join resumes it on the project's codex and answers with its snapshot", %{
+      thread: thread,
+      project: project
+    } do
+      assert {:error, :no_connection} =
+               Longx.Codex.Pool.connection_for_thread(thread.codex_thread_id)
+
+      assert {:ok, %{thread_id: id, seq: _}, _socket} = join!(thread.codex_thread_id)
+      assert id == thread.codex_thread_id
+      assert {:ok, _} = Longx.Codex.Pool.connection_for_thread(thread.codex_thread_id)
+      assert Longx.Codex.Pool.status(project.id) != :stopped
+    end
+
+    test "an empty thread codex cannot resume is started afresh under a new codex id", %{
+      project: project
+    } do
+      # codex only writes a thread to disk on its first turn; after a restart
+      # an empty one cannot be resumed — nothing is lost by starting it again
+      {:ok, thread} =
+        Longx.Projects.create_thread(%{
+          codex_thread_id: "thr_vanished",
+          project_id: project.id,
+          cwd: project.root_path,
+          approval_policy: :on_request,
+          sandbox: :workspace_write,
+          tools: []
+        })
+
+      assert {:ok, %{thread_id: new_id}, _socket} = join!("thr_vanished")
+      assert new_id != "thr_vanished"
+
+      assert %{codex_thread_id: ^new_id, status: :idle} =
+               Ash.get!(Longx.Projects.Thread, thread.id)
+
+      assert {:ok, _} = Longx.Codex.Pool.connection_for_thread(new_id)
+    end
+
+    test "an unrecoverable thread still joins (read-only) instead of erroring", %{
+      thread: thread
+    } do
+      Longx.Projects.touch_thread!(thread, %{status: :unrecoverable})
+      assert {:ok, %{thread_id: id}, _socket} = join!(thread.codex_thread_id)
+      assert id == thread.codex_thread_id
+    end
+  end
 end

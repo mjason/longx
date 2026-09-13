@@ -222,6 +222,28 @@ defmodule Longx.Codex.ConnectionTest do
              })
   end
 
+  test "when the connection goes away, the approvals it was waiting on are withdrawn from the thread",
+       %{conn: conn} do
+    thread_id = start_thread(conn)
+
+    {:ok, _} =
+      Connection.request(conn, "turn/start", %{
+        "threadId" => thread_id,
+        "input" => [%{"type" => "text", "text" => "approve ls"}]
+      })
+
+    assert_receive {:codex, _, "item/commandExecution/requestApproval",
+                    %{"requestId" => request_id}},
+                   5_000
+
+    assert [%{id: ^request_id}] = ThreadState.snapshot(thread_id).pending_requests
+
+    # nobody can answer a request whose codex is gone: it must not linger in the UI
+    stop_supervised!(Connection)
+    assert_receive {:codex, _, "serverRequest/resolved", %{"requestId" => ^request_id}}, 5_000
+    assert ThreadState.snapshot(thread_id).pending_requests == []
+  end
+
   test "when codex dies: pending callers get :connection_reset, :down is broadcast, the process stops",
        %{conn: conn} do
     thread_id = start_thread(conn)

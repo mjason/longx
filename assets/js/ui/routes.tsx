@@ -1,4 +1,5 @@
 import type { RouteObject } from "react-router";
+import { ThreadPage } from "./chat/ThreadPage";
 import { ProjectWindow } from "./frame/ProjectWindow";
 import { ChatPlaceholder } from "./pages/ChatPlaceholder";
 import { NotFoundPage } from "./pages/Placeholder";
@@ -23,7 +24,7 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <ChatPlaceholder /> },
           { path: "settings", element: <ChatPlaceholder /> },
-          { path: "t/:threadId", element: <ChatPlaceholder /> },
+          { path: "t/:threadId", element: <ThreadPage /> },
         ],
       },
       { path: "/settings", element: <SettingsPage /> },

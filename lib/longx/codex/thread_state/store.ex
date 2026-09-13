@@ -91,16 +91,38 @@ defmodule Longx.Codex.ThreadState.Store do
     :ok
   end
 
-  @spec append(String.t(), String.t(), String.t(), String.t()) :: :ok
-  def append(thread_id, item_id, field, delta) do
+  # `index` = nil appends to a string field; an integer addresses one entry of
+  # a list field (reasoning `summary`/`content` are `string[]`, and codex names
+  # the entry with `summaryIndex`/`contentIndex`). A list field with no index
+  # extends its last entry.
+  @spec append(String.t(), String.t(), String.t(), String.t(), non_neg_integer | nil) :: :ok
+  def append(thread_id, item_id, field, delta, index \\ nil) do
     item =
       case :ets.lookup(@items, {thread_id, item_id}) do
         [{_, _, item}] -> item
         [] -> %{"id" => item_id, "type" => "unknown"}
       end
 
-    put_item(thread_id, Map.update(item, field, delta, &((&1 || "") <> delta)))
+    put_item(thread_id, Map.update(item, field, initial(delta, index), &extend(&1, delta, index)))
   end
+
+  defp initial(delta, nil), do: delta
+  defp initial(delta, index), do: extend([], delta, index)
+
+  defp extend(list, delta, nil) when is_list(list) do
+    case Enum.reverse(list) do
+      [last | rest] when is_binary(last) -> Enum.reverse([last <> delta | rest])
+      _ -> list ++ [delta]
+    end
+  end
+
+  defp extend(list, delta, index) when is_list(list) do
+    padded = list ++ List.duplicate("", max(index + 1 - length(list), 0))
+    List.update_at(padded, index, &((&1 || "") <> delta))
+  end
+
+  defp extend(current, delta, nil), do: (current || "") <> delta
+  defp extend(current, delta, index), do: extend(List.wrap(current), delta, index)
 
   ## requests
 
@@ -159,11 +181,11 @@ defmodule Longx.Codex.ThreadState.Store do
   def fold(t, "item/agentMessage/delta", %{"itemId" => id, "delta" => d}),
     do: append(t, id, "text", d)
 
-  def fold(t, "item/reasoning/summaryTextDelta", %{"itemId" => id, "delta" => d}),
-    do: append(t, id, "summary", d)
+  def fold(t, "item/reasoning/summaryTextDelta", %{"itemId" => id, "delta" => d} = p),
+    do: append(t, id, "summary", d, p["summaryIndex"])
 
-  def fold(t, "item/reasoning/textDelta", %{"itemId" => id, "delta" => d}),
-    do: append(t, id, "content", d)
+  def fold(t, "item/reasoning/textDelta", %{"itemId" => id, "delta" => d} = p),
+    do: append(t, id, "content", d, p["contentIndex"])
 
   def fold(t, "item/commandExecution/outputDelta", %{"itemId" => id, "delta" => d}),
     do: append(t, id, "aggregatedOutput", d)

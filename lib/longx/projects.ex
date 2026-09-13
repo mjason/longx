@@ -33,6 +33,7 @@ defmodule Longx.Projects do
       rpc_action :list_threads, :for_project
       rpc_action :start_thread, :start_thread
       rpc_action :send_message, :send_message
+      rpc_action :interrupt_turn, :interrupt_turn
       rpc_action :respond, :respond
       rpc_action :rename_thread, :rename
       rpc_action :archive_thread, :archive
@@ -59,6 +60,7 @@ defmodule Longx.Projects do
       define :rename_thread, action: :rename
       define :archive_thread, action: :archive
       define :get_thread_by_codex_id, action: :by_codex_id, args: [:codex_thread_id]
+      define :rehost_thread, action: :rehost
       define :list_threads_for_project, action: :for_project, args: [:project_id]
       define :list_threads_with_status, action: :with_status, args: [:project_id, :status]
     end
@@ -192,6 +194,70 @@ defmodule Longx.Projects do
 
       broadcast_changed(thread.project_id)
       {:ok, turn}
+    end
+  end
+
+  @doc """
+  Makes sure some codex hosts the thread with this codex id — what a page
+  opening the thread needs before it can subscribe: resumes it on the
+  project's codex when nobody hosts it (after a restart), like
+  `send_message/3` does lazily. Answers with the codex id to subscribe to:
+  an empty thread codex cannot resume (it only writes a thread to disk on
+  its first turn) is started again, so the id may be a new one. A thread
+  codex can no longer know (`:unrecoverable`, `:archived`) keeps its id:
+  nothing to resume, but its last view (if any) may still be shown.
+  `{:error, :unknown_thread}` when we never heard of it.
+  """
+  @spec host_thread(String.t()) :: {:ok, String.t()} | {:error, term}
+  def host_thread(codex_thread_id) do
+    case get_thread_by_codex_id(codex_thread_id, load: [:project, :turns]) do
+      {:ok, %Thread{status: status}} when status in [:unrecoverable, :archived] ->
+        {:ok, codex_thread_id}
+
+      {:ok, %Thread{} = thread} ->
+        case resume_or_restart(thread) do
+          {:ok, %Thread{codex_thread_id: id}} -> {:ok, id}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, _} ->
+        {:error, :unknown_thread}
+    end
+  end
+
+  defp resume_or_restart(%Thread{turns: []} = thread) do
+    case resume_on_pool(thread) do
+      {:ok, _conn} -> {:ok, thread}
+      {:error, _reason} -> restart_empty_thread(thread)
+    end
+  end
+
+  defp resume_or_restart(thread) do
+    case resume_on_pool(thread) do
+      {:ok, _conn} -> {:ok, thread}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # the same start as start_thread/2, with what the row recorded
+  defp restart_empty_thread(%Thread{project: project} = thread) do
+    with {:ok, model_opts} <- Longx.AI.thread_options(thread.model_slug),
+         {:ok, conn} <- project_connection(project, []),
+         codex_opts =
+           [
+             cwd: thread.cwd,
+             approval_policy: thread.approval_policy,
+             sandbox: thread.sandbox,
+             tools: thread.tools,
+             network_access: project.network_access,
+             conn: conn
+           ]
+           |> Keyword.merge(model_opts),
+         {:ok, codex_thread_id} <- Longx.Codex.Thread.start(codex_opts) do
+      thread = rehost_thread!(thread, %{codex_thread_id: codex_thread_id})
+      :ok = Tracker.track(codex_thread_id)
+      broadcast_changed(project.id)
+      {:ok, thread}
     end
   end
 

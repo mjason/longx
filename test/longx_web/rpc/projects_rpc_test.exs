@@ -154,6 +154,18 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"threadId" => thread_id, "text" => "say hi"}
                })
 
+      # the turn in flight can be stopped from the composer; a stale id is an error, not a crash
+      %{"success" => true, "data" => [%{"codexTurnId" => codex_turn_id}]} =
+        rpc(conn, "list_turns", %{
+          "fields" => ["codexTurnId"],
+          "input" => %{"threadId" => thread_id}
+        })
+
+      assert %{"success" => true} =
+               rpc(conn, "interrupt_turn", %{
+                 "input" => %{"threadId" => thread_id, "codexTurnId" => codex_turn_id}
+               })
+
       assert %{"success" => true, "data" => [%{"id" => ^thread_id}]} =
                rpc(conn, "list_threads", %{
                  "fields" => ["id"],
@@ -179,6 +191,91 @@ defmodule LongxWeb.ProjectsRpcTest do
                rpc(conn, "codex_info", %{
                  "fields" => ["worker"],
                  "input" => %{"id" => project["id"]}
+               })
+    end
+  end
+
+  describe "approvals" do
+    test "respond answers codex's (integer) request id given as the string the client has", %{
+      conn: conn,
+      dir: dir
+    } do
+      project = create!(conn, dir)
+      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
+
+      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
+        rpc(conn, "start_thread", %{
+          "fields" => ["id", "codexThreadId"],
+          "input" => %{"projectId" => project["id"]}
+        })
+
+      :ok = Longx.Codex.Thread.subscribe(codex_id)
+
+      %{"success" => true} =
+        rpc(conn, "send_message", %{
+          "fields" => ["id"],
+          "input" => %{"threadId" => thread_id, "text" => "approve make"}
+        })
+
+      assert_receive {:codex, _, "item/commandExecution/requestApproval",
+                      %{"requestId" => request_id}},
+                     10_000
+
+      assert is_integer(request_id)
+
+      assert %{"success" => true} =
+               rpc(conn, "respond", %{
+                 "input" => %{
+                   "threadId" => thread_id,
+                   "requestId" => Integer.to_string(request_id),
+                   "decision" => "accept"
+                 }
+               })
+
+      assert_receive {:codex, _, "serverRequest/resolved", %{"requestId" => ^request_id}}, 5_000
+      assert_receive {:codex, _, "turn/completed", _}, 10_000
+
+      # answering twice (or a stale id) is an error, not a crash
+      assert %{"success" => false} =
+               rpc(conn, "respond", %{
+                 "input" => %{
+                   "threadId" => thread_id,
+                   "requestId" => Integer.to_string(request_id),
+                   "decision" => "accept"
+                 }
+               })
+    end
+  end
+
+  describe "dirty tree" do
+    test "send_message on a dirty :ask project is a structured error the UI can act on", %{
+      conn: conn,
+      dir: dir
+    } do
+      project = create!(conn, dir, %{"initGit" => true, "dirtyStart" => "ask"})
+      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
+      File.write!(Path.join(dir, "a.txt"), "changed")
+
+      %{"success" => true, "data" => %{"id" => thread_id}} =
+        rpc(conn, "start_thread", %{
+          "fields" => ["id"],
+          "input" => %{"projectId" => project["id"]}
+        })
+
+      assert %{"success" => false, "errors" => [error]} =
+               rpc(conn, "send_message", %{
+                 "fields" => ["id"],
+                 "input" => %{"threadId" => thread_id, "text" => "go"}
+               })
+
+      assert %{"type" => "dirty_tree", "details" => %{"changes" => [%{"path" => "a.txt"}]}} =
+               error
+
+      # the override goes through
+      assert %{"success" => true} =
+               rpc(conn, "send_message", %{
+                 "fields" => ["id"],
+                 "input" => %{"threadId" => thread_id, "text" => "go", "dirty" => "ignore"}
                })
     end
   end

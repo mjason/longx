@@ -1,0 +1,135 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, test, vi } from "vitest";
+import type { ToolCallMessagePartProps } from "@assistant-ui/react";
+import { CommandExecutionTool, FileChangeTool, WebSearchTool, parseDiff } from "./toolkit";
+
+// A tool-call part as assistant-ui hands it to a renderer (the parts we read).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function part(over: Partial<ToolCallMessagePartProps>): any {
+  return {
+    type: "tool-call",
+    toolCallId: "c1",
+    toolName: "commandExecution",
+    args: {},
+    argsText: "{}",
+    result: undefined,
+    isError: undefined,
+    status: { type: "running" },
+    addResult: () => {},
+    resume: () => {},
+    respondToApproval: async () => {},
+    ...over,
+  } as ToolCallMessagePartProps;
+}
+
+const APPROVAL = {
+  id: "42",
+  prompt: "允许执行这条命令？",
+  display: "select" as const,
+  options: [
+    { id: "accept", kind: "allow-once" as const, label: "允许" },
+    { id: "accept_for_session", kind: "allow-always" as const, label: "本会话都允许" },
+    { id: "decline", kind: "reject-once" as const, label: "拒绝" },
+  ],
+};
+
+describe("CommandExecutionTool", () => {
+  test("streams output while running, shows the exit code when done", () => {
+    const { rerender } = render(
+      <CommandExecutionTool {...part({ args: { command: "mix test", cwd: "/p" }, artifact: "line 1\nline 2" })} />,
+    );
+    expect(screen.getByText("mix test")).toBeInTheDocument();
+    expect(screen.getByText("line 2")).toBeInTheDocument();
+
+    rerender(
+      <CommandExecutionTool
+        {...part({
+          args: { command: "mix test", cwd: "/p" },
+          status: { type: "complete" },
+          result: { status: "completed", exitCode: 3, output: "boom", durationMs: 10 },
+          isError: true,
+        })}
+      />,
+    );
+    expect(screen.getByText("exit 3")).toBeInTheDocument();
+    expect(screen.getByText("boom")).toBeInTheDocument();
+  });
+
+  test("a pending approval offers allow / allow-for-session / deny and answers with the option id", async () => {
+    const respondToApproval = vi.fn(async () => {});
+    render(
+      <CommandExecutionTool
+        {...part({ args: { command: "rm -rf build", cwd: "/p" }, status: { type: "requires-action", reason: "interrupt" }, approval: APPROVAL, respondToApproval })}
+      />,
+    );
+    expect(screen.getByText("允许执行这条命令？")).toBeInTheDocument();
+    expect(screen.getAllByText("rm -rf build").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "本会话都允许" }));
+    expect(respondToApproval).toHaveBeenCalledWith({ optionId: "accept_for_session" });
+    // one answer per request: the buttons go dead once one is sent
+    fireEvent.click(screen.getByRole("button", { name: "拒绝" }));
+    expect(respondToApproval).toHaveBeenCalledTimes(1);
+  });
+
+  test("a declined command says so instead of an exit code", () => {
+    render(
+      <CommandExecutionTool
+        {...part({ args: { command: "rm -rf /", cwd: "/p" }, status: { type: "complete" }, result: { status: "declined", exitCode: null, output: "" }, isError: true })}
+      />,
+    );
+    expect(screen.getByText("已拒绝")).toBeInTheDocument();
+  });
+});
+
+describe("FileChangeTool", () => {
+  const changes = [
+    { path: "lib/a.ex", kind: { type: "update" }, diff: "@@ -1,2 +1,2 @@\n-old\n+new\n same\n" },
+    { path: "lib/b.ex", kind: { type: "add" }, diff: "@@ -0,0 +1 @@\n+hello\n" },
+  ];
+
+  test("parseDiff classifies lines and counts +/-", () => {
+    const parsed = parseDiff("--- a\n+++ b\n@@ -1,2 +1,2 @@\n-old\n+new\n same\n");
+    expect(parsed.lines.map((l) => l.kind)).toEqual(["context", "removed", "added", "context"]);
+    expect(parsed).toMatchObject({ additions: 1, deletions: 1 });
+  });
+
+  test("renders one diff per file with the change counts", () => {
+    render(<FileChangeTool {...part({ toolName: "fileChange", args: { changes }, status: { type: "complete" }, result: { status: "completed", output: "" } })} />);
+    expect(screen.getByText("2 个文件改动")).toBeInTheDocument();
+    expect(screen.getByText("lib/a.ex")).toBeInTheDocument();
+    expect(screen.getByText("+ lib/b.ex")).toBeInTheDocument();
+    expect(screen.getByText("new")).toBeInTheDocument();
+  });
+
+  test("a pending approval lists the files and answers", () => {
+    const respondToApproval = vi.fn(async () => {});
+    render(
+      <FileChangeTool
+        {...part({ toolName: "fileChange", args: { changes }, status: { type: "requires-action", reason: "interrupt" }, approval: { ...APPROVAL, prompt: "允许修改这些文件？" }, respondToApproval })}
+      />,
+    );
+    expect(screen.getByText("允许修改这些文件？")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "允许" }));
+    expect(respondToApproval).toHaveBeenCalledWith({ optionId: "accept" });
+  });
+});
+
+describe("WebSearchTool", () => {
+  test("shows the query, then the sources as links", () => {
+    const { rerender } = render(<WebSearchTool {...part({ toolName: "webSearch", args: { query: "elixir 1.19" } })} />);
+    expect(screen.getByText("elixir 1.19")).toBeInTheDocument();
+    expect(screen.getByText("搜索中…")).toBeInTheDocument();
+    rerender(
+      <WebSearchTool
+        {...part({
+          toolName: "webSearch",
+          args: { query: "elixir 1.19" },
+          status: { type: "complete" },
+          result: { results: [{ title: "Elixir 1.19 released", url: "https://elixir-lang.org/blog/1-19" }] },
+        })}
+      />,
+    );
+    expect(screen.getByText("读了 1 个来源")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Elixir 1.19 released/ })).toHaveAttribute("href", "https://elixir-lang.org/blog/1-19");
+  });
+});

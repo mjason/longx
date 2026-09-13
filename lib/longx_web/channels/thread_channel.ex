@@ -10,18 +10,34 @@ defmodule LongxWeb.ThreadChannel do
   use Phoenix.Channel
 
   alias Longx.Codex.{Pool, ThreadState}
+  alias Longx.Projects
 
+  # A thread some codex hosts (ad-hoc connections included) joins directly;
+  # a project thread nobody hosts is resumed on its project's codex first
+  # (an empty one is started again — the snapshot then carries the new id,
+  # which is what the client follows from there); a thread codex can no
+  # longer know still shows its last view, read-only.
   @impl true
   def join("thread:" <> thread_id, _payload, socket) do
-    case Pool.connection_for_thread(thread_id) do
-      {:ok, _conn} ->
-        :ok = ThreadState.subscribe(thread_id)
-        {:ok, ThreadState.snapshot(thread_id), assign(socket, :thread_id, thread_id)}
+    case host(thread_id) do
+      {:ok, current_id} ->
+        :ok = ThreadState.subscribe(current_id)
+        {:ok, ThreadState.snapshot(current_id), assign(socket, :thread_id, current_id)}
 
-      {:error, :no_connection} ->
-        {:error, %{reason: "unknown thread"}}
+      {:error, reason} ->
+        {:error, %{reason: describe(reason)}}
     end
   end
+
+  defp host(thread_id) do
+    case Pool.connection_for_thread(thread_id) do
+      {:ok, _conn} -> {:ok, thread_id}
+      {:error, :no_connection} -> Projects.host_thread(thread_id)
+    end
+  end
+
+  defp describe(:unknown_thread), do: "unknown thread"
+  defp describe(reason), do: "cannot open thread: #{inspect(reason)}"
 
   @impl true
   def handle_in("snapshot", _payload, socket) do

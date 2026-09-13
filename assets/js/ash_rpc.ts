@@ -2169,6 +2169,75 @@ export async function validateListThreads(
 }
 
 
+export type InterruptTurnInput = {
+  threadId: UUID;
+  codexTurnId: string;
+};
+
+export type InferInterruptTurnResult = {};
+
+export type InterruptTurnResult = | { success: true; data: InferInterruptTurnResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function interruptTurn(
+  config: {
+  tenant?: string;
+  input: InterruptTurnInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<InterruptTurnResult> {
+  const payload = {
+    action: "interrupt_turn",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<InterruptTurnResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateInterruptTurn(
+  config: {
+  tenant?: string;
+  input: InterruptTurnInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "interrupt_turn",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type RenameThreadInput = {
   title?: string | null;
 };
