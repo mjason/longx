@@ -28,7 +28,9 @@ type FileChange = { path: string; kind?: { type?: string; move_path?: string | n
 type FileChangeArgs = { changes?: FileChange[] };
 type FileChangeResult = { status: string; output: string };
 
-type WebSearchArgs = { query?: string };
+// codex records every web.run call as a webSearch item; the action says what it was
+type WebSearchAction = { type: "search"; query?: string | null; queries?: string[] | null } | { type: "openPage"; url?: string | null } | { type: "findInPage"; url?: string | null; pattern?: string | null } | { type: string };
+type WebSearchArgs = { query?: string; action?: WebSearchAction | null };
 type WebSearchResult = { results?: { title?: string; url?: string }[] | null };
 
 const APPROVAL_LABELS: ApprovalLabels = { allowOnce: t.allowOnce, alwaysAllow: t.allowSession, deny: t.deny };
@@ -199,10 +201,18 @@ export function parseDiff(diff: string): { lines: DiffLine[]; additions: number;
 export const WebSearchTool: ToolCallMessagePartComponent<WebSearchArgs, WebSearchResult> = (p) => {
   const results = (p.result?.results ?? []).filter((r) => typeof r?.url === "string").map((r) => ({ title: r.title ?? "", url: r.url! }));
   const searching = p.result === undefined && p.status.type === "running";
-  const query = p.args.query ?? "";
+  const action = p.args.action;
+  const kind = action?.type === "openPage" ? "open" : action?.type === "findInPage" ? "find" : "search";
+  const query =
+    kind === "open"
+      ? ((action as { url?: string | null }).url ?? p.args.query ?? "")
+      : kind === "find"
+        ? ((action as { pattern?: string | null }).pattern ?? p.args.query ?? "")
+        : (p.args.query ?? "");
+  const labels = kind === "open" ? [t.readPage, t.readingPage] : kind === "find" ? [t.foundInPage, t.findingInPage] : [t.searchedWeb, t.searching];
   return (
-    <ToolRow label={t.searchedWeb} activeLabel={t.searching} query={query} running={searching} failed={p.isError === true} testId="tool-web-search">
-      <WebSearch query={query} results={results} searching={searching} searchingLabel={t.searching} readLabel={t.readSources(results.length)} className="max-w-none" />
+    <ToolRow label={labels[0]!} activeLabel={labels[1]!} query={query} running={searching} failed={p.isError === true} testId="tool-web-search">
+      <WebSearch query={query} results={results} searching={searching} searchingLabel={labels[1]!} readLabel={kind === "search" ? t.readSources(results.length) : t.pageRead} className="max-w-none" />
     </ToolRow>
   );
 };

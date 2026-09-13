@@ -7,15 +7,17 @@
 import { createMessageQueue, useExternalStoreRuntime, type AppendMessage, type AssistantRuntime } from "@assistant-ui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { archiveThread, renameThread } from "@/ash_rpc";
+import { archiveThread, deleteThread, renameThread } from "@/ash_rpc";
 import { queryKeys, unwrap, useStartThread, useThreads } from "@/core/projects";
-import { buildAdapter, type DirtyChange, type DirtyDecision, type ThreadTarget } from "./adapter";
+import { buildAdapter, type AccessMode, type DirtyChange, type DirtyDecision, type ThreadTarget } from "./adapter";
 import { runningTurnId, type ThreadView } from "./thread";
 import { buildThreadListAdapter, type ThreadRow } from "./threadList";
 import { useThreadView } from "./useThreadView";
 
 export type CodexRuntimeOptions = {
   projectId: string;
+  /** the project's defaults: what a new chat starts with */
+  defaults: AccessMode;
   /** the thread row id from the route; undefined = new chat (the first message creates one) */
   threadId: string | undefined;
   onOpenThread: (threadId: string) => void;
@@ -37,13 +39,16 @@ export type CodexRuntime = {
   disabledReason: string | null;
   model: string | null;
   setModel: (slug: string | null) => void;
+  /** the access mode the next turn runs with */
+  mode: AccessMode;
+  setMode: (mode: AccessMode) => void;
 };
 
 // statuses that end a thread for good vs. a codex on its way back
 const CLOSED = new Set(["unrecoverable", "archived"]);
 
 export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
-  const { projectId, threadId, onOpenThread, onDirtyTree } = opts;
+  const { projectId, defaults, threadId, onOpenThread, onDirtyTree } = opts;
   const client = useQueryClient();
   const threads = useThreads(projectId);
   const rows = useMemo(() => (threads.data ?? []) as ThreadRow[], [threads.data]);
@@ -52,15 +57,28 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   const [model, setModel] = useState<string | null>(null);
   const start = useStartThread(projectId);
 
-  // the model choice is per thread
+  // the model choice is per thread; the mode starts from what the thread
+  // runs with (the row) and is only overridden by an explicit choice
   useEffect(() => setModel(null), [threadId]);
+  const [modeOverride, setModeOverride] = useState<{ threadId: string | undefined; mode: AccessMode } | null>(null);
+  const rowMode: AccessMode | null = thread
+    ? {
+        sandbox: thread.sandbox as AccessMode["sandbox"],
+        approvalPolicy: thread.approvalPolicy as AccessMode["approvalPolicy"],
+        networkAccess: thread.networkAccess ?? false,
+        webSearch: thread.webSearch ?? true,
+      }
+    : null;
+  const mode = modeOverride && modeOverride.threadId === threadId ? modeOverride.mode : (rowMode ?? defaults);
+  const setMode = useCallback((next: AccessMode) => setModeOverride({ threadId, mode: next }), [threadId]);
 
   const invalidate = useCallback(() => client.invalidateQueries({ queryKey: queryKeys.threads(projectId) }), [client, projectId]);
 
+  // a new chat starts in the mode picked in the rail (web search is start-only)
   const createThread = useCallback(async (): Promise<ThreadTarget> => {
-    const row = await start.mutateAsync();
+    const row = await start.mutateAsync(mode);
     return { threadId: row.id, codexThreadId: row.codexThreadId };
-  }, [start]);
+  }, [start, mode]);
 
   const threadList = useMemo(
     () =>
@@ -77,6 +95,10 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
           },
           archive: async (id) => {
             unwrap(await archiveThread({ identity: id }));
+            await invalidate();
+          },
+          delete: async (id) => {
+            unwrap(await deleteThread({ input: { threadId: id } }));
             await invalidate();
           },
         },
@@ -106,6 +128,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         target,
         view,
         model,
+        mode,
         disabled: disabledReason !== null,
         sendDisabled: thread?.status === "disconnected" || (thread !== undefined && !ready),
         loading: thread !== undefined && !ready && !error,
@@ -117,7 +140,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         queue: queue.adapter,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [target?.threadId, target?.codexThreadId, view, model, disabledReason, thread?.status, ready, error, createThread, onSent, onDirtyTree, refetch, threadList, queue],
+    [target?.threadId, target?.codexThreadId, view, model, mode, disabledReason, thread?.status, ready, error, createThread, onSent, onDirtyTree, refetch, threadList, queue],
   );
   onNewRef.current = adapter.onNew;
   const runtime = useExternalStoreRuntime(adapter);
@@ -143,5 +166,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     disabledReason,
     model,
     setModel,
+    mode,
+    setMode,
   };
 }

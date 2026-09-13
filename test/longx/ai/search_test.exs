@@ -36,7 +36,7 @@ defmodule Longx.AI.SearchTest do
     "results" => [
       %{
         "title" => "Elixir 1.19 released",
-        "url" => "https://elixir-lang.org/blog/1.19",
+        "url" => "http://127.0.0.1:1/blog/1.19",
         "content" => "Elixir 1.19 ships type inference...",
         "score" => 0.91,
         "published_date" => "2026-06-01"
@@ -85,7 +85,7 @@ defmodule Longx.AI.SearchTest do
       # the model sees reference ids, titles, urls and snippets
       assert output =~ "turn0search0"
       assert output =~ "Elixir 1.19 released"
-      assert output =~ "https://elixir-lang.org/blog/1.19"
+      assert output =~ "http://127.0.0.1:1/blog/1.19"
       assert output =~ "type inference"
       assert output =~ "2026-06-01"
 
@@ -96,7 +96,7 @@ defmodule Longx.AI.SearchTest do
                  query: "elixir 1.19 release",
                  ref_id: "turn0search0",
                  title: "Elixir 1.19 released",
-                 url: "https://elixir-lang.org/blog/1.19"
+                 url: "http://127.0.0.1:1/blog/1.19"
                }
                | _
              ] = results
@@ -192,7 +192,7 @@ defmodule Longx.AI.SearchTest do
       Bypass.expect_once(bypass, "POST", "/extract", fn conn ->
         {:ok, raw, conn} = Plug.Conn.read_body(conn)
 
-        assert %{"urls" => ["https://elixir-lang.org/blog/1.19"], "format" => "markdown"} =
+        assert %{"urls" => ["http://127.0.0.1:1/blog/1.19"], "format" => "markdown"} =
                  Jason.decode!(raw)
 
         conn
@@ -202,7 +202,7 @@ defmodule Longx.AI.SearchTest do
           Jason.encode!(%{
             "results" => [
               %{
-                "url" => "https://elixir-lang.org/blog/1.19",
+                "url" => "http://127.0.0.1:1/blog/1.19",
                 "raw_content" => "# Elixir 1.19\n\nBig release."
               }
             ],
@@ -226,30 +226,81 @@ defmodule Longx.AI.SearchTest do
         )
 
       assert output =~ "Big release."
-      assert output =~ "https://elixir-lang.org/blog/1.19"
-      assert [%{type: "open", url: "https://elixir-lang.org/blog/1.19"}] = results
+      assert output =~ "http://127.0.0.1:1/blog/1.19"
+      assert [%{type: "open", url: "http://127.0.0.1:1/blog/1.19"}] = results
     end
 
-    test "opens a bare URL directly", %{bypass: bypass, target: target} do
+    test "opens a bare URL by fetching it ourselves — no search provider involved", %{
+      bypass: bypass,
+      target: target
+    } do
+      site = Bypass.open()
+
+      Bypass.expect_once(site, "GET", "/page", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.send_resp(
+          200,
+          "<html><title>Hex</title><body><main><p>hex packages</p></main></body></html>"
+        )
+      end)
+
+      # Tavily must not be asked
+      Bypass.stub(bypass, "POST", "/extract", fn conn -> Plug.Conn.send_resp(conn, 500, "no") end)
+      url = "http://localhost:#{site.port}/page"
+
+      {:ok, %{output: output, results: [result]}} =
+        Search.run(%{"id" => "t", "commands" => %{"open" => [%{"ref_id" => url}]}}, target)
+
+      assert output =~ "hex packages"
+      assert output =~ "Hex"
+      assert %{type: "open", url: ^url, title: "Hex"} = result
+
+      # and it works with no search provider configured at all
+      Bypass.expect_once(site, "GET", "/page", fn conn ->
+        conn |> Plug.Conn.put_resp_content_type("text/plain") |> Plug.Conn.send_resp(200, "plain")
+      end)
+
+      {:ok, %{output: output2}} =
+        Search.run(%{"id" => "t2", "commands" => %{"open" => [%{"ref_id" => url}]}}, nil)
+
+      assert output2 =~ "plain"
+    end
+
+    test "when our fetch fails the search provider's extractor is the fallback; without one the failure is reported",
+         %{bypass: bypass, target: target} do
+      site = Bypass.open()
+      Bypass.expect(site, "GET", "/blocked", fn conn -> Plug.Conn.send_resp(conn, 403, "bot") end)
+      url = "http://localhost:#{site.port}/blocked"
+
       Bypass.expect_once(bypass, "POST", "/extract", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(
           200,
           Jason.encode!(%{
-            "results" => [%{"url" => "https://hex.pm", "raw_content" => "hex"}],
+            "results" => [%{"url" => url, "raw_content" => "via tavily"}],
             "failed_results" => []
           })
         )
       end)
 
       {:ok, %{output: output}} =
-        Search.run(
-          %{"id" => "t", "commands" => %{"open" => [%{"ref_id" => "https://hex.pm"}]}},
-          target
-        )
+        Search.run(%{"id" => "t", "commands" => %{"open" => [%{"ref_id" => url}]}}, target)
 
-      assert output =~ "hex"
+      assert output =~ "via tavily"
+
+      {:ok, %{output: output2, results: []}} =
+        Search.run(%{"id" => "t", "commands" => %{"open" => [%{"ref_id" => url}]}}, nil)
+
+      assert output2 =~ "403"
+    end
+
+    test "search_query without a search provider says so instead of failing" do
+      {:ok, %{output: output, results: []}} =
+        Search.run(%{"id" => "t", "commands" => %{"search_query" => [%{"q" => "elixir"}]}}, nil)
+
+      assert output =~ "no search provider"
     end
 
     test "an unknown ref_id is reported, not fetched", %{target: target} do

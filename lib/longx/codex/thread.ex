@@ -221,6 +221,32 @@ defmodule Longx.Codex.Thread do
     |> put_model(Keyword.get(opts, :model))
     |> put_if("effort", Keyword.get(opts, :effort))
     |> put_if("summary", opts |> Keyword.get(:summary) |> wire_atom())
+    |> put_if(
+      "approvalPolicy",
+      opts |> Keyword.get(:approval_policy) |> then(&(&1 && Map.fetch!(@approval_policies, &1)))
+    )
+    |> put_if("sandboxPolicy", sandbox_policy(opts))
+  end
+
+  # turn/start's SandboxPolicy (the structured form; thread/start takes the
+  # kebab-case name) — codex keeps it for the turns after this one too
+  defp sandbox_policy(opts) do
+    case Keyword.get(opts, :sandbox) do
+      nil ->
+        nil
+
+      :read_only ->
+        %{"type" => "readOnly"}
+
+      :danger_full_access ->
+        %{"type" => "dangerFullAccess"}
+
+      :workspace_write ->
+        %{
+          "type" => "workspaceWrite",
+          "networkAccess" => Keyword.get(opts, :network_access, false)
+        }
+    end
   end
 
   @doc false

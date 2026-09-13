@@ -169,6 +169,21 @@ describe("QuestionsTool", () => {
 });
 
 describe("WebSearchTool", () => {
+  test("an openPage action reads as a fetch, not a search", () => {
+    render(
+      <WebSearchTool
+        {...part({
+          toolName: "webSearch",
+          args: { query: "https://x.dev/docs", action: { type: "openPage", url: "https://x.dev/docs" } },
+          status: { type: "complete" },
+          result: { results: [{ type: "open", url: "https://x.dev/docs", title: "Docs" }] },
+        })}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /读取了/ })).toBeInTheDocument();
+    expect(screen.queryByText(/搜索了/)).not.toBeInTheDocument();
+  });
+
   test("shows the query, then the sources as links", () => {
     const { rerender } = render(<WebSearchTool {...part({ toolName: "webSearch", args: { query: "elixir 1.19" } })} />);
     expect(screen.getAllByText("elixir 1.19").length).toBeGreaterThan(0);

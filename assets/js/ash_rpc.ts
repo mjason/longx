@@ -1402,6 +1402,7 @@ export type CreateProjectInput = {
   tools?: Array<string>;
   dirtyStart?: "ask" | "commit" | "off";
   networkAccess?: boolean;
+  webSearch?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
   initGit?: boolean | null;
@@ -1944,6 +1945,7 @@ export type UpdateProjectInput = {
   tools?: Array<string>;
   dirtyStart?: "ask" | "commit" | "off";
   networkAccess?: boolean;
+  webSearch?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
 };
@@ -2153,6 +2155,74 @@ export async function validateArchiveThread(
     action: "archive_thread",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     identity: config.identity
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type DeleteThreadInput = {
+  threadId: UUID;
+};
+
+export type InferDeleteThreadResult = {};
+
+export type DeleteThreadResult = | { success: true; data: InferDeleteThreadResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function deleteThread(
+  config: {
+  tenant?: string;
+  input: DeleteThreadInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DeleteThreadResult> {
+  const payload = {
+    action: "delete_thread",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<DeleteThreadResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateDeleteThread(
+  config: {
+  tenant?: string;
+  input: DeleteThreadInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "delete_thread",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
   };
 
   return executeValidationRpcRequest<ValidationResult>(
@@ -2461,6 +2531,9 @@ export type SendMessageInput = {
   text: string;
   model?: string | null;
   dirty?: "commit" | "ignore" | null;
+  sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
+  approvalPolicy?: "never" | "on_request" | "untrusted" | null;
+  networkAccess?: boolean | null;
 };
 
 export type SendMessageFields = UnifiedFieldSelection<TurnResourceSchema>[];
@@ -2539,6 +2612,8 @@ export type StartThreadInput = {
   tools?: Array<string> | null;
   approvalPolicy?: "never" | "on_request" | "untrusted" | null;
   sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
+  networkAccess?: boolean | null;
+  webSearch?: boolean | null;
 };
 
 export type StartThreadFields = UnifiedFieldSelection<ThreadResourceSchema>[];
@@ -2678,6 +2753,234 @@ export async function validateListTurns(
 ): Promise<ValidationResult> {
   const payload = {
     action: "list_turns",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type RedoTurnInput = {
+  turnId: UUID;
+  text?: string | null;
+  model?: string | null;
+  mode?: "fork" | "revert" | null;
+  restoreFiles?: boolean | null;
+};
+
+export type RedoTurnFields = UnifiedFieldSelection<TurnResourceSchema>[];
+
+export type InferRedoTurnResult<
+  Fields extends RedoTurnFields | undefined,
+> = InferResult<TurnResourceSchema, Fields>;
+
+export type RedoTurnResult<Fields extends RedoTurnFields | undefined = undefined> = | { success: true; data: InferRedoTurnResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Turn
+ *
+ * @ashActionType :action
+ */
+export async function redoTurn<Fields extends RedoTurnFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: RedoTurnInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<RedoTurnResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "redo_turn",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<RedoTurnResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Turn
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateRedoTurn(
+  config: {
+  tenant?: string;
+  input: RedoTurnInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "redo_turn",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type RestoreFilesInput = {
+  turnId: UUID;
+  confirm?: boolean | null;
+  mode?: "reset_hard" | "restore_tree" | null;
+};
+
+export type RestoreFilesFields = UnifiedFieldSelection<{safetyCommit: string | null, head: string, __type: "TypedMap", __primitiveFields: "safetyCommit" | "head"}>[];
+
+export type InferRestoreFilesResult<
+  Fields extends RestoreFilesFields | undefined,
+> = InferResult<{safetyCommit: string | null, head: string, __type: "TypedMap", __primitiveFields: "safetyCommit" | "head"}, Fields>;
+
+export type RestoreFilesResult<Fields extends RestoreFilesFields | undefined = undefined> = | { success: true; data: InferRestoreFilesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Turn
+ *
+ * @ashActionType :action
+ */
+export async function restoreFiles<Fields extends RestoreFilesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: RestoreFilesInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<RestoreFilesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "restore_files",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<RestoreFilesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Turn
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateRestoreFiles(
+  config: {
+  tenant?: string;
+  input: RestoreFilesInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "restore_files",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type RestoreProposalInput = {
+  turnId: UUID;
+};
+
+export type RestoreProposalFields = UnifiedFieldSelection<{commit: string, dirtyNow: boolean, changedFiles: Array<string>, laterTurns: number, __type: "TypedMap", __primitiveFields: "commit" | "dirtyNow" | "changedFiles" | "laterTurns"}>[];
+
+export type InferRestoreProposalResult<
+  Fields extends RestoreProposalFields | undefined,
+> = InferResult<{commit: string, dirtyNow: boolean, changedFiles: Array<string>, laterTurns: number, __type: "TypedMap", __primitiveFields: "commit" | "dirtyNow" | "changedFiles" | "laterTurns"}, Fields>;
+
+export type RestoreProposalResult<Fields extends RestoreProposalFields | undefined = undefined> = | { success: true; data: InferRestoreProposalResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Turn
+ *
+ * @ashActionType :action
+ */
+export async function restoreProposal<Fields extends RestoreProposalFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: RestoreProposalInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<RestoreProposalResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "restore_proposal",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<RestoreProposalResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Turn
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateRestoreProposal(
+  config: {
+  tenant?: string;
+  input: RestoreProposalInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "restore_proposal",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };

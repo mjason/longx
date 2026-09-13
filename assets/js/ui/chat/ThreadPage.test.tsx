@@ -59,7 +59,7 @@ describe("ThreadPage", () => {
     await user.click(await screen.findByRole("option", { name: /glm-5/ }));
     await user.type(screen.getByRole("textbox", { name: "随心输入" }), "next step{Enter}");
     await waitFor(() =>
-      expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", text: "next step", model: "glm-5" } })),
+      expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "next step", model: "glm-5", sandbox: "workspace_write" }) })),
     );
   });
 
@@ -88,15 +88,39 @@ describe("ThreadPage", () => {
     expect(screen.getByRole("textbox", { name: "随心输入" })).toBeDisabled();
   });
 
-  test("the project route is a new chat: the first message creates the thread and opens it", async () => {
+  test("the project route is a new chat: the first message creates the thread (in the picked mode, web search included) and opens it", async () => {
     const user = userEvent.setup();
     const { router } = renderAt("/p/app-1");
     await screen.findByText("让 agent 在这个项目里干活");
     expect(channel.topics.filter((t) => t.startsWith("thread:"))).toEqual([]);
+    // web search can only be chosen before the thread exists
+    await user.click(screen.getByTestId("mode-picker"));
+    const webSearch = await screen.findByRole("switch", { name: /网页搜索/ });
+    expect(webSearch).toBeEnabled();
+    await user.click(webSearch);
+    await user.keyboard("{Escape}");
     await user.type(screen.getByRole("textbox", { name: "随心输入" }), "start here{Enter}");
-    await waitFor(() => expect(startThread).toHaveBeenCalled());
-    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t2", text: "start here" } })));
+    await waitFor(() => expect(startThread).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ projectId: "id-1", webSearch: false, sandbox: "workspace_write" }) })));
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t2", text: "start here" }) })));
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t2"));
+  });
+
+  test("the access mode is picked in the composer rail and rides on the next message", async () => {
+    const user = userEvent.setup();
+    await open();
+    await user.click(screen.getByTestId("mode-picker"));
+    // an existing thread's web search is fixed
+    expect(await screen.findByRole("switch", { name: /网页搜索/ })).toBeDisabled();
+    await user.click(await screen.findByRole("radio", { name: "完全访问（危险）" }));
+    await user.click(screen.getByRole("radio", { name: "从不询问" }));
+    await user.keyboard("{Escape}");
+    expect(screen.getByTestId("mode-picker")).toHaveTextContent("完全访问");
+    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "go wild{Enter}");
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ input: expect.objectContaining({ text: "go wild", sandbox: "danger_full_access", approvalPolicy: "never", networkAccess: false }) }),
+      ),
+    );
   });
 
   test("a disconnected thread keeps the input usable but cannot send", async () => {
@@ -145,7 +169,7 @@ describe("ThreadPage", () => {
     await user.type(screen.getByRole("textbox", { name: "随心输入" }), "and then this{Enter}");
     expect(sendMessage).not.toHaveBeenCalled();
     act(() => channel.deliver("codex", { seq: 5, method: "turn/completed", params: { turn: { id: "turn_2", status: "completed" } } }));
-    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", text: "and then this" } })));
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "and then this" }) })));
   });
 
   test("phone: the chat still shows the command block and the bottom toolbar", async () => {

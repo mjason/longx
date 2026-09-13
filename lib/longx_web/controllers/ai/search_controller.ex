@@ -25,25 +25,16 @@ defmodule LongxWeb.AI.SearchController do
     end
   end
 
+  # no search provider (or one without a key) → `open` still works (we fetch
+  # pages ourselves), `search_query` is answered with "no search provider"
   defp search(request) do
-    case AI.resolve_search_target() do
-      {:ok, target} ->
-        {:ok, result} = Search.run(request, target)
-        result
+    target =
+      case AI.resolve_search_target() do
+        {:ok, target} -> target
+        {:error, _} -> nil
+      end
 
-      {:error, :no_search_provider} ->
-        %{
-          output:
-            "Web search is not configured in Longx (no default search provider). Answer without browsing.",
-          results: []
-        }
-
-      {:error, {:missing_api_key, slug}} ->
-        %{
-          output:
-            "Web search provider #{slug} has no API key configured in Longx. Answer without browsing.",
-          results: []
-        }
-    end
+    {:ok, result} = Search.run(request, target)
+    result
   end
 end

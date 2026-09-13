@@ -117,6 +117,27 @@ defmodule Longx.Codex.ThreadTest do
       assert params["summary"] == "none"
     end
 
+    test "turn_params/3: the access mode switches for this turn and the ones after" do
+      params =
+        Thread.turn_params("t", "hi",
+          sandbox: :workspace_write,
+          approval_policy: :never,
+          network_access: true
+        )
+
+      assert params["approvalPolicy"] == "never"
+      assert params["sandboxPolicy"] == %{"type" => "workspaceWrite", "networkAccess" => true}
+
+      assert Thread.turn_params("t", "hi", sandbox: :read_only)["sandboxPolicy"] ==
+               %{"type" => "readOnly"}
+
+      assert Thread.turn_params("t", "hi", sandbox: :danger_full_access)["sandboxPolicy"] ==
+               %{"type" => "dangerFullAccess"}
+
+      # nothing given → nothing sent (the thread keeps what it has)
+      refute Map.has_key?(Thread.turn_params("t", "hi", []), "sandboxPolicy")
+    end
+
     test "fork_params/2 carries the same model settings as a start" do
       params =
         Thread.fork_params("t",

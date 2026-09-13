@@ -38,10 +38,14 @@ defmodule Longx.Projects do
       rpc_action :answer_request, :answer_request
       rpc_action :rename_thread, :rename
       rpc_action :archive_thread, :archive
+      rpc_action :delete_thread, :delete_thread
     end
 
     resource Longx.Projects.Turn do
       rpc_action :list_turns, :for_thread
+      rpc_action :restore_proposal, :restore_proposal
+      rpc_action :restore_files, :restore_files
+      rpc_action :redo_turn, :redo_turn
     end
   end
 
@@ -81,6 +85,8 @@ defmodule Longx.Projects do
   end
 
   alias Longx.Codex.Pool
+
+  require Ash.Query
   alias Longx.Projects.{Thread, Tracker, Turn}
 
   @doc "Threads of a project, most recently active first."
@@ -107,12 +113,16 @@ defmodule Longx.Projects do
           | {:sandbox, atom}
           | {:tools, [String.t()]}
           | {:model, String.t()}
+          | {:network_access, boolean}
+          | {:web_search, boolean}
           | {:conn, GenServer.server()}
 
   @doc """
   Starts a codex thread in the project directory with the project's
   defaults (overridable per call) and records it. The project's model
   (or `model:`) is passed to codex as its slug; nil means the global default.
+  `web_search: false` turns codex's `web.run` off for the thread (a
+  thread/start config, so it cannot change later).
   """
   @spec start_thread(Project.t(), [start_option]) :: {:ok, Thread.t()} | {:error, term}
   def start_thread(%Project{} = project, opts \\ []) do
@@ -121,6 +131,8 @@ defmodule Longx.Projects do
     tools = Keyword.get(opts, :tools, project.tools)
     approval_policy = Keyword.get(opts, :approval_policy, project.approval_policy)
     sandbox = Keyword.get(opts, :sandbox, project.sandbox)
+    network_access = Keyword.get(opts, :network_access, project.network_access)
+    web_search = Keyword.get(opts, :web_search, project.web_search)
 
     # the model's own settings (context window, reasoning, web search mode);
     # an unknown slug or a missing default is refused before codex is involved
@@ -132,10 +144,11 @@ defmodule Longx.Projects do
              approval_policy: approval_policy,
              sandbox: sandbox,
              tools: tools,
-             network_access: project.network_access,
+             network_access: network_access,
              conn: conn
            ]
-           |> Keyword.merge(model_opts),
+           |> Keyword.merge(model_opts)
+           |> without_web_search(web_search),
          {:ok, codex_thread_id} <- Longx.Codex.Thread.start(codex_opts),
          {:ok, thread} <-
            create_thread(%{
@@ -145,6 +158,8 @@ defmodule Longx.Projects do
              model_slug: model_slug,
              approval_policy: approval_policy,
              sandbox: sandbox,
+             network_access: network_access,
+             web_search: web_search,
              tools: tools
            }) do
       :ok = Tracker.track(codex_thread_id)
@@ -152,6 +167,10 @@ defmodule Longx.Projects do
       {:ok, thread}
     end
   end
+
+  # the model's mode (thread_options) unless the thread wants no web.run at all
+  defp without_web_search(opts, true), do: opts
+  defp without_web_search(opts, false), do: Keyword.put(opts, :web_search, :disabled)
 
   defp put_if(opts, _key, nil), do: opts
   defp put_if(opts, key, value), do: Keyword.put(opts, key, value)
@@ -162,7 +181,10 @@ defmodule Longx.Projects do
   applies (`:commit` commits them first, `:off` only records the fact,
   `:ask` returns `{:error, {:dirty_tree, changes}}` unless `dirty: :commit | :ignore`
   is given). The turn's `commit_before` is HEAD once that is settled.
-  Options: `model:` (switches the model from here on), `conn:`.
+  Options: `model:` (switches the model from here on), `sandbox:` /
+  `approval_policy:` / `network_access:` (the access mode from here on —
+  codex keeps a turn's policies for the turns after it; recorded on the
+  thread), `conn:`.
   """
   @spec send_message(Thread.t(), String.t(), keyword) ::
           {:ok, Turn.t()} | {:error, {:dirty_tree, [map]} | term}
@@ -171,12 +193,18 @@ defmodule Longx.Projects do
     thread = Ash.get!(Thread, id, load: :project)
     model_slug = Keyword.get(opts, :model, thread.model_slug)
 
+    mode = mode_change(thread, opts)
+
     with :ok <- ensure_usable(thread),
          {:ok, turn_opts} <- turn_options(model_slug, thread),
          {:ok, conn} <- thread_connection(thread, opts),
          {:ok, bookmark} <- preflight(thread, text, opts),
          {:ok, codex_turn_id} <-
-           Longx.Codex.Thread.send(thread.codex_thread_id, text, [{:conn, conn} | turn_opts]),
+           Longx.Codex.Thread.send(
+             thread.codex_thread_id,
+             text,
+             [{:conn, conn} | turn_opts] ++ mode_turn_opts(mode, thread)
+           ),
          {:ok, turn} <-
            create_turn(%{
              codex_turn_id: codex_turn_id,
@@ -187,16 +215,65 @@ defmodule Longx.Projects do
              dirty_start: bookmark.dirty?,
              started_at: DateTime.utc_now()
            }) do
-      touch_thread!(thread, %{
-        status: :active,
-        model_slug: model_slug,
-        last_activity_at: DateTime.utc_now()
-      })
+      touch_thread!(
+        thread,
+        Map.merge(mode, %{
+          status: :active,
+          model_slug: model_slug,
+          last_activity_at: DateTime.utc_now()
+        })
+      )
 
       broadcast_changed(thread.project_id)
       {:ok, turn}
     end
   end
+
+  # the access-mode fields this call changes (only those that differ)
+  defp mode_change(%Thread{} = thread, opts) do
+    [:sandbox, :approval_policy, :network_access]
+    |> Enum.flat_map(fn key ->
+      case Keyword.fetch(opts, key) do
+        {:ok, value} when value != nil and value != :erlang.map_get(key, thread) -> [{key, value}]
+        _ -> []
+      end
+    end)
+    |> Map.new()
+  end
+
+  # turn/start needs the whole sandbox policy when any of it changes
+  defp mode_turn_opts(mode, _thread) when map_size(mode) == 0, do: []
+
+  defp mode_turn_opts(mode, %Thread{} = thread) do
+    [
+      sandbox: Map.get(mode, :sandbox, thread.sandbox),
+      approval_policy: Map.get(mode, :approval_policy, thread.approval_policy),
+      network_access: Map.get(mode, :network_access, thread.network_access)
+    ]
+  end
+
+  @doc """
+  Deletes the thread row and its turns (never while a turn runs). Codex's
+  own record of the conversation stays in the project's CODEX_HOME —
+  `clear_codex_history/1` is the wipe for that.
+  """
+  @spec delete_thread(Thread.t()) :: :ok | {:error, term}
+  def delete_thread(%Thread{} = thread) do
+    thread = Ash.get!(Thread, thread.id)
+
+    with :ok <- refuse_while_running(thread) do
+      Ash.bulk_destroy!(Ash.Query.filter(Turn, thread_id == ^thread.id), :destroy, %{},
+        authorize?: false
+      )
+
+      Ash.destroy!(thread)
+      broadcast_changed(thread.project_id)
+      :ok
+    end
+  end
+
+  defp refuse_while_running(%Thread{status: :active}), do: {:error, :turn_in_progress}
+  defp refuse_while_running(_), do: :ok
 
   @doc """
   Makes sure some codex hosts the thread with this codex id — what a page
@@ -250,10 +327,11 @@ defmodule Longx.Projects do
              approval_policy: thread.approval_policy,
              sandbox: thread.sandbox,
              tools: thread.tools,
-             network_access: project.network_access,
+             network_access: thread.network_access,
              conn: conn
            ]
-           |> Keyword.merge(model_opts),
+           |> Keyword.merge(model_opts)
+           |> without_web_search(thread.web_search),
          {:ok, codex_thread_id} <- Longx.Codex.Thread.start(codex_opts) do
       thread = rehost_thread!(thread, %{codex_thread_id: codex_thread_id})
       :ok = Tracker.track(codex_thread_id)

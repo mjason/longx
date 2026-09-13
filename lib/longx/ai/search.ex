@@ -5,7 +5,10 @@ defmodule Longx.AI.Search do
   `codex-api/src/search.rs`) against a `Longx.AI.SearchTarget`.
 
   Supported: `search_query` (with `recency`/`domains`), `open` (by reference
-  id from an earlier call in the same session, or a URL), `time`. The other
+  id from an earlier call in the same session, or a URL — **fetched by us**,
+  `Longx.AI.Search.Fetch`; the provider's extractor is only the fallback when
+  our fetch fails, so opening a URL needs no search provider and costs no
+  credits), `time`. The other
   commands (`image_query`, `click`, `find`, `screenshot`, `finance`,
   `weather`, `sports`) are answered with a "not supported" line so the model
   can adapt instead of retrying.
@@ -15,7 +18,7 @@ defmodule Longx.AI.Search do
   passes through to the UI unchanged.
   """
 
-  alias Longx.AI.Search.{Refs, Tavily}
+  alias Longx.AI.Search.{Fetch, Refs, Tavily}
   alias Longx.AI.SearchTarget
 
   require Logger
@@ -29,8 +32,9 @@ defmodule Longx.AI.Search do
   @concurrency 4
 
   @type result :: map
-  @spec run(map, SearchTarget.t()) :: {:ok, %{output: String.t(), results: [result]}}
-  def run(request, %SearchTarget{} = target) when is_map(request) do
+  @spec run(map, SearchTarget.t() | nil) :: {:ok, %{output: String.t(), results: [result]}}
+  def run(request, target)
+      when is_map(request) and (is_nil(target) or is_struct(target, SearchTarget)) do
     session = request["id"] || "anonymous"
     commands = request["commands"] || %{}
     budget = (request["max_output_tokens"] || @default_output_tokens) * @chars_per_token
@@ -78,6 +82,16 @@ defmodule Longx.AI.Search do
   end
 
   ## search_query
+
+  defp search(queries, _response_length, _turn, _session, nil) do
+    Enum.map(queries, fn query ->
+      %{
+        output:
+          "## search_query: #{inspect(query["q"] || "")}\nno search provider is configured in Longx; open URLs you already know instead.",
+        results: []
+      }
+    end)
+  end
 
   defp search(queries, response_length, turn, session, target) do
     max_results = Map.get(@max_results, response_length, @default_max_results)
@@ -192,16 +206,30 @@ defmodule Longx.AI.Search do
     end
   end
 
+  # our own fetch first; the provider's extractor (readability for pages
+  # that block plain clients) only when that fails and one is configured
   defp fetch_page(url, ref_id, lineno, session, target) do
+    case Fetch.fetch(url) do
+      {:ok, %{title: title, text: text}} ->
+        page(url, ref_id, lineno, session, title, text)
+
+      {:error, reason} ->
+        Logger.info(
+          "web open: own fetch of #{url} failed (#{inspect(reason)}), trying the provider"
+        )
+
+        extract_page(url, ref_id, lineno, session, target, reason)
+    end
+  end
+
+  defp extract_page(url, _ref_id, _lineno, _session, nil, reason) do
+    %{output: "## open: #{url}\nopen failed: #{describe_error(reason)}", results: []}
+  end
+
+  defp extract_page(url, ref_id, lineno, session, target, _reason) do
     case Tavily.extract(target, [url]) do
       {:ok, [%{content: content} | _], _failed} ->
-        Refs.put(session, ref_id, %{url: url, title: nil})
-        body = content |> from_line(lineno) |> String.slice(0, @max_page_chars)
-
-        %{
-          output: "## open: #{url} [#{ref_id}]\n#{body}",
-          results: [%{type: "open", ref_id: ref_id, url: url, title: nil}]
-        }
+        page(url, ref_id, lineno, session, nil, content)
 
       {:ok, [], failed} ->
         %{
@@ -213,6 +241,17 @@ defmodule Longx.AI.Search do
         Logger.warning("web open failed for #{url}: #{inspect(reason)}")
         %{output: "## open: #{url}\nopen failed: #{describe_error(reason)}", results: []}
     end
+  end
+
+  defp page(url, ref_id, lineno, session, title, text) do
+    Refs.put(session, ref_id, %{url: url, title: title})
+    body = text |> from_line(lineno) |> String.slice(0, @max_page_chars)
+    heading = if title, do: "#{title} — #{url}", else: url
+
+    %{
+      output: "## open: #{heading} [#{ref_id}]\n#{body}",
+      results: [%{type: "open", ref_id: ref_id, url: url, title: title}]
+    }
   end
 
   defp from_line(content, lineno) when is_integer(lineno) and lineno > 1 do

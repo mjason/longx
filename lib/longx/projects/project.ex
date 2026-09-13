@@ -76,6 +76,7 @@ defmodule Longx.Projects.Project do
         :tools,
         :dirty_start,
         :network_access,
+        :web_search,
         :memory_limit_mb,
         :model_id
       ]
@@ -100,6 +101,7 @@ defmodule Longx.Projects.Project do
         :tools,
         :dirty_start,
         :network_access,
+        :web_search,
         :memory_limit_mb,
         :model_id
       ]
@@ -220,6 +222,11 @@ defmodule Longx.Projects.Project do
     # (codex `sandbox_workspace_write.network_access`); read-only and
     # danger-full-access ignore it.
     attribute :network_access, :boolean, allow_nil?: false, default: false, public?: true
+
+    # Whether threads get codex's `web.run` (search + open URL, executed by
+    # Longx's own gateway — this is separate from the sandbox's network,
+    # which only governs commands). Decided at thread start.
+    attribute :web_search, :boolean, allow_nil?: false, default: true, public?: true
 
     # Optional cap on the codex process tree (Linux RLIMIT_AS / Windows Job
     # memory). Off by default: a task that needs 30 GB gets 30 GB; the OOM

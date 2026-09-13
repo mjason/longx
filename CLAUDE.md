@@ -87,6 +87,12 @@ React Native client planned on the same core code.
     `dirty: :commit | :ignore`), then `turn/start` (with `model:` if switching). The Tracker
     fills `status`/`completed_at`/`commit_after`/`diff` from `turn/completed` and
     `turn/diff/updated`, and the thread `preview` from the first user message.
+    **Access mode per turn**: `send_message/3` takes `sandbox:` / `approval_policy:` /
+    `network_access:`; what differs from the thread row goes on `turn/start` as
+    `sandboxPolicy` / `approvalPolicy` (codex keeps them for the turns after) and is
+    recorded on the `Thread` (`network_access` is a thread attribute too). `delete_thread/1`
+    removes the row and its turns (not while a turn runs; codex's own copy stays — the
+    project-level wipe is `clear_codex_history/1`).
   - **Opening a thread** (`LongxWeb.ThreadChannel` join → `Projects.host_thread/1`): a
     thread nobody hosts is resumed on its project's codex; an *empty* one codex cannot
     resume (it only writes a thread to disk on its first turn) is started again under a
@@ -116,6 +122,8 @@ React Native client planned on the same core code.
     `thread/fork` with the turn before N and creates a sibling `Thread` (`forked_from_id`).
     Then `send_message/3` with `text:`/`model:` through the normal git preflight. Worktree
     isolation was considered and dropped: knowing the commit after each turn is enough.
+    Over RPC these are the `Turn` generic actions `restore_proposal`, `restore_files`
+    (`confirm`, `mode`) and `redo_turn` (`text`, `model`, `mode`, `restore_files`).
 - `lib/longx/platform.ex` — `Longx.Platform`: runtime-safe os/arch detection and the Rust
   triple / GOOS-GOARCH naming for it. Anything that resolves a binary path at runtime goes
   through this, never through `Mix.*` (Mix is absent in releases).
@@ -182,7 +190,14 @@ React Native client planned on the same core code.
     resolved model target and search target, never an `&&`/`||` chain at the call site:
     `:hosted` when the model's provider has `supports_hosted_web_search` (OpenAI —
     the Responses API runs `web_search` inside the provider; config `web_search = "live"`),
-    else `:standalone` when a search provider with a key is configured, else `:disabled`.
+    else `:standalone` — always: `open` needs no provider (below), and a `search_query`
+    without one is told "no search provider" inside the output. `:disabled` is only ever an
+    explicit choice: `Project.web_search` / `Thread.web_search` (a `thread/start` config,
+    so decided when the thread starts — `start_thread(web_search: false)`, the project's
+    default otherwise; the composer's mode picker offers it for a new chat only).
+    **This is separate from the sandbox's network access**, which governs commands inside
+    bubblewrap: `web.run` is executed by the Longx server, so "no network" for the agent's
+    commands does not stop it reading a page through us — hence its own switch.
     The provider block always declares `supports_standalone_web_search = true` (a capability,
     not a switch); what a thread gets is `web_search` (`"live"`/`"disabled"`) +
     `features.standalone_web_search` — standalone needs `web_search = "live"` too.
@@ -395,7 +410,7 @@ React Native client planned on the same core code.
     (unrecoverable, archived), `adapters.threadList`, `queue`, `extras.answerRequest` →
     `answer_request`), `threadList.ts` (`buildThreadListAdapter`: rows → assistant-ui thread
     data, handlers only for what exists: switch, new, rename, archive), `runtime.ts`
-    (**`useCodexRuntime({ projectId, threadId, onOpenThread })`** — the whole thing as one
+    (**`useCodexRuntime({ projectId, defaults, threadId, onOpenThread })`** — the whole thing as one
     hook, the shape of `@assistant-ui/react-opencode`: threads query + live view +
     `createMessageQueue` (a message sent while a turn runs waits and goes out when it
     settles; no `cancel`, so a "steer" only means "next" — codex's `turn/steer` is a
@@ -409,9 +424,16 @@ React Native client planned on the same core code.
     a repository directory is an *open*, anything else may get `init_git: true`),
     `frame/ProjectWindow` (desktop: icon rail + docked resizable tool window + status
     strip; phone: chat full-screen, bottom toolbar, tools as bottom sheets — tool windows:
-    `frame/tools/{Threads,Git,Process,Files}Tool`; ⌘1–4 toggle them; `core/frame.ts` keeps
-    the state, remembered per device), `frame/StatusStrip` (HEAD, codex, memory, sandbox
-    warning), `pages/SettingsPage` (categories tree on desktop, list → sub page on phones;
+    `frame/tools/{Threads,Git,Process,Turns}Tool`; ⌘1–4 toggle them; `core/frame.ts` keeps
+    the state, remembered per device; `TurnsTool` is the history: the thread's turns with
+    status / model / commits, the per-turn diff as `code-diff` per file (`splitDiff`), and
+    the restore (proposal → confirm → `restore_files`) and redo (text, model, revert |
+    fork, restore first) dialogs over `core/projects.ts`'s `useTurns` / `useRestoreFiles` /
+    `useRedoTurn`), `frame/StatusStrip` (HEAD, codex, memory, sandbox warning),
+    `pages/ProjectSettingsPage` (`/p/:slug/settings`: name, description, the thread
+    defaults — sandbox, approval, network, dirty_start, model, memory cap — via
+    `update_project`; danger zone: clear codex history, archive, each behind a confirm),
+    `pages/SettingsPage` (categories tree on desktop, list → sub page on phones;
     sections models / tools / sandbox / appearance, only appearance has content so far),
     `components/CommandPalette` (⌘K, desktop), `sonner` toasts for codex down/ready.
     `routes.tsx` (react-router, browser history; tests use a memory router via
@@ -443,9 +465,11 @@ React Native client planned on the same core code.
     share one runtime: `useCodexRuntime` + `AssistantRuntimeProvider` with `chatConfig` +
     the `DirtyTreeDialog`; `useChat()` reads it), `ThreadPage` (routes `/p/:slug` — a new
     chat whose first message creates the thread — and `/p/:slug/t/:threadId`; Thread
-    element; the composer rail is Codex's: `ComposerLeading` (the project's access mode →
-    settings, and the turn's state) / `ComposerTrailing` (the per-turn model with its
-    reasoning effort) are slots our `thread.aui` copy adds), `toolkit.tsx` (`defineToolkit` with
+    element; the composer rail is Codex's: `ComposerLeading` (`ModePicker` — the access
+    mode for the next turn: sandbox / approval / network in a popover, from the thread row
+    or the project defaults, sent with every message — and the turn's state) /
+    `ComposerTrailing` (the per-turn model with its reasoning effort) are slots our
+    `thread.aui` copy adds), `toolkit.tsx` (`defineToolkit` with
     `type: "backend"`, `display: "standalone"` renderers per codex item type, **all built
     from the registry's Tool-use elements, one visual language**: every invocation is a
     `tool-call` row (verb · mono chip · check/cross; open while running or failed, a click

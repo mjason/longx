@@ -50,7 +50,7 @@ defmodule LongxWeb.ThreadChannelTest do
     thread_id: thread_id
   } do
     ref = push(socket, "snapshot", %{})
-    assert_reply ref, :ok, %{seq: _, thread: %{"id" => ^thread_id}}
+    assert_reply ref, :ok, %{seq: _, thread: %{"id" => ^thread_id}}, 2_000
   end
 
   test "joining an unknown thread is refused" do

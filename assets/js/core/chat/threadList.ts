@@ -3,13 +3,25 @@
 // each handler that exists turns its menu item on in the ThreadList element.
 import type { ExternalStoreThreadData, ExternalStoreThreadListAdapter } from "@assistant-ui/react";
 
-export type ThreadRow = { id: string; codexThreadId: string; title: string | null; preview: string | null; status: string; modelSlug?: string | null };
+export type ThreadRow = {
+  id: string;
+  codexThreadId: string;
+  title: string | null;
+  preview: string | null;
+  status: string;
+  modelSlug?: string | null;
+  sandbox?: string;
+  approvalPolicy?: string;
+  networkAccess?: boolean;
+  webSearch?: boolean;
+};
 
 export type ThreadListActions = {
   switchTo?: (threadId: string) => void;
   create?: () => Promise<void>;
   rename?: (threadId: string, title: string) => Promise<void>;
   archive?: (threadId: string) => Promise<void>;
+  delete?: (threadId: string) => Promise<void>;
 };
 
 export function buildThreadListAdapter(opts: { rows: readonly ThreadRow[]; currentId: string | undefined; actions: ThreadListActions; loading?: boolean }): ExternalStoreThreadListAdapter {
@@ -28,5 +40,6 @@ export function buildThreadListAdapter(opts: { rows: readonly ThreadRow[]; curre
     ...(actions.create ? { onSwitchToNewThread: actions.create } : {}),
     ...(actions.rename ? { onRename: actions.rename } : {}),
     ...(actions.archive ? { onArchive: actions.archive } : {}),
+    ...(actions.delete ? { onDelete: actions.delete } : {}),
   };
 }

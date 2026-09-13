@@ -18,6 +18,15 @@ import { runningTurnId, type ThreadView } from "./thread";
 export type ThreadTarget = { threadId: string; codexThreadId: string };
 
 export type DirtyChange = { path: string; status: string };
+
+/** The access mode codex runs a turn with; codex keeps it for the turns after. */
+export type AccessMode = {
+  sandbox: "read_only" | "workspace_write" | "danger_full_access";
+  approvalPolicy: "never" | "on_request" | "untrusted";
+  networkAccess: boolean;
+  /** codex's web.run (search + open URL, run by Longx, not the sandbox); fixed at thread start */
+  webSearch: boolean;
+};
 /** what to do with uncommitted changes when the project's policy is "ask"; null = don't send */
 export type DirtyDecision = "commit" | "ignore" | null;
 
@@ -33,6 +42,8 @@ export type AdapterOptions = {
   view: ThreadView;
   /** the model slug for the next turn (null = the thread's current) */
   model: string | null;
+  /** the access mode for the next turn (undefined = the thread's current) */
+  mode?: AccessMode;
   /** the thread cannot take messages at all (unrecoverable / archived) */
   disabled?: boolean;
   /** typing is fine, sending is not (codex reconnecting) */
@@ -89,7 +100,13 @@ export function buildAdapter(opts: AdapterOptions): ExternalStoreAdapter<ThreadM
       const send = (dirty?: "commit" | "ignore") =>
         sendMessage({
           fields: ["id"],
-          input: { threadId: target.threadId, text, ...(opts.model ? { model: opts.model } : {}), ...(dirty ? { dirty } : {}) },
+          input: {
+            threadId: target.threadId,
+            text,
+            ...(opts.model ? { model: opts.model } : {}),
+            ...(opts.mode ? { sandbox: opts.mode.sandbox, approvalPolicy: opts.mode.approvalPolicy, networkAccess: opts.mode.networkAccess } : {}),
+            ...(dirty ? { dirty } : {}),
+          },
         });
       try {
         unwrap(await send());

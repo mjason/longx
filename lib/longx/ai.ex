@@ -359,9 +359,12 @@ defmodule Longx.AI do
 
     * `:hosted` — the upstream runs the Responses API's built-in `web_search`
       tool itself (OpenAI); nothing for us to do
-    * `:standalone` — codex's `web.run` tool, executed by our `/alpha/search`
-      against the default `SearchProvider`
-    * `:disabled` — no search tool offered at all
+    * `:standalone` — codex's `web.run` tool, executed by our `/alpha/search`:
+      `open` fetches pages ourselves (`Longx.AI.Search.Fetch`) and needs no
+      provider, `search_query` needs the default `SearchProvider` (told so
+      otherwise) — so this is the mode whenever search is not hosted
+    * `:disabled` — no search tool offered at all (an explicit choice; the
+      resolver never picks it on its own any more)
   """
   @type web_search_mode :: :hosted | :standalone | :disabled
 
@@ -381,8 +384,7 @@ defmodule Longx.AI do
   def web_search_mode(slug), do: web_search_mode(resolve_target(slug), resolve_search_target())
 
   defp web_search_mode({:ok, %Target{hosted_web_search?: true}}, _search), do: :hosted
-  defp web_search_mode(_target, {:ok, %SearchTarget{}}), do: :standalone
-  defp web_search_mode(_target, _search), do: :disabled
+  defp web_search_mode(_target, _search), do: :standalone
 
   defp fetch_default_search_provider do
     case default_search_provider() do

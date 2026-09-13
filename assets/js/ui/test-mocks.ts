@@ -9,12 +9,13 @@ export const failed = (message: string, fields: string[] = []) => ({
 
 export const project = (n: number) => ({
   id: `id-${n}`, slug: `app-${n}`, name: `App ${n}`, description: null, rootPath: `/srv/app-${n}`,
-  sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, dirtyStart: "commit",
+  sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true, dirtyStart: "commit",
   tools: [], memoryLimitMb: null, archivedAt: null, updatedAt: "2026-09-12T00:00:00Z",
 });
 
 export const thread = (n: number) => ({
   id: `t${n}`, codexThreadId: `thr_${n}`, title: null, preview: `thread ${n}`, status: "idle", modelSlug: null,
+  sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true,
   lastActivityAt: "2026-09-12T00:00:00Z", insertedAt: "2026-09-12T00:00:00Z",
 });
 
@@ -23,6 +24,9 @@ export function rpcMock() {
     listProjects: vi.fn(async () => ok([project(1), project(2)])),
     getProject: vi.fn(async () => ok(project(1))),
     createProject: vi.fn(),
+    updateProject: vi.fn(async () => ok(project(1))),
+    archiveProject: vi.fn(async () => ok(project(1))),
+    clearCodexHistory: vi.fn(async () => ok(null)),
     gitInfo: vi.fn(async () => ok({ repository: true, head: "372bb0366a5ae41b", clean: true, changes: 0, lfs: false })),
     initGit: vi.fn(),
     codexInfo: vi.fn(async () => ok({ home: "/x", exists: false, bytes: 0, files: {}, worker: null })),
@@ -32,6 +36,11 @@ export function rpcMock() {
     interruptTurn: vi.fn(async () => ok(null)),
     respond: vi.fn(async () => ok(null)),
     answerRequest: vi.fn(async () => ok(null)),
+    deleteThread: vi.fn(async () => ok(null)),
+    listTurns: vi.fn(async () => ok([])),
+    restoreProposal: vi.fn(async () => ok({ commit: "aaaa1111", dirtyNow: false, changedFiles: [], laterTurns: 0 })),
+    restoreFiles: vi.fn(async () => ok({ safetyCommit: null, head: "aaaa1111" })),
+    redoTurn: vi.fn(async () => ok({ id: "tu9", threadId: "t1" })),
     renameThread: vi.fn(async () => ok(thread(1))),
     archiveThread: vi.fn(async () => ok(thread(1))),
     startThread: vi.fn(async () => ok(thread(2))),

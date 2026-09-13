@@ -36,10 +36,13 @@ defmodule Longx.Projects.Thread do
       argument :sandbox, :atom,
         constraints: [one_of: [:read_only, :workspace_write, :danger_full_access]]
 
+      argument :network_access, :boolean
+      argument :web_search, :boolean
+
       run fn input, _ ->
         opts =
           input.arguments
-          |> Map.take([:model, :tools, :approval_policy, :sandbox])
+          |> Map.take([:model, :tools, :approval_policy, :sandbox, :network_access, :web_search])
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
         with {:ok, project} <- Ash.get(Longx.Projects.Project, input.arguments.project_id),
@@ -54,11 +57,17 @@ defmodule Longx.Projects.Thread do
       argument :model, :string
       # what to do with a dirty tree when the project's policy is :ask
       argument :dirty, :atom, constraints: [one_of: [:commit, :ignore]]
+      # the access mode from this turn on (absent: the thread keeps its mode)
+      argument :sandbox, :atom,
+        constraints: [one_of: [:read_only, :workspace_write, :danger_full_access]]
+
+      argument :approval_policy, :atom, constraints: [one_of: [:never, :on_request, :untrusted]]
+      argument :network_access, :boolean
 
       run fn input, _ ->
         opts =
           input.arguments
-          |> Map.take([:model, :dirty])
+          |> Map.take([:model, :dirty, :sandbox, :approval_policy, :network_access])
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
         with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
@@ -103,6 +112,17 @@ defmodule Longx.Projects.Thread do
       end
     end
 
+    # the row and its turns go; codex's own copy of the conversation stays
+    # in its sqlite (clear_codex_history is the project-level wipe)
+    action :delete_thread do
+      argument :thread_id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             do: Longx.Projects.delete_thread(thread)
+      end
+    end
+
     # answers a question codex asked (item/tool/requestUserInput): the raw
     # response map, `%{"answers" => %{question_id => %{"answers" => [..]}}}`
     action :answer_request do
@@ -131,13 +151,23 @@ defmodule Longx.Projects.Thread do
         :model_slug,
         :approval_policy,
         :sandbox,
+        :network_access,
+        :web_search,
         :tools,
         :forked_from_id
       ]
     end
 
     update :touch do
-      accept [:status, :preview, :model_slug, :last_activity_at]
+      accept [
+        :status,
+        :preview,
+        :model_slug,
+        :last_activity_at,
+        :sandbox,
+        :approval_policy,
+        :network_access
+      ]
     end
 
     # an empty thread codex could not resume was started again (new codex id)
@@ -197,6 +227,12 @@ defmodule Longx.Projects.Thread do
       public? true
       constraints one_of: [:read_only, :workspace_write, :danger_full_access]
     end
+
+    # the workspace-write sandbox has no network unless this is true
+    attribute :network_access, :boolean, allow_nil?: false, default: false, public?: true
+
+    # codex's web.run offered to this thread (fixed at start: a thread/start config)
+    attribute :web_search, :boolean, allow_nil?: false, default: true, public?: true
 
     attribute :tools, {:array, :string}, allow_nil?: false, default: [], public?: true
 
