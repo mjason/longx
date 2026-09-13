@@ -22,7 +22,7 @@ export const routes: RouteObject[] = [
         path: "/p/:slug",
         element: <ProjectWindow />,
         children: [
-          { index: true, element: <ChatPlaceholder /> },
+          { index: true, element: <ThreadPage /> },
           { path: "settings", element: <ChatPlaceholder /> },
           { path: "t/:threadId", element: <ThreadPage /> },
         ],

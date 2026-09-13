@@ -137,6 +137,49 @@ describe("toMessages", () => {
     expect(parts(msgs[0]!)[0]).toMatchObject({ args: { command: "mix test", fullCommand: "/usr/bin/zsh -lc 'mix test'" } });
   });
 
+  test("tool timing and message timing come from the stamps, the turn and token usage", () => {
+    const msgs = toMessages(
+      view({
+        turn: { id: "t10", status: "completed", startedAt: 1_700_000_000, completedAt: 1_700_000_012 },
+        tokenUsage: { last: { inputTokens: 100, outputTokens: 240 }, total: { inputTokens: 100, outputTokens: 240 } },
+        items: [
+          { id: "c10", type: "commandExecution", turnId: "t10", command: "ls", status: "completed", exitCode: 0, startedAtMs: 5000, completedAtMs: 6500 },
+          { id: "c11", type: "commandExecution", turnId: "t10", command: "sleep", status: "inProgress", startedAtMs: 7000 },
+          { id: "a10", type: "agentMessage", turnId: "t10", text: "done" },
+        ],
+      }),
+    );
+    const ps = parts(msgs[0]!);
+    expect(ps[0]).toMatchObject({ timing: { startedAt: 5000, completedAt: 6500 } });
+    expect(ps[1]).toMatchObject({ timing: { startedAt: 7000 } });
+    expect((ps[1] as { timing: { completedAt?: number } }).timing.completedAt).toBeUndefined();
+    expect(msgs[0]!.metadata?.timing).toMatchObject({ streamStartTime: 1_700_000_000_000, totalStreamTime: 12_000, tokenCount: 240, toolCallCount: 2 });
+
+    // a running turn has no total yet; an older turn gets no token count (usage is per last turn)
+    const running = toMessages(view({ turn: { id: "t11", status: "inProgress", startedAt: 1_700_000_100 }, tokenUsage: { last: { outputTokens: 9 } }, items: [{ id: "a11", type: "agentMessage", turnId: "t11", text: "hi" }] }));
+    expect(running[0]!.metadata?.timing).toMatchObject({ streamStartTime: 1_700_000_100_000 });
+    expect(running[0]!.metadata?.timing?.totalStreamTime).toBeUndefined();
+  });
+
+  test("a pending requestUserInput becomes a standalone question part answered through extras", () => {
+    const msgs = toMessages(
+      view({
+        turn: { id: "t12", status: "inProgress" },
+        items: [{ id: "u12", type: "userMessage", turnId: "t12", content: [{ type: "text", text: "go" }] }],
+        requests: [
+          {
+            id: 3,
+            method: "item/tool/requestUserInput",
+            params: { requestId: 3, itemId: "call_3", turnId: "t12", isBlocking: true, questions: [{ id: "q1", header: "DB", question: "which db?", options: [{ label: "sqlite", description: "" }], isOther: true }] },
+          },
+        ],
+      }),
+    );
+    const part = parts(msgs[1]!)[0]!;
+    expect(part).toMatchObject({ type: "tool-call", toolName: "requestUserInput", toolCallId: "call_3", args: { requestId: "3", questions: [{ id: "q1" }] } });
+    expect(msgs[1]!.status).toEqual({ type: "requires-action", reason: "interrupt" });
+  });
+
   test("userText joins text parts", () => {
     expect(userText({ id: "u", type: "userMessage", content: [{ type: "text", text: "a" }, { type: "image" }, { type: "text", text: "b" }] })).toBe("ab");
     expect(userText({ id: "u", type: "userMessage", content: "plain" })).toBe("plain");

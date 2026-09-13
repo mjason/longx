@@ -6,8 +6,9 @@ vi.mock("@/ash_rpc", () => ({
   sendMessage: vi.fn(async () => ({ success: true, data: { id: "turn-row" } })),
   interruptTurn: vi.fn(async () => ({ success: true, data: null })),
   respond: vi.fn(async () => ({ success: true, data: null })),
+  answerRequest: vi.fn(async () => ({ success: true, data: null })),
 }));
-import { interruptTurn, respond, sendMessage } from "@/ash_rpc";
+import { answerRequest, interruptTurn, respond, sendMessage } from "@/ash_rpc";
 
 const target = { threadId: "row-1", codexThreadId: "thr_1" };
 const append = (text: string) => ({ role: "user", content: [{ type: "text", text }], parentId: null, sourceId: null, runConfig: undefined }) as never;
@@ -58,6 +59,34 @@ describe("chat adapter", () => {
     const before = vi.mocked(sendMessage).mock.calls.length;
     await expect(cancel.onNew(append("go"))).resolves.toBeUndefined();
     expect(vi.mocked(sendMessage).mock.calls.length).toBe(before + 1);
+  });
+
+  test("without a thread, the first message creates one and lands there", async () => {
+    const createThread = vi.fn(async () => ({ threadId: "row-new", codexThreadId: "thr_new" }));
+    const onSent = vi.fn();
+    const adapter = buildAdapter({ target: null, view: emptyView(""), model: null, createThread, onSent });
+    expect(adapter.messages).toEqual([]);
+    await adapter.onNew(append("first"));
+    expect(createThread).toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({ input: { threadId: "row-new", text: "first" } }));
+    expect(onSent).toHaveBeenCalledWith({ threadId: "row-new", codexThreadId: "thr_new" });
+  });
+
+  test("loading, send-disabled, refetch, thread list, queue and extras pass through to the runtime", async () => {
+    const refetch = vi.fn(async () => {});
+    const threadList = { threadId: "row-1", threads: [] };
+    const queue = { items: [], steerItems: [], enqueue: () => {}, steer: () => {}, move: () => {} } as never;
+    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null, loading: true, sendDisabled: true, refetch, threadList, queue });
+    expect(adapter.isLoading).toBe(true);
+    expect(adapter.isSendDisabled).toBe(true);
+    expect(adapter.adapters?.threadList).toBe(threadList);
+    expect(adapter.queue).toBe(queue);
+    await adapter.onRefetchThread!();
+    expect(refetch).toHaveBeenCalled();
+
+    const extras = adapter.extras as { answerRequest: (id: string, answers: Record<string, string[]>) => Promise<void> };
+    await extras.answerRequest("3", { q1: ["sqlite"] });
+    expect(answerRequest).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", requestId: "3", answers: { q1: { answers: ["sqlite"] } } } }));
   });
 
   test("textOf joins text parts and trims", () => {

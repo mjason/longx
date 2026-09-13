@@ -371,22 +371,36 @@ React Native client planned on the same core code.
     edited; `codegen --check` runs in precommit), `rpcHooks.ts`, `socket.ts` (one Phoenix
     socket, status for the connection banner), `projectChannel.ts`, TanStack Query hooks
     (`projects.ts`; `RpcFailure` carries field errors; `useModels`), formatters, and
-    `core/chat/`: `thread.ts` (the client half of `Longx.Codex.ThreadState`: snapshot +
-    `applyEvent` with the same fold rules as the server's Store — deltas append, reasoning
-    `summary`/`content` are `string[]` addressed by `summaryIndex`/`contentIndex`,
-    `thread/reverted` drops turns, a `requestId` means a pending question), `threadChannel.ts`
-    (`thread:<codex id>`; the join reply's `thread_id` is authoritative — an empty thread
-    codex could not resume comes back under a new id), `useThreadView.ts`, `messages.ts`
-    (codex items → assistant-ui `ThreadMessageLike`: one assistant message per turn;
+    `core/chat/` — the chat runtime, DOM-free: `thread.ts` (the client half of
+    `Longx.Codex.ThreadState`: snapshot + `applyEvent` with the same fold rules as the
+    server's Store — deltas append, reasoning `summary`/`content` are `string[]` addressed by
+    `summaryIndex`/`contentIndex`, `thread/reverted` drops turns, a `requestId` means a
+    pending question; items get `startedAtMs`/`completedAtMs` from the client clock),
+    `threadChannel.ts` (`thread:<codex id>`; the join reply's `thread_id` is authoritative —
+    an empty thread codex could not resume comes back under a new id; `snapshot()` re-pulls
+    in place), `useThreadView.ts` (`refetch`; a `thread/reverted` re-pulls on its own),
+    `messages.ts` (codex items → assistant-ui `ThreadMessageLike`: one assistant message per
+    turn with `metadata.timing` from the turn's stamps + the last turn's token usage;
     agentMessage/plan → text, reasoning → reasoning, commandExecution / fileChange /
-    webSearch / `ns.tool` → tool-call parts whose `args`/`result`/`artifact` are what the
-    renderers read, `displayCommand` strips codex's `zsh -lc '…'` wrapper; a pending
-    `*/requestApproval` rides on its part as assistant-ui's `approval` with the options
-    accept / accept_for_session / decline, and that message is `requires-action` — the only
-    state in which assistant-ui shows approval controls), `adapter.ts` (`buildAdapter` →
-    `ExternalStoreAdapter`: `onNew` → `sendMessage` (a `dirty_tree` RPC error asks
+    webSearch / `ns.tool` → tool-call parts (`args`/`result`/`artifact`/`timing`) —
+    `displayCommand` strips codex's `zsh -lc '…'` wrapper; a pending `*/requestApproval`
+    rides on its part as assistant-ui's `approval` (accept / accept_for_session / decline), a
+    pending `item/tool/requestUserInput` is a standalone `requestUserInput` part; either
+    makes the message `requires-action`, the only state in which assistant-ui shows the
+    controls), `adapter.ts` (`buildAdapter` → `ExternalStoreAdapter`: `onNew` →
+    `sendMessage` (no thread yet → `createThread` first; a `dirty_tree` RPC error asks
     `onDirtyTree` for commit / ignore and resends), `onCancel` → `interruptTurn`,
-    `onRespondToToolApproval` → `respond` with the option id as the decision).
+    `onRespondToToolApproval` → `respond`, `onRefetchThread`, `isLoading` /
+    `isSendDisabled` (disconnected: typing yes, sending no) / `isDisabled`
+    (unrecoverable, archived), `adapters.threadList`, `queue`, `extras.answerRequest` →
+    `answer_request`), `threadList.ts` (`buildThreadListAdapter`: rows → assistant-ui thread
+    data, handlers only for what exists: switch, new, rename, archive), `runtime.ts`
+    (**`useCodexRuntime({ projectId, threadId, onOpenThread })`** — the whole thing as one
+    hook, the shape of `@assistant-ui/react-opencode`: threads query + live view +
+    `createMessageQueue` (a message sent while a turn runs waits and goes out when it
+    settles; no `cancel`, so a "steer" only means "next" — codex's `turn/steer` is a
+    different thing, not wired) + per-turn model + `TurnState`; the router comes in as a
+    callback so React Native can reuse it).
   - `js/ui/` — React DOM, **shaped like an IDE with the chat where the editor would be**
     (IDEA's interactions, not its looks): `pages/WelcomePage` (recent projects, search, one
     door to open/create), `pages/ProjectWizard` (two steps: `components/DirectoryPicker` on
@@ -422,16 +436,22 @@ React Native client planned on the same core code.
     `markdown-text`, `tool-fallback.aui` (dynamic `ns.tool` calls), `terminal-block`
     (`exitCode`/`exitLabel`/`fullCommand` instead of the demo's fixed "exit 0"),
     `code-diff`, `web-search` (real urls), `approval-card` (labels/icon props) —
-    `surfaces.tsx` and `../utils/range.ts` are the registry's shared helpers. `ui/chat/`:
-    `ThreadPage` (route `/p/:slug/t/:threadId`; `useExternalStoreRuntime(buildAdapter(…))`
-    inside `AssistantRuntimeProvider` with `chatConfig`; per-turn model in `TurnBar`;
-    `DirtyTreeDialog`), `toolkit.tsx` (`defineToolkit` with `type: "backend"` renderers per
-    codex item type — `CommandExecutionTool`, `FileChangeTool` (`parseDiff`),
-    `WebSearchTool` — registered through `AuiConfig({ tools: Tools({ toolkit }) })`, so
-    they win over `ToolFallback` by name; approvals answer with
-    `respondToApproval({ optionId })`). Tool groups start **open** (what the agent ran is
-    the point of this UI). `ProjectWindow` is `h-dvh`: the thread scrolls in its own
-    viewport, never the page. Headers and bars are
+    `thread-list.aui` (the threads tool is this element over `adapters.threadList`),
+    `message-timing.aui` (in the assistant action bar), `elicitation-form` (made
+    interactive: `onChange`, labels — codex's questions) — `surfaces.tsx` and
+    `../utils/range.ts` are the registry's shared helpers. `ui/chat/`: `ChatProvider`
+    (mounted by `ProjectWindow` around the whole window so the threads tool and the centre
+    share one runtime: `useCodexRuntime` + `AssistantRuntimeProvider` with `chatConfig` +
+    the `DirtyTreeDialog`; `useChat()` reads it), `ThreadPage` (routes `/p/:slug` — a new
+    chat whose first message creates the thread — and `/p/:slug/t/:threadId`; Thread
+    element + `TurnBar` with the per-turn model), `toolkit.tsx` (`defineToolkit` with
+    `type: "backend"`, `display: "standalone"` renderers per codex item type —
+    `CommandExecutionTool`, `FileChangeTool` (`parseDiff`), `WebSearchTool`,
+    `QuestionsTool` (answers via `s.thread.extras.answerRequest`) — registered through
+    `AuiConfig({ tools: Tools({ toolkit }) })`, so they win over `ToolFallback` by name;
+    approvals answer with `respondToApproval({ optionId })`). `thread.aui` also shows a
+    stall hint (`unstable_useMessageStallDetection`, 15 s) and the timing badge.
+    `ProjectWindow` is `h-dvh`: the thread scrolls in its own viewport, never the page. Headers and bars are
     solid (`backdrop-blur` on sticky/fixed bars ghosted text in Chromium screenshots).
     After `npm install` adds packages while `mix phx.server` runs, restart it: Vite's
     dependency re-optimisation can otherwise load two copies of React ("Invalid hook call").

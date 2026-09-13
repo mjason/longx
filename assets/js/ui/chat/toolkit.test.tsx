@@ -1,7 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { CommandExecutionTool, FileChangeTool, WebSearchTool, parseDiff } from "./toolkit";
+import { CommandExecutionTool, FileChangeTool, QuestionsTool, WebSearchTool, parseDiff } from "./toolkit";
+
+const answerRequest = vi.fn(async () => {});
+vi.mock("@assistant-ui/react", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("@assistant-ui/react")>();
+  return { ...mod, useAuiState: (selector: (s: unknown) => unknown) => selector({ thread: { extras: { answerRequest } } }) };
+});
 
 // A tool-call part as assistant-ui hands it to a renderer (the parts we read).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -111,6 +117,30 @@ describe("FileChangeTool", () => {
     expect(screen.getByText("允许修改这些文件？")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "允许" }));
     expect(respondToApproval).toHaveBeenCalledWith({ optionId: "accept" });
+  });
+});
+
+describe("QuestionsTool", () => {
+  test("renders codex's questions, answers through the runtime's extras", () => {
+    render(
+      <QuestionsTool
+        {...part({
+          toolName: "requestUserInput",
+          status: { type: "requires-action", reason: "interrupt" },
+          args: {
+            requestId: "3",
+            questions: [
+              { id: "q1", header: "DB", question: "which db?", options: [{ label: "sqlite", description: "small" }, { label: "postgres", description: "" }], isOther: true },
+              { id: "q2", header: "Name", question: "project name?", options: null },
+            ],
+          },
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "sqlite" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "project name?" }), { target: { value: "longx" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    expect(answerRequest).toHaveBeenCalledWith("3", { q1: ["sqlite"], q2: ["longx"] });
   });
 });
 

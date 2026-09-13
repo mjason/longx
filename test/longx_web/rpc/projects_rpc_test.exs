@@ -247,6 +247,51 @@ defmodule LongxWeb.ProjectsRpcTest do
     end
   end
 
+  describe "questions" do
+    test "answer_request answers codex's requestUserInput with the answers map", %{
+      conn: conn,
+      dir: dir
+    } do
+      project = create!(conn, dir)
+      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
+
+      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
+        rpc(conn, "start_thread", %{
+          "fields" => ["id", "codexThreadId"],
+          "input" => %{"projectId" => project["id"]}
+        })
+
+      :ok = Longx.Codex.Thread.subscribe(codex_id)
+
+      %{"success" => true} =
+        rpc(conn, "send_message", %{
+          "fields" => ["id"],
+          "input" => %{"threadId" => thread_id, "text" => "ask which db?"}
+        })
+
+      assert_receive {:codex, _, "item/tool/requestUserInput",
+                      %{"requestId" => request_id, "questions" => [%{"id" => "q1"}]}},
+                     10_000
+
+      assert %{"success" => true} =
+               rpc(conn, "answer_request", %{
+                 "input" => %{
+                   "threadId" => thread_id,
+                   "requestId" => Integer.to_string(request_id),
+                   "answers" => %{"q1" => %{"answers" => ["sqlite"]}}
+                 }
+               })
+
+      assert_receive {:codex, _, "serverRequest/resolved", %{"requestId" => ^request_id}}, 5_000
+      assert_receive {:codex, _, "turn/completed", _}, 10_000
+
+      assert Enum.any?(
+               Longx.Codex.Thread.snapshot(codex_id).items,
+               &(&1["type"] == "agentMessage" and &1["text"] =~ "you said sqlite")
+             )
+    end
+  end
+
   describe "dirty tree" do
     test "send_message on a dirty :ask project is a structured error the UI can act on", %{
       conn: conn,

@@ -2,7 +2,7 @@
 // item; everything else a turn produced becomes one assistant message whose
 // parts follow the items in order. Pending approvals ride on the tool-call
 // part they belong to (assistant-ui's `approval` seam). Pure; DOM-free.
-import type { ThreadMessageLike } from "@assistant-ui/react";
+import type { MessageTiming, ThreadMessageLike } from "@assistant-ui/react";
 import { runningTurnId, sameId, type CodexItem, type PendingRequest, type ThreadView } from "./thread";
 
 export type ApprovalDecision = "accept" | "accept_for_session" | "decline";
@@ -25,11 +25,13 @@ export function toMessages(view: ThreadView): ThreadMessageLike[] {
 
   const flush = () => {
     if (current && current.parts.length) {
+      const timing = timingFor(view, current.turnId, current.parts);
       out.push({
         id: current.turnId ? `turn:${current.turnId}` : `turn:${out.length}`,
         role: "assistant",
         content: current.parts,
         status: awaitsApproval(current.parts) ? REQUIRES_ACTION : statusFor(view, current.turnId, running),
+        ...(timing ? { metadata: { timing } } : {}),
       });
     }
     current = null;
@@ -53,16 +55,47 @@ export function toMessages(view: ThreadView): ThreadMessageLike[] {
   // an approval for an item we have not seen yet still needs a place to be answered
   for (const [itemId, request] of approvals) {
     if (!view.items.some((i) => i.id === itemId)) {
-      const part = toolPart(itemId, toolNameFor(request.method), {}, undefined, request);
-      const last = out.at(-1);
-      if (last && last.role === "assistant" && Array.isArray(last.content)) {
-        out[out.length - 1] = { ...last, content: [...last.content, part], status: REQUIRES_ACTION };
-      } else {
-        out.push({ id: `pending:${itemId}`, role: "assistant", content: [part], status: REQUIRES_ACTION });
-      }
+      attachPending(out, itemId, toolPart(itemId, toolNameFor(request.method), {}, undefined, request));
     }
   }
+  // questions codex asks (requestUserInput) are standalone parts; the
+  // renderer answers them through the runtime's extras (answerRequest)
+  for (const request of view.requests) {
+    if (request.method !== "item/tool/requestUserInput") continue;
+    const itemId = String(request.params["itemId"] ?? request.id);
+    const args = { requestId: String(request.id), questions: (request.params["questions"] as unknown[]) ?? [] };
+    attachPending(out, itemId, toolPart(itemId, "requestUserInput", args, undefined, undefined));
+  }
   return out;
+}
+
+function attachPending(out: ThreadMessageLike[], itemId: string, part: ToolPart) {
+  const last = out.at(-1);
+  if (last && last.role === "assistant" && Array.isArray(last.content)) {
+    out[out.length - 1] = { ...last, content: [...last.content, part], status: REQUIRES_ACTION };
+  } else {
+    out.push({ id: `pending:${itemId}`, role: "assistant", content: [part], status: REQUIRES_ACTION });
+  }
+}
+
+// assistant-ui's MessageTiming from the turn (codex: epoch seconds) and the
+// last turn's token usage; older turns keep only what the turn row knows.
+function timingFor(view: ThreadView, turnId: string | undefined, parts: Part[]): MessageTiming | undefined {
+  const turn = view.turn;
+  if (!turn || turn["id"] !== turnId || typeof turn["startedAt"] !== "number") return undefined;
+  const startedAt = (turn["startedAt"] as number) * 1000;
+  const completedAt = typeof turn["completedAt"] === "number" ? (turn["completedAt"] as number) * 1000 : undefined;
+  const last = (view.tokenUsage?.["last"] as { outputTokens?: number } | undefined) ?? undefined;
+  const tokenCount = completedAt !== undefined && typeof last?.outputTokens === "number" ? last.outputTokens : undefined;
+  const totalStreamTime = completedAt !== undefined ? completedAt - startedAt : undefined;
+  return {
+    streamStartTime: startedAt,
+    ...(totalStreamTime !== undefined ? { totalStreamTime } : {}),
+    ...(tokenCount !== undefined ? { tokenCount } : {}),
+    ...(tokenCount !== undefined && totalStreamTime ? { tokensPerSecond: (tokenCount * 1000) / totalStreamTime } : {}),
+    totalChunks: parts.length,
+    toolCallCount: parts.filter((p) => p.type === "tool-call").length,
+  };
 }
 
 // assistant-ui shows a part's approval controls only while its message
@@ -71,6 +104,14 @@ const REQUIRES_ACTION = { type: "requires-action", reason: "interrupt" } as cons
 
 function awaitsApproval(parts: Part[]): boolean {
   return parts.some((p) => p.type === "tool-call" && "approval" in p && p.approval !== undefined);
+}
+
+// the client stamps items when they start/complete (thread.ts); snapshot items have none
+function timingOf(item: CodexItem): { startedAt: number; completedAt?: number } | undefined {
+  const startedAt = item["startedAtMs"];
+  if (typeof startedAt !== "number") return undefined;
+  const completedAt = item["completedAtMs"];
+  return typeof completedAt === "number" ? { startedAt, completedAt } : { startedAt };
 }
 
 function approvalsByItem(requests: PendingRequest[]): Map<string, PendingRequest> {
@@ -148,6 +189,7 @@ function toPart(item: CodexItem, approval: PendingRequest | undefined): Part | n
         approval,
         done && ((typeof exit === "number" && exit !== 0) || status === "failed" || status === "declined"),
         item["aggregatedOutput"],
+        timingOf(item),
       );
     }
     case "fileChange": {
@@ -160,10 +202,12 @@ function toPart(item: CodexItem, approval: PendingRequest | undefined): Part | n
         done ? { status, output: item["output"] ?? "" } : undefined,
         approval,
         status === "failed" || status === "declined",
+        undefined,
+        timingOf(item),
       );
     }
     case "webSearch":
-      return toolPart(item.id, "webSearch", { query: item["query"], action: item["action"] }, item["results"] !== undefined ? { results: item["results"] } : undefined, undefined);
+      return toolPart(item.id, "webSearch", { query: item["query"], action: item["action"] }, item["results"] !== undefined ? { results: item["results"] } : undefined, undefined, false, undefined, timingOf(item));
     case "dynamicToolCall": {
       const status = item["status"];
       const done = status === "completed" || status === "failed";
@@ -174,6 +218,8 @@ function toPart(item: CodexItem, approval: PendingRequest | undefined): Part | n
         done ? { success: item["success"], contentItems: item["contentItems"] ?? [], durationMs: item["durationMs"] } : undefined,
         undefined,
         done && item["success"] === false,
+        undefined,
+        timingOf(item),
       );
     }
     default:
@@ -189,6 +235,7 @@ function toolPart(
   approval: PendingRequest | undefined,
   isError = false,
   artifact?: unknown,
+  timing?: { startedAt: number; completedAt?: number },
 ): ToolPart {
   const part: ToolPart = {
     type: "tool-call",
@@ -198,6 +245,7 @@ function toolPart(
     ...(result !== undefined ? { result } : {}),
     ...(isError ? { isError: true } : {}),
     ...(artifact !== undefined ? { artifact } : {}),
+    ...(timing ? { timing } : {}),
   };
   if (approval) {
     return {

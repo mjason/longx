@@ -13,6 +13,7 @@ import { Skeleton } from "@/ui/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/components/ui/tooltip";
 import { TopBar } from "@/ui/shell/Shell";
 import { ThemeToggle } from "@/ui/components/ThemeToggle";
+import { ChatProvider } from "@/ui/chat/ChatProvider";
 import { t } from "@/ui/strings";
 import { StatusStrip } from "./StatusStrip";
 import { FilesTool } from "./tools/FilesTool";
@@ -85,6 +86,7 @@ export function ProjectWindow() {
 
   return (
     // fixed height: the chat scrolls inside its own viewport, not the page
+    <ChatProvider projectId={project.data.id} slug={slug}>
     <div className="flex h-dvh flex-col">
       <TopBar
         wide
@@ -125,13 +127,14 @@ export function ProjectWindow() {
         </>
       ) : null}
     </div>
+    </ChatProvider>
   );
 }
 
 function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
   switch (tool) {
     case "threads":
-      return <ThreadsTool ctx={ctx} />;
+      return <ThreadsTool />;
     case "git":
       return <GitTool ctx={ctx} />;
     case "process":

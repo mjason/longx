@@ -58,14 +58,18 @@ const DELTAS: Record<string, { field: string; index?: string }> = {
   "item/plan/delta": { field: "text" },
 };
 
-/** Applies one event; anything at or before the view's seq is already in it. */
-export function applyEvent(view: ThreadView, event: ThreadEvent): ThreadView {
+/**
+ * Applies one event; anything at or before the view's seq is already in it.
+ * `now` (epoch ms) stamps items as `startedAtMs` / `completedAtMs` — codex
+ * only reports durations, the UI wants wall-clock timing.
+ */
+export function applyEvent(view: ThreadView, event: ThreadEvent, now: number = Date.now()): ThreadView {
   if (event.seq <= view.seq) return view;
-  const next = { ...fold(view, event.method, event.params), seq: event.seq };
+  const next = { ...fold(view, event.method, event.params, now), seq: event.seq };
   return next;
 }
 
-function fold(view: ThreadView, method: string, params: Record<string, unknown>): ThreadView {
+function fold(view: ThreadView, method: string, params: Record<string, unknown>, now: number): ThreadView {
   switch (method) {
     case "thread/started":
       return { ...view, thread: params["thread"] as Record<string, unknown> };
@@ -81,7 +85,12 @@ function fold(view: ThreadView, method: string, params: Record<string, unknown>)
       const item = params["item"] as CodexItem | undefined;
       if (!item?.id) return view;
       const turnId = (params["turnId"] as string | undefined) ?? item.turnId;
-      return { ...view, items: putItem(view.items, turnId ? { ...item, turnId } : item) };
+      const previous = view.items.find((i) => i.id === item.id);
+      const stamps =
+        method === "item/started"
+          ? { startedAtMs: now }
+          : { ...(previous?.["startedAtMs"] !== undefined ? { startedAtMs: previous["startedAtMs"] } : {}), completedAtMs: now };
+      return { ...view, items: putItem(view.items, { ...item, ...(turnId ? { turnId } : {}), ...stamps }) };
     }
     case "thread/reverted": {
       const dropped = new Set((params["turnIds"] as string[] | undefined) ?? []);

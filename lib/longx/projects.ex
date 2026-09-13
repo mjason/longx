@@ -35,6 +35,7 @@ defmodule Longx.Projects do
       rpc_action :send_message, :send_message
       rpc_action :interrupt_turn, :interrupt_turn
       rpc_action :respond, :respond
+      rpc_action :answer_request, :answer_request
       rpc_action :rename_thread, :rename
       rpc_action :archive_thread, :archive
     end

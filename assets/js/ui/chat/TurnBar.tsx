@@ -1,9 +1,10 @@
 import { Loader2, ShieldAlert } from "lucide-react";
+import type { TurnState } from "@/core/chat/runtime";
 import { useModels } from "@/core/projects";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { t } from "@/ui/strings";
 
-export type TurnState = "idle" | "running" | "approval";
+
 
 /**
  * The thin bar above the composer: what the turn is doing, and which model

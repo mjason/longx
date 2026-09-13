@@ -39,7 +39,8 @@ describe("ProjectWindow", () => {
     // remembered default: the threads tool is open
     const panel = screen.getByTestId("tool-panel");
     expect(await within(panel).findByText("thread 1")).toBeInTheDocument();
-    expect(within(panel).getByText("thread 1").closest("a")).toHaveAttribute("aria-current", "page");
+    // the ThreadList element marks the open thread active
+    expect(within(panel).getByText("thread 1").closest("[data-active]")).toBeInTheDocument();
 
     await user.keyboard("{Meta>}2{/Meta}");
     expect(within(screen.getByTestId("tool-panel")).getByTestId("git-tool")).toBeInTheDocument();

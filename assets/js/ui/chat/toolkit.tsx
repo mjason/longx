@@ -4,7 +4,9 @@
 // web-search, approval-card); dynamic tools (`ns.name`) fall through to the
 // ToolFallback element. Approvals are answered through assistant-ui's
 // `respondToApproval` seam (option id = our decision).
-import { AuiConfig, defineToolkit, Tools, type ToolCallMessagePartComponent, type ToolCallMessagePartProps } from "@assistant-ui/react";
+import { AuiConfig, defineToolkit, Tools, useAuiState, type ToolCallMessagePartComponent, type ToolCallMessagePartProps } from "@assistant-ui/react";
+import type { CodexExtras } from "@/core/chat/adapter";
+import { ElicitationForm, type ElicitationField } from "@/ui/components/assistant-ui/elements/elicitation-form";
 import { FileDiffIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -159,6 +161,53 @@ export const WebSearchTool: ToolCallMessagePartComponent<WebSearchArgs, WebSearc
   );
 };
 
+type Question = { id: string; header?: string; question: string; options?: { label: string; description?: string }[] | null; isOther?: boolean; isSecret?: boolean };
+type QuestionsArgs = { requestId?: string; questions?: Question[] };
+
+/** codex's requestUserInput: one form for all its questions; answered through the runtime's extras. */
+export const QuestionsTool: ToolCallMessagePartComponent<QuestionsArgs, unknown> = (p) => {
+  const extras = useAuiState((s) => s.thread.extras) as CodexExtras | undefined;
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [state, setState] = useState<"request" | "accepted">("request");
+  const questions = p.args.questions ?? [];
+  const fields: ElicitationField[] = questions.map((q) => {
+    const options = (q.options ?? []).map((o) => o.label);
+    return {
+      name: q.id,
+      label: q.question,
+      hint: q.header,
+      value: values[q.id] ?? "",
+      kind: options.length ? "choice" : "text",
+      options,
+      freeform: q.isOther ?? false,
+      secret: q.isSecret ?? false,
+      required: true,
+    };
+  });
+  const pending = p.status.type === "requires-action" && state === "request";
+  const submit = () => {
+    if (!p.args.requestId || !extras) return;
+    setState("accepted");
+    void extras.answerRequest(p.args.requestId, Object.fromEntries(questions.map((q) => [q.id, [values[q.id] ?? ""]]))).catch((error: unknown) => {
+      setState("request");
+      toast.error(error instanceof Error ? error.message : String(error));
+    });
+  };
+  return (
+    <div className="py-1" data-testid="tool-questions">
+      <ElicitationForm
+        server={t.agentAsks}
+        message=""
+        fields={fields}
+        state={pending ? "request" : "accepted"}
+        labels={{ needsInput: t.needsAnswer, send: t.send, decline: t.deny, sent: t.answered, declined: t.declined, other: t.otherAnswer }}
+        onChange={(name, value) => setValues((v) => ({ ...v, [name]: value }))}
+        onAccept={submit}
+      />
+    </div>
+  );
+};
+
 // `type: "backend"`: codex runs these; we only render. `display: "standalone"`
 // keeps them out of the collapsible "n tool calls" trace group — what the
 // agent ran and changed is the point of this UI, not a trace to fold away;
@@ -167,6 +216,7 @@ export const codexToolkit = defineToolkit({
   commandExecution: { type: "backend", render: CommandExecutionTool, display: "standalone" },
   fileChange: { type: "backend", render: FileChangeTool, display: "standalone" },
   webSearch: { type: "backend", render: WebSearchTool, display: "standalone" },
+  requestUserInput: { type: "backend", render: QuestionsTool, display: "standalone" },
 });
 
 export const chatConfig = AuiConfig({ tools: Tools({ toolkit: codexToolkit }) });

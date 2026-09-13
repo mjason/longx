@@ -38,6 +38,16 @@ describe("thread view", () => {
     expect(v.items.at(-1)).toMatchObject({ content: ["raw!"] });
   });
 
+  test("items are stamped with the client clock when they start and complete", () => {
+    let v = fromSnapshot(snapshot);
+    v = applyEvent(v, { seq: 11, method: "item/started", params: { turnId: "turn_2", item: { id: "c1", type: "commandExecution", command: "ls" } } }, 1000);
+    expect(v.items.at(-1)).toMatchObject({ id: "c1", startedAtMs: 1000 });
+    v = applyEvent(v, { seq: 12, method: "item/completed", params: { turnId: "turn_2", item: { id: "c1", type: "commandExecution", command: "ls", status: "completed", exitCode: 0 } } }, 1800);
+    expect(v.items.at(-1)).toMatchObject({ id: "c1", startedAtMs: 1000, completedAtMs: 1800, exitCode: 0 });
+    // snapshot items carry no client stamps
+    expect(v.items[1]).not.toHaveProperty("startedAtMs");
+  });
+
   test("items start, stream deltas, complete (replace), in order", () => {
     let v = fromSnapshot(snapshot);
     v = applyEvent(v, { seq: 11, method: "item/started", params: { turnId: "turn_2", item: { id: "a2", type: "agentMessage", text: "" } } });

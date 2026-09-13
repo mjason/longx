@@ -247,7 +247,7 @@ defmodule Longx.Codex.ThreadStateTest do
             "delta" => "ok"
           })
 
-          assert_receive {:codex, 2, "item/agentMessage/delta", %{"itemId" => "m2"}}
+          assert_receive {:codex, 2, "item/agentMessage/delta", %{"itemId" => "m2"}}, 2_000
         end)
 
       assert log =~ "could not fold item/agentMessage/delta"

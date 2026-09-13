@@ -7,6 +7,7 @@ import {
 import { File } from "@/ui/components/assistant-ui/elements/file";
 import { Image } from "@/ui/components/assistant-ui/elements/image";
 import { MarkdownText } from "@/ui/components/assistant-ui/elements/markdown-text";
+import { MessageTiming } from "@/ui/components/assistant-ui/elements/message-timing.aui";
 import {
   Reasoning,
   ReasoningContent,
@@ -39,6 +40,7 @@ import {
   type FileMessagePartComponent,
   type ImageMessagePartComponent,
   type ToolCallMessagePartComponent,
+  unstable_useMessageStallDetection,
   useAuiState,
 } from "@assistant-ui/react";
 import {
@@ -435,6 +437,7 @@ const AssistantMessage: FC = () => {
           }}
         </MessagePrimitive.GroupedParts>
         <MessageError />
+        <StalledHint />
       </div>
 
       <div
@@ -443,8 +446,22 @@ const AssistantMessage: FC = () => {
       >
         <BranchPicker />
         <AssistantActionBar />
+        <MessageTiming />
       </div>
     </MessagePrimitive.Root>
+  );
+};
+
+// Longx: a turn that stops producing output (a long command, a slow model)
+// says so instead of looking finished; the backend's stall watchdog ends
+// it for good after `stall_after`.
+const StalledHint: FC = () => {
+  const { stalled, stalledForMs } = unstable_useMessageStallDetection({ thresholdMs: 15_000 });
+  if (!stalled) return null;
+  return (
+    <p data-slot="aui_assistant-message-stalled" className="text-muted-foreground mt-2 animate-pulse text-xs">
+      {t.stalledFor(Math.round(stalledForMs / 1000))}
+    </p>
   );
 };
 

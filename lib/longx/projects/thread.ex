@@ -103,6 +103,24 @@ defmodule Longx.Projects.Thread do
       end
     end
 
+    # answers a question codex asked (item/tool/requestUserInput): the raw
+    # response map, `%{"answers" => %{question_id => %{"answers" => [..]}}}`
+    action :answer_request do
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :request_id, :string, allow_nil?: false
+      argument :answers, :map, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
+          Longx.Codex.Thread.respond_raw(
+            input.arguments.request_id,
+            %{"answers" => input.arguments.answers},
+            thread_id: thread.codex_thread_id
+          )
+        end
+      end
+    end
+
     create :create do
       primary? true
 

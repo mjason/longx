@@ -5,6 +5,8 @@
 #   "say <words>"      stream <words> as agentMessage deltas, complete the turn
 #   "approve <cmd>"    ask the client to approve <cmd> (server → client request),
 #                      then run or decline it depending on the answer
+#   "ask <question>"   ask the client a question (item/tool/requestUserInput with one
+#                      question `q1`), then say the answer back
 #   "stall"            emit 3 deltas, wait for a `fake/continue` notification,
 #                      then finish
 #   "slow <ms>"        sleep <ms> before answering turn/start
@@ -324,6 +326,50 @@ defmodule FakeAppServer do
       _other, state ->
         stream_message(thread_id, turn_id, ["declined"])
         finish_turn(thread_id, turn_id, "completed", state, "approve " <> cmd, "declined")
+    end
+
+    %{state | next: state.next + 1, pending: Map.put(state.pending, request_id, continuation)}
+  end
+
+  defp run_turn("ask " <> question, id, thread_id, turn_id, state) do
+    start_turn(id, thread_id, turn_id, "ask " <> question)
+    request_id = state.next
+
+    request(request_id, "item/tool/requestUserInput", %{
+      "threadId" => thread_id,
+      "turnId" => turn_id,
+      "itemId" => "call_#{state.next}",
+      "isBlocking" => true,
+      "questions" => [
+        %{
+          "id" => "q1",
+          "header" => "Question",
+          "question" => question,
+          "options" => [
+            %{"label" => "yes", "description" => "go ahead"},
+            %{"label" => "no", "description" => "stop"}
+          ],
+          "isOther" => true
+        }
+      ]
+    })
+
+    continuation = fn
+      %{"answers" => %{"q1" => %{"answers" => [answer | _]}}}, state ->
+        stream_message(thread_id, turn_id, ["you said", answer])
+
+        finish_turn(
+          thread_id,
+          turn_id,
+          "completed",
+          state,
+          "ask " <> question,
+          "you said " <> answer
+        )
+
+      _other, state ->
+        stream_message(thread_id, turn_id, ["no answer"])
+        finish_turn(thread_id, turn_id, "completed", state, "ask " <> question, "no answer")
     end
 
     %{state | next: state.next + 1, pending: Map.put(state.pending, request_id, continuation)}

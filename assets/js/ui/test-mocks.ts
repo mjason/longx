@@ -31,6 +31,9 @@ export function rpcMock() {
     sendMessage: vi.fn(async () => ok({ id: "turn-row" })),
     interruptTurn: vi.fn(async () => ok(null)),
     respond: vi.fn(async () => ok(null)),
+    answerRequest: vi.fn(async () => ok(null)),
+    renameThread: vi.fn(async () => ok(thread(1))),
+    archiveThread: vi.fn(async () => ok(thread(1))),
     startThread: vi.fn(async () => ok(thread(2))),
     stopCodex: vi.fn(),
     restartCodex: vi.fn(),
@@ -56,8 +59,10 @@ export const model = (n: number, extra: Partial<{ slug: string; default: boolean
 
 /**
  * A channel double that remembers what was joined and lets a test deliver
- * the join reply (`channel.reply("ok", snapshot)`) and pushes
- * (`channel.push("codex", event)`) — for both the project and thread topics.
+ * the join reply (`channel.reply("ok", snapshot)`) and deliver server pushes
+ * (`channel.deliver("codex", event)`) — for both the project and thread
+ * topics. Client pushes (`push`) are recorded; `answer(status, payload)`
+ * resolves the last one.
  */
 export const channel = {
   topics: [] as string[],
@@ -76,16 +81,34 @@ export const channel = {
     return receiver;
   }),
   leave: vi.fn(),
+  pushed: [] as { event: string; payload: unknown }[],
+  pushReplies: {} as Record<string, (payload: unknown) => void>,
+  push: vi.fn((event: string, payload: unknown) => {
+    channel.pushed.push({ event, payload });
+    const receiver = {
+      receive(status: string, cb: (payload: unknown) => void) {
+        channel.pushReplies[status] = cb;
+        return receiver;
+      },
+    };
+    return receiver;
+  }),
   reply(status: string, payload: unknown) {
     channel.replies[status]?.(payload);
   },
-  push(event: string, payload: unknown) {
+  answer(status: string, payload: unknown) {
+    channel.pushReplies[status]?.(payload);
+  },
+  deliver(event: string, payload: unknown) {
     channel.handlers[event]?.(payload);
   },
   reset() {
     channel.topics = [];
     channel.handlers = {};
     channel.replies = {};
+    channel.pushed = [];
+    channel.pushReplies = {};
+    channel.push.mockClear();
     channel.on.mockClear();
     channel.join.mockClear();
     channel.leave.mockClear();
