@@ -257,48 +257,12 @@ defmodule Longx.AI.SearchTest do
       assert %{type: "open", url: "https://spa.test/app", title: "Fake page"} = result
     end
 
-    test "opens a bare URL by fetching it ourselves — no search provider involved", %{
-      bypass: bypass,
-      target: target
-    } do
-      site = Bypass.open()
-
-      Bypass.expect_once(site, "GET", "/page", fn conn ->
-        conn
-        |> Plug.Conn.put_resp_content_type("text/html")
-        |> Plug.Conn.send_resp(
-          200,
-          "<html><title>Hex</title><body><main><p>hex packages</p></main></body></html>"
-        )
-      end)
-
-      # Tavily must not be asked
-      Bypass.stub(bypass, "POST", "/extract", fn conn -> Plug.Conn.send_resp(conn, 500, "no") end)
-      url = "http://localhost:#{site.port}/page"
-
-      {:ok, %{output: output, results: [result]}} =
-        Search.run(%{"id" => "t", "commands" => %{"open" => [%{"ref_id" => url}]}}, target)
-
-      assert output =~ "hex packages"
-      assert output =~ "Hex"
-      assert %{type: "open", url: ^url, title: "Hex"} = result
-
-      # and it works with no search provider configured at all
-      Bypass.expect_once(site, "GET", "/page", fn conn ->
-        conn |> Plug.Conn.put_resp_content_type("text/plain") |> Plug.Conn.send_resp(200, "plain")
-      end)
-
-      {:ok, %{output: output2}} =
-        Search.run(%{"id" => "t2", "commands" => %{"open" => [%{"ref_id" => url}]}}, nil)
-
-      assert output2 =~ "plain"
-    end
-
-    test "when our fetch fails the search provider's extractor is the fallback; without one the failure is reported",
-         %{bypass: bypass, target: target} do
-      site = Bypass.open()
-      Bypass.expect(site, "GET", "/blocked", fn conn -> Plug.Conn.send_resp(conn, 403, "bot") end)
-      url = "http://localhost:#{site.port}/blocked"
+    test "without the browser the provider's extractor opens the page; with neither the model is told",
+         %{
+           bypass: bypass,
+           target: target
+         } do
+      url = "https://spa.test/app"
 
       Bypass.expect_once(bypass, "POST", "/extract", fn conn ->
         conn
@@ -320,7 +284,7 @@ defmodule Longx.AI.SearchTest do
       {:ok, %{output: output2, results: []}} =
         Search.run(%{"id" => "t", "commands" => %{"open" => [%{"ref_id" => url}]}}, nil)
 
-      assert output2 =~ "403"
+      assert output2 =~ "no headless browser"
     end
 
     test "search_query without a search provider says so instead of failing" do

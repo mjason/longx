@@ -18,8 +18,13 @@ defmodule Longx.Browser.Html do
     root =
       pick(LazyHTML.query(doc, "main, article, [role=main]"), LazyHTML.query(doc, "body"), doc)
 
+    # the root's children: `<main>…</main>` / `<body>…</body>` wrappers say nothing
     root
     |> LazyHTML.to_tree()
+    |> Enum.flat_map(fn
+      {_tag, _attrs, children} -> children
+      other -> [other]
+    end)
     |> Enum.map(&prune/1)
     |> Enum.reject(&is_nil/1)
     |> LazyHTML.from_tree()

@@ -5,10 +5,9 @@ defmodule Longx.AI.Search do
   `codex-api/src/search.rs`) against a `Longx.AI.SearchTarget`.
 
   Supported: `search_query` (with `recency`/`domains`), `open` (by reference
-  id from an earlier call in the same session, or a URL — **fetched by us**,
-  `Longx.AI.Search.Fetch`; the provider's extractor is only the fallback when
-  our fetch fails, so opening a URL needs no search provider and costs no
-  credits), `time`. The other
+  id from an earlier call in the same session, or a URL — rendered by the
+  bundled headless browser, `Longx.Browser`; the provider's extractor is the
+  fallback when the browser is not installed or fails), `time`. The other
   commands (`image_query`, `click`, `find`, `screenshot`, `finance`,
   `weather`, `sports`) are answered with a "not supported" line so the model
   can adapt instead of retrying.
@@ -18,7 +17,7 @@ defmodule Longx.AI.Search do
   passes through to the UI unchanged.
   """
 
-  alias Longx.AI.Search.{Fetch, Refs, Tavily}
+  alias Longx.AI.Search.{Refs, Tavily}
   alias Longx.Browser
   alias Longx.AI.SearchTarget
 
@@ -207,26 +206,22 @@ defmodule Longx.AI.Search do
     end
   end
 
-  # the headless browser first (JavaScript pages come out rendered, the
-  # model gets the main element's html), a plain fetch when it is not
-  # available, the provider's extractor last
+  # the headless browser (JavaScript pages come out rendered, the model gets
+  # the main element's html); the provider's extractor when it is not
+  # installed or fails
   defp fetch_page(url, ref_id, lineno, session, target) do
     case browser_page(url) do
       {:ok, title, content} ->
         page(url, ref_id, lineno, session, title, content)
 
-      {:error, browser_reason} ->
-        case Fetch.fetch(url) do
-          {:ok, %{title: title, text: text}} ->
-            page(url, ref_id, lineno, session, title, text)
-
-          {:error, reason} ->
+      {:error, reason} ->
+        if reason != :unavailable,
+          do:
             Logger.info(
-              "web open: fetch of #{url} failed (browser: #{inspect(browser_reason)}, plain: #{inspect(reason)}), trying the provider"
+              "web open: browser failed for #{url} (#{inspect(reason)}), trying the provider"
             )
 
-            extract_page(url, ref_id, lineno, session, target, reason)
-        end
+        extract_page(url, ref_id, lineno, session, target, reason)
     end
   end
 
@@ -240,6 +235,14 @@ defmodule Longx.AI.Search do
     else
       {:error, :unavailable}
     end
+  end
+
+  defp extract_page(url, _ref_id, _lineno, _session, nil, :unavailable) do
+    %{
+      output:
+        "## open: #{url}\ncannot open pages: no headless browser installed on this Longx and no search provider configured.",
+      results: []
+    }
   end
 
   defp extract_page(url, _ref_id, _lineno, _session, nil, reason) do
