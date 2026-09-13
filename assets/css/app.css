@@ -232,6 +232,16 @@
   min-width: 44px;
 }
 
+/* the diff view (ui/editor/DiffView): CodeMirror's merge view clips long
+   lines by default; each side scrolls sideways instead, with a rule between */
+.cm-mergeView .cm-mergeViewEditor {
+  min-width: 0;
+  overflow-x: auto;
+}
+.cm-mergeView .cm-mergeViewEditor + .cm-mergeViewEditor {
+  border-left: 1px solid var(--border);
+}
+
 /* assistant-ui elements: open/closed state variants (Radix data-state or Base UI data-open) */
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));

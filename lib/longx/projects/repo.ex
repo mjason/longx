@@ -204,6 +204,25 @@ defmodule Longx.Projects.Repo do
       end
     end
 
+    # both whole texts, for the side-by-side view (sha nil: HEAD vs the working tree)
+    action :git_file_versions, :map do
+      constraints fields: [
+                    before: [type: :string],
+                    after: [type: :string],
+                    binary: [type: :boolean, allow_nil?: false]
+                  ]
+
+      argument :project_id, :uuid, allow_nil?: false
+      argument :sha, :string
+      argument :path, :string, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, dir} <- repo(input) do
+          {:ok, Git.file_versions(dir, input.arguments[:sha], input.arguments.path)}
+        end
+      end
+    end
+
     # Branches (and the stash, which is what a switch with changes needs)
     action :git_branches, :map do
       constraints fields: [

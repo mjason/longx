@@ -129,6 +129,15 @@ defmodule LongxWeb.WorkspaceRpcTest do
 
     assert diff =~ "+# two"
 
+    assert %{
+             "success" => true,
+             "data" => %{"before" => "# hi\n", "after" => "# two\n", "binary" => false}
+           } =
+             rpc(conn, "git_file_versions", %{
+               "fields" => ["before", "after", "binary"],
+               "input" => %{"projectId" => id, "path" => "README.md"}
+             })
+
     assert %{"success" => true, "data" => %{"sha" => sha}} =
              rpc(conn, "git_commit", %{
                "fields" => ["sha"],
@@ -174,6 +183,12 @@ defmodule LongxWeb.WorkspaceRpcTest do
              })
 
     assert diff =~ "+# two"
+
+    assert %{"success" => true, "data" => %{"before" => "# hi\n", "after" => "# two\n"}} =
+             rpc(conn, "git_file_versions", %{
+               "fields" => ["before", "after"],
+               "input" => %{"projectId" => id, "sha" => sha, "path" => "README.md"}
+             })
 
     assert %{"success" => true} =
              rpc(conn, "git_discard", %{"input" => %{"projectId" => id, "paths" => ["new.txt"]}})

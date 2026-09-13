@@ -180,6 +180,23 @@ defmodule Longx.GitTest do
       assert %{binary: true} = Git.file_diff(dir, "pic.png")
     end
 
+    test "file_versions/3 gives both sides of a working-tree change: HEAD's text and the file now",
+         %{
+           dir: dir
+         } do
+      write!(dir, "a.txt", "two\n")
+      write!(dir, "c.txt", "new\n")
+      File.rm!(Path.join(dir, "b.txt"))
+      write!(dir, "pic.png", <<137, 80, 78, 71, 0, 1, 2, 3>>)
+
+      assert %{before: "one\n", after: "two\n", binary: false} =
+               Git.file_versions(dir, nil, "a.txt")
+
+      assert %{before: nil, after: "new\n"} = Git.file_versions(dir, nil, "c.txt")
+      assert %{before: "b\n", after: nil} = Git.file_versions(dir, nil, "b.txt")
+      assert %{binary: true, before: nil, after: nil} = Git.file_versions(dir, nil, "pic.png")
+    end
+
     test "discard/2 puts tracked files back and removes untracked ones, only the named paths", %{
       dir: dir
     } do
@@ -262,6 +279,15 @@ defmodule Longx.GitTest do
       assert diff =~ "-one" and diff =~ "+two"
       assert %{diff: diff} = Git.commit_file_diff(dir, s1, "a.txt")
       assert diff =~ "+one"
+    end
+
+    test "file_versions/3 for a commit: the file before it (its first parent) and after; nothing before the root",
+         %{dir: dir, s1: s1, s2: s2} do
+      assert %{before: "one\n", after: "two\n", binary: false} =
+               Git.file_versions(dir, s2, "a.txt")
+
+      assert %{before: nil, after: "one\n"} = Git.file_versions(dir, s1, "a.txt")
+      assert %{before: nil, after: "b\n"} = Git.file_versions(dir, s2, "b.txt")
     end
 
     test "undo_commit/1 takes the last commit back into the working tree; the root commit cannot be undone",

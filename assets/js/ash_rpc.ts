@@ -3261,6 +3261,82 @@ export async function validateGitFileDiff(
 }
 
 
+export type GitFileVersionsInput = {
+  projectId: UUID;
+  sha?: string | null;
+  path: string;
+};
+
+export type GitFileVersionsFields = UnifiedFieldSelection<{before: string | null, after: string | null, binary: boolean, __type: "TypedMap", __primitiveFields: "before" | "after" | "binary"}>[];
+
+export type InferGitFileVersionsResult<
+  Fields extends GitFileVersionsFields | undefined,
+> = InferResult<{before: string | null, after: string | null, binary: boolean, __type: "TypedMap", __primitiveFields: "before" | "after" | "binary"}, Fields>;
+
+export type GitFileVersionsResult<Fields extends GitFileVersionsFields | undefined = undefined> = | { success: true; data: InferGitFileVersionsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitFileVersions<Fields extends GitFileVersionsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: GitFileVersionsInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitFileVersionsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "git_file_versions",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<GitFileVersionsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitFileVersions(
+  config: {
+  tenant?: string;
+  input: GitFileVersionsInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_file_versions",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type GitLogInput = {
   projectId: UUID;
   limit?: number | null;

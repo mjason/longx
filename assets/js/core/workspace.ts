@@ -10,12 +10,11 @@ import {
   gitBranches,
   gitChanges,
   gitCommit,
-  gitCommitFileDiff,
+  gitFileVersions,
   gitCreateBranch,
   gitDeleteBranch,
   gitDiscard,
   gitFetch,
-  gitFileDiff,
   gitLog,
   gitPull,
   gitPush,
@@ -53,7 +52,8 @@ export type LogEntry = { sha: string; subject: string; author: string; email: st
 export type Commit = LogEntry & { body: string; parents: string[]; files: Change[] };
 export type Branch = { name: string; sha: string; current: boolean; upstream: string | null };
 export type Branches = { current: string | null; branches: Branch[]; stashes: { index: number; message: string }[] };
-export type FileDiff = { binary: boolean; diff: string };
+/** both whole texts of one change; a side that does not exist is null; binaries carry no text */
+export type FileVersions = { before: string | null; after: string | null; binary: boolean };
 
 export const wsKeys = {
   files: (id: string, path: string) => ["files", id, path] as const,
@@ -61,10 +61,9 @@ export const wsKeys = {
   file: (id: string, path: string) => ["file", id, path] as const,
   git: (id: string) => ["git", id] as const,
   changes: (id: string) => ["git", id, "changes"] as const,
-  fileDiff: (id: string, path: string) => ["git", id, "diff", path] as const,
   log: (id: string, limit: number, skip: number) => ["git", id, "log", limit, skip] as const,
   show: (id: string, sha: string) => ["git", id, "show", sha] as const,
-  commitDiff: (id: string, sha: string, path: string) => ["git", id, "commit", sha, path] as const,
+  versions: (id: string, sha: string | null, path: string) => ["git", id, "versions", sha ?? "", path] as const,
   branches: (id: string) => ["git", id, "branches"] as const,
 };
 
@@ -145,11 +144,13 @@ export function useGitChanges(projectId: string, opts: { poll?: boolean } = {}) 
   });
 }
 
-export function useGitFileDiff(projectId: string, path: string | null) {
+/** the two sides of a file's change: HEAD vs the working tree (sha null) or a commit against its first parent */
+export function useGitFileVersions(projectId: string, sha: string | null, path: string | null) {
   return useQuery({
-    queryKey: wsKeys.fileDiff(projectId, path ?? ""),
+    queryKey: wsKeys.versions(projectId, sha, path ?? ""),
     enabled: path !== null,
-    queryFn: async () => unwrap(await gitFileDiff({ fields: ["binary", "diff"], input: { projectId, path: path! } })) as FileDiff,
+    queryFn: async () =>
+      unwrap(await gitFileVersions({ fields: ["before", "after", "binary"], input: { projectId, sha: sha ?? undefined, path: path! } })) as FileVersions,
   });
 }
 
@@ -169,15 +170,6 @@ export function useGitShow(projectId: string, sha: string | null) {
     enabled: sha !== null,
     queryFn: async () =>
       unwrap(await gitShow({ fields: [...logFields, "body", "parents", "files"], input: { projectId, sha: sha! } })) as Commit,
-  });
-}
-
-export function useGitCommitFileDiff(projectId: string, sha: string | null, path: string | null) {
-  return useQuery({
-    queryKey: wsKeys.commitDiff(projectId, sha ?? "", path ?? ""),
-    enabled: sha !== null && path !== null,
-    queryFn: async () =>
-      unwrap(await gitCommitFileDiff({ fields: ["binary", "diff"], input: { projectId, sha: sha!, path: path! } })) as FileDiff,
   });
 }
 

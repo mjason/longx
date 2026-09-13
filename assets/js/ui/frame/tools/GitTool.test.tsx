@@ -50,7 +50,11 @@ describe("GitTool", () => {
     await user.click(within(panel).getByRole("button", { name: /lib\/a\.ex/ }));
     const tabs = await screen.findByTestId("workbench-tabs");
     expect(within(tabs).getByRole("tab", { name: /a\.ex ±/ })).toHaveAttribute("aria-selected", "true");
-    await screen.findByTestId("diff-tab");
+    // GitHub's file view: both versions in the merge view, side by side on a desktop
+    const diff = await screen.findByTestId("diff-view");
+    await waitFor(() => expect(diff.querySelectorAll(".cm-mergeViewEditor")).toHaveLength(2));
+    await user.click(screen.getByRole("tab", { name: "单栏" }));
+    await waitFor(() => expect(screen.getByTestId("diff-view")).toHaveAttribute("data-mode", "unified"));
 
     await user.click(within(panel).getByRole("checkbox", { name: /new\.txt/ }));
     await user.type(within(panel).getByRole("textbox", { name: "摘要" }), "fix a");

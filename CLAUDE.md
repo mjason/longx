@@ -64,7 +64,8 @@ React Native client planned on the same core code.
   (`reset --soft HEAD~1`, never the root), `branches/1` / `create_branch` / `switch` /
   `delete_branch`, `stash` / `stash_pop` / `stashes`, `remotes` / `set_remote` /
   `ahead_behind` / `fetch` / `pull` / `push` (upstream set on first push; 120 s), `ignored/1`
-  (what `.gitignore` hides, directories whole), `merging?/1` / `abort_merge/1`. Auth for
+  (what `.gitignore` hides, directories whole), `merging?/1` / `abort_merge/1`,
+  `file_versions/3` (`git show rev:path` on both sides). Auth for
   remotes is whatever the machine's SSH agent / credential helpers give the bundled git
   (`GIT_TERMINAL_PROMPT=0`: never a prompt, an error instead). The suite plays the remote
   with a bare repository on disk. `LONGX_GIT` overrides the binary.
@@ -150,7 +151,10 @@ React Native client planned on the same core code.
   - `Longx.Projects.Repo` over `Longx.Git`: `git_changes` (the whole sync state in one call:
     branch, head, changes, ahead/behind, remotes, ignored, merging), `git_file_diff`,
     `git_commit`, `git_discard`, `git_undo_commit`, `git_abort_merge`, `git_log`,
-    `git_show`, `git_commit_file_diff`, `git_branches` (+ stashes), `git_create_branch`,
+    `git_show`, `git_commit_file_diff`, `git_file_versions` (both whole texts of one
+    change — HEAD vs the working tree, or a commit vs its first parent; a missing side is
+    null, a binary carries none — what the side-by-side view wants instead of a patch),
+    `git_branches` (+ stashes), `git_create_branch`,
     `git_switch` (`stash: true` sets the tree aside first), `git_delete_branch`,
     `git_stash_pop`, `git_set_remote`, `git_fetch` / `git_pull` / `git_push`. git's own words
     come back as the error on the argument they concern; a non-repository answers
@@ -560,8 +564,13 @@ React Native client planned on the same core code.
     controlled component: lazy languages from `@codemirror/language-data` plus
     `codemirror-lang-elixir`, our tokens as the theme — `--syntax-*` colours in both
     themes — ⌘S, soft wrap on phones; a value from outside never counts as an edit) with a
-    draft, save / discard, binary and over-large files said as such; `DiffTab` = the
-    `code-diff` element over `git_file_diff` / `git_commit_file_diff`. **`FilesTool`** (⌘6)
+    draft, save / discard, binary and over-large files said as such; `DiffTab` =
+    `ui/editor/DiffView`, **GitHub's file view on `@codemirror/merge`**: the two versions
+    from `git_file_versions` as `MergeView` side by side (each pane scrolls sideways on its
+    own — `app.css` lifts the merge view's `overflow: hidden`) or `unifiedMergeView` inline
+    (a phone's default; a toggle in the tab's bar), the file's language highlighting both,
+    changed characters underlined, unchanged stretches collapsed into a "N 行未改动" bar
+    (`EditorState.phrases` for the label), colours from our tokens, read-only. **`FilesTool`** (⌘6)
     is the IDE tree: folders first, children on open, git status coloured on files and
     rolled up onto folders, `.gitignore`d paths dimmed, a row menu for new file / folder,
     rename (open tabs follow) and delete (confirm), a filter over codex's fuzzy file index

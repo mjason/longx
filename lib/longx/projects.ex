@@ -62,6 +62,7 @@ defmodule Longx.Projects do
       rpc_action :git_log, :git_log
       rpc_action :git_show, :git_show
       rpc_action :git_commit_file_diff, :git_commit_file_diff
+      rpc_action :git_file_versions, :git_file_versions
       rpc_action :git_branches, :git_branches
       rpc_action :git_create_branch, :git_create_branch
       rpc_action :git_switch, :git_switch

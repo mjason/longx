@@ -347,6 +347,52 @@ defmodule Longx.Git do
 
   defp as_file_diff(out), do: %{binary: String.contains?(out, "Binary files"), diff: out}
 
+  @doc """
+  Both sides of one file's change, whole — what a side-by-side view needs
+  rather than a patch. `sha` nil: HEAD's text against the working tree;
+  a sha: the file at the commit's first parent against the commit. A side
+  where the file does not exist is nil; a binary on either side flags the
+  pair and carries no text.
+  """
+  @spec file_versions(Path.t(), String.t() | nil, String.t()) :: %{
+          before: String.t() | nil,
+          after: String.t() | nil,
+          binary: boolean
+        }
+  def file_versions(dir, nil, path) do
+    after_text =
+      case File.read(Path.join(dir, path)) do
+        {:ok, text} -> text
+        {:error, _} -> nil
+      end
+
+    versions(file_at(dir, "HEAD", path), after_text)
+  end
+
+  def file_versions(dir, sha, path),
+    do: versions(file_at(dir, sha <> "^", path), file_at(dir, sha, path))
+
+  defp versions(before_text, after_text) do
+    if Enum.any?([before_text, after_text], &binary_text?/1),
+      do: %{before: nil, after: nil, binary: true},
+      else: %{before: before_text, after: after_text, binary: false}
+  end
+
+  # the file's content at a revision, nil when it (or the revision) is not there
+  defp file_at(dir, rev, path) do
+    case run(["show", rev <> ":" <> path], cd: dir) do
+      {:ok, %{stdout: out}} -> out
+      {:error, _} -> nil
+    end
+  end
+
+  defp binary_text?(nil), do: false
+
+  defp binary_text?(text) do
+    head = binary_part(text, 0, min(byte_size(text), 8_192))
+    String.contains?(head, <<0>>) or not String.valid?(head)
+  end
+
   @doc "What `.gitignore` hides, ignored directories as a whole (`build/`)."
   @spec ignored(Path.t()) :: [String.t()]
   def ignored(dir) do
