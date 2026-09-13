@@ -332,11 +332,13 @@ export const SubagentTool: ToolCallMessagePartComponent<SubagentArgs, SubagentRe
   );
 };
 
-type CollabAgent = { threadId: string; name: string };
+type CollabAgent = { threadId: string; name: string; kind?: string | null };
 type CollabArgs = { tool?: string; prompt?: string | null; model?: string | null; agents?: CollabAgent[] };
 type CollabResult = { status: string; agentsStates?: Record<string, { status?: string; message?: string | null }> };
 
 const FINISHED_AGENT = new Set(["completed", "errored", "interrupted", "shutdown", "notFound"]);
+// a sub-agent's latest activity as an agent state (codex 0.154 completes a wait with empty agentsStates)
+const KIND_STATE: Record<string, string> = { started: "running", interacted: "running", completed: "completed", interrupted: "interrupted" };
 
 /** codex's collaboration tools: a spawn / message is a handoff, a wait lists the agents and their reported states. */
 export const CollabTool: ToolCallMessagePartComponent<CollabArgs, CollabResult> = (p) => {
@@ -356,7 +358,7 @@ export const CollabTool: ToolCallMessagePartComponent<CollabArgs, CollabResult> 
       ) : (
         <SubagentList
           agents={agents.map((a) => {
-            const status = states[a.threadId]?.status;
+            const status = states[a.threadId]?.status ?? (a.kind ? KIND_STATE[a.kind] : undefined);
             return { name: a.name, ...(status ? { model: t.agentStates[status] ?? status } : {}), done: status !== undefined && FINISHED_AGENT.has(status) };
           })}
         />

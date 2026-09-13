@@ -242,7 +242,8 @@ describe("agents", () => {
         {...part({
           toolName: "collab",
           toolCallId: "collab1",
-          args: { tool: "wait", prompt: null, model: null, agents: [{ threadId: "child-alpha", name: "alpha" }, { threadId: "child-beta", name: "beta" }] },
+          args: { tool: "wait", prompt: null, model: null, agents: [{ threadId: "child-alpha", name: "alpha", kind: "started" }, { threadId: "child-beta", name: "beta", kind: "started" }, { threadId: "child-gamma", name: "gamma", kind: "completed" }] },
+          // real codex completes a wait with empty agentsStates: the agent's own activity decides then
           result: { status: "completed", agentsStates: { "child-alpha": { status: "completed", message: "done" }, "child-beta": { status: "running", message: null } } },
           status: { type: "complete" },
         })}
@@ -252,6 +253,7 @@ describe("agents", () => {
     fireEvent.click(screen.getByRole("button", { name: /等到了/ }));
     expect(screen.getByRole("progressbar", { name: "alpha progress" })).toHaveAttribute("aria-valuenow", "100");
     expect(screen.getByRole("progressbar", { name: "beta progress" })).not.toHaveAttribute("aria-valuenow");
+    expect(screen.getByRole("progressbar", { name: "gamma progress" })).toHaveAttribute("aria-valuenow", "100");
 
     render(<CollabTool {...part({ toolName: "collab", toolCallId: "spawn1", args: { tool: "spawnAgent", prompt: "read the docs", model: "deepseek-flash", agents: [] } })} />);
     expect(screen.getByText("正在派出")).toBeInTheDocument();

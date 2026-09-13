@@ -154,7 +154,7 @@ function collabPart(item: CodexItem, agents: Map<string, SubAgent>): ToolPart {
       tool: item["tool"],
       prompt: item["prompt"] ?? null,
       model: item["model"] ?? null,
-      agents: receivers.map((threadId) => ({ threadId, name: agents.get(threadId)?.name ?? threadId })),
+      agents: receivers.map((threadId) => ({ threadId, name: agents.get(threadId)?.name ?? threadId, kind: agents.get(threadId)?.kind ?? null })),
     },
     done ? { status, agentsStates: states } : undefined,
     undefined,

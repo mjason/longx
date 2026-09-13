@@ -275,7 +275,9 @@ describe("multi-agent", () => {
     expect(ps[4]).toMatchObject({ args: { tool: "wait", agents: [{ name: "alpha" }, { name: "beta" }] } });
     expect(ps[2]).toMatchObject({
       toolCallId: "collab1",
-      args: { tool: "wait", agents: [{ threadId: "child-alpha", name: "alpha" }, { threadId: "child-beta", name: "beta" }] },
+      // each agent carries its own latest activity too: real codex completes a wait with
+      // empty agentsStates, so the sub-agents' activities are what says who is done
+      args: { tool: "wait", agents: [{ threadId: "child-alpha", name: "alpha", kind: "started" }, { threadId: "child-beta", name: "beta", kind: "started" }] },
       result: { status: "completed", agentsStates: { "child-alpha": { status: "completed" } } },
     });
     expect(ps[3]).toMatchObject({ args: { tool: "spawnAgent", prompt: "read the docs", model: "deepseek-flash" } });

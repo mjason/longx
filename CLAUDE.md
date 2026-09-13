@@ -555,8 +555,9 @@ React Native client planned on the same core code.
     `AssistantParts` of `thread.aui`, so nested commands/diffs look like the parent's;
     a child's pending approval rides on that part as the parent's `approval`
     (`approval-card`, answered on the parent thread). `collabAgentToolCall` → `collab`:
-    spawn / send_message are an `agent-handoff`, wait a `subagent-list` (states from
-    `agentsStates`; a wait names every agent so far). The turn's plan is a `data-plan` part
+    spawn / send_message are an `agent-handoff`, wait a `subagent-list` (a wait names every
+    agent so far; codex 0.154 completes it with empty `receiverThreadIds`/`agentsStates`, so
+    each agent's state falls back to its own latest `subAgentActivity` kind). The turn's plan is a `data-plan` part
     at the top of its message (`PlanUI` = `makeAssistantDataUI` + `agent-plan`, mounted in
     `ChatProvider`, like `CompactionUI` for codex's `contextCompaction` marker). The child views come from `useThreadViews` (one channel per child id
     named by the parent's activities, transitively) and reach the adapter as `subviews`;
