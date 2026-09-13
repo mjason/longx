@@ -32,7 +32,10 @@ defmodule Longx.Projects.Repo do
                     ahead: [type: :integer],
                     behind: [type: :integer],
                     remotes: [type: {:array, :map}, allow_nil?: false],
-                    lfs: [type: :boolean, allow_nil?: false]
+                    lfs: [type: :boolean, allow_nil?: false],
+                    # what .gitignore hides (the tree dims them); a merge stopped on conflicts
+                    ignored: [type: {:array, :string}, allow_nil?: false],
+                    merging: [type: :boolean, allow_nil?: false]
                   ]
 
       argument :project_id, :uuid, allow_nil?: false
@@ -52,7 +55,9 @@ defmodule Longx.Projects.Repo do
                ahead: sync && sync.ahead,
                behind: sync && sync.behind,
                remotes: Git.remotes(dir),
-               lfs: Git.lfs?(dir)
+               lfs: Git.lfs?(dir),
+               ignored: Git.ignored(dir),
+               merging: Git.merging?(dir)
              }}
           else
             {:ok,
@@ -64,7 +69,9 @@ defmodule Longx.Projects.Repo do
                ahead: nil,
                behind: nil,
                remotes: [],
-               lfs: false
+               lfs: false,
+               ignored: [],
+               merging: false
              }}
           end
         end
@@ -103,6 +110,18 @@ defmodule Longx.Projects.Repo do
 
       run fn input, _ ->
         with {:ok, dir} <- repo(input), do: Git.discard(dir, input.arguments.paths) |> on(:paths)
+      end
+    end
+
+    action :git_abort_merge do
+      argument :project_id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, dir} <- repo(input) do
+          if Git.merging?(dir),
+            do: Git.abort_merge(dir) |> on(:project_id),
+            else: invalid(:project_id, "no merge is in progress")
+        end
       end
     end
 

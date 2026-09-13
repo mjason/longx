@@ -3,8 +3,9 @@
 // over whichever is active. The chat stays mounted behind a file so its
 // scroll and composer draft survive a look at the code.
 import { FileCode2, GitCompareArrows, MessagesSquare, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { tabKey, useWorkbench, type Tab } from "@/core/workbench";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/ui/components/ui/alert-dialog";
 import { t } from "@/ui/strings";
 import { DiffTab } from "./DiffTab";
 import { EditorTab } from "./EditorTab";
@@ -12,6 +13,9 @@ import { EditorTab } from "./EditorTab";
 export function Workbench({ projectId, children }: { projectId: string; children: ReactNode }) {
   const wb = useWorkbench(projectId);
   const active = wb.tabs.find((tab) => tabKey(tab) === wb.active) ?? wb.tabs[0]!;
+  // closing a tab with unsaved edits asks first
+  const [closing, setClosing] = useState<Tab | null>(null);
+  const close = (tab: Tab) => (wb.dirty.includes(tabKey(tab)) ? setClosing(tab) : wb.close(tabKey(tab)));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="workbench">
@@ -33,7 +37,7 @@ export function Workbench({ projectId, children }: { projectId: string; children
                   {wb.dirty.includes(key) ? <span className="text-warning" title={t.unsavedChanges}>●</span> : null}
                 </button>
                 {tab.kind !== "chat" ? (
-                  <button type="button" aria-label={`${t.closeTab} ${tabLabel(tab)}`} className="text-muted-foreground hover:text-foreground rounded p-0.5" onClick={() => wb.close(key)}>
+                  <button type="button" aria-label={`${t.closeTab} ${tabLabel(tab)}`} className="text-muted-foreground hover:text-foreground rounded p-0.5" onClick={() => close(tab)}>
                     <X className="size-3" />
                   </button>
                 ) : null}
@@ -45,6 +49,26 @@ export function Workbench({ projectId, children }: { projectId: string; children
       <div className={`min-h-0 flex-1 flex-col ${active.kind === "chat" ? "flex" : "hidden"}`}>{children}</div>
       {active.kind === "file" ? <EditorTab key={active.path} projectId={projectId} path={active.path} /> : null}
       {active.kind === "diff" ? <DiffTab key={tabKey(active)} projectId={projectId} path={active.path} sha={active.sha} /> : null}
+      <AlertDialog open={closing !== null} onOpenChange={(open) => (open ? null : setClosing(null))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{closing ? t.closeDirtyTitle(tabLabel(closing)) : ""}</AlertDialogTitle>
+            <AlertDialogDescription>{t.closeDirtyHint}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (closing) wb.close(tabKey(closing));
+                setClosing(null);
+              }}
+            >
+              {t.closeWithoutSaving}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

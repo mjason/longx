@@ -237,6 +237,22 @@ defmodule Longx.GitTest do
       assert {:error, _} = Git.show(dir, "0000000")
     end
 
+    test "a merge commit lists what it brought in (against its first parent)", %{dir: dir} do
+      :ok = Git.create_branch(dir, "topic")
+      write!(dir, "c.txt", "c\n")
+      {:ok, topic} = Git.commit_all(dir, "topic work")
+      main = Git.branches(dir).branches |> Enum.find(&(&1.name != "topic")) |> Map.fetch!(:name)
+      :ok = Git.switch(dir, main)
+      {:ok, _} = Git.run(["merge", "--no-ff", "-q", "-m", "merge topic", "topic"], cd: dir)
+      {:ok, merge} = Git.head(dir)
+
+      assert %{parents: [_, ^topic], files: [%{path: "c.txt", status: :added}]} =
+               Git.show(dir, merge)
+
+      assert %{diff: diff} = Git.commit_file_diff(dir, merge, "c.txt")
+      assert diff =~ "+c"
+    end
+
     test "commit_file_diff/3 shows what one commit did to one file, the root commit too", %{
       dir: dir,
       s1: s1,
@@ -319,6 +335,60 @@ defmodule Longx.GitTest do
       assert :ok = Git.stash_pop(dir)
       assert File.read!(Path.join(dir, "a.txt")) == "wip\n"
       assert [] = Git.stashes(dir)
+    end
+  end
+
+  describe "ignored paths and merges in progress" do
+    setup %{dir: dir} do
+      :ok = Git.init(dir)
+      write!(dir, ".gitignore", "build/\n*.log\n")
+      write!(dir, "a.txt", "one\n")
+      {:ok, _} = Git.commit_all(dir, "base")
+      :ok
+    end
+
+    test "ignored/1 names what .gitignore hides (directories as a whole)", %{dir: dir} do
+      File.mkdir_p!(Path.join(dir, "build/out"))
+      write!(dir, "build/out/x.js", "x")
+      write!(dir, "debug.log", "l")
+      write!(dir, "b.txt", "b")
+      assert Git.ignored(dir) == ["build/", "debug.log"]
+    end
+
+    test "a pull that conflicts leaves a merge in progress: the files are unmerged, the merge can be committed (after editing) or aborted",
+         %{dir: dir} do
+      :ok = Git.create_branch(dir, "theirs")
+      write!(dir, "a.txt", "theirs\n")
+      {:ok, _} = Git.commit_all(dir, "theirs")
+      main = Git.branches(dir).branches |> Enum.find(&(&1.name != "theirs")) |> Map.fetch!(:name)
+      :ok = Git.switch(dir, main)
+      write!(dir, "a.txt", "ours\n")
+      {:ok, _} = Git.commit_all(dir, "ours")
+
+      assert {:error, %Git.Error{}} = Git.run(["merge", "-q", "theirs"], cd: dir)
+      assert Git.merging?(dir)
+      assert %{changes: [%{path: "a.txt", status: :unmerged}]} = Git.status(dir)
+      assert %{diff: diff} = Git.file_diff(dir, "a.txt")
+      assert diff =~ "<<<<<<<" or diff =~ "ours"
+
+      # resolved by hand, then committed: a merge is committed whole, never partially
+      write!(dir, "a.txt", "both\n")
+      assert {:ok, sha} = Git.commit(dir, "merge theirs", paths: ["a.txt"])
+      assert %{parents: [_, _]} = Git.show(dir, sha)
+      refute Git.merging?(dir)
+
+      # or abandoned
+      write!(dir, "a.txt", "ours again\n")
+      {:ok, _} = Git.commit_all(dir, "ours again")
+      :ok = Git.switch(dir, "theirs")
+      write!(dir, "a.txt", "theirs again\n")
+      {:ok, _} = Git.commit_all(dir, "theirs again")
+      :ok = Git.switch(dir, main)
+      assert {:error, _} = Git.run(["merge", "-q", "theirs"], cd: dir)
+      assert Git.merging?(dir)
+      assert :ok = Git.abort_merge(dir)
+      refute Git.merging?(dir)
+      assert File.read!(Path.join(dir, "a.txt")) == "ours again\n"
     end
   end
 

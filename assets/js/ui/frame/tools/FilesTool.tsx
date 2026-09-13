@@ -10,6 +10,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useFrame } from "@/core/frame";
 import { useViewport } from "@/core/viewport";
 import { useWorkbench } from "@/core/workbench";
+import { searchFiles } from "@/ash_rpc";
+import { unwrap } from "@/core/projects";
+import { useQuery } from "@tanstack/react-query";
 import { useCreateEntry, useDeleteEntry, useFiles, useGitChanges, useRenameEntry, wsKeys, type FileEntry } from "@/core/workspace";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/ui/components/ui/alert-dialog";
 import { Button } from "@/ui/components/ui/button";
@@ -20,6 +23,13 @@ import { t } from "@/ui/strings";
 import type { ProjectContext } from "../ProjectWindow";
 
 type GitStatus = Map<string, string>;
+type Ignored = string[];
+
+/** `.gitignore` hides it: the path, or a directory above it, is in the ignored list. */
+function ignoredEntry(ignored: Ignored, entry: FileEntry): boolean {
+  const path = entry.kind === "dir" ? entry.path + "/" : entry.path;
+  return ignored.some((i) => path === i || (i.endsWith("/") && path.startsWith(i)));
+}
 
 const GIT_COLOR: Record<string, string> = {
   modified: "text-warning",
@@ -45,6 +55,8 @@ export function FilesTool({ ctx }: { ctx: ProjectContext }) {
   const client = useQueryClient();
   const changes = useGitChanges(projectId);
   const git = useMemo<GitStatus>(() => new Map((changes.data?.changes ?? []).map((c) => [c.path, c.status])), [changes.data]);
+  const ignored = changes.data?.ignored ?? [];
+  const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [editing, setEditing] = useState<Editing>(null);
   const [deleting, setDeleting] = useState<FileEntry | null>(null);
@@ -85,12 +97,51 @@ export function FilesTool({ ctx }: { ctx: ProjectContext }) {
           <RefreshCw />
         </Button>
       </div>
-      <div role="tree" aria-label={t.tools["files"]} className="text-sm">
-        {editing && editing.kind !== "rename" && editing.parent === "" ? <NameRow depth={0} projectId={projectId} editing={editing} onDone={() => setEditing(null)} /> : null}
-        <Level key={version} projectId={projectId} path="" depth={0} git={git} expanded={expanded} onToggle={toggle} editing={editing} setEditing={setEditing} onDelete={setDeleting} />
-      </div>
+      <Input type="search" role="searchbox" aria-label={t.filterFiles} placeholder={t.filterFiles} value={filter} onChange={(e) => setFilter(e.target.value)} className="h-8 text-sm" autoCapitalize="none" spellCheck={false} />
+      {filter.trim() ? (
+        <FilterResults projectId={projectId} query={filter.trim()} git={git} />
+      ) : (
+        <div role="tree" aria-label={t.tools["files"]} className="text-sm">
+          {editing && editing.kind !== "rename" && editing.parent === "" ? <NameRow depth={0} projectId={projectId} editing={editing} onDone={() => setEditing(null)} /> : null}
+          <Level key={version} projectId={projectId} path="" depth={0} git={git} ignored={ignored} expanded={expanded} onToggle={toggle} editing={editing} setEditing={setEditing} onDelete={setDeleting} />
+        </div>
+      )}
       <DeleteDialog projectId={projectId} entry={deleting} onClose={() => setDeleting(null)} />
     </div>
+  );
+}
+
+/** VS Code's quick open, inside the tool: codex's fuzzy file index, a tap opens. */
+function FilterResults({ projectId, query, git }: { projectId: string; query: string; git: GitStatus }) {
+  const workbench = useWorkbench(projectId);
+  const frame = useFrame();
+  const viewport = useViewport();
+  const results = useQuery({
+    queryKey: ["file-search", projectId, query],
+    queryFn: async () => unwrap(await searchFiles({ fields: ["path", "fileName", "matchType"], input: { id: projectId, query } })),
+  });
+  if (results.isPending) return <Skeleton className="h-5 w-1/2" />;
+  if (results.isError) return <p className="text-destructive text-xs">{results.error.message}</p>;
+  if (results.data.length === 0) return <p className="text-muted-foreground text-xs">{t.noFilesMatch}</p>;
+  return (
+    <ul className="text-sm">
+      {results.data.map((hit) => (
+        <li key={hit.path}>
+          <button
+            type="button"
+            className={`touch-target hover:bg-sidebar-accent/60 flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left ${GIT_COLOR[git.get(hit.path) ?? ""] ?? ""}`}
+            onClick={() => {
+              if (hit.matchType === "directory") return;
+              workbench.open({ kind: "file", path: hit.path });
+              if (viewport !== "desktop") frame.close();
+            }}
+          >
+            {hit.matchType === "directory" ? <Folder className="text-muted-foreground size-4 shrink-0" /> : <File className="text-muted-foreground size-4 shrink-0" />}
+            <span className="truncate font-mono text-xs">{hit.path}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -99,13 +150,14 @@ function Level(props: {
   path: string;
   depth: number;
   git: GitStatus;
+  ignored: Ignored;
   expanded: Set<string>;
   onToggle: (path: string) => void;
   editing: Editing;
   setEditing: (e: Editing) => void;
   onDelete: (entry: FileEntry) => void;
 }) {
-  const { projectId, path, depth, git, expanded, onToggle, editing, setEditing, onDelete } = props;
+  const { projectId, path, depth, git, ignored, expanded, onToggle, editing, setEditing, onDelete } = props;
   const files = useFiles(projectId, path);
   if (files.isPending) return <Skeleton className="my-1 ml-4 h-5 w-1/2" />;
   if (files.isError) return <p className="text-destructive px-2 py-1 text-xs">{t.filesLoadFailed(files.error.message)}</p>;
@@ -120,7 +172,7 @@ function Level(props: {
             {editing?.kind === "rename" && editing.entry.path === entry.path ? (
               <NameRow depth={depth} projectId={projectId} editing={editing} onDone={() => setEditing(null)} />
             ) : (
-              <Row entry={entry} depth={depth} open={open} status={statusOf(git, entry)} projectId={projectId} onToggle={onToggle} setEditing={setEditing} onDelete={onDelete} />
+              <Row entry={entry} depth={depth} open={open} status={statusOf(git, entry)} ignored={ignoredEntry(ignored, entry)} projectId={projectId} onToggle={onToggle} setEditing={setEditing} onDelete={onDelete} />
             )}
             {open ? (
               <>
@@ -135,7 +187,7 @@ function Level(props: {
   );
 }
 
-function Row({ entry, depth, open, status, projectId, onToggle, setEditing, onDelete }: { entry: FileEntry; depth: number; open: boolean; status: string | undefined; projectId: string; onToggle: (p: string) => void; setEditing: (e: Editing) => void; onDelete: (e: FileEntry) => void }) {
+function Row({ entry, depth, open, status, ignored, projectId, onToggle, setEditing, onDelete }: { entry: FileEntry; depth: number; open: boolean; status: string | undefined; ignored: boolean; projectId: string; onToggle: (p: string) => void; setEditing: (e: Editing) => void; onDelete: (e: FileEntry) => void }) {
   const workbench = useWorkbench(projectId);
   const frame = useFrame();
   const viewport = useViewport();
@@ -147,7 +199,7 @@ function Row({ entry, depth, open, status, projectId, onToggle, setEditing, onDe
   const Icon = entry.kind === "dir" ? (open ? FolderOpen : Folder) : File;
   return (
     <div className="group hover:bg-sidebar-accent/60 flex items-center rounded-md" style={{ paddingLeft: depth * 16 }}>
-      <button type="button" role="treeitem" aria-expanded={entry.kind === "dir" ? open : undefined} aria-label={entry.name} data-git={status} className={`touch-target flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-1 text-left ${status ? (GIT_COLOR[status] ?? "") : ""}`} onClick={activate}>
+      <button type="button" role="treeitem" aria-expanded={entry.kind === "dir" ? open : undefined} aria-label={entry.name} data-git={status} data-ignored={ignored || undefined} className={`touch-target flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-1 text-left ${status ? (GIT_COLOR[status] ?? "") : ignored ? "text-muted-foreground/60" : ""}`} onClick={activate}>
         <ChevronRight className={`text-muted-foreground size-3.5 shrink-0 transition-transform ${entry.kind === "dir" ? (open ? "rotate-90" : "") : "invisible"}`} />
         <Icon className="text-muted-foreground size-4 shrink-0" />
         <span className="truncate">{entry.name}</span>

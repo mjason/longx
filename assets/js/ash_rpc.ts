@@ -2542,6 +2542,74 @@ export async function validateUpdateProject(
 }
 
 
+export type GitAbortMergeInput = {
+  projectId: UUID;
+};
+
+export type InferGitAbortMergeResult = {};
+
+export type GitAbortMergeResult = | { success: true; data: InferGitAbortMergeResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitAbortMerge(
+  config: {
+  tenant?: string;
+  input: GitAbortMergeInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitAbortMergeResult> {
+  const payload = {
+    action: "git_abort_merge",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<GitAbortMergeResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitAbortMerge(
+  config: {
+  tenant?: string;
+  input: GitAbortMergeInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_abort_merge",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type GitBranchesInput = {
   projectId: UUID;
 };
@@ -2620,11 +2688,11 @@ export type GitChangesInput = {
   projectId: UUID;
 };
 
-export type GitChangesFields = UnifiedFieldSelection<{repository: boolean, branch: string | null, head: string | null, changes: Array<Record<string, any>>, ahead: number | null, behind: number | null, remotes: Array<Record<string, any>>, lfs: boolean, __type: "TypedMap", __primitiveFields: "repository" | "branch" | "head" | "changes" | "ahead" | "behind" | "remotes" | "lfs"}>[];
+export type GitChangesFields = UnifiedFieldSelection<{repository: boolean, branch: string | null, head: string | null, changes: Array<Record<string, any>>, ahead: number | null, behind: number | null, remotes: Array<Record<string, any>>, lfs: boolean, ignored: Array<string>, merging: boolean, __type: "TypedMap", __primitiveFields: "repository" | "branch" | "head" | "changes" | "ahead" | "behind" | "remotes" | "lfs" | "ignored" | "merging"}>[];
 
 export type InferGitChangesResult<
   Fields extends GitChangesFields | undefined,
-> = InferResult<{repository: boolean, branch: string | null, head: string | null, changes: Array<Record<string, any>>, ahead: number | null, behind: number | null, remotes: Array<Record<string, any>>, lfs: boolean, __type: "TypedMap", __primitiveFields: "repository" | "branch" | "head" | "changes" | "ahead" | "behind" | "remotes" | "lfs"}, Fields>;
+> = InferResult<{repository: boolean, branch: string | null, head: string | null, changes: Array<Record<string, any>>, ahead: number | null, behind: number | null, remotes: Array<Record<string, any>>, lfs: boolean, ignored: Array<string>, merging: boolean, __type: "TypedMap", __primitiveFields: "repository" | "branch" | "head" | "changes" | "ahead" | "behind" | "remotes" | "lfs" | "ignored" | "merging"}, Fields>;
 
 export type GitChangesResult<Fields extends GitChangesFields | undefined = undefined> = | { success: true; data: InferGitChangesResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }

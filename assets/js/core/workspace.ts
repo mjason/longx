@@ -23,6 +23,7 @@ import {
   gitShow,
   gitStashPop,
   gitSwitch,
+  gitAbortMerge,
   gitUndoCommit,
   listFiles,
   readFile,
@@ -43,6 +44,10 @@ export type GitChanges = {
   behind: number | null;
   remotes: { name: string; url: string }[];
   lfs: boolean;
+  /** what .gitignore hides; directories end with "/" */
+  ignored: string[];
+  /** a pull / merge stopped on conflicts */
+  merging: boolean;
 };
 export type LogEntry = { sha: string; subject: string; author: string; email: string; at: string };
 export type Commit = LogEntry & { body: string; parents: string[]; files: Change[] };
@@ -128,7 +133,7 @@ export function useDeleteEntry(projectId: string) {
 
 // ---- git -------------------------------------------------------------------
 
-export const changesFields = ["repository", "branch", "head", "changes", "ahead", "behind", "remotes", "lfs"] as const;
+export const changesFields = ["repository", "branch", "head", "changes", "ahead", "behind", "remotes", "lfs", "ignored", "merging"] as const;
 
 /** The changes view; polled while shown — the agent edits files without telling us. */
 export function useGitChanges(projectId: string, opts: { poll?: boolean } = {}) {
@@ -203,6 +208,7 @@ export function useGitActions(projectId: string) {
     }),
     discard: useMutation({ mutationFn: async (paths: string[]) => unwrap(await gitDiscard({ input: { projectId, paths } })), onSuccess: done }),
     undoCommit: useMutation({ mutationFn: async () => unwrap(await gitUndoCommit({ fields: ["sha"], input: { projectId } })), onSuccess: done }),
+    abortMerge: useMutation({ mutationFn: async () => unwrap(await gitAbortMerge({ input: { projectId } })), onSuccess: done }),
     createBranch: useMutation({ mutationFn: async (name: string) => unwrap(await gitCreateBranch({ input: { projectId, name } })), onSuccess: done }),
     switchBranch: useMutation({
       mutationFn: async ({ name, stash }: { name: string; stash?: boolean }) => unwrap(await gitSwitch({ input: { projectId, name, stash: stash ?? false } })),

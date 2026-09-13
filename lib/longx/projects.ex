@@ -58,6 +58,7 @@ defmodule Longx.Projects do
       rpc_action :git_commit, :git_commit
       rpc_action :git_discard, :git_discard
       rpc_action :git_undo_commit, :git_undo_commit
+      rpc_action :git_abort_merge, :git_abort_merge
       rpc_action :git_log, :git_log
       rpc_action :git_show, :git_show
       rpc_action :git_commit_file_diff, :git_commit_file_diff

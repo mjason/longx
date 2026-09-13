@@ -261,8 +261,20 @@ defmodule Longx.Git do
   def show(dir, sha) do
     format = "--format=%H%x1f%s%x1f%b%x1f%an%x1f%ae%x1f%aI%x1f%P%x1e"
 
+    # a merge commit shows what it brought in, against its first parent
     with {:ok, %{stdout: out}} <-
-           run(["show", "--name-status", "-z", format, "--no-color", sha], cd: dir),
+           run(
+             [
+               "show",
+               "--name-status",
+               "-z",
+               "--diff-merges=first-parent",
+               format,
+               "--no-color",
+               sha
+             ],
+             cd: dir
+           ),
          [header, files] <- String.split(out, <<0x1E>>, parts: 2) do
       [sha, subject, body, author, email, at, parents] = String.split(header, <<0x1F>>, parts: 7)
       {:ok, at, _} = DateTime.from_iso8601(at)
@@ -301,7 +313,9 @@ defmodule Longx.Git do
   @doc "What one commit did to one file (the root commit against the empty tree)."
   @spec commit_file_diff(Path.t(), String.t(), String.t()) :: file_diff | {:error, term}
   def commit_file_diff(dir, sha, path) do
-    case run(["show", "--format=", "--no-color", sha, "--", path], cd: dir) do
+    case run(["show", "--format=", "--no-color", "--diff-merges=first-parent", sha, "--", path],
+           cd: dir
+         ) do
       {:ok, %{stdout: out}} -> as_file_diff(out)
       {:error, _} = error -> error
     end
@@ -333,10 +347,34 @@ defmodule Longx.Git do
 
   defp as_file_diff(out), do: %{binary: String.contains?(out, "Binary files"), diff: out}
 
+  @doc "What `.gitignore` hides, ignored directories as a whole (`build/`)."
+  @spec ignored(Path.t()) :: [String.t()]
+  def ignored(dir) do
+    ["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"]
+    |> stdout!(cd: dir)
+    |> String.split(<<0>>, trim: true)
+  end
+
+  @doc "A merge is in progress (a pull or merge stopped on conflicts)."
+  @spec merging?(Path.t()) :: boolean
+  def merging?(dir) do
+    case run(["rev-parse", "--verify", "-q", "MERGE_HEAD"], cd: dir) do
+      {:ok, _} -> true
+      {:error, _} -> false
+    end
+  end
+
+  @spec abort_merge(Path.t()) :: :ok | {:error, term}
+  def abort_merge(dir) do
+    with {:ok, _} <- run(["merge", "--abort"], cd: dir), do: :ok
+  end
+
   @doc """
   Commits the named paths only (untracked ones included, deletions too);
   the other changes stay in the working tree. `{:error, :nothing_to_commit}`
   when the paths carry no change. Uses Longx's identity if the user has none.
+  During a merge git allows no partial commit: the paths are staged and the
+  merge committed whole.
   """
   @spec commit(Path.t(), String.t(), keyword) ::
           {:ok, String.t()} | {:error, :nothing_to_commit | term}
@@ -345,12 +383,13 @@ defmodule Longx.Git do
     env = Keyword.get(opts, :env, [])
     identity = if configured_identity?(dir, env), do: [], else: @fallback_identity
 
+    only = if merging?(dir), do: [], else: ["--" | paths]
+
     with {:ok, _} <- run(["add", "-A", "--"] ++ paths, cd: dir, env: env),
          {:ok, _} <-
            run(["diff", "--cached", "--quiet", "--"] ++ paths, cd: dir, env: env)
            |> nothing_when_clean(),
-         {:ok, _} <-
-           run(identity ++ ["commit", "-q", "-m", message, "--"] ++ paths, cd: dir, env: env) do
+         {:ok, _} <- run(identity ++ ["commit", "-q", "-m", message] ++ only, cd: dir, env: env) do
       head(dir)
     end
   end

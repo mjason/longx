@@ -37,7 +37,7 @@ describe("FilesTool", () => {
     channel.reset();
     vi.mocked(listFiles).mockImplementation(async ({ input }: { input: { path: string } }) => ok(tree[input.path] ?? []) as never);
     vi.mocked(gitChanges).mockResolvedValue(
-      ok({ repository: true, branch: "main", head: "abc", changes: [{ path: "lib/a.ex", status: "modified" }, { path: "new.txt", status: "untracked" }], ahead: 0, behind: 0, remotes: [], lfs: false }) as never,
+      ok({ repository: true, branch: "main", head: "abc", changes: [{ path: "lib/a.ex", status: "modified" }, { path: "new.txt", status: "untracked" }], ahead: 0, behind: 0, remotes: [], lfs: false, ignored: ["node_modules/", "README.md"], merging: false }) as never,
     );
     vi.mocked(readFile).mockResolvedValue(ok({ path: "lib/a.ex", content: "defmodule A do\nend\n", size: 12, binary: false, truncated: false }) as never);
   });
@@ -46,8 +46,9 @@ describe("FilesTool", () => {
     const { user, panel } = await openFiles();
     const rows = within(panel).getAllByRole("treeitem");
     expect(rows.map((r) => r.textContent)).toEqual(["lib", "README.md"]);
-    // a folder with a change under it is marked like the file
+    // a folder with a change under it is marked like the file; an ignored path is dimmed
     expect(within(panel).getByRole("treeitem", { name: /lib/ })).toHaveAttribute("data-git", "modified");
+    expect(within(panel).getByRole("treeitem", { name: /README/ })).toHaveAttribute("data-ignored", "true");
     await user.click(within(panel).getByRole("treeitem", { name: /lib/ }));
     const child = await within(panel).findByRole("treeitem", { name: /a\.ex/ });
     expect(child).toHaveAttribute("data-git", "modified");
@@ -98,6 +99,36 @@ describe("FilesTool", () => {
     const dialog = await screen.findByRole("alertdialog");
     await user.click(within(dialog).getByRole("button", { name: "删除" }));
     await waitFor(() => expect(deleteEntry).toHaveBeenCalledWith(expect.objectContaining({ input: { projectId: "id-1", path: "README.md" } })));
+  });
+
+  test("the filter finds files through codex's fuzzy index and opens one", async () => {
+    const { searchFiles } = await import("@/ash_rpc");
+    vi.mocked(searchFiles).mockResolvedValue(ok([{ path: "lib/deep/gateway.ex", fileName: "gateway.ex", matchType: "file", root: "/", score: 1, indices: null }]) as never);
+    const { user, panel } = await openFiles();
+    await user.type(within(panel).getByRole("searchbox", { name: "按文件名查找…" }), "gtw");
+    const hit = await within(panel).findByRole("button", { name: /lib\/deep\/gateway\.ex/ });
+    await user.click(hit);
+    expect(within(await screen.findByTestId("workbench-tabs")).getByRole("tab", { name: /gateway\.ex/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("closing a tab with unsaved edits asks first", async () => {
+    const { user, panel } = await openFiles();
+    vi.mocked(readFile).mockResolvedValue(ok({ path: "README.md", content: "# hi\n", size: 5, binary: false, truncated: false }) as never);
+    await user.click(within(panel).getByRole("treeitem", { name: /README/ }));
+    const editor = await screen.findByTestId("editor-tab");
+    const content = await waitFor(() => {
+      const c = editor.querySelector(".cm-content");
+      expect(c).toHaveTextContent("hi");
+      return c!;
+    });
+    await user.click(content);
+    await user.keyboard("!");
+    const tabs = screen.getByTestId("workbench-tabs");
+    await user.click(within(tabs).getByRole("button", { name: /关闭 README/ }));
+    const dialog = await screen.findByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: "不保存，关闭" }));
+    // the strip itself goes when the chat is the only tab left
+    await waitFor(() => expect(screen.queryByRole("tab", { name: /README/ })).toBeNull());
   });
 
   test("phone: the tree is a sheet; tapping a file opens the editor full-screen with wrapped lines", async () => {

@@ -27,8 +27,9 @@ describe("ProjectWindow", () => {
 
     await user.click(within(toolbar).getByLabelText("Git"));
     const sheet = await screen.findByTestId("tool-sheet");
-    expect(within(sheet).getByTestId("git-tool")).toBeInTheDocument();
-    expect(await within(sheet).findByText("372bb036")).toBeInTheDocument();
+    await within(sheet).findByTestId("git-tool");
+    // the git tool opens on the branch; the status bar keeps the short HEAD
+    expect(screen.getByTestId("status-strip")).toHaveTextContent("372bb036");
   });
 
   test("desktop: icon rail + docked panel, ⌘2 switches tools, the status bar is there", async () => {
