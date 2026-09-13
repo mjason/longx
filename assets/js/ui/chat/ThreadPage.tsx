@@ -2,6 +2,7 @@ import { Thread, type ThreadComponents } from "@/ui/components/assistant-ui/elem
 import { Alert, AlertDescription } from "@/ui/components/ui/alert";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
+import { FileMentions, FileMentionText } from "./FileMentions";
 import { ComposerLeading, ComposerTrailing } from "./TurnBar";
 
 const Welcome = () => (
@@ -12,7 +13,7 @@ const Welcome = () => (
 );
 
 // module scope: a new object per render would remount every message
-const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing };
+const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers: FileMentions, UserText: FileMentionText };
 
 /**
  * The centre of the project window: assistant-ui's Thread element over the

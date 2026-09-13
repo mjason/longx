@@ -1868,6 +1868,81 @@ export async function validateRestartCodex(
 }
 
 
+export type SearchFilesInput = {
+  id: UUID;
+  query: string;
+};
+
+export type SearchFilesFields = UnifiedFieldSelection<{path: string, fileName: string, root: string, matchType: string, score: number, indices: Array<number> | null, __type: "TypedMap", __primitiveFields: "path" | "fileName" | "root" | "matchType" | "score" | "indices"}>[];
+
+export type InferSearchFilesResult<
+  Fields extends SearchFilesFields | undefined,
+> = Array<InferResult<{path: string, fileName: string, root: string, matchType: string, score: number, indices: Array<number> | null, __type: "TypedMap", __primitiveFields: "path" | "fileName" | "root" | "matchType" | "score" | "indices"}, Fields>>;
+
+export type SearchFilesResult<Fields extends SearchFilesFields | undefined = undefined> = | { success: true; data: InferSearchFilesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Project
+ *
+ * @ashActionType :action
+ */
+export async function searchFiles<Fields extends SearchFilesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SearchFilesInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SearchFilesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "search_files",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SearchFilesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Project
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSearchFiles(
+  config: {
+  tenant?: string;
+  input: SearchFilesInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "search_files",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type StopCodexInput = {
   id: UUID;
   force?: boolean | null;

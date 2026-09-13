@@ -530,7 +530,14 @@ React Native client planned on the same core code.
     or the project defaults, sent with every message — and the turn's state) /
     `ComposerTrailing` (the `context-display` ring — codex's last-turn token usage
     against the `modelContextWindow` it reports, `contextUsage(view)` — and the per-turn
-    model with its reasoning effort) are slots our `thread.aui` copy adds), `toolkit.tsx` (`defineToolkit` with
+    model with its reasoning effort) are slots our `thread.aui` copy adds, as are
+    `ComposerPopovers` and `UserText`: **`@` file mentions** — `FileMentions` is the
+    registry's `composer-trigger-popover` over `unstable_useLiveCompletionAdapter` →
+    RPC `search_files` (`Projects.search_files/3`: codex's own `fuzzyFileSearch` index under
+    the project root, `.git` dropped, 20 best); `core/chat/mentions.ts`'s `fileFormatter`
+    writes the pick as `@path` (quoted when it has spaces — what codex's TUI does, the model
+    just sees a path and reads the file itself) and `directive-text` renders it as a chip in
+    the user message), `toolkit.tsx` (`defineToolkit` with
     `type: "backend"`, `display: "standalone"` renderers per codex item type, **all built
     from the registry's Tool-use elements, one visual language**: every invocation is a
     `tool-call` row (verb · mono chip · check/cross; open while running or failed, a click

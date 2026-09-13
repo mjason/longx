@@ -192,6 +192,26 @@ defmodule Longx.Projects.ThreadsTest do
     end
   end
 
+  describe "search_files/3" do
+    test "asks the project's codex for fuzzy file matches under the root", %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      File.mkdir_p!(Path.join(dir, "lib/longx"))
+      File.write!(Path.join(dir, "lib/longx/gateway.ex"), "")
+      File.write!(Path.join(dir, "lib/longx/git.ex"), "")
+
+      assert {:ok, matches} = Projects.search_files(project, "gtw", conn: conn)
+
+      assert [%{path: "lib/longx/gateway.ex", file_name: "gateway.ex", match_type: "file"} | _] =
+               matches
+
+      refute Enum.any?(matches, &(&1.path == "lib/longx/git.ex"))
+      # codex's index sees .git too; nobody mentions those
+      refute Enum.any?(matches, &String.starts_with?(&1.path, ".git/"))
+
+      assert {:ok, []} = Projects.search_files(project, "", conn: conn)
+    end
+  end
+
   describe "send_message/3 and the turn's git bookmarks" do
     test "clean git tree: the turn starts from HEAD and completes with the tracker filling it in",
          %{dir: dir, conn: conn} do

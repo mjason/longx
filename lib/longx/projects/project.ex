@@ -125,6 +125,28 @@ defmodule Longx.Projects.Project do
       run fn input, _ -> with {:ok, project} <- fetch(input), do: {:ok, git_info_map(project)} end
     end
 
+    # the composer's @ mentions: codex's fuzzy file index under the root
+    action :search_files, {:array, :map} do
+      constraints items: [
+                    fields: [
+                      path: [type: :string, allow_nil?: false],
+                      file_name: [type: :string, allow_nil?: false],
+                      root: [type: :string, allow_nil?: false],
+                      match_type: [type: :string, allow_nil?: false],
+                      score: [type: :integer, allow_nil?: false],
+                      indices: [type: {:array, :integer}]
+                    ]
+                  ]
+
+      argument :id, :uuid, allow_nil?: false
+      argument :query, :string, allow_nil?: false, constraints: [allow_empty?: true]
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input),
+             do: Longx.Projects.search_files(project, input.arguments.query)
+      end
+    end
+
     action :init_git, :map do
       constraints fields: @git_info
       argument :id, :uuid, allow_nil?: false

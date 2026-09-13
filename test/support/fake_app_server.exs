@@ -271,10 +271,47 @@ defmodule FakeAppServer do
     state
   end
 
+  # fuzzyFileSearch: the files under the roots whose relative path contains
+  # the query's characters in order (a real subsequence match, like codex)
+  defp handle(
+         %{
+           "id" => id,
+           "method" => "fuzzyFileSearch",
+           "params" => %{"query" => q, "roots" => roots}
+         },
+         state
+       ) do
+    files =
+      for root <- roots,
+          q != "",
+          file <- Path.wildcard(Path.join(root, "**/*"), match_dot: false),
+          File.regular?(file),
+          rel = Path.relative_to(file, root),
+          subsequence?(String.downcase(q), String.downcase(rel)) do
+        %{
+          "root" => root,
+          "path" => rel,
+          "file_name" => Path.basename(rel),
+          "match_type" => "file",
+          "score" => max(1000 - String.length(rel), 1),
+          "indices" => nil
+        }
+      end
+
+    reply(id, %{"files" => Enum.sort_by(files, & &1["score"], :desc)})
+    state
+  end
+
   defp handle(%{"id" => id, "method" => method}, state) do
     error(id, -32601, "Method not found: #{method}")
     state
   end
+
+  defp subsequence?("", _), do: true
+  defp subsequence?(_, ""), do: false
+
+  defp subsequence?(<<c, q::binary>>, <<c, s::binary>>), do: subsequence?(q, s)
+  defp subsequence?(q, <<_, s::binary>>), do: subsequence?(q, s)
 
   defp handle(%{"method" => "fake/continue"}, %{pending: pending} = state) do
     case Map.pop(pending, :continue) do

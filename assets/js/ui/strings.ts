@@ -131,6 +131,7 @@ export const t = {
   welcomeChat: "让 agent 在这个项目里干活",
   welcomeChatHint: "描述要做的事；命令、改动和审批都会显示在这里。",
   composerPlaceholder: "随心输入",
+  mentionFiles: { back: "返回", empty: "没有匹配的文件", loading: "搜索中…", none: "输入文件名" },
   send: "发送",
   stopTurn: "停止",
   scrollToBottom: "回到底部",

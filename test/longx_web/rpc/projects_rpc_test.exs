@@ -212,6 +212,15 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"id" => project["id"]}
                })
 
+      # the composer's @ mentions come from codex's file index
+      File.write!(Path.join(dir, "notes.md"), "")
+
+      assert %{"success" => true, "data" => [%{"path" => "notes.md", "fileName" => "notes.md"}]} =
+               rpc(conn, "search_files", %{
+                 "fields" => ["path", "fileName", "matchType"],
+                 "input" => %{"id" => project["id"], "query" => "nts"}
+               })
+
       assert %{"success" => true} =
                rpc(conn, "stop_codex", %{"input" => %{"id" => project["id"], "force" => true}})
 

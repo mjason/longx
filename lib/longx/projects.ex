@@ -22,6 +22,7 @@ defmodule Longx.Projects do
       rpc_action :archive_project, :archive
       rpc_action :delete_project, :delete
       rpc_action :git_info, :git_info
+      rpc_action :search_files, :search_files
       rpc_action :init_git, :init_git
       rpc_action :codex_info, :codex_info
       rpc_action :stop_codex, :stop_codex
@@ -743,6 +744,59 @@ defmodule Longx.Projects do
     {:ok, projects} = list_projects(opts)
     projects
   end
+
+  ## Files (for the composer's @ mentions)
+
+  @file_matches 20
+
+  @type file_match :: %{
+          path: String.t(),
+          file_name: String.t(),
+          root: String.t(),
+          match_type: String.t(),
+          score: non_neg_integer,
+          indices: [non_neg_integer] | nil
+        }
+
+  @doc """
+  Fuzzy file matches under the project root, from codex's own file index
+  (`fuzzyFileSearch`, the same one its TUI uses for `@`): paths relative to
+  the root, best first. An empty query matches nothing.
+  """
+  @spec search_files(Project.t(), String.t(), keyword) :: {:ok, [file_match]} | {:error, term}
+  def search_files(project, query, opts \\ [])
+
+  def search_files(%Project{}, "", _opts), do: {:ok, []}
+
+  def search_files(%Project{root_path: root} = project, query, opts) when is_binary(query) do
+    with {:ok, conn} <- project_connection(project, opts),
+         {:ok, %{"files" => files}} <-
+           Longx.Codex.Connection.request(conn, "fuzzyFileSearch", %{
+             "query" => query,
+             "roots" => [root]
+           }) do
+      {:ok,
+       files
+       |> Enum.reject(&git_internal?(&1["path"]))
+       |> Enum.take(@file_matches)
+       |> Enum.map(fn f ->
+         %{
+           path: f["path"],
+           file_name: f["file_name"],
+           root: f["root"],
+           match_type: f["match_type"],
+           score: f["score"] || 0,
+           indices: f["indices"]
+         }
+       end)}
+    end
+  end
+
+  # codex's index includes .git; nobody wants to mention those
+  defp git_internal?(path) when is_binary(path),
+    do: path == ".git" or String.starts_with?(path, ".git/") or String.contains?(path, "/.git/")
+
+  defp git_internal?(_), do: false
 
   ## Git
 

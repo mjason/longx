@@ -7,7 +7,7 @@ import { channel, ok, thread } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { answerRequest, listThreads, respond, sendMessage, startThread } from "@/ash_rpc";
+import { answerRequest, listThreads, respond, searchFiles, sendMessage, startThread } from "@/ash_rpc";
 
 const snapshot = {
   thread_id: "thr_1",
@@ -232,6 +232,27 @@ describe("ThreadPage", () => {
       }),
     );
     expect(screen.getByLabelText("上下文用量")).toHaveTextContent("25%");
+  });
+
+  test("@ in the composer offers the project's files; the pick is a path in the text, a chip in the message", async () => {
+    vi.mocked(searchFiles).mockResolvedValue(ok([{ path: "lib/longx/gateway.ex", fileName: "gateway.ex", matchType: "file", root: "/srv/app-1", score: 9, indices: null }]) as never);
+    const user = userEvent.setup();
+    const r = renderAt("/p/app-1/t/t1");
+    await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
+    act(() => channel.reply("ok", { ...snapshot, items: [{ id: "u1", type: "userMessage", turnId: "turn_1", content: [{ type: "text", text: "read @lib/a.ex first" }] }] }));
+    // a mention already in the history is a chip
+    const chip = await screen.findByText("lib/a.ex");
+    expect(chip.closest("[data-slot=directive-text-chip]")).not.toBeNull();
+
+    const box = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(box, "look at @gat");
+    // the popover asks codex's index (debounced) and lists the matches
+    await user.click(await screen.findByRole("option", { name: /gateway\.ex/ }));
+    expect(searchFiles).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "id-1", query: "gat" } }));
+    expect(box).toHaveValue("look at @lib/longx/gateway.ex ");
+    await user.type(box, "{Enter}");
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ text: "look at @lib/longx/gateway.ex" }) })));
+    r.unmount();
   });
 
   test("phone: the chat still shows the command block and the bottom toolbar", async () => {

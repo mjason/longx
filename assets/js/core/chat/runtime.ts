@@ -30,6 +30,7 @@ export type TurnState = "idle" | "running" | "approval";
 
 export type CodexRuntime = {
   runtime: AssistantRuntime;
+  projectId: string;
   thread: ThreadRow | undefined;
   /** the route names a thread the project does not have */
   missing: boolean;
@@ -169,6 +170,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
 
   return {
     runtime,
+    projectId,
     thread,
     missing: threadId !== undefined && !threads.isPending && thread === undefined,
     view,

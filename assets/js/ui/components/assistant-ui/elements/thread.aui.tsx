@@ -39,6 +39,7 @@ import {
   ThreadPrimitive,
   type FileMessagePartComponent,
   type ImageMessagePartComponent,
+  type TextMessagePartComponent,
   type ToolCallMessagePartComponent,
   unstable_useMessageStallDetection,
   useAuiState,
@@ -78,6 +79,10 @@ export type ThreadComponents = {
   /** Longx: the composer rail — left of the actions (mode, status) and right, before send (model) */
   ComposerLeading?: ComponentType | undefined;
   ComposerTrailing?: ComponentType | undefined;
+  /** Longx: trigger popovers (`@` mentions) rendered inside the composer root */
+  ComposerPopovers?: ComponentType | undefined;
+  /** Longx: how a user message's text renders (directive chips) */
+  UserText?: TextMessagePartComponent | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
   ToolGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
@@ -241,8 +246,11 @@ const ThreadWelcome: FC = () => {
 };
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
+  const { ComposerPopovers } = useContext(ThreadComponentsContext);
   return (
+    <ComposerPrimitive.Unstable_TriggerPopoverRoot>
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
+      {ComposerPopovers ? <ComposerPopovers /> : null}
       <ComposerPrimitive.AttachmentDropzone asChild>
         <div
           data-slot="aui_composer-shell"
@@ -261,6 +269,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
         </div>
       </ComposerPrimitive.AttachmentDropzone>
     </ComposerPrimitive.Root>
+    </ComposerPrimitive.Unstable_TriggerPopoverRoot>
   );
 };
 
@@ -536,6 +545,7 @@ const UserImagePart: ImageMessagePartComponent = (part) => (
 );
 
 const UserMessage: FC = () => {
+  const { UserText } = useContext(ThreadComponentsContext);
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
@@ -547,7 +557,7 @@ const UserMessage: FC = () => {
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
         <div className="aui-user-message-content peer bg-muted text-foreground rounded-xl px-4 py-2 wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
-            components={{ File: UserFilePart, Image: UserImagePart }}
+            components={{ File: UserFilePart, Image: UserImagePart, ...(UserText ? { Text: UserText } : {}) }}
           />
         </div>
       </div>

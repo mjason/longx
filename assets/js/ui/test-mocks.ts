@@ -39,6 +39,7 @@ export function rpcMock() {
     deleteThread: vi.fn(async () => ok(null)),
     listTurns: vi.fn(async () => ok([])),
     listSubagents: vi.fn(async () => ok([])),
+    searchFiles: vi.fn(async () => ok([])),
     restoreProposal: vi.fn(async () => ok({ commit: "aaaa1111", dirtyNow: false, changedFiles: [], laterTurns: 0 })),
     restoreFiles: vi.fn(async () => ok({ safetyCommit: null, head: "aaaa1111" })),
     redoTurn: vi.fn(async () => ok({ id: "tu9", threadId: "t1" })),
