@@ -10,78 +10,103 @@
 :root {
   --radius: 0.625rem;
 
-  /* dark: the navy from the logo's dark stroke, the logo's azure as primary */
-  --background: oklch(0.16 0.02 258);
-  --foreground: oklch(0.94 0.01 250);
-  --card: oklch(0.2 0.022 258);
-  --card-foreground: oklch(0.94 0.01 250);
-  --popover: oklch(0.2 0.022 258);
-  --popover-foreground: oklch(0.94 0.01 250);
-  --primary: oklch(0.68 0.19 258);
-  --primary-foreground: oklch(0.99 0.01 258);
-  --secondary: oklch(0.27 0.025 258);
-  --secondary-foreground: oklch(0.94 0.01 250);
-  --muted: oklch(0.25 0.022 258);
-  --muted-foreground: oklch(0.7 0.02 255);
-  --accent: oklch(0.3 0.03 258);
-  --accent-foreground: oklch(0.97 0.01 250);
-  --destructive: oklch(0.62 0.2 25);
-  --destructive-foreground: oklch(0.98 0.01 25);
-  --border: oklch(0.31 0.025 258);
-  --input: oklch(0.31 0.025 258);
-  --ring: oklch(0.68 0.19 258 / 0.6);
+  /* Dark. Codex GUI's layout of colour — the transcript on a near-black
+     ground, the frame (rail, panel, bars) one step darker — balanced the way
+     Monokai Pro balances its theme: neutrals carry a whisper of the accent's
+     hue, greys are calm, state colours are muted and sit on the same
+     lightness. The accent is the logo's azure, on interactive marks only,
+     never as a background wash. */
+  --background: #1c1e24;
+  --foreground: #f2f3f5;
+  --card: #1c1e24;
+  --card-foreground: #f2f3f5;
+  --popover: #24262e;
+  --popover-foreground: #f2f3f5;
+  --primary: #2f7cf6;
+  --primary-foreground: #ffffff;
+  --secondary: #2a2d36;
+  --secondary-foreground: #f2f3f5;
+  --muted: #262931;
+  --muted-foreground: #9a9ca6;
+  --accent: #2e313b;
+  --accent-foreground: #f6f7f9;
+  --destructive: #f0567c;
+  --destructive-foreground: #ffffff;
+  --border: #2e3039;
+  --input: #2e3039;
+  --ring: rgb(47 124 246 / 0.6);
+  /* the frame around the transcript */
+  --sidebar: #15171c;
+  --sidebar-foreground: #c9cbd2;
+  --sidebar-border: #262931;
+  --sidebar-accent: #262931;
+  --sidebar-accent-foreground: #f6f7f9;
 
-  --success: oklch(0.72 0.17 150);
-  --warning: oklch(0.8 0.16 80);
+  --success: #4ec27f;
+  --warning: #f5a35a;
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
-/* Light tokens: an explicit choice, or the OS preference before/without JS
-   (Longx.Vite loads the app; no inline script decides the theme). */
+/* Light: white paper, near-black ink, a cool-grey frame; the logo's deeper
+   azure as the accent, the state colours darkened for contrast. */
 [data-theme="light"] {
-  --background: oklch(0.985 0.005 250);
-  --foreground: oklch(0.22 0.03 258);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.03 258);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.03 258);
-  --primary: oklch(0.55 0.22 262);
-  --primary-foreground: oklch(0.99 0.01 258);
-  --secondary: oklch(0.95 0.01 255);
-  --secondary-foreground: oklch(0.22 0.03 258);
-  --muted: oklch(0.95 0.01 255);
-  --muted-foreground: oklch(0.5 0.025 258);
-  --accent: oklch(0.93 0.015 255);
-  --accent-foreground: oklch(0.22 0.03 258);
-  --destructive: oklch(0.55 0.21 25);
-  --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(0.9 0.01 255);
-  --input: oklch(0.9 0.01 255);
-  --ring: oklch(0.55 0.22 262 / 0.5);
+  --background: #ffffff;
+  --foreground: #1c1f26;
+  --card: #ffffff;
+  --card-foreground: #1c1f26;
+  --popover: #ffffff;
+  --popover-foreground: #1c1f26;
+  --primary: #1b5cf0;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f2f5;
+  --secondary-foreground: #1c1f26;
+  --muted: #f1f2f5;
+  --muted-foreground: #6b6f7b;
+  --accent: #eaecf1;
+  --accent-foreground: #1c1f26;
+  --destructive: #dc3a5f;
+  --destructive-foreground: #ffffff;
+  --border: #e2e4ea;
+  --input: #e2e4ea;
+  --ring: rgb(27 92 240 / 0.45);
+  --sidebar: #f3f4f7;
+  --sidebar-foreground: #3a3e48;
+  --sidebar-border: #e2e4ea;
+  --sidebar-accent: #e4e7ee;
+  --sidebar-accent-foreground: #1c1f26;
+  --success: #1f9d55;
+  --warning: #d97a1e;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
-    --background: oklch(0.985 0.005 250);
-    --foreground: oklch(0.22 0.03 258);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.22 0.03 258);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.22 0.03 258);
-    --primary: oklch(0.55 0.22 262);
-    --primary-foreground: oklch(0.99 0.01 258);
-    --secondary: oklch(0.95 0.01 255);
-    --secondary-foreground: oklch(0.22 0.03 258);
-    --muted: oklch(0.95 0.01 255);
-    --muted-foreground: oklch(0.5 0.025 258);
-    --accent: oklch(0.93 0.015 255);
-    --accent-foreground: oklch(0.22 0.03 258);
-    --destructive: oklch(0.55 0.21 25);
-    --destructive-foreground: oklch(0.99 0 0);
-    --border: oklch(0.9 0.01 255);
-    --input: oklch(0.9 0.01 255);
-    --ring: oklch(0.55 0.22 262 / 0.5);
+    --background: #ffffff;
+    --foreground: #1c1f26;
+    --card: #ffffff;
+    --card-foreground: #1c1f26;
+    --popover: #ffffff;
+    --popover-foreground: #1c1f26;
+    --primary: #1b5cf0;
+    --primary-foreground: #ffffff;
+    --secondary: #f1f2f5;
+    --secondary-foreground: #1c1f26;
+    --muted: #f1f2f5;
+    --muted-foreground: #6b6f7b;
+    --accent: #eaecf1;
+    --accent-foreground: #1c1f26;
+    --destructive: #dc3a5f;
+    --destructive-foreground: #ffffff;
+    --border: #e2e4ea;
+    --input: #e2e4ea;
+    --ring: rgb(27 92 240 / 0.45);
+    --sidebar: #f3f4f7;
+    --sidebar-foreground: #3a3e48;
+    --sidebar-border: #e2e4ea;
+    --sidebar-accent: #e4e7ee;
+    --sidebar-accent-foreground: #1c1f26;
+    --success: #1f9d55;
+    --warning: #d97a1e;
   }
 }
 
@@ -105,6 +130,11 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --radius-sm: calc(var(--radius) - 4px);

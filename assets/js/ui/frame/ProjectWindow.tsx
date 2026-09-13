@@ -174,7 +174,7 @@ function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
 
 function ToolRail({ active, onToggle }: { active: Tool | null; onToggle: (tool: Tool) => void }) {
   return (
-    <nav aria-label="工具窗口" className="bg-background flex w-11 shrink-0 flex-col items-center gap-1 border-r py-2" data-testid="tool-rail">
+    <nav aria-label="工具窗口" className="bg-sidebar border-sidebar-border flex w-11 shrink-0 flex-col items-center gap-1 border-r py-2" data-testid="tool-rail">
       {TOOLS.map((tool, i) => {
         const Icon = ICONS[tool];
         return (
@@ -185,7 +185,7 @@ function ToolRail({ active, onToggle }: { active: Tool | null; onToggle: (tool: 
                 aria-label={t.tools[tool]}
                 aria-pressed={active === tool}
                 onClick={() => onToggle(tool)}
-                className={`flex size-9 items-center justify-center rounded-md ${active === tool ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                className={`flex size-9 items-center justify-center rounded-md ${active === tool ? "bg-sidebar-accent text-primary" : "text-muted-foreground hover:text-foreground"}`}
               >
                 <Icon className="size-5" />
               </button>
@@ -213,7 +213,7 @@ function DockedPanel({ width, onResize, title, onClose, children }: { width: num
     window.addEventListener("pointerup", up);
   }
   return (
-    <aside className="bg-card relative flex shrink-0 flex-col border-r" style={{ width }} data-testid="tool-panel">
+    <aside className="bg-sidebar border-sidebar-border relative flex shrink-0 flex-col border-r" style={{ width }} data-testid="tool-panel">
       <div className="flex h-9 items-center justify-between border-b px-3 text-xs font-medium uppercase tracking-wide">
         {title}
         <button type="button" aria-label={t.close} onClick={onClose} className="text-muted-foreground hover:text-foreground rounded p-1">
@@ -228,7 +228,7 @@ function DockedPanel({ width, onResize, title, onClose, children }: { width: num
 
 function BottomToolbar({ active, onToggle }: { active: Tool | null; onToggle: (tool: Tool) => void }) {
   return (
-    <nav aria-label="工具窗口" className="safe-bottom bg-background/95 sticky bottom-0 z-20 border-t backdrop-blur" data-testid="bottom-toolbar">
+    <nav aria-label="工具窗口" className="safe-bottom bg-sidebar border-sidebar-border sticky bottom-0 z-20 border-t" data-testid="bottom-toolbar">
       <div className="flex">
         {TOOLS.map((tool) => {
           const Icon = ICONS[tool];

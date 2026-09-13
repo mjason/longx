@@ -12,7 +12,7 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
   const rss = ctx.sample?.rss_bytes ?? (codex.data?.worker as { stats?: { rss_bytes: number } } | null)?.stats?.rss_bytes;
 
   return (
-    <div className="bg-card text-muted-foreground flex h-7 items-center gap-4 overflow-x-auto border-t px-3 text-xs" data-testid="status-strip">
+    <div className="bg-sidebar border-sidebar-border text-muted-foreground flex h-7 items-center gap-4 overflow-x-auto border-t px-3 text-xs" data-testid="status-strip">
       <span className="flex items-center gap-1 font-mono" title="HEAD">
         <GitBranch className="size-3" /> {git.data ? (git.data.repository ? shortSha(git.data.head) : "no git") : "…"}
         {git.data?.repository && !git.data.clean ? <span className="text-warning">·{git.data.changes}</span> : null}

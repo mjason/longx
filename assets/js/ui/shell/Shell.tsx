@@ -42,7 +42,7 @@ export function TopBar({
   wide?: boolean;
 }) {
   return (
-    <header className="safe-top bg-background sticky top-0 z-20 border-b">
+    <header className="safe-top bg-sidebar border-sidebar-border sticky top-0 z-20 border-b">
       <div className={`safe-x mx-auto flex h-14 w-full items-center gap-2 ${wide ? "" : "max-w-5xl"}`}>
         {back ? (
           <Link to={back} aria-label="返回" className="touch-target -ml-2 flex items-center justify-center rounded-md">
