@@ -55,7 +55,20 @@ React Native client planned on the same core code.
   hooks/LFS fidelity — evaluated and rejected). `Longx.Git`: `repository?/toplevel/init/head`,
   `status` (porcelain v1 -z), `commit_all` (falls back to a Longx identity when the user has
   none), `log`, `diff`, `restore_tree` (files back to a commit, branch untouched),
-  `reset_hard`, `worktree_add/remove/list`, `lfs?`. `LONGX_GIT` overrides the binary.
+  `reset_hard`, `worktree_add/remove/list`, `lfs?`; and, for the git tool (GitHub Desktop's
+  feature set on the bundled binary): `commit/3` (named paths only — during a merge the
+  merge is committed whole, git allows no partial commit then), `file_diff/2` (working tree
+  vs HEAD; untracked against nothing; binaries flagged), `discard/2` (tracked restored,
+  untracked removed), `log` (`limit`/`skip`, email), `show/2` (message, parents, files with
+  status; merges against their first parent), `commit_file_diff/3`, `undo_commit/1`
+  (`reset --soft HEAD~1`, never the root), `branches/1` / `create_branch` / `switch` /
+  `delete_branch`, `stash` / `stash_pop` / `stashes`, `remotes` / `set_remote` /
+  `ahead_behind` / `fetch` / `pull` / `push` (upstream set on first push; 120 s), `ignored/1`
+  (what `.gitignore` hides, directories whole), `merging?/1` / `abort_merge/1`,
+  `file_versions/3` (`git show rev:path` on both sides). Auth for
+  remotes is whatever the machine's SSH agent / credential helpers give the bundled git
+  (`GIT_TERMINAL_PROMPT=0`: never a prompt, an error instead). The suite plays the remote
+  with a bare repository on disk. `LONGX_GIT` overrides the binary.
   Bundle download/verify/extract lives in `Longx.Bundle`, shared with `Codex.Runtime`.
 - `lib/longx/projects/` — Ash domain `Longx.Projects` (single-user; no thread ↔ user mapping):
   - `Project` = a working directory (absolute, existing, unique `root_path`) + defaults for
@@ -127,6 +140,27 @@ React Native client planned on the same core code.
     isolation was considered and dropped: knowing the commit after each turn is enough.
     Over RPC these are the `Turn` generic actions `restore_proposal`, `restore_files`
     (`confirm`, `mode`) and `redo_turn` (`text`, `model`, `mode`, `restore_files`).
+- **The project's files and git, for the UI** — two data-less resources under
+  `Longx.Projects` (like `Longx.System.Status`), one generic action per operation, wire-tested
+  in `test/longx_web/rpc/workspace_rpc_test.exs`:
+  - `Longx.Projects.Files` over `Longx.Projects.Workspace`: `list_files` (one level,
+    directories first, `.git` never), `read_file` (1 MB cap → `truncated`, NUL / invalid
+    UTF-8 in the head → `binary`, no content), `write_file`, `create_entry`, `rename_entry`,
+    `delete_entry`. Every path is relative to the root and resolved inside it (`..`,
+    absolute paths, `.git/` → an error on `path`).
+  - `Longx.Projects.Repo` over `Longx.Git`: `git_changes` (the whole sync state in one call:
+    branch, head, changes, ahead/behind, remotes, ignored, merging), `git_file_diff`,
+    `git_commit`, `git_discard`, `git_undo_commit`, `git_abort_merge`, `git_log`,
+    `git_show`, `git_commit_file_diff`, `git_file_versions` (both whole texts of one
+    change — HEAD vs the working tree, or a commit vs its first parent; a missing side is
+    null, a binary carries none — what the side-by-side view wants instead of a patch),
+    `git_branches` (+ stashes), `git_create_branch`,
+    `git_switch` (`stash: true` sets the tree aside first), `git_delete_branch`,
+    `git_stash_pop`, `git_set_remote`, `git_fetch` / `git_pull` / `git_push`. git's own words
+    come back as the error on the argument they concern; a non-repository answers
+    `repository: false` to `git_changes` and an error on `project_id` to the rest. Commit
+    times are ISO strings (a typed map's `utc_datetime` has no client type in
+    ash_typescript 0.18).
 - **A headless browser is bundled too: obscura** (`h4ckf0r0day/obscura`, Rust + embedded V8,
   Apache-2.0). `Longx.Browser.Runtime` pins `v0.2.2` (five targets: `{x86_64,aarch64}-linux`,
   `{x86_64,aarch64}-macos` as tar.gz, `x86_64-windows` as zip — `Longx.Bundle` unpacks
@@ -513,7 +547,7 @@ React Native client planned on the same core code.
     a repository directory is an *open*, anything else may get `init_git: true`),
     `frame/ProjectWindow` (desktop: icon rail + docked resizable tool window + status
     strip; phone: chat full-screen, bottom toolbar, tools as bottom sheets — tool windows:
-    `frame/tools/{Threads,Git,Process,Turns,Agents}Tool`; ⌘1–5 toggle them; `core/frame.ts` keeps
+    `frame/tools/{Threads,Git,Process,Turns,Agents,Files}Tool`; ⌘1–6 toggle them; `core/frame.ts` keeps
     the state, remembered per device; `TurnsTool` is the history: the thread's turns with
     status / model / commits, the per-turn diff as `code-diff` per file (`splitDiff`), and
     the restore (proposal → confirm → `restore_files`) and redo (text, model, revert |
@@ -522,7 +556,36 @@ React Native client planned on the same core code.
     plus "now" — are the `checkpoint-history` element on top, its restore opening the same
     dialog; `AgentsTool` is the thread's sub-agents as the `background-inbox`
     element over `useSubagents` — a finished one opens its own thread page),
-    `frame/StatusStrip` (HEAD, codex, memory, sandbox warning),
+    `frame/StatusStrip` (HEAD, codex, memory, sandbox warning).
+    **The centre is an editor area** (`ui/workbench/Workbench`, state in `core/workbench.ts`
+    per project on the device): a tab strip — the chat first and always, then files and
+    diffs opened from the tools — the chat kept mounted behind an open file; a dirty tab
+    asks before closing. `EditorTab` = `ui/editor/CodeEditor` (**CodeMirror 6** as a
+    controlled component: lazy languages from `@codemirror/language-data` plus
+    `codemirror-lang-elixir`, our tokens as the theme — `--syntax-*` colours in both
+    themes — ⌘S, soft wrap on phones; a value from outside never counts as an edit) with a
+    draft, save / discard, binary and over-large files said as such; `DiffTab` =
+    `ui/editor/DiffView`, **GitHub's file view on `@codemirror/merge`**: the two versions
+    from `git_file_versions` as `MergeView` side by side (each pane scrolls sideways on its
+    own — `app.css` lifts the merge view's `overflow: hidden`) or `unifiedMergeView` inline
+    (a phone's default; a toggle in the tab's bar), the file's language highlighting both,
+    changed characters underlined, unchanged stretches collapsed into a "N 行未改动" bar
+    (`EditorState.phrases` for the label), colours from our tokens, read-only. **`FilesTool`** (⌘6)
+    is the IDE tree: folders first, children on open, git status coloured on files and
+    rolled up onto folders, `.gitignore`d paths dimmed, a row menu for new file / folder,
+    rename (open tabs follow) and delete (confirm), a filter over codex's fuzzy file index
+    (`search_files`); on a phone the tree is a sheet that closes on tap. **`GitTool`** (⌘2)
+    is GitHub Desktop's shape in a tool window: a branch button (popover: switch — with a
+    stash offered when the tree is dirty — create, delete, pop a stash) and a sync button
+    (↓behind ↑fetch/pull/push, the remote set in a dialog when there is none), then Changes
+    (every file checked by default, its diff a tap away in the workbench, summary +
+    description, commit to the branch, discard behind a confirm, a merge stopped on
+    conflicts explained with "abort") and History (commits paged 30 at a time, one commit's
+    body and files, a file's diff at that commit, undo of the last commit). Its queries
+    live in `core/workspace.ts` (`useFiles`, `useFileContent`, `useGitChanges` — polled
+    every 10 s while the tool shows, since the agent edits without telling us —
+    `useGitLog`, `useGitShow`, `useGitActions` invalidating everything git, the tree and
+    open files after any action).
     `pages/ProjectSettingsPage` (`/p/:slug/settings`: name, description, the thread
     defaults — sandbox, approval, network, dirty_start, model, memory cap — via
     `update_project`; danger zone: clear codex history, archive, each behind a confirm),

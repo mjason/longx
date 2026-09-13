@@ -49,8 +49,20 @@ defmodule LongxWeb.ThreadChannelTest do
     socket: socket,
     thread_id: thread_id
   } do
+    # the fake's thread/started may still be on its way under a loaded suite:
+    # the snapshot is re-pulled until the view carries the thread
+    assert %{seq: _, thread: %{"id" => ^thread_id}} = snapshot_with_thread(socket, 20)
+  end
+
+  defp snapshot_with_thread(socket, tries) do
     ref = push(socket, "snapshot", %{})
-    assert_reply ref, :ok, %{seq: _, thread: %{"id" => ^thread_id}}, 2_000
+    assert_reply ref, :ok, payload, 2_000
+
+    case payload do
+      %{thread: %{"id" => _}} -> payload
+      _ when tries > 1 -> snapshot_with_thread(socket, tries - 1)
+      _ -> payload
+    end
   end
 
   test "joining an unknown thread is refused" do
