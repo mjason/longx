@@ -41,7 +41,9 @@ React Native client planned on the same core code.
   `mix codex.fetch [--target …]` before `mix release`). `mix setup` runs it too.
   `Longx.Codex.Runtime.executable/0` resolves the binary; `LONGX_CODEX_APP_SERVER` overrides.
   Bumping the version = change `@version` + the six `@sha256` entries from the release's
-  `codex-package_SHA256SUMS`, then `mix codex.fetch --force`.
+  `codex-package_SHA256SUMS`, then `mix codex.fetch --force`, and refresh
+  `priv/codex_prompt.md` from the release's `codex-rs/models-manager/prompt.md` (the
+  model catalog's base instructions; `mix test --include integration` checks it).
 - **Git is bundled too, and it is real git.** `Longx.Git.Runtime` pins GitHub Desktop's
   portable build (`desktop/dugite-native` v2.53.0-4: git 2.53.0 + git-lfs + git-remote-https,
   six targets, sha256 per target) fetched by `mix git.fetch` into `priv/git/<target>/`
@@ -188,6 +190,23 @@ React Native client planned on the same core code.
     Unknown slugs are refused in `Longx.Projects` before codex is involved. Not covered:
     config overrides are per thread, so a mid-thread model switch (`redo_turn` in revert
     mode) changes effort/summary but keeps the first model's context window and search mode.
+    **The context window has two halves.** The per-thread `model_context_window` override
+    is what codex reports (×95% "usable", `thread/tokenUsage/updated.modelContextWindow`)
+    and compacts against — but codex clamps it to the model's `max_context_window`, and for
+    a slug it does not know (every model behind our gateway) its fallback metadata says
+    272k. So `Longx.Codex.Home.prepare/1` also writes **`model_catalog.json`**
+    (`model_catalog_json` in config.toml): one entry per `Longx.AI.Model` slug plus the
+    `longx` placeholder sized as the default model, each in codex's own fallback shape
+    (unified-exec shell, byte truncation, `priv/codex_prompt.md` as base instructions —
+    the prompt vendored from the pinned release; the `:integration` suite checks the
+    bundled binary embeds it verbatim, so a codex bump that changes it fails there) with
+    `context_window` / `max_context_window` from the row. The catalog is written when a
+    codex process starts: a window edit reaches a project after `restart_codex` (or the
+    Recycler). `Projects.resume_thread/2` (the pool's lazy resume and the Tracker's
+    resume after a codex death) passes the same overrides as a start, so old threads get
+    the row's current window on their next resume — verified against the real binary in
+    `gateway_e2e_test` (start 128k → 121 600 reported; resume 1M → 950 000). Seeds give
+    `deepseek-flash` 1M (DeepSeek V4 Flash) and lift a row still on the old 128k default.
   - **Provider health / limits**: `Longx.AI.check_model/1` sends one tiny non-streaming
     request (16 output tokens, 30 s) and records the outcome on the provider. In the gateway,
     `Longx.AI.Gateway.Limiter` (ETS counters, in the supervision tree) caps in-flight

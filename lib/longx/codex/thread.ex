@@ -56,11 +56,20 @@ defmodule Longx.Codex.Thread do
     end
   end
 
-  @doc "Resumes a stored thread and rebuilds its `ThreadState` from `thread/read`."
+  @doc """
+  Resumes a stored thread and rebuilds its `ThreadState` from `thread/read`.
+  Takes the same model / config options as `start/1` (`model_context_window:`,
+  `reasoning_effort:`, `web_search:`, …): a resumed thread runs with what the
+  model row says *now*, not what it was started with.
+  """
   @spec resume(String.t(), keyword) :: {:ok, String.t()} | {:error, term}
   def resume(thread_id, opts \\ []) do
     conn = Keyword.fetch!(opts, :conn)
-    params = %{"threadId" => thread_id} |> put_model(Keyword.get(opts, :model))
+
+    params =
+      %{"threadId" => thread_id}
+      |> put_model(Keyword.get(opts, :model))
+      |> put_config(opts)
 
     with {:ok, _} <- Connection.request(conn, "thread/resume", params),
          {:ok, read} <-

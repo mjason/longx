@@ -374,11 +374,29 @@ defmodule Longx.Projects do
     end
   end
 
-  defp resume_on_pool(%Thread{codex_thread_id: codex_id, project: project}) do
+  defp resume_on_pool(%Thread{codex_thread_id: codex_id, project: project} = thread) do
     with {:error, :no_connection} <- Pool.connection_for_thread(codex_id),
          {:ok, conn} <- Pool.connection(project.id, shim: shim_options(project)),
-         {:ok, _} <- Longx.Codex.Thread.resume(codex_id, conn: conn) do
+         {:ok, _} <- resume_thread(thread, conn) do
       {:ok, conn}
+    end
+  end
+
+  @doc """
+  `thread/resume` on `conn` with what the model row says *now* (context
+  window, reasoning, search mode) and what the thread recorded (network,
+  sub-agents) — the same config overrides as its start, so a model edit
+  reaches old threads the next time they are resumed.
+  """
+  @spec resume_thread(Thread.t(), pid) :: {:ok, String.t()} | {:error, term}
+  def resume_thread(%Thread{codex_thread_id: codex_id} = thread, conn) do
+    with {:ok, model_opts} <- Longx.AI.thread_options(thread.model_slug) do
+      opts =
+        [conn: conn, network_access: thread.network_access, multi_agent: thread.multi_agent]
+        |> Keyword.merge(model_opts)
+        |> without_web_search(thread.web_search)
+
+      Longx.Codex.Thread.resume(codex_id, opts)
     end
   end
 

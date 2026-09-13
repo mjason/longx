@@ -318,6 +318,51 @@ defmodule Longx.Codex.GatewayE2ETest do
     refute body["reasoning"]["effort"] == "high"
   end
 
+  test "the model's context window reaches codex at start and again at resume (95% usable is what it reports)",
+       %{gateway_url: gateway_url} do
+    upstream = Bypass.open()
+    fake_provider!(upstream)
+
+    Bypass.expect(upstream, "POST", "/v1/responses", fn conn ->
+      {:ok, _raw, conn} = Plug.Conn.read_body(conn, length: 50_000_000)
+      send_sse(conn, ResponsesFixture.assistant_message("ok"))
+    end)
+
+    # the catalog codex boots with says this model takes 1M (its own fallback
+    # would cap any override at 272k); the row's window of the day is the
+    # per-thread override
+    {:ok, model} = AI.default_model()
+    AI.update_model!(model, %{context_window: 1_000_000})
+    home = prepare_home!(gateway_url)
+    conn = start_connection!(home)
+    thread_id = start_thread!(conn, home, model_context_window: 128_000)
+    {turn, _} = run_turn!(conn, thread_id, "hi")
+    assert turn["status"] == "completed", inspect(turn)
+    assert window(thread_id) == 121_600
+
+    # the row was edited to 1M; codex restarted (a new process on the same
+    # home) — the resume carries the new window
+    :ok = stop_supervised({:conn, home.dir})
+    Longx.Codex.ThreadState.stop(thread_id)
+    conn = start_connection!(home, :conn2)
+
+    assert {:ok, ^thread_id} =
+             Thread.resume(thread_id, conn: conn, model_context_window: 1_000_000)
+
+    {turn, _} = run_turn!(conn, thread_id, "hi again")
+    assert turn["status"] == "completed", inspect(turn)
+    assert window(thread_id) == 950_000
+  end
+
+  test "the vendored base instructions are what the bundled binary embeds (refresh priv/codex_prompt.md on a codex bump)" do
+    {:ok, exe} = Longx.Codex.Runtime.executable()
+    assert :binary.match(File.read!(exe), Longx.Codex.Home.base_instructions()) != :nomatch
+  end
+
+  defp window(thread_id) do
+    get_in(Thread.snapshot(thread_id).token_usage, ["modelContextWindow"])
+  end
+
   test "multi_agent: the thread gets codex's sub-agent tools (spawn / wait / …)", %{
     gateway_url: gateway_url
   } do

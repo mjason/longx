@@ -226,7 +226,7 @@ defmodule Longx.Projects.Tracker do
   defp codex_back(project_id) do
     with {:ok, conn} <- Pool.connection(project_id) do
       for thread <- Projects.list_threads_with_status!(project_id, :disconnected) do
-        case Longx.Codex.Thread.resume(thread.codex_thread_id, conn: conn) do
+        case Projects.resume_thread(thread, conn) do
           {:ok, _} ->
             Projects.touch_thread!(thread, %{status: :idle})
 

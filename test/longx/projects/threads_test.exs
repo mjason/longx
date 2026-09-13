@@ -162,7 +162,9 @@ defmodule Longx.Projects.ThreadsTest do
 
       %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
       refute Map.has_key?(params, "model")
-      assert params["config"]["model_context_window"] == 128_000
+      # the seeded default model's window (DeepSeek V4 Flash: 1M)
+      assert params["config"]["model_context_window"] == Longx.AI.default_model!().context_window
+      assert params["config"]["model_context_window"] == 1_000_000
     end
 
     test "network_access: true opens the workspace-write sandbox's network", %{

@@ -3,7 +3,9 @@
 # Idempotent: creates the DeepSeek provider and `deepseek-flash` model if they
 # are missing, refreshes the provider's key from DEEPSEEK_API_KEY when that is
 # set, and makes deepseek-flash the default model when nothing is the default
-# yet. Safe to re-run; never downgrades an existing key to nil.
+# yet. Safe to re-run; never downgrades an existing key to nil. A row still on
+# the old seeded window (128k — DeepSeek V4 Flash takes 1M) is lifted; a
+# window someone chose stays.
 
 alias Longx.AI
 
@@ -32,9 +34,12 @@ model =
       AI.create_model!(%{
         name: "DeepSeek Flash",
         upstream_id: "deepseek-flash",
-        context_window: 128_000,
+        context_window: 1_000_000,
         provider_id: provider.id
       })
+
+    %AI.Model{context_window: 128_000} = model ->
+      AI.update_model!(model, %{context_window: 1_000_000})
 
     model ->
       model

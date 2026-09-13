@@ -92,6 +92,17 @@ defmodule Longx.Projects.ResilienceTest do
     idle = eventually(thread_status(thread.id, :idle))
     assert idle.status == :idle
 
+    # resumed with the model's current settings (context window, web search), like a start
+    {:ok, conn} = Pool.connection_for_thread(thread.codex_thread_id)
+
+    assert {:ok, %{"thread" => %{"resumeParams" => %{"config" => config}}}} =
+             Longx.Codex.Connection.request(conn, "thread/read", %{
+               "threadId" => thread.codex_thread_id
+             })
+
+    assert config["model_context_window"] == Longx.AI.default_model!().context_window
+    assert config["features.multi_agent_v2"] == true
+
     # and it keeps working on the new process
     {:ok, turn} = Projects.send_message(thread, "say again")
     assert %{status: :completed} = eventually(turn_status(turn.id, :completed))
