@@ -31,10 +31,13 @@ config :longx, LongxWeb.Endpoint,
   code_reloader: true,
   debug_errors: true,
   secret_key_base: "4A38gUAMiHRAiBew4wUwtlx6FxYqEtZmR+vcsR2BeC+CNN6opnyxRfDLgI/nTFNu",
-  watchers: [
-    esbuild: {Esbuild, :install_and_run, [:longx, ~w(--sourcemap=inline --watch)]},
-    tailwind: {Tailwind, :install_and_run, [:longx, ~w(--watch)]}
-  ]
+  # Vite dev server (HMR): the page comes from Phoenix, its scripts and CSS
+  # from Vite (LongxWeb.Vite). Over the LAN (phone testing) the browser must
+  # reach Vite too: LONGX_DEV_HOST=<lan-ip> points the asset URLs there.
+  watchers: [vite: {LongxWeb.Vite.Watcher, :run, [[cd: Path.expand("../assets", __DIR__)]]}]
+
+config :longx, LongxWeb.Vite,
+  dev_server: "http://#{System.get_env("LONGX_DEV_HOST", "localhost")}:5173"
 
 # ## SSL Support
 #

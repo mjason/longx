@@ -10,11 +10,16 @@ defmodule Longx.Projects.Turn do
   use Ash.Resource,
     otp_app: :longx,
     domain: Longx.Projects,
-    data_layer: AshSqlite.DataLayer
+    data_layer: AshSqlite.DataLayer,
+    extensions: [AshTypescript.Resource]
 
   sqlite do
     table "project_turns"
     repo Longx.Repo
+  end
+
+  typescript do
+    type_name "Turn"
   end
 
   actions do
@@ -96,7 +101,7 @@ defmodule Longx.Projects.Turn do
     attribute :diff, :string, public?: true
     attribute :error, :string, public?: true
 
-    timestamps()
+    timestamps public?: true
   end
 
   relationships do

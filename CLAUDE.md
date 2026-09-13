@@ -2,7 +2,8 @@
 
 Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives the
 **OpenAI Codex app-server** (`codex app-server`, JSON-RPC) and renders the agent UI with
-**React 19 + AI Elements** (https://elements.ai-sdk.dev/docs).
+**React 19** (Vite, shadcn/Tailwind v4, assistant-ui for the chat), mobile-first, with a
+React Native client planned on the same core code.
 
 ## Architecture
 
@@ -310,20 +311,66 @@ Agent application. **Ash 3 + Phoenix 1.8 (Bandit, SQLite)** backend that drives 
     `priv/codex/<target>/bin/codex-app-server generate-json-schema --out DIR`
     (also `generate-ts` for the React side). Regenerate into the scratchpad/`tmp/`, don't
     commit the 4 MB output.
-- `lib/longx_web/` — Phoenix web layer. Two entry points:
-  - React SPA: `assets/js/index.tsx` mounts at `#app`, served with the `spa_root` layout
-    (`PageController.index`). Agent chat UI lives here.
-  - LiveView/HEEx pages use the `root` layout + `<Layouts.app>`.
-- `assets/js/` — TypeScript/React bundled by esbuild (`--alias:@=.` so `@/…` resolves to
-  `assets/`). `ash_rpc.ts` and `ash_types.ts` are **generated** by `mix ash_typescript.codegen`
-  — never edit by hand; re-run after changing any RPC-exposed resource/action
-  (endpoints `/rpc/run`, `/rpc/validate`).
-- AI Elements components are shadcn-style source you own: add with
-  `npx ai-elements@latest add <component>` (run in `assets/`), they land in
-  `assets/js/components/ai-elements/`. Prerequisites (set up on first use, test-first like
-  everything else): shadcn/ui `components.json` + `cn()` util, Tailwind v4 in CSS-variables
-  mode, and the `ai` package. Keep them working alongside the daisyUI plugin already in
-  `assets/css/app.css`. Do not hand-roll chat/message/prompt UI that AI Elements provides.
+- `lib/longx_web/` — Phoenix web layer. **The React SPA owns the URL space**:
+  `LongxWeb.PageController.spa/2` serves the shell (`spa_root` layout, `<div id="app">`) for
+  `/` and, as the router's **last** route (`get "/*path"`, pipeline `:spa` — session, CSRF
+  token, no `:accepts`), for every other HTML navigation, so deep links survive a refresh.
+  It answers 404 for non-HTML `Accept`s and file-looking paths (a missing asset must never
+  come back as HTML). `/rpc/*`, `/ai/v1/*`, `/socket`, `/dev/*` are matched before it.
+  No LiveView pages (the `root` layout remains for the dev dashboard/errors).
+  - `LongxWeb.Actor` is the single place an actor comes from (RPC conn, socket params) —
+    `nil` today; AshAuthentication plugs in there later without touching the client.
+  - **RPC** = ash_typescript: domains `Longx.Projects`, `Longx.AI`, `Longx.System` declare
+    `typescript_rpc` blocks; resources carry `AshTypescript.Resource` + `typescript do
+    type_name … end`; work that lives in domain functions (`send_message`, `git_info`,
+    `codex_info`, `check_model`, tools catalogue, sandbox status…) is exposed as **generic
+    actions** whose `run` calls the existing function and whose return is a typed map
+    (`constraints fields: […]`) or `:struct`. Ash `timestamps(public?: true)` where the UI
+    needs them. `POST /rpc/run` is tested at the wire in `test/longx_web/rpc/` so the
+    generated client's contract is what is tested. Every call carries Phoenix's CSRF token
+    via the lifecycle hook (`assets/js/core/rpcHooks.ts`, configured in `config.exs`).
+  - **Channels** (`LongxWeb.UserSocket` at `/socket`): `LongxWeb.ThreadChannel`
+    (`thread:<codex_thread_id>`) is the ThreadState protocol on the wire — join replies with
+    the snapshot (`seq`), then `"codex"` pushes `%{seq, method, params}`, `"snapshot"` on
+    demand; joining a thread no running codex hosts is refused. `LongxWeb.ProjectChannel`
+    (`project:<id>`) pushes `"changed"` (rows changed → refetch; from
+    `Longx.Projects.broadcast_changed/1`, called by the Tracker and Projects after writes),
+    `"codex"` (`%{status}` ready/down for that project's process) and `"sample"` (the
+    recycler's numbers). Tests: `LongxWeb.ChannelCase`.
+  - **Vite ↔ Phoenix is ours, not a dependency** (`LongxWeb.Vite`, `LongxWeb.Vite.Watcher`;
+    phoenix_vite was evaluated and rejected as immature — reference only). `<LongxWeb.Vite.assets />`
+    in the layouts renders, in dev, the HMR client + raw entry from the Vite dev server
+    (`config :longx, LongxWeb.Vite, dev_server:`; `LONGX_DEV_HOST=<lan-ip>` for phone
+    testing — Vite listens on `0.0.0.0:5173` and the phone loads scripts from it directly),
+    — first `js/dev/react-refresh.ts` (the React Fast Refresh preamble a non-Vite page must
+    load itself, else "@vitejs/plugin-react can't detect preamble"), then `@vite/client`,
+    then the entry — otherwise the hashed files from `priv/static/assets/.vite/manifest.json` (entry css,
+    script, `modulepreload` for imported chunks; cached in `persistent_term`). The dev
+    watcher runs `npm run dev` **through `Longx.Shim`** so Vite dies with the BEAM (a plain
+    npm watcher leaves node on 5173). `mix assets.build` = compile + `ash_typescript.codegen`
+    + `npm run build` → `priv/static/assets/` (gitignored); no `phx.digest`. PWA bits are
+    committed static files: `priv/static/manifest.webmanifest`, `icons/` (`static_paths/0`).
+- `assets/` — Vite + TypeScript + React 19, tests with vitest/testing-library
+  (`npm run check` = `tsc --noEmit` + `vitest run`, part of `mix precommit`). Layout:
+  - `js/core/` — **DOM-free**, the part a React Native app will reuse: the generated client
+    (`ash_rpc.ts`, `ash_types.ts` — **generated** by `mix ash_typescript.codegen`, never
+    edited; `codegen --check` runs in precommit), `rpcHooks.ts`, `socket.ts` (one Phoenix
+    socket, status for the connection banner), `projectChannel.ts`, TanStack Query hooks
+    (`projects.ts`; `RpcFailure` carries field errors), formatters. Thread reducer, the
+    codex item → assistant-ui message mapping and the `ExternalStoreRuntime` adapter go
+    here too (branch ②).
+  - `js/ui/` — React DOM: `routes.tsx` (react-router, browser history; tests use a memory
+    router via `ui/test-utils.tsx`), `shell/` (Shell, TopBar, Page, BottomBar, banners),
+    `pages/`, `components/ui/` (shadcn, added with `npx shadcn@latest add …` in `assets/`;
+    `components.json` maps `@/ui/components`, `@/lib/utils`), `strings.ts` (all UI copy,
+    zh-CN). The chat uses **assistant-ui** (`@assistant-ui/react`, `ExternalStoreRuntime`;
+    it has an official React Native package) — not AI Elements, not `useChat`.
+  - **Mobile first**: one column; `TopBar` respects the notch (`safe-top`), `Page` keeps
+    ≥16 px gutters (`safe-x`), the primary action sits in a fixed `BottomBar` on phones
+    (`safe-bottom`) and inline on desktop (`lg:`); touch targets ≥ 44 px (`touch-target`);
+    16 px base font (no iOS zoom); the page never scrolls sideways — wide content scrolls
+    inside its own box; dark is the default theme, `[data-theme="light"]` the override.
+    `css/app.css`: Tailwind v4 with shadcn token names, **no `@apply`**, no daisyUI.
 
 ## Development workflow — TDD is mandatory
 
@@ -374,8 +421,15 @@ Where tests live / what to use:
 - Never run the real `codex` binary in the unit suite. Real-Codex tests are
   `@tag :integration`, excluded by default (`test_helper.exs`); run them with
   `mix test --include integration`.
-- TypeScript/React → also test-first. Use `vitest` + `@testing-library/react` in `assets/`
-  (add on first need: `npm i -D vitest jsdom @testing-library/react --prefix assets`).
+- **Look at it in a real browser** before calling a screen done: `node scripts/browse.mjs
+  <url> phone|desktop out.png` (playwright, in `assets/`) loads the page as an iPhone 13 or a
+  1280px desktop, prints console/page errors and any element wider than the viewport, and
+  saves a screenshot to read back. Point it at the running dev server (never start a second
+  one on 7788 if it is already up).
+- TypeScript/React → also test-first: vitest + testing-library in `assets/` (`npm test`).
+  Pure code in `js/core/` is unit-tested directly; pages render the real route tree with
+  `renderAt(path)` from `ui/test-utils.tsx`, mocking `@/ash_rpc` (and `@/core/socket`) with
+  `vi.mock`; `setViewport(390)` for phone-width assertions.
 - `mix test` runs `ash.setup --quiet` first; the test DB is `longx_test.db` (SQLite) —
   avoid `async: true` on DB-backed tests. Prefer `start_supervised!/1`; never `Process.sleep`
   in tests (monitor / `assert_receive` instead).
@@ -403,14 +457,12 @@ Where tests live / what to use:
 - Ash: consult the `ash-framework` skill before touching domains/resources. Generate with
   `mix ash.gen.*`; migrations via `mix ash.codegen <name>` then `mix ash.migrate`;
   RPC exposure lives in `Longx.AshTypescriptManifest`.
-- Phoenix: consult the `phoenix-framework` skill for the web layer. Phoenix 1.8 rules that
-  still apply: LiveView templates start with `<Layouts.app flash={@flash} …>`;
-  `<.flash_group>` only inside `layouts.ex`; icons via `<.icon name="hero-…">`; form inputs
-  via `<.input>` from `core_components.ex`.
-- Assets: keep the Tailwind v4 import block in `app.css`
-  (`@import "tailwindcss" source(none);` + `@source …`); never `@apply`; only the `app.js` /
-  `index.js` / `app.css` bundles are served — no inline `<script>` in templates and no
-  vendored `<script src>`; import dependencies through `assets/package.json`.
+- Phoenix: consult the `phoenix-framework` skill for the web layer. The UI is the React SPA;
+  HEEx is only the shell/error pages — no LiveView screens.
+- Assets: Vite owns bundling (`assets/vite.config.ts`, `@` → `assets/js`); never `@apply`;
+  only Vite's output under `/assets` and the committed PWA files are served — no inline
+  `<script>` in templates and no vendored `<script src>`; dependencies through
+  `assets/package.json`.
 - Docs: `mix usage_rules.docs Module.fun` and `mix usage_rules.search_docs "…" -p pkg`
   (see below) before guessing an API.
 

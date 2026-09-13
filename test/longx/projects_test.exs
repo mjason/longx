@@ -176,7 +176,8 @@ defmodule Longx.ProjectsTest do
       assert Pool.status(project.id) == :stopped
       assert File.exists?(home)
 
-      assert {:error, :confirmation_required} = Projects.delete_project(project)
+      assert {:error, %Ash.Error.Invalid{} = err} = Projects.delete_project(project)
+      assert Exception.message(err) =~ "confirm"
       assert :ok = Projects.delete_project(project, confirm: true)
       refute File.exists?(home)
       assert {:error, _} = Projects.get_project_by_slug(project.slug)

@@ -10,6 +10,19 @@ defmodule LongxWeb.Router do
     plug :put_secure_browser_headers
   end
 
+  # The SPA shell decides for itself whether a request is a page (no
+  # `:accepts`: an API client hitting an unknown path gets a 404, not a 406).
+  pipeline :spa do
+    plug :fetch_session
+    plug :put_root_layout, html: {LongxWeb.Layouts, :spa_root}
+    plug :protect_from_forgery
+    # Phoenix's default permissions-policy names ad-tech features Chrome does
+    # not recognise (console noise on every page); ours says what we mean.
+    plug :put_secure_browser_headers, %{
+      "permissions-policy" => "camera=(), microphone=(), geolocation=(), payment=()"
+    }
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
   end
@@ -24,10 +37,8 @@ defmodule LongxWeb.Router do
   scope "/", LongxWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
     post "/rpc/run", AshTypescriptRpcController, :run
     post "/rpc/validate", AshTypescriptRpcController, :validate
-    get "/ash-typescript", PageController, :index
   end
 
   scope "/ai/v1", LongxWeb.AI do
@@ -42,6 +53,14 @@ defmodule LongxWeb.Router do
   # scope "/api", LongxWeb do
   #   pipe_through :api
   # end
+
+  # The React SPA: every remaining HTML path gets the shell (see
+  # LongxWeb.PageController). Must stay last — after /ai, /rpc and /dev.
+  scope "/", LongxWeb do
+    pipe_through :spa
+
+    get "/", PageController, :spa
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:longx, :dev_routes) do
@@ -58,5 +77,11 @@ defmodule LongxWeb.Router do
       live_dashboard "/dashboard", metrics: LongxWeb.Telemetry
       forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
+  end
+
+  scope "/", LongxWeb do
+    pipe_through :spa
+
+    get "/*path", PageController, :spa
   end
 end

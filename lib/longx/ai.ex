@@ -5,10 +5,32 @@ defmodule Longx.AI do
   this domain decides what that means.
   """
 
-  use Ash.Domain, otp_app: :longx
+  use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
 
   alias Longx.AI.{Model, Provider, SearchProvider, SearchTarget, Target}
   alias Longx.Codex.Tool.Registry
+
+  # The SPA's typed client (settings pages)
+  typescript_rpc do
+    resource Provider do
+      rpc_action :list_providers, :read
+      rpc_action :create_provider, :create
+      rpc_action :update_provider, :update
+    end
+
+    resource Model do
+      rpc_action :list_models, :read
+      rpc_action :create_model, :create
+      rpc_action :update_model, :update
+      rpc_action :make_default_model, :make_default
+      rpc_action :check_model, :check_model
+    end
+
+    resource Longx.AI.Tool do
+      rpc_action :list_tools, :catalogue
+      rpc_action :set_tool_enabled, :set_enabled
+    end
+  end
 
   resources do
     resource Provider do

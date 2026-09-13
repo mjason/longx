@@ -6,15 +6,48 @@ defmodule Longx.Projects do
   records the commit every turn started from so a bad turn can be undone.
   """
 
-  use Ash.Domain, otp_app: :longx
+  use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
 
   alias Longx.Git
   alias Longx.Projects.Project
+
+  # The SPA's typed client (assets/js/ash_rpc.ts, `mix ash_typescript.codegen`)
+  typescript_rpc do
+    resource Project do
+      rpc_action :list_projects, :active
+      rpc_action :list_all_projects, :read
+      rpc_action :get_project, :by_slug
+      rpc_action :create_project, :create
+      rpc_action :update_project, :update
+      rpc_action :archive_project, :archive
+      rpc_action :delete_project, :delete
+      rpc_action :git_info, :git_info
+      rpc_action :init_git, :init_git
+      rpc_action :codex_info, :codex_info
+      rpc_action :stop_codex, :stop_codex
+      rpc_action :restart_codex, :restart_codex
+      rpc_action :clear_codex_history, :clear_codex_history
+    end
+
+    resource Longx.Projects.Thread do
+      rpc_action :list_threads, :for_project
+      rpc_action :start_thread, :start_thread
+      rpc_action :send_message, :send_message
+      rpc_action :respond, :respond
+      rpc_action :rename_thread, :rename
+      rpc_action :archive_thread, :archive
+    end
+
+    resource Longx.Projects.Turn do
+      rpc_action :list_turns, :for_thread
+    end
+  end
 
   resources do
     resource Project do
       define :create_project, action: :create
       define :update_project, action: :update
+      define :archive_project, action: :archive
       define :get_project_by_slug, action: :by_slug, args: [:slug]
       define :list_active_projects, action: :active
       define :list_all_projects, action: :read
@@ -112,6 +145,7 @@ defmodule Longx.Projects do
              tools: tools
            }) do
       :ok = Tracker.track(codex_thread_id)
+      broadcast_changed(project.id)
       {:ok, thread}
     end
   end
@@ -156,6 +190,7 @@ defmodule Longx.Projects do
         last_activity_at: DateTime.utc_now()
       })
 
+      broadcast_changed(thread.project_id)
       {:ok, turn}
     end
   end
@@ -420,6 +455,29 @@ defmodule Longx.Projects do
   defp restore(dir, sha, :restore_tree), do: Git.restore_tree(dir, sha)
   defp restore(dir, sha, :reset_hard), do: Git.reset_hard(dir, sha)
 
+  @doc """
+  Deletes the project, its threads and turns, and its `CODEX_HOME` (the
+  `delete` action); the working directory is never touched. Needs
+  `confirm: true`.
+  """
+  @spec delete_project(Project.t(), keyword) :: :ok | {:error, term}
+  def delete_project(%Project{} = project, opts \\ []) do
+    project
+    |> Ash.Changeset.for_destroy(:delete, %{confirm: Keyword.get(opts, :confirm, false)})
+    |> Ash.destroy()
+  end
+
+  ## Change notifications
+
+  @doc "PubSub topic carrying a project's `{:project_changed, id}` and `{:codex_sample, id, m}` messages."
+  @spec topic(String.t()) :: String.t()
+  def topic(project_id), do: "project:" <> project_id
+
+  @doc "Tells subscribers (the project channel) that thread/turn rows of this project changed."
+  @spec broadcast_changed(String.t()) :: :ok
+  def broadcast_changed(project_id),
+    do: Phoenix.PubSub.broadcast(Longx.PubSub, topic(project_id), {:project_changed, project_id})
+
   ## The project's codex: process and CODEX_HOME
 
   # codex's own state inside the home; everything else there is ours (config)
@@ -508,32 +566,6 @@ defmodule Longx.Projects do
     :ok = Pool.stop(project_id)
     File.rm_rf!(Pool.home_dir(project_id))
     :ok
-  end
-
-  @doc "Archives the project: its codex is stopped, the home is kept."
-  @spec archive_project(Project.t()) :: {:ok, Project.t()} | {:error, term}
-  def archive_project(%Project{id: project_id} = project) do
-    :ok = Pool.stop(project_id)
-    Ash.update(project, %{}, action: :archive)
-  end
-
-  def archive_project!(project) do
-    {:ok, archived} = archive_project(project)
-    archived
-  end
-
-  @doc """
-  Deletes the project, its threads and turns, and its `CODEX_HOME`. The
-  working directory itself is never touched. Needs `confirm: true`.
-  """
-  @spec delete_project(Project.t(), keyword) :: :ok | {:error, :confirmation_required | term}
-  def delete_project(%Project{} = project, opts \\ []) do
-    if Keyword.get(opts, :confirm, false) do
-      :ok = reset_codex_home(project)
-      Ash.destroy(project)
-    else
-      {:error, :confirmation_required}
-    end
   end
 
   defp size(path), do: File.stat!(path).size

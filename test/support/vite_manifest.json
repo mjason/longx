@@ -1,0 +1,20 @@
+{
+  "js/index.tsx": {
+    "file": "index-BvxhF3aQ.js",
+    "name": "index",
+    "src": "js/index.tsx",
+    "isEntry": true,
+    "imports": ["_vendor-Dk3lqR5m.js"],
+    "css": ["index-C0hg9Xz1.css"]
+  },
+  "_vendor-Dk3lqR5m.js": {
+    "file": "vendor-Dk3lqR5m.js",
+    "name": "vendor",
+    "css": ["vendor-Q2rTs8Yp.css"]
+  },
+  "css/app.css": {
+    "file": "app-Z9y8x7w6.css",
+    "src": "css/app.css",
+    "isEntry": true
+  }
+}

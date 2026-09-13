@@ -20,6 +20,12 @@ defmodule Longx.Codex.RecyclerTest do
 
   defp configure(opts), do: Application.put_env(:longx, Recycler, opts)
 
+  # other tests' workers may be running too: only ours is judged here
+  defp verdict(verdicts, project_id) do
+    {^project_id, outcome, reason} = List.keyfind(verdicts, project_id, 0)
+    {outcome, reason}
+  end
+
   defp ready!(a) do
     {:ok, conn} = Pool.connection(a)
     assert_receive {:codex_connection, ^a, :ready}, 15_000
@@ -34,7 +40,7 @@ defmodule Longx.Codex.RecyclerTest do
     {:ok, _} = Thread.send(thread_id, "say hi", conn: conn)
     assert_receive {:codex, _, "turn/completed", _}, 10_000
 
-    assert [{^a, :recycled, :max_turns}] = Recycler.sweep()
+    assert {:recycled, :max_turns} = verdict(Recycler.sweep(), a)
     assert_receive {:codex_connection, ^a, :down}, 10_000
     assert Pool.status(a) == :stopped
   end
@@ -47,7 +53,7 @@ defmodule Longx.Codex.RecyclerTest do
     {:ok, turn_id} = Thread.send(thread_id, "stall", conn: conn)
     assert_receive {:codex, _, "item/agentMessage/delta", _}, 10_000
 
-    assert [{^a, :busy, _}] = Recycler.sweep()
+    assert {:busy, _} = verdict(Recycler.sweep(), a)
     assert %{pid: ^conn} = Pool.status(a)
 
     :ok = Thread.interrupt(thread_id, turn_id, conn: conn)
@@ -57,12 +63,12 @@ defmodule Longx.Codex.RecyclerTest do
   test "uptime and memory thresholds", %{a: a} do
     configure(max_uptime_ms: 1)
     ready!(a)
-    assert [{^a, :recycled, :max_uptime}] = Recycler.sweep()
+    assert {:recycled, :max_uptime} = verdict(Recycler.sweep(), a)
     assert_receive {:codex_connection, ^a, :down}, 10_000
 
     configure(max_rss_bytes: 1)
     ready!(a)
-    assert [{^a, :recycled, :max_rss}] = Recycler.sweep()
+    assert {:recycled, :max_rss} = verdict(Recycler.sweep(), a)
     assert_receive {:codex_connection, ^a, :down}, 10_000
   end
 
@@ -83,7 +89,7 @@ defmodule Longx.Codex.RecyclerTest do
 
     on_exit(fn -> :telemetry.detach(handler) end)
 
-    assert [{^a, :kept, _}] = Recycler.sweep()
+    assert {:kept, _} = verdict(Recycler.sweep(), a)
 
     assert_receive {:sample, %{rss_bytes: rss, processes: _, cpu_ms: _, uptime_ms: _, turns: 0},
                     %{project_id: ^a}}

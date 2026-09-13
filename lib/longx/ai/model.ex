@@ -9,11 +9,16 @@ defmodule Longx.AI.Model do
   use Ash.Resource,
     otp_app: :longx,
     domain: Longx.AI,
-    data_layer: AshSqlite.DataLayer
+    data_layer: AshSqlite.DataLayer,
+    extensions: [AshTypescript.Resource]
 
   sqlite do
     table "ai_models"
     repo Longx.Repo
+  end
+
+  typescript do
+    type_name "Model"
   end
 
   actions do
@@ -59,6 +64,26 @@ defmodule Longx.AI.Model do
     read :default do
       get? true
       filter expr(default == true)
+    end
+
+    # Longx.AI.check_model/1: one tiny request through the provider, outcome recorded
+    action :check_model, :map do
+      constraints fields: [
+                    ok: [type: :boolean, allow_nil?: false],
+                    latency_ms: [type: :integer],
+                    error: [type: :string]
+                  ]
+
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, model} <- Ash.get(__MODULE__, input.arguments.id) do
+          case Longx.AI.check_model(model) do
+            {:ok, %{latency_ms: ms}} -> {:ok, %{ok: true, latency_ms: ms, error: nil}}
+            {:error, reason} -> {:ok, %{ok: false, latency_ms: nil, error: inspect(reason)}}
+          end
+        end
+      end
     end
 
     # Exactly one model is the default: clear the flag everywhere else first.
@@ -115,7 +140,7 @@ defmodule Longx.AI.Model do
       constraints min: 1
     end
 
-    timestamps()
+    timestamps public?: true
   end
 
   relationships do
