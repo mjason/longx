@@ -294,6 +294,38 @@ defmodule Longx.Projects.ThreadsTest do
                Projects.send_message(thread, "say c", conn: conn, model: "nope")
     end
 
+    test "sandbox / approval_policy / network_access switch the access mode from this turn on and are recorded on the thread",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      # the thread starts with the project's defaults
+      assert %{sandbox: :workspace_write, approval_policy: :on_request, network_access: false} =
+               Ash.get!(Thread, thread.id)
+
+      {:ok, turn} =
+        Projects.send_message(thread, "say a",
+          conn: conn,
+          sandbox: :danger_full_access,
+          approval_policy: :never,
+          network_access: true
+        )
+
+      eventually(turn_done(turn.id))
+      %{"lastTurnParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      assert params["sandboxPolicy"] == %{"type" => "dangerFullAccess"}
+      assert params["approvalPolicy"] == "never"
+
+      assert %{sandbox: :danger_full_access, approval_policy: :never, network_access: true} =
+               Ash.get!(Thread, thread.id)
+
+      # nothing given: the thread keeps its mode, nothing is sent
+      {:ok, turn2} = Projects.send_message(thread, "say b", conn: conn)
+      eventually(turn_done(turn2.id))
+      %{"lastTurnParams" => params2} = read_thread!(conn, thread.codex_thread_id)
+      refute Map.has_key?(params2, "sandboxPolicy")
+      assert Ash.get!(Thread, thread.id).sandbox == :danger_full_access
+    end
+
     test "turns are listed oldest first", %{dir: dir, conn: conn} do
       project = git_project!(dir)
       {:ok, thread} = Projects.start_thread(project, conn: conn)

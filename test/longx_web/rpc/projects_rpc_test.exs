@@ -292,6 +292,119 @@ defmodule LongxWeb.ProjectsRpcTest do
     end
   end
 
+  describe "history" do
+    defp turn_status(conn, thread_id, wanted, attempts \\ 100) do
+      %{"success" => true, "data" => turns} =
+        rpc(conn, "list_turns", %{
+          "fields" => ["id", "status", "commitBefore", "commitAfter"],
+          "input" => %{"threadId" => thread_id}
+        })
+
+      cond do
+        Enum.all?(turns, &(&1["status"] == wanted)) and turns != [] -> turns
+        attempts == 0 -> flunk("turns never became #{wanted}: #{inspect(turns)}")
+        true -> Process.sleep(50) && turn_status(conn, thread_id, wanted, attempts - 1)
+      end
+    end
+
+    test "restore_proposal → restore_files → redo_turn over the wire", %{conn: conn, dir: dir} do
+      project = create!(conn, dir, %{"initGit" => true})
+      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
+
+      %{"success" => true, "data" => %{"id" => thread_id}} =
+        rpc(conn, "start_thread", %{"fields" => ["id"], "input" => %{"projectId" => project["id"]}})
+
+      %{"success" => true, "data" => %{"id" => turn_id}} =
+        rpc(conn, "send_message", %{
+          "fields" => ["id"],
+          "input" => %{"threadId" => thread_id, "text" => "say one"}
+        })
+
+      [%{"commitBefore" => sha}] = turn_status(conn, thread_id, "completed")
+      assert is_binary(sha)
+
+      # some work after the turn, then the proposal names it
+      File.write!(Path.join(dir, "a.txt"), "changed")
+
+      assert %{"success" => true, "data" => proposal} =
+               rpc(conn, "restore_proposal", %{
+                 "fields" => ["commit", "dirtyNow", "changedFiles", "laterTurns"],
+                 "input" => %{"turnId" => turn_id}
+               })
+
+      assert %{"commit" => ^sha, "dirtyNow" => true, "changedFiles" => ["a.txt"], "laterTurns" => 0} =
+               proposal
+
+      # restoring needs confirm, makes the safety commit, puts a.txt back
+      assert %{"success" => false} =
+               rpc(conn, "restore_files", %{"fields" => ["head"], "input" => %{"turnId" => turn_id}})
+
+      assert %{"success" => true, "data" => %{"safetyCommit" => safety, "head" => head}} =
+               rpc(conn, "restore_files", %{
+                 "fields" => ["safetyCommit", "head"],
+                 "input" => %{"turnId" => turn_id, "confirm" => true}
+               })
+
+      assert is_binary(safety) and is_binary(head)
+      refute File.exists?(Path.join(dir, "a.txt"))
+
+      # redo from that turn with other text: the old turn is reverted, a new one runs
+      assert %{"success" => true, "data" => %{"id" => new_id, "userText" => "say two"}} =
+               rpc(conn, "redo_turn", %{
+                 "fields" => ["id", "userText", "status"],
+                 "input" => %{"turnId" => turn_id, "text" => "say two", "mode" => "revert"}
+               })
+
+      refute new_id == turn_id
+      turn_status(conn, thread_id, "completed")
+
+      %{"success" => true, "data" => all} =
+        rpc(conn, "list_turns", %{
+          "fields" => ["id", "status"],
+          "input" => %{"threadId" => thread_id, "includeReverted" => true}
+        })
+
+      assert Enum.find(all, &(&1["id"] == turn_id))["status"] == "reverted"
+    end
+  end
+
+  defp thread_idle(conn, project_id, thread_id, attempts \\ 100) do
+    %{"success" => true, "data" => threads} =
+      rpc(conn, "list_threads", %{"fields" => ["id", "status"], "input" => %{"projectId" => project_id}})
+
+    case Enum.find(threads, &(&1["id"] == thread_id)) do
+      %{"status" => "idle"} -> :ok
+      _ when attempts > 0 -> Process.sleep(50) && thread_idle(conn, project_id, thread_id, attempts - 1)
+      other -> flunk("thread never idle: #{inspect(other)}")
+    end
+  end
+
+  describe "delete thread" do
+    test "delete_thread removes the row and its turns; codex's own history is untouched", %{
+      conn: conn,
+      dir: dir
+    } do
+      project = create!(conn, dir)
+      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
+
+      %{"success" => true, "data" => %{"id" => thread_id}} =
+        rpc(conn, "start_thread", %{"fields" => ["id"], "input" => %{"projectId" => project["id"]}})
+
+      %{"success" => true} =
+        rpc(conn, "send_message", %{"fields" => ["id"], "input" => %{"threadId" => thread_id, "text" => "say x"}})
+
+      # not while the turn runs
+      assert %{"success" => false} = rpc(conn, "delete_thread", %{"input" => %{"threadId" => thread_id}})
+      thread_idle(conn, project["id"], thread_id)
+      assert %{"success" => true} = rpc(conn, "delete_thread", %{"input" => %{"threadId" => thread_id}})
+
+      assert %{"success" => true, "data" => []} =
+               rpc(conn, "list_threads", %{"fields" => ["id"], "input" => %{"projectId" => project["id"]}})
+
+      assert Ash.read!(Longx.Projects.Turn) |> Enum.reject(&(&1.thread_id != thread_id)) == []
+    end
+  end
+
   describe "dirty tree" do
     test "send_message on a dirty :ask project is a structured error the UI can act on", %{
       conn: conn,

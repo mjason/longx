@@ -22,8 +22,80 @@ defmodule Longx.Projects.Turn do
     type_name "Turn"
   end
 
+  # what restore_proposal/1 shows before anyone touches the tree
+  @restore_proposal [
+    commit: [type: :string, allow_nil?: false],
+    dirty_now: [type: :boolean, allow_nil?: false],
+    changed_files: [type: {:array, :string}, allow_nil?: false],
+    later_turns: [type: :integer, allow_nil?: false]
+  ]
+
+  @restore_result [
+    safety_commit: [type: :string],
+    head: [type: :string, allow_nil?: false]
+  ]
+
   actions do
     defaults [:read, :destroy]
+
+    ## Generic actions the SPA calls; the work is in Longx.Projects
+
+    action :restore_proposal, :map do
+      constraints fields: @restore_proposal
+      argument :turn_id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, turn} <- Ash.get(__MODULE__, input.arguments.turn_id),
+             {:ok, proposal} <- Longx.Projects.restore_proposal(turn) do
+          {:ok,
+           %{
+             commit: proposal.commit,
+             dirty_now: proposal.dirty_now?,
+             changed_files: proposal.changed_files,
+             later_turns: proposal.later_turns
+           }}
+        end
+      end
+    end
+
+    # files back to before this turn; never without confirm
+    action :restore_files, :map do
+      constraints fields: @restore_result
+      argument :turn_id, :uuid, allow_nil?: false
+      argument :confirm, :boolean, default: false
+      argument :mode, :atom, constraints: [one_of: [:restore_tree, :reset_hard]]
+
+      run fn input, _ ->
+        opts =
+          input.arguments
+          |> Map.take([:confirm, :mode])
+          |> Enum.reject(fn {_, v} -> is_nil(v) end)
+
+        with {:ok, turn} <- Ash.get(__MODULE__, input.arguments.turn_id),
+             do: Longx.Projects.restore_files(turn, opts)
+      end
+    end
+
+    # this turn again — other text and/or model; :revert drops it and what
+    # followed from the conversation, :fork starts a sibling thread before it
+    action :redo_turn, :struct do
+      constraints instance_of: __MODULE__
+      argument :turn_id, :uuid, allow_nil?: false
+      argument :text, :string
+      argument :model, :string
+      argument :mode, :atom, constraints: [one_of: [:revert, :fork]]
+      argument :restore_files, :boolean
+
+      run fn input, _ ->
+        opts =
+          input.arguments
+          |> Map.take([:text, :model, :mode, :restore_files])
+          |> Enum.reject(fn {_, v} -> is_nil(v) end)
+
+        with {:ok, turn} <- Ash.get(__MODULE__, input.arguments.turn_id),
+             do: Longx.Projects.redo_turn(turn, opts)
+      end
+    end
 
     create :create do
       primary? true

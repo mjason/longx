@@ -161,7 +161,7 @@ export type ProjectAttributesOnlySchema = {
 // Thread Schema
 export type ThreadResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "approvalPolicy" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "modelSlug" | "preview" | "projectId" | "sandbox" | "status" | "title" | "tools" | "updatedAt";
+  __primitiveFields: "approvalPolicy" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "modelSlug" | "networkAccess" | "preview" | "projectId" | "sandbox" | "status" | "title" | "tools" | "updatedAt";
   approvalPolicy: "never" | "on_request" | "untrusted";
   codexThreadId: string;
   cwd: string;
@@ -170,6 +170,7 @@ export type ThreadResourceSchema = {
   insertedAt: UtcDateTimeUsec;
   lastActivityAt: UtcDateTimeUsec | null;
   modelSlug: string | null;
+  networkAccess: boolean;
   preview: string | null;
   projectId: UUID;
   sandbox: "danger_full_access" | "read_only" | "workspace_write";
@@ -185,7 +186,7 @@ export type ThreadResourceSchema = {
 
 export type ThreadAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "approvalPolicy" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "modelSlug" | "preview" | "projectId" | "sandbox" | "status" | "title" | "tools" | "updatedAt";
+  __primitiveFields: "approvalPolicy" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "modelSlug" | "networkAccess" | "preview" | "projectId" | "sandbox" | "status" | "title" | "tools" | "updatedAt";
   approvalPolicy: "never" | "on_request" | "untrusted";
   codexThreadId: string;
   cwd: string;
@@ -194,6 +195,7 @@ export type ThreadAttributesOnlySchema = {
   insertedAt: UtcDateTimeUsec;
   lastActivityAt: UtcDateTimeUsec | null;
   modelSlug: string | null;
+  networkAccess: boolean;
   preview: string | null;
   projectId: UUID;
   sandbox: "danger_full_access" | "read_only" | "workspace_write";
@@ -892,6 +894,12 @@ export type ThreadFilterInput = {
     stringStartsWith?: string;
   };
 
+  networkAccess?: {
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
+  };
+
   preview?: {
     isNil?: boolean;
     eq?: string;
@@ -1176,7 +1184,7 @@ export type ToolFilterField = (typeof toolFilterFields)[number];
 export const projectFilterFields = ["approvalPolicy", "archivedAt", "description", "dirtyStart", "id", "insertedAt", "memoryLimitMb", "modelId", "name", "networkAccess", "rootPath", "sandbox", "slug", "tools", "updatedAt", "model"] as const;
 export type ProjectFilterField = (typeof projectFilterFields)[number];
 
-export const threadFilterFields = ["approvalPolicy", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "modelSlug", "preview", "projectId", "sandbox", "status", "title", "tools", "updatedAt", "forkedFrom", "project"] as const;
+export const threadFilterFields = ["approvalPolicy", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "modelSlug", "networkAccess", "preview", "projectId", "sandbox", "status", "title", "tools", "updatedAt", "forkedFrom", "project"] as const;
 export type ThreadFilterField = (typeof threadFilterFields)[number];
 
 export const turnFilterFields = ["codexTurnId", "commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "modelSlug", "startedAt", "status", "threadId", "updatedAt", "userText", "thread"] as const;
@@ -1196,7 +1204,7 @@ export type ToolSortField = (typeof toolSortFields)[number];
 export const projectSortFields = ["approvalPolicy", "archivedAt", "description", "dirtyStart", "id", "insertedAt", "memoryLimitMb", "modelId", "name", "networkAccess", "rootPath", "sandbox", "slug", "tools", "updatedAt"] as const;
 export type ProjectSortField = (typeof projectSortFields)[number];
 
-export const threadSortFields = ["approvalPolicy", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "modelSlug", "preview", "projectId", "sandbox", "status", "title", "tools", "updatedAt"] as const;
+export const threadSortFields = ["approvalPolicy", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "modelSlug", "networkAccess", "preview", "projectId", "sandbox", "status", "title", "tools", "updatedAt"] as const;
 export type ThreadSortField = (typeof threadSortFields)[number];
 
 export const turnSortFields = ["codexTurnId", "commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "modelSlug", "startedAt", "status", "threadId", "updatedAt", "userText"] as const;
