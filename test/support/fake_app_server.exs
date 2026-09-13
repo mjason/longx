@@ -307,12 +307,6 @@ defmodule FakeAppServer do
     state
   end
 
-  defp subsequence?("", _), do: true
-  defp subsequence?(_, ""), do: false
-
-  defp subsequence?(<<c, q::binary>>, <<c, s::binary>>), do: subsequence?(q, s)
-  defp subsequence?(q, <<_, s::binary>>), do: subsequence?(q, s)
-
   defp handle(%{"method" => "fake/continue"}, %{pending: pending} = state) do
     case Map.pop(pending, :continue) do
       {nil, _} -> state
@@ -321,6 +315,12 @@ defmodule FakeAppServer do
   end
 
   defp handle(_other, state), do: state
+
+  defp subsequence?("", _), do: true
+  defp subsequence?(_, ""), do: false
+
+  defp subsequence?(<<c, q::binary>>, <<c, s::binary>>), do: subsequence?(q, s)
+  defp subsequence?(q, <<_, s::binary>>), do: subsequence?(q, s)
 
   ## turn scripts
 

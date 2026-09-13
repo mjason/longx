@@ -7,6 +7,7 @@ defmodule Longx.System do
     resource Longx.System.Status do
       rpc_action :sandbox_status, :sandbox
       rpc_action :list_directory, :list_directory
+      rpc_action :create_directory, :create_directory
     end
   end
 
@@ -14,6 +15,7 @@ defmodule Longx.System do
     resource Longx.System.Status do
       define :sandbox_status, action: :sandbox
       define :list_directory, action: :list_directory
+      define :create_directory, action: :create_directory
     end
   end
 end

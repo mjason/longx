@@ -50,6 +50,28 @@ defmodule Longx.SystemTest do
              LongxSystem.list_directory(%{path: Path.join(root, "file.txt")})
   end
 
+  test "create_directory makes one directory under an existing parent and answers its listing entry",
+       %{root: root} do
+    assert {:ok, %{name: "new-app", path: path, git: false}} =
+             LongxSystem.create_directory(%{parent: root, name: "new-app"})
+
+    assert path == Path.join(root, "new-app")
+    assert File.dir?(path)
+
+    # a name is one path segment, never a path; an existing name is refused
+    assert {:error, %Ash.Error.Invalid{}} =
+             LongxSystem.create_directory(%{parent: root, name: "a/b"})
+
+    assert {:error, %Ash.Error.Invalid{}} =
+             LongxSystem.create_directory(%{parent: root, name: ".."})
+
+    assert {:error, %Ash.Error.Invalid{}} =
+             LongxSystem.create_directory(%{parent: root, name: "new-app"})
+
+    assert {:error, %Ash.Error.Invalid{}} =
+             LongxSystem.create_directory(%{parent: Path.join(root, "nope"), name: "x"})
+  end
+
   test "relative paths are refused", _ do
     assert {:error, %Ash.Error.Invalid{}} = LongxSystem.list_directory(%{path: "relative/dir"})
   end

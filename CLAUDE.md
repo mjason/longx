@@ -402,7 +402,8 @@ React Native client planned on the same core code.
   - `Longx.System` (domain) → `Longx.System.Status` generic actions: `sandbox` and
     `list_directory` (`Longx.System.Directory`: subdirectories of an absolute path, git
     flagged, hidden on request, roots home and `/`; arrays of typed maps are untyped in
-    ash_typescript 0.18's field selection, so entries are typed client-side).
+    ash_typescript 0.18's field selection, so entries are typed client-side) and
+    `create_directory` (one name under an existing parent — the picker's "新建目录").
   - `LongxWeb.Actor` is the single place an actor comes from (RPC conn, socket params) —
     `nil` today; AshAuthentication plugs in there later without touching the client.
   - **RPC** = ash_typescript: domains `Longx.Projects`, `Longx.AI`, `Longx.System` declare

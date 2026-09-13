@@ -49,6 +49,29 @@ defmodule Longx.System.Directory do
     end
   end
 
+  @doc """
+  Makes `name` (one path segment — no separators, not `.`/`..`) under the
+  existing absolute `parent`; refuses a name already there.
+  """
+  @spec create(Path.t(), String.t()) :: {:ok, entry} | {:error, Ash.Error.t()}
+  def create(parent, name) do
+    cond do
+      Path.type(parent) != :absolute -> invalid(:parent, "must be an absolute path")
+      not File.dir?(parent) -> invalid(:parent, "is not an existing directory")
+      name == "" or name in [".", ".."] -> invalid(:name, "is not a directory name")
+      String.contains?(name, ["/", "\\"]) -> invalid(:name, "must be a name, not a path")
+      File.exists?(Path.join(parent, name)) -> invalid(:name, "already exists")
+      true -> mkdir(Path.join(Path.expand(parent), name))
+    end
+  end
+
+  defp mkdir(path) do
+    case File.mkdir(path) do
+      :ok -> {:ok, entry(path)}
+      {:error, reason} -> invalid(:name, "could not create: #{:file.format_error(reason)}")
+    end
+  end
+
   defp entry(path),
     do: %{name: Path.basename(path), path: path, git: File.dir?(Path.join(path, ".git"))}
 
