@@ -1,6 +1,6 @@
-import { ChevronRight, CornerLeftUp, Folder, FolderGit2 } from "lucide-react";
+import { ChevronRight, CornerLeftUp, Folder, FolderGit2, FolderPlus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useDirectory } from "@/core/projects";
+import { useCreateDirectory, useDirectory } from "@/core/projects";
 import { Button } from "@/ui/components/ui/button";
 import { Checkbox } from "@/ui/components/ui/checkbox";
 import { Input } from "@/ui/components/ui/input";
@@ -22,7 +22,18 @@ export function DirectoryPicker({
 }) {
   const [showHidden, setShowHidden] = useState(false);
   const [typed, setTyped] = useState("");
+  const [naming, setNaming] = useState<string | null>(null);
   const listing = useDirectory(value, showHidden);
+  const create = useCreateDirectory();
+  const here = value ?? listing.data?.path ?? null;
+
+  const makeDirectory = async () => {
+    const name = naming?.trim();
+    if (!name || !here) return;
+    const made = await create.mutateAsync({ parent: here, name });
+    setNaming(null);
+    onChange(made.path, made.git);
+  };
 
   // no choice yet: the server's home is where we are, so that is the choice
   useEffect(() => {
@@ -92,7 +103,26 @@ export function DirectoryPicker({
         <label className="flex items-center gap-2 text-sm">
           <Checkbox checked={showHidden} onCheckedChange={(v) => setShowHidden(v === true)} /> {t.showHidden}
         </label>
+        {naming === null ? (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setNaming("")} disabled={!here}>
+            <FolderPlus /> {t.newDirectory}
+          </Button>
+        ) : (
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void makeDirectory().catch(() => {});
+            }}
+          >
+            <Label htmlFor="new-directory" className="sr-only">{t.directoryName}</Label>
+            <Input id="new-directory" value={naming} onChange={(e) => setNaming(e.target.value)} placeholder={t.directoryName} className="h-9 w-48 font-mono" autoFocus autoCapitalize="none" spellCheck={false} />
+            <Button type="submit" size="sm" disabled={!naming.trim() || create.isPending}>{t.create}</Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setNaming(null)}>{t.cancel}</Button>
+          </form>
+        )}
       </div>
+      {create.isError ? <p role="alert" className="text-destructive text-sm">{create.error.message}</p> : null}
 
       <form
         className="flex gap-2"

@@ -6,7 +6,7 @@ import { failed, ok, project, rpcMock, socketMock } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { createProject } from "@/ash_rpc";
+import { createDirectory, createProject } from "@/ash_rpc";
 
 describe("ProjectWizard", () => {
   test("browse to a directory, name defaults to its basename, git is offered, project created", async () => {
@@ -53,6 +53,16 @@ describe("ProjectWizard", () => {
     await user.type(screen.getByPlaceholderText("或直接输入路径"), "/home/me/code");
     await user.click(screen.getByRole("button", { name: "前往" }));
     expect(screen.getByTestId("chosen-directory")).toHaveTextContent("/home/me/code");
+  });
+
+  test("a new directory is made under the one being looked at and becomes the choice", async () => {
+    const user = userEvent.setup();
+    renderAt("/new");
+    await screen.findByTestId("directory-entries");
+    await user.click(screen.getByRole("button", { name: "新建目录" }));
+    await user.type(screen.getByRole("textbox", { name: "目录名" }), "fresh-app{Enter}");
+    await waitFor(() => expect(createDirectory).toHaveBeenCalledWith(expect.objectContaining({ input: { parent: "/home/me", name: "fresh-app" } })));
+    await waitFor(() => expect(screen.getByTestId("chosen-directory")).toHaveTextContent("/home/me/fresh-app"));
   });
 
   test("server-side errors land on the form", async () => {

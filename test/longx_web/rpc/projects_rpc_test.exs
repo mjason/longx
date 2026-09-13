@@ -531,6 +531,21 @@ defmodule LongxWeb.ProjectsRpcTest do
 
       assert %{"success" => false, "errors" => [%{"fields" => ["path"]}]} =
                rpc(conn, "list_directory", %{"fields" => ["path"], "input" => %{"path" => "nope"}})
+
+      # the picker's "new directory"
+      assert %{"success" => true, "data" => %{"name" => "fresh", "path" => fresh, "git" => false}} =
+               rpc(conn, "create_directory", %{
+                 "fields" => ["name", "path", "git"],
+                 "input" => %{"parent" => dir, "name" => "fresh"}
+               })
+
+      assert fresh == Path.join(dir, "fresh") and File.dir?(fresh)
+
+      assert %{"success" => false, "errors" => [%{"fields" => ["name"]}]} =
+               rpc(conn, "create_directory", %{
+                 "fields" => ["path"],
+                 "input" => %{"parent" => dir, "name" => "fresh"}
+               })
     end
 
     test "create_project with initGit sets git up", %{conn: conn, dir: dir} do

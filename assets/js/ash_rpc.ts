@@ -3147,6 +3147,81 @@ export async function validateRestoreProposal(
 }
 
 
+export type CreateDirectoryInput = {
+  parent: string;
+  name: string;
+};
+
+export type CreateDirectoryFields = UnifiedFieldSelection<{name: string, path: string, git: boolean, __type: "TypedMap", __primitiveFields: "name" | "path" | "git"}>[];
+
+export type InferCreateDirectoryResult<
+  Fields extends CreateDirectoryFields | undefined,
+> = InferResult<{name: string, path: string, git: boolean, __type: "TypedMap", __primitiveFields: "name" | "path" | "git"}, Fields>;
+
+export type CreateDirectoryResult<Fields extends CreateDirectoryFields | undefined = undefined> = | { success: true; data: InferCreateDirectoryResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function createDirectory<Fields extends CreateDirectoryFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: CreateDirectoryInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<CreateDirectoryResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "create_directory",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<CreateDirectoryResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateCreateDirectory(
+  config: {
+  tenant?: string;
+  input: CreateDirectoryInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "create_directory",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ListDirectoryInput = {
   path?: string | null;
   showHidden?: boolean | null;

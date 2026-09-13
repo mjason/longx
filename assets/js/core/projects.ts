@@ -7,6 +7,7 @@ import {
   getProject,
   gitInfo,
   initGit,
+  createDirectory,
   listDirectory,
   listModels,
   listTurns,
@@ -246,6 +247,15 @@ export function useDirectory(path: string | null, showHidden = false) {
           input: { ...(path ? { path } : {}), showHidden },
         }),
       ) as DirectoryListing,
+  });
+}
+
+/** The picker's "new directory": made under `parent`, the listing refetched. */
+export function useCreateDirectory() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { parent: string; name: string }) => unwrap(await createDirectory({ fields: ["name", "path", "git"], input })),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["directory"] }),
   });
 }
 

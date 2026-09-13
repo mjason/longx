@@ -49,6 +49,7 @@ export function rpcMock() {
     stopCodex: vi.fn(),
     restartCodex: vi.fn(),
     sandboxStatus: vi.fn(async () => ok({ status: "ok", reason: null, checkedAt: "" })),
+    createDirectory: vi.fn(async ({ input }: { input: { parent: string; name: string } }) => ok({ name: input.name, path: `${input.parent}/${input.name}`, git: false })),
     listDirectory: vi.fn(async ({ input }: { input?: { path?: string; showHidden?: boolean } }) => {
       const path = input?.path ?? "/home/me";
       const entries =

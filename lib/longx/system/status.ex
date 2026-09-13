@@ -35,6 +35,23 @@ defmodule Longx.System.Status do
       end
     end
 
+    # The picker's "new directory": one segment under an existing parent;
+    # answers the entry as the listing would show it
+    action :create_directory, :map do
+      constraints fields: [
+                    name: [type: :string, allow_nil?: false],
+                    path: [type: :string, allow_nil?: false],
+                    git: [type: :boolean, allow_nil?: false]
+                  ]
+
+      argument :parent, :string, allow_nil?: false
+      argument :name, :string, allow_nil?: false
+
+      run fn input, _ ->
+        Longx.System.Directory.create(input.arguments.parent, input.arguments.name)
+      end
+    end
+
     # Longx.Codex.Sandbox.report/0 for the UI's banner
     action :sandbox, :map do
       constraints fields: [

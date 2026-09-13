@@ -65,6 +65,8 @@ export const t = {
   chooseDirectoryHint: "选一个目录作为项目根。已经是 git 仓库的目录会标出来。",
   useThisDirectory: "就用这个目录",
   showHidden: "显示隐藏目录",
+  newDirectory: "新建目录",
+  directoryName: "目录名",
   typePath: "或直接输入路径",
   go: "前往",
   parent: "上一级",

@@ -402,7 +402,8 @@ React Native client planned on the same core code.
   - `Longx.System` (domain) → `Longx.System.Status` generic actions: `sandbox` and
     `list_directory` (`Longx.System.Directory`: subdirectories of an absolute path, git
     flagged, hidden on request, roots home and `/`; arrays of typed maps are untyped in
-    ash_typescript 0.18's field selection, so entries are typed client-side).
+    ash_typescript 0.18's field selection, so entries are typed client-side) and
+    `create_directory` (one name under an existing parent — the picker's "新建目录").
   - `LongxWeb.Actor` is the single place an actor comes from (RPC conn, socket params) —
     `nil` today; AshAuthentication plugs in there later without touching the client.
   - **RPC** = ash_typescript: domains `Longx.Projects`, `Longx.AI`, `Longx.System` declare
@@ -594,10 +595,18 @@ React Native client planned on the same core code.
     (`safe-bottom`) and inline on desktop (`lg:`); touch targets ≥ 44 px (`touch-target`);
     16 px base font (no iOS zoom); the page never scrolls sideways — wide content scrolls
     inside its own box; dark is the default theme, `[data-theme="light"]` the override.
-    **Brand**: the LX logo (`priv/static/images/logo.png`, designed, transparent) sets the
-    palette — primary is its azure, the dark ground its navy, warning stays amber; favicon,
-    PWA icons, apple-touch-icon and the header mark (`images/logo-mark.png`, `ui/components/Logo`)
-    are regenerated from it with `python3 assets/scripts/icons.py`.
+    **Palette** (`css/app.css`): Codex GUI's layout of colour — the transcript on a white /
+    near-black ground, the frame (rail, tool panel, top bar, status strip, phone toolbar:
+    `bg-sidebar` / `border-sidebar-border`) one step off it, no surface tinted beyond a
+    whisper — balanced the way Monokai Pro balances a theme (calm greys, state colours
+    muted and on one lightness), with the **LX logo's azure as the one accent**
+    (`--primary` `#2f7cf6` dark / `#1b5cf0` light: send button, active rail icon, focus
+    ring — never a background wash); green / orange / red for success / warning /
+    destructive. Dark ground `#1c1e24`, frame `#15171c`; light `#ffffff` / `#f3f4f7`. The
+    logo (`priv/static/images/logo.png`) is the mark; favicon, PWA icons, apple-touch-icon
+    and the header mark (`images/logo-mark.png`, `ui/components/Logo`) are regenerated from
+    it with `python3 assets/scripts/icons.py`; `theme-color` metas and the manifest carry
+    the frame / ground colours.
     `css/app.css`: Tailwind v4 with shadcn token names, **no `@apply`**, no daisyUI; only
     `html` gets `overflow-x: hidden` (on body/#app it can steal touch scrolling).
 
