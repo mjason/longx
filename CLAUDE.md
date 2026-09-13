@@ -426,9 +426,8 @@ React Native client planned on the same core code.
     `core/viewport.ts` (phone < 768 ≤ tablet < 1024 ≤ desktop).
     The chat uses **assistant-ui** (`@assistant-ui/react`, `ExternalStoreRuntime`; it has an
     official React Native package) — not AI Elements, not `useChat`. **Do not hand-roll
-    chat UI**: use the assistant-ui skills (`.claude/skills/{elements,tools,primitives,
-    runtime,markdown,…}`, installed with `npx skills add assistant-ui/skills`) to find the
-    element, then `npx assistant-ui@latest add <item>` in `assets/` (answer "n" to
+    chat UI**: find the element in assistant-ui's catalog (the `elements` skill from
+    `npx skills add assistant-ui/skills`, or https://www.assistant-ui.com/elements), then `npx assistant-ui@latest add <item>` in `assets/` (answer "n" to
     overwriting existing shadcn files). Elements land in
     `js/ui/components/assistant-ui/elements/` (`*.aui.tsx` read the runtime, the rest are
     props-driven) and are **source we own and adapt**: `thread.aui` (zh-CN strings, no
@@ -458,8 +457,8 @@ React Native client planned on the same core code.
     `ghost` variant so it sits with the rows. Registered through
     `AuiConfig({ tools: Tools({ toolkit }) })`, so they win over `ToolFallback` by name;
     approvals answer with `respondToApproval({ optionId })`. **Never draw a tool's UI from
-    scratch — pick the element from the catalog first** (`elements` skill,
-    `references/catalog.md`, section "Tool use"). `thread.aui` also shows a
+    scratch — pick the element from the catalog first** (https://www.assistant-ui.com/elements,
+    section "Tool use"). `thread.aui` also shows a
     stall hint (`unstable_useMessageStallDetection`, 15 s) and the timing badge.
     `ProjectWindow` is `h-dvh`: the thread scrolls in its own viewport, never the page. Headers and bars are
     solid (`backdrop-blur` on sticky/fixed bars ghosted text in Chromium screenshots).
@@ -483,10 +482,11 @@ This project uses assistant-ui for chat interfaces.
 
 Documentation: https://www.assistant-ui.com/llms-full.txt (the whole docs in one file — fetch
 it into the scratchpad and grep; https://www.assistant-ui.com/llms.txt is the index, and any
-docs page + `.mdx` is raw markdown, e.g. `/docs/runtimes/custom/external-store.mdx`). The
-skills under `.claude/skills/{assistant-ui,elements,tools,primitives,runtime,…}` (installed by
-`npx skills add assistant-ui/skills`, pinned in `skills-lock.json`) are the same material
-sliced by task — start there, fall back to llms-full for what they leave out.
+docs page + `.mdx` is raw markdown, e.g. `/docs/runtimes/custom/external-store.mdx`).
+assistant-ui also publishes the same material as Claude Code skills (`npx skills add
+assistant-ui/skills` → `elements`, `tools`, `primitives`, `runtime`, `markdown`, …); they are
+not vendored here — install them into your own environment when working on the chat, or
+read llms-full directly.
 
 Key patterns:
 - Use AssistantRuntimeProvider at the app root of the chat (`ui/chat/ThreadPage`).
