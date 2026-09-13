@@ -43,10 +43,15 @@ describe("TurnsTool (history)", () => {
     expect(within(panel).getByText("new")).toBeInTheDocument();
   });
 
-  test("restore: the proposal is shown, nothing happens without confirming", async () => {
+  test("restore: the checkpoints are the turns' starting points; the proposal is shown, nothing happens without confirming", async () => {
     const { user, panel } = await openTool();
     vi.mocked(restoreProposal).mockResolvedValue(ok({ commit: "aaaa1111bbbb", dirtyNow: true, changedFiles: ["lib/a.ex", "README.md"], laterTurns: 1 }) as never);
-    await user.click(within(panel).getAllByRole("button", { name: /回到这一轮之前/ })[0]!);
+    const checkpoints = within(panel).getByTestId("checkpoints");
+    expect(checkpoints).toHaveTextContent("现在");
+    expect(checkpoints).toHaveTextContent("1 个文件");
+    // both turns started from a commit, so both are points to fall back to; "now" is not
+    expect(within(checkpoints).getAllByRole("button", { name: /回到/ })).toHaveLength(2);
+    await user.click(within(checkpoints).getByRole("button", { name: /回到 #1 add a test 之前/ }));
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("README.md");
     expect(dialog).toHaveTextContent("1 轮");

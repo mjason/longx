@@ -1,5 +1,7 @@
 import { Loader2, ShieldAlert } from "lucide-react";
+import { contextUsage } from "@/core/chat/thread";
 import { useModels } from "@/core/projects";
+import { ContextDisplay } from "@/ui/components/assistant-ui/elements/context-display";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
@@ -30,39 +32,47 @@ export function ComposerLeading() {
   );
 }
 
-/** Right of the rail, before send: the model the next turn uses (null = the thread's current). */
+/**
+ * Right of the rail, before send: how full the model's context is (codex's
+ * token usage against the window it was told) and the model the next turn
+ * uses (null = the thread's current).
+ */
 export function ComposerTrailing() {
-  const { thread, model, setModel } = useChat();
+  const { thread, view, model, setModel } = useChat();
   const models = useModels();
   const rows = models.data ?? [];
   const current = thread?.modelSlug ?? rows.find((m) => m.default)?.slug ?? null;
   const shown = rows.find((m) => m.slug === (model ?? current));
   const label = shown ? `${shown.slug}${shown.reasoningEffort ? ` ${EFFORT[shown.reasoningEffort] ?? shown.reasoningEffort}` : ""}` : (model ?? current ?? t.defaultModel);
+  const usage = contextUsage(view);
   return (
-    <Select value={model ?? "__current"} onValueChange={(v) => setModel(v === "__current" ? null : v)}>
-      <SelectTrigger
-        size="sm"
-        aria-label={t.model}
-        className="h-7 gap-1 border-0 bg-transparent px-2 font-mono text-xs shadow-none dark:bg-transparent dark:hover:bg-accent"
-        data-testid="model-picker"
-      >
-        <SelectValue>{label}</SelectValue>
-      </SelectTrigger>
-      <SelectContent align="end">
-        <SelectItem value="__current" className="font-mono text-xs">
-          {current ?? t.defaultModel} <span className="text-muted-foreground ml-1 font-sans">{t.threadModel}</span>
-        </SelectItem>
-        {rows
-          .filter((m) => m.slug)
-          .map((m) => (
-            <SelectItem key={m.id} value={m.slug!} className="font-mono text-xs">
-              {m.slug}
-              {m.reasoningEffort ? ` ${EFFORT[m.reasoningEffort] ?? m.reasoningEffort}` : ""}
-              <span className="text-muted-foreground ml-1 font-sans">{providerName(m.provider)}</span>
-            </SelectItem>
-          ))}
-      </SelectContent>
-    </Select>
+    <>
+      {usage ? <ContextDisplay.Ring modelContextWindow={usage.modelContextWindow} usage={usage.usage} resetKey={view.threadId} labels={t.context} className="h-7" /> : null}
+      <Select value={model ?? "__current"} onValueChange={(v) => setModel(v === "__current" ? null : v)}>
+        <SelectTrigger
+          size="sm"
+          aria-label={t.model}
+          className="h-7 gap-1 border-0 bg-transparent px-2 font-mono text-xs shadow-none dark:bg-transparent dark:hover:bg-accent"
+          data-testid="model-picker"
+        >
+          <SelectValue>{label}</SelectValue>
+        </SelectTrigger>
+        <SelectContent align="end">
+          <SelectItem value="__current" className="font-mono text-xs">
+            {current ?? t.defaultModel} <span className="text-muted-foreground ml-1 font-sans">{t.threadModel}</span>
+          </SelectItem>
+          {rows
+            .filter((m) => m.slug)
+            .map((m) => (
+              <SelectItem key={m.id} value={m.slug!} className="font-mono text-xs">
+                {m.slug}
+                {m.reasoningEffort ? ` ${EFFORT[m.reasoningEffort] ?? m.reasoningEffort}` : ""}
+                <span className="text-muted-foreground ml-1 font-sans">{providerName(m.provider)}</span>
+              </SelectItem>
+            ))}
+        </SelectContent>
+      </Select>
+    </>
   );
 }
 

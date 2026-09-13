@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router";
 import type { AccessMode, DirtyChange, DirtyDecision } from "@/core/chat/adapter";
 import { useCodexRuntime, type CodexRuntime } from "@/core/chat/runtime";
 import { DirtyTreeDialog, type DirtyPrompt } from "./DirtyTreeDialog";
-import { chatConfig, PlanUI } from "./toolkit";
+import { chatConfig, CompactionUI, PlanUI } from "./toolkit";
 
 const ChatContext = createContext<CodexRuntime | null>(null);
 
@@ -46,6 +46,7 @@ export function ChatProvider({ projectId, slug, defaults, children }: { projectI
     <ChatContext.Provider value={chat}>
       <AssistantRuntimeProvider runtime={chat.runtime} config={chatConfig}>
         <PlanUI />
+        <CompactionUI />
         {children}
         <DirtyTreeDialog prompt={dirty} />
       </AssistantRuntimeProvider>

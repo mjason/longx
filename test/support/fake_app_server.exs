@@ -13,6 +13,7 @@
 #   "error"            answer turn/start with a JSON-RPC error
 #   "die"              exit immediately (simulates a crash)
 #   "server-notify"    emit a notification without a threadId
+#   "name <title>"     codex names the thread: thread/name/updated, then a message
 #   "spawn <name>"     a sub-agent: turn/plan/updated, subAgentActivity started on
 #                      this thread, a child thread <name> (items on its own id: a
 #                      command and an agentMessage "done by <name>"), a
@@ -569,6 +570,12 @@ defmodule FakeAppServer do
 
     stream_message(thread_id, turn_id, ["#{name}", "reported"])
     finish_turn(thread_id, turn_id, "completed", state, "spawn " <> name, "#{name} reported")
+  end
+
+  defp run_turn("name " <> title, id, thread_id, turn_id, state) do
+    start_turn(id, thread_id, turn_id, "name " <> title)
+    notify("thread/name/updated", %{"threadId" => thread_id, "threadName" => title})
+    finish_turn(thread_id, turn_id, "completed", state, "name " <> title, "named")
   end
 
   defp run_turn("server-notify", id, thread_id, turn_id, state) do

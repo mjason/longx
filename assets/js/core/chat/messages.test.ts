@@ -99,8 +99,11 @@ describe("toMessages", () => {
       }),
     );
     const ps = parts(msgs[0]!);
-    expect(ps[0]).toMatchObject({ type: "data-codex" });
+    // codex compacted the context here: a marker, not a tool
+    expect(ps[0]).toEqual({ type: "data-compaction", data: { id: "x1" } });
     expect(ps[1]).toMatchObject({ toolName: "builtin.echo", args: { message: "hi" }, result: { success: true } });
+    const other = toMessages(view({ items: [{ id: "e1", type: "enteredReviewMode", turnId: "t7", review: "x" }] }));
+    expect(parts(other[0]!)[0]).toMatchObject({ type: "data-codex" });
   });
 
   test("reasoning lists (summary or full text) become one reasoning part", () => {

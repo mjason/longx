@@ -317,6 +317,8 @@ function toPart(item: CodexItem, approval: PendingRequest | undefined): Part | n
         timingOf(item),
       );
     }
+    case "contextCompaction":
+      return { type: "data-compaction", data: { id: item.id } } as Part;
     default:
       return { type: "data-codex", data: item } as Part;
   }

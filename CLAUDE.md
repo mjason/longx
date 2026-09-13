@@ -86,7 +86,8 @@ React Native client planned on the same core code.
     `dirty_start: true`; `:ask` returns `{:error, {:dirty_tree, changes}}` unless
     `dirty: :commit | :ignore`), then `turn/start` (with `model:` if switching). The Tracker
     fills `status`/`completed_at`/`commit_after`/`diff` from `turn/completed` and
-    `turn/diff/updated`, and the thread `preview` from the first user message.
+    `turn/diff/updated`, the thread `preview` from the first user message, and an empty
+    `title` from codex's `thread/name/updated` (a title the person chose stays).
     **Access mode per turn**: `send_message/3` takes `sandbox:` / `approval_policy:` /
     `network_access:`; what differs from the thread row goes on `turn/start` as
     `sandboxPolicy` / `approvalPolicy` (codex keeps them for the turns after) and is
@@ -484,7 +485,9 @@ React Native client planned on the same core code.
     status / model / commits, the per-turn diff as `code-diff` per file (`splitDiff`), and
     the restore (proposal → confirm → `restore_files`) and redo (text, model, revert |
     fork, restore first) dialogs over `core/projects.ts`'s `useTurns` / `useRestoreFiles` /
-    `useRedoTurn`; `AgentsTool` is the thread's sub-agents as the `background-inbox`
+    `useRedoTurn`; the points to fall back to — every turn that started from a commit,
+    plus "now" — are the `checkpoint-history` element on top, its restore opening the same
+    dialog; `AgentsTool` is the thread's sub-agents as the `background-inbox`
     element over `useSubagents` — a finished one opens its own thread page),
     `frame/StatusStrip` (HEAD, codex, memory, sandbox warning),
     `pages/ProjectSettingsPage` (`/p/:slug/settings`: name, description, the thread
@@ -525,8 +528,9 @@ React Native client planned on the same core code.
     element; the composer rail is Codex's: `ComposerLeading` (`ModePicker` — the access
     mode for the next turn: sandbox / approval / network in a popover, from the thread row
     or the project defaults, sent with every message — and the turn's state) /
-    `ComposerTrailing` (the per-turn model with its reasoning effort) are slots our
-    `thread.aui` copy adds), `toolkit.tsx` (`defineToolkit` with
+    `ComposerTrailing` (the `context-display` ring — codex's last-turn token usage
+    against the `modelContextWindow` it reports, `contextUsage(view)` — and the per-turn
+    model with its reasoning effort) are slots our `thread.aui` copy adds), `toolkit.tsx` (`defineToolkit` with
     `type: "backend"`, `display: "standalone"` renderers per codex item type, **all built
     from the registry's Tool-use elements, one visual language**: every invocation is a
     `tool-call` row (verb · mono chip · check/cross; open while running or failed, a click
@@ -547,7 +551,7 @@ React Native client planned on the same core code.
     spawn / send_message are an `agent-handoff`, wait a `subagent-list` (states from
     `agentsStates`; a wait names every agent so far). The turn's plan is a `data-plan` part
     at the top of its message (`PlanUI` = `makeAssistantDataUI` + `agent-plan`, mounted in
-    `ChatProvider`). The child views come from `useThreadViews` (one channel per child id
+    `ChatProvider`, like `CompactionUI` for codex's `contextCompaction` marker). The child views come from `useThreadViews` (one channel per child id
     named by the parent's activities, transitively) and reach the adapter as `subviews`;
     a child's requests count as "等待审批" in the turn bar. The `agent-plan`,
     `subagent-list`, `agent-status`, `agent-handoff`, `background-inbox` copies took

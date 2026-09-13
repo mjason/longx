@@ -176,6 +176,7 @@ defmodule Longx.Projects.Thread do
       accept [
         :status,
         :preview,
+        :title,
         :model_slug,
         :last_activity_at,
         :sandbox,

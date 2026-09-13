@@ -94,6 +94,9 @@ export const t = {
   noTurns: "这个会话还没有轮次",
   turnStatus: { in_progress: "进行中", completed: "完成", failed: "失败", interrupted: "已中断", reverted: "已撤回" } as Record<string, string>,
   restoreBefore: "回到这一轮之前",
+  checkpoints: { title: "可回退的节点", current: "现在", restore: "回到", restoreTo: (label: string) => `回到 ${label} 之前`, files: (n: number) => `${n} 个文件` },
+  checkpointNow: "现在",
+  checkpointBefore: (n: number, text: string) => `#${n} ${text}`,
   redo: "重跑",
   restoreTitle: "把文件恢复到这一轮之前",
   restoreHint: "未提交的改动会先做一个安全提交，不会丢；只动仓库里的文件，忽略的文件和仓库之外的副作用不管。",
@@ -146,6 +149,7 @@ export const t = {
   } as Record<string, string>,
   threadError: (reason: string) => `会话加载失败：${reason}`,
   loadingThread: "正在加载会话…",
+  context: { trigger: "上下文用量", full: (p: number) => `已用 ${p}%`, input: "输入", cachedInput: "缓存命中", output: "输出", reasoning: "思考" },
   timing: { title: "这一轮的耗时", firstToken: "首个输出", total: "总耗时", speed: "速度", items: "条目" },
   stalledFor: (s: number) => `${s} 秒没有新输出`,
   // chat: tools
@@ -184,6 +188,7 @@ export const t = {
   toolError: "错误",
   // chat: agents
   plan: "计划",
+  compacted: "上下文已压缩",
   planProgress: (done: number, total: number) => `${done} / ${total}`,
   mainAgent: "主 agent",
   subagent: "子 agent",

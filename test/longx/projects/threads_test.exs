@@ -218,6 +218,22 @@ defmodule Longx.Projects.ThreadsTest do
       assert thread.status == :idle
     end
 
+    test "codex naming the thread fills an empty title; a title the person chose stays", %{
+      dir: dir,
+      conn: conn
+    } do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      {:ok, turn} = Projects.send_message(thread, "name Fix the tests", conn: conn)
+      eventually(turn_done(turn.id))
+      assert Ash.get!(Thread, thread.id).title == "Fix the tests"
+
+      {:ok, named} = Projects.rename_thread(Ash.get!(Thread, thread.id), %{title: "Mine"})
+      {:ok, turn2} = Projects.send_message(named, "name Something else", conn: conn)
+      eventually(turn_done(turn2.id))
+      assert Ash.get!(Thread, thread.id).title == "Mine"
+    end
+
     test "dirty tree with dirty_start: :commit commits first so the turn starts from a commit", %{
       dir: dir,
       conn: conn

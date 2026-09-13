@@ -259,6 +259,12 @@ describe("agents", () => {
     expect(screen.getAllByText("新 agent").length).toBeGreaterThan(0);
   });
 
+  test("a context compaction is a quiet marker", async () => {
+    const { CompactionView } = await import("./toolkit");
+    render(<CompactionView />);
+    expect(screen.getByRole("separator")).toHaveTextContent("上下文已压缩");
+  });
+
   test("the plan renders codex's step states, not a running index", async () => {
     const { PlanView } = await import("./toolkit");
     render(<PlanView explanation="delegating" steps={[{ step: "spawn", status: "completed" }, { step: "wait", status: "inProgress" }, { step: "report", status: "pending" }]} />);

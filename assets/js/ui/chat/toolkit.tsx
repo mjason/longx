@@ -385,6 +385,20 @@ export const PlanUI = makeAssistantDataUI<{ explanation: string | null; steps: P
   render: ({ data }) => <PlanView explanation={data.explanation} steps={data.steps} />,
 });
 
+// ---- codex compacted the conversation here (older turns summarised away)
+
+export function CompactionView() {
+  return (
+    <div role="separator" aria-label={t.compacted} className="text-muted-foreground my-2 flex items-center gap-2 text-[11px]" data-testid="compaction">
+      <span className="bg-border h-px flex-1" />
+      <span>{t.compacted}</span>
+      <span className="bg-border h-px flex-1" />
+    </div>
+  );
+}
+
+export const CompactionUI = makeAssistantDataUI<{ id: string }>({ name: "compaction", render: () => <CompactionView /> });
+
 // `type: "backend"`: codex runs these; we only render. `display: "standalone"`
 // keeps them out of the collapsible "n tool calls" trace group — what the
 // agent ran and changed is the point of this UI, not a trace to fold away;

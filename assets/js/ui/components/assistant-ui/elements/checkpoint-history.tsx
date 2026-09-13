@@ -8,14 +8,33 @@ import { mono, paper } from "./surfaces";
 export interface Checkpoint {
   id: string;
   label: string;
-  at: string;
-  files: number;
+  at?: string;
+  files?: number;
 }
+
+// Longx: the copy is ours (`labels`); a checkpoint may carry its own `meta`
+// line instead of "<at> · <files> files".
+export type CheckpointLabels = {
+  title: string;
+  current: string;
+  restore: string;
+  restoreTo: (label: string) => string;
+  files: (n: number) => string;
+};
+
+const DEFAULT_LABELS: CheckpointLabels = {
+  title: "Checkpoints",
+  current: "current",
+  restore: "Restore",
+  restoreTo: (label) => `Restore to ${label}`,
+  files: (n) => `${n} files`,
+};
 
 export function CheckpointHistory({
   checkpoints,
   currentId,
   onRestore,
+  labels = DEFAULT_LABELS,
   className,
   ...props
 }: Omit<
@@ -25,6 +44,7 @@ export function CheckpointHistory({
   checkpoints: readonly Checkpoint[];
   currentId: string;
   onRestore?: (id: string) => void;
+  labels?: CheckpointLabels;
 }) {
   const currentIndex = checkpoints.findIndex(
     (checkpoint) => checkpoint.id === currentId,
@@ -41,7 +61,7 @@ export function CheckpointHistory({
 
       {...props}
     >
-      <span className="px-1.5 pb-1 text-[13.5px] font-medium">Checkpoints</span>
+      <span className="px-1.5 pb-1 text-[13.5px] font-medium">{labels.title}</span>
 
       {checkpoints.map((checkpoint, i) => {
         const ahead = currentIndex >= 0 && i > currentIndex;
@@ -70,24 +90,26 @@ export function CheckpointHistory({
 
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-[13px]">{checkpoint.label}</span>
-              <span className={cn(mono, "text-foreground/30")}>
-                {checkpoint.at} · {checkpoint.files} files
-              </span>
+              {checkpoint.at !== undefined && checkpoint.files !== undefined && (
+                <span className={cn(mono, "text-foreground/30")}>
+                  {checkpoint.at} · {labels.files(checkpoint.files)}
+                </span>
+              )}
             </span>
 
             {current ? (
               <span className={cn(mono, "text-foreground/35 shrink-0")}>
-                current
+                {labels.current}
               </span>
             ) : (
               <button
                 type="button"
-                aria-label={`Restore to ${checkpoint.label}`}
+                aria-label={labels.restoreTo(checkpoint.label)}
                 onClick={() => onRestore?.(checkpoint.id)}
                 className="text-foreground/45 hover:bg-foreground/[0.06] hover:text-foreground/90 flex h-6 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-medium opacity-0 transition-[background-color,color,opacity,scale] duration-150 group-hover:opacity-100 focus-visible:opacity-100 active:scale-[0.96]"
               >
                 <RotateCcwIcon className="size-2.5" />
-                Restore
+                {labels.restore}
               </button>
             )}
           </div>

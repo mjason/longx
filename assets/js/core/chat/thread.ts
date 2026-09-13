@@ -160,6 +160,23 @@ export function sameId(a: unknown, b: unknown): boolean {
   return a === b || String(a) === String(b);
 }
 
+/**
+ * How full the model's context is after the last turn: codex reports the
+ * last turn's usage (its input is the whole conversation) and the window it
+ * was told (`model_context_window`); nothing until both are known.
+ */
+export function contextUsage(view: ThreadView): { modelContextWindow: number; usage: { totalTokens: number; inputTokens: number; cachedInputTokens: number; outputTokens: number; reasoningTokens: number } } | null {
+  const usage = view.tokenUsage;
+  const window = usage?.["modelContextWindow"];
+  const last = usage?.["last"] as Record<string, unknown> | undefined;
+  if (typeof window !== "number" || window <= 0 || !last) return null;
+  const n = (key: string) => (typeof last[key] === "number" ? (last[key] as number) : 0);
+  return {
+    modelContextWindow: window,
+    usage: { totalTokens: n("totalTokens") || n("inputTokens") + n("outputTokens"), inputTokens: n("inputTokens"), cachedInputTokens: n("cachedInputTokens"), outputTokens: n("outputTokens"), reasoningTokens: n("reasoningOutputTokens") },
+  };
+}
+
 /** The turn in flight, if any. */
 export function runningTurnId(view: ThreadView): string | null {
   const turn = view.turn;

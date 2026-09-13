@@ -221,6 +221,19 @@ describe("ThreadPage", () => {
     expect(screen.getByText("done by alpha")).toBeInTheDocument();
   });
 
+  test("the composer rail shows how full the model's context is, from codex's token usage", async () => {
+    await open();
+    expect(screen.queryByLabelText("上下文用量")).not.toBeInTheDocument();
+    act(() =>
+      channel.deliver("codex", {
+        seq: 4,
+        method: "thread/tokenUsage/updated",
+        params: { turnId: "turn_1", tokenUsage: { modelContextWindow: 128000, last: { inputTokens: 30000, cachedInputTokens: 2000, outputTokens: 2000, reasoningOutputTokens: 500, totalTokens: 32000 }, total: { inputTokens: 30000, cachedInputTokens: 2000, outputTokens: 2000, reasoningOutputTokens: 500, totalTokens: 32000 } } },
+      }),
+    );
+    expect(screen.getByLabelText("上下文用量")).toHaveTextContent("25%");
+  });
+
   test("phone: the chat still shows the command block and the bottom toolbar", async () => {
     setViewport(390);
     await open();

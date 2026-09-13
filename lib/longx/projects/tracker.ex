@@ -138,6 +138,19 @@ defmodule Longx.Projects.Tracker do
     end
   end
 
+  # codex names a thread from its first exchange; that fills an empty title
+  # only — a title the person chose (rename) is theirs
+  defp handle_event("thread/name/updated", %{
+         "threadId" => codex_thread_id,
+         "threadName" => name
+       })
+       when is_binary(name) and name != "" do
+    with {:ok, %Thread{title: nil} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id) do
+      Projects.touch_thread!(thread, %{title: String.slice(name, 0, 200)})
+      Projects.broadcast_changed(thread.project_id)
+    end
+  end
+
   # a sub-agent codex spawned inside a tracked thread: a row of its own under
   # the parent (same project / cwd; codex sends no thread/started for it), its
   # topic followed from now on so its turns get the same treatment
