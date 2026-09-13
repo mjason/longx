@@ -399,7 +399,7 @@ const AssistantMessage: FC = () => {
                 }
                 const running = part.status.type === "running";
                 return (
-                  <ReasoningRoot streaming={running}>
+                  <ReasoningRoot streaming={running} variant="ghost" className="mb-1">
                     <ReasoningTrigger active={running} />
                     <ReasoningContent aria-busy={running}>
                       <ReasoningText>{children}</ReasoningText>

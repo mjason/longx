@@ -447,11 +447,19 @@ React Native client planned on the same core code.
     element; the composer rail is Codex's: `ComposerLeading` (the project's access mode →
     settings, and the turn's state) / `ComposerTrailing` (the per-turn model with its
     reasoning effort) are slots our `thread.aui` copy adds), `toolkit.tsx` (`defineToolkit` with
-    `type: "backend"`, `display: "standalone"` renderers per codex item type —
-    `CommandExecutionTool`, `FileChangeTool` (`parseDiff`), `WebSearchTool`,
-    `QuestionsTool` (answers via `s.thread.extras.answerRequest`) — registered through
+    `type: "backend"`, `display: "standalone"` renderers per codex item type, **all built
+    from the registry's Tool-use elements, one visual language**: every invocation is a
+    `tool-call` row (verb · mono chip · check/cross; open while running or failed, a click
+    away when done — our copy takes `children`/`failed`) whose body is the element for the
+    work — `terminal-block` (commands; `tool-error` when it could not run), `file-tree` +
+    `code-diff` (file changes; `treeOf`, `parseDiff`), `web-search`; `approval-card` above a
+    row that waits on a decision; `elicitation-form` for codex's questions
+    (`QuestionsTool`, answers via `s.thread.extras.answerRequest`); reasoning uses the
+    `ghost` variant so it sits with the rows. Registered through
     `AuiConfig({ tools: Tools({ toolkit }) })`, so they win over `ToolFallback` by name;
-    approvals answer with `respondToApproval({ optionId })`). `thread.aui` also shows a
+    approvals answer with `respondToApproval({ optionId })`. **Never draw a tool's UI from
+    scratch — pick the element from the catalog first** (`elements` skill,
+    `references/catalog.md`, section "Tool use"). `thread.aui` also shows a
     stall hint (`unstable_useMessageStallDetection`, 15 s) and the timing badge.
     `ProjectWindow` is `h-dvh`: the thread scrolls in its own viewport, never the page. Headers and bars are
     solid (`backdrop-blur` on sticky/fixed bars ghosted text in Chromium screenshots).

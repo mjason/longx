@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { CommandExecutionTool, FileChangeTool, QuestionsTool, WebSearchTool, parseDiff } from "./toolkit";
+import { CommandExecutionTool, FileChangeTool, QuestionsTool, WebSearchTool, parseDiff, treeOf } from "./toolkit";
 
 const answerRequest = vi.fn(async () => {});
 vi.mock("@assistant-ui/react", async (importOriginal) => {
@@ -40,11 +40,11 @@ const APPROVAL = {
 };
 
 describe("CommandExecutionTool", () => {
-  test("streams output while running, shows the exit code when done", () => {
+  test("streams output while running (row open), collapses to a row with the exit code when done", () => {
     const { rerender } = render(
       <CommandExecutionTool {...part({ args: { command: "mix test", cwd: "/p" }, artifact: "line 1\nline 2" })} />,
     );
-    expect(screen.getByText("mix test")).toBeInTheDocument();
+    expect(screen.getAllByText("mix test").length).toBeGreaterThan(0);
     expect(screen.getByText("line 2")).toBeInTheDocument();
 
     rerender(
@@ -57,8 +57,20 @@ describe("CommandExecutionTool", () => {
         })}
       />,
     );
+    // a failed command stays open
     expect(screen.getByText("exit 3")).toBeInTheDocument();
     expect(screen.getByText("boom")).toBeInTheDocument();
+
+    rerender(
+      <CommandExecutionTool
+        {...part({ args: { command: "mix test", cwd: "/p" }, status: { type: "complete" }, result: { status: "completed", exitCode: 0, output: "ok", durationMs: 10 } })} />,
+    );
+    // a successful one collapses to its row: the verb, the command, a check; the output is behind the disclosure
+    expect(screen.getByRole("button", { name: /运行了/ })).toBeInTheDocument();
+    expect(screen.queryByText("ok")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /运行了/ }));
+    expect(screen.getByText("ok")).toBeInTheDocument();
+    expect(screen.getByText("exit 0")).toBeInTheDocument();
   });
 
   test("a pending approval offers allow / allow-for-session / deny and answers with the option id", async () => {
@@ -99,12 +111,24 @@ describe("FileChangeTool", () => {
     expect(parsed).toMatchObject({ additions: 1, deletions: 1 });
   });
 
-  test("renders one diff per file with the change counts", () => {
+  test("a row per change set: the file tree and one diff per file behind the disclosure", () => {
     render(<FileChangeTool {...part({ toolName: "fileChange", args: { changes }, status: { type: "complete" }, result: { status: "completed", output: "" } })} />);
-    expect(screen.getByText("2 个文件改动")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /修改了/ }));
+    expect(screen.getAllByText("2 个文件改动").length).toBeGreaterThan(0);
     expect(screen.getByText("lib/a.ex")).toBeInTheDocument();
     expect(screen.getByText("+ lib/b.ex")).toBeInTheDocument();
     expect(screen.getByText("new")).toBeInTheDocument();
+    // the tree groups by folder
+    expect(screen.getByText("lib")).toBeInTheDocument();
+  });
+
+  test("treeOf builds folder nodes above their files, sorted", () => {
+    const nodes = treeOf([
+      { path: "lib/b.ex", additions: 1, deletions: 0 },
+      { path: "lib/a.ex", additions: 1, deletions: 1 },
+      { path: "README.md", additions: 2, deletions: 0 },
+    ]);
+    expect(nodes.map((n) => `${n.kind}:${n.path}@${n.depth}`)).toEqual(["folder:lib@0", "file:lib/a.ex@1", "file:lib/b.ex@1", "file:README.md@0"]);
   });
 
   test("a pending approval lists the files and answers", () => {
@@ -147,8 +171,8 @@ describe("QuestionsTool", () => {
 describe("WebSearchTool", () => {
   test("shows the query, then the sources as links", () => {
     const { rerender } = render(<WebSearchTool {...part({ toolName: "webSearch", args: { query: "elixir 1.19" } })} />);
-    expect(screen.getByText("elixir 1.19")).toBeInTheDocument();
-    expect(screen.getByText("搜索中…")).toBeInTheDocument();
+    expect(screen.getAllByText("elixir 1.19").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("搜索中…").length).toBeGreaterThan(0);
     rerender(
       <WebSearchTool
         {...part({
@@ -159,6 +183,7 @@ describe("WebSearchTool", () => {
         })}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: /搜索了/ }));
     expect(screen.getByText("读了 1 个来源")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Elixir 1.19 released/ })).toHaveAttribute("href", "https://elixir-lang.org/blog/1-19");
   });

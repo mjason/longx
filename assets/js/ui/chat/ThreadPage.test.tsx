@@ -46,6 +46,8 @@ describe("ThreadPage", () => {
   test("renders the snapshot: user message, command block, markdown reply", async () => {
     await open();
     expect(screen.getByTestId("tool-command")).toHaveTextContent("mix test");
+    // finished commands are collapsed rows; the output is a click away
+    await userEvent.click(screen.getByRole("button", { name: /运行了/ }));
     expect(screen.getByText("12 tests, 0 failures")).toBeInTheDocument();
     expect(screen.getByText("green").tagName).toBe("STRONG");
   });

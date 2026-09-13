@@ -72,7 +72,7 @@ const ReasoningGroupImpl: ReasoningGroupComponent = ({
   });
 
   return (
-    <ReasoningRoot streaming={isReasoningStreaming}>
+    <ReasoningRoot streaming={isReasoningStreaming} variant="ghost" className="mb-1">
       <ReasoningTrigger active={isReasoningStreaming} />
       <ReasoningContent aria-busy={isReasoningStreaming}>
         <ReasoningText>{children}</ReasoningText>
