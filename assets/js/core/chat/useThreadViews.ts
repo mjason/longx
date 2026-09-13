@@ -4,19 +4,20 @@
 // that disappear leave. A join that fails (the child is gone) yields no view.
 import { useEffect, useReducer, useRef } from "react";
 import { getSocket } from "@/core/socket";
+import { createBatcher } from "./batch";
 import { applyEvent, fromSnapshot, type ThreadEvent, type ThreadSnapshot, type ThreadView } from "./thread";
 import { joinThreadChannel, type ThreadChannelHandle } from "./threadChannel";
 
 type Views = Record<string, ThreadView>;
-type Action = { type: "snapshot"; id: string; snapshot: ThreadSnapshot } | { type: "event"; id: string; event: ThreadEvent } | { type: "drop"; id: string };
+type Action = { type: "snapshot"; id: string; snapshot: ThreadSnapshot } | { type: "events"; id: string; events: ThreadEvent[] } | { type: "drop"; id: string };
 
 function reduce(views: Views, action: Action): Views {
   switch (action.type) {
     case "snapshot":
       return { ...views, [action.id]: fromSnapshot(action.snapshot) };
-    case "event": {
+    case "events": {
       const view = views[action.id];
-      return view ? { ...views, [action.id]: applyEvent(view, action.event) } : views;
+      return view ? { ...views, [action.id]: action.events.reduce((v, event) => applyEvent(v, event), view) } : views;
     }
     case "drop": {
       if (!(action.id in views)) return views;
@@ -45,14 +46,18 @@ export function useThreadViews(ids: readonly string[], expand?: (view: ThreadVie
     }
     for (const id of wanted) {
       if (handles.current.has(id)) continue;
+      const events = createBatcher<ThreadEvent>((batch) => dispatch({ type: "events", id, events: batch }));
       const joined = joinThreadChannel(getSocket(), id, {
-        onSnapshot: (snapshot) => dispatch({ type: "snapshot", id, snapshot }),
+        onSnapshot: (snapshot) => {
+          events.cancel();
+          dispatch({ type: "snapshot", id, snapshot });
+        },
         onEvent: (event) => {
-          dispatch({ type: "event", id, event });
+          events.push(event);
           if (event.method === "thread/reverted") void joined.snapshot().catch(() => {});
         },
       });
-      handles.current.set(id, joined);
+      handles.current.set(id, { leave: () => { events.cancel(); joined.leave(); }, snapshot: joined.snapshot });
     }
   }, [key]);
 

@@ -449,7 +449,11 @@ React Native client planned on the same core code.
     pending question; items get `startedAtMs`/`completedAtMs` from the client clock),
     `threadChannel.ts` (`thread:<codex id>`; the join reply's `thread_id` is authoritative —
     an empty thread codex could not resume comes back under a new id; `snapshot()` re-pulls
-    in place), `useThreadView.ts` (`refetch`; a `thread/reverted` re-pulls on its own),
+    in place), `useThreadView.ts` (`refetch`; a `thread/reverted` re-pulls on its own;
+    **events fold once per animation frame** — `batch.ts`'s `createBatcher`: codex streams
+    deltas every few ms, and a React commit per delta cannot keep up, which React reads as a
+    commit that always leaves work pending and kills as "Maximum update depth exceeded";
+    test builds fold at once),
     `messages.ts` (codex items → assistant-ui `ThreadMessageLike`: one assistant message per
     turn with `metadata.timing` from the turn's stamps + the last turn's token usage;
     agentMessage/plan → text, reasoning → reasoning, commandExecution / fileChange /
@@ -471,7 +475,11 @@ React Native client planned on the same core code.
     `createMessageQueue` (a message sent while a turn runs waits and goes out when it
     settles; no `cancel`, so a "steer" only means "next" — codex's `turn/steer` is a
     different thing, not wired) + per-turn model + `TurnState`; the router comes in as a
-    callback so React Native can reuse it).
+    callback so React Native can reuse it). **Everything the adapter is built from must be
+    referentially stable while nothing changes** (`runtime.test.tsx`): assistant-ui
+    re-applies the adapter after every render and a "new" adapter notifies the store on
+    every commit — `useMutation`'s result is a new object per render (use `mutateAsync`),
+    the mode object is memoised, callbacks are `useCallback`.
   - `js/ui/` — React DOM, **shaped like an IDE with the chat where the editor would be**
     (IDEA's interactions, not its looks): `pages/WelcomePage` (recent projects, search, one
     door to open/create), `pages/ProjectWizard` (two steps: `components/DirectoryPicker` on
@@ -516,7 +524,14 @@ React Native client planned on the same core code.
     attachments/reload/edit until the runtime offers them), `tool-group.aui`, `reasoning`,
     `markdown-text`, `tool-fallback.aui` (dynamic `ns.tool` calls), `terminal-block`
     (`exitCode`/`exitLabel`/`fullCommand` instead of the demo's fixed "exit 0"),
-    `code-diff`, `web-search` (real urls), `approval-card` (labels/icon props) —
+    `code-diff`, `web-search` (real urls), `approval-card` (labels/icon props);
+    **renderers** (catalog section "Renderers"): `markdown-text` with `shiki-highlighter`
+    for fenced code (tokenises once the part settles; `github-light/dark-default` themes)
+    and `mermaid-diagram` for `mermaid` fences (skeleton while streaming, zoom dialog);
+    `reasoning.aui` streams the thinking through `streaming-text` (newest words tinted, a
+    caret) while the part runs and settles to markdown after; the `generative-ui` renderer
+    is not wired — nothing produces `generative-ui` parts (codex emits none, OpenUI was
+    dropped) —
     `thread-list.aui` (the threads tool is this element over `adapters.threadList`),
     `message-timing.aui` (in the assistant action bar), `elicitation-form` (made
     interactive: `onChange`, labels — codex's questions) — `surfaces.tsx` and

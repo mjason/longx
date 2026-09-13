@@ -71,25 +71,34 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   // runs with (the row) and is only overridden by an explicit choice
   useEffect(() => setModel(null), [threadId]);
   const [modeOverride, setModeOverride] = useState<{ threadId: string | undefined; mode: AccessMode } | null>(null);
-  const rowMode: AccessMode | null = thread
-    ? {
-        sandbox: thread.sandbox as AccessMode["sandbox"],
-        approvalPolicy: thread.approvalPolicy as AccessMode["approvalPolicy"],
-        networkAccess: thread.networkAccess ?? false,
-        webSearch: thread.webSearch ?? true,
-        multiAgent: thread.multiAgent ?? true,
-      }
-    : null;
+  // referentially stable while nothing changes: assistant-ui re-applies the
+  // adapter after every render, and an adapter rebuilt each time notifies
+  // the store on every commit (a render loop once a subscriber re-renders us)
+  const rowMode: AccessMode | null = useMemo(
+    () =>
+      thread
+        ? {
+            sandbox: thread.sandbox as AccessMode["sandbox"],
+            approvalPolicy: thread.approvalPolicy as AccessMode["approvalPolicy"],
+            networkAccess: thread.networkAccess ?? false,
+            webSearch: thread.webSearch ?? true,
+            multiAgent: thread.multiAgent ?? true,
+          }
+        : null,
+    [thread?.sandbox, thread?.approvalPolicy, thread?.networkAccess, thread?.webSearch, thread?.multiAgent, thread !== undefined],
+  );
   const mode = modeOverride && modeOverride.threadId === threadId ? modeOverride.mode : (rowMode ?? defaults);
   const setMode = useCallback((next: AccessMode) => setModeOverride({ threadId, mode: next }), [threadId]);
 
   const invalidate = useCallback(() => client.invalidateQueries({ queryKey: queryKeys.threads(projectId) }), [client, projectId]);
 
-  // a new chat starts in the mode picked in the rail (web search is start-only)
+  // a new chat starts in the mode picked in the rail (web search is start-only);
+  // `start` itself is a new object every render, its mutateAsync is stable
+  const startThread = start.mutateAsync;
   const createThread = useCallback(async (): Promise<ThreadTarget> => {
-    const row = await start.mutateAsync(mode);
+    const row = await startThread(mode);
     return { threadId: row.id, codexThreadId: row.codexThreadId };
-  }, [start, mode]);
+  }, [startThread, mode]);
 
   const threadList = useMemo(
     () =>

@@ -1,4 +1,5 @@
 import { Loader2, ShieldAlert } from "lucide-react";
+import { useMemo } from "react";
 import { contextUsage } from "@/core/chat/thread";
 import { useModels } from "@/core/projects";
 import { ContextDisplay } from "@/ui/components/assistant-ui/elements/context-display";
@@ -44,7 +45,9 @@ export function ComposerTrailing() {
   const current = thread?.modelSlug ?? rows.find((m) => m.default)?.slug ?? null;
   const shown = rows.find((m) => m.slug === (model ?? current));
   const label = shown ? `${shown.slug}${shown.reasoningEffort ? ` ${EFFORT[shown.reasoningEffort] ?? shown.reasoningEffort}` : ""}` : (model ?? current ?? t.defaultModel);
-  const usage = contextUsage(view);
+  // one object per token-usage update: the ring stores what it is given and
+  // re-syncs (a render-phase setState) whenever the identity changes
+  const usage = useMemo(() => contextUsage(view), [view.tokenUsage]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <>
       {usage ? <ContextDisplay.Ring modelContextWindow={usage.modelContextWindow} usage={usage.usage} resetKey={view.threadId} labels={t.context} className="h-7" /> : null}
