@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Bot, GitBranch, History, MessagesSquare, Server, Settings, X } from "lucide-react";
+import { Bot, FolderTree, GitBranch, History, MessagesSquare, Server, Settings, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, Outlet, useParams } from "react-router";
+import { Link, Outlet, useMatch, useParams } from "react-router";
+import { Workbench } from "@/ui/workbench/Workbench";
 import { toast } from "sonner";
 import { TOOLS, toolForShortcut, useFrame, type Tool } from "@/core/frame";
 import { joinProjectChannel, type CodexSample } from "@/core/projectChannel";
@@ -17,6 +18,7 @@ import { ChatProvider } from "@/ui/chat/ChatProvider";
 import { t } from "@/ui/strings";
 import { StatusStrip } from "./StatusStrip";
 import { AgentsTool } from "./tools/AgentsTool";
+import { FilesTool } from "./tools/FilesTool";
 import { TurnsTool } from "./tools/TurnsTool";
 import { GitTool } from "./tools/GitTool";
 import { ProcessTool } from "./tools/ProcessTool";
@@ -28,6 +30,7 @@ const ICONS: Record<Tool, typeof MessagesSquare> = {
   process: Server,
   history: History,
   agents: Bot,
+  files: FolderTree,
 };
 
 export type ProjectContext = {
@@ -50,6 +53,8 @@ export function ProjectWindow() {
   const project = useProject(slug);
   const viewport = useViewport();
   const frame = useFrame();
+  // the settings page is a page, not part of the editor area
+  const settings = useMatch("/p/:slug/settings") !== null;
   const client = useQueryClient();
   const [sample, setSample] = useState<CodexSample | null>(null);
   const id = project.data?.id;
@@ -79,7 +84,7 @@ export function ProjectWindow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docked]);
 
-  // ⌘/Ctrl+1..5 toggle tool windows (desktop habit; harmless elsewhere)
+  // ⌘/Ctrl+1..6 toggle tool windows (desktop habit; harmless elsewhere)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -134,8 +139,18 @@ export function ProjectWindow() {
             <ToolBody tool={frame.tool} ctx={ctx} />
           </DockedPanel>
         ) : null}
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-          <Outlet context={ctx} />
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {settings ? (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <Outlet context={ctx} />
+            </div>
+          ) : (
+            <Workbench projectId={project.data.id}>
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                <Outlet context={ctx} />
+              </div>
+            </Workbench>
+          )}
         </main>
       </div>
       <StatusStrip ctx={ctx} />
@@ -169,6 +184,8 @@ function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
       return <TurnsTool ctx={ctx} />;
     case "agents":
       return <AgentsTool ctx={ctx} />;
+    case "files":
+      return <FilesTool ctx={ctx} />;
   }
 }
 

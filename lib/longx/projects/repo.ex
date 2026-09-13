@@ -125,7 +125,8 @@ defmodule Longx.Projects.Repo do
                       subject: [type: :string, allow_nil?: false],
                       author: [type: :string, allow_nil?: false],
                       email: [type: :string, allow_nil?: false],
-                      at: [type: :utc_datetime, allow_nil?: false]
+                      # ISO 8601: a typed map's utc_datetime has no client-side type in ash_typescript 0.18
+                      at: [type: :string, allow_nil?: false]
                     ]
                   ]
 
@@ -135,7 +136,11 @@ defmodule Longx.Projects.Repo do
 
       run fn input, _ ->
         with {:ok, dir} <- repo(input),
-             do: {:ok, Git.log(dir, limit: input.arguments.limit, skip: input.arguments.skip)}
+             do:
+               {:ok,
+                dir
+                |> Git.log(limit: input.arguments.limit, skip: input.arguments.skip)
+                |> Enum.map(&iso_at/1)}
       end
     end
 
@@ -146,7 +151,7 @@ defmodule Longx.Projects.Repo do
                     body: [type: :string, allow_nil?: false],
                     author: [type: :string, allow_nil?: false],
                     email: [type: :string, allow_nil?: false],
-                    at: [type: :utc_datetime, allow_nil?: false],
+                    at: [type: :string, allow_nil?: false],
                     parents: [type: {:array, :string}, allow_nil?: false],
                     files: [type: {:array, :map}, allow_nil?: false]
                   ]
@@ -158,7 +163,7 @@ defmodule Longx.Projects.Repo do
         with {:ok, dir} <- repo(input) do
           case Git.show(dir, input.arguments.sha) do
             {:error, _} = error -> on(error, :sha)
-            commit -> {:ok, commit}
+            commit -> {:ok, iso_at(commit)}
           end
         end
       end
@@ -283,6 +288,8 @@ defmodule Longx.Projects.Repo do
         else: invalid(:project_id, "is not a git repository")
     end
   end
+
+  defp iso_at(%{at: %DateTime{} = at} = entry), do: %{entry | at: DateTime.to_iso8601(at)}
 
   defp head_or_nil(dir) do
     case Git.head(dir) do

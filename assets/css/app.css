@@ -44,6 +44,14 @@
 
   --success: #4ec27f;
   --warning: #f5a35a;
+  /* the editor's syntax colours: the same muted register, on the dark ground */
+  --syntax-keyword: oklch(0.78 0.12 300);
+  --syntax-string: oklch(0.8 0.12 145);
+  --syntax-number: oklch(0.8 0.13 55);
+  --syntax-function: oklch(0.78 0.13 258);
+  --syntax-type: oklch(0.8 0.1 200);
+  --syntax-property: oklch(0.82 0.07 258);
+  --syntax-tag: oklch(0.75 0.14 20);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -78,6 +86,13 @@
   --sidebar-accent-foreground: #1c1f26;
   --success: #1f9d55;
   --warning: #d97a1e;
+  --syntax-keyword: oklch(0.5 0.15 300);
+  --syntax-string: oklch(0.5 0.12 145);
+  --syntax-number: oklch(0.55 0.14 55);
+  --syntax-function: oklch(0.5 0.17 258);
+  --syntax-type: oklch(0.5 0.1 200);
+  --syntax-property: oklch(0.45 0.09 258);
+  --syntax-tag: oklch(0.5 0.15 20);
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
@@ -107,6 +122,13 @@
     --sidebar-accent-foreground: #1c1f26;
     --success: #1f9d55;
     --warning: #d97a1e;
+    --syntax-keyword: oklch(0.5 0.15 300);
+    --syntax-string: oklch(0.5 0.12 145);
+    --syntax-number: oklch(0.55 0.14 55);
+    --syntax-function: oklch(0.5 0.17 258);
+    --syntax-type: oklch(0.5 0.1 200);
+    --syntax-property: oklch(0.45 0.09 258);
+    --syntax-tag: oklch(0.5 0.15 20);
   }
 }
 

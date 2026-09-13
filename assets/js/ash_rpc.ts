@@ -3199,11 +3199,11 @@ export type GitLogInput = {
   skip?: number | null;
 };
 
-export type GitLogFields = UnifiedFieldSelection<{sha: string, subject: string, author: string, email: string, at: UtcDateTime, __type: "TypedMap", __primitiveFields: "sha" | "subject" | "author" | "email" | "at"}>[];
+export type GitLogFields = UnifiedFieldSelection<{sha: string, subject: string, author: string, email: string, at: string, __type: "TypedMap", __primitiveFields: "sha" | "subject" | "author" | "email" | "at"}>[];
 
 export type InferGitLogResult<
   Fields extends GitLogFields | undefined,
-> = Array<InferResult<{sha: string, subject: string, author: string, email: string, at: UtcDateTime, __type: "TypedMap", __primitiveFields: "sha" | "subject" | "author" | "email" | "at"}, Fields>>;
+> = Array<InferResult<{sha: string, subject: string, author: string, email: string, at: string, __type: "TypedMap", __primitiveFields: "sha" | "subject" | "author" | "email" | "at"}, Fields>>;
 
 export type GitLogResult<Fields extends GitLogFields | undefined = undefined> = | { success: true; data: InferGitLogResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -3480,11 +3480,11 @@ export type GitShowInput = {
   sha: string;
 };
 
-export type GitShowFields = UnifiedFieldSelection<{sha: string, subject: string, body: string, author: string, email: string, at: UtcDateTime, parents: Array<string>, files: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "sha" | "subject" | "body" | "author" | "email" | "at" | "parents" | "files"}>[];
+export type GitShowFields = UnifiedFieldSelection<{sha: string, subject: string, body: string, author: string, email: string, at: string, parents: Array<string>, files: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "sha" | "subject" | "body" | "author" | "email" | "at" | "parents" | "files"}>[];
 
 export type InferGitShowResult<
   Fields extends GitShowFields | undefined,
-> = InferResult<{sha: string, subject: string, body: string, author: string, email: string, at: UtcDateTime, parents: Array<string>, files: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "sha" | "subject" | "body" | "author" | "email" | "at" | "parents" | "files"}, Fields>;
+> = InferResult<{sha: string, subject: string, body: string, author: string, email: string, at: string, parents: Array<string>, files: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "sha" | "subject" | "body" | "author" | "email" | "at" | "parents" | "files"}, Fields>;
 
 export type GitShowResult<Fields extends GitShowFields | undefined = undefined> = | { success: true; data: InferGitShowResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
