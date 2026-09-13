@@ -19,6 +19,7 @@ defmodule Longx.AI.Search do
   """
 
   alias Longx.AI.Search.{Fetch, Refs, Tavily}
+  alias Longx.Browser
   alias Longx.AI.SearchTarget
 
   require Logger
@@ -28,7 +29,7 @@ defmodule Longx.AI.Search do
   @default_max_results 5
   @default_output_tokens 4_000
   @chars_per_token 4
-  @max_page_chars 12_000
+  @max_page_chars 24_000
   @concurrency 4
 
   @type result :: map
@@ -206,19 +207,38 @@ defmodule Longx.AI.Search do
     end
   end
 
-  # our own fetch first; the provider's extractor (readability for pages
-  # that block plain clients) only when that fails and one is configured
+  # the headless browser first (JavaScript pages come out rendered, the
+  # model gets the main element's html), a plain fetch when it is not
+  # available, the provider's extractor last
   defp fetch_page(url, ref_id, lineno, session, target) do
-    case Fetch.fetch(url) do
-      {:ok, %{title: title, text: text}} ->
-        page(url, ref_id, lineno, session, title, text)
+    case browser_page(url) do
+      {:ok, title, content} ->
+        page(url, ref_id, lineno, session, title, content)
 
-      {:error, reason} ->
-        Logger.info(
-          "web open: own fetch of #{url} failed (#{inspect(reason)}), trying the provider"
-        )
+      {:error, browser_reason} ->
+        case Fetch.fetch(url) do
+          {:ok, %{title: title, text: text}} ->
+            page(url, ref_id, lineno, session, title, text)
 
-        extract_page(url, ref_id, lineno, session, target, reason)
+          {:error, reason} ->
+            Logger.info(
+              "web open: fetch of #{url} failed (browser: #{inspect(browser_reason)}, plain: #{inspect(reason)}), trying the provider"
+            )
+
+            extract_page(url, ref_id, lineno, session, target, reason)
+        end
+    end
+  end
+
+  defp browser_page(url) do
+    if Browser.available?() do
+      case Browser.fetch(url, format: :html, wait_until: :networkidle0) do
+        {:ok, %{title: title, content: content}} when content != "" -> {:ok, title, content}
+        {:ok, _empty} -> {:error, :empty_page}
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:error, :unavailable}
     end
   end
 

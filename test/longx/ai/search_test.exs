@@ -230,6 +230,33 @@ defmodule Longx.AI.SearchTest do
       assert [%{type: "open", url: "http://127.0.0.1:1/blog/1.19"}] = results
     end
 
+    test "opens a URL with the headless browser first (rendered, main html for the model)", %{
+      bypass: bypass,
+      target: target
+    } do
+      previous = Application.get_env(:longx, Longx.Browser, [])
+
+      Application.put_env(
+        :longx,
+        Longx.Browser,
+        Keyword.put(previous, :executable, Path.expand("test/support/fake_obscura.sh"))
+      )
+
+      on_exit(fn -> Application.put_env(:longx, Longx.Browser, previous) end)
+      Bypass.stub(bypass, "POST", "/extract", fn conn -> Plug.Conn.send_resp(conn, 500, "no") end)
+
+      {:ok, %{output: output, results: [result]}} =
+        Search.run(
+          %{"id" => "t", "commands" => %{"open" => [%{"ref_id" => "https://spa.test/app"}]}},
+          target
+        )
+
+      assert output =~ "<h1>Rendered</h1>"
+      assert output =~ "Fake page"
+      refute output =~ "menu"
+      assert %{type: "open", url: "https://spa.test/app", title: "Fake page"} = result
+    end
+
     test "opens a bare URL by fetching it ourselves — no search provider involved", %{
       bypass: bypass,
       target: target

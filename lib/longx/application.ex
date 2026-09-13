@@ -37,6 +37,8 @@ defmodule Longx.Application do
       # its gateway URL, hence after it)
       {Registry, keys: :unique, name: Longx.Codex.Registry},
       Longx.Codex.Pool,
+      # permits for the headless browser (Longx.Browser)
+      Longx.Browser.Pool,
       # retires idle codex processes that got old or fat; publishes their numbers
       Longx.Codex.Recycler,
       # is codex's command sandbox going to work here? (result cached, shown in the UI)

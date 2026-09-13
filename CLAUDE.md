@@ -124,6 +124,38 @@ React Native client planned on the same core code.
     isolation was considered and dropped: knowing the commit after each turn is enough.
     Over RPC these are the `Turn` generic actions `restore_proposal`, `restore_files`
     (`confirm`, `mode`) and `redo_turn` (`text`, `model`, `mode`, `restore_files`).
+- **A headless browser is bundled too: obscura** (`h4ckf0r0day/obscura`, Rust + embedded V8,
+  Apache-2.0). `Longx.Browser.Runtime` pins `v0.2.2` (five targets: `{x86_64,aarch64}-linux`,
+  `{x86_64,aarch64}-macos` as tar.gz, `x86_64-windows` as zip — `Longx.Bundle` unpacks
+  both; upstream publishes no checksums, so the sha256s were computed once when pinning and
+  are verified on every fetch), fetched by `mix obscura.fetch` into `priv/obscura/<target>/`
+  (gitignored; in `mix setup`; optional — without it `open` falls back to a plain fetch and
+  the browser tools are unavailable). `LONGX_OBSCURA` overrides. The default (rendering,
+  no stealth) variant is bundled; `stealth:` is a config flag.
+  - `Longx.Browser.fetch(url, format: :html | :markdown | :text, timeout:, wait_until:,
+    selector:, wait:, max_bytes:)` — **one short-lived `obscura fetch` process per page**
+    under `Longx.Shim.run/2` (killed with its tree at the deadline, `oom_score_adj` 600,
+    `OBSCURA_SCRIPT_DEADLINE_MS` = the deadline, optional `memory_limit:`), so an idle
+    system runs no browser and nothing can leak across pages. `:html` is the page reduced by
+    `Longx.Browser.Html.main/1` — the `main`/`article`/`[role=main]` element (else `body`)
+    without scripts, styles, svg, iframes, nav/header/footer/aside/forms and with only the
+    attributes that carry meaning (`href`, `src`, `alt`, `title`, …): the model gets HTML
+    with its structure and links, not flattened text. obscura keeps its SSRF guard (private /
+    loopback IPs refused) unless `allow_private_network: true` (tests against Bypass set it).
+    stdout is the dump, stderr the log (`Page loaded: <url> - "<title>"` gives the title;
+    `Error: …` and exit 1 on navigation failure; a 404 still renders as a page).
+  - `Longx.Browser.Pool` (in the tree) hands out permits: at most `max_concurrent` (default
+    `min(4, schedulers)`) fetches at once, FIFO waiting up to `queue_timeout` (10 s →
+    `{:error, :busy}`), permits tied to the caller by monitor (a dead caller frees its slot);
+    limits are read per request so config changes apply at once. Stateful sessions
+    (clicking, logging in) are the planned second step: `obscura serve` behind the same pool,
+    idle-shutdown like `Pool.connection/1` plus `Recycler`-style limits — not built yet.
+  - Tests: `test/support/fake_obscura.sh` plays the CLI (`/page`, `/slow?N`, `/fail`,
+    `/big`; flags echoed to stderr); `config/test.exs` points `executable:` at a
+    nonexistent path so the unit suite never runs the real one; the real binary runs only in
+    `test/longx/browser_integration_test.exs` (`:integration`, a Bypass SPA).
+  - `builtin.browser_fetch` (`Longx.Tools.Builtin.BrowserFetch`, url / format / selector,
+    60 s) is the agent's way to read rendered pages outside the sandbox.
 - `lib/longx/platform.ex` — `Longx.Platform`: runtime-safe os/arch detection and the Rust
   triple / GOOS-GOARCH naming for it. Anything that resolves a binary path at runtime goes
   through this, never through `Mix.*` (Mix is absent in releases).

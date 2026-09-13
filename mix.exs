@@ -94,7 +94,8 @@ defmodule Longx.MixProject do
         "assets.setup",
         "assets.build",
         "codex.fetch",
-        "git.fetch"
+        "git.fetch",
+        "obscura.fetch"
       ],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
