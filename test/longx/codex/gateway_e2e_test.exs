@@ -317,4 +317,59 @@ defmodule Longx.Codex.GatewayE2ETest do
     # codex's own reasoning defaults for a thread that set none
     refute body["reasoning"]["effort"] == "high"
   end
+
+  test "multi_agent: the thread gets codex's sub-agent tools (spawn / wait / …)", %{
+    gateway_url: gateway_url
+  } do
+    upstream = Bypass.open()
+    test_pid = self()
+    fake_provider!(upstream)
+
+    Bypass.expect(upstream, "POST", "/v1/responses", fn conn ->
+      {:ok, raw, conn} = Plug.Conn.read_body(conn, length: 50_000_000)
+      send(test_pid, {:upstream_request, Jason.decode!(raw)})
+      send_sse(conn, ResponsesFixture.assistant_message("ok"))
+    end)
+
+    home = prepare_home!(gateway_url)
+    conn = start_connection!(home)
+
+    plain = start_thread!(conn, home)
+    {turn, _} = run_turn!(conn, plain, "hi")
+    assert turn["status"] == "completed", inspect(turn)
+    assert_receive {:upstream_request, without}, 5_000
+
+    agents = start_thread!(conn, home, multi_agent: true)
+    {turn, _} = run_turn!(conn, agents, "hi")
+    assert turn["status"] == "completed", inspect(turn)
+    assert_receive {:upstream_request, with_agents}, 5_000
+
+    names = fn body ->
+      body["tools"]
+      |> Enum.flat_map(fn
+        %{"type" => "namespace", "name" => ns, "tools" => tools} ->
+          Enum.map(tools, &"#{ns}.#{&1["name"]}")
+
+        %{"name" => name} ->
+          [name]
+
+        _ ->
+          []
+      end)
+    end
+
+    # 0.154 offers its v1 sub-agent tools by default; ours asks for v2 (the
+    # `collaboration` namespace: spawn / wait / send_message / followup / interrupt / list)
+    assert "multi_agent_v1.spawn_agent" in names.(without)
+    assert "collaboration.spawn_agent" in names.(with_agents)
+    assert "collaboration.wait_agent" in names.(with_agents)
+    refute "multi_agent_v1.spawn_agent" in names.(with_agents)
+
+    # and off means no sub-agent tools at all
+    solo = start_thread!(conn, home, multi_agent: false)
+    {turn, _} = run_turn!(conn, solo, "hi")
+    assert turn["status"] == "completed", inspect(turn)
+    assert_receive {:upstream_request, alone}, 5_000
+    refute Enum.any?(names.(alone), &String.contains?(&1, "spawn")), inspect(names.(alone))
+  end
 end

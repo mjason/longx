@@ -77,6 +77,7 @@ defmodule Longx.Projects.Project do
         :dirty_start,
         :network_access,
         :web_search,
+        :multi_agent,
         :memory_limit_mb,
         :model_id
       ]
@@ -102,6 +103,7 @@ defmodule Longx.Projects.Project do
         :dirty_start,
         :network_access,
         :web_search,
+        :multi_agent,
         :memory_limit_mb,
         :model_id
       ]
@@ -227,6 +229,10 @@ defmodule Longx.Projects.Project do
     # Longx's own gateway — this is separate from the sandbox's network,
     # which only governs commands). Decided at thread start.
     attribute :web_search, :boolean, allow_nil?: false, default: true, public?: true
+
+    # codex's sub-agent tools (multi_agent_v2: spawn / wait / send / …) for
+    # new threads; decided at thread start
+    attribute :multi_agent, :boolean, allow_nil?: false, default: true, public?: true
 
     # Optional cap on the codex process tree (Linux RLIMIT_AS / Windows Job
     # memory). Off by default: a task that needs 30 GB gets 30 GB; the OOM

@@ -148,7 +148,8 @@ defmodule Longx.Projects.ThreadsTest do
                "model_reasoning_effort" => "high",
                "model_reasoning_summary" => "auto",
                "web_search" => "live",
-               "features.standalone_web_search" => true
+               "features.standalone_web_search" => true,
+               "features.multi_agent_v2" => true
              }
     end
 
@@ -351,6 +352,22 @@ defmodule Longx.Projects.ThreadsTest do
       quiet = Projects.update_project!(project, %{web_search: false})
       {:ok, inherited} = Projects.start_thread(quiet, conn: conn)
       assert inherited.web_search == false
+    end
+
+    test "multi_agent: false at start keeps codex's sub-agent tools off; the project's default applies otherwise",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      assert project.multi_agent == true
+
+      {:ok, on} = Projects.start_thread(project, conn: conn)
+      assert on.multi_agent == true
+      %{"startParams" => params} = read_thread!(conn, on.codex_thread_id)
+      assert params["config"]["features.multi_agent_v2"] == true
+
+      {:ok, off} = Projects.start_thread(project, conn: conn, multi_agent: false)
+      assert off.multi_agent == false
+      %{"startParams" => params} = read_thread!(conn, off.codex_thread_id)
+      assert params["config"]["features.multi_agent"] == false
     end
 
     test "turns are listed oldest first", %{dir: dir, conn: conn} do

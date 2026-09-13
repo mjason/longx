@@ -68,6 +68,7 @@ defmodule Longx.Projects do
       define :rehost_thread, action: :rehost
       define :list_threads_for_project, action: :for_project, args: [:project_id]
       define :list_threads_with_status, action: :with_status, args: [:project_id, :status]
+      define :list_subagents, action: :subagents_of, args: [:parent_thread_id]
     end
 
     resource Longx.Projects.Turn do
@@ -115,6 +116,7 @@ defmodule Longx.Projects do
           | {:model, String.t()}
           | {:network_access, boolean}
           | {:web_search, boolean}
+          | {:multi_agent, boolean}
           | {:conn, GenServer.server()}
 
   @doc """
@@ -133,6 +135,7 @@ defmodule Longx.Projects do
     sandbox = Keyword.get(opts, :sandbox, project.sandbox)
     network_access = Keyword.get(opts, :network_access, project.network_access)
     web_search = Keyword.get(opts, :web_search, project.web_search)
+    multi_agent = Keyword.get(opts, :multi_agent, project.multi_agent)
 
     # the model's own settings (context window, reasoning, web search mode);
     # an unknown slug or a missing default is refused before codex is involved
@@ -145,6 +148,7 @@ defmodule Longx.Projects do
              sandbox: sandbox,
              tools: tools,
              network_access: network_access,
+             multi_agent: multi_agent,
              conn: conn
            ]
            |> Keyword.merge(model_opts)
@@ -160,6 +164,7 @@ defmodule Longx.Projects do
              sandbox: sandbox,
              network_access: network_access,
              web_search: web_search,
+             multi_agent: multi_agent,
              tools: tools
            }) do
       :ok = Tracker.track(codex_thread_id)
@@ -328,6 +333,7 @@ defmodule Longx.Projects do
              sandbox: thread.sandbox,
              tools: thread.tools,
              network_access: thread.network_access,
+             multi_agent: thread.multi_agent,
              conn: conn
            ]
            |> Keyword.merge(model_opts)

@@ -103,6 +103,50 @@ defmodule Longx.AI.GatewayTest do
       assert up.body["input"] == [@message, call]
     end
 
+    test "sub-agent envelopes (agent_message with an `encrypted_content` payload) reach a non-OpenAI model as a plain user message" do
+      # what codex puts in front of a spawned sub-agent: the task text travels
+      # as an `encrypted_content` part — readable, but ignored by any provider
+      # that is not OpenAI, which leaves the child with an empty task
+      envelope = %{
+        "type" => "agent_message",
+        "id" => "amsg_1",
+        "author" => "/root",
+        "recipient" => "/root/read_a",
+        "content" => [
+          %{
+            "type" => "input_text",
+            "text" => "Message Type: NEW_TASK\nTask name: /root/read_a\nSender: /root\nPayload:\n"
+          },
+          %{
+            "type" => "encrypted_content",
+            "encrypted_content" => "Read a.txt and report its content."
+          }
+        ]
+      }
+
+      {:ok, up} = Gateway.prepare(with_input([@message, envelope]), @target)
+
+      assert [
+               @message,
+               %{
+                 "type" => "message",
+                 "role" => "user",
+                 "content" => [
+                   %{
+                     "type" => "input_text",
+                     "text" =>
+                       "Message Type: NEW_TASK\nTask name: /root/read_a\nSender: /root\nPayload:\n"
+                   },
+                   %{"type" => "input_text", "text" => "Read a.txt and report its content."}
+                 ]
+               }
+             ] = up.body["input"]
+
+      # OpenAI understands the item as codex sends it
+      {:ok, up} = Gateway.prepare(with_input([envelope]), openai())
+      assert up.body["input"] == [envelope]
+    end
+
     test "strip_all_encrypted/1 is what the degraded retry sends" do
       body = with_input([@openai_item, @deepseek_item])
       stripped = Gateway.strip_all_encrypted(body)

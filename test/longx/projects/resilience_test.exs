@@ -134,4 +134,43 @@ defmodule Longx.Projects.ResilienceTest do
     assert done.error =~ "no progress"
     assert %{status: :idle} = Ash.get!(Thread, thread.id)
   end
+
+  describe "sub-agents" do
+    test "a spawned sub-agent becomes a thread row under its parent, hidden from the project's list; its view is live",
+         %{project: project} do
+      {:ok, parent} = Projects.start_thread(project)
+      {:ok, turn} = Projects.send_message(parent, "spawn helper")
+      eventually(turn_status(turn.id, :completed))
+
+      child =
+        eventually(fn ->
+          case Projects.list_subagents!(parent.id) do
+            [child] -> {:ok, child}
+            other -> {:pending, other}
+          end
+        end)
+
+      assert child.parent_thread_id == parent.id
+      assert child.codex_thread_id == parent.codex_thread_id <> "-helper"
+      assert child.agent_path == "/root/helper"
+      assert child.title == "helper"
+      assert child.project_id == project.id
+      assert child.cwd == parent.cwd
+      eventually(thread_status(child.id, :idle))
+
+      # not in the project's thread list
+      refute Enum.any?(Projects.list_threads!(project), &(&1.id == child.id))
+
+      # its codex view is there (items on its own thread id), and so is the parent's plan
+      snap = Longx.Codex.Thread.snapshot(child.codex_thread_id)
+
+      assert Enum.any?(
+               snap.items,
+               &(&1["type"] == "agentMessage" and &1["text"] == "done by helper")
+             )
+
+      assert %{plan: %{"plan" => [_, _, %{"step" => "report"}]}} =
+               Longx.Codex.Thread.snapshot(parent.codex_thread_id)
+    end
+  end
 end

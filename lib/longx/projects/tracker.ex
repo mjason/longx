@@ -50,19 +50,27 @@ defmodule Longx.Projects.Tracker do
   end
 
   @impl true
-  def handle_call({:track, codex_thread_id}, _from, %State{tracked: tracked} = state) do
+  def handle_call({:track, codex_thread_id}, _from, state) do
+    {:reply, :ok, follow(state, codex_thread_id)}
+  end
+
+  defp follow(%State{tracked: tracked} = state, codex_thread_id) do
     unless Map.has_key?(tracked, codex_thread_id) do
       :ok = PubSub.subscribe(Longx.PubSub, Longx.Codex.ThreadState.topic(codex_thread_id))
     end
 
     # (re)arm the watchdog with the current settings for the new thread
-    state = schedule_tick(%State{state | tracked: Map.put(tracked, codex_thread_id, now())})
-    {:reply, :ok, state}
+    schedule_tick(%State{state | tracked: Map.put(tracked, codex_thread_id, now())})
   end
 
   @impl true
   def handle_info({:codex, _seq, method, params}, state) do
-    handle_event(method, params)
+    state =
+      case handle_event(method, params) do
+        {:track, child_codex_id} -> follow(state, child_codex_id)
+        _ -> state
+      end
+
     {:noreply, touch(state, method, params["threadId"])}
   rescue
     e ->
@@ -127,6 +135,52 @@ defmodule Longx.Projects.Tracker do
          text when is_binary(text) <- user_text(item) do
       Projects.touch_thread!(thread, %{preview: String.slice(text, 0, 200)})
       Projects.broadcast_changed(thread.project_id)
+    end
+  end
+
+  # a sub-agent codex spawned inside a tracked thread: a row of its own under
+  # the parent (same project / cwd; codex sends no thread/started for it), its
+  # topic followed from now on so its turns get the same treatment
+  defp handle_event("item/completed", %{
+         "threadId" => parent_codex_id,
+         "item" => %{
+           "type" => "subAgentActivity",
+           "agentThreadId" => child_codex_id,
+           "agentPath" => path,
+           "kind" => kind
+         }
+       }) do
+    with {:ok, %Thread{} = parent} <- Projects.get_thread_by_codex_id(parent_codex_id) do
+      child =
+        case Projects.get_thread_by_codex_id(child_codex_id) do
+          {:ok, %Thread{} = child} ->
+            child
+
+          {:error, _} ->
+            Projects.create_thread!(%{
+              codex_thread_id: child_codex_id,
+              project_id: parent.project_id,
+              parent_thread_id: parent.id,
+              agent_path: path,
+              title: path |> String.split("/") |> List.last(),
+              cwd: parent.cwd,
+              model_slug: parent.model_slug,
+              approval_policy: parent.approval_policy,
+              sandbox: parent.sandbox,
+              network_access: parent.network_access,
+              web_search: parent.web_search,
+              multi_agent: parent.multi_agent,
+              tools: parent.tools,
+              status: :active
+            })
+        end
+
+      status = if kind in ["started", "interacted"], do: :active, else: :idle
+      Projects.touch_thread!(child, %{status: status, last_activity_at: DateTime.utc_now()})
+      Projects.broadcast_changed(parent.project_id)
+      {:track, child_codex_id}
+    else
+      _ -> :ok
     end
   end
 
