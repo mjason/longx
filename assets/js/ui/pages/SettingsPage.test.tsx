@@ -17,6 +17,20 @@ describe("SettingsPage", () => {
     expect(screen.getByTestId("section-appearance")).toBeInTheDocument();
   });
 
+  test("the theme follows the system unless chosen, and the toggle cycles", async () => {
+    setViewport(390);
+    localStorage.clear();
+    const user = userEvent.setup();
+    renderAt("/");
+    const toggle = await screen.findByTestId("theme-toggle");
+    expect(toggle).toHaveAccessibleName("主题：跟随系统");
+    await user.click(toggle);
+    expect(toggle).toHaveAccessibleName("主题：深色");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    await user.click(toggle);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+  });
+
   test("desktop: categories beside the content, models first", async () => {
     setViewport(1280);
     const { router } = renderAt("/settings");

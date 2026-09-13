@@ -1,5 +1,5 @@
-// Theme preference: dark is the product default; "system" follows the OS;
-// light is an explicit override. Stored per device.
+// Theme preference: follows the OS by default; dark or light are explicit
+// choices. Stored per device.
 import { useEffect, useSyncExternalStore } from "react";
 
 export type ThemePreference = "dark" | "light" | "system";
@@ -11,9 +11,9 @@ const listeners = new Set<() => void>();
 function read(): ThemePreference {
   try {
     const v = localStorage.getItem(KEY);
-    return v === "light" || v === "system" || v === "dark" ? v : "dark";
+    return v === "light" || v === "system" || v === "dark" ? v : "system";
   } catch {
-    return "dark";
+    return "system";
   }
 }
 
@@ -41,6 +41,11 @@ export function setTheme(pref: ThemePreference) {
   listeners.forEach((l) => l());
 }
 
+/** dark → light → system → dark (the toggle button's order). */
+export function nextTheme(pref: ThemePreference): ThemePreference {
+  return pref === "dark" ? "light" : pref === "light" ? "system" : "dark";
+}
+
 export function useTheme(): { preference: ThemePreference; resolved: ResolvedTheme; setTheme: typeof setTheme } {
   const preference = useSyncExternalStore(
     (l) => {
@@ -48,8 +53,15 @@ export function useTheme(): { preference: ThemePreference; resolved: ResolvedThe
       return () => listeners.delete(l);
     },
     read,
-    () => "dark" as ThemePreference,
+    () => "system" as ThemePreference,
   );
-  useEffect(() => applyTheme(preference), [preference]);
+  useEffect(() => {
+    applyTheme(preference);
+    if (preference !== "system" || typeof matchMedia !== "function") return;
+    const mq = matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => applyTheme("system");
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [preference]);
   return { preference, resolved: resolveTheme(preference, systemDark()), setTheme };
 }

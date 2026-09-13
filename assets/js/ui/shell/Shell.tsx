@@ -63,10 +63,14 @@ export function Page({ children, className = "" }: { children: ReactNode; classN
   );
 }
 
-/** Primary action pinned to the bottom on phones; inline at the end on desktop. */
+/**
+ * Primary action pinned to the bottom of the viewport on every screen size
+ * (a dialog footer): it must never depend on the page scrolling to be seen.
+ * Long content scrolls in its own box (see DirectoryPicker) or under it.
+ */
 export function BottomBar({ children }: { children: ReactNode }) {
   return (
-    <div className="safe-bottom bg-background fixed inset-x-0 bottom-0 z-20 border-t lg:static lg:border-0 lg:bg-transparent">
+    <div className="safe-bottom bg-background fixed inset-x-0 bottom-0 z-20 border-t" data-testid="bottom-bar">
       <div className="safe-x mx-auto flex w-full max-w-5xl gap-2 py-3">{children}</div>
     </div>
   );

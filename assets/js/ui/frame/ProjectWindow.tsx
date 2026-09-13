@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/ui
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/components/ui/tooltip";
 import { TopBar } from "@/ui/shell/Shell";
+import { ThemeToggle } from "@/ui/components/ThemeToggle";
 import { t } from "@/ui/strings";
 import { StatusStrip } from "./StatusStrip";
 import { FilesTool } from "./tools/FilesTool";
@@ -89,9 +90,12 @@ export function ProjectWindow() {
         title={project.data.name}
         back="/"
         actions={
+          <>
+          <ThemeToggle />
           <Link to={`/p/${slug}/settings`} aria-label={t.settings} className="touch-target flex items-center justify-center rounded-md">
             <Settings className="size-5" />
           </Link>
+          </>
         }
       />
       <div className="flex min-h-0 flex-1">

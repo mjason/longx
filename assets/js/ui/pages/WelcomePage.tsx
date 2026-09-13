@@ -7,6 +7,7 @@ import { Button } from "@/ui/components/ui/button";
 import { Input } from "@/ui/components/ui/input";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { BottomBar, Page, TopBar } from "@/ui/shell/Shell";
+import { ThemeToggle } from "@/ui/components/ThemeToggle";
 import { t } from "@/ui/strings";
 
 /** IDEA's welcome screen: recent projects, search, one door into a project. */
@@ -25,9 +26,12 @@ export function WelcomePage() {
       <TopBar
         title={t.app}
         actions={
+          <>
+          <ThemeToggle />
           <Link to="/settings" aria-label={t.settings} className="touch-target flex items-center justify-center rounded-md">
             <Settings className="size-5" />
           </Link>
+          </>
         }
       />
       <Page>

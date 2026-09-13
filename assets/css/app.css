@@ -1,9 +1,9 @@
 @import "tailwindcss";
 @source "../js";
 
-/* Longx — a dark-first workbench. Tokens follow shadcn's names so its
-   components work unchanged; values are ours. Light mode is an override,
-   dark is the default (data-theme / prefers-color-scheme). */
+/* Longx — a workbench in dark or light. Tokens follow shadcn's names so
+   its components work unchanged; values are ours. The theme follows the OS
+   unless the user picks one (data-theme, set by core/theme.ts). */
 @custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
 
 :root {
@@ -36,6 +36,8 @@
   --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
+/* Light tokens: an explicit choice, or the OS preference before/without JS
+   (Longx.Vite loads the app; no inline script decides the theme). */
 [data-theme="light"] {
   --background: oklch(0.985 0.004 250);
   --foreground: oklch(0.2 0.012 250);
@@ -56,6 +58,29 @@
   --border: oklch(0.9 0.008 250);
   --input: oklch(0.9 0.008 250);
   --ring: oklch(0.55 0.15 80 / 0.5);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --background: oklch(0.985 0.004 250);
+    --foreground: oklch(0.2 0.012 250);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.2 0.012 250);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.2 0.012 250);
+    --primary: oklch(0.55 0.15 80);
+    --primary-foreground: oklch(0.99 0.01 80);
+    --secondary: oklch(0.95 0.006 250);
+    --secondary-foreground: oklch(0.2 0.012 250);
+    --muted: oklch(0.95 0.006 250);
+    --muted-foreground: oklch(0.5 0.015 250);
+    --accent: oklch(0.93 0.01 250);
+    --accent-foreground: oklch(0.2 0.012 250);
+    --destructive: oklch(0.55 0.21 25);
+    --destructive-foreground: oklch(0.99 0 0);
+    --border: oklch(0.9 0.008 250);
+    --input: oklch(0.9 0.008 250);
+    --ring: oklch(0.55 0.15 80 / 0.5);
+}
 }
 
 @theme inline {
@@ -100,6 +125,11 @@
   [data-theme="light"] {
     color-scheme: light;
   }
+  @media (prefers-color-scheme: light) {
+    html:not([data-theme]) {
+      color-scheme: light;
+    }
+  }
   body {
     background: var(--background);
     color: var(--foreground);
@@ -107,11 +137,11 @@
     -webkit-font-smoothing: antialiased;
     /* phones: 16px keeps iOS from zooming into inputs */
     font-size: 16px;
-    overscroll-behavior-y: none;
   }
-  /* the page never scrolls sideways; wide content scrolls inside its box */
-  html, body, #app {
-    max-width: 100%;
+  /* the page never scrolls sideways; wide content scrolls inside its box.
+     Only the root carries this: overflow on body/#app too can steal touch
+     scrolling on some mobile browsers. */
+  html {
     overflow-x: hidden;
   }
 }

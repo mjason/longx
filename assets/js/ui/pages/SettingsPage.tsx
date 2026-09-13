@@ -82,7 +82,7 @@ function Appearance() {
       <Select value={preference} onValueChange={(v) => setTheme(v as ThemePreference)}>
         <SelectTrigger className="h-11 w-full" aria-label={t.theme}><SelectValue /></SelectTrigger>
         <SelectContent>
-          {(["dark", "light", "system"] as const).map((k) => <SelectItem key={k} value={k}>{t.themes[k]}</SelectItem>)}
+          {(["system", "dark", "light"] as const).map((k) => <SelectItem key={k} value={k}>{t.themes[k]}</SelectItem>)}
         </SelectContent>
       </Select>
     </div>

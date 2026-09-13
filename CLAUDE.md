@@ -378,10 +378,14 @@ React Native client planned on the same core code.
     `components/CommandPalette` (⌘K, desktop), `sonner` toasts for codex down/ready.
     `routes.tsx` (react-router, browser history; tests use a memory router via
     `ui/test-utils.tsx`, shared `vi.mock` factories in `ui/test-mocks.ts`), `shell/` (Shell,
-    TopBar `wide` for the IDE window, Page, BottomBar, banners), `components/ui/` (shadcn,
+    TopBar `wide` for the IDE window, Page, BottomBar — **fixed at the bottom on every screen
+    size**, a dialog footer: an action must never depend on the page scrolling to be reached;
+    long lists scroll in their own box — banners), `components/ui/` (shadcn,
     added with `npx shadcn@latest add …` in `assets/`; `components.json` maps
     `@/ui/components`, `@/lib/utils`), `strings.ts` (all UI copy, zh-CN). `core/theme.ts`
-    (dark default, light/system), `core/viewport.ts` (phone < 768 ≤ tablet < 1024 ≤ desktop).
+    (**follows the OS by default**, dark/light as explicit choices; `ThemeToggle` in the top
+    bars cycles them; the CSS also honours `prefers-color-scheme` before JS runs),
+    `core/viewport.ts` (phone < 768 ≤ tablet < 1024 ≤ desktop).
     The chat uses **assistant-ui** (`@assistant-ui/react`, `ExternalStoreRuntime`; it has an
     official React Native package) — not AI Elements, not `useChat`. Headers and bars are
     solid (`backdrop-blur` on sticky/fixed bars ghosted text in Chromium screenshots).
@@ -392,7 +396,8 @@ React Native client planned on the same core code.
     (`safe-bottom`) and inline on desktop (`lg:`); touch targets ≥ 44 px (`touch-target`);
     16 px base font (no iOS zoom); the page never scrolls sideways — wide content scrolls
     inside its own box; dark is the default theme, `[data-theme="light"]` the override.
-    `css/app.css`: Tailwind v4 with shadcn token names, **no `@apply`**, no daisyUI.
+    `css/app.css`: Tailwind v4 with shadcn token names, **no `@apply`**, no daisyUI; only
+    `html` gets `overflow-x: hidden` (on body/#app it can steal touch scrolling).
 
 ## Development workflow — TDD is mandatory
 

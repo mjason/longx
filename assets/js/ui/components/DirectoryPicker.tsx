@@ -57,7 +57,7 @@ export function DirectoryPicker({
         </div>
       ) : null}
 
-      <ul className="divide-y rounded-lg border" data-testid="directory-entries" aria-busy={listing.isPending}>
+      <ul className="max-h-[50dvh] divide-y overflow-y-auto rounded-lg border" data-testid="directory-entries" aria-busy={listing.isPending}>
         {listing.data?.parent != null ? (
           <li>
             <button type="button" className="touch-target hover:bg-accent/40 flex w-full items-center gap-3 px-3 py-2 text-left text-sm" onClick={() => onChange(listing.data!.parent!, false)}>
