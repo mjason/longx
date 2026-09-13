@@ -20,6 +20,18 @@ defmodule Longx.AI.SearchTest do
     %{bypass: bypass, target: target}
   end
 
+  defp with_fake_browser do
+    previous = Application.get_env(:longx, Longx.Browser, [])
+
+    Application.put_env(
+      :longx,
+      Longx.Browser,
+      Keyword.put(previous, :executable, Path.expand("test/support/fake_obscura.sh"))
+    )
+
+    on_exit(fn -> Application.put_env(:longx, Longx.Browser, previous) end)
+  end
+
   defp tavily_search(bypass, fun) do
     Bypass.expect(bypass, "POST", "/search", fn conn ->
       {:ok, raw, conn} = Plug.Conn.read_body(conn)
@@ -183,34 +195,13 @@ defmodule Longx.AI.SearchTest do
   end
 
   describe "open" do
-    test "resolves a ref_id from an earlier search in the same session and extracts the page", %{
-      bypass: bypass,
-      target: target
-    } do
+    test "resolves a ref_id from an earlier search in the same session and opens it in the browser",
+         %{
+           bypass: bypass,
+           target: target
+         } do
       tavily_search(bypass, fn _h, _b -> {200, @tavily_results} end)
-
-      Bypass.expect_once(bypass, "POST", "/extract", fn conn ->
-        {:ok, raw, conn} = Plug.Conn.read_body(conn)
-
-        assert %{"urls" => ["http://127.0.0.1:1/blog/1.19"], "format" => "markdown"} =
-                 Jason.decode!(raw)
-
-        conn
-        |> Plug.Conn.put_resp_content_type("application/json")
-        |> Plug.Conn.send_resp(
-          200,
-          Jason.encode!(%{
-            "results" => [
-              %{
-                "url" => "http://127.0.0.1:1/blog/1.19",
-                "raw_content" => "# Elixir 1.19\n\nBig release."
-              }
-            ],
-            "failed_results" => []
-          })
-        )
-      end)
-
+      with_fake_browser()
       session = "session-#{System.unique_integer([:positive])}"
 
       {:ok, _} =
@@ -225,25 +216,15 @@ defmodule Longx.AI.SearchTest do
           target
         )
 
-      assert output =~ "Big release."
+      assert output =~ "<h1>Rendered</h1>"
       assert output =~ "http://127.0.0.1:1/blog/1.19"
       assert [%{type: "open", url: "http://127.0.0.1:1/blog/1.19"}] = results
     end
 
-    test "opens a URL with the headless browser first (rendered, main html for the model)", %{
-      bypass: bypass,
+    test "opens a URL with the headless browser (rendered, main html for the model)", %{
       target: target
     } do
-      previous = Application.get_env(:longx, Longx.Browser, [])
-
-      Application.put_env(
-        :longx,
-        Longx.Browser,
-        Keyword.put(previous, :executable, Path.expand("test/support/fake_obscura.sh"))
-      )
-
-      on_exit(fn -> Application.put_env(:longx, Longx.Browser, previous) end)
-      Bypass.stub(bypass, "POST", "/extract", fn conn -> Plug.Conn.send_resp(conn, 500, "no") end)
+      with_fake_browser()
 
       {:ok, %{output: output, results: [result]}} =
         Search.run(
@@ -257,34 +238,20 @@ defmodule Longx.AI.SearchTest do
       assert %{type: "open", url: "https://spa.test/app", title: "Fake page"} = result
     end
 
-    test "without the browser the provider's extractor opens the page; with neither the model is told",
-         %{
-           bypass: bypass,
-           target: target
-         } do
-      url = "https://spa.test/app"
+    test "a page the browser cannot open is reported to the model, with or without a search provider",
+         %{target: target} do
+      with_fake_browser()
+      url = "https://spa.test/fail"
 
-      Bypass.expect_once(bypass, "POST", "/extract", fn conn ->
-        conn
-        |> Plug.Conn.put_resp_content_type("application/json")
-        |> Plug.Conn.send_resp(
-          200,
-          Jason.encode!(%{
-            "results" => [%{"url" => url, "raw_content" => "via tavily"}],
-            "failed_results" => []
-          })
-        )
-      end)
-
-      {:ok, %{output: output}} =
+      {:ok, %{output: output, results: []}} =
         Search.run(%{"id" => "t", "commands" => %{"open" => [%{"ref_id" => url}]}}, target)
 
-      assert output =~ "via tavily"
+      assert output =~ "connection refused"
 
       {:ok, %{output: output2, results: []}} =
         Search.run(%{"id" => "t", "commands" => %{"open" => [%{"ref_id" => url}]}}, nil)
 
-      assert output2 =~ "no headless browser"
+      assert output2 =~ "connection refused"
     end
 
     test "search_query without a search provider says so instead of failing" do

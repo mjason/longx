@@ -129,8 +129,9 @@ React Native client planned on the same core code.
   `{x86_64,aarch64}-macos` as tar.gz, `x86_64-windows` as zip — `Longx.Bundle` unpacks
   both; upstream publishes no checksums, so the sha256s were computed once when pinning and
   are verified on every fetch), fetched by `mix obscura.fetch` into `priv/obscura/<target>/`
-  (gitignored; in `mix setup`; optional — without it `open` falls back to a plain fetch and
-  the browser tools are unavailable). `LONGX_OBSCURA` overrides. The default (rendering,
+  (gitignored; in `mix setup`; `priv` ships in `mix release`, so CI runs `mix obscura.fetch`
+  before `mix release` — it is part of every release, like codex and git; only windows
+  arm64 has no upstream build). `LONGX_OBSCURA` overrides. The default (rendering,
   no stealth) variant is bundled; `stealth:` is a config flag.
   - `Longx.Browser.fetch(url, format: :html | :markdown | :text, timeout:, wait_until:,
     selector:, wait:, max_bytes:)` — **one short-lived `obscura fetch` process per page**
