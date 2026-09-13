@@ -23,7 +23,8 @@ defmodule Longx.BrowserIntegrationTest do
     Application.put_env(
       :longx,
       Longx.Browser,
-      Keyword.merge(previous, allow_private_network: true)
+      # the unit suite's config hides the real binary; this test wants it (mix obscura.fetch)
+      previous |> Keyword.delete(:executable) |> Keyword.put(:allow_private_network, true)
     )
 
     on_exit(fn -> Application.put_env(:longx, Longx.Browser, previous) end)
