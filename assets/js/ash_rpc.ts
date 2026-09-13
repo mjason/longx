@@ -1039,6 +1039,447 @@ export async function validateSetToolEnabled(
 }
 
 
+export type CreateEntryInput = {
+  projectId: UUID;
+  path: string;
+  kind: "dir" | "file";
+};
+
+export type CreateEntryFields = UnifiedFieldSelection<{name: string, path: string, kind: "dir" | "file", size: number, __type: "TypedMap", __primitiveFields: "name" | "path" | "kind" | "size"}>[];
+
+export type InferCreateEntryResult<
+  Fields extends CreateEntryFields | undefined,
+> = InferResult<{name: string, path: string, kind: "dir" | "file", size: number, __type: "TypedMap", __primitiveFields: "name" | "path" | "kind" | "size"}, Fields>;
+
+export type CreateEntryResult<Fields extends CreateEntryFields | undefined = undefined> = | { success: true; data: InferCreateEntryResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Files
+ *
+ * @ashActionType :action
+ */
+export async function createEntry<Fields extends CreateEntryFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: CreateEntryInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<CreateEntryResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "create_entry",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<CreateEntryResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Files
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateCreateEntry(
+  config: {
+  tenant?: string;
+  input: CreateEntryInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "create_entry",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type DeleteEntryInput = {
+  projectId: UUID;
+  path: string;
+};
+
+export type InferDeleteEntryResult = {};
+
+export type DeleteEntryResult = | { success: true; data: InferDeleteEntryResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Files
+ *
+ * @ashActionType :action
+ */
+export async function deleteEntry(
+  config: {
+  tenant?: string;
+  input: DeleteEntryInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DeleteEntryResult> {
+  const payload = {
+    action: "delete_entry",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<DeleteEntryResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Files
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateDeleteEntry(
+  config: {
+  tenant?: string;
+  input: DeleteEntryInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "delete_entry",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ListFilesInput = {
+  projectId: UUID;
+  path: string;
+};
+
+export type ListFilesFields = UnifiedFieldSelection<{name: string, path: string, kind: "dir" | "file", size: number, __type: "TypedMap", __primitiveFields: "name" | "path" | "kind" | "size"}>[];
+
+export type InferListFilesResult<
+  Fields extends ListFilesFields | undefined,
+> = Array<InferResult<{name: string, path: string, kind: "dir" | "file", size: number, __type: "TypedMap", __primitiveFields: "name" | "path" | "kind" | "size"}, Fields>>;
+
+export type ListFilesResult<Fields extends ListFilesFields | undefined = undefined> = | { success: true; data: InferListFilesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Files
+ *
+ * @ashActionType :action
+ */
+export async function listFiles<Fields extends ListFilesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: ListFilesInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListFilesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "list_files",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ListFilesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Files
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateListFiles(
+  config: {
+  tenant?: string;
+  input: ListFilesInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_files",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ReadFileInput = {
+  projectId: UUID;
+  path: string;
+};
+
+export type ReadFileFields = UnifiedFieldSelection<{path: string, content: string | null, size: number, binary: boolean, truncated: boolean, __type: "TypedMap", __primitiveFields: "path" | "content" | "size" | "binary" | "truncated"}>[];
+
+export type InferReadFileResult<
+  Fields extends ReadFileFields | undefined,
+> = InferResult<{path: string, content: string | null, size: number, binary: boolean, truncated: boolean, __type: "TypedMap", __primitiveFields: "path" | "content" | "size" | "binary" | "truncated"}, Fields>;
+
+export type ReadFileResult<Fields extends ReadFileFields | undefined = undefined> = | { success: true; data: InferReadFileResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Files
+ *
+ * @ashActionType :action
+ */
+export async function readFile<Fields extends ReadFileFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: ReadFileInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ReadFileResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "read_file",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ReadFileResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Files
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateReadFile(
+  config: {
+  tenant?: string;
+  input: ReadFileInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "read_file",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type RenameEntryInput = {
+  projectId: UUID;
+  from: string;
+  to: string;
+};
+
+export type RenameEntryFields = UnifiedFieldSelection<{name: string, path: string, kind: "dir" | "file", size: number, __type: "TypedMap", __primitiveFields: "name" | "path" | "kind" | "size"}>[];
+
+export type InferRenameEntryResult<
+  Fields extends RenameEntryFields | undefined,
+> = InferResult<{name: string, path: string, kind: "dir" | "file", size: number, __type: "TypedMap", __primitiveFields: "name" | "path" | "kind" | "size"}, Fields>;
+
+export type RenameEntryResult<Fields extends RenameEntryFields | undefined = undefined> = | { success: true; data: InferRenameEntryResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Files
+ *
+ * @ashActionType :action
+ */
+export async function renameEntry<Fields extends RenameEntryFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: RenameEntryInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<RenameEntryResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "rename_entry",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<RenameEntryResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Files
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateRenameEntry(
+  config: {
+  tenant?: string;
+  input: RenameEntryInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "rename_entry",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type WriteFileInput = {
+  projectId: UUID;
+  path: string;
+  content: string;
+};
+
+export type InferWriteFileResult = {};
+
+export type WriteFileResult = | { success: true; data: InferWriteFileResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Files
+ *
+ * @ashActionType :action
+ */
+export async function writeFile(
+  config: {
+  tenant?: string;
+  input: WriteFileInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<WriteFileResult> {
+  const payload = {
+    action: "write_file",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<WriteFileResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Files
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateWriteFile(
+  config: {
+  tenant?: string;
+  input: WriteFileInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "write_file",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ListProjectsFields = UnifiedFieldSelection<ProjectResourceSchema>[];
 export type InferListProjectsResult<
   Fields extends ListProjectsFields,
@@ -2091,6 +2532,1226 @@ export async function validateUpdateProject(
     action: "update_project",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     identity: config.identity,
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitBranchesInput = {
+  projectId: UUID;
+};
+
+export type GitBranchesFields = UnifiedFieldSelection<{current: string | null, branches: Array<Record<string, any>>, stashes: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "current" | "branches" | "stashes"}>[];
+
+export type InferGitBranchesResult<
+  Fields extends GitBranchesFields | undefined,
+> = InferResult<{current: string | null, branches: Array<Record<string, any>>, stashes: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "current" | "branches" | "stashes"}, Fields>;
+
+export type GitBranchesResult<Fields extends GitBranchesFields | undefined = undefined> = | { success: true; data: InferGitBranchesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitBranches<Fields extends GitBranchesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: GitBranchesInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitBranchesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "git_branches",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<GitBranchesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitBranches(
+  config: {
+  tenant?: string;
+  input: GitBranchesInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_branches",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitChangesInput = {
+  projectId: UUID;
+};
+
+export type GitChangesFields = UnifiedFieldSelection<{repository: boolean, branch: string | null, head: string | null, changes: Array<Record<string, any>>, ahead: number | null, behind: number | null, remotes: Array<Record<string, any>>, lfs: boolean, __type: "TypedMap", __primitiveFields: "repository" | "branch" | "head" | "changes" | "ahead" | "behind" | "remotes" | "lfs"}>[];
+
+export type InferGitChangesResult<
+  Fields extends GitChangesFields | undefined,
+> = InferResult<{repository: boolean, branch: string | null, head: string | null, changes: Array<Record<string, any>>, ahead: number | null, behind: number | null, remotes: Array<Record<string, any>>, lfs: boolean, __type: "TypedMap", __primitiveFields: "repository" | "branch" | "head" | "changes" | "ahead" | "behind" | "remotes" | "lfs"}, Fields>;
+
+export type GitChangesResult<Fields extends GitChangesFields | undefined = undefined> = | { success: true; data: InferGitChangesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitChanges<Fields extends GitChangesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: GitChangesInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitChangesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "git_changes",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<GitChangesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitChanges(
+  config: {
+  tenant?: string;
+  input: GitChangesInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_changes",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitCommitInput = {
+  projectId: UUID;
+  paths: Array<string>;
+  message: string;
+};
+
+export type GitCommitFields = UnifiedFieldSelection<{sha: string, __type: "TypedMap", __primitiveFields: "sha"}>[];
+
+export type InferGitCommitResult<
+  Fields extends GitCommitFields | undefined,
+> = InferResult<{sha: string, __type: "TypedMap", __primitiveFields: "sha"}, Fields>;
+
+export type GitCommitResult<Fields extends GitCommitFields | undefined = undefined> = | { success: true; data: InferGitCommitResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitCommit<Fields extends GitCommitFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: GitCommitInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitCommitResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "git_commit",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<GitCommitResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitCommit(
+  config: {
+  tenant?: string;
+  input: GitCommitInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_commit",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitCommitFileDiffInput = {
+  projectId: UUID;
+  sha: string;
+  path: string;
+};
+
+export type GitCommitFileDiffFields = UnifiedFieldSelection<{binary: boolean, diff: string, __type: "TypedMap", __primitiveFields: "binary" | "diff"}>[];
+
+export type InferGitCommitFileDiffResult<
+  Fields extends GitCommitFileDiffFields | undefined,
+> = InferResult<{binary: boolean, diff: string, __type: "TypedMap", __primitiveFields: "binary" | "diff"}, Fields>;
+
+export type GitCommitFileDiffResult<Fields extends GitCommitFileDiffFields | undefined = undefined> = | { success: true; data: InferGitCommitFileDiffResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitCommitFileDiff<Fields extends GitCommitFileDiffFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: GitCommitFileDiffInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitCommitFileDiffResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "git_commit_file_diff",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<GitCommitFileDiffResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitCommitFileDiff(
+  config: {
+  tenant?: string;
+  input: GitCommitFileDiffInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_commit_file_diff",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitCreateBranchInput = {
+  projectId: UUID;
+  name: string;
+};
+
+export type InferGitCreateBranchResult = {};
+
+export type GitCreateBranchResult = | { success: true; data: InferGitCreateBranchResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitCreateBranch(
+  config: {
+  tenant?: string;
+  input: GitCreateBranchInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitCreateBranchResult> {
+  const payload = {
+    action: "git_create_branch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<GitCreateBranchResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitCreateBranch(
+  config: {
+  tenant?: string;
+  input: GitCreateBranchInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_create_branch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitDeleteBranchInput = {
+  projectId: UUID;
+  name: string;
+  force?: boolean | null;
+};
+
+export type InferGitDeleteBranchResult = {};
+
+export type GitDeleteBranchResult = | { success: true; data: InferGitDeleteBranchResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitDeleteBranch(
+  config: {
+  tenant?: string;
+  input: GitDeleteBranchInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitDeleteBranchResult> {
+  const payload = {
+    action: "git_delete_branch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<GitDeleteBranchResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitDeleteBranch(
+  config: {
+  tenant?: string;
+  input: GitDeleteBranchInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_delete_branch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitDiscardInput = {
+  projectId: UUID;
+  paths: Array<string>;
+};
+
+export type InferGitDiscardResult = {};
+
+export type GitDiscardResult = | { success: true; data: InferGitDiscardResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitDiscard(
+  config: {
+  tenant?: string;
+  input: GitDiscardInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitDiscardResult> {
+  const payload = {
+    action: "git_discard",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<GitDiscardResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitDiscard(
+  config: {
+  tenant?: string;
+  input: GitDiscardInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_discard",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitFetchInput = {
+  projectId: UUID;
+};
+
+export type InferGitFetchResult = {};
+
+export type GitFetchResult = | { success: true; data: InferGitFetchResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitFetch(
+  config: {
+  tenant?: string;
+  input: GitFetchInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitFetchResult> {
+  const payload = {
+    action: "git_fetch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<GitFetchResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitFetch(
+  config: {
+  tenant?: string;
+  input: GitFetchInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_fetch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitFileDiffInput = {
+  projectId: UUID;
+  path: string;
+};
+
+export type GitFileDiffFields = UnifiedFieldSelection<{binary: boolean, diff: string, __type: "TypedMap", __primitiveFields: "binary" | "diff"}>[];
+
+export type InferGitFileDiffResult<
+  Fields extends GitFileDiffFields | undefined,
+> = InferResult<{binary: boolean, diff: string, __type: "TypedMap", __primitiveFields: "binary" | "diff"}, Fields>;
+
+export type GitFileDiffResult<Fields extends GitFileDiffFields | undefined = undefined> = | { success: true; data: InferGitFileDiffResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitFileDiff<Fields extends GitFileDiffFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: GitFileDiffInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitFileDiffResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "git_file_diff",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<GitFileDiffResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitFileDiff(
+  config: {
+  tenant?: string;
+  input: GitFileDiffInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_file_diff",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitLogInput = {
+  projectId: UUID;
+  limit?: number | null;
+  skip?: number | null;
+};
+
+export type GitLogFields = UnifiedFieldSelection<{sha: string, subject: string, author: string, email: string, at: UtcDateTime, __type: "TypedMap", __primitiveFields: "sha" | "subject" | "author" | "email" | "at"}>[];
+
+export type InferGitLogResult<
+  Fields extends GitLogFields | undefined,
+> = Array<InferResult<{sha: string, subject: string, author: string, email: string, at: UtcDateTime, __type: "TypedMap", __primitiveFields: "sha" | "subject" | "author" | "email" | "at"}, Fields>>;
+
+export type GitLogResult<Fields extends GitLogFields | undefined = undefined> = | { success: true; data: InferGitLogResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitLog<Fields extends GitLogFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: GitLogInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitLogResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "git_log",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<GitLogResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitLog(
+  config: {
+  tenant?: string;
+  input: GitLogInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_log",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitPullInput = {
+  projectId: UUID;
+};
+
+export type InferGitPullResult = {};
+
+export type GitPullResult = | { success: true; data: InferGitPullResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitPull(
+  config: {
+  tenant?: string;
+  input: GitPullInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitPullResult> {
+  const payload = {
+    action: "git_pull",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<GitPullResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitPull(
+  config: {
+  tenant?: string;
+  input: GitPullInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_pull",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitPushInput = {
+  projectId: UUID;
+};
+
+export type InferGitPushResult = {};
+
+export type GitPushResult = | { success: true; data: InferGitPushResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitPush(
+  config: {
+  tenant?: string;
+  input: GitPushInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitPushResult> {
+  const payload = {
+    action: "git_push",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<GitPushResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitPush(
+  config: {
+  tenant?: string;
+  input: GitPushInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_push",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitSetRemoteInput = {
+  projectId: UUID;
+  name: string;
+  url: string;
+};
+
+export type InferGitSetRemoteResult = {};
+
+export type GitSetRemoteResult = | { success: true; data: InferGitSetRemoteResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitSetRemote(
+  config: {
+  tenant?: string;
+  input: GitSetRemoteInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitSetRemoteResult> {
+  const payload = {
+    action: "git_set_remote",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<GitSetRemoteResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitSetRemote(
+  config: {
+  tenant?: string;
+  input: GitSetRemoteInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_set_remote",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitShowInput = {
+  projectId: UUID;
+  sha: string;
+};
+
+export type GitShowFields = UnifiedFieldSelection<{sha: string, subject: string, body: string, author: string, email: string, at: UtcDateTime, parents: Array<string>, files: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "sha" | "subject" | "body" | "author" | "email" | "at" | "parents" | "files"}>[];
+
+export type InferGitShowResult<
+  Fields extends GitShowFields | undefined,
+> = InferResult<{sha: string, subject: string, body: string, author: string, email: string, at: UtcDateTime, parents: Array<string>, files: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "sha" | "subject" | "body" | "author" | "email" | "at" | "parents" | "files"}, Fields>;
+
+export type GitShowResult<Fields extends GitShowFields | undefined = undefined> = | { success: true; data: InferGitShowResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitShow<Fields extends GitShowFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: GitShowInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitShowResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "git_show",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<GitShowResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitShow(
+  config: {
+  tenant?: string;
+  input: GitShowInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_show",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitStashPopInput = {
+  projectId: UUID;
+};
+
+export type InferGitStashPopResult = {};
+
+export type GitStashPopResult = | { success: true; data: InferGitStashPopResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitStashPop(
+  config: {
+  tenant?: string;
+  input: GitStashPopInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitStashPopResult> {
+  const payload = {
+    action: "git_stash_pop",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<GitStashPopResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitStashPop(
+  config: {
+  tenant?: string;
+  input: GitStashPopInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_stash_pop",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitSwitchInput = {
+  projectId: UUID;
+  name: string;
+  stash?: boolean | null;
+};
+
+export type InferGitSwitchResult = {};
+
+export type GitSwitchResult = | { success: true; data: InferGitSwitchResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitSwitch(
+  config: {
+  tenant?: string;
+  input: GitSwitchInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitSwitchResult> {
+  const payload = {
+    action: "git_switch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<GitSwitchResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitSwitch(
+  config: {
+  tenant?: string;
+  input: GitSwitchInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_switch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GitUndoCommitInput = {
+  projectId: UUID;
+};
+
+export type GitUndoCommitFields = UnifiedFieldSelection<{sha: string, __type: "TypedMap", __primitiveFields: "sha"}>[];
+
+export type InferGitUndoCommitResult<
+  Fields extends GitUndoCommitFields | undefined,
+> = InferResult<{sha: string, __type: "TypedMap", __primitiveFields: "sha"}, Fields>;
+
+export type GitUndoCommitResult<Fields extends GitUndoCommitFields | undefined = undefined> = | { success: true; data: InferGitUndoCommitResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Repo
+ *
+ * @ashActionType :action
+ */
+export async function gitUndoCommit<Fields extends GitUndoCommitFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: GitUndoCommitInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GitUndoCommitResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "git_undo_commit",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<GitUndoCommitResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Repo
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGitUndoCommit(
+  config: {
+  tenant?: string;
+  input: GitUndoCommitInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "git_undo_commit",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };
 

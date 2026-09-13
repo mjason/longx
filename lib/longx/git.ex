@@ -26,7 +26,20 @@ defmodule Longx.Git do
 
   @type change :: %{path: String.t(), status: atom}
   @type status :: %{clean?: boolean, changes: [change]}
-  @type log_entry :: %{sha: String.t(), subject: String.t(), author: String.t(), at: DateTime.t()}
+  @type log_entry :: %{
+          sha: String.t(),
+          subject: String.t(),
+          author: String.t(),
+          email: String.t(),
+          at: DateTime.t()
+        }
+  @type file_diff :: %{binary: boolean, diff: String.t()}
+  @type branch :: %{
+          name: String.t(),
+          sha: String.t(),
+          current: boolean,
+          upstream: String.t() | nil
+        }
 
   # Identity for commits Longx makes when the user has none configured.
   @fallback_identity ["-c", "user.name=Longx", "-c", "user.email=longx@localhost"]
@@ -196,13 +209,22 @@ defmodule Longx.Git do
     match?({:ok, _}, run(["config", "--get", "user.email"], cd: dir, env: env))
   end
 
+  @doc "Newest first; `limit:` (50) and `skip:` (0) page through the history."
   @spec log(Path.t(), keyword) :: [log_entry]
   def log(dir, opts \\ []) do
     limit = Keyword.get(opts, :limit, 50)
+    skip = Keyword.get(opts, :skip, 0)
 
-    case run(["log", "-z", "--format=%H%x1f%s%x1f%an%x1f%aI", "-n", Integer.to_string(limit)],
-           cd: dir
-         ) do
+    args = [
+      "log",
+      "-z",
+      "--format=%H%x1f%s%x1f%an%x1f%ae%x1f%aI",
+      "-n",
+      Integer.to_string(limit),
+      "--skip=#{skip}"
+    ]
+
+    case run(args, cd: dir) do
       {:ok, %{stdout: ""}} ->
         []
 
@@ -210,14 +232,317 @@ defmodule Longx.Git do
         out
         |> String.split(<<0>>, trim: true)
         |> Enum.map(fn line ->
-          [sha, subject, author, at] = String.split(line, <<0x1F>>, parts: 4)
+          [sha, subject, author, email, at] = String.split(line, <<0x1F>>, parts: 5)
           {:ok, at, _} = DateTime.from_iso8601(at)
-          %{sha: sha, subject: subject, author: author, at: at}
+          %{sha: sha, subject: subject, author: author, email: email, at: at}
         end)
 
       {:error, %Error{status: 128}} ->
         []
     end
+  end
+
+  @doc """
+  One commit for the history view: message (subject + body), author, time,
+  parents and the files it touched with their status.
+  """
+  @spec show(Path.t(), String.t()) ::
+          %{
+            sha: String.t(),
+            subject: String.t(),
+            body: String.t(),
+            author: String.t(),
+            email: String.t(),
+            at: DateTime.t(),
+            parents: [String.t()],
+            files: [change]
+          }
+          | {:error, term}
+  def show(dir, sha) do
+    format = "--format=%H%x1f%s%x1f%b%x1f%an%x1f%ae%x1f%aI%x1f%P%x1e"
+
+    with {:ok, %{stdout: out}} <-
+           run(["show", "--name-status", "-z", format, "--no-color", sha], cd: dir),
+         [header, files] <- String.split(out, <<0x1E>>, parts: 2) do
+      [sha, subject, body, author, email, at, parents] = String.split(header, <<0x1F>>, parts: 7)
+      {:ok, at, _} = DateTime.from_iso8601(at)
+
+      %{
+        sha: sha,
+        subject: subject,
+        body: String.trim(body),
+        author: author,
+        email: email,
+        at: at,
+        parents: String.split(parents, " ", trim: true),
+        # the file list starts after a NUL and a newline
+        files: files |> String.trim_leading(<<0>>) |> String.trim_leading() |> parse_name_status()
+      }
+    else
+      {:error, _} = error -> error
+      _ -> {:error, :unparsable}
+    end
+  end
+
+  # `--name-status -z`: STATUS NUL PATH NUL (renames / copies: STATUS NUL OLD NUL NEW NUL)
+  defp parse_name_status(out), do: out |> String.split(<<0>>, trim: true) |> name_status([])
+
+  defp name_status([], acc), do: Enum.reverse(acc)
+
+  defp name_status([<<code, _::binary>>, _old, new | rest], acc) when code in [?R, ?C],
+    do: name_status(rest, [%{path: new, status: Map.fetch!(@status_codes, <<code>>)} | acc])
+
+  defp name_status([<<code, _::binary>>, path | rest], acc),
+    do:
+      name_status(rest, [%{path: path, status: Map.get(@status_codes, <<code>>, :unknown)} | acc])
+
+  defp name_status([_dangling], acc), do: Enum.reverse(acc)
+
+  @doc "What one commit did to one file (the root commit against the empty tree)."
+  @spec commit_file_diff(Path.t(), String.t(), String.t()) :: file_diff | {:error, term}
+  def commit_file_diff(dir, sha, path) do
+    case run(["show", "--format=", "--no-color", sha, "--", path], cd: dir) do
+      {:ok, %{stdout: out}} -> as_file_diff(out)
+      {:error, _} = error -> error
+    end
+  end
+
+  @doc """
+  The working tree's change to one file against HEAD: a modified, deleted or
+  untracked file (the latter diffed against nothing). `binary` when git
+  cannot show it as text.
+  """
+  @spec file_diff(Path.t(), String.t()) :: file_diff
+  def file_diff(dir, path) do
+    tracked? = match?({:ok, _}, run(["ls-files", "--error-unmatch", "--", path], cd: dir))
+
+    if tracked? do
+      case run(["diff", "--no-color", "HEAD", "--", path], cd: dir) do
+        {:ok, %{stdout: out}} -> as_file_diff(out)
+        {:error, %Error{stdout: out}} -> as_file_diff(out)
+      end
+    else
+      # git diff --no-index exits 1 when the files differ, which they do
+      case run(["diff", "--no-color", "--no-index", "--", "/dev/null", path], cd: dir) do
+        {:ok, %{stdout: out}} -> as_file_diff(out)
+        {:error, %Error{status: 1, stdout: out}} -> as_file_diff(out)
+        {:error, %Error{}} -> %{binary: false, diff: ""}
+      end
+    end
+  end
+
+  defp as_file_diff(out), do: %{binary: String.contains?(out, "Binary files"), diff: out}
+
+  @doc """
+  Commits the named paths only (untracked ones included, deletions too);
+  the other changes stay in the working tree. `{:error, :nothing_to_commit}`
+  when the paths carry no change. Uses Longx's identity if the user has none.
+  """
+  @spec commit(Path.t(), String.t(), keyword) ::
+          {:ok, String.t()} | {:error, :nothing_to_commit | term}
+  def commit(dir, message, opts) do
+    paths = Keyword.fetch!(opts, :paths)
+    env = Keyword.get(opts, :env, [])
+    identity = if configured_identity?(dir, env), do: [], else: @fallback_identity
+
+    with {:ok, _} <- run(["add", "-A", "--"] ++ paths, cd: dir, env: env),
+         {:ok, _} <-
+           run(["diff", "--cached", "--quiet", "--"] ++ paths, cd: dir, env: env)
+           |> nothing_when_clean(),
+         {:ok, _} <-
+           run(identity ++ ["commit", "-q", "-m", message, "--"] ++ paths, cd: dir, env: env) do
+      head(dir)
+    end
+  end
+
+  # `diff --quiet` exits 0 when nothing differs, 1 when something does
+  defp nothing_when_clean({:ok, _}), do: {:error, :nothing_to_commit}
+  defp nothing_when_clean({:error, %Error{status: 1}}), do: {:ok, :changes}
+  defp nothing_when_clean(other), do: other
+
+  @doc "Puts the named tracked files back to HEAD and removes the named untracked ones."
+  @spec discard(Path.t(), [String.t()]) :: :ok | {:error, term}
+  def discard(dir, paths) do
+    {tracked, untracked} =
+      Enum.split_with(
+        paths,
+        &match?({:ok, _}, run(["ls-files", "--error-unmatch", "--", &1], cd: dir))
+      )
+
+    with {:ok, _} <- restore_paths(dir, tracked),
+         {:ok, _} <- clean_paths(dir, untracked),
+         do: :ok
+  end
+
+  defp restore_paths(_dir, []), do: {:ok, :none}
+
+  defp restore_paths(dir, paths),
+    do: run(["restore", "--source=HEAD", "--staged", "--worktree", "--"] ++ paths, cd: dir)
+
+  defp clean_paths(_dir, []), do: {:ok, :none}
+  defp clean_paths(dir, paths), do: run(["clean", "-f", "--"] ++ paths, cd: dir)
+
+  @doc """
+  Takes the last commit back into the working tree (its changes stay, as
+  changes): `reset --soft HEAD~1`. The root commit cannot be undone.
+  """
+  @spec undo_commit(Path.t()) :: {:ok, String.t()} | {:error, :root_commit | term}
+  def undo_commit(dir) do
+    case run(["rev-parse", "--verify", "-q", "HEAD~1"], cd: dir) do
+      {:ok, %{stdout: parent}} ->
+        with {:ok, _} <- run(["reset", "-q", "--soft", "HEAD~1"], cd: dir),
+             do: {:ok, String.trim(parent)}
+
+      {:error, %Error{status: 1}} ->
+        {:error, :root_commit}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  ## Branches
+
+  @doc "Local branches with the current one marked (`current: nil` when HEAD is detached)."
+  @spec branches(Path.t()) :: %{current: String.t() | nil, branches: [branch]}
+  def branches(dir) do
+    current =
+      case run(["symbolic-ref", "--short", "-q", "HEAD"], cd: dir) do
+        {:ok, %{stdout: out}} -> String.trim(out)
+        {:error, _} -> nil
+      end
+
+    branches =
+      [
+        "for-each-ref",
+        "--format=%(refname:short)%1f%(objectname)%1f%(upstream:short)",
+        "refs/heads"
+      ]
+      |> stdout!(cd: dir)
+      |> String.split("\n", trim: true)
+      |> Enum.map(fn line ->
+        [name, sha, upstream] = String.split(line, <<0x1F>>, parts: 3)
+
+        %{
+          name: name,
+          sha: sha,
+          current: name == current,
+          upstream: if(upstream == "", do: nil, else: upstream)
+        }
+      end)
+
+    %{current: current, branches: branches}
+  end
+
+  @spec create_branch(Path.t(), String.t()) :: :ok | {:error, term}
+  def create_branch(dir, name) do
+    with {:ok, _} <- run(["switch", "-q", "-c", name], cd: dir), do: :ok
+  end
+
+  @doc "Checks the branch out; fails (rather than carrying changes over) when they are in the way."
+  @spec switch(Path.t(), String.t()) :: :ok | {:error, term}
+  def switch(dir, name) do
+    with {:ok, _} <- run(["switch", "-q", name], cd: dir), do: :ok
+  end
+
+  @spec delete_branch(Path.t(), String.t(), keyword) :: :ok | {:error, term}
+  def delete_branch(dir, name, opts \\ []) do
+    flag = if Keyword.get(opts, :force, false), do: "-D", else: "-d"
+    with {:ok, _} <- run(["branch", "-q", flag, name], cd: dir), do: :ok
+  end
+
+  @doc "Sets the working tree aside (untracked files too) so a branch can be switched."
+  @spec stash(Path.t(), String.t()) :: :ok | {:error, term}
+  def stash(dir, message) do
+    with {:ok, _} <- run(["stash", "push", "-q", "-u", "-m", message], cd: dir), do: :ok
+  end
+
+  @spec stash_pop(Path.t()) :: :ok | {:error, term}
+  def stash_pop(dir) do
+    with {:ok, _} <- run(["stash", "pop", "-q"], cd: dir), do: :ok
+  end
+
+  @spec stashes(Path.t()) :: [%{index: non_neg_integer, message: String.t()}]
+  def stashes(dir) do
+    ["stash", "list", "--format=%gd%x1f%gs"]
+    |> stdout!(cd: dir)
+    |> String.split("\n", trim: true)
+    |> Enum.with_index()
+    |> Enum.map(fn {line, index} ->
+      [_ref, message] = String.split(line, <<0x1F>>, parts: 2)
+      %{index: index, message: message}
+    end)
+  end
+
+  ## Remotes
+
+  @remote_timeout 120_000
+
+  @spec remotes(Path.t()) :: [%{name: String.t(), url: String.t()}]
+  def remotes(dir) do
+    ["remote", "-v"]
+    |> stdout!(cd: dir)
+    |> String.split("\n", trim: true)
+    |> Enum.flat_map(fn line ->
+      case String.split(line, ~r/\s+/, parts: 3) do
+        [name, url, "(fetch)"] -> [%{name: name, url: url}]
+        _ -> []
+      end
+    end)
+  end
+
+  @doc "Adds the remote, or points an existing one at `url`."
+  @spec set_remote(Path.t(), String.t(), String.t()) :: :ok | {:error, term}
+  def set_remote(dir, name, url) do
+    if Enum.any?(remotes(dir), &(&1.name == name)) do
+      with {:ok, _} <- run(["remote", "set-url", name, url], cd: dir), do: :ok
+    else
+      with {:ok, _} <- run(["remote", "add", name, url], cd: dir), do: :ok
+    end
+  end
+
+  @doc "Commits ahead of / behind the upstream, or nil without one."
+  @spec ahead_behind(Path.t()) :: %{ahead: non_neg_integer, behind: non_neg_integer} | nil
+  def ahead_behind(dir) do
+    case run(["rev-list", "--left-right", "--count", "@{u}...HEAD"], cd: dir) do
+      {:ok, %{stdout: out}} ->
+        [behind, ahead] =
+          out |> String.trim() |> String.split(~r/\s+/) |> Enum.map(&String.to_integer/1)
+
+        %{ahead: ahead, behind: behind}
+
+      {:error, _} ->
+        nil
+    end
+  end
+
+  @spec fetch(Path.t()) :: :ok | {:error, term}
+  def fetch(dir) do
+    with {:ok, _} <- run(["fetch", "-q", "--prune"], cd: dir, timeout: @remote_timeout), do: :ok
+  end
+
+  @spec pull(Path.t()) :: :ok | {:error, term}
+  def pull(dir) do
+    with {:ok, _} <- run(["pull", "-q", "--no-rebase"], cd: dir, timeout: @remote_timeout),
+         do: :ok
+  end
+
+  @doc "Pushes the current branch, setting its upstream on `origin` the first time."
+  @spec push(Path.t()) :: :ok | {:error, term}
+  def push(dir) do
+    args =
+      case branches(dir) do
+        %{current: nil} ->
+          ["push", "-q"]
+
+        %{current: name, branches: branches} ->
+          case Enum.find(branches, &(&1.name == name)) do
+            %{upstream: nil} -> ["push", "-q", "-u", "origin", name]
+            _ -> ["push", "-q"]
+          end
+      end
+
+    with {:ok, _} <- run(args, cd: dir, timeout: @remote_timeout), do: :ok
   end
 
   @doc "Unified diff between `from` and `to` (default: the working tree)."

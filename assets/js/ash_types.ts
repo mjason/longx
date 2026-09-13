@@ -113,6 +113,20 @@ export type ToolAttributesOnlySchema = {
 };
 
 
+// ProjectFiles Schema
+export type ProjectFilesResourceSchema = {
+  __type: "Resource";
+  __primitiveFields: never;
+};
+
+
+
+export type ProjectFilesAttributesOnlySchema = {
+  __type: "Resource";
+  __primitiveFields: never;
+};
+
+
 // Project Schema
 export type ProjectResourceSchema = {
   __type: "Resource";
@@ -159,6 +173,20 @@ export type ProjectAttributesOnlySchema = {
   tools: Array<string>;
   updatedAt: UtcDateTimeUsec;
   webSearch: boolean;
+};
+
+
+// ProjectRepo Schema
+export type ProjectRepoResourceSchema = {
+  __type: "Resource";
+  __primitiveFields: never;
+};
+
+
+
+export type ProjectRepoAttributesOnlySchema = {
+  __type: "Resource";
+  __primitiveFields: never;
 };
 
 
@@ -643,6 +671,14 @@ export type ToolFilterInput = {
 
 
 };
+export type ProjectFilesFilterInput = {
+  and?: Array<ProjectFilesFilterInput>;
+  or?: Array<ProjectFilesFilterInput>;
+  not?: Array<ProjectFilesFilterInput>;
+
+
+
+};
 export type ProjectFilterInput = {
   and?: Array<ProjectFilterInput>;
   or?: Array<ProjectFilterInput>;
@@ -820,6 +856,14 @@ export type ProjectFilterInput = {
   };
 
   model?: ModelFilterInput;
+
+};
+export type ProjectRepoFilterInput = {
+  and?: Array<ProjectRepoFilterInput>;
+  or?: Array<ProjectRepoFilterInput>;
+  not?: Array<ProjectRepoFilterInput>;
+
+
 
 };
 export type ThreadFilterInput = {
@@ -1245,8 +1289,10 @@ export type ProviderFilterField = (typeof providerFilterFields)[number];
 export const toolFilterFields = ["enabled", "id", "insertedAt", "name", "namespace", "updatedAt"] as const;
 export type ToolFilterField = (typeof toolFilterFields)[number];
 
+
 export const projectFilterFields = ["approvalPolicy", "archivedAt", "description", "dirtyStart", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "rootPath", "sandbox", "slug", "tools", "updatedAt", "webSearch", "model"] as const;
 export type ProjectFilterField = (typeof projectFilterFields)[number];
+
 
 export const threadFilterFields = ["agentPath", "approvalPolicy", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "modelSlug", "multiAgent", "networkAccess", "parentThreadId", "preview", "projectId", "sandbox", "status", "title", "tools", "updatedAt", "webSearch", "forkedFrom", "parentThread", "project"] as const;
 export type ThreadFilterField = (typeof threadFilterFields)[number];
@@ -1265,8 +1311,10 @@ export type ProviderSortField = (typeof providerSortFields)[number];
 export const toolSortFields = ["enabled", "id", "insertedAt", "name", "namespace", "updatedAt"] as const;
 export type ToolSortField = (typeof toolSortFields)[number];
 
+
 export const projectSortFields = ["approvalPolicy", "archivedAt", "description", "dirtyStart", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "rootPath", "sandbox", "slug", "tools", "updatedAt", "webSearch"] as const;
 export type ProjectSortField = (typeof projectSortFields)[number];
+
 
 export const threadSortFields = ["agentPath", "approvalPolicy", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "modelSlug", "multiAgent", "networkAccess", "parentThreadId", "preview", "projectId", "sandbox", "status", "title", "tools", "updatedAt", "webSearch"] as const;
 export type ThreadSortField = (typeof threadSortFields)[number];

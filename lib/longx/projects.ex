@@ -43,6 +43,35 @@ defmodule Longx.Projects do
       rpc_action :delete_thread, :delete_thread
     end
 
+    resource Longx.Projects.Files do
+      rpc_action :list_files, :list_files
+      rpc_action :read_file, :read_file
+      rpc_action :write_file, :write_file
+      rpc_action :create_entry, :create_entry
+      rpc_action :rename_entry, :rename_entry
+      rpc_action :delete_entry, :delete_entry
+    end
+
+    resource Longx.Projects.Repo do
+      rpc_action :git_changes, :git_changes
+      rpc_action :git_file_diff, :git_file_diff
+      rpc_action :git_commit, :git_commit
+      rpc_action :git_discard, :git_discard
+      rpc_action :git_undo_commit, :git_undo_commit
+      rpc_action :git_log, :git_log
+      rpc_action :git_show, :git_show
+      rpc_action :git_commit_file_diff, :git_commit_file_diff
+      rpc_action :git_branches, :git_branches
+      rpc_action :git_create_branch, :git_create_branch
+      rpc_action :git_switch, :git_switch
+      rpc_action :git_delete_branch, :git_delete_branch
+      rpc_action :git_stash_pop, :git_stash_pop
+      rpc_action :git_set_remote, :git_set_remote
+      rpc_action :git_fetch, :git_fetch
+      rpc_action :git_pull, :git_pull
+      rpc_action :git_push, :git_push
+    end
+
     resource Longx.Projects.Turn do
       rpc_action :list_turns, :for_thread
       rpc_action :restore_proposal, :restore_proposal
@@ -72,6 +101,9 @@ defmodule Longx.Projects do
       define :list_threads_with_status, action: :with_status, args: [:project_id, :status]
       define :list_subagents, action: :subagents_of, args: [:parent_thread_id]
     end
+
+    resource Longx.Projects.Files
+    resource Longx.Projects.Repo
 
     resource Longx.Projects.Turn do
       define :create_turn, action: :create
