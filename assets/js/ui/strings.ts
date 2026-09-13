@@ -98,7 +98,7 @@ export const t = {
   // chat
   welcomeChat: "让 agent 在这个项目里干活",
   welcomeChatHint: "描述要做的事；命令、改动和审批都会显示在这里。",
-  composerPlaceholder: "输入消息… (Enter 发送，Shift+Enter 换行)",
+  composerPlaceholder: "随心输入",
   send: "发送",
   stopTurn: "停止",
   scrollToBottom: "回到底部",

@@ -54,7 +54,7 @@ export function rpcMock() {
 
 export const model = (n: number, extra: Partial<{ slug: string; default: boolean; name: string }> = {}) => ({
   id: `m${n}`, name: extra.name ?? `Model ${n}`, slug: extra.slug ?? `model-${n}`, default: extra.default ?? n === 1,
-  provider: { name: "Prov" },
+  reasoningEffort: n === 1 ? "medium" : null, provider: { name: "Prov" },
 });
 
 /**

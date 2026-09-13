@@ -444,7 +444,9 @@ React Native client planned on the same core code.
     share one runtime: `useCodexRuntime` + `AssistantRuntimeProvider` with `chatConfig` +
     the `DirtyTreeDialog`; `useChat()` reads it), `ThreadPage` (routes `/p/:slug` — a new
     chat whose first message creates the thread — and `/p/:slug/t/:threadId`; Thread
-    element + `TurnBar` with the per-turn model), `toolkit.tsx` (`defineToolkit` with
+    element; the composer rail is Codex's: `ComposerLeading` (the project's access mode →
+    settings, and the turn's state) / `ComposerTrailing` (the per-turn model with its
+    reasoning effort) are slots our `thread.aui` copy adds), `toolkit.tsx` (`defineToolkit` with
     `type: "backend"`, `display: "standalone"` renderers per codex item type —
     `CommandExecutionTool`, `FileChangeTool` (`parseDiff`), `WebSearchTool`,
     `QuestionsTool` (answers via `s.thread.extras.answerRequest`) — registered through

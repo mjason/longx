@@ -28,7 +28,15 @@ const ICONS: Record<Tool, typeof MessagesSquare> = {
   files: FolderTree,
 };
 
-export type ProjectContext = { id: string; slug: string; name: string; rootPath: string; sample: CodexSample | null };
+export type ProjectContext = {
+  id: string;
+  slug: string;
+  name: string;
+  rootPath: string;
+  sandbox: string;
+  approvalPolicy: string;
+  sample: CodexSample | null;
+};
 
 /**
  * The IDE frame with chat in the middle. Desktop: icon rail + docked,
@@ -82,7 +90,15 @@ export function ProjectWindow() {
   if (project.isPending) return <Skeleton className="m-4 h-32" />;
   if (project.isError) return <p role="alert" className="text-destructive p-4">{project.error.message}</p>;
 
-  const ctx: ProjectContext = { id: project.data.id, slug, name: project.data.name, rootPath: project.data.rootPath, sample };
+  const ctx: ProjectContext = {
+    id: project.data.id,
+    slug,
+    name: project.data.name,
+    rootPath: project.data.rootPath,
+    sandbox: project.data.sandbox,
+    approvalPolicy: project.data.approvalPolicy,
+    sample,
+  };
 
   return (
     // fixed height: the chat scrolls inside its own viewport, not the page

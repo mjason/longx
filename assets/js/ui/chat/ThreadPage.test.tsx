@@ -55,7 +55,7 @@ describe("ThreadPage", () => {
     await open();
     await user.click(screen.getByTestId("model-picker"));
     await user.click(await screen.findByRole("option", { name: /glm-5/ }));
-    await user.type(screen.getByRole("textbox", { name: /消息/ }), "next step{Enter}");
+    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "next step{Enter}");
     await waitFor(() =>
       expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", text: "next step", model: "glm-5" } })),
     );
@@ -83,7 +83,7 @@ describe("ThreadPage", () => {
     } as never);
     await open();
     expect(screen.getByRole("alert")).toHaveTextContent("codex 已不认识这个会话");
-    expect(screen.getByRole("textbox", { name: /消息/ })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "随心输入" })).toBeDisabled();
   });
 
   test("the project route is a new chat: the first message creates the thread and opens it", async () => {
@@ -91,7 +91,7 @@ describe("ThreadPage", () => {
     const { router } = renderAt("/p/app-1");
     await screen.findByText("让 agent 在这个项目里干活");
     expect(channel.topics.filter((t) => t.startsWith("thread:"))).toEqual([]);
-    await user.type(screen.getByRole("textbox", { name: /消息/ }), "start here{Enter}");
+    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "start here{Enter}");
     await waitFor(() => expect(startThread).toHaveBeenCalled());
     await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t2", text: "start here" } })));
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t2"));
@@ -104,7 +104,7 @@ describe("ThreadPage", () => {
     } as never);
     await open();
     expect(screen.getByRole("alert")).toHaveTextContent("codex 断开了");
-    const box = screen.getByRole("textbox", { name: /消息/ });
+    const box = screen.getByRole("textbox", { name: "随心输入" });
     expect(box).toBeEnabled();
     expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
   });
@@ -140,7 +140,7 @@ describe("ThreadPage", () => {
     const user = userEvent.setup();
     await open();
     act(() => channel.deliver("codex", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } }));
-    await user.type(screen.getByRole("textbox", { name: /消息/ }), "and then this{Enter}");
+    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "and then this{Enter}");
     expect(sendMessage).not.toHaveBeenCalled();
     act(() => channel.deliver("codex", { seq: 5, method: "turn/completed", params: { turn: { id: "turn_2", status: "completed" } } }));
     await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", text: "and then this" } })));

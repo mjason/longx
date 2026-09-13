@@ -117,7 +117,7 @@ export function useThreads(id: string | undefined) {
   });
 }
 
-export const modelFields: ListModelsFields = ["id", "name", "slug", "default", { provider: ["name"] }];
+export const modelFields: ListModelsFields = ["id", "name", "slug", "default", "reasoningEffort", { provider: ["name"] }];
 
 /** The models a turn can pick from (Longx.AI); slug is what codex is told. */
 export function useModels() {

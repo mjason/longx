@@ -2,7 +2,7 @@ import { Thread, type ThreadComponents } from "@/ui/components/assistant-ui/elem
 import { Alert, AlertDescription } from "@/ui/components/ui/alert";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
-import { TurnBar } from "./TurnBar";
+import { ComposerLeading, ComposerTrailing } from "./TurnBar";
 
 const Welcome = () => (
   <div className="mb-6 flex flex-col items-center px-4 text-center">
@@ -12,7 +12,7 @@ const Welcome = () => (
 );
 
 // module scope: a new object per render would remount every message
-const THREAD_COMPONENTS: ThreadComponents = { Welcome };
+const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing };
 
 /**
  * The centre of the project window: assistant-ui's Thread element over the
@@ -49,7 +49,6 @@ export function ThreadPage() {
       <div className="min-h-0 flex-1">
         <Thread components={THREAD_COMPONENTS} autoFocus={false} />
       </div>
-      <TurnBar state={chat.state} threadModel={chat.thread?.modelSlug ?? null} model={chat.model} onModel={chat.setModel} />
     </div>
   );
 }
