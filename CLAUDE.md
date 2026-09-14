@@ -782,6 +782,21 @@ Key patterns:
 - Tool UI: toolkit `render` per tool name; `display: "standalone"` keeps a tool out of the
   collapsible trace group (commands / file changes are "informing the user", not a trace).
 
+## Releases
+
+`MIX_ENV=prod mix assets.build && MIX_ENV=prod mix release` builds a self-contained
+release; `mix.exs`'s release step `bundles/1` recopies `priv/{codex,git,obscura}` with
+their symlinks (a plain copy turns git's 145 builtin links into 700 MB) and drops
+`priv/plts`. `config/runtime.exs` (prod) needs only `LONGX_DATA_DIR`: the database, codex's
+home and the two secrets live there — `secret_key_base` and `cloak_key` are generated on
+first boot into 0600 files unless given as env vars; `PORT` (7788), `PHX_HOST`; the
+release serves plain http itself (`server: true`, no `force_ssl` — TLS is a proxy's job).
+`.github/workflows/ci.yml` runs the precommit set on every push / PR (bundled git and
+codex fetched and cached; `:integration` stays excluded); `release.yml` builds on a
+`v*` tag for linux x86_64 and arm64, each natively on its own runner
+(`ubuntu-24.04` / `ubuntu-24.04-arm`), tars `_build/prod/rel/longx` and attaches the
+tarballs to the GitHub release. The repository is public at github.com/mjason/longx (MIT).
+
 ## Development workflow — TDD is mandatory
 
 Every change follows red → green → refactor. No production code without a test that

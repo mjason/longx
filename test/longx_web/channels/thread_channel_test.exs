@@ -22,11 +22,13 @@ defmodule LongxWeb.ThreadChannelTest do
 
   test "join replies with the current snapshot", %{socket: socket, thread_id: thread_id} do
     {:ok, reply, _} = join!(thread_id)
-    assert %{seq: seq, items: items, thread: thread} = reply
+    assert %{seq: seq, items: items} = reply
     assert is_integer(seq)
     assert is_list(items)
-    assert thread["id"] == thread_id
     assert socket.assigns.thread_id == thread_id
+    # the thread itself lands with the fake's thread/started, which a loaded
+    # suite may still be delivering: the snapshot is re-pulled until it is there
+    assert %{thread: %{"id" => ^thread_id}} = snapshot_with_thread(socket, 20)
   end
 
   test "events stream as `codex` pushes carrying seq/method/params", %{

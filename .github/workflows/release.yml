@@ -1,0 +1,101 @@
+name: Release
+
+# A tag `vX.Y.Z` builds the self-contained release (ERTS, the Go shim, the
+# bundled codex-app-server, git and obscura, the built SPA) for linux x86_64
+# and arm64 — each on a runner of its own architecture, no cross-compiling —
+# and attaches the tarballs to the GitHub release for that tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  MIX_ENV: prod
+
+jobs:
+  build:
+    name: linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          elixir-version: "1.19"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/shim/go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: assets/package-lock.json
+
+      - name: Cache mix deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: mix-prod-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('mix.lock') }}
+          restore-keys: mix-prod-${{ runner.os }}-${{ matrix.arch }}-
+
+      - name: Cache bundled binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            priv/git
+            priv/codex
+            priv/obscura
+          key: bundles-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('lib/longx/git/runtime.ex', 'lib/longx/codex/runtime.ex', 'lib/longx/browser/runtime.ex') }}
+
+      - run: mix deps.get --only prod
+      - run: npm ci --prefix assets
+
+      # the bundles for the platform this runner is (the release runs on the same)
+      - run: mix codex.fetch
+      - run: mix git.fetch
+      - run: mix obscura.fetch
+
+      - run: mix assets.build
+      - run: mix release --overwrite
+
+      - name: Package
+        id: package
+        run: |
+          version="$(mix run --no-start --no-compile -e 'IO.puts(Mix.Project.config()[:version])')"
+          name="longx-${version}-linux-${{ matrix.arch }}"
+          tar -C _build/prod/rel -czf "${name}.tar.gz" longx
+          sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: |
+            ${{ steps.package.outputs.name }}.tar.gz
+            ${{ steps.package.outputs.name }}.tar.gz.sha256
+          if-no-files-found: error
+
+      - name: Attach to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.package.outputs.name }}.tar.gz
+            ${{ steps.package.outputs.name }}.tar.gz.sha256
+          generate_release_notes: true

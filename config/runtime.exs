@@ -38,66 +38,66 @@ if config_env() == :dev do
 end
 
 if config_env() == :prod do
-  database_path =
-    System.get_env("DATABASE_PATH") ||
+  # A self-hosted release needs one thing: where to keep its state. The
+  # database, codex's home and the two secrets live under LONGX_DATA_DIR;
+  # the secrets are generated on first boot and kept in files there, unless
+  # given as environment variables.
+  data_dir =
+    System.get_env("LONGX_DATA_DIR") ||
       raise """
-      environment variable DATABASE_PATH is missing.
-      For example: /etc/longx/longx.db
+      environment variable LONGX_DATA_DIR is missing.
+      It holds the database, the bundled codex-app-server's state and the
+      generated secrets, e.g. /var/lib/longx
       """
+
+  File.mkdir_p!(data_dir)
+
+  secret_file = fn name, generate ->
+    path = Path.join(data_dir, name)
+
+    case File.read(path) do
+      {:ok, value} ->
+        String.trim(value)
+
+      {:error, :enoent} ->
+        value = generate.()
+        File.write!(path, value <> "\n")
+        File.chmod!(path, 0o600)
+        value
+    end
+  end
 
   config :longx, Longx.Repo,
-    database: database_path,
+    database: System.get_env("DATABASE_PATH") || Path.join(data_dir, "longx.db"),
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
 
-  # The secret key base is used to sign/encrypt cookies and other secrets.
-  # A default value is used in config/dev.exs and config/test.exs but you
-  # want to use a different value for prod and you most likely don't want
-  # to check this value into version control, so we use an environment
-  # variable instead.
+  # signs and encrypts cookies
   secret_key_base =
     System.get_env("SECRET_KEY_BASE") ||
-      raise """
-      environment variable SECRET_KEY_BASE is missing.
-      You can generate one by calling: mix phx.gen.secret
-      """
+      secret_file.("secret_key_base", fn -> :crypto.strong_rand_bytes(64) |> Base.encode64() end)
 
-  host = System.get_env("PHX_HOST") || "example.com"
-
+  # encrypts provider API keys at rest — lose it and the keys are unreadable
   cloak_key =
     System.get_env("LONGX_CLOAK_KEY") ||
-      raise """
-      environment variable LONGX_CLOAK_KEY is missing.
-      It encrypts provider API keys at rest. Generate one with:
-      elixir -e ':crypto.strong_rand_bytes(32) |> Base.encode64() |> IO.puts()'
-      """
+      secret_file.("cloak_key", fn -> :crypto.strong_rand_bytes(32) |> Base.encode64() end)
 
   config :longx, Longx.Vault,
     ciphers: [default: {Cloak.Ciphers.AES.GCM, tag: "AES.GCM.V1", key: Base.decode64!(cloak_key)}]
 
   config :longx, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
-  # PORT only applies to prod; dev (7788) and test (4002) are fixed in their config files.
-  port = String.to_integer(System.get_env("PORT") || "4000")
-
-  data_dir =
-    System.get_env("LONGX_DATA_DIR") ||
-      raise """
-      environment variable LONGX_DATA_DIR is missing.
-      It holds the bundled codex-app-server's state (CODEX_HOME), e.g. /var/lib/longx
-      """
-
   config :longx, Longx.Codex.Home, dir: Path.join(data_dir, "codex_home")
 
+  # PORT only applies to prod; dev (7788) and test (4002) are fixed in their config files.
+  port = String.to_integer(System.get_env("PORT") || "7788")
+  host = System.get_env("PHX_HOST") || "localhost"
+
+  # the release serves on its own, plain http on every interface (put a
+  # reverse proxy in front for TLS); PHX_HOST is the name links are built with
   config :longx, LongxWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
-    http: [
-      # Enable IPv6 and bind on all interfaces.
-      # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
-      # See the documentation on https://bandit.hexdocs.pm/Bandit.html#t:options/0
-      # for details about using IPv6 vs IPv4 and loopback vs public addresses.
-      ip: {0, 0, 0, 0, 0, 0, 0, 0},
-      port: port
-    ],
+    server: true,
+    url: [host: host, port: port, scheme: "http"],
+    http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}, port: port],
     secret_key_base: secret_key_base
 
   # ## SSL Support

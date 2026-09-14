@@ -14,6 +14,7 @@ defmodule Longx.MixProject do
       listeners: [Phoenix.CodeReloader],
       consolidate_protocols: Mix.env() != :dev,
       usage_rules: usage_rules(),
+      releases: [longx: [steps: [:assemble, &bundles/1]]],
       # `mix dialyzer`: mix tasks and test support are part of the app
       dialyzer: [plt_add_apps: [:mix, :ex_unit], plt_file: {:no_warn, "priv/plts/project.plt"}]
     ]
@@ -36,6 +37,36 @@ defmodule Longx.MixProject do
   end
 
   # Specifies which paths to compile per environment.
+  # `mix release` copies priv following symlinks, which turns the bundled git
+  # (145 builtins linking to one binary) into 700 MB. Recopy the bundles with
+  # their links, and drop the dialyzer PLT — it has no place in a release.
+  defp bundles(release) do
+    priv = Path.join([release.path, "lib", "longx-#{release.version}", "priv"])
+    File.rm_rf!(Path.join(priv, "plts"))
+
+    for dir <- ~w(codex git obscura), src = Path.join("priv", dir), File.dir?(src) do
+      dst = Path.join(priv, dir)
+      File.rm_rf!(dst)
+      copy_tree(src, dst)
+    end
+
+    release
+  end
+
+  defp copy_tree(src, dst) do
+    case File.lstat!(src).type do
+      :symlink ->
+        File.ln_s!(File.read_link!(src), dst)
+
+      :directory ->
+        File.mkdir_p!(dst)
+        for name <- File.ls!(src), do: copy_tree(Path.join(src, name), Path.join(dst, name))
+
+      _ ->
+        File.cp!(src, dst)
+    end
+  end
+
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 

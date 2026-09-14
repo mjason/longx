@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  MIX_ENV: test
+
+jobs:
+  test:
+    name: precommit (linux x86_64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          elixir-version: "1.19"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/shim/go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: assets/package-lock.json
+
+      - name: Cache mix deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-
+
+      # the bundled binaries the suite drives (git for real; codex only for the
+      # sandbox probe at boot — the real app-server is :integration, excluded)
+      - name: Cache bundled binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            priv/git
+            priv/codex
+          key: bundles-${{ runner.os }}-x64-${{ hashFiles('lib/longx/git/runtime.ex', 'lib/longx/codex/runtime.ex') }}
+
+      - run: mix deps.get
+      - run: mix git.fetch
+      - run: mix codex.fetch
+      - run: npm ci --prefix assets
+
+      - run: mix compile --warnings-as-errors
+      - run: mix format --check-formatted
+      - run: mix deps.unlock --check-unused
+      - run: test -z "$(gofmt -l .)"
+        working-directory: native/shim
+      - run: go vet ./...
+        working-directory: native/shim
+      - run: go test ./...
+        working-directory: native/shim
+      - run: mix ash_typescript.codegen --check
+      - run: npm run check --prefix assets
+      - run: mix test

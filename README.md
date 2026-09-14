@@ -8,14 +8,32 @@ codex 的工具能力可以用 Elixir 直接扩展。
 
 ```sh
 mix setup            # deps、数据库、npm install + 前端构建、下载内置的 codex-app-server、git 和 obscura（无头浏览器）
-mix phx.server       # 0.0.0.0:7788；开发时前端资源由 Vite dev server（5173）热更新
+mix phx.server       # 0.0.0.0:7788；开发时前端资源由 Vite dev server（7789）热更新
 ```
 
 手机连 LAN 调试时页面从 `http://<lan-ip>:7788` 打开，脚本要能到达 Vite：
 `LONGX_DEV_HOST=<lan-ip> mix phx.server`。
 
 环境变量：`DEEPSEEK_API_KEY`（seeds 会把它写进 DeepSeek provider）、`TAVILY_API_KEY`（联网搜索）、`OPENAI_API_KEY`（可选）。
-生产环境另需 `LONGX_CLOAK_KEY`（加密 provider 密钥）和 `LONGX_DATA_DIR`（codex 的状态目录）。
+模型 provider 和密钥也可以在启动后的「设置 → 模型与 Provider」里配置。
+
+## 安装发布版（Linux x86_64 / arm64）
+
+[Releases](https://github.com/mjason/longx/releases) 里的 `longx-<版本>-linux-<架构>.tar.gz` 是自带
+Erlang 运行时、Go 中间件、codex-app-server、git 和 obscura 的完整包，解开就能跑，只要一个数据目录：
+
+```sh
+tar xzf longx-0.1.0-linux-x86_64.tar.gz
+LONGX_DATA_DIR=/var/lib/longx PORT=7788 ./longx/bin/longx start
+```
+
+`LONGX_DATA_DIR` 放数据库、codex 的状态和首次启动时生成的两个密钥（`secret_key_base`、`cloak_key`——
+后者加密 provider 的 API key，丢了密钥就读不回来）。可选：`PORT`（默认 7788）、`PHX_HOST`（生成链接用的主机名）、
+`SECRET_KEY_BASE` / `LONGX_CLOAK_KEY`（用环境变量代替文件）。服务是明文 http，要 TLS 就在前面放个反向代理。
+codex 的沙箱要内核允许非特权用户命名空间（「设置 → 沙箱与权限」能看到检测结果）。
+
+发布由 `.github/workflows/release.yml` 完成：打 `v*` 标签就在 x86_64 和 arm64 的 runner 上各自原生构建并挂到
+GitHub Release；本地 `MIX_ENV=prod mix assets.build && MIX_ENV=prod mix release` 得到同样的东西。
 
 ## 结构一览
 

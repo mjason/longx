@@ -7,17 +7,8 @@ import Config
 # before starting your production server.
 # Static asset digests come from Vite's manifest (LongxWeb.Vite), not phx.digest.
 
-# Force using SSL in production. This also sets the "strict-security-transport" header,
-# known as HSTS. If you have a health check endpoint, you may want to exclude it below.
-# Note `:force_ssl` is required to be set at compile-time.
-config :longx, LongxWeb.Endpoint,
-  force_ssl: [
-    rewrite_on: [:x_forwarded_proto],
-    exclude: [
-      # paths: ["/health"],
-      hosts: ["localhost", "127.0.0.1"]
-    ]
-  ]
+# No force_ssl: a self-hosted Longx serves plain http on the LAN; TLS is a
+# reverse proxy's job (config/runtime.exs builds links with PHX_HOST).
 
 # Configure Swoosh API Client
 config :swoosh, api_client: Swoosh.ApiClient.Req

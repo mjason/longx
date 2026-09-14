@@ -98,8 +98,9 @@ defmodule Longx.Codex.PoolTest do
     assert_receive {:codex_connection, ^a, :ready}, 15_000
 
     {:ok, thread_id} = Thread.start(cwd: "/", tools: [], conn: conn)
+    # (thread/started may already have gone by when we subscribe — the turn's
+    # events are what this test waits for)
     Thread.subscribe(thread_id)
-    assert_receive {:codex, _, "thread/started", _}, 5_000
 
     assert {:ok, ^conn} = Pool.connection_for_thread(thread_id)
     assert {:ok, _turn} = Thread.send(thread_id, "say hi")
