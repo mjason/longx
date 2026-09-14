@@ -236,6 +236,65 @@ defmodule Longx.Codex.GatewayE2ETest do
     assert Enum.any?(Thread.snapshot(thread_id).items, &(&1["type"] == "dynamicToolCall"))
   end
 
+  test "codex's own memory tools are offered; add_ad_hoc_note writes into the home's memories", %{
+    gateway_url: gateway_url
+  } do
+    upstream = Bypass.open()
+    test_pid = self()
+    fake_provider!(upstream)
+    {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+    Bypass.expect(upstream, "POST", "/v1/responses", fn conn ->
+      {:ok, raw, conn} = Plug.Conn.read_body(conn, length: 50_000_000)
+      body = Jason.decode!(raw)
+      n = Agent.get_and_update(calls, &{&1 + 1, &1 + 1})
+      send(test_pid, {:upstream_request, n, body})
+
+      case n do
+        1 ->
+          send_sse(
+            conn,
+            ResponsesFixture.function_call("add_ad_hoc_note", "memories", %{
+              filename: "2026-09-14T12-00-00-prefers-tabs.md",
+              note: "The user prefers tabs over spaces."
+            })
+          )
+
+        _ ->
+          send_sse(conn, ResponsesFixture.assistant_message("Noted."))
+      end
+    end)
+
+    home = prepare_home!(gateway_url)
+    conn = start_connection!(home)
+    thread_id = start_thread!(conn, home, tools: [])
+
+    {turn, items} = run_turn!(conn, thread_id, "remember that I prefer tabs")
+    assert turn["status"] == "completed", inspect(turn)
+
+    # the memories namespace, with its four tools, reaches the model through us
+    assert_receive {:upstream_request, 1, first}, 5_000
+    memories = Enum.find(first["tools"], &(&1["type"] == "namespace" and &1["name"] == "memories"))
+
+    assert memories,
+           "memories namespace not offered: #{inspect(Enum.map(first["tools"], &{&1["type"], &1["name"]}))}"
+
+    assert Enum.map(memories["tools"], & &1["name"]) |> Enum.sort() ==
+             ["add_ad_hoc_note", "list", "read", "search"]
+
+    # codex ran it inside itself: the note is on disk, the output went back to the model
+    assert_receive {:upstream_request, 2, second}, 5_000
+    assert Enum.any?(second["input"], &(&1["type"] == "function_call_output"))
+
+    notes = Path.wildcard(Path.join(home.dir, "memories/extensions/ad_hoc/notes/*.md"))
+    assert [note] = notes
+    assert File.read!(note) == "The user prefers tabs over spaces."
+
+    # codex 0.154 reports nothing for the call on the wire (only the messages):
+    # the UI cannot show it — this assertion is here to notice when that changes
+    assert Enum.map(items, & &1["type"]) == ["userMessage", "agentMessage"]
+  end
+
   test "web_search: :hosted hands the upstream its own web_search tool and nothing of ours", %{
     gateway_url: gateway_url
   } do
