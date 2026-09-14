@@ -52,6 +52,110 @@ defmodule Longx.System.Status do
       end
     end
 
+    # Longx.Memory — the global memory a settings page edits: the curated
+    # index, the notes inbox, a search over both
+    action :memory_index, :map do
+      constraints fields: [text: [type: :string, allow_nil?: false]]
+
+      run fn _input, _ ->
+        # the first look seeds the directory (a repository with a MEMORY.md)
+        with :ok <- Longx.Memory.ensure(), do: {:ok, %{text: Longx.Memory.index()}}
+      end
+    end
+
+    action :memory_write_index do
+      argument :text, :string, allow_nil?: false
+
+      run fn input, _ ->
+        case Longx.Memory.write_index(Longx.Memory.dir(), input.arguments.text) do
+          :ok -> :ok
+          {:error, reason} -> {:error, field: :text, message: inspect(reason)}
+        end
+      end
+    end
+
+    action :memory_notes, {:array, :map} do
+      constraints items: [
+                    fields: [
+                      file: [type: :string, allow_nil?: false],
+                      at: [type: :string],
+                      project: [type: :string],
+                      thread: [type: :string],
+                      source: [type: :string],
+                      text: [type: :string, allow_nil?: false]
+                    ]
+                  ]
+
+      run fn _input, _ ->
+        {:ok,
+         for note <- Longx.Memory.notes() do
+           %{note | at: note.at && DateTime.to_iso8601(note.at)}
+         end}
+      end
+    end
+
+    action :memory_search, {:array, :map} do
+      constraints items: [
+                    fields: [
+                      file: [type: :string, allow_nil?: false],
+                      line: [type: :integer, allow_nil?: false],
+                      text: [type: :string, allow_nil?: false]
+                    ]
+                  ]
+
+      argument :query, :string, allow_nil?: false
+      run fn input, _ -> {:ok, Longx.Memory.search(Longx.Memory.dir(), input.arguments.query)} end
+    end
+
+    action :memory_delete_note do
+      argument :file, :string, allow_nil?: false
+
+      run fn input, _ ->
+        case Longx.Memory.delete_note(Longx.Memory.dir(), input.arguments.file) do
+          :ok -> :ok
+          {:error, :not_found} -> {:error, field: :file, message: "no such note"}
+          {:error, :invalid_path} -> {:error, field: :file, message: "must be notes/<name>.md"}
+          {:error, reason} -> {:error, field: :file, message: inspect(reason)}
+        end
+      end
+    end
+
+    # the pipeline's switch and last run
+    action :memory_status, :map do
+      constraints fields: [
+                    auto_extract: [type: :boolean, allow_nil?: false],
+                    last_run_at: [type: :string],
+                    last_error: [type: :string],
+                    pending: [type: :integer, allow_nil?: false]
+                  ]
+
+      run fn _input, _ ->
+        st = Longx.Memory.status()
+        {:ok, %{st | last_run_at: st.last_run_at && DateTime.to_iso8601(st.last_run_at)}}
+      end
+    end
+
+    action :memory_set_auto_extract do
+      argument :enabled, :boolean, allow_nil?: false
+
+      run fn input, _ ->
+        Longx.Memory.set_auto_extract(Longx.Memory.dir(), input.arguments.enabled)
+      end
+    end
+
+    # one pass of the pipeline, now, in the background (it talks to the model
+    # for a while); the page polls memory_status for the outcome
+    action :memory_run do
+      run fn _input, _ ->
+        {:ok, _} =
+          Task.Supervisor.start_child(Longx.Codex.TaskSupervisor, fn ->
+            Longx.Memory.Worker.run_now()
+          end)
+
+        :ok
+      end
+    end
+
     # Longx.Codex.Sandbox.report/0 for the UI's banner
     action :sandbox, :map do
       constraints fields: [

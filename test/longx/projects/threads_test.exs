@@ -125,7 +125,8 @@ defmodule Longx.Projects.ThreadsTest do
         )
 
       assert thread.sandbox == :danger_full_access
-      assert thread.tools == []
+      # nothing chosen = the globally enabled set (the memory tools by default)
+      assert thread.tools == ["memory.note", "memory.read", "memory.search"]
       assert thread.model_slug == "deepseek-flash"
     end
 
@@ -424,6 +425,21 @@ defmodule Longx.Projects.ThreadsTest do
       %{"lastTurnParams" => params2} = read_thread!(conn, thread.codex_thread_id)
       refute Map.has_key?(params2, "sandboxPolicy")
       assert Ash.get!(Thread, thread.id).sandbox == :danger_full_access
+    end
+
+    test "the global memory reaches a new thread as developer instructions and the memory tools, unless the project opts out",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      assert [%{"name" => "memory"}] = params["dynamicTools"]
+      assert params["developerInstructions"] =~ "Longx 全局记忆"
+      assert params["developerInstructions"] =~ "调用 `note`"
+
+      {:ok, quiet} = Projects.update_project(project, %{global_memory: false})
+      {:ok, thread} = Projects.start_thread(quiet, conn: conn)
+      %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      refute Map.has_key?(params, "developerInstructions")
     end
 
     test "web_search: false at start turns codex's web.run off for the thread; the project's default applies otherwise",

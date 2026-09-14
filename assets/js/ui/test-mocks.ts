@@ -10,7 +10,7 @@ export const failed = (message: string, fields: string[] = []) => ({
 export const project = (n: number) => ({
   id: `id-${n}`, slug: `app-${n}`, name: `App ${n}`, description: null, rootPath: `/srv/app-${n}`,
   sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true, multiAgent: true, dirtyStart: "commit",
-  tools: [], memoryLimitMb: null, archivedAt: null, updatedAt: "2026-09-12T00:00:00Z",
+  tools: [], memoryLimitMb: null, globalMemory: true, archivedAt: null, updatedAt: "2026-09-12T00:00:00Z",
 });
 
 export const thread = (n: number) => ({
@@ -26,6 +26,9 @@ export function rpcMock() {
     createProject: vi.fn(),
     updateProject: vi.fn(async () => ok(project(1))),
     archiveProject: vi.fn(async () => ok(project(1))),
+    deleteProject: vi.fn(async () => ok(null)),
+    clearCodexMemories: vi.fn(async () => ok(null)),
+    resetCodexHome: vi.fn(async () => ok(null)),
     clearCodexHistory: vi.fn(async () => ok(null)),
     gitInfo: vi.fn(async () => ok({ repository: true, head: "372bb0366a5ae41b", clean: true, changes: 0, lfs: false })),
     initGit: vi.fn(),
@@ -48,6 +51,17 @@ export function rpcMock() {
       { id: "t2", namespace: "builtin", name: "browser_fetch", qualifiedName: "builtin.browser_fetch", description: "Reads a rendered page.", inputSchema: {}, enabled: true },
     ])),
     setToolEnabled: vi.fn(async ({ input, identity }: { input: { enabled: boolean }; identity: string }) => ok({ id: identity, enabled: input.enabled })),
+    memoryIndex: vi.fn(async () => ok({ text: "# MEMORY\n\n- Tabs over spaces\n" })),
+    memoryWriteIndex: vi.fn(async () => ok(null)),
+    memoryNotes: vi.fn(async () => ok([
+      { file: "notes/2026-09-14T04-48-17Z-tabs.md", at: "2026-09-14T04:48:17Z", project: "数学精灵", thread: "thr_1", source: null, text: "用户所有项目的代码缩进一律使用 Tab。" },
+      { file: "notes/2026-09-14T05-00-00Z-pnpm.md", at: "2026-09-14T05:00:00Z", project: "longx", thread: "thr_2", source: "auto", text: "用户用 pnpm。" },
+    ])),
+    memorySearch: vi.fn(async () => ok([{ file: "MEMORY.md", line: 3, text: "- Tabs over spaces" }])),
+    memoryDeleteNote: vi.fn(async () => ok(null)),
+    memoryStatus: vi.fn(async () => ok({ autoExtract: true, lastRunAt: "2026-09-14T05:10:00Z", lastError: null, pending: 2 })),
+    memorySetAutoExtract: vi.fn(async () => ok(null)),
+    memoryRun: vi.fn(async () => ok(null)),
     probeSandbox: vi.fn(async () => ok({ status: "unavailable", reason: "bwrap: setting up uid map: Permission denied", checkedAt: "2026-09-14T00:00:00Z" })),
     sendMessage: vi.fn(async () => ok({ id: "turn-row" })),
     compactThread: vi.fn(async () => ok(null)),

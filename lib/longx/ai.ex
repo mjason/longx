@@ -91,7 +91,10 @@ defmodule Longx.AI do
     registered = Registry.all()
     known = MapSet.new(registered, &{&1.namespace, &1.name})
 
-    Enum.each(registered, &create_tool!(%{namespace: &1.namespace, name: &1.name}))
+    Enum.each(
+      registered,
+      &create_tool!(%{namespace: &1.namespace, name: &1.name, enabled: &1.enabled_by_default?})
+    )
 
     Longx.AI.Tool
     |> Ash.read!()
@@ -126,6 +129,9 @@ defmodule Longx.AI do
   @doc "Qualified names (`\"ns.name\"`) of the globally enabled tools — what a thread gets when it does not choose."
   @spec enabled_tool_names() :: [String.t()]
   def enabled_tool_names do
+    # sync first: a tool on by default counts before anyone opened the tools page
+    {:ok, _} = list_tools()
+
     enabled_tools!()
     |> Enum.map(&"#{&1.namespace}.#{&1.name}")
     |> Enum.filter(&match?({:ok, _}, Registry.fetch_qualified(&1)))
@@ -301,6 +307,57 @@ defmodule Longx.AI do
       {:error, _} -> {:error, {:unknown_model, slug}}
     end
   end
+
+  @doc """
+  One non-streaming answer from the default model: `instructions` as the
+  system side, `input` as the user turn, the output text back. What
+  Longx's own model calls use (the memory pipeline); `timeout:` (default
+  2 min) and `max_output_tokens:` (default 4096) are the knobs.
+  """
+  @spec complete(String.t(), String.t(), keyword) ::
+          {:ok, String.t()}
+          | {:error,
+             :no_default_model | {:status, integer, term} | {:unreachable, String.t()} | term}
+  def complete(instructions, input, opts \\ []) do
+    with {:ok, %Target{} = target} <- resolve_target() do
+      request =
+        Req.new(
+          url: String.trim_trailing(target.base_url, "/") <> "/responses",
+          auth: {:bearer, target.api_key},
+          json: %{
+            model: target.model,
+            instructions: instructions,
+            input: input,
+            max_output_tokens: Keyword.get(opts, :max_output_tokens, 4096),
+            stream: false,
+            store: false
+          },
+          retry: false,
+          receive_timeout: Keyword.get(opts, :timeout, 120_000)
+        )
+
+      case Req.post(request) do
+        {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
+          {:ok, output_text(body)}
+
+        {:ok, %Req.Response{status: status, body: body}} ->
+          {:error, {:status, status, error_message(body)}}
+
+        {:error, exception} ->
+          {:error, {:unreachable, Exception.message(exception)}}
+      end
+    end
+  end
+
+  # the text of every assistant message in a Responses answer
+  defp output_text(%{"output" => output}) when is_list(output) do
+    for %{"type" => "message", "content" => content} <- output,
+        %{"type" => "output_text", "text" => text} <- content,
+        into: "",
+        do: text
+  end
+
+  defp output_text(_), do: ""
 
   defp probe(%Target{} = target) do
     started = System.monotonic_time(:millisecond)

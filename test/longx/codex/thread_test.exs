@@ -61,12 +61,15 @@ defmodule Longx.Codex.ThreadTest do
       assert names == ["builtin", "test"]
     end
 
-    test "without tools: the globally enabled set from the DB is used (empty by default)" do
-      refute Map.has_key?(Thread.start_params(cwd: "/p"), "dynamicTools")
+    test "without tools: the globally enabled set from the DB is used (the memory tools by default)" do
+      [memory] = Thread.start_params(cwd: "/p")["dynamicTools"]
+      assert memory["name"] == "memory"
+      assert Enum.map(memory["tools"], & &1["name"]) |> Enum.sort() == ["note", "read", "search"]
 
       {:ok, _} = Longx.AI.enable_tool("builtin.thread_status")
-      [ns] = Thread.start_params(cwd: "/p")["dynamicTools"]
-      assert Enum.map(ns["tools"], & &1["name"]) == ["thread_status"]
+      namespaces = Thread.start_params(cwd: "/p")["dynamicTools"]
+      builtin = Enum.find(namespaces, &(&1["name"] == "builtin"))
+      assert Enum.map(builtin["tools"], & &1["name"]) == ["thread_status"]
     end
 
     test "model: sets codex's per-thread model (a Longx.AI.Model slug)" do
@@ -119,6 +122,14 @@ defmodule Longx.Codex.ThreadTest do
       assert Thread.start_params(cwd: "/p", tools: [], multi_agent: false)["config"][
                "features.multi_agent_v2"
              ] == false
+    end
+
+    test "start_params/1: developer instructions ride on thread/start when given" do
+      assert Thread.start_params(cwd: "/p", tools: [], developer_instructions: "remember X")[
+               "developerInstructions"
+             ] == "remember X"
+
+      refute Map.has_key?(Thread.start_params(cwd: "/p", tools: []), "developerInstructions")
     end
 
     test "turn_params/3: text input, optional model / effort / summary for this turn onwards" do

@@ -161,21 +161,47 @@ defmodule Longx.ProjectsTest do
       fake_home!(home)
       {:ok, thread} = Projects.start_thread(project)
 
+      File.mkdir_p!(Path.join(home, "memories"))
+      File.write!(Path.join(home, "memories/MEMORY.md"), "# learned\n")
+
       assert :ok = Projects.clear_codex_history(project)
       assert Pool.status(project.id) == :stopped
       refute File.exists?(Path.join(home, "state_5.sqlite"))
       refute File.exists?(Path.join(home, "sessions"))
-      # the config is ours, it stays
+      # the config is ours, it stays; what codex learned about the project is
+      # not "history" — it stays too (reset_codex_home is the wipe)
       assert File.exists?(Path.join(home, "config.toml"))
+      assert File.exists?(Path.join(home, "memories/MEMORY.md"))
       assert Ash.get!(Projects.Thread, thread.id).status == :unrecoverable
     end
 
-    test "reset_codex_home/1 removes the whole directory", %{project: project, home: home} do
+    test "clear_codex_memories/1 forgets only what codex learned about the project: the sessions and threads stay",
+         %{project: project, home: home} do
       fake_home!(home)
-      {:ok, _} = Pool.connection(project.id)
+      File.mkdir_p!(Path.join(home, "memories/rollout_summaries"))
+      File.write!(Path.join(home, "memories/MEMORY.md"), "# learned\n")
+      File.write!(Path.join(home, "memories_1.sqlite"), "m")
+      {:ok, thread} = Projects.start_thread(project)
+
+      assert :ok = Projects.clear_codex_memories(project)
+      assert Pool.status(project.id) == :stopped
+      refute File.exists?(Path.join(home, "memories"))
+      refute File.exists?(Path.join(home, "memories_1.sqlite"))
+      assert File.exists?(Path.join(home, "sessions"))
+      assert File.exists?(Path.join(home, "state_5.sqlite"))
+      assert Ash.get!(Projects.Thread, thread.id).status == :idle
+    end
+
+    test "reset_codex_home/1 removes the whole directory; the threads become unrecoverable", %{
+      project: project,
+      home: home
+    } do
+      fake_home!(home)
+      {:ok, thread} = Projects.start_thread(project)
       assert :ok = Projects.reset_codex_home(project)
       refute File.exists?(home)
       assert Pool.status(project.id) == :stopped
+      assert Ash.get!(Projects.Thread, thread.id).status == :unrecoverable
     end
 
     test "archiving stops the worker and keeps the home; deleting needs confirm and removes it",

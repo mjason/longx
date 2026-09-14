@@ -358,32 +358,37 @@ defmodule Longx.AITest do
   end
 
   describe "agent tools (which registered tools a thread may get)" do
-    test "list_tools/0 mirrors the registry into the DB: every tool present, new ones disabled" do
+    test "list_tools/0 mirrors the registry into the DB: every tool present, new ones disabled unless the tool asks otherwise" do
       tools = AI.list_tools!()
       names = Enum.map(tools, &{&1.namespace, &1.name})
 
       assert {"builtin", "echo"} in names
       assert {"builtin", "thread_status"} in names
       assert {"test", "echo"} in names
-      assert Enum.all?(tools, &(&1.enabled == false))
+      {on, off} = Enum.split_with(tools, & &1.enabled)
+      assert Enum.all?(off, &(&1.namespace != "memory"))
+      # the memory tools declare enabled_by_default?; nothing else does
+      assert Enum.map(on, &{&1.namespace, &1.name}) |> Enum.sort() ==
+               [{"memory", "note"}, {"memory", "read"}, {"memory", "search"}]
+
       # description comes from the code, not the DB
       assert Enum.find(tools, &(&1.name == "thread_status")).description =~ "thread"
     end
 
-    test "nothing is enabled by default, so nothing is injected" do
-      assert AI.enabled_tool_names() == []
+    test "only the memory tools are enabled by default, so only they are injected" do
+      assert AI.enabled_tool_names() == ["memory.note", "memory.read", "memory.search"]
     end
 
     test "enable/disable by qualified name, kept across syncs" do
       assert {:ok, %{enabled: true}} = AI.enable_tool("builtin.thread_status")
-      assert AI.enabled_tool_names() == ["builtin.thread_status"]
+      assert "builtin.thread_status" in AI.enabled_tool_names()
 
       # a re-sync (list) must not flip it back
       AI.list_tools!()
-      assert AI.enabled_tool_names() == ["builtin.thread_status"]
+      assert "builtin.thread_status" in AI.enabled_tool_names()
 
       assert {:ok, %{enabled: false}} = AI.disable_tool("builtin.thread_status")
-      assert AI.enabled_tool_names() == []
+      refute "builtin.thread_status" in AI.enabled_tool_names()
     end
 
     test "enabling an unregistered tool is an error" do
@@ -529,6 +534,65 @@ defmodule Longx.AITest do
       assert {:error, {:unknown_model, "nope"}} = AI.turn_options("nope")
       assert {:error, :no_default_model} = AI.thread_options(nil)
       assert {:error, :no_default_model} = AI.turn_options(nil)
+    end
+  end
+
+  describe "complete/3 (one non-streaming answer from the default model — the memory pipeline's model call)" do
+    setup do
+      bypass = Bypass.open()
+
+      provider =
+        create_provider!(%{base_url: "http://localhost:#{bypass.port}/v1", api_key: "sk-ok"})
+
+      model = create_model!(provider, %{upstream_id: "real-model"})
+      {:ok, _} = AI.make_default_model(model)
+      %{bypass: bypass}
+    end
+
+    test "sends instructions + input, hands back the output text", %{bypass: bypass} do
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        {:ok, raw, up} = Plug.Conn.read_body(up)
+        send(test_pid, {:upstream, Jason.decode!(raw)})
+
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            id: "resp_1",
+            object: "response",
+            status: "completed",
+            output: [
+              %{type: "reasoning", summary: []},
+              %{
+                type: "message",
+                role: "assistant",
+                content: [%{type: "output_text", text: "- tabs"}]
+              }
+            ]
+          })
+        )
+      end)
+
+      assert {:ok, "- tabs"} = AI.complete("merge these", "note one", max_output_tokens: 500)
+      assert_receive {:upstream, body}
+      assert body["model"] == "real-model"
+      assert body["instructions"] == "merge these"
+      assert body["input"] == "note one"
+      assert body["stream"] == false
+      assert body["max_output_tokens"] == 500
+    end
+
+    test "an upstream error is an error, never a raise", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(401, ~s({"error":{"message":"Authentication Fails"}}))
+      end)
+
+      assert {:error, {:status, 401, "Authentication Fails"}} = AI.complete("i", "x")
     end
   end
 

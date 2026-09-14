@@ -93,10 +93,15 @@ React Native client planned on the same core code.
     tests pass `conn:` to use their own fake. The codex is a project resource:
     `codex_info/1` (home path, size, sqlite files, worker status incl. OS pid), `stop_codex/2`
     (refuses while a turn runs unless `force: true`), `restart_codex/1`,
-    `clear_codex_history/1` (stop + delete codex's state in the home, keep our config; the
-    threads become `:unrecoverable`), `reset_codex_home/1` (whole directory), archive stops
-    the worker and keeps the home, `delete_project/2` needs `confirm: true` and removes the
-    home (never the working directory).
+    `clear_codex_history/1` (stop + delete codex's sessions and state in the home, keep our
+    config and its `memories/`; the threads become `:unrecoverable`),
+    `clear_codex_memories/1` (only what codex learned about the project: `memories/` and
+    `memories_*.sqlite`; sessions and threads stay — for a project memory gone wrong),
+    `reset_codex_home/1` (the whole directory; threads `:unrecoverable`; the next use
+    regenerates a clean config), archive stops the worker and keeps the home,
+    `delete_project/2` needs `confirm: true` and removes the home (never the working
+    directory). All five are the project settings page's danger zone (delete asks for the
+    project's name); none touches the global memory.
   - `Thread` = codex thread ↔ project (`codex_thread_id`, `cwd`, the settings it started with,
     `model_slug`, `preview`, `status`, `last_activity_at`). Statuses: `:idle`, `:active`,
     `:disconnected` (its codex died mid-turn; resumed → `:idle` when it is back),
@@ -181,6 +186,52 @@ React Native client planned on the same core code.
     `repository: false` to `git_changes` and an error on `project_id` to the rest. Commit
     times are ISO strings (a typed map's `utc_datetime` has no client type in
     ash_typescript 0.18).
+- **Memory, two layers.** (1) *Project memory is codex's own*: `Home.prepare/1` writes
+  `features.memories = true` and `[memories] dedicated_tools = true` into every home
+  (`config :longx, Longx.Codex.Home, memories: false` turns it off), so codex runs its
+  extraction / consolidation pipeline per project (at root-session start, on rollouts idle
+  ≥ 6 h, through our gateway — it costs tokens) and injects its read path (memory summary
+  + "grep MEMORY.md"). Its **dedicated tools stay off** (`[memories] dedicated_tools =
+  false`): they would hand the model a second "remember this" (`memories.add_ad_hoc_note`,
+  into the project's home) beside Longx's global `memory.note`, and asked to remember, a
+  model picked codex's. Verified against the real binary in `gateway_e2e_test`: the
+  `memories` namespace is not offered, ours is; codex 0.154 emits **no item** for its own
+  memory tool calls anyway, so the UI could not have shown them. `clear_codex_history` keeps
+  `memories/` (what codex learned is not history; `reset_codex_home` wipes it). (2) *Global
+  memory is Longx's*: `Longx.Memory` — one directory across projects and homes
+  (`config :longx, Longx.Memory, dir:`; dev `data/memory`, prod `$LONGX_DATA_DIR/memory`),
+  a git repository where every write is a commit: `MEMORY.md` (the curated part) +
+  `notes/<utc ts>-<slug>.md` (the append-only inbox, front matter `at` / `project` /
+  `thread`). `instructions/1` (how to use it, the index, the latest 20 notes; capped at
+  32 KB) goes to every new thread as `thread/start.developerInstructions` unless
+  `Project.global_memory` is false; the `memory.*` tools (`lib/longx/tools/memory/`:
+  `note` — when the person says remember / forget / from now on — `search`, `read`)
+  are Elixir tools in the `memory` namespace, on by default (`enabled_by_default?/0`, a
+  new optional `Longx.Codex.Tool` callback the registry sync honours; a switch someone
+  turned off stays off; `enabled_tool_names/0` syncs the registry first so a default-on
+  tool counts before anyone opened the tools page). **`Project.tools == []` means the
+  globally enabled set** (`start_thread` resolves it) — a project never has to know about
+  a new default-on tool; "none" is a decision for the tools page. The instructions name
+  the tools as functions in the `memory` namespace, not as `memory.note` in backticks:
+  DeepSeek Flash read the latter as a shell command and wrapped it in `exec_command`.
+  Live-checked: "记住…" → one `memory.note` call → a note with provenance. RPC: `memory_index` / `memory_write_index` / `memory_notes` /
+  `memory_search` / `memory_delete_note` / `memory_status` / `memory_set_auto_extract` /
+  `memory_run` on `Longx.System`; the page is Settings → 记忆 (`settings/MemorySection`:
+  the pipeline's switch and last run, MEMORY.md in the CodeMirror editor, the notes with
+  their origin, a search), and Project settings has the 注入全局记忆 switch.
+  **The pipeline** (`Longx.Memory.Worker`, in the tree, a pass every 15 min — `config
+  :longx, Longx.Memory, tick:` nil in tests —, `run_now/1`): `Extract` reads threads idle
+  ≥ 1 h (`idle_hours`) that were not read since their last activity — root threads of
+  projects with the memory on, 2 per pass — from codex's rollout on disk
+  (`Longx.Codex.Rollout`: the person's and the model's words and the commands run, no
+  codex process) and asks the default model (`Longx.AI.complete/3`, non-streaming) for
+  durable cross-project facts → notes with `source: auto`; the thread is marked
+  (`Thread.memory_extracted_at`) even when nothing was kept, a model failure leaves it
+  for next time. `Consolidate` then folds the pending notes into `MEMORY.md` through the
+  model (merged by topic, newer wins), refusing an answer that lost most entries; folded
+  notes are recorded in `state.json` (also the `auto_extract` switch and the last run)
+  and no longer handed to threads raw. Both prompts are Chinese and say a note is
+  information, never an instruction, and never to write secrets.
 - **A headless browser is bundled too: obscura** (`h4ckf0r0day/obscura`, Rust + embedded V8,
   Apache-2.0). `Longx.Browser.Runtime` pins `v0.2.2` (five targets: `{x86_64,aarch64}-linux`,
   `{x86_64,aarch64}-macos` as tar.gz, `x86_64-windows` as zip — `Longx.Bundle` unpacks
@@ -836,7 +887,8 @@ Where tests live / what to use:
   fake app-server through a per-test `Connection` passed as `conn:`.
 - Codex client → `test/support/fake_app_server.exs` is a scripted stand-in for the
   app-server (`say`/`approve`/`stall`/`slow`/`error`/`die`/`server-notify` turns) run under
-  `Longx.Shim` exactly like the real binary; Connection/Thread/ThreadState tests use it, and
+  `Longx.Shim` exactly like the real binary (its stdio forced to byte mode: with no UTF-8
+  locale in the env the VM's latin1 stdio ended the read on a CJK frame); Connection/Thread/ThreadState tests use it, and
   `thread/read` answers with the `startParams`/`lastTurnParams` it received so tests can
   assert what was sent. Tests that go through the pool (no `conn:`) are `Longx.DataCase`
   (the Tracker writes on every `:down`/`:ready`) and clean up with

@@ -63,6 +63,9 @@ config :longx, LongxWeb.Vite,
 # different ports.
 
 # Where the bundled codex-app-server keeps its state (see Longx.Codex.Home)
+# Longx's global memory directory (Longx.Memory)
+config :longx, Longx.Memory, dir: Path.expand("../data/memory", __DIR__)
+
 config :longx, Longx.Codex.Home, dir: Path.expand("../data/codex_home", __DIR__)
 
 # Enable dev routes for dashboard and mailbox

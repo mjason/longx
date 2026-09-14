@@ -33,6 +33,9 @@ config :longx, Longx.Mailer, adapter: Swoosh.Adapters.Test
 # Disable swoosh api client as it is only required for production adapters
 config :swoosh, :api_client, false
 
+# Longx's global memory directory (Longx.Memory)
+config :longx, Longx.Memory, dir: Path.expand("../data/memory_test", __DIR__), tick: nil
+
 config :longx, Longx.Codex.Home, dir: Path.expand("../data/codex_home_test", __DIR__)
 
 # The headless browser is never the real one in the unit suite: unavailable

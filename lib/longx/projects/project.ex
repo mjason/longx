@@ -80,6 +80,7 @@ defmodule Longx.Projects.Project do
         :network_access,
         :web_search,
         :multi_agent,
+        :global_memory,
         :memory_limit_mb,
         :model_id
       ]
@@ -106,6 +107,7 @@ defmodule Longx.Projects.Project do
         :network_access,
         :web_search,
         :multi_agent,
+        :global_memory,
         :memory_limit_mb,
         :model_id
       ]
@@ -197,6 +199,22 @@ defmodule Longx.Projects.Project do
       end
     end
 
+    action :clear_codex_memories do
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input), do: Longx.Projects.clear_codex_memories(project)
+      end
+    end
+
+    action :reset_codex_home do
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input), do: Longx.Projects.reset_codex_home(project)
+      end
+    end
+
     read :by_slug do
       argument :slug, :string, allow_nil?: false
       get? true
@@ -232,7 +250,8 @@ defmodule Longx.Projects.Project do
       constraints one_of: [:read_only, :workspace_write, :danger_full_access]
     end
 
-    # "ns.name" of Longx.Codex.Tool implementations offered on this project's threads
+    # "ns.name" of Longx.Codex.Tool implementations offered on this project's
+    # threads; empty = whatever is globally enabled (Longx.AI.enabled_tool_names/0)
     attribute :tools, {:array, :string}, allow_nil?: false, default: [], public?: true
 
     # What to do when a turn starts with uncommitted changes in a git project:
@@ -257,6 +276,10 @@ defmodule Longx.Projects.Project do
     # codex's sub-agent tools (multi_agent_v2: spawn / wait / send / …) for
     # new threads; decided at thread start
     attribute :multi_agent, :boolean, allow_nil?: false, default: true, public?: true
+
+    # Longx's global memory (Longx.Memory) goes to every new thread as
+    # developer instructions — unless this project wants none of it
+    attribute :global_memory, :boolean, allow_nil?: false, default: true, public?: true
 
     # Optional cap on the codex process tree (Linux RLIMIT_AS / Windows Job
     # memory). Off by default: a task that needs 30 GB gets 30 GB; the OOM

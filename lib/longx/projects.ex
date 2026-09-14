@@ -28,6 +28,8 @@ defmodule Longx.Projects do
       rpc_action :stop_codex, :stop_codex
       rpc_action :restart_codex, :restart_codex
       rpc_action :clear_codex_history, :clear_codex_history
+      rpc_action :clear_codex_memories, :clear_codex_memories
+      rpc_action :reset_codex_home, :reset_codex_home
     end
 
     resource Longx.Projects.Thread do
@@ -97,6 +99,7 @@ defmodule Longx.Projects do
     resource Longx.Projects.Thread do
       define :create_thread, action: :create
       define :touch_thread, action: :touch
+      define :mark_thread_extracted, action: :mark_extracted
       define :rename_thread, action: :rename
       define :archive_thread, action: :archive
       define :get_thread_by_codex_id, action: :by_codex_id, args: [:codex_thread_id]
@@ -168,7 +171,14 @@ defmodule Longx.Projects do
   def start_thread(%Project{} = project, opts \\ []) do
     project = Ash.load!(project, :model)
     model_slug = Keyword.get(opts, :model) || (project.model && project.model.slug)
-    tools = Keyword.get(opts, :tools, project.tools)
+    # a project that chose nothing gets the globally enabled tools (the memory
+    # tools by default) — the tools page is where "none" is decided
+    tools =
+      case Keyword.get(opts, :tools, project.tools) do
+        [] -> Longx.AI.enabled_tool_names()
+        chosen -> chosen
+      end
+
     approval_policy = Keyword.get(opts, :approval_policy, project.approval_policy)
     sandbox = Keyword.get(opts, :sandbox, project.sandbox)
     network_access = Keyword.get(opts, :network_access, project.network_access)
@@ -190,7 +200,8 @@ defmodule Longx.Projects do
              conn: conn
            ]
            |> Keyword.merge(model_opts)
-           |> without_web_search(web_search),
+           |> without_web_search(web_search)
+           |> with_global_memory(project),
          {:ok, codex_thread_id} <- Longx.Codex.Thread.start(codex_opts),
          {:ok, thread} <-
            create_thread(%{
@@ -210,6 +221,12 @@ defmodule Longx.Projects do
       {:ok, thread}
     end
   end
+
+  # what Longx remembers across projects, as the thread's developer instructions
+  defp with_global_memory(opts, %Project{global_memory: true}),
+    do: Keyword.put(opts, :developer_instructions, Longx.Memory.instructions())
+
+  defp with_global_memory(opts, _project), do: opts
 
   # the model's mode (thread_options) unless the thread wants no web.run at all
   defp without_web_search(opts, true), do: opts
@@ -749,7 +766,9 @@ defmodule Longx.Projects do
   ## The project's codex: process and CODEX_HOME
 
   # codex's own state inside the home; everything else there is ours (config)
-  @codex_state_globs ~w(*.sqlite *.sqlite-wal *.sqlite-shm sessions logs db-backups archived_sessions memories skills tmp)
+  # what codex keeps in the home besides our config — `memories` (what it
+  # learned about the project) is deliberately not history and survives a clear
+  @codex_state_globs ~w(*.sqlite *.sqlite-wal *.sqlite-shm sessions logs db-backups archived_sessions skills tmp)
 
   @doc """
   The project's codex resources: the `CODEX_HOME` directory (path, size,
@@ -833,11 +852,40 @@ defmodule Longx.Projects do
     :ok
   end
 
-  @doc "Stops the worker and deletes the whole `CODEX_HOME` (config included)."
+  @doc """
+  Forgets what codex learned about this project — its memories (the
+  `memories/` workspace and its state db) — and nothing else: sessions and
+  our threads stay. For a project memory that went wrong; the global one
+  (`Longx.Memory`) is untouched.
+  """
+  @spec clear_codex_memories(Project.t()) :: :ok
+  def clear_codex_memories(%Project{id: project_id}) do
+    :ok = Pool.stop(project_id)
+    home = Pool.home_dir(project_id)
+
+    for glob <- ~w(memories memories_*.sqlite memories_*.sqlite-wal memories_*.sqlite-shm),
+        path <- Path.wildcard(Path.join(home, glob), match_dot: true) do
+      File.rm_rf!(path)
+    end
+
+    :ok
+  end
+
+  @doc """
+  Stops the worker and deletes the whole `CODEX_HOME` (config, sessions,
+  memories, everything); the threads become `:unrecoverable`. The next use
+  starts codex afresh with a regenerated config.
+  """
   @spec reset_codex_home(Project.t()) :: :ok
   def reset_codex_home(%Project{id: project_id}) do
     :ok = Pool.stop(project_id)
     File.rm_rf!(Pool.home_dir(project_id))
+
+    project_id
+    |> list_threads_for_project!()
+    |> Enum.each(&touch_thread!(&1, %{status: :unrecoverable}))
+
+    broadcast_changed(project_id)
     :ok
   end
 

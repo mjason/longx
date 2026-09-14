@@ -42,7 +42,7 @@ defmodule Longx.Codex.HomeTest do
     refute config =~ ~s(web_search = "disabled")
     # the provider is always declared capable: threads switch modes per model
     assert config =~ "supports_standalone_web_search = true"
-    assert config =~ "[features]\nstandalone_web_search = true"
+    assert config =~ "[features]\nmemories = true\nstandalone_web_search = true"
 
     # an explicit :disabled still turns the tool off entirely
     {:ok, off} =
@@ -59,7 +59,7 @@ defmodule Longx.Codex.HomeTest do
 
     refute config =~ ~s(web_search = "disabled")
     assert config =~ "supports_standalone_web_search = true"
-    assert config =~ "[features]\nstandalone_web_search = true"
+    assert config =~ "[features]\nmemories = true\nstandalone_web_search = true"
   end
 
   test "web_search: :hosted lets codex use the upstream's own web_search tool", %{dir: dir} do
@@ -69,7 +69,29 @@ defmodule Longx.Codex.HomeTest do
     config = File.read!(home.config_path)
 
     assert config =~ ~s(web_search = "live")
-    refute config =~ "[features]\nstandalone_web_search = true"
+    refute config =~ "\nstandalone_web_search = true"
+  end
+
+  test "codex's own memories are on for every home (its read path and pipeline, not its tools), in one [features] table with search",
+       %{dir: dir} do
+    {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
+    config = File.read!(home.config_path)
+    assert config =~ "[features]\nmemories = true\nstandalone_web_search = true\n"
+    assert config =~ "[memories]\ndedicated_tools = false\n"
+    # one [features] table: TOML refuses a second
+    assert length(String.split(config, "[features]")) == 2
+
+    {:ok, home} =
+      Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1", memories: false)
+
+    config = File.read!(home.config_path)
+    assert config =~ "[features]\nmemories = false\n"
+    refute config =~ "[memories]"
+
+    {:ok, home} =
+      Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1", web_search: :disabled)
+
+    assert File.read!(home.config_path) =~ "[features]\nmemories = true\n"
   end
 
   test "the [agents] limits (sub-agents per session, depth) come from config", %{dir: dir} do
@@ -181,7 +203,9 @@ defmodule Longx.Codex.HomeTest do
   test "without an explicit option the mode comes from Longx.AI.web_search_mode/0", %{dir: dir} do
     # nothing configured in the (sandboxed, cleared) DB → standalone (open needs no provider)
     {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
-    assert File.read!(home.config_path) =~ "[features]\nstandalone_web_search = true"
+
+    assert File.read!(home.config_path) =~
+             "[features]\nmemories = true\nstandalone_web_search = true"
   end
 
   test "the env caps codex's tokio worker threads (musl allocator contention on many cores)",

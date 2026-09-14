@@ -28,7 +28,7 @@ defmodule LongxWeb.ThreadChannelTest do
     assert socket.assigns.thread_id == thread_id
     # the thread itself lands with the fake's thread/started, which a loaded
     # suite may still be delivering: the snapshot is re-pulled until it is there
-    assert %{thread: %{"id" => ^thread_id}} = snapshot_with_thread(socket, 20)
+    assert %{thread: %{"id" => ^thread_id}} = snapshot_with_thread(socket, 50)
   end
 
   test "events stream as `codex` pushes carrying seq/method/params", %{
@@ -53,7 +53,7 @@ defmodule LongxWeb.ThreadChannelTest do
   } do
     # the fake's thread/started may still be on its way under a loaded suite:
     # the snapshot is re-pulled until the view carries the thread
-    assert %{seq: _, thread: %{"id" => ^thread_id}} = snapshot_with_thread(socket, 20)
+    assert %{seq: _, thread: %{"id" => ^thread_id}} = snapshot_with_thread(socket, 50)
   end
 
   defp snapshot_with_thread(socket, tries) do
@@ -61,9 +61,17 @@ defmodule LongxWeb.ThreadChannelTest do
     assert_reply ref, :ok, payload, 2_000
 
     case payload do
-      %{thread: %{"id" => _}} -> payload
-      _ when tries > 1 -> snapshot_with_thread(socket, tries - 1)
-      _ -> payload
+      %{thread: %{"id" => _}} ->
+        payload
+
+      _ when tries > 1 ->
+        # the fake is an `elixir` script: on a slow runner its thread/started
+        # can trail the reply by a good while
+        Process.sleep(100)
+        snapshot_with_thread(socket, tries - 1)
+
+      _ ->
+        payload
     end
   end
 
