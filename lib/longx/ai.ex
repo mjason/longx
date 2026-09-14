@@ -37,6 +37,11 @@ defmodule Longx.AI do
       rpc_action :list_tools, :catalogue
       rpc_action :set_tool_enabled, :set_enabled
     end
+
+    resource Longx.AI.Preset do
+      rpc_action :list_presets, :list_presets
+      rpc_action :apply_preset, :apply_preset
+    end
   end
 
   resources do
@@ -71,6 +76,8 @@ defmodule Longx.AI do
 
       define :make_default_search_provider, action: :make_default
     end
+
+    resource Longx.AI.Preset
 
     resource Longx.AI.Tool do
       define :create_tool, action: :create

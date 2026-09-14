@@ -1,52 +1,21 @@
 # Seeds — run by `mix ash.setup` (and therefore by `mix setup` and `mix test`).
 #
-# Idempotent: creates the DeepSeek provider and `deepseek-flash` model if they
-# are missing, refreshes the provider's key from DEEPSEEK_API_KEY when that is
-# set, and makes deepseek-flash the default model when nothing is the default
-# yet. Safe to re-run; never downgrades an existing key to nil. A row still on
-# the old seeded window (128k — DeepSeek V4 Flash takes 1M) is lifted; a
-# window someone chose stays.
+# Idempotent, on `Longx.AI.Presets`: the DeepSeek preset (its recommended
+# models) with the key from DEEPSEEK_API_KEY, made the default model when
+# nothing is the default yet; the OpenAI preset's provider alone (its models
+# are one click away in the settings page) with OPENAI_API_KEY. Safe to
+# re-run; never downgrades an existing key to nil, never touches a window
+# or level someone chose (a row without levels learns the preset's).
 
 alias Longx.AI
+alias Longx.AI.Presets
 
 deepseek_key = System.get_env("DEEPSEEK_API_KEY")
 
-provider =
-  case AI.get_provider_by_slug("deepseek") do
-    {:ok, %AI.Provider{} = provider} ->
-      if deepseek_key, do: AI.update_provider!(provider, %{api_key: deepseek_key}), else: provider
-
-    {:error, _} ->
-      AI.create_provider!(%{
-        name: "DeepSeek",
-        slug: "deepseek",
-        base_url: "https://api.deepseek.com/v1",
-        api_key: deepseek_key
-      })
-  end
-
-model =
-  case Enum.find(
-         AI.list_models!(),
-         &(&1.upstream_id == "deepseek-flash" and &1.provider_id == provider.id)
-       ) do
-    nil ->
-      AI.create_model!(%{
-        name: "DeepSeek Flash",
-        upstream_id: "deepseek-flash",
-        context_window: 1_000_000,
-        provider_id: provider.id
-      })
-
-    %AI.Model{context_window: 128_000} = model ->
-      AI.update_model!(model, %{context_window: 1_000_000})
-
-    model ->
-      model
-  end
+{:ok, %{models: [flash | _]}} = Presets.apply("deepseek", api_key: deepseek_key)
 
 case AI.default_model!() do
-  nil -> AI.make_default_model!(model)
+  nil -> AI.make_default_model!(flash)
   _ -> :ok
 end
 
@@ -56,24 +25,7 @@ unless deepseek_key do
   )
 end
 
-# OpenAI: not the default, but present so its hosted web_search is one click
-# away; key from OPENAI_API_KEY when set.
-openai_key = System.get_env("OPENAI_API_KEY")
-
-case AI.get_provider_by_slug("openai") do
-  {:ok, %AI.Provider{} = openai} ->
-    if openai_key, do: AI.update_provider!(openai, %{api_key: openai_key})
-
-  {:error, _} ->
-    AI.create_provider!(%{
-      name: "OpenAI",
-      slug: "openai",
-      kind: :openai,
-      base_url: "https://api.openai.com/v1",
-      api_key: openai_key,
-      supports_hosted_web_search: true
-    })
-end
+{:ok, _} = Presets.apply("openai", api_key: System.get_env("OPENAI_API_KEY"), models: [])
 
 # Web search for codex's `web.run` tool: Tavily, key from TAVILY_API_KEY.
 tavily_key = System.get_env("TAVILY_API_KEY")

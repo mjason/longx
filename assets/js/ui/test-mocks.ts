@@ -127,6 +127,8 @@ export function rpcMock() {
       ]),
     ),
     updateSearchProvider: vi.fn(async () => ok({ id: "s1", hasApiKey: true })),
+    listPresets: vi.fn(async () => ok(presets())),
+    applyPreset: vi.fn(async () => ok({ providerId: "p9", modelIds: ["m9"] })),
     listTools: vi.fn(async () =>
       ok([
         {
@@ -383,6 +385,99 @@ export const model = (
     name: n === 2 ? "GLM" : "Prov",
   },
 });
+
+const presetModel = (
+  upstreamId: string,
+  name: string,
+  extra: Partial<{
+    contextWindow: number;
+    reasoningLevels: string[];
+    reasoningEffort: string | null;
+    image: boolean;
+    recommended: boolean;
+    installed: boolean;
+  }> = {},
+) => ({
+  upstreamId,
+  slug: upstreamId,
+  name,
+  contextWindow: extra.contextWindow ?? 1_000_000,
+  reasoningLevels: extra.reasoningLevels ?? ["low", "high", "max"],
+  reasoningEffort: "reasoningEffort" in extra ? extra.reasoningEffort : "high",
+  image: extra.image ?? false,
+  recommended: extra.recommended ?? true,
+  installed: extra.installed ?? false,
+});
+
+/** the preset catalogue as list_presets answers it: DeepSeek installed as p1 (flash there, pro not), GLM and OpenAI not */
+export const presets = () => [
+  {
+    slug: "deepseek",
+    name: "DeepSeek",
+    kind: "openai_compatible",
+    baseUrl: "https://api.deepseek.com/v1",
+    supportsHostedWebSearch: false,
+    keyEnv: "DEEPSEEK_API_KEY",
+    keyUrl: "https://platform.deepseek.com/api_keys",
+    docsUrl: "https://api-docs.deepseek.com/",
+    installed: true,
+    providerId: "p1",
+    models: [
+      presetModel("deepseek-flash", "DeepSeek Flash", {
+        image: true,
+        installed: true,
+      }),
+      presetModel("deepseek-v4-pro", "DeepSeek V4 Pro"),
+    ],
+  },
+  {
+    slug: "glm",
+    name: "GLM",
+    kind: "openai_compatible",
+    baseUrl: "https://open.bigmodel.cn/api/v1",
+    supportsHostedWebSearch: false,
+    keyEnv: "GLM_API_KEY",
+    keyUrl: "https://bigmodel.cn/",
+    docsUrl: "https://docs.bigmodel.cn/",
+    installed: false,
+    providerId: null,
+    models: [
+      presetModel("glm-5.3", "GLM 5.3", { reasoningEffort: "max" }),
+      presetModel("glm-5-turbo", "GLM 5 Turbo", {
+        contextWindow: 200_000,
+        reasoningLevels: [],
+        reasoningEffort: null,
+      }),
+    ],
+  },
+  {
+    slug: "openai",
+    name: "OpenAI",
+    kind: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    supportsHostedWebSearch: true,
+    keyEnv: "OPENAI_API_KEY",
+    keyUrl: "https://platform.openai.com/api-keys",
+    docsUrl: "https://developers.openai.com/codex",
+    installed: false,
+    providerId: null,
+    models: [
+      presetModel("gpt-5.6-sol", "GPT-5.6 Sol", {
+        contextWindow: 272_000,
+        reasoningLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
+        reasoningEffort: "low",
+        image: true,
+      }),
+      presetModel("gpt-5.5", "GPT-5.5", {
+        contextWindow: 272_000,
+        reasoningLevels: ["low", "medium", "high", "xhigh"],
+        reasoningEffort: "medium",
+        image: true,
+        recommended: false,
+      }),
+    ],
+  },
+];
 
 export const provider = (n: number, extra: Record<string, unknown> = {}) => ({
   id: `p${n}`,

@@ -48,6 +48,20 @@ export type ModelAttributesOnlySchema = {
 };
 
 
+// Preset Schema
+export type PresetResourceSchema = {
+  __type: "Resource";
+  __primitiveFields: never;
+};
+
+
+
+export type PresetAttributesOnlySchema = {
+  __type: "Resource";
+  __primitiveFields: never;
+};
+
+
 // Provider Schema
 export type ProviderResourceSchema = {
   __type: "Resource";
@@ -488,6 +502,14 @@ export type ModelFilterInput = {
   };
 
   provider?: ProviderFilterInput;
+
+};
+export type PresetFilterInput = {
+  and?: Array<PresetFilterInput>;
+  or?: Array<PresetFilterInput>;
+  not?: Array<PresetFilterInput>;
+
+
 
 };
 export type ProviderFilterInput = {
@@ -1451,6 +1473,7 @@ export type SystemStatusFilterInput = {
 export const modelFilterFields = ["contextWindow", "default", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId", "provider"] as const;
 export type ModelFilterField = (typeof modelFilterFields)[number];
 
+
 export const providerFilterFields = ["baseUrl", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
 export type ProviderFilterField = (typeof providerFilterFields)[number];
 
@@ -1475,6 +1498,7 @@ export type TurnFilterField = (typeof turnFilterFields)[number];
 
 export const modelSortFields = ["contextWindow", "default", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId"] as const;
 export type ModelSortField = (typeof modelSortFields)[number];
+
 
 export const providerSortFields = ["baseUrl", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
 export type ProviderSortField = (typeof providerSortFields)[number];

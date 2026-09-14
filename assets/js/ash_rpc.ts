@@ -691,6 +691,149 @@ export async function validateUpdateModel(
 }
 
 
+export type ApplyPresetInput = {
+  slug: string;
+  apiKey?: string | null;
+  models?: Array<string> | null;
+  makeDefault?: string | null;
+};
+
+export type ApplyPresetFields = UnifiedFieldSelection<{providerId: UUID, modelIds: Array<UUID>, __type: "TypedMap", __primitiveFields: "providerId" | "modelIds"}>[];
+
+export type InferApplyPresetResult<
+  Fields extends ApplyPresetFields | undefined,
+> = InferResult<{providerId: UUID, modelIds: Array<UUID>, __type: "TypedMap", __primitiveFields: "providerId" | "modelIds"}, Fields>;
+
+export type ApplyPresetResult<Fields extends ApplyPresetFields | undefined = undefined> = | { success: true; data: InferApplyPresetResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Preset
+ *
+ * @ashActionType :action
+ */
+export async function applyPreset<Fields extends ApplyPresetFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: ApplyPresetInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ApplyPresetResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "apply_preset",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ApplyPresetResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Preset
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateApplyPreset(
+  config: {
+  tenant?: string;
+  input: ApplyPresetInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "apply_preset",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ListPresetsFields = UnifiedFieldSelection<{slug: string, name: string, kind: string, baseUrl: string, supportsHostedWebSearch: boolean, keyEnv: string, keyUrl: string, docsUrl: string, installed: boolean, providerId: UUID | null, models: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "slug" | "name" | "kind" | "baseUrl" | "supportsHostedWebSearch" | "keyEnv" | "keyUrl" | "docsUrl" | "installed" | "providerId" | "models"}>[];
+
+export type InferListPresetsResult<
+  Fields extends ListPresetsFields | undefined,
+> = Array<InferResult<{slug: string, name: string, kind: string, baseUrl: string, supportsHostedWebSearch: boolean, keyEnv: string, keyUrl: string, docsUrl: string, installed: boolean, providerId: UUID | null, models: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "slug" | "name" | "kind" | "baseUrl" | "supportsHostedWebSearch" | "keyEnv" | "keyUrl" | "docsUrl" | "installed" | "providerId" | "models"}, Fields>>;
+
+export type ListPresetsResult<Fields extends ListPresetsFields | undefined = undefined> = | { success: true; data: InferListPresetsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Preset
+ *
+ * @ashActionType :action
+ */
+export async function listPresets<Fields extends ListPresetsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListPresetsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "list_presets",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ListPresetsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Preset
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateListPresets(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_presets",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type CreateProviderInput = {
   name: string;
   slug: string;

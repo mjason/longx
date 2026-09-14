@@ -42,20 +42,28 @@ defmodule Longx.AITest do
   describe "seeds (priv/repo/seeds.exs)" do
     @seeds Path.expand("priv/repo/seeds.exs")
 
-    test "deepseek-flash is created as a 1M-context model; an old 128k seed is corrected, a chosen value kept" do
+    test "deepseek-flash (1M, low / high / max) is the default; the OpenAI provider is there without models; a chosen value is kept" do
       Code.eval_file(@seeds)
       flash = Enum.find(AI.list_models!(), &(&1.upstream_id == "deepseek-flash"))
       assert flash.context_window == 1_000_000
+      assert flash.reasoning_levels == ["low", "high", "max"]
+      assert flash.reasoning_effort == "high"
+      assert AI.default_model!().id == flash.id
+      assert {:ok, %AI.Provider{kind: :openai}} = AI.get_provider_by_slug("openai")
+      refute Enum.any?(AI.list_models!(), &(&1.provider.slug == "openai"))
 
-      # a row still carrying the old seeded default is lifted on the next run…
-      AI.update_model!(flash, %{context_window: 128_000})
-      Code.eval_file(@seeds)
-      assert Ash.get!(AI.Model, flash.id).context_window == 1_000_000
-
-      # …a value someone chose is theirs
+      # a value someone chose is theirs
       AI.update_model!(flash, %{context_window: 200_000})
       Code.eval_file(@seeds)
       assert Ash.get!(AI.Model, flash.id).context_window == 200_000
+      # …and a row seeded before levels existed learns them on the next run
+      AI.update_model!(Ash.get!(AI.Model, flash.id), %{
+        reasoning_levels: [],
+        reasoning_effort: nil
+      })
+
+      Code.eval_file(@seeds)
+      assert Ash.get!(AI.Model, flash.id).reasoning_levels == ["low", "high", "max"]
     end
   end
 
