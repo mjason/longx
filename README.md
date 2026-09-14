@@ -14,8 +14,8 @@ mix phx.server       # 0.0.0.0:7788；开发时前端资源由 Vite dev server�
 手机连 LAN 调试时页面从 `http://<lan-ip>:7788` 打开，脚本要能到达 Vite：
 `LONGX_DEV_HOST=<lan-ip> mix phx.server`。
 
-环境变量：`DEEPSEEK_API_KEY`（seeds 会把它写进 DeepSeek provider）、`TAVILY_API_KEY`（联网搜索）、`OPENAI_API_KEY`（可选）。
-模型 provider 和密钥也可以在启动后的「设置 → 模型与 Provider」里配置。
+模型 provider 和密钥在启动后的「设置 → 模型与 Provider」里配置（seeds 只建 DeepSeek / OpenAI 的空 provider 和 Tavily 一行，不读环境变量）；
+`:live` 测试自己读 `DEEPSEEK_API_KEY` / `TAVILY_API_KEY`。
 
 ## 在 Linux 上安装（x86_64 / arm64）
 
@@ -28,129 +28,59 @@ Erlang 运行时、Go 中间件、codex-app-server、git、obscura（无头浏�
 Docker 容器和一些加固过的系统不允许——不允许时 codex 会拒绝所有沙箱内的命令，只能用「完全访问」模式；
 「设置 → 沙箱与权限」能看到检测结果）。
 
-全部装在用户自己的目录里（`~/.longx`），不需要 root：
+全部装在用户自己的目录里（`~/.longx`），不需要 root。
 
-### 1. 下载并解开
-
-```sh
-# 把版本号和架构换成你要的（x86_64 或 arm64）
-mkdir -p ~/.longx && cd ~/.longx
-curl -LO https://github.com/mjason/longx/releases/download/v0.1.0/longx-0.1.0-linux-x86_64.tar.gz
-curl -LO https://github.com/mjason/longx/releases/download/v0.1.0/longx-0.1.0-linux-x86_64.tar.gz.sha256
-sha256sum -c longx-0.1.0-linux-x86_64.tar.gz.sha256
-mkdir -p app && tar -C app --strip-components=1 -xzf longx-0.1.0-linux-x86_64.tar.gz
-```
-
-之后 `~/.longx/app` 是程序，`~/.longx/data` 是数据。
-
-### 2. 启动
+### 安装
 
 ```sh
-LONGX_DATA_DIR=~/.longx/data ~/.longx/app/bin/longx start
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install.sh | sh
 ```
 
-然后打开 `http://<这台机器>:7788`。首次启动会建库、跑迁移、生成两个密钥文件；打开「设置 → 模型与 Provider」
-用预设一步接入 DeepSeek / GLM / OpenAI（填 API Key 就行），或者启动前设好 `DEEPSEEK_API_KEY` 让种子数据直接写进去。
+脚本做的事：识别架构 → 从 Releases 下载最新版并校验 sha256 → 解到 `~/.longx/app` → 建 `~/.longx/data` →
+写一个 `systemd --user` 服务（`~/.config/systemd/user/longx.service`）并启动 → 等到端口响应后打印地址。
+然后打开 `http://<这台机器>:7788`，到「设置 → 模型与 Provider」接入一个模型（DeepSeek / GLM / OpenAI 有预设，
+填 API Key 就行；密钥加密存在数据目录里，不走环境变量）。
 
-环境变量：
-
-| 变量 | 作用 | 默认 |
-|---|---|---|
-| `LONGX_DATA_DIR` | 数据库、codex 的状态目录（每个项目一个 CODEX_HOME）、全局记忆、密钥文件 | 必填 |
-| `PORT` | 监听端口（所有网卡，明文 http） | `7788` |
-| `PHX_HOST` | 生成链接时用的主机名 | `localhost` |
-| `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` / `TAVILY_API_KEY` | 启动时写进对应的 provider / 搜索服务（之后在设置里改也行；GLM 在设置里用预设接入） | 无 |
-| `SECRET_KEY_BASE` / `LONGX_CLOAK_KEY` | 用环境变量代替数据目录里自动生成的密钥文件 | 自动生成 |
-
-`data/cloak_key` 加密 provider 的 API key，**丢了就读不回来**——备份 `~/.longx/data` 时一起备份。要 TLS 就在前面放一个
-反向代理（Caddy / nginx），Longx 自己只说 http。
-
-### 3. 作为用户服务运行（systemd --user）
-
-`~/.config/systemd/user/longx.service`：
-
-```ini
-[Unit]
-Description=Longx
-After=network.target
-
-[Service]
-Environment=LONGX_DATA_DIR=%h/.longx/data
-Environment=PORT=7788
-ExecStart=%h/.longx/app/bin/longx start
-ExecStop=%h/.longx/app/bin/longx stop
-Restart=on-failure
-
-[Install]
-WantedBy=default.target
-```
+可以调的：
 
 ```sh
-systemctl --user daemon-reload
-systemctl --user enable --now longx
-journalctl --user -u longx -f
-# 没登录时也要跑（服务器）：允许这个用户的服务常驻
-loginctl enable-linger "$USER"
+LONGX_HOME=~/apps/longx LONGX_PORT=8080 sh install.sh      # 换目录、换端口
+sh install.sh 0.1.0                                          # 指定版本
+LONGX_NO_SERVICE=1 sh install.sh                             # 只安装不启动（没有 systemd 的环境也会自动降级成这样，并打印手动启动的命令）
+loginctl enable-linger "$USER"                               # 服务器：不登录也让用户服务常驻
 ```
 
-用户服务里 codex 的沙箱照常工作（bubblewrap 用的是非特权用户命名空间，不需要 root）。
+手动启动就是 `LONGX_DATA_DIR=~/.longx/data PORT=7788 ~/.longx/app/bin/longx start`；`PHX_HOST` 是生成链接用的主机名
+（默认 `localhost`）；`SECRET_KEY_BASE` / `LONGX_CLOAK_KEY` 可以代替数据目录里自动生成的密钥文件。
+`data/cloak_key` 加密 provider 的 API key，**丢了就读不回来**——备份 `~/.longx/data` 时一起备份。
+要 TLS 就在前面放一个反向代理（Caddy / nginx），Longx 自己只说 http。
 
-### 4. 升级
+### 升级
 
-发布说明在 [Releases](https://github.com/mjason/longx/releases)；升级是"换程序目录、数据目录不动"，
-每一步都可以退回去。
-
-**升级前**
+再跑一遍同一条命令：
 
 ```sh
-~/.longx/app/bin/longx version            # 现在跑的是哪个版本
-systemctl --user stop longx               # 停服务（会一并停掉各项目的 codex 进程，正在跑的一轮会被打断）
-tar -C ~/.longx -czf ~/longx-data-$(date +%F).tar.gz data    # 备份数据目录：数据库、每个项目的 CODEX_HOME、全局记忆、密钥
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install.sh | sh
 ```
 
-`data/cloak_key` 丢了 provider 的密钥就读不回来，所以备份一定要带上 `data` 整个目录。
+它会：看当前版本 → 停服务（各项目的 codex 一并停掉，正在跑的一轮会被打断）→ 把 `data` 备份到
+`~/.longx/backups/data-<时间>.tar.gz` → 下载校验新版本 → 旧程序改名 `app.old`、新程序就位 → 重启服务 → 等端口响应。
+数据库迁移在启动时自动跑，`data` 目录原样保留：项目、会话、每个项目的 codex 状态和记忆、全局记忆、密钥都在。
+`journalctl --user -u longx -f` 看日志。
 
-**换程序**
+**回退**：
 
 ```sh
-cd ~/.longx
-V=0.2.0; A=x86_64                          # 目标版本和架构（x86_64 / arm64）
-curl -LO https://github.com/mjason/longx/releases/download/v$V/longx-$V-linux-$A.tar.gz
-curl -LO https://github.com/mjason/longx/releases/download/v$V/longx-$V-linux-$A.tar.gz.sha256
-sha256sum -c longx-$V-linux-$A.tar.gz.sha256
-rm -rf app.new && mkdir app.new && tar -C app.new --strip-components=1 -xzf longx-$V-linux-$A.tar.gz
-rm -rf app.old && mv app app.old && mv app.new app
-systemctl --user start longx
-journalctl --user -u longx -n 50          # 看到 "Running LongxWeb.Endpoint" 就好了；迁移在这之前自动跑
+sh install.sh --rollback        # 或 curl -fsSL …/install.sh | sh -s -- --rollback
 ```
 
-新版本启动时自动跑数据库迁移，`data` 目录原样保留：项目、会话、每个项目的 codex 状态和记忆、
-全局记忆、密钥都在。程序目录里只有代码和内置的二进制（codex、git、obscura、Erlang 运行时），
-所以换掉它不会丢任何东西。
+把 `app.old` 换回来并重启。两种情况要多做一步——新版本跑过**数据库迁移**（旧版本可能认不得新表结构），
+或升级了**内置的 codex**（它会迁移每个项目 CODEX_HOME 里自己的状态库）：用 `backups` 里的备份恢复 `data`
+（`rm -rf ~/.longx/data && tar -C ~/.longx -xzf ~/.longx/backups/data-<时间>.tar.gz`），或者只对出问题的项目
+在「项目设置 → 危险操作」里重置 codex 目录。发布说明会标出带迁移或换了 codex 的版本。
 
-**回滚**
-
-启动失败或不对劲，把旧程序换回来：
-
-```sh
-systemctl --user stop longx
-cd ~/.longx && mv app app.failed && mv app.old app
-systemctl --user start longx
-```
-
-两种情况回滚要多做一步：
-- 新版本已经跑过**数据库迁移**，旧版本可能认不得新的表结构——这时用升级前的备份恢复 `data`
-  （`rm -rf ~/.longx/data && tar -C ~/.longx -xzf ~/longx-data-<日期>.tar.gz`）。发布说明里会标出
-  带迁移的版本。
-- 新版本升级了**内置的 codex**，它会顺手迁移每个项目 CODEX_HOME 里自己的状态库，旧 codex 同样认不得——
-  同上，用备份恢复；或者只对出问题的项目在「项目设置 → 危险操作」里重置 codex 目录（会话历史会没，
-  项目和文件不受影响）。
-
-**顺便**
-
-- 升级后第一次打开设置，检查一下「模型与 Provider」：新版本的预设可能给已有的模型补了新的思考档位。
-- 每个项目正在运行的 codex 是升级前那份配置启动的，状态栏提示「codex 需要重启」时在进程工具里重启一下。
-- 旧的 `app.old` 确认没问题后可以删。
+升级后顺手：状态栏提示「codex 需要重启」时在进程工具里重启项目的 codex；「模型与 Provider」里预设可能给已有模型
+补了新的思考档位；确认没问题后 `app.old` 可以删。
 
 ### 自己构建
 
