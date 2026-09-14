@@ -118,7 +118,10 @@ defmodule Longx.Codex.Home do
   (the catalog codex read at boot is behind), `:config` for the rest of
   `config.toml`. Empty when nothing was written yet — there is no process
   to be behind. codex reads both once, at start: a non-empty answer means
-  "restart this project's codex".
+  "restart this project's codex". codex appends sections of its own to
+  `config.toml` (`[projects."…"] trust_level`, on first use), so the file is
+  current when it *starts with* what we wrote — a byte-for-byte comparison
+  flagged every project as stale after its first turn.
   """
   @spec stale(Path.t(), keyword) :: [:models | :config]
   def stale(dir, opts \\ []) do
@@ -131,13 +134,16 @@ defmodule Longx.Codex.Home do
               {:models, catalog_path, catalog},
               {:config, config_path, config}
             ],
-            File.read(path) != {:ok, wanted},
+            not current?(File.read(path), wanted),
             do: tag
 
       {:error, _} ->
         []
     end
   end
+
+  defp current?({:ok, on_disk}, wanted), do: String.starts_with?(on_disk, wanted)
+  defp current?(_, _wanted), do: false
 
   # everything prepare/1 writes, from the options (and the DB for what is not given)
   defp render(opts) do
