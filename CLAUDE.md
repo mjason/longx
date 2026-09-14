@@ -662,7 +662,9 @@ React Native client planned on the same core code.
     codex's `userMessage` content as `image` and `messages.ts` renders it as an image
     part (`UserImagePart`); **dictation** — `adapters.dictation` is
     `WebSpeechDictationAdapter` where the browser has speech recognition (the mic in the
-    rail; absent otherwise); **`/` commands** — `ui/chat/SlashCommands` over
+    rail; absent otherwise) — **switched off for now** by `DICTATION = false` in
+    `core/chat/runtime.ts` (no adapter → no capability → no button), flip it to bring
+    the mic back; **`/` commands** — `ui/chat/SlashCommands` over
     `unstable_useSlashCommandAdapter` and the same `composer-trigger-popover` element
     (`action` behaviour, text cleared on pick): `/new`, `/review` (RPC `review_thread`,
     uncommitted changes), `/compact` (RPC `compact_thread`), `/init` (sends

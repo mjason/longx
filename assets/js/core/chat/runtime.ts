@@ -50,6 +50,10 @@ export type CodexRuntime = {
   setMode: (mode: AccessMode) => void;
 };
 
+// voice input is wired (WebSpeechDictationAdapter, the mic in the composer rail)
+// but off for now: flip this to show it again
+const DICTATION = false;
+
 // statuses that end a thread for good vs. a codex on its way back
 const CLOSED = new Set(["unrecoverable", "archived"]);
 
@@ -136,7 +140,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   // files (inlined), and the browser's speech recognition where it exists —
   // built once, like everything the adapter is made of
   const [attachments] = useState(() => new CompositeAttachmentAdapter([new SimpleImageAttachmentAdapter(), new SimpleTextAttachmentAdapter()]));
-  const [dictation] = useState(() => (WebSpeechDictationAdapter.isSupported() ? new WebSpeechDictationAdapter({ language: navigator.language, interimResults: true }) : undefined));
+  const [dictation] = useState(() => (DICTATION && WebSpeechDictationAdapter.isSupported() ? new WebSpeechDictationAdapter({ language: navigator.language, interimResults: true }) : undefined));
 
   const disabledReason = thread && CLOSED.has(thread.status) ? thread.status : null;
   const target = thread ? { threadId: thread.id, codexThreadId: thread.codexThreadId } : null;

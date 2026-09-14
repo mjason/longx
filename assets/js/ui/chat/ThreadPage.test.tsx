@@ -295,6 +295,11 @@ describe("ThreadPage", () => {
     await waitFor(() => expect(document.querySelector("img[src^='data:image/png']")).not.toBeNull());
   });
 
+  test("voice input is switched off for now: no mic in the rail", async () => {
+    await open();
+    expect(screen.queryByRole("button", { name: "语音输入" })).toBeNull();
+  });
+
   test("↑ on an empty composer recalls the last message sent", async () => {
     const user = userEvent.setup();
     await open();
