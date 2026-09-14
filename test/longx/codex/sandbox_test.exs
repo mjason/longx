@@ -26,7 +26,10 @@ defmodule Longx.Codex.SandboxTest do
   end
 
   describe "probe/0" do
+    # what the host allows: a WSL2 dev box passes, a GitHub runner does not
+    # (bwrap cannot set up the loopback there) — CI excludes :host_sandbox
     @tag :linux
+    @tag :host_sandbox
     test "runs the bundled bwrap once; a WSL2 dev box passes" do
       case :os.type() do
         {:unix, :linux} -> assert :ok = Sandbox.probe()

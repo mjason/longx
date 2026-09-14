@@ -260,7 +260,7 @@ defmodule Longx.GitTest do
       {:ok, topic} = Git.commit_all(dir, "topic work")
       main = Git.branches(dir).branches |> Enum.find(&(&1.name != "topic")) |> Map.fetch!(:name)
       :ok = Git.switch(dir, main)
-      {:ok, _} = Git.run(["merge", "--no-ff", "-q", "-m", "merge topic", "topic"], cd: dir)
+      :ok = Git.merge(dir, "topic", no_ff: true, message: "merge topic")
       {:ok, merge} = Git.head(dir)
 
       assert %{parents: [_, ^topic], files: [%{path: "c.txt", status: :added}]} =
@@ -391,7 +391,7 @@ defmodule Longx.GitTest do
       write!(dir, "a.txt", "ours\n")
       {:ok, _} = Git.commit_all(dir, "ours")
 
-      assert {:error, %Git.Error{}} = Git.run(["merge", "-q", "theirs"], cd: dir)
+      assert {:error, :conflict} = Git.merge(dir, "theirs")
       assert Git.merging?(dir)
       assert %{changes: [%{path: "a.txt", status: :unmerged}]} = Git.status(dir)
       assert %{diff: diff} = Git.file_diff(dir, "a.txt")
@@ -410,7 +410,7 @@ defmodule Longx.GitTest do
       write!(dir, "a.txt", "theirs again\n")
       {:ok, _} = Git.commit_all(dir, "theirs again")
       :ok = Git.switch(dir, main)
-      assert {:error, _} = Git.run(["merge", "-q", "theirs"], cd: dir)
+      assert {:error, :conflict} = Git.merge(dir, "theirs")
       assert Git.merging?(dir)
       assert :ok = Git.abort_merge(dir)
       refute Git.merging?(dir)

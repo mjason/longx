@@ -201,8 +201,7 @@ defmodule Longx.Git do
   end
 
   defp do_commit(dir, message, env) do
-    identity = if configured_identity?(dir, env), do: [], else: @fallback_identity
-    run(identity ++ ["commit", "-q", "-m", message], cd: dir, env: env)
+    run(identity(dir, env) ++ ["commit", "-q", "-m", message], cd: dir, env: env)
   end
 
   defp configured_identity?(dir, env) do
@@ -427,7 +426,7 @@ defmodule Longx.Git do
   def commit(dir, message, opts) do
     paths = Keyword.fetch!(opts, :paths)
     env = Keyword.get(opts, :env, [])
-    identity = if configured_identity?(dir, env), do: [], else: @fallback_identity
+    identity = identity(dir, env)
 
     only = if merging?(dir), do: [], else: ["--" | paths]
 
@@ -608,9 +607,35 @@ defmodule Longx.Git do
 
   @spec pull(Path.t()) :: :ok | {:error, term}
   def pull(dir) do
-    with {:ok, _} <- run(["pull", "-q", "--no-rebase"], cd: dir, timeout: @remote_timeout),
+    # a pull may end in a merge commit, which needs an identity like any commit
+    with {:ok, _} <-
+           run(identity(dir, []) ++ ["pull", "-q", "--no-rebase"],
+             cd: dir,
+             timeout: @remote_timeout
+           ),
          do: :ok
   end
+
+  @doc """
+  Merges `branch` into the current one (a merge commit under Longx's identity
+  when the user has none). `{:error, :conflict}` leaves the merge in progress
+  for `commit/3` or `abort_merge/1`.
+  """
+  @spec merge(Path.t(), String.t(), keyword) :: :ok | {:error, :conflict | term}
+  def merge(dir, branch, opts \\ []) do
+    no_ff = if Keyword.get(opts, :no_ff, false), do: ["--no-ff"], else: []
+    message = if msg = Keyword.get(opts, :message), do: ["-m", msg], else: []
+
+    case run(identity(dir, []) ++ ["merge", "-q"] ++ no_ff ++ message ++ [branch], cd: dir) do
+      {:ok, _} -> :ok
+      {:error, %Error{}} = error -> if merging?(dir), do: {:error, :conflict}, else: error
+      {:error, _} = error -> error
+    end
+  end
+
+  # the `-c user.*` fallback, unless an identity is configured
+  defp identity(dir, env),
+    do: if(configured_identity?(dir, env), do: [], else: @fallback_identity)
 
   @doc "Pushes the current branch, setting its upstream on `origin` the first time."
   @spec push(Path.t()) :: :ok | {:error, term}

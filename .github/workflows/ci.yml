@@ -68,4 +68,5 @@ jobs:
         working-directory: native/shim
       - run: mix ash_typescript.codegen --check
       - run: npm run check --prefix assets
-      - run: mix test
+      # the bwrap probe passes on a dev box, not inside a GitHub runner
+      - run: mix test --exclude host_sandbox

@@ -70,7 +70,10 @@ React Native client planned on the same core code.
   `delete_branch`, `stash` / `stash_pop` / `stashes`, `remotes` / `set_remote` /
   `ahead_behind` / `fetch` / `pull` / `push` (upstream set on first push; 120 s), `ignored/1`
   (what `.gitignore` hides, directories whole), `merging?/1` / `abort_merge/1`,
-  `file_versions/3` (`git show rev:path` on both sides). Auth for
+  `file_versions/3` (`git show rev:path` on both sides), `merge/3` (`{:error, :conflict}`
+  leaves the merge in progress). Every command that may commit (`commit_all`, `commit`,
+  `pull`, `merge`) passes the Longx identity as `-c user.*` when the user has none —
+  GitHub runners have none, a fresh machine neither. Auth for
   remotes is whatever the machine's SSH agent / credential helpers give the bundled git
   (`GIT_TERMINAL_PROMPT=0`: never a prompt, an error instead). The suite plays the remote
   with a bare repository on disk. `LONGX_GIT` overrides the binary.
@@ -792,7 +795,8 @@ home and the two secrets live there — `secret_key_base` and `cloak_key` are ge
 first boot into 0600 files unless given as env vars; `PORT` (7788), `PHX_HOST`; the
 release serves plain http itself (`server: true`, no `force_ssl` — TLS is a proxy's job).
 `.github/workflows/ci.yml` runs the precommit set on every push / PR (bundled git and
-codex fetched and cached; `:integration` stays excluded); `release.yml` builds on a
+codex fetched and cached; `:integration` stays excluded, and so is `:host_sandbox` — the
+bwrap probe test that only a real host passes, a runner cannot set up the loopback); `release.yml` builds on a
 `v*` tag for linux x86_64 and arm64, each natively on its own runner
 (`ubuntu-24.04` / `ubuntu-24.04-arm`), tars `_build/prod/rel/longx` and attaches the
 tarballs to the GitHub release. The repository is public at github.com/mjason/longx (MIT).
