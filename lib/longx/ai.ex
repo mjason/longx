@@ -8,6 +8,30 @@ defmodule Longx.AI do
   use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
 
   alias Longx.AI.{Model, Provider, SearchProvider, SearchTarget, Target}
+
+  @doc """
+  The Tavily row for codex's `web.run` search, the default when nothing is
+  — created when missing. Seeds call it, and so does the application at
+  boot: a release seeds nothing, and without the row the settings page had
+  no place to enter the key. A key or an edit already there is kept.
+  """
+  @spec ensure_search_provider() :: {:ok, SearchProvider.t()} | {:error, term}
+  def ensure_search_provider do
+    with {:ok, sp} <- tavily_row() do
+      case default_search_provider!() do
+        nil -> make_default_search_provider(sp)
+        _ -> {:ok, sp}
+      end
+    end
+  end
+
+  defp tavily_row do
+    case get_search_provider_by_slug("tavily") do
+      {:ok, %SearchProvider{} = sp} -> {:ok, sp}
+      {:error, _} -> create_search_provider(%{name: "Tavily", slug: "tavily", kind: :tavily})
+    end
+  end
+
   alias Longx.Codex.Tool.Registry
 
   # The SPA's typed client (settings pages)

@@ -16,6 +16,11 @@ defmodule Longx.Application do
       Longx.Repo,
       {Ecto.Migrator,
        repos: Application.fetch_env!(:longx, :ecto_repos), skip: skip_migrations?()},
+      # the search provider row the settings page edits (a release seeds nothing)
+      Supervisor.child_spec({Task, fn -> {:ok, _} = Longx.AI.ensure_search_provider() end},
+        id: :search_provider_row,
+        restart: :temporary
+      ),
       {DNSCluster, query: Application.get_env(:longx, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Longx.PubSub},
       # reference-id memory for codex web search (Longx.AI.Search)

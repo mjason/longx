@@ -930,7 +930,10 @@ The endpoint has `check_origin: :conn` (config.exs): a self-hosted instance is o
 whatever address the person typed, so the socket's Origin is checked against the request's
 own Host, never against `PHX_HOST` (the default `true` refused every LAN-IP page with
 "Could not check origin" — the "连接已断开" banner on a fresh install; `socket_origin_test`).
-A release seeds nothing — providers and keys are created in Settings (presets); the dev /
+A release seeds nothing — providers and keys are created in Settings (presets) — except
+the one row the settings page cannot create itself: `Longx.AI.ensure_search_provider/0`
+(the Tavily row, default) runs as a boot `Task` after the migrator, else a fresh install
+had no 联网搜索 section to enter the key in; the dev /
 test database gets `Longx.AI.Seeds.run/0` through `priv/repo/seeds.exs` (DeepSeek preset
 without a key as the default model, the OpenAI provider, a Tavily row, the tools — no
 API keys from the environment; the `:live` tests read `DEEPSEEK_API_KEY` themselves).
