@@ -33,6 +33,14 @@ defmodule Longx.AI.Provider do
   actions do
     defaults [:read, :destroy]
 
+    # the settings page's delete: its models go with it — unless one of them
+    # is the default, then pick another first
+    destroy :delete do
+      require_atomic? false
+      validate Longx.AI.Provider.Validations.NoDefaultModel
+      change cascade_destroy(:models, return_notifications?: false, after_action?: false)
+    end
+
     create :create do
       primary? true
 

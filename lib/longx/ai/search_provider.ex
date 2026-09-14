@@ -10,7 +10,12 @@ defmodule Longx.AI.SearchProvider do
     otp_app: :longx,
     domain: Longx.AI,
     data_layer: AshSqlite.DataLayer,
-    extensions: [AshCloak]
+    extensions: [AshCloak, AshTypescript.Resource]
+
+  typescript do
+    type_name "SearchProvider"
+    field_names has_api_key?: "hasApiKey"
+  end
 
   sqlite do
     table "ai_search_providers"
@@ -86,7 +91,9 @@ defmodule Longx.AI.SearchProvider do
   end
 
   calculations do
-    calculate :has_api_key?, :boolean, expr(not is_nil(encrypted_api_key))
+    calculate :has_api_key?, :boolean, expr(not is_nil(encrypted_api_key)) do
+      public? true
+    end
   end
 
   identities do

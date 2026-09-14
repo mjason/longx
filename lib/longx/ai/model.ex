@@ -24,6 +24,11 @@ defmodule Longx.AI.Model do
   actions do
     defaults [:read, :destroy]
 
+    # the settings page's delete: the default model stays until another one is made the default
+    destroy :delete do
+      validate attribute_equals(:default, false), message: "是默认模型，先把另一个模型设为默认"
+    end
+
     create :create do
       primary? true
 

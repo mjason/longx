@@ -3,7 +3,7 @@
 
 import * as RpcHooks from "./core/rpcHooks";
 
-import type { AshRpcError, ConditionalPaginatedResultMixed, InferResult, ModelFilterInput, ModelResourceSchema, ModelSortField, ProjectFilterInput, ProjectResourceSchema, ProjectSortField, ProviderFilterInput, ProviderResourceSchema, ProviderSortField, SortString, ThreadFilterInput, ThreadResourceSchema, ThreadSortField, ToolResourceSchema, TurnFilterInput, TurnResourceSchema, TurnSortField, UUID, UUIDv7, UnifiedFieldSelection, UtcDateTimeUsec, ValidationResult } from "./ash_types";
+import type { AshRpcError, ConditionalPaginatedResultMixed, InferResult, ModelFilterInput, ModelResourceSchema, ModelSortField, ProjectFilterInput, ProjectResourceSchema, ProjectSortField, ProviderFilterInput, ProviderResourceSchema, ProviderSortField, SearchProviderFilterInput, SearchProviderResourceSchema, SearchProviderSortField, SortString, ThreadFilterInput, ThreadResourceSchema, ThreadSortField, ToolResourceSchema, TurnFilterInput, TurnResourceSchema, TurnSortField, UUID, UUIDv7, UnifiedFieldSelection, UtcDateTimeUsec, ValidationResult } from "./ash_types";
 export type * from "./ash_types";
 
 // RPC Action Hook Context Type
@@ -370,6 +370,68 @@ export async function validateCreateModel(
 }
 
 
+export type DeleteModelResult = | { success: true; data: {}; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Delete a Model
+ *
+ * @ashActionType :destroy
+ */
+export async function deleteModel(
+  config: {
+  tenant?: string;
+  identity: UUIDv7;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DeleteModelResult> {
+  const payload = {
+    action: "delete_model",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    identity: config.identity
+  };
+
+  return executeActionRpcRequest<DeleteModelResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Delete a Model
+ *
+ * @ashActionType :destroy
+ * @validation true
+ */
+export async function validateDeleteModel(
+  config: {
+  tenant?: string;
+  identity: UUIDv7 | string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "delete_model",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    identity: config.identity
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type MakeDefaultModelFields = UnifiedFieldSelection<ModelResourceSchema>[];
 
 export type InferMakeDefaultModelResult<
@@ -708,6 +770,68 @@ export async function validateCreateProvider(
 }
 
 
+export type DeleteProviderResult = | { success: true; data: {}; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Delete a Provider
+ *
+ * @ashActionType :destroy
+ */
+export async function deleteProvider(
+  config: {
+  tenant?: string;
+  identity: UUIDv7;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DeleteProviderResult> {
+  const payload = {
+    action: "delete_provider",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    identity: config.identity
+  };
+
+  return executeActionRpcRequest<DeleteProviderResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Delete a Provider
+ *
+ * @ashActionType :destroy
+ * @validation true
+ */
+export async function validateDeleteProvider(
+  config: {
+  tenant?: string;
+  identity: UUIDv7 | string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "delete_provider",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    identity: config.identity
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ListProvidersFields = UnifiedFieldSelection<ProviderResourceSchema>[];
 
 
@@ -883,6 +1007,189 @@ export async function validateUpdateProvider(
 ): Promise<ValidationResult> {
   const payload = {
     action: "update_provider",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    identity: config.identity,
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ListSearchProvidersFields = UnifiedFieldSelection<SearchProviderResourceSchema>[];
+
+
+export type InferListSearchProvidersResult<
+  Fields extends ListSearchProvidersFields | undefined,
+  Page extends ListSearchProvidersConfig["page"] = undefined
+> = ConditionalPaginatedResultMixed<Page, Array<InferResult<SearchProviderResourceSchema, Fields>>, {
+  results: Array<InferResult<SearchProviderResourceSchema, Fields>>;
+  hasMore: boolean;
+  limit: number;
+  offset: number;
+  count?: number | null;
+  type: "offset";
+}, {
+  results: Array<InferResult<SearchProviderResourceSchema, Fields>>;
+  hasMore: boolean;
+  limit: number;
+  after: string | null;
+  before: string | null;
+  previousPage: string | null;
+  nextPage: string | null;
+  count?: number | null;
+  type: "keyset";
+}>;
+
+export type ListSearchProvidersConfig = {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: ListSearchProvidersFields;
+  filter?: SearchProviderFilterInput;
+  sort?: SortString<SearchProviderSortField> | SortString<SearchProviderSortField>[];
+  page?: (
+    {
+      limit?: number;
+      offset?: number;
+      count?: boolean;
+    } | {
+      limit?: number;
+      after?: string;
+      before?: string;
+    }
+  );
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+};
+
+export type ListSearchProvidersResult<Fields extends ListSearchProvidersFields, Page extends ListSearchProvidersConfig["page"] = undefined> = | { success: true; data: InferListSearchProvidersResult<Fields, Page>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Read SearchProvider records
+ *
+ * @ashActionType :read
+ */
+export async function listSearchProviders<Fields extends ListSearchProvidersFields, Config extends ListSearchProvidersConfig = ListSearchProvidersConfig>(
+  config: Config & { fields: Fields }
+): Promise<ListSearchProvidersResult<Fields, Config["page"]>> {
+  const payload = {
+    action: "list_search_providers",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields }),
+    ...(config.filter && { filter: config.filter }),
+    ...(config.sort && { sort: Array.isArray(config.sort) ? config.sort.join(",") : config.sort }),
+    ...(config.page && { page: config.page })
+  };
+
+  return executeActionRpcRequest<ListSearchProvidersResult<Fields, Config["page"]>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Read SearchProvider records
+ *
+ * @ashActionType :read
+ * @validation true
+ */
+export async function validateListSearchProviders(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_search_providers",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type UpdateSearchProviderInput = {
+  name?: string;
+  baseUrl?: string;
+  apiKey?: string | null;
+};
+
+export type UpdateSearchProviderFields = UnifiedFieldSelection<SearchProviderResourceSchema>[];
+
+export type InferUpdateSearchProviderResult<
+  Fields extends UpdateSearchProviderFields | undefined,
+> = InferResult<SearchProviderResourceSchema, Fields>;
+
+export type UpdateSearchProviderResult<Fields extends UpdateSearchProviderFields | undefined = undefined> = | { success: true; data: InferUpdateSearchProviderResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Update an existing SearchProvider
+ *
+ * @ashActionType :update
+ */
+export async function updateSearchProvider<Fields extends UpdateSearchProviderFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  identity: UUIDv7;
+  input?: UpdateSearchProviderInput;
+  hookCtx?: ActionHookContext;
+  fields?: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<UpdateSearchProviderResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "update_search_provider",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    identity: config.identity,
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<UpdateSearchProviderResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Update an existing SearchProvider
+ *
+ * @ashActionType :update
+ * @validation true
+ */
+export async function validateUpdateSearchProvider(
+  config: {
+  tenant?: string;
+  identity: UUIDv7 | string;
+  input?: UpdateSearchProviderInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "update_search_provider",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     identity: config.identity,
     input: config.input
@@ -5238,6 +5545,72 @@ export async function validateListDirectory(
     action: "list_directory",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ProbeSandboxFields = UnifiedFieldSelection<{status: "ok" | "unavailable", reason: string | null, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "checkedAt"}>[];
+
+export type InferProbeSandboxResult<
+  Fields extends ProbeSandboxFields | undefined,
+> = InferResult<{status: "ok" | "unavailable", reason: string | null, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "checkedAt"}, Fields>;
+
+export type ProbeSandboxResult<Fields extends ProbeSandboxFields | undefined = undefined> = | { success: true; data: InferProbeSandboxResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function probeSandbox<Fields extends ProbeSandboxFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ProbeSandboxResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "probe_sandbox",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ProbeSandboxResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateProbeSandbox(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "probe_sandbox",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
   };
 
   return executeValidationRpcRequest<ValidationResult>(

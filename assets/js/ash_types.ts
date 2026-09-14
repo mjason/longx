@@ -87,6 +87,33 @@ export type ProviderAttributesOnlySchema = {
 };
 
 
+// SearchProvider Schema
+export type SearchProviderResourceSchema = {
+  __type: "Resource";
+  __primitiveFields: "baseUrl" | "default" | "hasApiKey" | "id" | "kind" | "name" | "slug";
+  baseUrl: string;
+  default: boolean;
+  hasApiKey: boolean | null;
+  id: UUIDv7;
+  kind: "tavily";
+  name: string;
+  slug: string;
+};
+
+
+
+export type SearchProviderAttributesOnlySchema = {
+  __type: "Resource";
+  __primitiveFields: "baseUrl" | "default" | "id" | "kind" | "name" | "slug";
+  baseUrl: string;
+  default: boolean;
+  id: UUIDv7;
+  kind: "tavily";
+  name: string;
+  slug: string;
+};
+
+
 // Tool Schema
 export type ToolResourceSchema = {
   __type: "Resource";
@@ -598,6 +625,85 @@ export type ProviderFilterInput = {
     greaterThan?: UtcDateTimeUsec;
     lessThanOrEqual?: UtcDateTimeUsec;
     greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+
+};
+export type SearchProviderFilterInput = {
+  and?: Array<SearchProviderFilterInput>;
+  or?: Array<SearchProviderFilterInput>;
+  not?: Array<SearchProviderFilterInput>;
+
+  baseUrl?: {
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  default?: {
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
+  };
+
+  hasApiKey?: {
+    isNil?: boolean;
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
+  };
+
+  id?: {
+    eq?: UUIDv7;
+    notEq?: UUIDv7;
+    in?: Array<UUIDv7>;
+    lessThan?: UUIDv7;
+    greaterThan?: UUIDv7;
+    lessThanOrEqual?: UUIDv7;
+    greaterThanOrEqual?: UUIDv7;
+  };
+
+  kind?: {
+    eq?: "tavily";
+    notEq?: "tavily";
+    in?: Array<"tavily">;
+    lessThan?: "tavily";
+    greaterThan?: "tavily";
+    lessThanOrEqual?: "tavily";
+    greaterThanOrEqual?: "tavily";
+  };
+
+  name?: {
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  slug?: {
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
   };
 
 
@@ -1286,6 +1392,9 @@ export type ModelFilterField = (typeof modelFilterFields)[number];
 export const providerFilterFields = ["baseUrl", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
 export type ProviderFilterField = (typeof providerFilterFields)[number];
 
+export const searchProviderFilterFields = ["baseUrl", "default", "hasApiKey", "id", "kind", "name", "slug"] as const;
+export type SearchProviderFilterField = (typeof searchProviderFilterFields)[number];
+
 export const toolFilterFields = ["enabled", "id", "insertedAt", "name", "namespace", "updatedAt"] as const;
 export type ToolFilterField = (typeof toolFilterFields)[number];
 
@@ -1307,6 +1416,9 @@ export type ModelSortField = (typeof modelSortFields)[number];
 
 export const providerSortFields = ["baseUrl", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
 export type ProviderSortField = (typeof providerSortFields)[number];
+
+export const searchProviderSortFields = ["baseUrl", "default", "hasApiKey", "id", "kind", "name", "slug"] as const;
+export type SearchProviderSortField = (typeof searchProviderSortFields)[number];
 
 export const toolSortFields = ["enabled", "id", "insertedAt", "name", "namespace", "updatedAt"] as const;
 export type ToolSortField = (typeof toolSortFields)[number];
