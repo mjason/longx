@@ -78,6 +78,7 @@ defmodule Longx.Projects.Project do
         :tools,
         :dirty_start,
         :network_access,
+        :writable_roots,
         :web_search,
         :multi_agent,
         :global_memory,
@@ -105,6 +106,7 @@ defmodule Longx.Projects.Project do
         :tools,
         :dirty_start,
         :network_access,
+        :writable_roots,
         :web_search,
         :multi_agent,
         :global_memory,
@@ -267,6 +269,16 @@ defmodule Longx.Projects.Project do
     # (codex `sandbox_workspace_write.network_access`); read-only and
     # danger-full-access ignore it.
     attribute :network_access, :boolean, allow_nil?: false, default: false, public?: true
+
+    # Directories the workspace-write sandbox may write besides the project
+    # and /tmp (codex `sandbox_workspace_write.writable_roots`); `~` is the
+    # server user's home, a path that does not exist is skipped. ~/.cache by
+    # default: uv, pip, npm, cargo, huggingface all cache there and fail
+    # read-only. GPU device nodes are added on their own (Longx.Codex.Sandbox).
+    attribute :writable_roots, {:array, :string},
+      allow_nil?: false,
+      default: ["~/.cache"],
+      public?: true
 
     # Whether threads get codex's `web.run` (search + open URL, executed by
     # Longx's own gateway — this is separate from the sandbox's network,

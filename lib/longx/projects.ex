@@ -201,6 +201,7 @@ defmodule Longx.Projects do
              sandbox: sandbox,
              tools: tools,
              network_access: network_access,
+             writable_roots: writable_roots(project),
              multi_agent: multi_agent,
              conn: conn
            ]
@@ -379,8 +380,24 @@ defmodule Longx.Projects do
     [
       sandbox: Map.get(mode, :sandbox, thread.sandbox),
       approval_policy: Map.get(mode, :approval_policy, thread.approval_policy),
-      network_access: Map.get(mode, :network_access, thread.network_access)
+      network_access: Map.get(mode, :network_access, thread.network_access),
+      writable_roots: writable_roots(thread.project)
     ]
+  end
+
+  @doc """
+  What the workspace-write sandbox may write besides the project and /tmp:
+  the project's `writable_roots` (`~` = this user's home; only directories
+  that exist, so codex never sees a bind target that is missing) plus the
+  GPU device nodes of this machine (`Longx.Codex.Sandbox.device_roots/0`).
+  """
+  @spec writable_roots(Project.t()) :: [Path.t()]
+  def writable_roots(%Project{writable_roots: roots}) do
+    roots
+    |> Enum.map(&Path.expand/1)
+    |> Enum.filter(&File.dir?/1)
+    |> Enum.uniq()
+    |> Kernel.++(Longx.Codex.Sandbox.device_roots())
   end
 
   @doc """
@@ -459,6 +476,7 @@ defmodule Longx.Projects do
              sandbox: thread.sandbox,
              tools: thread.tools,
              network_access: thread.network_access,
+             writable_roots: writable_roots(project),
              multi_agent: thread.multi_agent,
              conn: conn
            ]
@@ -516,7 +534,12 @@ defmodule Longx.Projects do
   def resume_thread(%Thread{codex_thread_id: codex_id} = thread, conn) do
     with {:ok, model_opts} <- Longx.AI.thread_options(thread.model_slug) do
       opts =
-        [conn: conn, network_access: thread.network_access, multi_agent: thread.multi_agent]
+        [
+          conn: conn,
+          network_access: thread.network_access,
+          writable_roots: writable_roots(Ash.get!(Project, thread.project_id)),
+          multi_agent: thread.multi_agent
+        ]
         |> Keyword.merge(model_opts)
         # the level the thread was left on, not the row's default
         |> put_if(:reasoning_effort, thread.reasoning_effort)

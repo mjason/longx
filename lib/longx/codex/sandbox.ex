@@ -136,6 +136,29 @@ defmodule Longx.Codex.Sandbox do
     end
   end
 
+  @doc """
+  The GPU device nodes a sandboxed command needs, among the entries of
+  `/dev`: bubblewrap's `--dev /dev` is a minimal device tree (null, zero,
+  random, tty…), so CUDA inside the sandbox saw no GPU on a machine that
+  has one. Passed as writable roots, codex `--bind`s them in.
+  """
+  @spec device_roots([Path.t()]) :: [Path.t()]
+  def device_roots(entries \\ dev_entries()) do
+    entries
+    |> Enum.filter(fn path ->
+      name = Path.basename(path)
+      String.starts_with?(name, "nvidia") or name == "dri"
+    end)
+    |> Enum.sort()
+  end
+
+  defp dev_entries do
+    case File.ls("/dev") do
+      {:ok, names} -> Enum.map(names, &Path.join("/dev", &1))
+      _ -> []
+    end
+  end
+
   # codex's namespace flags (linux-sandbox/src/bwrap.rs); --unshare-net is
   # added for commands without network access
   @namespaces ~w(--unshare-user --unshare-pid --unshare-ipc)

@@ -173,7 +173,7 @@ export type ProjectFilesAttributesOnlySchema = {
 // Project Schema
 export type ProjectResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "approvalPolicy" | "archivedAt" | "description" | "dirtyStart" | "globalMemory" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "rootPath" | "sandbox" | "slug" | "tools" | "updatedAt" | "webSearch";
+  __primitiveFields: "approvalPolicy" | "archivedAt" | "description" | "dirtyStart" | "globalMemory" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "rootPath" | "sandbox" | "slug" | "tools" | "updatedAt" | "webSearch" | "writableRoots";
   approvalPolicy: "never" | "on_request" | "untrusted";
   archivedAt: UtcDateTimeUsec | null;
   description: string | null;
@@ -192,6 +192,7 @@ export type ProjectResourceSchema = {
   tools: Array<string>;
   updatedAt: UtcDateTimeUsec;
   webSearch: boolean;
+  writableRoots: Array<string>;
   model: { __type: "Relationship"; __resource: ModelResourceSchema | null; };
 };
 
@@ -199,7 +200,7 @@ export type ProjectResourceSchema = {
 
 export type ProjectAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "approvalPolicy" | "archivedAt" | "description" | "dirtyStart" | "globalMemory" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "rootPath" | "sandbox" | "slug" | "tools" | "updatedAt" | "webSearch";
+  __primitiveFields: "approvalPolicy" | "archivedAt" | "description" | "dirtyStart" | "globalMemory" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "rootPath" | "sandbox" | "slug" | "tools" | "updatedAt" | "webSearch" | "writableRoots";
   approvalPolicy: "never" | "on_request" | "untrusted";
   archivedAt: UtcDateTimeUsec | null;
   description: string | null;
@@ -218,6 +219,7 @@ export type ProjectAttributesOnlySchema = {
   tools: Array<string>;
   updatedAt: UtcDateTimeUsec;
   webSearch: boolean;
+  writableRoots: Array<string>;
 };
 
 
@@ -1006,6 +1008,13 @@ export type ProjectFilterInput = {
     in?: Array<boolean>;
   };
 
+  writableRoots?: {
+    eq?: Array<string>;
+    notEq?: Array<string>;
+    in?: Array<Array<string>>;
+    has?: string;
+  };
+
   model?: ModelFilterInput;
 
 };
@@ -1484,7 +1493,7 @@ export const toolFilterFields = ["enabled", "id", "insertedAt", "name", "namespa
 export type ToolFilterField = (typeof toolFilterFields)[number];
 
 
-export const projectFilterFields = ["approvalPolicy", "archivedAt", "description", "dirtyStart", "globalMemory", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "rootPath", "sandbox", "slug", "tools", "updatedAt", "webSearch", "model"] as const;
+export const projectFilterFields = ["approvalPolicy", "archivedAt", "description", "dirtyStart", "globalMemory", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "rootPath", "sandbox", "slug", "tools", "updatedAt", "webSearch", "writableRoots", "model"] as const;
 export type ProjectFilterField = (typeof projectFilterFields)[number];
 
 
@@ -1510,7 +1519,7 @@ export const toolSortFields = ["enabled", "id", "insertedAt", "name", "namespace
 export type ToolSortField = (typeof toolSortFields)[number];
 
 
-export const projectSortFields = ["approvalPolicy", "archivedAt", "description", "dirtyStart", "globalMemory", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "rootPath", "sandbox", "slug", "tools", "updatedAt", "webSearch"] as const;
+export const projectSortFields = ["approvalPolicy", "archivedAt", "description", "dirtyStart", "globalMemory", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "rootPath", "sandbox", "slug", "tools", "updatedAt", "webSearch", "writableRoots"] as const;
 export type ProjectSortField = (typeof projectSortFields)[number];
 
 

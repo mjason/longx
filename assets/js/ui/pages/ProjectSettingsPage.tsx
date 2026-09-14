@@ -20,6 +20,7 @@ type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPoli
   description: string;
   memoryLimitMb: string;
   modelId: string;
+  writableRoots: string;
 };
 
 /**
@@ -53,6 +54,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
     dirtyStart: project.dirtyStart,
     memoryLimitMb: project.memoryLimitMb ? String(project.memoryLimitMb) : "",
     modelId: "__default",
+    writableRoots: project.writableRoots.join("\n"),
   });
   const [confirming, setConfirming] = useState<"clear" | "memories" | "reset" | "archive" | "delete" | null>(null);
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
@@ -75,6 +77,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
             dirtyStart: form.dirtyStart,
             memoryLimitMb: form.memoryLimitMb ? Number(form.memoryLimitMb) : null,
             modelId: form.modelId === "__default" ? null : form.modelId,
+            writableRoots: form.writableRoots.split("\n").map((l) => l.trim()).filter(Boolean),
           },
         }),
       ),
@@ -186,6 +189,11 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         <div className="flex items-center justify-between gap-4">
           <Label htmlFor="ps-network">{t.network}</Label>
           <Switch id="ps-network" checked={form.networkAccess} onCheckedChange={(v) => set("networkAccess", v)} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="ps-writable-roots">{t.writableRoots}</Label>
+          <Textarea id="ps-writable-roots" rows={2} value={form.writableRoots} onChange={(e) => set("writableRoots", e.target.value)} className="font-mono text-sm" />
+          <p className="text-muted-foreground text-xs">{t.writableRootsHint}</p>
         </div>
         <div className="flex items-center justify-between gap-4">
           <Label htmlFor="ps-web-search">{t.webSearch}</Label>

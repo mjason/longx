@@ -34,6 +34,7 @@ export const projectFields = [
   "sandbox",
   "approvalPolicy",
   "networkAccess",
+  "writableRoots",
   "webSearch",
   "multiAgent",
   "globalMemory",

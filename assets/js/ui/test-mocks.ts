@@ -26,6 +26,7 @@ export const project = (n: number) => ({
   sandbox: "workspace_write",
   approvalPolicy: "on_request",
   networkAccess: false,
+  writableRoots: ["~/.cache"],
   webSearch: true,
   multiAgent: true,
   dirtyStart: "commit",
