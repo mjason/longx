@@ -236,13 +236,23 @@ defmodule Longx.Codex.GatewayE2ETest do
     assert Enum.any?(Thread.snapshot(thread_id).items, &(&1["type"] == "dynamicToolCall"))
   end
 
-  test "codex's own memory tools are offered; add_ad_hoc_note writes into the home's memories", %{
-    gateway_url: gateway_url
-  } do
+  test "remembering goes through Longx's memory.note (global), codex's own memory tools stay out of the way",
+       %{gateway_url: gateway_url} do
     upstream = Bypass.open()
     test_pid = self()
     fake_provider!(upstream)
     {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+    memory_dir =
+      Path.join(System.tmp_dir!(), "longx-e2e-memory-#{System.unique_integer([:positive])}")
+
+    previous = Application.get_env(:longx, Longx.Memory, [])
+    Application.put_env(:longx, Longx.Memory, Keyword.put(previous, :dir, memory_dir))
+
+    on_exit(fn ->
+      Application.put_env(:longx, Longx.Memory, previous)
+      File.rm_rf!(memory_dir)
+    end)
 
     Bypass.expect(upstream, "POST", "/v1/responses", fn conn ->
       {:ok, raw, conn} = Plug.Conn.read_body(conn, length: 50_000_000)
@@ -254,8 +264,7 @@ defmodule Longx.Codex.GatewayE2ETest do
         1 ->
           send_sse(
             conn,
-            ResponsesFixture.function_call("add_ad_hoc_note", "memories", %{
-              filename: "2026-09-14T12-00-00-prefers-tabs.md",
+            ResponsesFixture.function_call("note", "memory", %{
               note: "The user prefers tabs over spaces."
             })
           )
@@ -267,34 +276,32 @@ defmodule Longx.Codex.GatewayE2ETest do
 
     home = prepare_home!(gateway_url)
     conn = start_connection!(home)
-    thread_id = start_thread!(conn, home, tools: [])
+
+    thread_id =
+      start_thread!(conn, home,
+        tools: ["memory.note", "memory.search", "memory.read"],
+        developer_instructions: Longx.Memory.instructions(memory_dir)
+      )
 
     {turn, items} = run_turn!(conn, thread_id, "remember that I prefer tabs")
     assert turn["status"] == "completed", inspect(turn)
 
-    # the memories namespace, with its four tools, reaches the model through us
     assert_receive {:upstream_request, 1, first}, 5_000
+    names = Enum.map(first["tools"], &{&1["type"], &1["name"]})
+    # ours is there, codex's `memories` namespace is not (dedicated_tools = false)
+    assert {"namespace", "memory"} in names, inspect(names)
+    refute {"namespace", "memories"} in names, inspect(names)
+    # and the global memory reached the model as developer instructions
+    assert Enum.any?(first["input"], fn item ->
+             item["role"] == "developer" and
+               Enum.any?(item["content"] || [], &((&1["text"] || "") =~ "Longx 全局记忆"))
+           end)
 
-    memories =
-      Enum.find(first["tools"], &(&1["type"] == "namespace" and &1["name"] == "memories"))
-
-    assert memories,
-           "memories namespace not offered: #{inspect(Enum.map(first["tools"], &{&1["type"], &1["name"]}))}"
-
-    assert Enum.map(memories["tools"], & &1["name"]) |> Enum.sort() ==
-             ["add_ad_hoc_note", "list", "read", "search"]
-
-    # codex ran it inside itself: the note is on disk, the output went back to the model
     assert_receive {:upstream_request, 2, second}, 5_000
     assert Enum.any?(second["input"], &(&1["type"] == "function_call_output"))
 
-    notes = Path.wildcard(Path.join(home.dir, "memories/extensions/ad_hoc/notes/*.md"))
-    assert [note] = notes
-    assert File.read!(note) == "The user prefers tabs over spaces."
-
-    # codex 0.154 reports nothing for the call on the wire (only the messages):
-    # the UI cannot show it — this assertion is here to notice when that changes
-    assert Enum.map(items, & &1["type"]) == ["userMessage", "agentMessage"]
+    assert [%{text: "The user prefers tabs over spaces."}] = Longx.Memory.notes(memory_dir)
+    assert Enum.any?(items, &(&1["type"] == "dynamicToolCall" and &1["tool"] == "note"))
   end
 
   test "web_search: :hosted hands the upstream its own web_search tool and nothing of ours", %{

@@ -234,7 +234,8 @@ defmodule Longx.Projects.Project do
       constraints one_of: [:read_only, :workspace_write, :danger_full_access]
     end
 
-    # "ns.name" of Longx.Codex.Tool implementations offered on this project's threads
+    # "ns.name" of Longx.Codex.Tool implementations offered on this project's
+    # threads; empty = whatever is globally enabled (Longx.AI.enabled_tool_names/0)
     attribute :tools, {:array, :string}, allow_nil?: false, default: [], public?: true
 
     # What to do when a turn starts with uncommitted changes in a git project:

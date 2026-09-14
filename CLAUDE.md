@@ -185,11 +185,13 @@ React Native client planned on the same core code.
   `features.memories = true` and `[memories] dedicated_tools = true` into every home
   (`config :longx, Longx.Codex.Home, memories: false` turns it off), so codex runs its
   extraction / consolidation pipeline per project (at root-session start, on rollouts idle
-  ≥ 6 h, through our gateway — it costs tokens) and offers the model its `memories.*`
-  namespace tools (`add_ad_hoc_note` / `list` / `read` / `search`); a note lands in
-  `<home>/memories/extensions/ad_hoc/notes/` and the next consolidation folds it into
-  `MEMORY.md`. Verified end to end in `gateway_e2e_test`; codex 0.154 reports **no item**
-  for those calls on the wire, so the UI cannot show them. `clear_codex_history` keeps
+  ≥ 6 h, through our gateway — it costs tokens) and injects its read path (memory summary
+  + "grep MEMORY.md"). Its **dedicated tools stay off** (`[memories] dedicated_tools =
+  false`): they would hand the model a second "remember this" (`memories.add_ad_hoc_note`,
+  into the project's home) beside Longx's global `memory.note`, and asked to remember, a
+  model picked codex's. Verified against the real binary in `gateway_e2e_test`: the
+  `memories` namespace is not offered, ours is; codex 0.154 emits **no item** for its own
+  memory tool calls anyway, so the UI could not have shown them. `clear_codex_history` keeps
   `memories/` (what codex learned is not history; `reset_codex_home` wipes it). (2) *Global
   memory is Longx's*: `Longx.Memory` — one directory across projects and homes
   (`config :longx, Longx.Memory, dir:`; dev `data/memory`, prod `$LONGX_DATA_DIR/memory`),
@@ -201,7 +203,13 @@ React Native client planned on the same core code.
   `note` — when the person says remember / forget / from now on — `search`, `read`)
   are Elixir tools in the `memory` namespace, on by default (`enabled_by_default?/0`, a
   new optional `Longx.Codex.Tool` callback the registry sync honours; a switch someone
-  turned off stays off). RPC: `memory_index` / `memory_write_index` / `memory_notes` /
+  turned off stays off; `enabled_tool_names/0` syncs the registry first so a default-on
+  tool counts before anyone opened the tools page). **`Project.tools == []` means the
+  globally enabled set** (`start_thread` resolves it) — a project never has to know about
+  a new default-on tool; "none" is a decision for the tools page. The instructions name
+  the tools as functions in the `memory` namespace, not as `memory.note` in backticks:
+  DeepSeek Flash read the latter as a shell command and wrapped it in `exec_command`.
+  Live-checked: "记住…" → one `memory.note` call → a note with provenance. RPC: `memory_index` / `memory_write_index` / `memory_notes` /
   `memory_search` / `memory_delete_note` on `Longx.System` — no page yet. Not built:
   automatic extraction into the global memory and consolidation of notes into
   `MEMORY.md` (a note is handed to the model raw until then).

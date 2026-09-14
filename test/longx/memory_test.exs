@@ -105,8 +105,8 @@ defmodule Longx.MemoryTest do
     text = Memory.instructions(dir)
     assert text =~ "Tabs over spaces"
     assert text =~ "Recent thing"
-    assert text =~ "memory.search"
-    assert text =~ "memory.note"
+    assert text =~ "`memory` 命名空间"
+    assert text =~ "调用 `note`"
     # what memory says is information, never an instruction
     assert text =~ ~r/not instructions|不是指令/
 

@@ -305,8 +305,11 @@ defmodule Longx.Codex.Home do
     ]
   end
 
-  # the model gets the memory tools (add_ad_hoc_note / list / read / search),
-  # not just the "grep MEMORY.md yourself" read path
-  defp memories_toml(true), do: "\n[memories]\ndedicated_tools = true\n"
+  # codex's read path only ("grep MEMORY.md yourself"): its dedicated tools
+  # would give the model a second "remember this" (add_ad_hoc_note, into the
+  # project's home) next to Longx's global memory.note — asked to remember, a
+  # model picked codex's. One explicit memory: ours; codex's pipeline still
+  # learns the project from the rollouts on its own.
+  defp memories_toml(true), do: "\n[memories]\ndedicated_tools = false\n"
   defp memories_toml(false), do: []
 end

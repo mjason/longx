@@ -168,7 +168,14 @@ defmodule Longx.Projects do
   def start_thread(%Project{} = project, opts \\ []) do
     project = Ash.load!(project, :model)
     model_slug = Keyword.get(opts, :model) || (project.model && project.model.slug)
-    tools = Keyword.get(opts, :tools, project.tools)
+    # a project that chose nothing gets the globally enabled tools (the memory
+    # tools by default) — the tools page is where "none" is decided
+    tools =
+      case Keyword.get(opts, :tools, project.tools) do
+        [] -> Longx.AI.enabled_tool_names()
+        chosen -> chosen
+      end
+
     approval_policy = Keyword.get(opts, :approval_policy, project.approval_policy)
     sandbox = Keyword.get(opts, :sandbox, project.sandbox)
     network_access = Keyword.get(opts, :network_access, project.network_access)
