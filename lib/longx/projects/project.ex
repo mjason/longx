@@ -199,6 +199,22 @@ defmodule Longx.Projects.Project do
       end
     end
 
+    action :clear_codex_memories do
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input), do: Longx.Projects.clear_codex_memories(project)
+      end
+    end
+
+    action :reset_codex_home do
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input), do: Longx.Projects.reset_codex_home(project)
+      end
+    end
+
     read :by_slug do
       argument :slug, :string, allow_nil?: false
       get? true

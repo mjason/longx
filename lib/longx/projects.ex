@@ -28,6 +28,8 @@ defmodule Longx.Projects do
       rpc_action :stop_codex, :stop_codex
       rpc_action :restart_codex, :restart_codex
       rpc_action :clear_codex_history, :clear_codex_history
+      rpc_action :clear_codex_memories, :clear_codex_memories
+      rpc_action :reset_codex_home, :reset_codex_home
     end
 
     resource Longx.Projects.Thread do
@@ -850,11 +852,40 @@ defmodule Longx.Projects do
     :ok
   end
 
-  @doc "Stops the worker and deletes the whole `CODEX_HOME` (config included)."
+  @doc """
+  Forgets what codex learned about this project — its memories (the
+  `memories/` workspace and its state db) — and nothing else: sessions and
+  our threads stay. For a project memory that went wrong; the global one
+  (`Longx.Memory`) is untouched.
+  """
+  @spec clear_codex_memories(Project.t()) :: :ok
+  def clear_codex_memories(%Project{id: project_id}) do
+    :ok = Pool.stop(project_id)
+    home = Pool.home_dir(project_id)
+
+    for glob <- ~w(memories memories_*.sqlite memories_*.sqlite-wal memories_*.sqlite-shm),
+        path <- Path.wildcard(Path.join(home, glob), match_dot: true) do
+      File.rm_rf!(path)
+    end
+
+    :ok
+  end
+
+  @doc """
+  Stops the worker and deletes the whole `CODEX_HOME` (config, sessions,
+  memories, everything); the threads become `:unrecoverable`. The next use
+  starts codex afresh with a regenerated config.
+  """
   @spec reset_codex_home(Project.t()) :: :ok
   def reset_codex_home(%Project{id: project_id}) do
     :ok = Pool.stop(project_id)
     File.rm_rf!(Pool.home_dir(project_id))
+
+    project_id
+    |> list_threads_for_project!()
+    |> Enum.each(&touch_thread!(&1, %{status: :unrecoverable}))
+
+    broadcast_changed(project_id)
     :ok
   end
 

@@ -93,10 +93,15 @@ React Native client planned on the same core code.
     tests pass `conn:` to use their own fake. The codex is a project resource:
     `codex_info/1` (home path, size, sqlite files, worker status incl. OS pid), `stop_codex/2`
     (refuses while a turn runs unless `force: true`), `restart_codex/1`,
-    `clear_codex_history/1` (stop + delete codex's state in the home, keep our config; the
-    threads become `:unrecoverable`), `reset_codex_home/1` (whole directory), archive stops
-    the worker and keeps the home, `delete_project/2` needs `confirm: true` and removes the
-    home (never the working directory).
+    `clear_codex_history/1` (stop + delete codex's sessions and state in the home, keep our
+    config and its `memories/`; the threads become `:unrecoverable`),
+    `clear_codex_memories/1` (only what codex learned about the project: `memories/` and
+    `memories_*.sqlite`; sessions and threads stay — for a project memory gone wrong),
+    `reset_codex_home/1` (the whole directory; threads `:unrecoverable`; the next use
+    regenerates a clean config), archive stops the worker and keeps the home,
+    `delete_project/2` needs `confirm: true` and removes the home (never the working
+    directory). All five are the project settings page's danger zone (delete asks for the
+    project's name); none touches the global memory.
   - `Thread` = codex thread ↔ project (`codex_thread_id`, `cwd`, the settings it started with,
     `model_slug`, `preview`, `status`, `last_activity_at`). Statuses: `:idle`, `:active`,
     `:disconnected` (its codex died mid-turn; resumed → `:idle` when it is back),

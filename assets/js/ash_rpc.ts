@@ -2067,6 +2067,74 @@ export async function validateClearCodexHistory(
 }
 
 
+export type ClearCodexMemoriesInput = {
+  id: UUID;
+};
+
+export type InferClearCodexMemoriesResult = {};
+
+export type ClearCodexMemoriesResult = | { success: true; data: InferClearCodexMemoriesResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Project
+ *
+ * @ashActionType :action
+ */
+export async function clearCodexMemories(
+  config: {
+  tenant?: string;
+  input: ClearCodexMemoriesInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ClearCodexMemoriesResult> {
+  const payload = {
+    action: "clear_codex_memories",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<ClearCodexMemoriesResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Project
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateClearCodexMemories(
+  config: {
+  tenant?: string;
+  input: ClearCodexMemoriesInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "clear_codex_memories",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type CodexInfoInput = {
   id: UUID;
 };
@@ -2540,6 +2608,74 @@ export async function validateListAllProjects(
   const payload = {
     action: "list_all_projects",
     ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ResetCodexHomeInput = {
+  id: UUID;
+};
+
+export type InferResetCodexHomeResult = {};
+
+export type ResetCodexHomeResult = | { success: true; data: InferResetCodexHomeResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Project
+ *
+ * @ashActionType :action
+ */
+export async function resetCodexHome(
+  config: {
+  tenant?: string;
+  input: ResetCodexHomeInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ResetCodexHomeResult> {
+  const payload = {
+    action: "reset_codex_home",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<ResetCodexHomeResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Project
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateResetCodexHome(
+  config: {
+  tenant?: string;
+  input: ResetCodexHomeInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "reset_codex_home",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
   };
 
   return executeValidationRpcRequest<ValidationResult>(

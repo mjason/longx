@@ -80,6 +80,25 @@ defmodule LongxWeb.ProjectsRpcTest do
       assert "rootPath" in error["fields"]
     end
 
+    test "the codex home can be cleared of its memories or reset whole", %{conn: conn, dir: dir} do
+      project = create!(conn, dir)
+      home = Longx.Codex.Pool.home_dir(project["id"])
+      File.mkdir_p!(Path.join(home, "memories"))
+      File.write!(Path.join(home, "memories/MEMORY.md"), "x")
+      File.write!(Path.join(home, "config.toml"), "# ours")
+
+      assert %{"success" => true} =
+               rpc(conn, "clear_codex_memories", %{"input" => %{"id" => project["id"]}})
+
+      refute File.exists?(Path.join(home, "memories"))
+      assert File.exists?(Path.join(home, "config.toml"))
+
+      assert %{"success" => true} =
+               rpc(conn, "reset_codex_home", %{"input" => %{"id" => project["id"]}})
+
+      refute File.exists?(home)
+    end
+
     test "delete needs confirm and removes the project", %{conn: conn, dir: dir} do
       project = create!(conn, dir)
 
