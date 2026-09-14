@@ -17,23 +17,93 @@ mix phx.server       # 0.0.0.0:7788；开发时前端资源由 Vite dev server�
 环境变量：`DEEPSEEK_API_KEY`（seeds 会把它写进 DeepSeek provider）、`TAVILY_API_KEY`（联网搜索）、`OPENAI_API_KEY`（可选）。
 模型 provider 和密钥也可以在启动后的「设置 → 模型与 Provider」里配置。
 
-## 安装发布版（Linux x86_64 / arm64）
+## 在 Linux 上安装（x86_64 / arm64）
 
-[Releases](https://github.com/mjason/longx/releases) 里的 `longx-<版本>-linux-<架构>.tar.gz` 是自带
-Erlang 运行时、Go 中间件、codex-app-server、git 和 obscura 的完整包，解开就能跑，只要一个数据目录：
+[Releases](https://github.com/mjason/longx/releases) 里的 `longx-<版本>-linux-<架构>.tar.gz` 是完整包：
+Erlang 运行时、Go 中间件、codex-app-server、git、obscura（无头浏览器）和构建好的前端都在里面，
+**不需要**装 Erlang / Elixir / Node / Go / git / codex。
+
+**要求**：Linux x86_64 或 arm64，glibc ≥ 2.39（Ubuntu 24.04、Debian 13 及更新的发行版；包在
+`ubuntu-24.04` runner 上构建）；codex 的沙箱需要内核允许非特权用户命名空间（大多数发行版默认允许，
+Docker 容器和一些加固过的系统不允许——不允许时 codex 会拒绝所有沙箱内的命令，只能用「完全访问」模式；
+「设置 → 沙箱与权限」能看到检测结果）。
+
+### 1. 下载并解开
 
 ```sh
-tar xzf longx-0.1.0-linux-x86_64.tar.gz
-LONGX_DATA_DIR=/var/lib/longx PORT=7788 ./longx/bin/longx start
+# 把版本号和架构换成你要的（x86_64 或 arm64）
+curl -LO https://github.com/mjason/longx/releases/download/v0.1.0/longx-0.1.0-linux-x86_64.tar.gz
+curl -LO https://github.com/mjason/longx/releases/download/v0.1.0/longx-0.1.0-linux-x86_64.tar.gz.sha256
+sha256sum -c longx-0.1.0-linux-x86_64.tar.gz.sha256
+sudo mkdir -p /opt/longx
+sudo tar -C /opt/longx --strip-components=1 -xzf longx-0.1.0-linux-x86_64.tar.gz
 ```
 
-`LONGX_DATA_DIR` 放数据库、codex 的状态和首次启动时生成的两个密钥（`secret_key_base`、`cloak_key`——
-后者加密 provider 的 API key，丢了密钥就读不回来）。可选：`PORT`（默认 7788）、`PHX_HOST`（生成链接用的主机名）、
-`SECRET_KEY_BASE` / `LONGX_CLOAK_KEY`（用环境变量代替文件）。服务是明文 http，要 TLS 就在前面放个反向代理。
-codex 的沙箱要内核允许非特权用户命名空间（「设置 → 沙箱与权限」能看到检测结果）。
+### 2. 启动
 
+只需要一个数据目录：
+
+```sh
+sudo mkdir -p /var/lib/longx
+LONGX_DATA_DIR=/var/lib/longx /opt/longx/bin/longx start
+```
+
+然后打开 `http://<这台机器>:7788`。首次启动会建库、跑迁移、生成两个密钥文件；打开「设置 → 模型与 Provider」
+用预设一步接入 DeepSeek / GLM / OpenAI（填 API Key 就行），或者启动前设好 `DEEPSEEK_API_KEY` 让种子数据直接写进去。
+
+环境变量：
+
+| 变量 | 作用 | 默认 |
+|---|---|---|
+| `LONGX_DATA_DIR` | 数据库、codex 的状态目录（每个项目一个 CODEX_HOME）、全局记忆、密钥文件 | 必填 |
+| `PORT` | 监听端口（所有网卡，明文 http） | `7788` |
+| `PHX_HOST` | 生成链接时用的主机名 | `localhost` |
+| `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` / `TAVILY_API_KEY` | 启动时写进对应的 provider / 搜索服务（之后在设置里改也行；GLM 在设置里用预设接入） | 无 |
+| `SECRET_KEY_BASE` / `LONGX_CLOAK_KEY` | 用环境变量代替数据目录里自动生成的密钥文件 | 自动生成 |
+
+`cloak_key` 加密 provider 的 API key，**丢了就读不回来**——备份数据目录时一起备份。要 TLS 就在前面放一个
+反向代理（Caddy / nginx），Longx 自己只说 http。
+
+### 3. 作为服务运行（systemd）
+
+`/etc/systemd/system/longx.service`：
+
+```ini
+[Unit]
+Description=Longx
+After=network.target
+
+[Service]
+User=longx
+Environment=LONGX_DATA_DIR=/var/lib/longx
+Environment=PORT=7788
+ExecStart=/opt/longx/bin/longx start
+ExecStop=/opt/longx/bin/longx stop
+Restart=on-failure
+# codex 的沙箱要能创建用户命名空间；不要给这个服务加 NoNewPrivileges / 禁用 userns 的加固项
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```sh
+sudo useradd -r -s /usr/sbin/nologin -d /var/lib/longx longx
+sudo chown -R longx:longx /var/lib/longx /opt/longx
+sudo systemctl enable --now longx
+journalctl -u longx -f
+```
+
+### 4. 升级
+
+解开新版本覆盖 `/opt/longx`（或解到新目录再换软链接），重启服务；迁移在启动时自动跑，数据目录不动。
+运行中的 codex 进程随 Longx 一起停止，项目的会话和记忆都在数据目录里。
+
+### 自己构建
+
+`MIX_ENV=prod mix assets.build && MIX_ENV=prod mix release`（需要 Elixir 1.19 / OTP 28、Node 22、Go 1.24，
+`mix setup` 会下载内置的 codex / git / obscura）得到 `_build/prod/rel/longx`，和 Release 里的一样。
 发布由 `.github/workflows/release.yml` 完成：打 `v*` 标签就在 x86_64 和 arm64 的 runner 上各自原生构建并挂到
-GitHub Release；本地 `MIX_ENV=prod mix assets.build && MIX_ENV=prod mix release` 得到同样的东西。
+GitHub Release。
 
 ## 结构一览
 
