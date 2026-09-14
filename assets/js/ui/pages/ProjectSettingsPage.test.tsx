@@ -29,10 +29,15 @@ describe("ProjectSettingsPage", () => {
     await user.click(within(form).getByRole("switch", { name: /子 agent/ }));
     expect(within(form).getByRole("switch", { name: /全局记忆/ })).toBeChecked();
     await user.click(within(form).getByRole("switch", { name: /全局记忆/ }));
+    // extra writable directories: one per line, blanks dropped
+    const roots = within(form).getByLabelText(/沙箱额外可写目录/);
+    expect(roots).toHaveValue("~/.cache");
+    await user.clear(roots);
+    await user.type(roots, "~/.cache\n\n/data/models  ");
     await user.click(within(form).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(updateProject).toHaveBeenCalledWith(
-        expect.objectContaining({ identity: "id-1", input: expect.objectContaining({ sandbox: "read_only", approvalPolicy: "never", dirtyStart: "ask", multiAgent: false, globalMemory: false }) }),
+        expect.objectContaining({ identity: "id-1", input: expect.objectContaining({ sandbox: "read_only", approvalPolicy: "never", dirtyStart: "ask", multiAgent: false, globalMemory: false, writableRoots: ["~/.cache", "/data/models"] }) }),
       ),
     );
   });

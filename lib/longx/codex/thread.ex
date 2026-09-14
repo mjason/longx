@@ -28,6 +28,7 @@ defmodule Longx.Codex.Thread do
           | {:reasoning_summary, atom}
           | {:web_search, web_search}
           | {:network_access, boolean}
+          | {:writable_roots, [Path.t()]}
           | {:multi_agent, boolean}
           | {:developer_instructions, String.t()}
           | {:tools, [module | String.t()]}
@@ -282,6 +283,9 @@ defmodule Longx.Codex.Thread do
     |> put_if("sandboxPolicy", sandbox_policy(opts))
   end
 
+  defp roots_or_nil([]), do: nil
+  defp roots_or_nil(roots), do: roots
+
   # turn/start's SandboxPolicy (the structured form; thread/start takes the
   # kebab-case name) — codex keeps it for the turns after this one too
   defp sandbox_policy(opts) do
@@ -300,6 +304,7 @@ defmodule Longx.Codex.Thread do
           "type" => "workspaceWrite",
           "networkAccess" => Keyword.get(opts, :network_access, false)
         }
+        |> put_if("writableRoots", roots_or_nil(Keyword.get(opts, :writable_roots, [])))
     end
   end
 
@@ -346,6 +351,16 @@ defmodule Longx.Codex.Thread do
       if Keyword.get(opts, :network_access, false),
         do: Map.put(config, "sandbox_workspace_write.network_access", true),
         else: config
+
+    # extra places the workspace-write sandbox may write, on top of codex's
+    # cwd / /tmp / $TMPDIR: caches (~/.cache for uv, pip, npm…) and the GPU
+    # device nodes — bwrap's minimal /dev has none, a `--bind` brings them in
+    config =
+      put_if(
+        config,
+        "sandbox_workspace_write.writable_roots",
+        roots_or_nil(Keyword.get(opts, :writable_roots, []))
+      )
 
     # sub-agents: codex's `spawn_agent` / `wait` / … tools (multi_agent_v2);
     # the `[agents]` limits come from the global config (Longx.Codex.Home)

@@ -144,7 +144,7 @@ defmodule Longx.Projects.ThreadsTest do
       %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
       assert params["model"] == "glm-5"
 
-      assert params["config"] == %{
+      assert Map.delete(params["config"], "sandbox_workspace_write.writable_roots") == %{
                "model_context_window" => 200_000,
                "model_reasoning_effort" => "high",
                "model_reasoning_summary" => "auto",
@@ -183,6 +183,30 @@ defmodule Longx.Projects.ThreadsTest do
       {:ok, thread} = Projects.start_thread(open, conn: conn)
       %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
       assert params["config"]["sandbox_workspace_write.network_access"] == true
+    end
+
+    test "writable_roots: the project's extra directories reach the sandbox — ~ expanded, missing ones skipped, GPU nodes added",
+         %{dir: dir, conn: conn} do
+      cache = Path.join(dir, "cache")
+      File.mkdir_p!(cache)
+
+      project =
+        git_project!(dir, %{writable_roots: ["~/.cache", cache, Path.join(dir, "nope")]})
+
+      assert Projects.writable_roots(project) ==
+               Enum.filter([Path.expand("~/.cache"), cache], &File.dir?/1) ++
+                 Longx.Codex.Sandbox.device_roots()
+
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
+
+      assert params["config"]["sandbox_workspace_write.writable_roots"] ==
+               Projects.writable_roots(project)
+
+      # a turn that changes the mode carries them in the policy
+      {:ok, _} = Projects.send_message(thread, "hi", conn: conn, network_access: true)
+      %{"lastTurnParams" => turn} = read_thread!(conn, thread.codex_thread_id)
+      assert turn["sandboxPolicy"]["writableRoots"] == Projects.writable_roots(project)
     end
 
     test "an unknown model is refused before codex is involved", %{dir: dir, conn: conn} do

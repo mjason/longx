@@ -2363,6 +2363,7 @@ export type CreateProjectInput = {
   tools?: Array<string>;
   dirtyStart?: "ask" | "commit" | "off";
   networkAccess?: boolean;
+  writableRoots?: Array<string>;
   webSearch?: boolean;
   multiAgent?: boolean;
   globalMemory?: boolean;
@@ -3051,6 +3052,7 @@ export type UpdateProjectInput = {
   tools?: Array<string>;
   dirtyStart?: "ask" | "commit" | "off";
   networkAccess?: boolean;
+  writableRoots?: Array<string>;
   webSearch?: boolean;
   multiAgent?: boolean;
   globalMemory?: boolean;

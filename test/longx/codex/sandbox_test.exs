@@ -129,6 +129,17 @@ defmodule Longx.Codex.SandboxTest do
     end
   end
 
+  describe "device_roots/1 (pure): GPU device nodes a sandboxed command needs" do
+    test "nvidia nodes and /dev/dri, nothing else" do
+      assert Sandbox.device_roots(
+               ~w(/dev/null /dev/nvidia0 /dev/nvidia1 /dev/nvidiactl /dev/nvidia-uvm /dev/nvidia-uvm-tools /dev/nvidia-caps /dev/dri /dev/tty /dev/nvidia-modeset)
+             ) ==
+               ~w(/dev/dri /dev/nvidia-caps /dev/nvidia-modeset /dev/nvidia-uvm /dev/nvidia-uvm-tools /dev/nvidia0 /dev/nvidia1 /dev/nvidiactl)
+
+      assert Sandbox.device_roots(~w(/dev/null /dev/tty)) == []
+    end
+  end
+
   describe "probe/0" do
     # what the host allows: a WSL2 dev box passes, a GitHub runner does not
     # (bwrap cannot set up the loopback there) — CI excludes :host_sandbox

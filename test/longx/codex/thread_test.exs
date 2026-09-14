@@ -207,6 +207,28 @@ defmodule Longx.Codex.ThreadTest do
       assert Thread.fork_params("t", []) == %{"threadId" => "t"}
     end
 
+    test "writable_roots: extra directories (and device nodes) the workspace-write sandbox may write" do
+      roots = ["/home/x/.cache", "/dev/nvidia0"]
+
+      assert Thread.start_params(cwd: "/p", tools: [], writable_roots: roots)["config"] ==
+               %{"sandbox_workspace_write.writable_roots" => roots}
+
+      # none: no key (and no config at all here)
+      assert Thread.start_params(cwd: "/p", tools: [], writable_roots: [])["config"] == nil
+
+      # on a turn that changes the mode the whole policy goes, roots included
+      assert Thread.turn_params("t", "hi",
+               sandbox: :workspace_write,
+               network_access: true,
+               writable_roots: roots
+             )["sandboxPolicy"] ==
+               %{"type" => "workspaceWrite", "networkAccess" => true, "writableRoots" => roots}
+
+      assert Thread.turn_params("t", "hi", sandbox: :read_only, writable_roots: roots)[
+               "sandboxPolicy"
+             ] == %{"type" => "readOnly"}
+    end
+
     test "network_access: true opens the network inside the workspace-write sandbox" do
       assert Thread.start_params(cwd: "/p", tools: [], network_access: true)["config"] ==
                %{"sandbox_workspace_write.network_access" => true}
