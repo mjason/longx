@@ -895,7 +895,11 @@ their symlinks (a plain copy turns git's 145 builtin links into 700 MB) and drop
 home and the two secrets live there — `secret_key_base` and `cloak_key` are generated on
 first boot into 0600 files unless given as env vars; `PORT` (7788), `PHX_HOST`; the
 release serves plain http itself (`server: true`, no `force_ssl` — TLS is a proxy's job).
-`.github/workflows/ci.yml` runs the precommit set on every push / PR (bundled git and
+A release seeds itself at boot after migrating (`Longx.AI.Seeds.run/0`, a `Task` child
+right after the migrator, only when `RELEASE_NAME` is set; mix runs the same through
+`priv/repo/seeds.exs`), so `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` / `TAVILY_API_KEY` in the
+service's environment land in the rows. `rel/env.sh.eex` sets `ELIXIR_ERL_OPTIONS=+fnu`:
+file names stay UTF-8 in a bare environment. `.github/workflows/ci.yml` runs the precommit set on every push / PR (bundled git and
 codex fetched and cached; `:integration` stays excluded, and so is `:host_sandbox` — the
 bwrap probe test that only a real host passes, a runner cannot set up the loopback); `release.yml` builds on a
 `v*` tag for linux x86_64 and arm64, each natively on its own runner

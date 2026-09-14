@@ -16,6 +16,8 @@ defmodule Longx.Application do
       Longx.Repo,
       {Ecto.Migrator,
        repos: Application.fetch_env!(:longx, :ecto_repos), skip: skip_migrations?()},
+      # a release seeds itself after migrating (mix does it through seeds.exs)
+      Supervisor.child_spec({Task, &seed!/0}, id: :seeds, restart: :temporary),
       {DNSCluster, query: Application.get_env(:longx, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Longx.PubSub},
       # reference-id memory for codex web search (Longx.AI.Search)
@@ -67,5 +69,9 @@ defmodule Longx.Application do
   defp skip_migrations?() do
     # By default, sqlite migrations are run when using a release
     System.get_env("RELEASE_NAME") == nil
+  end
+
+  defp seed! do
+    if System.get_env("RELEASE_NAME"), do: Longx.AI.Seeds.run(), else: :ok
   end
 end
