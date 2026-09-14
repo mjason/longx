@@ -26,6 +26,10 @@ say() { printf '%s\n' "$*"; }
 die() { printf 'longx: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "需要 $1，请先安装"; }
 
+# bin/longx honours RELEASE_* from the environment (another release's shell
+# exports them — RELEASE_VSN would point it at a version that is not there)
+longx_bin() { env -i HOME="$HOME" PATH="$PATH" "$APP/bin/longx" "$@"; }
+
 have_systemd() {
   command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1
 }
@@ -60,7 +64,7 @@ rollback() {
   rm -rf "$APP.failed"
   [ -d "$APP" ] && mv "$APP" "$APP.failed"
   mv "$APP.old" "$APP"
-  say "已换回上一个版本：$("$APP/bin/longx" version 2>/dev/null || echo '?')"
+  say "已换回上一个版本：$(longx_bin version 2>/dev/null || echo '?')"
   if have_systemd && [ -f "$UNIT" ]; then
     systemctl --user start longx
     say "服务已启动。如果新版本跑过数据库迁移，旧版本可能认不得——用 $HOME_DIR/backups 里的备份恢复 data。"
@@ -101,7 +105,7 @@ fi
 
 # ---- the current version, if any ---------------------------------------------
 if [ -d "$APP" ]; then
-  CURRENT="$("$APP/bin/longx" version 2>/dev/null | awk '{print $2}')"
+  CURRENT="$(longx_bin version 2>/dev/null | awk '{print $2}')"
   say "当前版本 ${CURRENT:-?} → $VERSION"
   stop_service
   BACKUP="$HOME_DIR/backups/data-$(date +%Y%m%d-%H%M%S).tar.gz"
@@ -119,7 +123,7 @@ if [ -d "$APP" ]; then
   mv "$APP" "$APP.old"
 fi
 mv "$APP.new" "$APP"
-say "已安装 $("$APP/bin/longx" version) 到 $APP"
+say "已安装 $(longx_bin version) 到 $APP"
 
 # ---- the service ----------------------------------------------------------------
 if [ -n "${LONGX_NO_SERVICE:-}" ]; then
