@@ -38,6 +38,8 @@ export const t = {
   uptime: "运行时长",
   connectionLost: "连接已断开，正在重连…",
   sandboxUnavailable: "沙箱不可用：agent 的命令会被 codex 拒绝或需要逐条批准。",
+  sandboxNoNet: "沙箱的断网隔离不可用：项目「网络访问」关着时命令会被 codex 拒绝，打开就正常。",
+  sandboxAppArmor: "沙箱不可用：Ubuntu 的 AppArmor 不让普通程序建用户命名空间。给内置的 bwrap 加一条 AppArmor 配置就好，见「设置 → 沙箱与权限」。",
   sandboxReason: (r: string) => `原因：${r}`,
   notFound: "没有这个页面",
   lastActivity: "最近活动",
@@ -633,7 +635,21 @@ export const t = {
   sandboxPage: {
     hint: "codex 用 bubblewrap 把命令关在项目目录里跑。它需要内核允许非特权用户命名空间；不允许的话每条沙箱命令都会被 codex 拒绝，只能用“完全访问”模式。",
     ok: "可用",
+    noNet: "可用，但断网隔离不可用",
+    noNetHint: "这台机器允许用户命名空间，但 bubblewrap 建不了独立的网络命名空间（容器和一些虚拟机会这样）。codex 只在命令不能联网时才隔离网络：把项目的「网络访问」打开（沙箱内允许联网），命令就正常跑；关着的话每条命令都会被拒绝。",
     unavailable: "不可用",
+    apparmor: "不可用：AppArmor 限制了用户命名空间",
+    apparmorHint: "Ubuntu 24.04 起默认 kernel.apparmor_restrict_unprivileged_userns=1：没有 AppArmor 配置的程序拿不到带权限的用户命名空间，bwrap 就建不了沙箱。和 Ubuntu 给 Chrome、bazel 的做法一样，给内置的 bwrap 一条配置（只需要做一次，升级后仍然有效；要 sudo）：",
+    apparmorFix: `sudo tee /etc/apparmor.d/longx-bwrap <<'EOF'
+abi <abi/4.0>,
+include <tunables/global>
+
+profile longx-bwrap /home/*/.longx/app*/lib/longx-*/priv/codex/*/codex-resources/bwrap flags=(unconfined) {
+  userns,
+}
+EOF
+sudo apparmor_parser -r /etc/apparmor.d/longx-bwrap`,
+    apparmorAfter: "然后点「重新检测」。装在别的目录（LONGX_HOME）的话把路径换成自己的。不想加配置也可以整体关掉限制：sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0（写进 /etc/sysctl.d/ 才能重启后保留），但那会放开所有程序。",
     reason: "原因",
     checkedAt: (at: string) => `检测时间 ${at}`,
     probe: "重新检测",

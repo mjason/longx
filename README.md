@@ -26,7 +26,29 @@ Erlang 运行时、Go 中间件、codex-app-server、git、obscura（无头浏�
 **要求**：Linux x86_64 或 arm64，glibc ≥ 2.39（Ubuntu 24.04、Debian 13 及更新的发行版；包在
 `ubuntu-24.04` runner 上构建）；codex 的沙箱需要内核允许非特权用户命名空间（大多数发行版默认允许，
 Docker 容器和一些加固过的系统不允许——不允许时 codex 会拒绝所有沙箱内的命令，只能用「完全访问」模式；
-「设置 → 沙箱与权限」能看到检测结果）。
+「设置 → 沙箱与权限」能看到检测结果和对策）。两种常见情况：
+
+- **Ubuntu 24.04 及更新**默认 `kernel.apparmor_restrict_unprivileged_userns=1`，没有 AppArmor 配置的程序拿不到带权限的
+  用户命名空间（`bwrap: setting up uid map: Permission denied`）。**install.sh 装完会自己检测**：遇到这种情况就用 sudo 给内置的
+  bwrap 加一条 AppArmor 配置（和 Ubuntu 给 Chrome、bazel 的做法一样，一次性，升级后仍有效；`LONGX_NO_SUDO=1` 则只打印不执行），
+  之后也可以单独跑 `sh install.sh --fix-sandbox`。手动做就是：
+
+  ```sh
+  sudo tee /etc/apparmor.d/longx-bwrap <<'EOF'
+  abi <abi/4.0>,
+  include <tunables/global>
+
+  profile longx-bwrap /home/*/.longx/app*/lib/longx-*/priv/codex/*/codex-resources/bwrap flags=(unconfined) {
+    userns,
+  }
+  EOF
+  sudo apparmor_parser -r /etc/apparmor.d/longx-bwrap
+  ```
+
+  然后在「设置 → 沙箱与权限」点「重新检测」。`LONGX_HOME` 不是 `~/.longx` 的话改路径。整体关掉限制
+  （`sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`）也行，但放开的是所有程序。
+- **容器和部分虚拟机**允许用户命名空间但建不了网络命名空间（`bwrap: loopback: Failed RTM_NEWADDR`）：codex 只在命令不能联网时
+  才隔离网络，所以项目「网络访问」打开时沙箱正常，关着时每条命令都会被拒绝。设置页会标成「可用，但断网隔离不可用」。
 
 全部装在用户自己的目录里（`~/.longx`），不需要 root。
 

@@ -492,8 +492,18 @@ React Native client planned on the same core code.
   - `Longx.Codex.Sandbox` — codex sandboxes commands itself (Linux bubblewrap from the
     bundle, macOS seatbelt, Windows restricted token); bubblewrap needs unprivileged user
     namespaces (WSL1, most containers, hardened distros refuse → codex rejects every sandboxed
-    command at turn time). `probe/0` runs the bundled `bwrap` once at boot (a `Task` in the
-    tree; non-Linux is assumed ok), `report/0`/`status/0` are cached for the UI to warn.
+    command at turn time). `probe/0` runs the bundled `bwrap` at boot (a `Task` in the
+    tree; non-Linux is assumed ok) **with codex's own flags** (`--unshare-user --unshare-pid
+    --unshare-ipc`, `/proc` dropped when it cannot be mounted — codex's preflight does the
+    same), then again with `--unshare-net`, which codex adds only for commands without
+    network access: `status/0` is `:ok`, `:no_net_isolation` (containers, some VMs, GitHub
+    runners: "loopback: Failed RTM_NEWADDR" — a project with network access on works, one
+    without has every command refused; amber in the UI) or `:unavailable`. A namespace
+    refusal while `kernel.apparmor_restrict_unprivileged_userns` is 1 (Ubuntu ≥ 24.04, e.g.
+    a DGX Spark) is reason `:apparmor`, and the settings page prints the one-line AppArmor
+    profile for the bundled bwrap (README) — the fix is not a kernel setting.
+    `evaluate/2` is the probe over an injected runner (pure, tested);
+    `report/0`/`status/0` are cached for the UI to warn.
   - **Server → client requests** (approvals, `requestUserInput`, elicitations, tool calls…) go
     through the `Longx.Codex.ServerRequest` behaviour: `{:reply, _}` / `{:error, code, msg}` /
     `{:defer, timeout, fallback}` / `{:async, fun, timeout, fallback}`. `Default` is

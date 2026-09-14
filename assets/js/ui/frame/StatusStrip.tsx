@@ -43,9 +43,9 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
           <ArrowUpCircle className="size-3" /> {t.updatePage.newVersion(upgrade.data.latest)}
         </Link>
       ) : null}
-      {sandbox.data?.status === "unavailable" ? (
+      {sandbox.data && sandbox.data.status !== "ok" ? (
         <span className="text-warning flex items-center gap-1" title={sandbox.data.reason ?? ""}>
-          <AlertTriangle className="size-3" /> 沙箱不可用
+          <AlertTriangle className="size-3" /> {sandbox.data.status === "no_net_isolation" ? "沙箱不隔离网络" : "沙箱不可用"}
         </span>
       ) : null}
     </div>
