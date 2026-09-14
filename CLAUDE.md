@@ -86,11 +86,15 @@ React Native client planned on the same core code.
     (`:commit` | `:ask` | `:off`), `writable_roots` (directories the workspace-write
     sandbox may write besides cwd and /tmp — default `["~/.cache"]`: uv / pip / npm / cargo
     caches live there and `uv run` failed read-only; `Projects.writable_roots/1` expands `~`,
-    keeps only existing directories and appends `Longx.Codex.Sandbox.device_roots/0` — the
-    `/dev/nvidia*` and `/dev/dri` nodes, since bwrap's minimal `/dev` hid the GPU from CUDA
-    on a DGX Spark; they go on `thread/start` as `sandbox_workspace_write.writable_roots`,
-    on resume the same, and in `turn/start.sandboxPolicy.writableRoots` when a turn changes
-    the mode). Whether it is a git repo is read live (`git_info/1`), never
+    keeps only existing directories; they go on `thread/start` as
+    `sandbox_workspace_write.writable_roots`, on resume the same, and in
+    `turn/start.sandboxPolicy.writableRoots` when a turn changes the mode). **A GPU cannot
+    be let into the sandbox**: bwrap's `--dev /dev` is minimal and codex has no device
+    pass-through — a device node or `/dev/dri` as a writable root breaks the launch (codex
+    `--bind`s each root without device access and seeds it with protected `.git`/`.codex`
+    entries: "Can't mkdir /dev/dri/.git", tried on a DGX Spark). `Longx.Codex.Sandbox.gpu?/1`
+    (`/dev/nvidia*` present) is in the sandbox report (`gpu`), and project settings say GPU
+    work is for the full-access mode. Whether it is a git repo is read live (`git_info/1`), never
     stored; `init_git/1` sets git up with `Longx.Git.Ignore.default/0` and a first commit.
     The UI warns when a project has no git.
   - **Each project has its own codex process and its own `CODEX_HOME`**

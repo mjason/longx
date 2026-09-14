@@ -185,7 +185,7 @@ defmodule Longx.Projects.ThreadsTest do
       assert params["config"]["sandbox_workspace_write.network_access"] == true
     end
 
-    test "writable_roots: the project's extra directories reach the sandbox — ~ expanded, missing ones skipped, GPU nodes added",
+    test "writable_roots: the project's extra directories reach the sandbox — ~ expanded, missing ones skipped",
          %{dir: dir, conn: conn} do
       cache = Path.join(dir, "cache")
       File.mkdir_p!(cache)
@@ -194,8 +194,7 @@ defmodule Longx.Projects.ThreadsTest do
         git_project!(dir, %{writable_roots: ["~/.cache", cache, Path.join(dir, "nope")]})
 
       assert Projects.writable_roots(project) ==
-               Enum.filter([Path.expand("~/.cache"), cache], &File.dir?/1) ++
-                 Longx.Codex.Sandbox.device_roots()
+               Enum.filter([Path.expand("~/.cache"), cache], &File.dir?/1)
 
       {:ok, thread} = Projects.start_thread(project, conn: conn)
       %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)

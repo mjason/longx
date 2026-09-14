@@ -336,7 +336,7 @@ export function rpcMock() {
     stopCodex: vi.fn(),
     restartCodex: vi.fn(),
     sandboxStatus: vi.fn(async () =>
-      ok({ status: "ok", reason: null, checkedAt: "" }),
+      ok({ status: "ok", reason: null, bwrap: null, gpu: false, checkedAt: "" }),
     ),
     createDirectory: vi.fn(
       async ({ input }: { input: { parent: string; name: string } }) =>

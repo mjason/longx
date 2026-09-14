@@ -186,6 +186,7 @@ defmodule Longx.System.Status do
                     ],
                     reason: [type: :string],
                     bwrap: [type: :string],
+                    gpu: [type: :boolean, allow_nil?: false],
                     checked_at: [type: :utc_datetime_usec, allow_nil?: false]
                   ]
 
@@ -202,6 +203,7 @@ defmodule Longx.System.Status do
                     ],
                     reason: [type: :string],
                     bwrap: [type: :string],
+                    gpu: [type: :boolean, allow_nil?: false],
                     checked_at: [type: :utc_datetime_usec, allow_nil?: false]
                   ]
 
@@ -284,6 +286,7 @@ defmodule Longx.System.Status do
       status: report.status,
       reason: reason(report.reason),
       bwrap: report.bwrap,
+      gpu: report.gpu,
       checked_at: report.checked_at
     }
 

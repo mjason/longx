@@ -274,7 +274,7 @@ defmodule Longx.Projects.Project do
     # and /tmp (codex `sandbox_workspace_write.writable_roots`); `~` is the
     # server user's home, a path that does not exist is skipped. ~/.cache by
     # default: uv, pip, npm, cargo, huggingface all cache there and fail
-    # read-only. GPU device nodes are added on their own (Longx.Codex.Sandbox).
+    # read-only. (A GPU cannot be let in this way — see Longx.Codex.Sandbox.gpu?/1.)
     attribute :writable_roots, {:array, :string},
       allow_nil?: false,
       default: ["~/.cache"],

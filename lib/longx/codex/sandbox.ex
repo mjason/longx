@@ -45,6 +45,7 @@ defmodule Longx.Codex.Sandbox do
       status: status_of(result),
       reason: unwrap(result),
       bwrap: bwrap,
+      gpu: gpu?(),
       checked_at: DateTime.utc_now()
     })
 
@@ -64,6 +65,7 @@ defmodule Longx.Codex.Sandbox do
           status: status,
           reason: reason | nil,
           bwrap: String.t() | nil,
+          gpu: boolean,
           checked_at: DateTime.t()
         }
   def report do
@@ -137,20 +139,17 @@ defmodule Longx.Codex.Sandbox do
   end
 
   @doc """
-  The GPU device nodes a sandboxed command needs, among the entries of
-  `/dev`: bubblewrap's `--dev /dev` is a minimal device tree (null, zero,
-  random, tty…), so CUDA inside the sandbox saw no GPU on a machine that
-  has one. Passed as writable roots, codex `--bind`s them in.
+  Does this machine have an NVIDIA GPU (`/dev/nvidia*` nodes)? A sandboxed
+  command cannot see it: bubblewrap's `--dev /dev` is a minimal device tree,
+  and codex offers no device pass-through — its writable roots are
+  `--bind`s (no device access) that it also seeds with protected `.git` /
+  `.codex` entries, so a device node or `/dev/dri` as a root breaks the
+  launch (tried on a DGX Spark). GPU work runs in the full-access mode;
+  the UI says so where the sandbox is chosen.
   """
-  @spec device_roots([Path.t()]) :: [Path.t()]
-  def device_roots(entries \\ dev_entries()) do
-    entries
-    |> Enum.filter(fn path ->
-      name = Path.basename(path)
-      String.starts_with?(name, "nvidia") or name == "dri"
-    end)
-    |> Enum.sort()
-  end
+  @spec gpu?([Path.t()]) :: boolean
+  def gpu?(entries \\ dev_entries()),
+    do: Enum.any?(entries, &String.starts_with?(Path.basename(&1), "nvidia"))
 
   defp dev_entries do
     case File.ls("/dev") do

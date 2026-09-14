@@ -388,8 +388,9 @@ defmodule Longx.Projects do
   @doc """
   What the workspace-write sandbox may write besides the project and /tmp:
   the project's `writable_roots` (`~` = this user's home; only directories
-  that exist, so codex never sees a bind target that is missing) plus the
-  GPU device nodes of this machine (`Longx.Codex.Sandbox.device_roots/0`).
+  that exist and are writable — codex seeds every root with protected
+  `.git` / `.codex` entries, so a root it cannot write into, or a device
+  node, makes bwrap fail to launch).
   """
   @spec writable_roots(Project.t()) :: [Path.t()]
   def writable_roots(%Project{writable_roots: roots}) do
@@ -397,7 +398,6 @@ defmodule Longx.Projects do
     |> Enum.map(&Path.expand/1)
     |> Enum.filter(&File.dir?/1)
     |> Enum.uniq()
-    |> Kernel.++(Longx.Codex.Sandbox.device_roots())
   end
 
   @doc """
