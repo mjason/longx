@@ -198,6 +198,35 @@ defmodule LongxWeb.ProjectsRpcTest do
 
       thread_idle(conn, project["id"], thread_id)
 
+      # the composer's reasoning level: on the turn and remembered by the thread
+      Longx.AI.update_model!(Longx.AI.default_model!(), %{
+        reasoning_levels: ["low", "high"],
+        reasoning_effort: "high"
+      })
+
+      assert %{"success" => true, "data" => %{"reasoningEffort" => "low"}} =
+               rpc(conn, "send_message", %{
+                 "fields" => ["reasoningEffort"],
+                 "input" => %{"threadId" => thread_id, "text" => "say low", "effort" => "low"}
+               })
+
+      thread_idle(conn, project["id"], thread_id)
+
+      assert %{"success" => true, "data" => [%{"reasoningEffort" => "low"}]} =
+               rpc(conn, "list_threads", %{
+                 "fields" => ["reasoningEffort"],
+                 "input" => %{"projectId" => project["id"]}
+               })
+
+      # a level the model does not offer is an error on `effort`
+      assert %{"success" => false, "errors" => [%{"fields" => ["effort"], "message" => message}]} =
+               rpc(conn, "send_message", %{
+                 "fields" => ["id"],
+                 "input" => %{"threadId" => thread_id, "text" => "say", "effort" => "ultra"}
+               })
+
+      assert message =~ "ultra"
+
       # the slash commands: /compact and /review
       assert %{"success" => true} =
                rpc(conn, "compact_thread", %{"input" => %{"threadId" => thread_id}})
@@ -244,8 +273,11 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"projectId" => project["id"]}
                })
 
-      # the first message, the one with the image, the review
-      assert %{"success" => true, "data" => [%{"id" => ^turn_id}, _, %{"userText" => "/review"}]} =
+      # the first message, the one with the image, the low one, the review
+      assert %{
+               "success" => true,
+               "data" => [%{"id" => ^turn_id}, _, _, %{"userText" => "/review"}]
+             } =
                rpc(conn, "list_turns", %{
                  "fields" => ["id", "userText"],
                  "input" => %{"threadId" => thread_id}

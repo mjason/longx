@@ -83,17 +83,18 @@ defmodule Longx.Projects.Turn do
       argument :turn_id, :uuid, allow_nil?: false
       argument :text, :string
       argument :model, :string
+      argument :effort, :string
       argument :mode, :atom, constraints: [one_of: [:revert, :fork]]
       argument :restore_files, :boolean
 
       run fn input, _ ->
         opts =
           input.arguments
-          |> Map.take([:text, :model, :mode, :restore_files])
+          |> Map.take([:text, :model, :effort, :mode, :restore_files])
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
         with {:ok, turn} <- Ash.get(__MODULE__, input.arguments.turn_id),
-             do: Longx.Projects.redo_turn(turn, opts)
+             do: turn |> Longx.Projects.redo_turn(opts) |> Longx.Projects.Thread.model_errors()
       end
     end
 
@@ -105,6 +106,7 @@ defmodule Longx.Projects.Turn do
         :thread_id,
         :user_text,
         :model_slug,
+        :reasoning_effort,
         :commit_before,
         :dirty_start,
         :started_at
@@ -153,6 +155,8 @@ defmodule Longx.Projects.Turn do
     attribute :codex_turn_id, :string, allow_nil?: false, public?: true
     attribute :user_text, :string, public?: true
     attribute :model_slug, :string, public?: true
+    # the reasoning level in force for this turn (nil: codex's default)
+    attribute :reasoning_effort, :string, public?: true
 
     attribute :status, :atom do
       allow_nil? false

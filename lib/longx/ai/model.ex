@@ -38,26 +38,33 @@ defmodule Longx.AI.Model do
         :upstream_id,
         :context_window,
         :provider_id,
+        :reasoning_levels,
         :reasoning_effort,
         :reasoning_summary,
         :max_output_tokens
       ]
 
       change Longx.AI.Model.Changes.DeriveSlug
+      validate Longx.AI.Model.Validations.EffortInLevels
     end
 
     update :update do
       primary? true
+      # EffortInLevels reads both attributes together
+      require_atomic? false
 
       accept [
         :name,
         :slug,
         :upstream_id,
         :context_window,
+        :reasoning_levels,
         :reasoning_effort,
         :reasoning_summary,
         :max_output_tokens
       ]
+
+      validate Longx.AI.Model.Validations.EffortInLevels
     end
 
     read :by_slug do
@@ -92,6 +99,10 @@ defmodule Longx.AI.Model do
     end
 
     # Exactly one model is the default: clear the flag everywhere else first.
+    update :clear_default do
+      change set_attribute(:default, false)
+    end
+
     update :make_default do
       require_atomic? false
       change set_attribute(:default, true)
@@ -127,10 +138,19 @@ defmodule Longx.AI.Model do
 
     attribute :default, :boolean, allow_nil?: false, default: false, public?: true
 
+    # The reasoning efforts the model offers, in the order a picker shows
+    # them (DeepSeek: low / high / max; a model with none declared takes any
+    # effort string). Codex's `ReasoningEffort` is a free string, so these
+    # are whatever the provider advertises — `none` means thinking off.
+    attribute :reasoning_levels, {:array, :string},
+      allow_nil?: false,
+      default: [],
+      public?: true
+
     # Reasoning controls codex applies per thread/turn (`model_reasoning_*`),
-    # both optional: nil leaves codex's own default in place. Effort is
-    # whatever the model advertises ("low", "high", "xhigh", …); the summary
-    # is codex's closed enum.
+    # both optional: nil leaves codex's own default in place. Effort is the
+    # model's default level (one of `reasoning_levels` when those are
+    # declared); the summary is codex's closed enum.
     attribute :reasoning_effort, :string, public?: true
 
     attribute :reasoning_summary, :atom do

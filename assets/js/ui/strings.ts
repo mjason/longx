@@ -258,8 +258,12 @@ export const t = {
   exportMarkdown: "导出为 Markdown",
   edit: "编辑",
   model: "模型",
-  threadModel: "会话当前模型",
   defaultModel: "默认",
+  searchModels: "搜索模型…",
+  noModelFound: "没有匹配的模型",
+  reasoningLevel: "思考",
+  // codex's known reasoning efforts; a level outside these shows as is
+  effortLevels: { none: "关闭思考", minimal: "极低", low: "低", medium: "中", high: "高", xhigh: "极高", max: "最大" } as Record<string, string>,
   threadNotFound: "找不到这个会话",
   threadDisabled: {
     unrecoverable: "codex 已不认识这个会话，不能再发消息。",

@@ -259,6 +259,26 @@ defmodule Longx.AI do
     end
   end
 
+  @doc """
+  Whether `effort` is a reasoning level the model offers: any string for a
+  model that declares no levels (codex's `ReasoningEffort` is free text),
+  one of `reasoning_levels` otherwise. `nil` (the model's default) always is.
+  """
+  @spec check_effort(String.t() | nil, String.t() | nil) ::
+          :ok
+          | {:error,
+             {:unknown_effort, String.t()} | :no_default_model | {:unknown_model, String.t()}}
+  def check_effort(_slug, nil), do: :ok
+
+  def check_effort(slug, effort) when is_binary(effort) do
+    with {:ok, model, _explicit?} <- fetch_model(slug) do
+      case model.reasoning_levels do
+        [] -> :ok
+        levels -> if effort in levels, do: :ok, else: {:error, {:unknown_effort, effort}}
+      end
+    end
+  end
+
   # {:ok, model, named explicitly?}
   defp fetch_model(nil), do: fetch_model(@placeholder_model)
 

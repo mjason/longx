@@ -14,7 +14,12 @@ import type {
 } from "@assistant-ui/react";
 import { answerRequest, interruptTurn, respond, sendMessage } from "@/ash_rpc";
 import { RpcFailure, unwrap } from "@/core/projects";
-import { requestIdFor, toMessages, type ApprovalDecision, type SubViews } from "./messages";
+import {
+  requestIdFor,
+  toMessages,
+  type ApprovalDecision,
+  type SubViews,
+} from "./messages";
 import { runningTurnId, type ThreadView } from "./thread";
 
 export type ThreadTarget = { threadId: string; codexThreadId: string };
@@ -37,7 +42,10 @@ export type DirtyDecision = "commit" | "ignore" | null;
 /** What renderers reach through `useAuiState((s) => s.thread.extras)`. */
 export type CodexExtras = {
   /** answers a requestUserInput: question id → the chosen answers */
-  answerRequest: (requestId: string, answers: Record<string, string[]>) => Promise<void>;
+  answerRequest: (
+    requestId: string,
+    answers: Record<string, string[]>,
+  ) => Promise<void>;
 };
 
 export type AdapterOptions = {
@@ -48,6 +56,8 @@ export type AdapterOptions = {
   subviews?: SubViews;
   /** the model slug for the next turn (null = the thread's current) */
   model: string | null;
+  /** the reasoning level for the next turn (null = the thread's current / the model's default) */
+  effort?: string | null;
   /** the access mode for the next turn (undefined = the thread's current) */
   mode?: AccessMode;
   /** the thread cannot take messages at all (unrecoverable / archived) */
@@ -78,7 +88,10 @@ export function textOf(message: AppendMessage): string {
 }
 
 /** What a message carries for codex: the typed text plus any text attachments, and the images as data urls. */
-export function inputOf(message: AppendMessage): { text: string; images: string[] } {
+export function inputOf(message: AppendMessage): {
+  text: string;
+  images: string[];
+} {
   const images: string[] = [];
   const texts: string[] = [];
   for (const attachment of message.attachments ?? []) {
@@ -87,19 +100,29 @@ export function inputOf(message: AppendMessage): { text: string; images: string[
       else if (part.type === "text") texts.push(part.text);
     }
   }
-  const text = [textOf(message), ...texts].filter((t) => t.length > 0).join("\n\n");
+  const text = [textOf(message), ...texts]
+    .filter((t) => t.length > 0)
+    .join("\n\n");
   return { text, images };
 }
 
-export function buildAdapter(opts: AdapterOptions): ExternalStoreAdapter<ThreadMessageLike> {
+export function buildAdapter(
+  opts: AdapterOptions,
+): ExternalStoreAdapter<ThreadMessageLike> {
   const { view } = opts;
   const threadId = () => opts.target?.threadId;
   const extras: CodexExtras = {
     answerRequest: async (requestId, answers) => {
       const id = threadId();
       if (!id) return;
-      const shaped = Object.fromEntries(Object.entries(answers).map(([q, a]) => [q, { answers: a }]));
-      unwrap(await answerRequest({ input: { threadId: id, requestId, answers: shaped } }));
+      const shaped = Object.fromEntries(
+        Object.entries(answers).map(([q, a]) => [q, { answers: a }]),
+      );
+      unwrap(
+        await answerRequest({
+          input: { threadId: id, requestId, answers: shaped },
+        }),
+      );
     },
   };
   return {
@@ -133,7 +156,14 @@ export function buildAdapter(opts: AdapterOptions): ExternalStoreAdapter<ThreadM
             text,
             ...(images.length > 0 ? { images } : {}),
             ...(opts.model ? { model: opts.model } : {}),
-            ...(opts.mode ? { sandbox: opts.mode.sandbox, approvalPolicy: opts.mode.approvalPolicy, networkAccess: opts.mode.networkAccess } : {}),
+            ...(opts.effort ? { effort: opts.effort } : {}),
+            ...(opts.mode
+              ? {
+                  sandbox: opts.mode.sandbox,
+                  approvalPolicy: opts.mode.approvalPolicy,
+                  networkAccess: opts.mode.networkAccess,
+                }
+              : {}),
             ...(dirty ? { dirty } : {}),
           },
         });
@@ -152,13 +182,25 @@ export function buildAdapter(opts: AdapterOptions): ExternalStoreAdapter<ThreadM
       const turnId = runningTurnId(view);
       const id = threadId();
       if (!turnId || !id) return;
-      unwrap(await interruptTurn({ input: { threadId: id, codexTurnId: turnId } }));
+      unwrap(
+        await interruptTurn({ input: { threadId: id, codexTurnId: turnId } }),
+      );
     },
     onRespondToToolApproval: async ({ approvalId, optionId, approved }) => {
       const id = threadId();
       if (!id) return;
-      const decision = (optionId as ApprovalDecision | undefined) ?? (approved ? "accept" : "decline");
-      unwrap(await respond({ input: { threadId: id, requestId: String(requestIdFor(view, approvalId)), decision } }));
+      const decision =
+        (optionId as ApprovalDecision | undefined) ??
+        (approved ? "accept" : "decline");
+      unwrap(
+        await respond({
+          input: {
+            threadId: id,
+            requestId: String(requestIdFor(view, approvalId)),
+            decision,
+          },
+        }),
+      );
     },
   };
 }
@@ -167,6 +209,7 @@ function dirtyChanges(error: unknown): DirtyChange[] | null {
   if (!(error instanceof RpcFailure)) return null;
   const dirty = error.errors.find((e) => e.type === "dirty_tree");
   if (!dirty) return null;
-  const changes = (dirty.details as { changes?: DirtyChange[] } | undefined)?.changes;
+  const changes = (dirty.details as { changes?: DirtyChange[] } | undefined)
+    ?.changes;
   return Array.isArray(changes) ? changes : [];
 }

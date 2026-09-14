@@ -386,6 +386,52 @@ defmodule Longx.Codex.GatewayE2ETest do
     refute body["reasoning"]["effort"] == "high"
   end
 
+  test "a turn's effort reaches the upstream and stays for the turns after; the catalog's levels are accepted",
+       %{gateway_url: gateway_url} do
+    upstream = Bypass.open()
+    fake_provider!(upstream)
+    test_pid = self()
+
+    Bypass.expect(upstream, "POST", "/v1/responses", fn conn ->
+      {:ok, raw, conn} = Plug.Conn.read_body(conn, length: 50_000_000)
+      send(test_pid, {:upstream_request, Jason.decode!(raw)})
+      send_sse(conn, ResponsesFixture.assistant_message("ok"))
+    end)
+
+    # the catalog declares the levels (what a DeepSeek row carries)
+    home =
+      prepare_home!(gateway_url,
+        models: [
+          %{
+            slug: "longx",
+            context_window: 128_000,
+            reasoning_levels: ["low", "high", "max"],
+            reasoning_effort: "high"
+          }
+        ]
+      )
+
+    conn = start_connection!(home)
+    thread = start_thread!(conn, home, reasoning_effort: "high")
+
+    {turn, _} = run_turn!(conn, thread, "one")
+    assert turn["status"] == "completed", inspect(turn)
+    assert_receive {:upstream_request, body}, 5_000
+    assert body["reasoning"]["effort"] == "high"
+
+    # this turn switches the level…
+    {:ok, turn_id} = Longx.Codex.Thread.send(thread, "two", conn: conn, effort: "max")
+    assert_receive {:codex, _, "turn/completed", %{"turn" => %{"id" => ^turn_id}}}, 90_000
+    assert_receive {:upstream_request, body}, 5_000
+    assert body["reasoning"]["effort"] == "max"
+
+    # …and codex keeps it for the next one, which names none
+    {turn, _} = run_turn!(conn, thread, "three")
+    assert turn["status"] == "completed", inspect(turn)
+    assert_receive {:upstream_request, body}, 5_000
+    assert body["reasoning"]["effort"] == "max"
+  end
+
   test "the model's context window reaches codex at start and again at resume (95% usable is what it reports)",
        %{gateway_url: gateway_url} do
     upstream = Bypass.open()

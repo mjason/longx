@@ -228,6 +228,72 @@ defmodule Longx.AITest do
       refute Ash.get!(AI.Model, a.id).default
     end
 
+    test "reasoning_levels are the efforts the model offers, in order; the default effort must be one of them" do
+      provider = create_provider!()
+
+      # nothing declared: the effort is free text (an unknown model's advertised value)
+      free = create_model!(provider, %{reasoning_effort: "xhigh"})
+      assert free.reasoning_levels == []
+      assert free.reasoning_effort == "xhigh"
+
+      flash =
+        create_model!(provider, %{
+          reasoning_levels: ["low", "high", "max"],
+          reasoning_effort: "high"
+        })
+
+      assert flash.reasoning_levels == ["low", "high", "max"]
+
+      assert {:error, %Ash.Error.Invalid{errors: [error]}} =
+               AI.create_model(%{
+                 name: "bad",
+                 upstream_id: "bad-#{uniq()}",
+                 provider_id: provider.id,
+                 reasoning_levels: ["low", "high"],
+                 reasoning_effort: "max"
+               })
+
+      assert error.field == :reasoning_effort
+
+      # the same rule on update, whichever side changes
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.update_model(flash, %{reasoning_effort: "medium"})
+
+      assert {:error, %Ash.Error.Invalid{}} = AI.update_model(flash, %{reasoning_levels: ["low"]})
+
+      assert {:ok, _} =
+               AI.update_model(flash, %{
+                 reasoning_levels: ["low", "high"],
+                 reasoning_effort: "low"
+               })
+
+      # levels without a default: codex's own default applies
+      assert {:ok, %{reasoning_effort: nil}} =
+               AI.create_model(%{
+                 name: "no default",
+                 upstream_id: "nd-#{uniq()}",
+                 provider_id: provider.id,
+                 reasoning_levels: ["low", "high"]
+               })
+
+      # a level is a non-empty word, no duplicates
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_model(%{
+                 name: "bad",
+                 upstream_id: "bad-#{uniq()}",
+                 provider_id: provider.id,
+                 reasoning_levels: ["low", "low"]
+               })
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_model(%{
+                 name: "bad",
+                 upstream_id: "bad-#{uniq()}",
+                 provider_id: provider.id,
+                 reasoning_levels: [""]
+               })
+    end
+
     test "reasoning and output settings are per model, all optional" do
       provider = create_provider!()
       plain = create_model!(provider)

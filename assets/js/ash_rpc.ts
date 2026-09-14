@@ -295,6 +295,7 @@ export type CreateModelInput = {
   upstreamId: string;
   contextWindow?: number;
   providerId: UUID;
+  reasoningLevels?: Array<string>;
   reasoningEffort?: string | null;
   reasoningSummary?: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens?: number | null;
@@ -610,6 +611,7 @@ export type UpdateModelInput = {
   slug?: string | null;
   upstreamId?: string;
   contextWindow?: number;
+  reasoningLevels?: Array<string>;
   reasoningEffort?: string | null;
   reasoningSummary?: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens?: number | null;
@@ -5002,6 +5004,7 @@ export type SendMessageInput = {
   text: string;
   images?: Array<string> | null;
   model?: string | null;
+  effort?: string | null;
   dirty?: "commit" | "ignore" | null;
   sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
   approvalPolicy?: "never" | "on_request" | "untrusted" | null;
@@ -5081,6 +5084,7 @@ export async function validateSendMessage(
 export type StartThreadInput = {
   projectId: UUID;
   model?: string | null;
+  effort?: string | null;
   tools?: Array<string> | null;
   approvalPolicy?: "never" | "on_request" | "untrusted" | null;
   sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
@@ -5318,6 +5322,7 @@ export type RedoTurnInput = {
   turnId: UUID;
   text?: string | null;
   model?: string | null;
+  effort?: string | null;
   mode?: "fork" | "revert" | null;
   restoreFiles?: boolean | null;
 };

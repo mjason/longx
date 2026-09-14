@@ -173,6 +173,77 @@ defmodule Longx.Codex.HomeTest do
            ]
   end
 
+  test "a model's reasoning levels and default level go into its catalog entry (codex's own model picker shows them)",
+       %{dir: dir} do
+    {:ok, _} =
+      Home.prepare(
+        dir: dir,
+        gateway_url: "http://127.0.0.1:4242/ai/v1",
+        models: [
+          %{
+            slug: "longx",
+            context_window: 1_000_000,
+            reasoning_levels: ["low", "high", "max"],
+            reasoning_effort: "high"
+          },
+          %{slug: "turbo", context_window: 200_000, reasoning_levels: [], reasoning_effort: nil},
+          %{slug: "free", context_window: nil, reasoning_levels: [], reasoning_effort: "xhigh"}
+        ]
+      )
+
+    %{"models" => [longx, turbo, free]} =
+      Jason.decode!(File.read!(Path.join(dir, "model_catalog.json")))
+
+    assert Enum.map(longx["supported_reasoning_levels"], & &1["effort"]) == ["low", "high", "max"]
+    assert Enum.all?(longx["supported_reasoning_levels"], &is_binary(&1["description"]))
+    assert longx["default_reasoning_level"] == "high"
+
+    # no levels: nothing declared, codex's default effort
+    assert turbo["supported_reasoning_levels"] == []
+    refute Map.has_key?(turbo, "default_reasoning_level")
+
+    # a default without levels still counts as the default
+    assert free["supported_reasoning_levels"] == []
+    assert free["default_reasoning_level"] == "xhigh"
+  end
+
+  test "the catalog from the AI domain carries each row's levels, `longx` taking the default model's",
+       %{dir: dir} do
+    provider =
+      Longx.AI.create_provider!(%{
+        name: "P",
+        slug: "p-#{System.unique_integer([:positive])}",
+        base_url: "https://api.deepseek.com/v1",
+        api_key: "k"
+      })
+
+    a =
+      Longx.AI.create_model!(%{
+        name: "A",
+        upstream_id: "a-model",
+        context_window: 1_000_000,
+        reasoning_levels: ["low", "high"],
+        reasoning_effort: "low",
+        provider_id: provider.id
+      })
+
+    Longx.AI.make_default_model!(a)
+
+    {:ok, _home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
+
+    %{"models" => [longx, a_entry]} =
+      Jason.decode!(File.read!(Path.join(dir, "model_catalog.json")))
+
+    for entry <- [longx, a_entry] do
+      assert Enum.map(entry["supported_reasoning_levels"], & &1["effort"]) == ["low", "high"]
+      assert entry["default_reasoning_level"] == "low"
+    end
+
+    # editing the levels makes the catalog on disk stale, like a window edit
+    Longx.AI.update_model!(a, %{reasoning_levels: ["low", "high", "max"]})
+    assert Home.stale(dir, gateway_url: "http://127.0.0.1:4242/ai/v1") == [:models]
+  end
+
   test "stale/2 says which of the written files no longer match what prepare would write", %{
     dir: dir
   } do
