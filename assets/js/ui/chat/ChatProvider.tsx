@@ -25,7 +25,8 @@ export function ChatProvider({ projectId, slug, defaults, defaultModelId, childr
   const navigate = useNavigate();
   const [dirty, setDirty] = useState<DirtyPrompt | null>(null);
 
-  const onOpenThread = useCallback((id: string) => navigate(`/p/${slug}/t/${id}`), [navigate, slug]);
+  // null: the thread on screen was deleted or archived → the project's new chat
+  const onOpenThread = useCallback((id: string | null) => navigate(id ? `/p/${slug}/t/${id}` : `/p/${slug}`), [navigate, slug]);
   const onDirtyTree = useCallback(
     (changes: DirtyChange[]) =>
       new Promise<DirtyDecision>((resolve) => {
