@@ -47,18 +47,27 @@ stop_service() {
   fi
 }
 
-# codex sandboxes commands with the bundled bubblewrap, which needs a user
-# namespace with capabilities. Ubuntu ≥ 24.04 refuses that to programs without
-# an AppArmor profile (kernel.apparmor_restrict_unprivileged_userns=1: "bwrap:
-# setting up uid map: Permission denied"), so, like Ubuntu does for Chrome and
-# bazel, give the bundled bwrap a profile — the one root step, done with sudo
-# when allowed, printed otherwise. The path glob covers every version and app.old.
+# codex sandboxes commands with bubblewrap — a system `bwrap` on PATH when
+# its --help lists --perms (codex prefers it), the bundled one otherwise. It
+# needs a user namespace with capabilities, which Ubuntu ≥ 24.04 refuses to
+# programs without an AppArmor profile (kernel.apparmor_restrict_unprivileged_userns=1:
+# "bwrap: setting up uid map: Permission denied"). So, like Ubuntu does for
+# Chrome and bazel, give the bwrap codex runs a profile — the one root step,
+# done with sudo when allowed, printed otherwise. The bundled path is a glob
+# over every version and app.old; the system binary gets its own stanza
+# unless a profile already attaches to it.
 PROFILE=/etc/apparmor.d/longx-bwrap
 
-bwrap_bin() { ls "$APP"/lib/longx-*/priv/codex/*/codex-resources/bwrap 2>/dev/null | head -n 1; }
+bundled_bwrap() { ls "$APP"/lib/longx-*/priv/codex/*/codex-resources/bwrap 2>/dev/null | head -n 1; }
+
+# the bwrap codex will run (linux-sandbox/src/launcher.rs: preferred_bwrap_launcher)
+codex_bwrap() {
+  sys="$(command -v bwrap 2>/dev/null || true)"
+  if [ -n "$sys" ] && "$sys" --help 2>&1 | grep -q -- '--perms'; then echo "$sys"; else bundled_bwrap; fi
+}
 
 sandbox_works() {
-  b="$(bwrap_bin)"
+  b="$(codex_bwrap)"
   [ -n "$b" ] && "$b" --ro-bind / / --dev /dev --proc /proc --unshare-user --unshare-pid --unshare-ipc /bin/true >/dev/null 2>&1
 }
 
@@ -75,11 +84,27 @@ profile longx-bwrap $HOME_DIR/app*/lib/longx-*/priv/codex/*/codex-resources/bwra
   userns,
 }
 PROFILE
+  b="$(codex_bwrap)"
+  case "$b" in
+    "$HOME_DIR"/*) ;;
+    "") ;;
+    *)
+      # a system bwrap: its own stanza, unless some profile already claims it
+      if ! grep -rls "$b" /etc/apparmor.d/ 2>/dev/null | grep -qv "^$PROFILE\$"; then
+        cat <<PROFILE
+
+profile longx-system-bwrap $b flags=(unconfined) {
+  userns,
+}
+PROFILE
+      fi
+      ;;
+  esac
 }
 
 fix_sandbox() {
   if sandbox_works; then
-    say "沙箱可用（bubblewrap 正常）。"
+    say "沙箱可用（bubblewrap 正常：$(codex_bwrap)）。"
     return 0
   fi
   if ! apparmor_restricted; then
@@ -87,7 +112,7 @@ fix_sandbox() {
     return 0
   fi
   say "Ubuntu 的 AppArmor 不让普通程序建用户命名空间（kernel.apparmor_restrict_unprivileged_userns=1），"
-  say "codex 的沙箱需要给内置的 bwrap 一条 AppArmor 配置（$PROFILE，只做一次，升级后仍有效）。"
+  say "codex 的沙箱需要给它用的 bwrap（$(codex_bwrap)）一条 AppArmor 配置（$PROFILE，只做一次，升级后仍有效）。"
   if [ -n "${LONGX_NO_SUDO:-}" ] || ! command -v sudo >/dev/null 2>&1; then
     say "自己用 root 执行："
     say "  cat > $PROFILE <<'EOF'"; profile_text; say "EOF"

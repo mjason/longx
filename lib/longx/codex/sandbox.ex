@@ -39,11 +39,12 @@ defmodule Longx.Codex.Sandbox do
   @doc "Runs the probe and caches the result. `:ok` or `{:error, reason}`."
   @spec probe() :: :ok | {:error, reason}
   def probe do
-    result = run_probe(:os.type())
+    {bwrap, result} = run_probe(:os.type())
 
     :persistent_term.put(@key, %{
       status: status_of(result),
       reason: unwrap(result),
+      bwrap: bwrap,
       checked_at: DateTime.utc_now()
     })
 
@@ -58,8 +59,13 @@ defmodule Longx.Codex.Sandbox do
   @spec status() :: status
   def status, do: report().status
 
-  @doc "The cached probe result with its reason and time."
-  @spec report() :: %{status: status, reason: reason | nil, checked_at: DateTime.t()}
+  @doc "The cached probe result with its reason, the bwrap it ran, and the time."
+  @spec report() :: %{
+          status: status,
+          reason: reason | nil,
+          bwrap: String.t() | nil,
+          checked_at: DateTime.t()
+        }
   def report do
     case :persistent_term.get(@key, nil) do
       nil ->
@@ -74,17 +80,54 @@ defmodule Longx.Codex.Sandbox do
   # macOS and Windows: nothing to probe from here (seatbelt is built in; the
   # Windows sandbox is set up by codex itself) — assume ok until turn time
   defp run_probe({:unix, :linux}) do
-    with {:ok, bwrap} <- bundled_bwrap() do
-      evaluate(fn args ->
-        case Shim.run([bwrap | args], timeout: 10_000) do
-          {:ok, %{status: status, stderr: stderr}} -> {status, stderr}
-          {:error, reason} -> {1, inspect(reason)}
-        end
-      end)
+    case bwrap_for_codex() do
+      {which, bwrap} when which in [:system, :bundled] ->
+        {bwrap,
+         evaluate(fn args ->
+           case Shim.run([bwrap | args], timeout: 10_000) do
+             {:ok, %{status: status, stderr: stderr}} -> {status, stderr}
+             {:error, reason} -> {1, inspect(reason)}
+           end
+         end)}
+
+      {:error, _} = error ->
+        {nil, error}
     end
   end
 
-  defp run_probe(_other), do: :ok
+  defp run_probe(_other), do: {nil, :ok}
+
+  @doc """
+  The bubblewrap codex will actually run: **a `bwrap` on PATH comes first**
+  (codex's launcher prefers the system one when its `--help` lists
+  `--perms`; `preferred_bwrap_launcher` in linux-sandbox/src/launcher.rs),
+  the bundled `codex-resources/bwrap` otherwise. An AppArmor profile has to
+  cover the one codex runs — the bundled path alone is not enough on a
+  host with bubblewrap installed.
+  """
+  @spec bwrap_for_codex() :: {:system | :bundled, String.t()} | {:error, reason}
+  def bwrap_for_codex do
+    system = System.find_executable("bwrap")
+
+    help =
+      case system && System.cmd(system, ["--help"], stderr_to_stdout: true) do
+        {out, _} -> out
+        _ -> ""
+      end
+
+    choose_bwrap(system, help, bundled_bwrap())
+  rescue
+    _ -> choose_bwrap(nil, "", bundled_bwrap())
+  end
+
+  @doc false
+  def choose_bwrap(system, help, bundled) do
+    cond do
+      is_binary(system) and help =~ "--perms" -> {:system, system}
+      match?({:ok, _}, bundled) -> {:bundled, elem(bundled, 1)}
+      true -> bundled
+    end
+  end
 
   defp bundled_bwrap do
     with {:ok, exe} <- Runtime.executable() do

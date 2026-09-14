@@ -102,6 +102,33 @@ defmodule Longx.Codex.SandboxTest do
     end
   end
 
+  describe "choose_bwrap/3 (pure): the bwrap codex will run" do
+    # codex (linux-sandbox/src/launcher.rs) prefers a `bwrap` on PATH whose
+    # --help lists --perms, and falls back to the bundled one
+    test "a system bwrap with --perms wins over the bundled one" do
+      assert {:system, "/usr/bin/bwrap"} =
+               Sandbox.choose_bwrap(
+                 "/usr/bin/bwrap",
+                 "usage: bwrap … --perms OCTAL …",
+                 {:ok, "/b/bwrap"}
+               )
+    end
+
+    test "an old system bwrap without --perms is ignored" do
+      assert {:bundled, "/b/bwrap"} =
+               Sandbox.choose_bwrap(
+                 "/usr/bin/bwrap",
+                 "usage: bwrap --ro-bind …",
+                 {:ok, "/b/bwrap"}
+               )
+    end
+
+    test "no system bwrap → the bundled one; neither → not installed" do
+      assert {:bundled, "/b/bwrap"} = Sandbox.choose_bwrap(nil, "", {:ok, "/b/bwrap"})
+      assert {:error, :not_installed} = Sandbox.choose_bwrap(nil, "", {:error, :not_installed})
+    end
+  end
+
   describe "probe/0" do
     # what the host allows: a WSL2 dev box passes, a GitHub runner does not
     # (bwrap cannot set up the loopback there) — CI excludes :host_sandbox
@@ -116,8 +143,12 @@ defmodule Longx.Codex.SandboxTest do
 
     test "status/0 is cached after the first probe and can be re-probed" do
       assert Sandbox.status() in [:ok, :no_net_isolation, :unavailable]
-      assert %{status: status, reason: _, checked_at: %DateTime{}} = Sandbox.report()
+
+      assert %{status: status, reason: _, bwrap: bwrap, checked_at: %DateTime{}} =
+               Sandbox.report()
+
       assert status in [:ok, :no_net_isolation, :unavailable]
+      assert is_binary(bwrap) or is_nil(bwrap)
     end
   end
 end

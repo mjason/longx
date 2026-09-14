@@ -29,9 +29,10 @@ Docker 容器和一些加固过的系统不允许——不允许时 codex 会拒
 「设置 → 沙箱与权限」能看到检测结果和对策）。两种常见情况：
 
 - **Ubuntu 24.04 及更新**默认 `kernel.apparmor_restrict_unprivileged_userns=1`，没有 AppArmor 配置的程序拿不到带权限的
-  用户命名空间（`bwrap: setting up uid map: Permission denied`）。**install.sh 装完会自己检测**：遇到这种情况就用 sudo 给内置的
-  bwrap 加一条 AppArmor 配置（和 Ubuntu 给 Chrome、bazel 的做法一样，一次性，升级后仍有效；`LONGX_NO_SUDO=1` 则只打印不执行），
-  之后也可以单独跑 `sh install.sh --fix-sandbox`。手动做就是：
+  用户命名空间（`bwrap: setting up uid map: Permission denied`）。**install.sh 装完会自己检测**：遇到这种情况就用 sudo 给 codex
+  会用的 bwrap 加一条 AppArmor 配置（和 Ubuntu 给 Chrome、bazel 的做法一样，一次性，升级后仍有效；`LONGX_NO_SUDO=1` 则只打印不执行），
+  之后也可以单独跑 `sh install.sh --fix-sandbox`。注意 **codex 优先用系统里的 `bwrap`**（PATH 上有、支持 `--perms` 就用它，
+  比如 Ubuntu 的 bubblewrap 包），没有才用内置的——所以系统装了 bubblewrap 时配置里还要有 `/usr/bin/bwrap` 那一段。手动做就是：
 
   ```sh
   sudo tee /etc/apparmor.d/longx-bwrap <<'EOF'
@@ -39,6 +40,10 @@ Docker 容器和一些加固过的系统不允许——不允许时 codex 会拒
   include <tunables/global>
 
   profile longx-bwrap /home/*/.longx/app*/lib/longx-*/priv/codex/*/codex-resources/bwrap flags=(unconfined) {
+    userns,
+  }
+
+  profile longx-system-bwrap /usr/bin/bwrap flags=(unconfined) {
     userns,
   }
   EOF

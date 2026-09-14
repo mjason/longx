@@ -320,7 +320,7 @@ export function useProbeSandbox() {
   return useMutation({
     mutationFn: async () =>
       unwrap(
-        await probeSandbox({ fields: ["status", "reason", "checkedAt"] }),
+        await probeSandbox({ fields: ["status", "reason", "bwrap", "checkedAt"] }),
       ) as SandboxReport,
     onSuccess: (report) => client.setQueryData(queryKeys.sandbox, report),
   });

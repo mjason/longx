@@ -280,10 +280,15 @@ defmodule LongxWeb.AiRpcTest do
   end
 
   test "sandbox: the cached report, and a fresh probe on request", %{conn: conn} do
-    assert %{"success" => true, "data" => %{"status" => status, "checkedAt" => at}} =
-             rpc(conn, "probe_sandbox", %{"fields" => ["status", "reason", "checkedAt"]})
+    assert %{
+             "success" => true,
+             "data" => %{"status" => status, "checkedAt" => at, "bwrap" => bwrap}
+           } =
+             rpc(conn, "probe_sandbox", %{"fields" => ["status", "reason", "bwrap", "checkedAt"]})
 
-    assert status in ["ok", "unavailable"]
+    assert status in ["ok", "no_net_isolation", "unavailable"]
+    # the bwrap codex will run: the system one when installed, else the bundled
+    assert is_nil(bwrap) or String.ends_with?(bwrap, "bwrap")
     assert is_binary(at)
   end
 end
