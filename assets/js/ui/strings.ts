@@ -553,9 +553,10 @@ export const t = {
     contextWindowHint: "token 数；codex 按它压缩上下文",
     reasoningLevels: "推理档位",
     reasoningLevelsHint:
-      "模型提供的思考强度，按顺序显示在作曲栏里；一档不选则不传强度。",
-    customLevel: "其他…",
-    customLevelPlaceholder: "档位名，回车添加",
+      "模型提供的思考强度，按顺序显示在输入栏的模型菜单里；一档不选则不传强度。没列出的档位，在最后的框里填名字添加。",
+    customLevel: "自定义档位",
+    customLevelPlaceholder: "自定义档位名",
+    addLevel: "添加",
     reasoningEffort: "默认档",
     reasoningEffortHint: "不选则由 codex 决定",
     reasoningEffortFree: "推理强度",

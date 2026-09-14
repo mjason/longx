@@ -1074,19 +1074,24 @@ function LevelsEditor({
             ) : null}
           </Button>
         ))}
-        <Input
-          aria-label={s.customLevel}
-          placeholder={s.customLevelPlaceholder}
-          value={custom}
-          onChange={(e) => onCustom(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addCustom();
-            }
-          }}
-          className="h-7 w-32 font-mono text-xs"
-        />
+        <div className="flex gap-1">
+          <Input
+            aria-label={s.customLevel}
+            placeholder={s.customLevelPlaceholder}
+            value={custom}
+            onChange={(e) => onCustom(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addCustom();
+              }
+            }}
+            className="h-7 w-44 font-mono text-xs"
+          />
+          <Button type="button" size="sm" variant="outline" className="h-7" onClick={addCustom} disabled={!custom.trim()}>
+            {s.addLevel}
+          </Button>
+        </div>
       </div>
       <p className="text-muted-foreground text-xs">{s.reasoningLevelsHint}</p>
     </div>

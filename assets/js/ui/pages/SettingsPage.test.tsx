@@ -205,6 +205,20 @@ describe("SettingsPage", () => {
     );
   });
 
+  test("models: a reasoning level the list does not know is typed and added", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/models");
+    const glm = await screen.findByTestId("provider-p2");
+    await user.click(within(glm).getByRole("button", { name: "添加模型" }));
+    const md = await screen.findByRole("dialog");
+    await user.type(within(md).getByLabelText("自定义档位"), "deep");
+    await user.click(within(md).getByRole("button", { name: "添加" }));
+    expect(within(md).getByRole("button", { name: "deep", pressed: true })).toBeInTheDocument();
+    await user.type(within(md).getByLabelText("自定义档位"), "max2{Enter}");
+    expect(within(md).getByRole("button", { name: "max2", pressed: true })).toBeInTheDocument();
+  });
+
   test("models: check, make default, delete (with a confirm)", async () => {
     setViewport(1280);
     const user = userEvent.setup();
