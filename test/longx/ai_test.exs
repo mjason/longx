@@ -42,20 +42,28 @@ defmodule Longx.AITest do
   describe "seeds (priv/repo/seeds.exs)" do
     @seeds Path.expand("priv/repo/seeds.exs")
 
-    test "deepseek-flash is created as a 1M-context model; an old 128k seed is corrected, a chosen value kept" do
+    test "deepseek-flash (1M, none / low / high / max) is the default; the OpenAI provider is there without models; a chosen value is kept" do
       Code.eval_file(@seeds)
       flash = Enum.find(AI.list_models!(), &(&1.upstream_id == "deepseek-flash"))
       assert flash.context_window == 1_000_000
+      assert flash.reasoning_levels == ["none", "low", "high", "max"]
+      assert flash.reasoning_effort == "high"
+      assert AI.default_model!().id == flash.id
+      assert {:ok, %AI.Provider{kind: :openai}} = AI.get_provider_by_slug("openai")
+      refute Enum.any?(AI.list_models!(), &(&1.provider.slug == "openai"))
 
-      # a row still carrying the old seeded default is lifted on the next run…
-      AI.update_model!(flash, %{context_window: 128_000})
-      Code.eval_file(@seeds)
-      assert Ash.get!(AI.Model, flash.id).context_window == 1_000_000
-
-      # …a value someone chose is theirs
+      # a value someone chose is theirs
       AI.update_model!(flash, %{context_window: 200_000})
       Code.eval_file(@seeds)
       assert Ash.get!(AI.Model, flash.id).context_window == 200_000
+      # …and a row seeded before levels existed learns them on the next run
+      AI.update_model!(Ash.get!(AI.Model, flash.id), %{
+        reasoning_levels: [],
+        reasoning_effort: nil
+      })
+
+      Code.eval_file(@seeds)
+      assert Ash.get!(AI.Model, flash.id).reasoning_levels == ["none", "low", "high", "max"]
     end
   end
 
@@ -226,6 +234,72 @@ defmodule Longx.AITest do
       assert {:ok, %{id: id}} = AI.default_model()
       assert id == b.id
       refute Ash.get!(AI.Model, a.id).default
+    end
+
+    test "reasoning_levels are the efforts the model offers, in order; the default effort must be one of them" do
+      provider = create_provider!()
+
+      # nothing declared: the effort is free text (an unknown model's advertised value)
+      free = create_model!(provider, %{reasoning_effort: "xhigh"})
+      assert free.reasoning_levels == []
+      assert free.reasoning_effort == "xhigh"
+
+      flash =
+        create_model!(provider, %{
+          reasoning_levels: ["low", "high", "max"],
+          reasoning_effort: "high"
+        })
+
+      assert flash.reasoning_levels == ["low", "high", "max"]
+
+      assert {:error, %Ash.Error.Invalid{errors: [error]}} =
+               AI.create_model(%{
+                 name: "bad",
+                 upstream_id: "bad-#{uniq()}",
+                 provider_id: provider.id,
+                 reasoning_levels: ["low", "high"],
+                 reasoning_effort: "max"
+               })
+
+      assert error.field == :reasoning_effort
+
+      # the same rule on update, whichever side changes
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.update_model(flash, %{reasoning_effort: "medium"})
+
+      assert {:error, %Ash.Error.Invalid{}} = AI.update_model(flash, %{reasoning_levels: ["low"]})
+
+      assert {:ok, _} =
+               AI.update_model(flash, %{
+                 reasoning_levels: ["low", "high"],
+                 reasoning_effort: "low"
+               })
+
+      # levels without a default: codex's own default applies
+      assert {:ok, %{reasoning_effort: nil}} =
+               AI.create_model(%{
+                 name: "no default",
+                 upstream_id: "nd-#{uniq()}",
+                 provider_id: provider.id,
+                 reasoning_levels: ["low", "high"]
+               })
+
+      # a level is a non-empty word, no duplicates
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_model(%{
+                 name: "bad",
+                 upstream_id: "bad-#{uniq()}",
+                 provider_id: provider.id,
+                 reasoning_levels: ["low", "low"]
+               })
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_model(%{
+                 name: "bad",
+                 upstream_id: "bad-#{uniq()}",
+                 provider_id: provider.id,
+                 reasoning_levels: [""]
+               })
     end
 
     test "reasoning and output settings are per model, all optional" do

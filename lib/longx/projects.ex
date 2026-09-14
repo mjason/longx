@@ -155,6 +155,7 @@ defmodule Longx.Projects do
           | {:sandbox, atom}
           | {:tools, [String.t()]}
           | {:model, String.t()}
+          | {:effort, String.t()}
           | {:network_access, boolean}
           | {:web_search, boolean}
           | {:multi_agent, boolean}
@@ -164,8 +165,9 @@ defmodule Longx.Projects do
   Starts a codex thread in the project directory with the project's
   defaults (overridable per call) and records it. The project's model
   (or `model:`) is passed to codex as its slug; nil means the global default.
-  `web_search: false` turns codex's `web.run` off for the thread (a
-  thread/start config, so it cannot change later).
+  `effort:` is the reasoning level to start on (one the model offers;
+  default: the model's own), `web_search: false` turns codex's `web.run`
+  off for the thread (a thread/start config, so it cannot change later).
   """
   @spec start_thread(Project.t(), [start_option]) :: {:ok, Thread.t()} | {:error, term}
   def start_thread(%Project{} = project, opts \\ []) do
@@ -186,8 +188,11 @@ defmodule Longx.Projects do
     multi_agent = Keyword.get(opts, :multi_agent, project.multi_agent)
 
     # the model's own settings (context window, reasoning, web search mode);
-    # an unknown slug or a missing default is refused before codex is involved
+    # an unknown slug, a missing default or a level the model does not offer
+    # is refused before codex is involved
     with {:ok, model_opts} <- Longx.AI.thread_options(model_slug),
+         :ok <- Longx.AI.check_effort(model_slug, opts[:effort]),
+         model_opts = put_if(model_opts, :reasoning_effort, opts[:effort]),
          {:ok, conn} <- project_connection(project, opts),
          codex_opts =
            [
@@ -209,6 +214,7 @@ defmodule Longx.Projects do
              project_id: project.id,
              cwd: project.root_path,
              model_slug: model_slug,
+             reasoning_effort: model_opts[:reasoning_effort],
              approval_policy: approval_policy,
              sandbox: sandbox,
              network_access: network_access,
@@ -257,6 +263,8 @@ defmodule Longx.Projects do
 
     with :ok <- ensure_usable(thread),
          {:ok, turn_opts} <- turn_options(model_slug, thread),
+         :ok <- Longx.AI.check_effort(model_slug, opts[:effort]),
+         {turn_opts, effort} = effort_change(turn_opts, thread, opts[:effort]),
          {:ok, conn} <- thread_connection(thread, opts),
          {:ok, bookmark} <- preflight(thread, text, opts),
          {:ok, codex_turn_id} <-
@@ -272,6 +280,7 @@ defmodule Longx.Projects do
              thread_id: thread.id,
              user_text: text,
              model_slug: model_slug,
+             reasoning_effort: effort,
              commit_before: bookmark.commit,
              dirty_start: bookmark.dirty?,
              started_at: DateTime.utc_now()
@@ -281,6 +290,7 @@ defmodule Longx.Projects do
         Map.merge(mode, %{
           status: :active,
           model_slug: model_slug,
+          reasoning_effort: effort,
           last_activity_at: DateTime.utc_now()
         })
       )
@@ -508,6 +518,8 @@ defmodule Longx.Projects do
       opts =
         [conn: conn, network_access: thread.network_access, multi_agent: thread.multi_agent]
         |> Keyword.merge(model_opts)
+        # the level the thread was left on, not the row's default
+        |> put_if(:reasoning_effort, thread.reasoning_effort)
         |> without_web_search(thread.web_search)
 
       Longx.Codex.Thread.resume(codex_id, opts)
@@ -522,6 +534,24 @@ defmodule Longx.Projects do
   defp turn_options(slug, %Thread{model_slug: slug}), do: {:ok, []}
 
   defp turn_options(slug, _thread), do: Longx.AI.turn_options(slug)
+
+  # The reasoning level this turn runs with, and whether codex must be told:
+  # a chosen level replaces whatever `turn_options` proposed (a switched
+  # model's default) and is sent when it differs from the thread's; with none
+  # chosen the switched model's default (if any) or the thread's level stands.
+  # Returns the turn options and the level in force after this turn.
+  defp effort_change(turn_opts, %Thread{reasoning_effort: current}, nil) do
+    case Keyword.fetch(turn_opts, :effort) do
+      {:ok, effort} -> {turn_opts, effort}
+      :error -> {turn_opts, current}
+    end
+  end
+
+  defp effort_change(turn_opts, %Thread{reasoning_effort: current}, effort) do
+    if effort == current and not Keyword.has_key?(turn_opts, :model),
+      do: {turn_opts, effort},
+      else: {Keyword.put(turn_opts, :effort, effort), effort}
+  end
 
   # Where the working tree stands when the turn begins.
   defp preflight(%Thread{cwd: dir, project: project}, text, opts) do
@@ -560,6 +590,7 @@ defmodule Longx.Projects do
 
   @type redo_option ::
           {:model, String.t()}
+          | {:effort, String.t()}
           | {:text, String.t()}
           | {:restore_files, boolean}
           | {:mode, :revert | :fork}
@@ -577,8 +608,8 @@ defmodule Longx.Projects do
        every later turn leave the conversation and the projection, and their
        rows are marked `:reverted`. `mode: :fork` → a new thread holding the
        history *before* this turn (`forked_from`), the original untouched
-    4. a new turn with `text:` (default: the original message) and `model:`
-       (default: the thread's), through the normal git preflight
+    4. a new turn with `text:` (default: the original message), `model:`
+       (default: the thread's) and `effort:`, through the normal git preflight
 
   Returns the new turn.
   """
@@ -604,7 +635,7 @@ defmodule Longx.Projects do
       send_message(
         target,
         Keyword.get(opts, :text, turn.user_text),
-        [model: model] |> put_if(:conn, conn)
+        [model: model] |> put_if(:effort, opts[:effort]) |> put_if(:conn, conn)
       )
     end
   end
@@ -655,6 +686,7 @@ defmodule Longx.Projects do
              project_id: thread.project_id,
              cwd: thread.cwd,
              model_slug: model,
+             reasoning_effort: model_opts[:reasoning_effort],
              approval_policy: thread.approval_policy,
              sandbox: thread.sandbox,
              tools: thread.tools,

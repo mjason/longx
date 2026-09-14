@@ -1,13 +1,29 @@
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
-import { channel, ok, thread } from "@/ui/test-mocks";
+import { channel, model, ok, thread } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
-vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { answerRequest, listThreads, respond, searchFiles, sendMessage, startThread } from "@/ash_rpc";
+vi.mock("@/core/socket", async () =>
+  (await import("@/ui/test-mocks")).socketMock(),
+);
+import {
+  answerRequest,
+  listModels,
+  listThreads,
+  respond,
+  searchFiles,
+  sendMessage,
+  startThread,
+} from "@/ash_rpc";
 
 const snapshot = {
   thread_id: "thr_1",
@@ -17,9 +33,28 @@ const snapshot = {
   status: null,
   token_usage: null,
   items: [
-    { id: "u1", type: "userMessage", turnId: "turn_1", content: [{ type: "text", text: "run the tests" }] },
-    { id: "c1", type: "commandExecution", turnId: "turn_1", command: "mix test", cwd: "/p", status: "completed", exitCode: 0, aggregatedOutput: "12 tests, 0 failures\n" },
-    { id: "a1", type: "agentMessage", turnId: "turn_1", text: "All **green**." },
+    {
+      id: "u1",
+      type: "userMessage",
+      turnId: "turn_1",
+      content: [{ type: "text", text: "run the tests" }],
+    },
+    {
+      id: "c1",
+      type: "commandExecution",
+      turnId: "turn_1",
+      command: "mix test",
+      cwd: "/p",
+      status: "completed",
+      exitCode: 0,
+      aggregatedOutput: "12 tests, 0 failures\n",
+    },
+    {
+      id: "a1",
+      type: "agentMessage",
+      turnId: "turn_1",
+      text: "All **green**.",
+    },
   ],
   pending_requests: [],
 };
@@ -57,9 +92,104 @@ describe("ThreadPage", () => {
     await open();
     await user.click(screen.getByTestId("model-picker"));
     await user.click(await screen.findByRole("option", { name: /glm-5/ }));
-    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "next step{Enter}");
+    await user.type(
+      screen.getByRole("textbox", { name: "随心输入" }),
+      "next step{Enter}",
+    );
     await waitFor(() =>
-      expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "next step", model: "glm-5", sandbox: "workspace_write" }) })),
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            threadId: "t1",
+            text: "next step",
+            model: "glm-5",
+            sandbox: "workspace_write",
+          }),
+        }),
+      ),
+    );
+  });
+
+  test("the model picker offers the model's reasoning levels; the picked level rides on the turn and the new-chat start", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listModels).mockResolvedValue(
+      ok([
+        model(1, {
+          slug: "deepseek-flash",
+          default: true,
+          reasoningLevels: ["low", "high", "max"],
+          reasoningEffort: "high",
+        }),
+        model(2, {
+          slug: "glm-5",
+          reasoningLevels: ["low", "high"],
+          reasoningEffort: "high",
+        }),
+        model(3, { slug: "plain", reasoningEffort: null }),
+      ]) as never,
+    );
+    const first = await open();
+    // the thread runs on the default model at its default level
+    expect(screen.getByTestId("model-picker")).toHaveTextContent(
+      "deepseek-flash",
+    );
+    expect(screen.getByTestId("model-picker")).toHaveTextContent("high");
+    await user.click(screen.getByTestId("model-picker"));
+    await user.click(await screen.findByRole("radio", { name: "max" }));
+    await user.keyboard("{Escape}");
+    expect(screen.getByTestId("model-picker")).toHaveTextContent("max");
+    await user.type(
+      screen.getByRole("textbox", { name: "随心输入" }),
+      "go{Enter}",
+    );
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            threadId: "t1",
+            text: "go",
+            effort: "max",
+          }),
+        }),
+      ),
+    );
+
+    // a model without declared levels has no level row
+    await user.click(screen.getByTestId("model-picker"));
+    await user.click(await screen.findByRole("option", { name: /plain/ }));
+    await user.click(screen.getByTestId("model-picker"));
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    // a new chat starts the thread on the picked model and level
+    first.unmount();
+    vi.mocked(sendMessage).mockClear();
+    const { router } = renderAt("/p/app-1");
+    await screen.findByText("让 agent 在这个项目里干活");
+    await user.click(screen.getByTestId("model-picker"));
+    await user.click(await screen.findByRole("option", { name: /glm-5/ }));
+    // switching models lands on the new model's default level
+    expect(screen.getByTestId("model-picker")).toHaveTextContent(/glm-5\s*high/);
+    await user.click(screen.getByTestId("model-picker"));
+    await user.click(await screen.findByRole("radio", { name: "low" }));
+    await user.keyboard("{Escape}");
+    await user.type(
+      screen.getByRole("textbox", { name: "随心输入" }),
+      "start low{Enter}",
+    );
+    await waitFor(() =>
+      expect(startThread).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            projectId: "id-1",
+            model: "glm-5",
+            effort: "low",
+          }),
+        }),
+      ),
+    );
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/p/app-1/t/t2"),
     );
   });
 
@@ -67,13 +197,46 @@ describe("ThreadPage", () => {
     const user = userEvent.setup();
     await open();
     act(() => {
-      channel.deliver("codex", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
-      channel.deliver("codex", { seq: 5, method: "item/started", params: { turnId: "turn_2", item: { id: "c2", type: "commandExecution", command: "rm -rf build", cwd: "/p", status: "inProgress" } } });
-      channel.deliver("codex", { seq: 6, method: "item/commandExecution/requestApproval", params: { requestId: 7, itemId: "c2", threadId: "thr_1", turnId: "turn_2", command: "rm -rf build" } });
+      channel.deliver("codex", {
+        seq: 4,
+        method: "turn/started",
+        params: { turn: { id: "turn_2", status: "inProgress" } },
+      });
+      channel.deliver("codex", {
+        seq: 5,
+        method: "item/started",
+        params: {
+          turnId: "turn_2",
+          item: {
+            id: "c2",
+            type: "commandExecution",
+            command: "rm -rf build",
+            cwd: "/p",
+            status: "inProgress",
+          },
+        },
+      });
+      channel.deliver("codex", {
+        seq: 6,
+        method: "item/commandExecution/requestApproval",
+        params: {
+          requestId: 7,
+          itemId: "c2",
+          threadId: "thr_1",
+          turnId: "turn_2",
+          command: "rm -rf build",
+        },
+      });
     });
     expect(screen.getByTestId("turn-bar")).toHaveTextContent("等待审批");
     await user.click(screen.getByRole("button", { name: "允许" }));
-    await waitFor(() => expect(respond).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", requestId: "7", decision: "accept" } })));
+    await waitFor(() =>
+      expect(respond).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: { threadId: "t1", requestId: "7", decision: "accept" },
+        }),
+      ),
+    );
     // the composer offers stop while the turn runs
     expect(screen.getByRole("button", { name: /停止/ })).toBeInTheDocument();
   });
@@ -81,10 +244,23 @@ describe("ThreadPage", () => {
   test("an unrecoverable thread cannot take messages", async () => {
     vi.mocked(listThreads).mockResolvedValueOnce({
       success: true,
-      data: [{ id: "t1", codexThreadId: "thr_1", title: null, preview: "x", status: "unrecoverable", modelSlug: null, lastActivityAt: null, insertedAt: "2026-09-12T00:00:00Z" }],
+      data: [
+        {
+          id: "t1",
+          codexThreadId: "thr_1",
+          title: null,
+          preview: "x",
+          status: "unrecoverable",
+          modelSlug: null,
+          lastActivityAt: null,
+          insertedAt: "2026-09-12T00:00:00Z",
+        },
+      ],
     } as never);
     await open();
-    expect(screen.getByRole("alert")).toHaveTextContent("codex 已不认识这个会话");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "codex 已不认识这个会话",
+    );
     expect(screen.getByRole("textbox", { name: "随心输入" })).toBeDisabled();
   });
 
@@ -103,10 +279,35 @@ describe("ThreadPage", () => {
     expect(multiAgent).toBeChecked();
     await user.click(multiAgent);
     await user.keyboard("{Escape}");
-    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "start here{Enter}");
-    await waitFor(() => expect(startThread).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ projectId: "id-1", webSearch: false, multiAgent: false, sandbox: "workspace_write" }) })));
-    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t2", text: "start here" }) })));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t2"));
+    await user.type(
+      screen.getByRole("textbox", { name: "随心输入" }),
+      "start here{Enter}",
+    );
+    await waitFor(() =>
+      expect(startThread).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            projectId: "id-1",
+            webSearch: false,
+            multiAgent: false,
+            sandbox: "workspace_write",
+          }),
+        }),
+      ),
+    );
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            threadId: "t2",
+            text: "start here",
+          }),
+        }),
+      ),
+    );
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/p/app-1/t/t2"),
+    );
   });
 
   test("the access mode is picked in the composer rail and rides on the next message", async () => {
@@ -114,15 +315,29 @@ describe("ThreadPage", () => {
     await open();
     await user.click(screen.getByTestId("mode-picker"));
     // an existing thread's web search is fixed
-    expect(await screen.findByRole("switch", { name: /网页搜索/ })).toBeDisabled();
-    await user.click(await screen.findByRole("radio", { name: "完全访问（危险）" }));
+    expect(
+      await screen.findByRole("switch", { name: /网页搜索/ }),
+    ).toBeDisabled();
+    await user.click(
+      await screen.findByRole("radio", { name: "完全访问（危险）" }),
+    );
     await user.click(screen.getByRole("radio", { name: "从不询问" }));
     await user.keyboard("{Escape}");
     expect(screen.getByTestId("mode-picker")).toHaveTextContent("完全访问");
-    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "go wild{Enter}");
+    await user.type(
+      screen.getByRole("textbox", { name: "随心输入" }),
+      "go wild{Enter}",
+    );
     await waitFor(() =>
       expect(sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ input: expect.objectContaining({ text: "go wild", sandbox: "danger_full_access", approvalPolicy: "never", networkAccess: false }) }),
+        expect.objectContaining({
+          input: expect.objectContaining({
+            text: "go wild",
+            sandbox: "danger_full_access",
+            approvalPolicy: "never",
+            networkAccess: false,
+          }),
+        }),
       ),
     );
   });
@@ -130,7 +345,18 @@ describe("ThreadPage", () => {
   test("a disconnected thread keeps the input usable but cannot send", async () => {
     vi.mocked(listThreads).mockResolvedValue({
       success: true,
-      data: [{ id: "t1", codexThreadId: "thr_1", title: null, preview: "x", status: "disconnected", modelSlug: null, lastActivityAt: null, insertedAt: "2026-09-12T00:00:00Z" }],
+      data: [
+        {
+          id: "t1",
+          codexThreadId: "thr_1",
+          title: null,
+          preview: "x",
+          status: "disconnected",
+          modelSlug: null,
+          lastActivityAt: null,
+          insertedAt: "2026-09-12T00:00:00Z",
+        },
+      ],
     } as never);
     await open();
     expect(screen.getByRole("alert")).toHaveTextContent("codex 断开了");
@@ -143,37 +369,112 @@ describe("ThreadPage", () => {
     const user = userEvent.setup();
     await open();
     act(() => {
-      channel.deliver("codex", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("codex", {
+        seq: 4,
+        method: "turn/started",
+        params: { turn: { id: "turn_2", status: "inProgress" } },
+      });
       channel.deliver("codex", {
         seq: 5,
         method: "item/tool/requestUserInput",
-        params: { requestId: 9, itemId: "call_9", threadId: "thr_1", turnId: "turn_2", isBlocking: true, questions: [{ id: "q1", header: "DB", question: "which db?", options: [{ label: "sqlite", description: "" }] }] },
+        params: {
+          requestId: 9,
+          itemId: "call_9",
+          threadId: "thr_1",
+          turnId: "turn_2",
+          isBlocking: true,
+          questions: [
+            {
+              id: "q1",
+              header: "DB",
+              question: "which db?",
+              options: [{ label: "sqlite", description: "" }],
+            },
+          ],
+        },
       });
     });
     await user.click(screen.getByRole("button", { name: "sqlite" }));
     await user.click(screen.getByRole("button", { name: "发送" }));
-    await waitFor(() => expect(answerRequest).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", requestId: "9", answers: { q1: { answers: ["sqlite"] } } } })));
+    await waitFor(() =>
+      expect(answerRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: {
+            threadId: "t1",
+            requestId: "9",
+            answers: { q1: { answers: ["sqlite"] } },
+          },
+        }),
+      ),
+    );
   });
 
   test("a finished turn shows its timing; a revert re-pulls the snapshot", async () => {
     await open();
     // the snapshot's turn carries codex's epoch-second stamps
-    expect(screen.queryByRole("button", { name: "这一轮的耗时" })).not.toBeInTheDocument();
-    act(() => channel.reply("ok", { ...snapshot, seq: 4, turn: { id: "turn_1", status: "completed", startedAt: 1_700_000_000, completedAt: 1_700_000_007 } }));
-    expect(await screen.findByRole("button", { name: "这一轮的耗时" })).toHaveTextContent("7");
+    expect(
+      screen.queryByRole("button", { name: "这一轮的耗时" }),
+    ).not.toBeInTheDocument();
+    act(() =>
+      channel.reply("ok", {
+        ...snapshot,
+        seq: 4,
+        turn: {
+          id: "turn_1",
+          status: "completed",
+          startedAt: 1_700_000_000,
+          completedAt: 1_700_000_007,
+        },
+      }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "这一轮的耗时" }),
+    ).toHaveTextContent("7");
 
-    act(() => channel.deliver("codex", { seq: 5, method: "thread/reverted", params: { threadId: "thr_1", turnIds: ["turn_1"] } }));
-    await waitFor(() => expect(channel.pushed.at(-1)).toMatchObject({ event: "snapshot" }));
+    act(() =>
+      channel.deliver("codex", {
+        seq: 5,
+        method: "thread/reverted",
+        params: { threadId: "thr_1", turnIds: ["turn_1"] },
+      }),
+    );
+    await waitFor(() =>
+      expect(channel.pushed.at(-1)).toMatchObject({ event: "snapshot" }),
+    );
   });
 
   test("a message typed while a turn runs waits in the queue and goes out when it settles", async () => {
     const user = userEvent.setup();
     await open();
-    act(() => channel.deliver("codex", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } }));
-    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "and then this{Enter}");
+    act(() =>
+      channel.deliver("codex", {
+        seq: 4,
+        method: "turn/started",
+        params: { turn: { id: "turn_2", status: "inProgress" } },
+      }),
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "随心输入" }),
+      "and then this{Enter}",
+    );
     expect(sendMessage).not.toHaveBeenCalled();
-    act(() => channel.deliver("codex", { seq: 5, method: "turn/completed", params: { turn: { id: "turn_2", status: "completed" } } }));
-    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "and then this" }) })));
+    act(() =>
+      channel.deliver("codex", {
+        seq: 5,
+        method: "turn/completed",
+        params: { turn: { id: "turn_2", status: "completed" } },
+      }),
+    );
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            threadId: "t1",
+            text: "and then this",
+          }),
+        }),
+      ),
+    );
   });
 
   test("a sub-agent joins its own thread: its conversation nests under the parent, its approval is answered there, the plan shows", async () => {
@@ -181,9 +482,37 @@ describe("ThreadPage", () => {
     await open();
     const child = "thr_1-alpha";
     act(() => {
-      channel.deliverTo("thread:thr_1", "codex", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
-      channel.deliverTo("thread:thr_1", "codex", { seq: 5, method: "turn/plan/updated", params: { turnId: "turn_2", explanation: "delegating", plan: [{ step: "spawn alpha", status: "completed" }, { step: "wait for alpha", status: "inProgress" }] } });
-      channel.deliverTo("thread:thr_1", "codex", { seq: 6, method: "item/completed", params: { turnId: "turn_2", item: { id: "act_alpha_started", type: "subAgentActivity", agentPath: "/root/alpha", agentThreadId: child, kind: "started" } } });
+      channel.deliverTo("thread:thr_1", "codex", {
+        seq: 4,
+        method: "turn/started",
+        params: { turn: { id: "turn_2", status: "inProgress" } },
+      });
+      channel.deliverTo("thread:thr_1", "codex", {
+        seq: 5,
+        method: "turn/plan/updated",
+        params: {
+          turnId: "turn_2",
+          explanation: "delegating",
+          plan: [
+            { step: "spawn alpha", status: "completed" },
+            { step: "wait for alpha", status: "inProgress" },
+          ],
+        },
+      });
+      channel.deliverTo("thread:thr_1", "codex", {
+        seq: 6,
+        method: "item/completed",
+        params: {
+          turnId: "turn_2",
+          item: {
+            id: "act_alpha_started",
+            type: "subAgentActivity",
+            agentPath: "/root/alpha",
+            agentThreadId: child,
+            kind: "started",
+          },
+        },
+      });
     });
     // the parent's activity opened the child's channel
     await waitFor(() => expect(channel.topics).toContain(`thread:${child}`));
@@ -196,24 +525,99 @@ describe("ThreadPage", () => {
         status: null,
         token_usage: null,
         plan: null,
-        items: [{ id: "cmd_alpha", type: "commandExecution", turnId: "turn_2-alpha", command: "echo alpha", cwd: "/p", status: "inProgress" }],
-        pending_requests: [{ id: 9, method: "item/commandExecution/requestApproval", params: { requestId: 9, itemId: "cmd_alpha", threadId: child, command: "echo alpha" } }],
+        items: [
+          {
+            id: "cmd_alpha",
+            type: "commandExecution",
+            turnId: "turn_2-alpha",
+            command: "echo alpha",
+            cwd: "/p",
+            status: "inProgress",
+          },
+        ],
+        pending_requests: [
+          {
+            id: 9,
+            method: "item/commandExecution/requestApproval",
+            params: {
+              requestId: 9,
+              itemId: "cmd_alpha",
+              threadId: child,
+              command: "echo alpha",
+            },
+          },
+        ],
       }),
     );
     expect(screen.getByTestId("plan")).toHaveTextContent("wait for alpha");
     const sub = screen.getByTestId("tool-subagent");
     expect(sub).toHaveTextContent("alpha");
-    expect(within(sub).getByTestId("subagent-messages")).toHaveTextContent("echo alpha");
+    expect(within(sub).getByTestId("subagent-messages")).toHaveTextContent(
+      "echo alpha",
+    );
     expect(screen.getByTestId("turn-bar")).toHaveTextContent("等待审批");
     await user.click(screen.getAllByRole("button", { name: "允许" })[0]!);
-    await waitFor(() => expect(respond).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", requestId: "9", decision: "accept" } })));
+    await waitFor(() =>
+      expect(respond).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: { threadId: "t1", requestId: "9", decision: "accept" },
+        }),
+      ),
+    );
 
     act(() => {
-      channel.deliverTo(`thread:${child}`, "codex", { seq: 3, method: "serverRequest/resolved", params: { requestId: 9 } });
-      channel.deliverTo(`thread:${child}`, "codex", { seq: 4, method: "item/completed", params: { turnId: "turn_2-alpha", item: { id: "cmd_alpha", type: "commandExecution", command: "echo alpha", cwd: "/p", status: "completed", exitCode: 0, aggregatedOutput: "alpha\n" } } });
-      channel.deliverTo(`thread:${child}`, "codex", { seq: 5, method: "item/completed", params: { turnId: "turn_2-alpha", item: { id: "msg_alpha", type: "agentMessage", text: "done by alpha" } } });
-      channel.deliverTo(`thread:${child}`, "codex", { seq: 6, method: "turn/completed", params: { turn: { id: "turn_2-alpha", status: "completed" } } });
-      channel.deliverTo("thread:thr_1", "codex", { seq: 7, method: "item/completed", params: { turnId: "turn_2", item: { id: "act_alpha_done", type: "subAgentActivity", agentPath: "/root/alpha", agentThreadId: child, kind: "completed" } } });
+      channel.deliverTo(`thread:${child}`, "codex", {
+        seq: 3,
+        method: "serverRequest/resolved",
+        params: { requestId: 9 },
+      });
+      channel.deliverTo(`thread:${child}`, "codex", {
+        seq: 4,
+        method: "item/completed",
+        params: {
+          turnId: "turn_2-alpha",
+          item: {
+            id: "cmd_alpha",
+            type: "commandExecution",
+            command: "echo alpha",
+            cwd: "/p",
+            status: "completed",
+            exitCode: 0,
+            aggregatedOutput: "alpha\n",
+          },
+        },
+      });
+      channel.deliverTo(`thread:${child}`, "codex", {
+        seq: 5,
+        method: "item/completed",
+        params: {
+          turnId: "turn_2-alpha",
+          item: {
+            id: "msg_alpha",
+            type: "agentMessage",
+            text: "done by alpha",
+          },
+        },
+      });
+      channel.deliverTo(`thread:${child}`, "codex", {
+        seq: 6,
+        method: "turn/completed",
+        params: { turn: { id: "turn_2-alpha", status: "completed" } },
+      });
+      channel.deliverTo("thread:thr_1", "codex", {
+        seq: 7,
+        method: "item/completed",
+        params: {
+          turnId: "turn_2",
+          item: {
+            id: "act_alpha_done",
+            type: "subAgentActivity",
+            agentPath: "/root/alpha",
+            agentThreadId: child,
+            kind: "completed",
+          },
+        },
+      });
     });
     // finished, the row folds like any tool; its conversation is a click away
     expect(screen.getByText("子 agent 完成")).toBeInTheDocument();
@@ -228,18 +632,60 @@ describe("ThreadPage", () => {
       channel.deliver("codex", {
         seq: 4,
         method: "thread/tokenUsage/updated",
-        params: { turnId: "turn_1", tokenUsage: { modelContextWindow: 128000, last: { inputTokens: 30000, cachedInputTokens: 2000, outputTokens: 2000, reasoningOutputTokens: 500, totalTokens: 32000 }, total: { inputTokens: 30000, cachedInputTokens: 2000, outputTokens: 2000, reasoningOutputTokens: 500, totalTokens: 32000 } } },
+        params: {
+          turnId: "turn_1",
+          tokenUsage: {
+            modelContextWindow: 128000,
+            last: {
+              inputTokens: 30000,
+              cachedInputTokens: 2000,
+              outputTokens: 2000,
+              reasoningOutputTokens: 500,
+              totalTokens: 32000,
+            },
+            total: {
+              inputTokens: 30000,
+              cachedInputTokens: 2000,
+              outputTokens: 2000,
+              reasoningOutputTokens: 500,
+              totalTokens: 32000,
+            },
+          },
+        },
       }),
     );
     expect(screen.getByLabelText("上下文用量")).toHaveTextContent("25%");
   });
 
   test("@ in the composer offers the project's files; the pick is a path in the text, a chip in the message", async () => {
-    vi.mocked(searchFiles).mockResolvedValue(ok([{ path: "lib/longx/gateway.ex", fileName: "gateway.ex", matchType: "file", root: "/srv/app-1", score: 9, indices: null }]) as never);
+    vi.mocked(searchFiles).mockResolvedValue(
+      ok([
+        {
+          path: "lib/longx/gateway.ex",
+          fileName: "gateway.ex",
+          matchType: "file",
+          root: "/srv/app-1",
+          score: 9,
+          indices: null,
+        },
+      ]) as never,
+    );
     const user = userEvent.setup();
     const r = renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-    act(() => channel.reply("ok", { ...snapshot, items: [{ id: "u1", type: "userMessage", turnId: "turn_1", content: [{ type: "text", text: "read @lib/a.ex first" }] }] }));
+    act(() =>
+      channel.reply("ok", {
+        ...snapshot,
+        items: [
+          {
+            id: "u1",
+            type: "userMessage",
+            turnId: "turn_1",
+            content: [{ type: "text", text: "read @lib/a.ex first" }],
+          },
+        ],
+      }),
+    );
     // a mention already in the history is a chip
     const chip = await screen.findByText("lib/a.ex");
     expect(chip.closest("[data-slot=directive-text-chip]")).not.toBeNull();
@@ -247,11 +693,23 @@ describe("ThreadPage", () => {
     const box = screen.getByRole("textbox", { name: "随心输入" });
     await user.type(box, "look at @gat");
     // the popover asks codex's index (debounced) and lists the matches
-    await user.click(await screen.findByRole("option", { name: /gateway\.ex/ }));
-    expect(searchFiles).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "id-1", query: "gat" } }));
+    await user.click(
+      await screen.findByRole("option", { name: /gateway\.ex/ }),
+    );
+    expect(searchFiles).toHaveBeenCalledWith(
+      expect.objectContaining({ input: { id: "id-1", query: "gat" } }),
+    );
     expect(box).toHaveValue("look at @lib/longx/gateway.ex ");
     await user.type(box, "{Enter}");
-    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ text: "look at @lib/longx/gateway.ex" }) })));
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            text: "look at @lib/longx/gateway.ex",
+          }),
+        }),
+      ),
+    );
     r.unmount();
   });
 
@@ -262,20 +720,41 @@ describe("ThreadPage", () => {
     const box = screen.getByRole("textbox", { name: "随心输入" });
     await user.type(box, "/rev");
     await user.click(await screen.findByRole("option", { name: /review/ }));
-    await waitFor(() => expect(reviewThread).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", target: "uncommitted" } })));
+    await waitFor(() =>
+      expect(reviewThread).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: { threadId: "t1", target: "uncommitted" },
+        }),
+      ),
+    );
     expect(box).toHaveValue("");
 
     await user.type(box, "/comp");
     await user.click(await screen.findByRole("option", { name: /compact/ }));
-    await waitFor(() => expect(compactThread).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1" } })));
+    await waitFor(() =>
+      expect(compactThread).toHaveBeenCalledWith(
+        expect.objectContaining({ input: { threadId: "t1" } }),
+      ),
+    );
 
     await user.type(box, "/init");
     await user.click(await screen.findByRole("option", { name: /init/ }));
-    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: expect.stringContaining("AGENTS.md") }) })));
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            threadId: "t1",
+            text: expect.stringContaining("AGENTS.md"),
+          }),
+        }),
+      ),
+    );
 
     await user.type(box, "/git");
     await user.click(await screen.findByRole("option", { name: /git/ }));
-    expect(within(await screen.findByTestId("tool-panel")).getByTestId("git-tool")).toBeInTheDocument();
+    expect(
+      within(await screen.findByTestId("tool-panel")).getByTestId("git-tool"),
+    ).toBeInTheDocument();
   });
 
   test("an image can be attached (the button, the picker) and goes with the message; a sent image shows in the transcript", async () => {
@@ -283,16 +762,50 @@ describe("ThreadPage", () => {
     await open();
     // the button opens the native picker (nothing a test can drive); a drop stages the file the same way
     expect(screen.getByRole("button", { name: "添加附件" })).toBeEnabled();
-    const file = new File([new Uint8Array([137, 80, 78, 71])], "shot.png", { type: "image/png" });
+    const file = new File([new Uint8Array([137, 80, 78, 71])], "shot.png", {
+      type: "image/png",
+    });
     const shell = document.querySelector("[data-slot=aui_composer-shell]")!;
-    fireEvent.drop(shell, { dataTransfer: { files: [file], types: ["Files"] } });
+    fireEvent.drop(shell, {
+      dataTransfer: { files: [file], types: ["Files"] },
+    });
     await screen.findByRole("button", { name: /image attachment/i });
     const box = screen.getByRole("textbox", { name: "随心输入" });
     await user.type(box, "what is this{Enter}");
-    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ text: "what is this", images: [expect.stringMatching(/^data:image\/png;base64,/)] }) })));
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            text: "what is this",
+            images: [expect.stringMatching(/^data:image\/png;base64,/)],
+          }),
+        }),
+      ),
+    );
 
-    act(() => channel.deliver("codex", { seq: 4, method: "item/completed", params: { threadId: "thr_1", turnId: "turn_2", item: { id: "u2", type: "userMessage", content: [{ type: "text", text: "what is this" }, { type: "image", url: "data:image/png;base64,iVBORw0KGgo=" }] } } }));
-    await waitFor(() => expect(document.querySelector("img[src^='data:image/png']")).not.toBeNull());
+    act(() =>
+      channel.deliver("codex", {
+        seq: 4,
+        method: "item/completed",
+        params: {
+          threadId: "thr_1",
+          turnId: "turn_2",
+          item: {
+            id: "u2",
+            type: "userMessage",
+            content: [
+              { type: "text", text: "what is this" },
+              { type: "image", url: "data:image/png;base64,iVBORw0KGgo=" },
+            ],
+          },
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        document.querySelector("img[src^='data:image/png']"),
+      ).not.toBeNull(),
+    );
   });
 
   test("voice input is switched off for now: no mic in the rail", async () => {
@@ -317,8 +830,19 @@ describe("ThreadPage", () => {
         ...snapshot,
         turn: { id: "turn_1", status: "inProgress" },
         items: [
-          { id: "u1", type: "userMessage", turnId: "turn_1", content: [{ type: "text", text: "draw it" }] },
-          { id: "r1", type: "reasoning", turnId: "turn_1", summary: ["**Planning**\n\nfirst the schema then the diagram"], content: [] },
+          {
+            id: "u1",
+            type: "userMessage",
+            turnId: "turn_1",
+            content: [{ type: "text", text: "draw it" }],
+          },
+          {
+            id: "r1",
+            type: "reasoning",
+            turnId: "turn_1",
+            summary: ["**Planning**\n\nfirst the schema then the diagram"],
+            content: [],
+          },
         ],
       }),
     );
@@ -326,20 +850,57 @@ describe("ThreadPage", () => {
     // the turn is running and reasoning is what streams: the panel is open, its steps titled, the trigger shimmering
     const panel = document.querySelector("[data-slot=reasoning-panel]")!;
     expect(panel).toHaveAttribute("data-state", "open");
-    expect(within(panel as HTMLElement).getByText("Planning")).toBeInTheDocument();
-    expect(within(panel as HTMLElement).getByText("first the schema then the diagram")).toBeInTheDocument();
+    expect(
+      within(panel as HTMLElement).getByText("Planning"),
+    ).toBeInTheDocument();
+    expect(
+      within(panel as HTMLElement).getByText(
+        "first the schema then the diagram",
+      ),
+    ).toBeInTheDocument();
     act(() => {
-      channel.deliver("codex", { seq: 4, method: "item/completed", params: { turnId: "turn_1", item: { id: "a1", type: "agentMessage", text: "```elixir\ndefmodule A do\nend\n```\n\n```mermaid\ngraph TD; A-->B;\n```\n" } } });
-      channel.deliver("codex", { seq: 5, method: "turn/completed", params: { turn: { id: "turn_1", status: "completed" } } });
+      channel.deliver("codex", {
+        seq: 4,
+        method: "item/completed",
+        params: {
+          turnId: "turn_1",
+          item: {
+            id: "a1",
+            type: "agentMessage",
+            text: "```elixir\ndefmodule A do\nend\n```\n\n```mermaid\ngraph TD; A-->B;\n```\n",
+          },
+        },
+      });
+      channel.deliver("codex", {
+        seq: 5,
+        method: "turn/completed",
+        params: { turn: { id: "turn_1", status: "completed" } },
+      });
     });
     // settled, the panel folds under its resting label; a click opens it again
-    await waitFor(() => expect(document.querySelector("[data-slot=reasoning-panel]")).toHaveAttribute("data-state", "closed"));
+    await waitFor(() =>
+      expect(
+        document.querySelector("[data-slot=reasoning-panel]"),
+      ).toHaveAttribute("data-state", "closed"),
+    );
     await userEvent.click(screen.getByRole("button", { name: /思考过程/ }));
-    await waitFor(() => expect(document.querySelector("[data-slot=reasoning-panel]")).toHaveAttribute("data-state", "open"));
+    await waitFor(() =>
+      expect(
+        document.querySelector("[data-slot=reasoning-panel]"),
+      ).toHaveAttribute("data-state", "open"),
+    );
     // code goes through the shiki highlighter (plain until tokenised), mermaid through the diagram element
-    await waitFor(() => expect(document.querySelector(".aui-shiki-base")).toHaveTextContent("defmodule A do"));
-    await waitFor(() => expect(document.querySelector("[data-slot^=mermaid-]")).not.toBeNull());
-    expect(document.querySelector(".aui-shiki-base")?.textContent).not.toContain("graph TD");
+    await waitFor(() =>
+      expect(document.querySelector(".aui-shiki-base")).toHaveTextContent(
+        "defmodule A do",
+      ),
+    );
+    await waitFor(() =>
+      expect(document.querySelector("[data-slot^=mermaid-]")).not.toBeNull(),
+    );
+    expect(
+      document.querySelector(".aui-shiki-base")?.textContent,
+    ).not.toContain("graph TD");
     r.unmount();
   });
 
@@ -347,6 +908,8 @@ describe("ThreadPage", () => {
     setViewport(390);
     await open();
     expect(screen.getByTestId("bottom-toolbar")).toBeInTheDocument();
-    expect(within(screen.getByTestId("chat-area")).getByTestId("tool-command")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("chat-area")).getByTestId("tool-command"),
+    ).toBeInTheDocument();
   });
 });

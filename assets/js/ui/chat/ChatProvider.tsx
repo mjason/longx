@@ -20,7 +20,7 @@ export function useChat(): CodexRuntime {
  * thread list tool and the chat in the centre share one runtime; the
  * dirty-tree question is the one piece of DOM this needs.
  */
-export function ChatProvider({ projectId, slug, defaults, children }: { projectId: string; slug: string; defaults: AccessMode; children: ReactNode }) {
+export function ChatProvider({ projectId, slug, defaults, defaultModelId, children }: { projectId: string; slug: string; defaults: AccessMode; defaultModelId?: string | null; children: ReactNode }) {
   const { threadId } = useParams();
   const navigate = useNavigate();
   const [dirty, setDirty] = useState<DirtyPrompt | null>(null);
@@ -40,7 +40,7 @@ export function ChatProvider({ projectId, slug, defaults, children }: { projectI
     [],
   );
 
-  const chat = useCodexRuntime({ projectId, defaults, threadId, onOpenThread, onDirtyTree });
+  const chat = useCodexRuntime({ projectId, defaults, defaultModelId, threadId, onOpenThread, onDirtyTree });
 
   return (
     <ChatContext.Provider value={chat}>

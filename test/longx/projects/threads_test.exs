@@ -395,6 +395,91 @@ defmodule Longx.Projects.ThreadsTest do
                Projects.send_message(thread, "say c", conn: conn, model: "nope")
     end
 
+    test "effort: picks the reasoning level for this and later turns, recorded on the thread and the turn",
+         %{dir: dir, conn: conn} do
+      glm!(%{reasoning_levels: ["low", "high", "max"], reasoning_effort: "high"})
+      project = git_project!(dir)
+
+      # a thread starts on the model's default level…
+      {:ok, thread} = Projects.start_thread(project, conn: conn, model: "glm-5")
+      assert Ash.get!(Thread, thread.id).reasoning_effort == "high"
+      %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      assert params["config"]["model_reasoning_effort"] == "high"
+
+      # …or on the one chosen
+      {:ok, low} = Projects.start_thread(project, conn: conn, model: "glm-5", effort: "low")
+      assert Ash.get!(Thread, low.id).reasoning_effort == "low"
+      %{"startParams" => params} = read_thread!(conn, low.codex_thread_id)
+      assert params["config"]["model_reasoning_effort"] == "low"
+
+      # a turn that changes the level sends it (codex keeps it for the turns after)
+      {:ok, turn} = Projects.send_message(thread, "say a", conn: conn, effort: "max")
+      assert turn.reasoning_effort == "max"
+      assert Ash.get!(Thread, thread.id).reasoning_effort == "max"
+      eventually(turn_done(turn.id))
+      %{"lastTurnParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      assert params["effort"] == "max"
+      # the model did not change, so it is not named again
+      refute Map.has_key?(params, "model")
+
+      # the same level again, or none given: nothing sent, the turn records what is in force
+      {:ok, turn2} = Projects.send_message(thread, "say b", conn: conn)
+      assert turn2.reasoning_effort == "max"
+      eventually(turn_done(turn2.id))
+      %{"lastTurnParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      refute Map.has_key?(params, "effort")
+
+      # a level the model does not offer is refused before codex is involved
+      assert {:error, {:unknown_effort, "ultra"}} =
+               Projects.send_message(thread, "say c", conn: conn, effort: "ultra")
+
+      assert {:error, {:unknown_effort, "ultra"}} =
+               Projects.start_thread(project, conn: conn, model: "glm-5", effort: "ultra")
+
+      # switching models takes the new model's default level unless one is chosen
+      flash =
+        Longx.AI.update_model!(Longx.AI.default_model!(), %{
+          reasoning_levels: ["low", "high"],
+          reasoning_effort: "high"
+        })
+
+      {:ok, turn3} = Projects.send_message(thread, "say d", conn: conn, model: flash.slug)
+      assert turn3.reasoning_effort == "high"
+      eventually(turn_done(turn3.id))
+      %{"lastTurnParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      assert params["model"] == flash.slug
+      assert params["effort"] == "high"
+
+      {:ok, turn4} =
+        Projects.send_message(thread, "say e", conn: conn, model: "glm-5", effort: "low")
+
+      assert turn4.reasoning_effort == "low"
+      eventually(turn_done(turn4.id))
+      %{"lastTurnParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      assert params == Map.merge(params, %{"model" => "glm-5", "effort" => "low"})
+
+      # a model without declared levels takes any effort (whatever it advertises)
+      Longx.AI.update_model!(flash, %{reasoning_levels: [], reasoning_effort: nil})
+
+      {:ok, turn5} =
+        Projects.send_message(thread, "say f", conn: conn, model: flash.slug, effort: "ultra")
+
+      assert turn5.reasoning_effort == "ultra"
+    end
+
+    test "a thread resumes with the level it was left on, not the model's default", %{
+      dir: dir,
+      conn: conn
+    } do
+      glm!(%{reasoning_levels: ["low", "high"], reasoning_effort: "high"})
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn, model: "glm-5", effort: "low")
+
+      assert {:ok, _} = Projects.resume_thread(Ash.get!(Thread, thread.id, load: :project), conn)
+      %{"resumeParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      assert params["config"]["model_reasoning_effort"] == "low"
+    end
+
     test "sandbox / approval_policy / network_access switch the access mode from this turn on and are recorded on the thread",
          %{dir: dir, conn: conn} do
       project = git_project!(dir)

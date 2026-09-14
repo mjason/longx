@@ -37,6 +37,11 @@ defmodule Longx.AI do
       rpc_action :list_tools, :catalogue
       rpc_action :set_tool_enabled, :set_enabled
     end
+
+    resource Longx.AI.Preset do
+      rpc_action :list_presets, :list_presets
+      rpc_action :apply_preset, :apply_preset
+    end
   end
 
   resources do
@@ -71,6 +76,8 @@ defmodule Longx.AI do
 
       define :make_default_search_provider, action: :make_default
     end
+
+    resource Longx.AI.Preset
 
     resource Longx.AI.Tool do
       define :create_tool, action: :create
@@ -256,6 +263,26 @@ defmodule Longx.AI do
         |> put_if(:summary, model.reasoning_summary)
 
       {:ok, Enum.reverse(opts)}
+    end
+  end
+
+  @doc """
+  Whether `effort` is a reasoning level the model offers: any string for a
+  model that declares no levels (codex's `ReasoningEffort` is free text),
+  one of `reasoning_levels` otherwise. `nil` (the model's default) always is.
+  """
+  @spec check_effort(String.t() | nil, String.t() | nil) ::
+          :ok
+          | {:error,
+             {:unknown_effort, String.t()} | :no_default_model | {:unknown_model, String.t()}}
+  def check_effort(_slug, nil), do: :ok
+
+  def check_effort(slug, effort) when is_binary(effort) do
+    with {:ok, model, _explicit?} <- fetch_model(slug) do
+      case model.reasoning_levels do
+        [] -> :ok
+        levels -> if effort in levels, do: :ok, else: {:error, {:unknown_effort, effort}}
+      end
     end
   end
 

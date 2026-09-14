@@ -10,6 +10,7 @@ export type ThreadRow = {
   preview: string | null;
   status: string;
   modelSlug?: string | null;
+  reasoningEffort?: string | null;
   sandbox?: string;
   approvalPolicy?: string;
   networkAccess?: boolean;

@@ -276,11 +276,30 @@ React Native client planned on the same core code.
     `max_concurrent_requests` (nil = unlimited) that the gateway enforces; `last_error` /
     `last_error_at` / `last_checked_at` written by `check_model/1` and by the gateway on
     upstream 401/403) and `Model` (`upstream_id`, `slug`, `context_window`, one `default`,
-    plus optional `reasoning_effort` (free string, what the model advertises),
-    `reasoning_summary` (codex's enum) and `max_output_tokens`).
-    `Longx.AI.resolve_target/0` = default model + its provider's decrypted key. Seeds
-    (`priv/repo/seeds.exs`, run by `mix ash.setup`/`mix test`) create DeepSeek +
-    `deepseek-flash` as default, taking the key from `DEEPSEEK_API_KEY`. Columns added
+    `reasoning_levels` (the efforts the model offers, ordered — DeepSeek / GLM
+    `low / high / max`; codex's `ReasoningEffort` is any non-empty string, so a row with
+    no levels takes free text), optional `reasoning_effort` (the default level, one of
+    the levels when declared — `Model.Validations.EffortInLevels`), `reasoning_summary`
+    (codex's enum) and `max_output_tokens`).
+    `Longx.AI.resolve_target/0` = default model + its provider's decrypted key.
+    **Presets** (`Longx.AI.Presets`, pure data + `apply/2`): DeepSeek, GLM and OpenAI with
+    endpoint / kind / hosted search / key env + url / docs url and their models (window,
+    levels, default level, image input, recommended) — DeepSeek's and GLM's from the
+    `models.json` each publishes for codex, OpenAI's from the catalog embedded in the
+    pinned codex binary (`strings` it for `supported_reasoning_levels`). `apply/2` is
+    idempotent (provider by slug — facts refreshed, a key never dropped; models by
+    `upstream_id` — a person's edits kept, a row without levels learns the preset's, a row
+    on a smaller set of the preset's levels gains the ones added since (DeepSeek's are
+    `none / low / high / max` per its 思考模式 docs, Responses format `reasoning.effort`,
+    `none` = thinking off, default `high`; minimal / medium / xhigh / ultra are aliases the
+    API maps down); a
+    slug another provider took gets `<provider>-` prefixed) with `models:` (ids /
+    `:recommended` / `:all`) and `make_default:`. Over RPC via the data-less
+    `Longx.AI.Preset`: `list_presets` (each with `installed` / `provider_id`, models
+    flagged `installed`; the model maps are untyped → camelCased there) and
+    `apply_preset`. Seeds (`priv/repo/seeds.exs`, run by `mix ash.setup`/`mix test`)
+    apply the DeepSeek preset (key from `DEEPSEEK_API_KEY`, `deepseek-flash` the default
+    when nothing is) and the OpenAI provider alone (`OPENAI_API_KEY`). Columns added
     after rows existed get a backfill migration (`kind` for api.openai.com rows, `slug` from
     `upstream_id`) — a new NOT NULL column needs a `default:` in the migration (SQLite).
   - **What codex is told about a model** comes from the row, per thread:
@@ -290,7 +309,16 @@ React Native client planned on the same core code.
     turns them into `thread/start.config` overrides — the same dotted keys as `codex -c`
     (`model_reasoning_effort`, `web_search`, `features.standalone_web_search`, …; verified
     against the bundled binary in `gateway_e2e_test`). `turn_options/1` (`model:`, `effort:`,
-    `summary:`) goes on `turn/start` when a turn switches models. `max_output_tokens` is not
+    `summary:`) goes on `turn/start` when a turn switches models. **The level is chosen
+    per turn**: `start_thread(effort:)` / `send_message(effort:)` / `redo_turn(effort:)`
+    (RPC `effort`; `AI.check_effort/2` refuses a level the model does not declare — an
+    argument error on the wire, like an unknown model now) — `Thread.reasoning_effort`
+    is the level in force (start: chosen or the model's default; a turn that changes it
+    sends `turn/start.effort`, which codex keeps for the turns after — verified in
+    `gateway_e2e_test`; a resume passes the thread's level, not the row's), and
+    `Turn.reasoning_effort` what each turn ran with. The catalog entry carries
+    `supported_reasoning_levels` / `default_reasoning_level`, so a levels edit turns the
+    strip amber (`stale: [:models]`). `max_output_tokens` is not
     a codex knob any more: the gateway puts it on the Responses request when codex sets none.
     Unknown slugs are refused in `Longx.Projects` before codex is involved. Not covered:
     config overrides are per thread, so a mid-thread model switch (`redo_turn` in revert
@@ -398,10 +426,14 @@ React Native client planned on the same core code.
     with 200, never as an HTTP error (codex would fail the tool call). OpenAI's hosted
     `web_search` tool is never emitted (`web_search = "disabled"` otherwise).
   - `apply_patch` on third-party models works through `exec_command` (codex installs an
-    `apply_patch` helper on PATH under CODEX_HOME); the `custom`/freeform tool is OpenAI-only.
+    `apply_patch` helper on PATH under CODEX_HOME); our catalog entries declare no
+    `apply_patch_tool_type`. DeepSeek's and GLM's own codex catalogs declare `freeform`
+    (DeepSeek's Responses API accepts the `custom` apply_patch tool) — switching our
+    entries to that is a separate, e2e-verified change, not done yet.
   - Upstreams are all OpenAI **Responses API** (codex 0.154 dropped `wire_api = "chat"`):
     OpenAI `https://api.openai.com/v1`, DeepSeek `https://api.deepseek.com/v1`, GLM
-    `https://open.bigmodel.cn/api/paas/v4`. Adding a provider = a DB row, no code.
+    `https://open.bigmodel.cn/api/v1` (its `/api/paas/v4` is chat completions). Adding a
+    provider = a DB row, no code — `Longx.AI.Presets` has the three ready-made.
   - `Longx.Codex.Home` writes our own `CODEX_HOME` (`data/codex_home`, prod
     `$LONGX_DATA_DIR/codex_home`; never `~/.codex`, never a tmp dir) with a generated
     `config.toml`: one provider `longx` → `http://127.0.0.1:<port>/ai/v1`,
@@ -663,9 +695,18 @@ React Native client planned on the same core code.
     `update_project`; danger zone: clear codex history, archive, each behind a confirm),
     `pages/SettingsPage` (categories tree on desktop, list → sub page on phones):
     `settings/ModelsSection` — every provider as a card (endpoint, kind, key present or
-    not, last error / check) with its models (slug, upstream id, window, effort, the
-    default starred; 检测 = `check_model`, 设为默认, edit / delete in a menu) and dialogs
-    to add / edit a provider (slug derived from the name on create) or a model; the
+    not, last error / check) with its models (slug, upstream id, window, levels, the
+    default starred; 检测 = `check_model`, 设为默认, edit / delete in a menu). **"添加
+    Provider" offers the presets first** (`PresetChooser`: a card per `list_presets`
+    entry, 已添加 when installed, plus 自定义 → the free form with timeout / concurrency
+    folded under 高级); a preset is one step (`PresetDialog`: the key unless the
+    provider has one, 获取 API Key / 接入文档 links, the models to add as the registry's
+    `model-picker` element turned into a checklist — recommended ones pre-checked,
+    installed ones left out, window and 图片 / levels as chips — and which becomes the
+    default → `apply_preset`); a provider that came from a preset gets 从模版添加模型 in
+    its menu while the preset has models it lacks. The model dialog edits the levels as
+    toggles of codex's known efforts (`LevelsEditor`, plus a typed custom one) with the
+    default level chosen among them (free text when no level is declared); the
     search provider's key below. Deletes confirm; the default model and its provider
     refuse (`delete_model` / `delete_provider` are guarded actions apart from the plain
     `destroy`; a provider's delete cascades to its models). `settings/ToolsSection` — the
@@ -722,7 +763,16 @@ React Native client planned on the same core code.
     or the project defaults, sent with every message — and the turn's state) /
     `ComposerTrailing` (the `context-display` ring — codex's last-turn token usage
     against the `modelContextWindow` it reports, `contextUsage(view)` — and the per-turn
-    model with its reasoning effort) are slots our `thread.aui` copy adds, as are
+    model with its reasoning level: the registry's **`model-selector`** element used
+    standalone (`ModelSelectorRoot` with our `value` / `effort`; no model-context
+    registration — our RPC carries the choice), models grouped by provider,
+    `efforts` from the row's `reasoningLevels` so the 思考 row shows only for a model
+    that has them (`effortLabel` names them in `strings.effortLevels`); `model` /
+    `effort` live in `useCodexRuntime` (`setModel` resets the level to the new model's
+    default) and a new chat passes both to `start_thread` — the thread's window and
+    search mode are start-time config — while a later pick rides on `send_message`; the
+    rail names the project's own default model via `defaultModelId`) are slots our
+    `thread.aui` copy adds, as are
     `ComposerPopovers` and `UserText`. **The composer has the catalog's Composer
     element's full set** (https://www.assistant-ui.com/elements/composer, all wired
     through the runtime, nothing hand-rolled): **attachments** — the runtime's

@@ -10,7 +10,7 @@ export type UtcDateTimeUsec = string;
 // Model Schema
 export type ModelResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "contextWindow" | "default" | "id" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
+  __primitiveFields: "contextWindow" | "default" | "id" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
   contextWindow: number;
   default: boolean;
   id: UUIDv7;
@@ -19,6 +19,7 @@ export type ModelResourceSchema = {
   name: string;
   providerId: UUID;
   reasoningEffort: string | null;
+  reasoningLevels: Array<string>;
   reasoningSummary: "auto" | "concise" | "detailed" | "none" | null;
   slug: string | null;
   updatedAt: UtcDateTimeUsec;
@@ -30,7 +31,7 @@ export type ModelResourceSchema = {
 
 export type ModelAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "contextWindow" | "default" | "id" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
+  __primitiveFields: "contextWindow" | "default" | "id" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
   contextWindow: number;
   default: boolean;
   id: UUIDv7;
@@ -39,10 +40,25 @@ export type ModelAttributesOnlySchema = {
   name: string;
   providerId: UUID;
   reasoningEffort: string | null;
+  reasoningLevels: Array<string>;
   reasoningSummary: "auto" | "concise" | "detailed" | "none" | null;
   slug: string | null;
   updatedAt: UtcDateTimeUsec;
   upstreamId: string;
+};
+
+
+// Preset Schema
+export type PresetResourceSchema = {
+  __type: "Resource";
+  __primitiveFields: never;
+};
+
+
+
+export type PresetAttributesOnlySchema = {
+  __type: "Resource";
+  __primitiveFields: never;
 };
 
 
@@ -222,7 +238,7 @@ export type ProjectRepoAttributesOnlySchema = {
 // Thread Schema
 export type ThreadResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "agentPath" | "approvalPolicy" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "memoryExtractedAt" | "modelSlug" | "multiAgent" | "networkAccess" | "parentThreadId" | "preview" | "projectId" | "sandbox" | "status" | "title" | "tools" | "updatedAt" | "webSearch";
+  __primitiveFields: "agentPath" | "approvalPolicy" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "memoryExtractedAt" | "modelSlug" | "multiAgent" | "networkAccess" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "sandbox" | "status" | "title" | "tools" | "updatedAt" | "webSearch";
   agentPath: string | null;
   approvalPolicy: "never" | "on_request" | "untrusted";
   codexThreadId: string;
@@ -238,6 +254,7 @@ export type ThreadResourceSchema = {
   parentThreadId: UUID | null;
   preview: string | null;
   projectId: UUID;
+  reasoningEffort: string | null;
   sandbox: "danger_full_access" | "read_only" | "workspace_write";
   status: "active" | "archived" | "disconnected" | "idle" | "unrecoverable";
   title: string | null;
@@ -253,7 +270,7 @@ export type ThreadResourceSchema = {
 
 export type ThreadAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "agentPath" | "approvalPolicy" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "memoryExtractedAt" | "modelSlug" | "multiAgent" | "networkAccess" | "parentThreadId" | "preview" | "projectId" | "sandbox" | "status" | "title" | "tools" | "updatedAt" | "webSearch";
+  __primitiveFields: "agentPath" | "approvalPolicy" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "memoryExtractedAt" | "modelSlug" | "multiAgent" | "networkAccess" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "sandbox" | "status" | "title" | "tools" | "updatedAt" | "webSearch";
   agentPath: string | null;
   approvalPolicy: "never" | "on_request" | "untrusted";
   codexThreadId: string;
@@ -269,6 +286,7 @@ export type ThreadAttributesOnlySchema = {
   parentThreadId: UUID | null;
   preview: string | null;
   projectId: UUID;
+  reasoningEffort: string | null;
   sandbox: "danger_full_access" | "read_only" | "workspace_write";
   status: "active" | "archived" | "disconnected" | "idle" | "unrecoverable";
   title: string | null;
@@ -281,7 +299,7 @@ export type ThreadAttributesOnlySchema = {
 // Turn Schema
 export type TurnResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "codexTurnId" | "commitAfter" | "commitBefore" | "completedAt" | "diff" | "dirtyStart" | "error" | "id" | "insertedAt" | "modelSlug" | "startedAt" | "status" | "threadId" | "updatedAt" | "userText";
+  __primitiveFields: "codexTurnId" | "commitAfter" | "commitBefore" | "completedAt" | "diff" | "dirtyStart" | "error" | "id" | "insertedAt" | "modelSlug" | "reasoningEffort" | "startedAt" | "status" | "threadId" | "updatedAt" | "userText";
   codexTurnId: string;
   commitAfter: string | null;
   commitBefore: string | null;
@@ -292,6 +310,7 @@ export type TurnResourceSchema = {
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   modelSlug: string | null;
+  reasoningEffort: string | null;
   startedAt: UtcDateTimeUsec;
   status: "completed" | "failed" | "in_progress" | "interrupted" | "reverted";
   threadId: UUID;
@@ -304,7 +323,7 @@ export type TurnResourceSchema = {
 
 export type TurnAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "codexTurnId" | "commitAfter" | "commitBefore" | "completedAt" | "diff" | "dirtyStart" | "error" | "id" | "insertedAt" | "modelSlug" | "startedAt" | "status" | "threadId" | "updatedAt" | "userText";
+  __primitiveFields: "codexTurnId" | "commitAfter" | "commitBefore" | "completedAt" | "diff" | "dirtyStart" | "error" | "id" | "insertedAt" | "modelSlug" | "reasoningEffort" | "startedAt" | "status" | "threadId" | "updatedAt" | "userText";
   codexTurnId: string;
   commitAfter: string | null;
   commitBefore: string | null;
@@ -315,6 +334,7 @@ export type TurnAttributesOnlySchema = {
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   modelSlug: string | null;
+  reasoningEffort: string | null;
   startedAt: UtcDateTimeUsec;
   status: "completed" | "failed" | "in_progress" | "interrupted" | "reverted";
   threadId: UUID;
@@ -426,6 +446,13 @@ export type ModelFilterInput = {
     stringStartsWith?: string;
   };
 
+  reasoningLevels?: {
+    eq?: Array<string>;
+    notEq?: Array<string>;
+    in?: Array<Array<string>>;
+    has?: string;
+  };
+
   reasoningSummary?: {
     isNil?: boolean;
     eq?: "auto" | "concise" | "detailed" | "none";
@@ -475,6 +502,14 @@ export type ModelFilterInput = {
   };
 
   provider?: ProviderFilterInput;
+
+};
+export type PresetFilterInput = {
+  and?: Array<PresetFilterInput>;
+  or?: Array<PresetFilterInput>;
+  not?: Array<PresetFilterInput>;
+
+
 
 };
 export type ProviderFilterInput = {
@@ -1151,6 +1186,20 @@ export type ThreadFilterInput = {
     greaterThanOrEqual?: UUID;
   };
 
+  reasoningEffort?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
   sandbox?: {
     eq?: "danger_full_access" | "read_only" | "workspace_write";
     notEq?: "danger_full_access" | "read_only" | "workspace_write";
@@ -1340,6 +1389,20 @@ export type TurnFilterInput = {
     stringStartsWith?: string;
   };
 
+  reasoningEffort?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
   startedAt?: {
     eq?: UtcDateTimeUsec;
     notEq?: UtcDateTimeUsec;
@@ -1407,8 +1470,9 @@ export type SystemStatusFilterInput = {
 };
 
 
-export const modelFilterFields = ["contextWindow", "default", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningSummary", "slug", "updatedAt", "upstreamId", "provider"] as const;
+export const modelFilterFields = ["contextWindow", "default", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId", "provider"] as const;
 export type ModelFilterField = (typeof modelFilterFields)[number];
+
 
 export const providerFilterFields = ["baseUrl", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
 export type ProviderFilterField = (typeof providerFilterFields)[number];
@@ -1424,16 +1488,17 @@ export const projectFilterFields = ["approvalPolicy", "archivedAt", "description
 export type ProjectFilterField = (typeof projectFilterFields)[number];
 
 
-export const threadFilterFields = ["agentPath", "approvalPolicy", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "memoryExtractedAt", "modelSlug", "multiAgent", "networkAccess", "parentThreadId", "preview", "projectId", "sandbox", "status", "title", "tools", "updatedAt", "webSearch", "forkedFrom", "parentThread", "project"] as const;
+export const threadFilterFields = ["agentPath", "approvalPolicy", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "memoryExtractedAt", "modelSlug", "multiAgent", "networkAccess", "parentThreadId", "preview", "projectId", "reasoningEffort", "sandbox", "status", "title", "tools", "updatedAt", "webSearch", "forkedFrom", "parentThread", "project"] as const;
 export type ThreadFilterField = (typeof threadFilterFields)[number];
 
-export const turnFilterFields = ["codexTurnId", "commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "modelSlug", "startedAt", "status", "threadId", "updatedAt", "userText", "thread"] as const;
+export const turnFilterFields = ["codexTurnId", "commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "userText", "thread"] as const;
 export type TurnFilterField = (typeof turnFilterFields)[number];
 
 
 
-export const modelSortFields = ["contextWindow", "default", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningSummary", "slug", "updatedAt", "upstreamId"] as const;
+export const modelSortFields = ["contextWindow", "default", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId"] as const;
 export type ModelSortField = (typeof modelSortFields)[number];
+
 
 export const providerSortFields = ["baseUrl", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
 export type ProviderSortField = (typeof providerSortFields)[number];
@@ -1449,10 +1514,10 @@ export const projectSortFields = ["approvalPolicy", "archivedAt", "description",
 export type ProjectSortField = (typeof projectSortFields)[number];
 
 
-export const threadSortFields = ["agentPath", "approvalPolicy", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "memoryExtractedAt", "modelSlug", "multiAgent", "networkAccess", "parentThreadId", "preview", "projectId", "sandbox", "status", "title", "tools", "updatedAt", "webSearch"] as const;
+export const threadSortFields = ["agentPath", "approvalPolicy", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "memoryExtractedAt", "modelSlug", "multiAgent", "networkAccess", "parentThreadId", "preview", "projectId", "reasoningEffort", "sandbox", "status", "title", "tools", "updatedAt", "webSearch"] as const;
 export type ThreadSortField = (typeof threadSortFields)[number];
 
-export const turnSortFields = ["codexTurnId", "commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "modelSlug", "startedAt", "status", "threadId", "updatedAt", "userText"] as const;
+export const turnSortFields = ["codexTurnId", "commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "userText"] as const;
 export type TurnSortField = (typeof turnSortFields)[number];
 
 

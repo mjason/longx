@@ -72,8 +72,9 @@ defmodule Longx.Codex.Home do
   Options: `:dir` (default `default_dir/0`), `:gateway_url` (default
   `default_gateway_url/0`), `:web_search` — a `t:Longx.AI.web_search_mode/0`
   (default: `Longx.AI.web_search_mode/0`, i.e. whatever is configured),
-  `:models` — the catalog entries (`%{slug, context_window}`; default:
-  `catalog_models/0`, the AI domain's models with `longx` as the default one).
+  `:models` — the catalog entries (`%{slug, context_window, reasoning_levels,
+  reasoning_effort}`, the last two optional; default: `catalog_models/0`, the
+  AI domain's models with `longx` as the default one).
 
   Besides `config.toml` it writes `model_catalog.json`: codex knows nothing
   about the models behind the gateway, and for an unknown slug its fallback
@@ -213,43 +214,76 @@ defmodule Longx.Codex.Home do
   # `model_info_from_slug`): what a row without a window gets
   @fallback_context_window 272_000
 
+  @typedoc "What a catalog entry is made from: a `Longx.AI.Model` row's facts."
+  @type catalog_model :: %{
+          required(:slug) => String.t(),
+          required(:context_window) => pos_integer | nil,
+          optional(:reasoning_levels) => [String.t()],
+          optional(:reasoning_effort) => String.t() | nil
+        }
+
   @doc """
   The catalog entries for the AI domain's models: `longx` (the placeholder
-  every thread starts on, sized as the default model) and one per slug.
+  every thread starts on, sized and levelled as the default model) and one
+  per slug.
   """
-  @spec catalog_models() :: [%{slug: String.t(), context_window: pos_integer | nil}]
+  @spec catalog_models() :: [catalog_model]
   def catalog_models do
     models = Longx.AI.list_models!()
     default = Enum.find(models, & &1.default)
 
-    [%{slug: @placeholder_model, context_window: default && default.context_window}] ++
-      for(
-        %{slug: slug, context_window: window} <- models,
-        is_binary(slug),
-        do: %{slug: slug, context_window: window}
-      )
+    [catalog_model(@placeholder_model, default)] ++
+      for(%{slug: slug} = model <- models, is_binary(slug), do: catalog_model(slug, model))
   end
+
+  defp catalog_model(slug, nil), do: %{slug: slug, context_window: nil}
+
+  defp catalog_model(slug, model) do
+    %{
+      slug: slug,
+      context_window: model.context_window,
+      reasoning_levels: model.reasoning_levels,
+      reasoning_effort: model.reasoning_effort
+    }
+  end
+
+  # what codex shows next to a level in its own picker; ours has its own labels
+  @level_descriptions %{
+    "none" => "No reasoning",
+    "minimal" => "Minimal reasoning",
+    "low" => "Fast responses with lighter reasoning",
+    "medium" => "Balanced reasoning depth",
+    "high" => "Extra high reasoning depth for complex problems",
+    "xhigh" => "Extra high reasoning depth",
+    "max" => "Maximum reasoning depth for the hardest problems"
+  }
 
   @doc """
   codex's `model_catalog_json` document: one entry per model in codex's
   fallback shape (unified exec shell, byte truncation, its own base
-  instructions — `base_instructions/0`), with `context_window` and
-  `max_context_window` from the row.
+  instructions — `base_instructions/0`), with `context_window` /
+  `max_context_window` and the reasoning levels (`supported_reasoning_levels`,
+  `default_reasoning_level`) from the row.
   """
-  @spec model_catalog([%{slug: String.t(), context_window: pos_integer | nil}]) :: map
+  @spec model_catalog([catalog_model]) :: map
   def model_catalog(models) do
     instructions = base_instructions()
 
     %{
       "models" =>
-        for %{slug: slug, context_window: window} <- models do
+        for %{slug: slug, context_window: window} = model <- models do
           window = window || @fallback_context_window
+
+          levels =
+            for level <- Map.get(model, :reasoning_levels) || [] do
+              %{"effort" => level, "description" => Map.get(@level_descriptions, level, level)}
+            end
 
           %{
             "slug" => slug,
             "display_name" => slug,
             "description" => nil,
-            "supported_reasoning_levels" => [],
+            "supported_reasoning_levels" => levels,
             "shell_type" => "unified_exec",
             "visibility" => "none",
             "supported_in_api" => true,
@@ -266,9 +300,13 @@ defmodule Longx.Codex.Home do
             "experimental_supported_tools" => [],
             "base_instructions" => instructions
           }
+          |> put_default_level(Map.get(model, :reasoning_effort))
         end
     }
   end
+
+  defp put_default_level(entry, nil), do: entry
+  defp put_default_level(entry, effort), do: Map.put(entry, "default_reasoning_level", effort)
 
   @base_instructions_path Path.join(:code.priv_dir(:longx), "codex_prompt.md")
   @external_resource @base_instructions_path

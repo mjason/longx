@@ -142,6 +142,80 @@ defmodule LongxWeb.AiRpcTest do
              rpc(conn, "list_models", %{"fields" => ["id"]})
   end
 
+  test "presets: the catalogue says what is installed; apply_preset sets a provider up in one step",
+       %{
+         conn: conn
+       } do
+    assert %{"success" => true, "data" => presets} =
+             rpc(conn, "list_presets", %{
+               "fields" => ["slug", "name", "kind", "installed", "providerId", "keyUrl", "models"]
+             })
+
+    assert Enum.map(presets, & &1["slug"]) == ["deepseek", "glm", "openai"]
+    [deepseek | _] = presets
+    assert %{"installed" => false, "providerId" => nil, "kind" => "openai_compatible"} = deepseek
+
+    assert [
+             %{
+               "upstreamId" => "deepseek-flash",
+               "reasoningLevels" => ["none", "low", "high", "max"],
+               "image" => true,
+               "installed" => false
+             }
+             | _
+           ] = deepseek["models"]
+
+    assert %{
+             "success" => true,
+             "data" => %{"providerId" => provider_id, "modelIds" => [flash_id]}
+           } =
+             rpc(conn, "apply_preset", %{
+               "fields" => ["providerId", "modelIds"],
+               "input" => %{
+                 "slug" => "deepseek",
+                 "apiKey" => "sk-ds",
+                 "models" => ["deepseek-flash"],
+                 "makeDefault" => "deepseek-flash"
+               }
+             })
+
+    assert %{"success" => true, "data" => [%{"id" => ^provider_id, "hasApiKey" => true}]} =
+             rpc(conn, "list_providers", %{"fields" => ["id", "hasApiKey"]})
+
+    assert %{
+             "success" => true,
+             "data" => [%{"id" => ^flash_id, "default" => true, "reasoningEffort" => "high"}]
+           } =
+             rpc(conn, "list_models", %{"fields" => ["id", "default", "reasoningEffort"]})
+
+    # the catalogue now knows: the provider is there, one model of two
+    assert %{
+             "success" => true,
+             "data" => [
+               %{
+                 "installed" => true,
+                 "providerId" => ^provider_id,
+                 "models" => [%{"installed" => true}, %{"installed" => false}]
+               }
+               | _
+             ]
+           } =
+             rpc(conn, "list_presets", %{"fields" => ["installed", "providerId", "models"]})
+
+    # bad choices are errors on the argument
+    assert %{"success" => false, "errors" => [%{"fields" => ["models"]}]} =
+             rpc(conn, "apply_preset", %{
+               "fields" => ["providerId"],
+               "input" => %{"slug" => "deepseek", "models" => ["gpt-9"]}
+             })
+
+    assert %{"success" => false, "errors" => [%{"fields" => ["slug"]}]} =
+             rpc(conn, "apply_preset", %{
+               "fields" => ["providerId"],
+               "input" => %{"slug" => "nope"}
+             })
+  end
+
   test "check_model answers with ok / latency or the error, never a failure", %{conn: conn} do
     %{"success" => true, "data" => %{"id" => provider}} =
       rpc(conn, "create_provider", %{

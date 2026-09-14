@@ -30,6 +30,8 @@ defmodule Longx.Projects.Thread do
       constraints instance_of: __MODULE__
       argument :project_id, :uuid, allow_nil?: false
       argument :model, :string
+      # the reasoning level to start on (absent: the model's default)
+      argument :effort, :string
       argument :tools, {:array, :string}
       argument :approval_policy, :atom, constraints: [one_of: [:never, :on_request, :untrusted]]
 
@@ -45,6 +47,7 @@ defmodule Longx.Projects.Thread do
           input.arguments
           |> Map.take([
             :model,
+            :effort,
             :tools,
             :approval_policy,
             :sandbox,
@@ -55,7 +58,7 @@ defmodule Longx.Projects.Thread do
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
         with {:ok, project} <- Ash.get(Longx.Projects.Project, input.arguments.project_id),
-             do: Longx.Projects.start_thread(project, opts)
+             do: project |> Longx.Projects.start_thread(opts) |> model_errors()
       end
     end
 
@@ -66,6 +69,8 @@ defmodule Longx.Projects.Thread do
       # the composer's image attachments, as data: urls
       argument :images, {:array, :string}
       argument :model, :string
+      # the reasoning level from this turn on (absent: the thread keeps its level)
+      argument :effort, :string
       # what to do with a dirty tree when the project's policy is :ask
       argument :dirty, :atom, constraints: [one_of: [:commit, :ignore]]
       # the access mode from this turn on (absent: the thread keeps its mode)
@@ -78,7 +83,15 @@ defmodule Longx.Projects.Thread do
       run fn input, _ ->
         opts =
           input.arguments
-          |> Map.take([:images, :model, :dirty, :sandbox, :approval_policy, :network_access])
+          |> Map.take([
+            :images,
+            :model,
+            :effort,
+            :dirty,
+            :sandbox,
+            :approval_policy,
+            :network_access
+          ])
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
         with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
@@ -87,7 +100,7 @@ defmodule Longx.Projects.Thread do
               {:error, Longx.Projects.Errors.DirtyTree.exception(changes: changes)}
 
             other ->
-              other
+              model_errors(other)
           end
         end
       end
@@ -104,7 +117,7 @@ defmodule Longx.Projects.Thread do
               :ok
 
             {:error, :turn_in_progress} ->
-              {:error, field: :thread_id, message: "a turn is running"}
+              argument_error(:thread_id, "a turn is running")
 
             {:error, other} ->
               {:error, other}
@@ -131,7 +144,7 @@ defmodule Longx.Projects.Thread do
              {:ok, target} <- review_target(input.arguments) do
           case Longx.Projects.review_thread(thread, target) do
             {:error, :turn_in_progress} ->
-              {:error, field: :thread_id, message: "a turn is running"}
+              argument_error(:thread_id, "a turn is running")
 
             other ->
               other
@@ -207,6 +220,7 @@ defmodule Longx.Projects.Thread do
         :project_id,
         :cwd,
         :model_slug,
+        :reasoning_effort,
         :approval_policy,
         :sandbox,
         :network_access,
@@ -227,6 +241,7 @@ defmodule Longx.Projects.Thread do
         :preview,
         :title,
         :model_slug,
+        :reasoning_effort,
         :last_activity_at,
         :sandbox,
         :approval_policy,
@@ -284,6 +299,30 @@ defmodule Longx.Projects.Thread do
     end
   end
 
+  # what the model-choosing actions answer when the choice is bad: an error
+  # on the argument, not "something went wrong"
+  @doc false
+  def model_errors({:error, {:unknown_model, slug}}),
+    do: argument_error(:model, "未知的模型 #{slug}")
+
+  def model_errors({:error, {:unknown_effort, effort}}),
+    do: argument_error(:effort, "这个模型没有 #{effort} 这一档")
+
+  def model_errors({:error, :no_default_model}),
+    do: argument_error(:model, "还没有默认模型，先在设置里选一个")
+
+  def model_errors(other), do: other
+
+  # an error on one argument, the way the client shows it next to the field
+  # (a bare `{:error, field: …}` from a generic action's run is "unknown")
+  @doc false
+  def argument_error(field, message) do
+    {:error,
+     Ash.Error.to_error_class(
+       Ash.Error.Changes.InvalidArgument.exception(field: field, message: message)
+     )}
+  end
+
   attributes do
     uuid_v7_primary_key :id
 
@@ -296,6 +335,9 @@ defmodule Longx.Projects.Thread do
 
     # settings at start; nil model = codex's placeholder (global default)
     attribute :model_slug, :string, public?: true
+    # the reasoning level the thread runs with now: chosen at start or by a
+    # turn, else the model's default when it started (nil: codex's default)
+    attribute :reasoning_effort, :string, public?: true
 
     attribute :approval_policy, :atom do
       allow_nil? false
@@ -358,5 +400,5 @@ defmodule Longx.Projects.Thread do
   defp review_target(%{target: kind, value: value}) when is_binary(value) and value != "",
     do: {:ok, {kind, value}}
 
-  defp review_target(_), do: {:error, field: :value, message: "is required for this target"}
+  defp review_target(_), do: argument_error(:value, "is required for this target")
 end
