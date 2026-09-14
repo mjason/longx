@@ -28,24 +28,25 @@ Erlang 运行时、Go 中间件、codex-app-server、git、obscura（无头浏�
 Docker 容器和一些加固过的系统不允许——不允许时 codex 会拒绝所有沙箱内的命令，只能用「完全访问」模式；
 「设置 → 沙箱与权限」能看到检测结果）。
 
+全部装在用户自己的目录里（`~/.longx`），不需要 root：
+
 ### 1. 下载并解开
 
 ```sh
 # 把版本号和架构换成你要的（x86_64 或 arm64）
+mkdir -p ~/.longx && cd ~/.longx
 curl -LO https://github.com/mjason/longx/releases/download/v0.1.0/longx-0.1.0-linux-x86_64.tar.gz
 curl -LO https://github.com/mjason/longx/releases/download/v0.1.0/longx-0.1.0-linux-x86_64.tar.gz.sha256
 sha256sum -c longx-0.1.0-linux-x86_64.tar.gz.sha256
-sudo mkdir -p /opt/longx
-sudo tar -C /opt/longx --strip-components=1 -xzf longx-0.1.0-linux-x86_64.tar.gz
+mkdir -p app && tar -C app --strip-components=1 -xzf longx-0.1.0-linux-x86_64.tar.gz
 ```
+
+之后 `~/.longx/app` 是程序，`~/.longx/data` 是数据。
 
 ### 2. 启动
 
-只需要一个数据目录：
-
 ```sh
-sudo mkdir -p /var/lib/longx
-LONGX_DATA_DIR=/var/lib/longx /opt/longx/bin/longx start
+LONGX_DATA_DIR=~/.longx/data ~/.longx/app/bin/longx start
 ```
 
 然后打开 `http://<这台机器>:7788`。首次启动会建库、跑迁移、生成两个密钥文件；打开「设置 → 模型与 Provider」
@@ -61,12 +62,12 @@ LONGX_DATA_DIR=/var/lib/longx /opt/longx/bin/longx start
 | `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` / `TAVILY_API_KEY` | 启动时写进对应的 provider / 搜索服务（之后在设置里改也行；GLM 在设置里用预设接入） | 无 |
 | `SECRET_KEY_BASE` / `LONGX_CLOAK_KEY` | 用环境变量代替数据目录里自动生成的密钥文件 | 自动生成 |
 
-`cloak_key` 加密 provider 的 API key，**丢了就读不回来**——备份数据目录时一起备份。要 TLS 就在前面放一个
+`data/cloak_key` 加密 provider 的 API key，**丢了就读不回来**——备份 `~/.longx/data` 时一起备份。要 TLS 就在前面放一个
 反向代理（Caddy / nginx），Longx 自己只说 http。
 
-### 3. 作为服务运行（systemd）
+### 3. 作为用户服务运行（systemd --user）
 
-`/etc/systemd/system/longx.service`：
+`~/.config/systemd/user/longx.service`：
 
 ```ini
 [Unit]
@@ -74,29 +75,37 @@ Description=Longx
 After=network.target
 
 [Service]
-User=longx
-Environment=LONGX_DATA_DIR=/var/lib/longx
+Environment=LONGX_DATA_DIR=%h/.longx/data
 Environment=PORT=7788
-ExecStart=/opt/longx/bin/longx start
-ExecStop=/opt/longx/bin/longx stop
+ExecStart=%h/.longx/app/bin/longx start
+ExecStop=%h/.longx/app/bin/longx stop
 Restart=on-failure
-# codex 的沙箱要能创建用户命名空间；不要给这个服务加 NoNewPrivileges / 禁用 userns 的加固项
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 ```
 
 ```sh
-sudo useradd -r -s /usr/sbin/nologin -d /var/lib/longx longx
-sudo chown -R longx:longx /var/lib/longx /opt/longx
-sudo systemctl enable --now longx
-journalctl -u longx -f
+systemctl --user daemon-reload
+systemctl --user enable --now longx
+journalctl --user -u longx -f
+# 没登录时也要跑（服务器）：允许这个用户的服务常驻
+loginctl enable-linger "$USER"
 ```
+
+用户服务里 codex 的沙箱照常工作（bubblewrap 用的是非特权用户命名空间，不需要 root）。
 
 ### 4. 升级
 
-解开新版本覆盖 `/opt/longx`（或解到新目录再换软链接），重启服务；迁移在启动时自动跑，数据目录不动。
-运行中的 codex 进程随 Longx 一起停止，项目的会话和记忆都在数据目录里。
+```sh
+cd ~/.longx
+curl -LO https://github.com/mjason/longx/releases/download/v0.2.0/longx-0.2.0-linux-x86_64.tar.gz
+rm -rf app.new && mkdir app.new && tar -C app.new --strip-components=1 -xzf longx-0.2.0-linux-x86_64.tar.gz
+systemctl --user stop longx && rm -rf app.old && mv app app.old && mv app.new app && systemctl --user start longx
+```
+
+迁移在启动时自动跑，`data` 不动；运行中的 codex 进程随 Longx 一起停止，项目的会话和记忆都在数据目录里。
+不对劲就把 `app.old` 换回去。
 
 ### 自己构建
 
