@@ -7,7 +7,8 @@ import { channel, ok, rpcMock, socketMock } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { codexInfo } from "@/ash_rpc";
+import { codexInfo, upgradeStatus } from "@/ash_rpc";
+import { upgradeIdle } from "@/ui/test-mocks";
 
 describe("ProjectWindow", () => {
   beforeEach(() => {
@@ -64,6 +65,16 @@ describe("ProjectWindow", () => {
     const panel = await screen.findByTestId("tool-panel");
     expect(within(panel).getByTestId("process-tool")).toHaveTextContent("模型设置改了");
     expect(within(panel).getByRole("button", { name: "重启" })).toBeEnabled();
+  });
+
+  test("a new release is a hint in the status bar, linking to the update page", async () => {
+    setViewport(1280);
+    vi.mocked(upgradeStatus).mockResolvedValue(ok({ ...upgradeIdle, latest: "0.2.0", available: true }) as never);
+    const user = userEvent.setup();
+    const { router } = renderAt("/p/app-1/t/t1");
+    const strip = await screen.findByTestId("status-strip");
+    await user.click(await within(strip).findByRole("link", { name: /0\.2\.0/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/update"));
   });
 
   test("new thread from the threads tool navigates into it", async () => {

@@ -1,7 +1,9 @@
-import { AlertTriangle, GitBranch, MemoryStick } from "lucide-react";
+import { AlertTriangle, ArrowUpCircle, GitBranch, MemoryStick } from "lucide-react";
+import { Link } from "react-router";
 import { formatBytes, shortSha } from "@/core/format";
 import { useFrame } from "@/core/frame";
 import { useCodexInfo, useGitInfo, useSandboxStatus } from "@/core/projects";
+import { useUpgradeStatus } from "@/core/upgrade";
 import { t } from "@/ui/strings";
 import type { ProjectContext } from "./ProjectWindow";
 
@@ -10,6 +12,7 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
   const git = useGitInfo(ctx.id);
   const codex = useCodexInfo(ctx.id);
   const sandbox = useSandboxStatus();
+  const upgrade = useUpgradeStatus({ poll: false });
   const worker = codex.data?.worker as { phase?: string; active_turns?: number } | null | undefined;
   const rss = ctx.sample?.rss_bytes ?? (codex.data?.worker as { stats?: { rss_bytes: number } } | null)?.stats?.rss_bytes;
   const stale = codex.data?.stale ?? [];
@@ -34,6 +37,11 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
         <button type="button" className="text-warning flex items-center gap-1 hover:underline" title={t.codexStaleTitle} onClick={() => frame.open("process")}>
           <AlertTriangle className="size-3" /> {t.codexStale}
         </button>
+      ) : null}
+      {upgrade.data?.available && upgrade.data.latest ? (
+        <Link to="/settings/update" className="text-primary flex items-center gap-1 hover:underline" title={t.updatePage.hint}>
+          <ArrowUpCircle className="size-3" /> {t.updatePage.newVersion(upgrade.data.latest)}
+        </Link>
       ) : null}
       {sandbox.data?.status === "unavailable" ? (
         <span className="text-warning flex items-center gap-1" title={sandbox.data.reason ?? ""}>

@@ -124,3 +124,6 @@ config :phoenix, :json_library, Jason
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"
+
+# Self-upgrade from GitHub releases (Longx.Upgrade): where to look, how often
+config :longx, Longx.Upgrade, repo: "mjason/longx", tick: :timer.hours(6)

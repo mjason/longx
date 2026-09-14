@@ -22,10 +22,15 @@ import {
   memorySetAutoExtract,
   memoryWriteIndex,
   probeSandbox,
+  setGithubToken,
   setToolEnabled,
   updateSearchProvider,
+  upgradeApply,
+  upgradeCheck,
+  upgradeStatus,
 } from "@/ash_rpc";
-import { model } from "@/ui/test-mocks";
+import { model, upgradeIdle } from "@/ui/test-mocks";
+import { page } from "@/core/upgrade";
 import { within } from "@testing-library/react";
 
 describe("SettingsPage", () => {
@@ -389,5 +394,105 @@ describe("SettingsPage", () => {
       screen.getByRole("link", { name: "模型与 Provider" }),
     ).toHaveAttribute("aria-current", "page");
     expect(screen.getByTestId("section-models")).toBeInTheDocument();
+  });
+
+  test("update: the version, a check finds a release, the token, the upgrade with its stages until the new version answers", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/update");
+    const section = await screen.findByTestId("section-update");
+    expect(section).toHaveTextContent("Longx 0.1.0");
+    expect(section).toHaveTextContent("还没检查过");
+    // nothing to upgrade to yet
+    expect(
+      within(section).queryByRole("button", { name: /升级/ }),
+    ).not.toBeInTheDocument();
+
+    await user.click(within(section).getByRole("button", { name: "检查更新" }));
+    await waitFor(() => expect(upgradeCheck).toHaveBeenCalled());
+    await waitFor(() => expect(section).toHaveTextContent("有新版本 0.2.0"));
+    expect(
+      within(section).getByRole("link", { name: "更新说明" }),
+    ).toHaveAttribute("href", "https://github.com/mjason/longx/releases/tag/v0.2.0");
+
+    // the token: saved, then its presence shown; blank clears it (the
+    // server answers the whole status, the check result included)
+    vi.mocked(setGithubToken).mockImplementation(async ({ input }) =>
+      ok({ ...upgradeIdle, latest: "0.2.0", available: true, hasGithubToken: !!input?.token }) as never,
+    );
+    await user.type(within(section).getByLabelText("GitHub token"), "ghp_abc");
+    await user.click(within(section).getByRole("button", { name: "保存 token" }));
+    await waitFor(() =>
+      expect(setGithubToken).toHaveBeenCalledWith(
+        expect.objectContaining({ input: { token: "ghp_abc" } }),
+      ),
+    );
+    await within(section).findByText("已设置");
+    await user.click(within(section).getByRole("button", { name: "清除 token" }));
+    await waitFor(() =>
+      expect(setGithubToken).toHaveBeenLastCalledWith(
+        expect.objectContaining({ input: { token: null } }),
+      ),
+    );
+
+    // the upgrade: confirm, then the stages, then the new version comes up → reload
+    const reload = vi.spyOn(page, "reload").mockImplementation(() => {});
+    vi.mocked(upgradeStatus)
+      .mockResolvedValueOnce(
+        ok({ ...upgradeIdle, latest: "0.2.0", available: true, stage: "installing", target: "0.2.0" }) as never,
+      )
+      .mockResolvedValueOnce(
+        ok({ ...upgradeIdle, latest: "0.2.0", available: true, stage: "restarting", target: "0.2.0" }) as never,
+      )
+      .mockRejectedValueOnce(new Error("Failed to fetch"))
+      .mockResolvedValue(ok({ ...upgradeIdle, current: "0.2.0" }) as never);
+    await user.click(
+      within(section).getByRole("button", { name: "升级到 0.2.0 并重启" }),
+    );
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "升级并重启",
+      }),
+    );
+    await waitFor(() => expect(upgradeApply).toHaveBeenCalled());
+    await within(section).findByText(/正在下载/);
+    await within(section).findByText(/正在安装/, undefined, { timeout: 5000 });
+    await within(section).findByText(/正在重启/, undefined, { timeout: 5000 });
+    await waitFor(() => expect(reload).toHaveBeenCalled(), { timeout: 8000 });
+  }, 20000);
+
+  test("update: a failed upgrade says why and can be retried; a dev checkout cannot upgrade", async () => {
+    setViewport(1280);
+    vi.mocked(upgradeStatus).mockReset().mockResolvedValue(
+      ok({
+        ...upgradeIdle,
+        latest: "0.2.0",
+        available: true,
+        checkedAt: "2026-09-14T08:00:00Z",
+        stage: "failed",
+        target: "0.2.0",
+        message: "sha256 校验失败",
+      }) as never,
+    );
+    renderAt("/settings/update");
+    const section = await screen.findByTestId("section-update");
+    await within(section).findByText(/sha256 校验失败/);
+    expect(
+      within(section).getByRole("button", { name: "升级到 0.2.0 并重启" }),
+    ).toBeEnabled();
+  });
+
+  test("update: a dev checkout sees the release but cannot upgrade", async () => {
+    setViewport(1280);
+    vi.mocked(upgradeStatus).mockReset().mockResolvedValue(
+      ok({ ...upgradeIdle, installed: false, latest: "0.2.0", available: true }) as never,
+    );
+    renderAt("/settings/update");
+    const dev = await screen.findByTestId("section-update");
+    await waitFor(() => expect(dev).toHaveTextContent("不是用 install.sh 安装的"));
+    expect(dev).toHaveTextContent("有新版本 0.2.0");
+    expect(
+      within(dev).queryByRole("button", { name: /升级到/ }),
+    ).not.toBeInTheDocument();
   });
 });
