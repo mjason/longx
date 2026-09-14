@@ -151,7 +151,8 @@ defmodule Longx.Codex.Home do
       dir: dir,
       config_path: Path.join(dir, "config.toml"),
       catalog_path: catalog_path,
-      config: config_toml(gateway_url, web_search, catalog_path: catalog_path, memories: memories),
+      config:
+        config_toml(gateway_url, web_search, catalog_path: catalog_path, memories: memories),
       catalog: Jason.encode!(model_catalog(models))
     }
   end

@@ -29,6 +29,7 @@ defmodule Longx.Codex.Thread do
           | {:web_search, web_search}
           | {:network_access, boolean}
           | {:multi_agent, boolean}
+          | {:developer_instructions, String.t()}
           | {:tools, [module | String.t()]}
           | {:conn, GenServer.server()}
 
@@ -253,6 +254,8 @@ defmodule Longx.Codex.Thread do
       # a Longx.AI.Model slug; absent means codex's configured placeholder (global default)
       |> put_model(Keyword.get(opts, :model))
       |> put_config(opts)
+      # Longx's global memory (and anything else the app wants the model told)
+      |> put_if("developerInstructions", Keyword.get(opts, :developer_instructions))
 
     selection = Keyword.get_lazy(opts, :tools, &Longx.AI.enabled_tool_names/0)
 

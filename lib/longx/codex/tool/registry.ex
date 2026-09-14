@@ -23,7 +23,8 @@ defmodule Longx.Codex.Tool.Registry do
           input_schema: map,
           schema: ExJsonSchema.Schema.Root.t(),
           timeout: pos_integer,
-          available?: (Context.t() -> boolean)
+          available?: (Context.t() -> boolean),
+          enabled_by_default?: boolean
         }
 
   @spec all() :: [entry]
@@ -145,7 +146,9 @@ defmodule Longx.Codex.Tool.Registry do
         if(function_exported?(module, :available?, 1),
           do: &module.available?/1,
           else: fn _ -> true end
-        )
+        ),
+      enabled_by_default?:
+        function_exported?(module, :enabled_by_default?, 0) and module.enabled_by_default?()
     }
   end
 

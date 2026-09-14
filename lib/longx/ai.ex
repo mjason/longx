@@ -91,7 +91,10 @@ defmodule Longx.AI do
     registered = Registry.all()
     known = MapSet.new(registered, &{&1.namespace, &1.name})
 
-    Enum.each(registered, &create_tool!(%{namespace: &1.namespace, name: &1.name}))
+    Enum.each(
+      registered,
+      &create_tool!(%{namespace: &1.namespace, name: &1.name, enabled: &1.enabled_by_default?})
+    )
 
     Longx.AI.Tool
     |> Ash.read!()
@@ -126,6 +129,9 @@ defmodule Longx.AI do
   @doc "Qualified names (`\"ns.name\"`) of the globally enabled tools — what a thread gets when it does not choose."
   @spec enabled_tool_names() :: [String.t()]
   def enabled_tool_names do
+    # sync first: a tool on by default counts before anyone opened the tools page
+    {:ok, _} = list_tools()
+
     enabled_tools!()
     |> Enum.map(&"#{&1.namespace}.#{&1.name}")
     |> Enum.filter(&match?({:ok, _}, Registry.fetch_qualified(&1)))

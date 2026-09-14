@@ -181,6 +181,30 @@ React Native client planned on the same core code.
     `repository: false` to `git_changes` and an error on `project_id` to the rest. Commit
     times are ISO strings (a typed map's `utc_datetime` has no client type in
     ash_typescript 0.18).
+- **Memory, two layers.** (1) *Project memory is codex's own*: `Home.prepare/1` writes
+  `features.memories = true` and `[memories] dedicated_tools = true` into every home
+  (`config :longx, Longx.Codex.Home, memories: false` turns it off), so codex runs its
+  extraction / consolidation pipeline per project (at root-session start, on rollouts idle
+  ≥ 6 h, through our gateway — it costs tokens) and offers the model its `memories.*`
+  namespace tools (`add_ad_hoc_note` / `list` / `read` / `search`); a note lands in
+  `<home>/memories/extensions/ad_hoc/notes/` and the next consolidation folds it into
+  `MEMORY.md`. Verified end to end in `gateway_e2e_test`; codex 0.154 reports **no item**
+  for those calls on the wire, so the UI cannot show them. `clear_codex_history` keeps
+  `memories/` (what codex learned is not history; `reset_codex_home` wipes it). (2) *Global
+  memory is Longx's*: `Longx.Memory` — one directory across projects and homes
+  (`config :longx, Longx.Memory, dir:`; dev `data/memory`, prod `$LONGX_DATA_DIR/memory`),
+  a git repository where every write is a commit: `MEMORY.md` (the curated part) +
+  `notes/<utc ts>-<slug>.md` (the append-only inbox, front matter `at` / `project` /
+  `thread`). `instructions/1` (how to use it, the index, the latest 20 notes; capped at
+  32 KB) goes to every new thread as `thread/start.developerInstructions` unless
+  `Project.global_memory` is false; the `memory.*` tools (`lib/longx/tools/memory/`:
+  `note` — when the person says remember / forget / from now on — `search`, `read`)
+  are Elixir tools in the `memory` namespace, on by default (`enabled_by_default?/0`, a
+  new optional `Longx.Codex.Tool` callback the registry sync honours; a switch someone
+  turned off stays off). RPC: `memory_index` / `memory_write_index` / `memory_notes` /
+  `memory_search` / `memory_delete_note` on `Longx.System` — no page yet. Not built:
+  automatic extraction into the global memory and consolidation of notes into
+  `MEMORY.md` (a note is handed to the model raw until then).
 - **A headless browser is bundled too: obscura** (`h4ckf0r0day/obscura`, Rust + embedded V8,
   Apache-2.0). `Longx.Browser.Runtime` pins `v0.2.2` (five targets: `{x86_64,aarch64}-linux`,
   `{x86_64,aarch64}-macos` as tar.gz, `x86_64-windows` as zip — `Longx.Bundle` unpacks
@@ -836,7 +860,8 @@ Where tests live / what to use:
   fake app-server through a per-test `Connection` passed as `conn:`.
 - Codex client → `test/support/fake_app_server.exs` is a scripted stand-in for the
   app-server (`say`/`approve`/`stall`/`slow`/`error`/`die`/`server-notify` turns) run under
-  `Longx.Shim` exactly like the real binary; Connection/Thread/ThreadState tests use it, and
+  `Longx.Shim` exactly like the real binary (its stdio forced to byte mode: with no UTF-8
+  locale in the env the VM's latin1 stdio ended the read on a CJK frame); Connection/Thread/ThreadState tests use it, and
   `thread/read` answers with the `startParams`/`lastTurnParams` it received so tests can
   assert what was sent. Tests that go through the pool (no `conn:`) are `Longx.DataCase`
   (the Tracker writes on every `:down`/`:ready`) and clean up with

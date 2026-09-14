@@ -358,32 +358,37 @@ defmodule Longx.AITest do
   end
 
   describe "agent tools (which registered tools a thread may get)" do
-    test "list_tools/0 mirrors the registry into the DB: every tool present, new ones disabled" do
+    test "list_tools/0 mirrors the registry into the DB: every tool present, new ones disabled unless the tool asks otherwise" do
       tools = AI.list_tools!()
       names = Enum.map(tools, &{&1.namespace, &1.name})
 
       assert {"builtin", "echo"} in names
       assert {"builtin", "thread_status"} in names
       assert {"test", "echo"} in names
-      assert Enum.all?(tools, &(&1.enabled == false))
+      {on, off} = Enum.split_with(tools, & &1.enabled)
+      assert Enum.all?(off, &(&1.namespace != "memory"))
+      # the memory tools declare enabled_by_default?; nothing else does
+      assert Enum.map(on, &{&1.namespace, &1.name}) |> Enum.sort() ==
+               [{"memory", "note"}, {"memory", "read"}, {"memory", "search"}]
+
       # description comes from the code, not the DB
       assert Enum.find(tools, &(&1.name == "thread_status")).description =~ "thread"
     end
 
-    test "nothing is enabled by default, so nothing is injected" do
-      assert AI.enabled_tool_names() == []
+    test "only the memory tools are enabled by default, so only they are injected" do
+      assert AI.enabled_tool_names() == ["memory.note", "memory.read", "memory.search"]
     end
 
     test "enable/disable by qualified name, kept across syncs" do
       assert {:ok, %{enabled: true}} = AI.enable_tool("builtin.thread_status")
-      assert AI.enabled_tool_names() == ["builtin.thread_status"]
+      assert "builtin.thread_status" in AI.enabled_tool_names()
 
       # a re-sync (list) must not flip it back
       AI.list_tools!()
-      assert AI.enabled_tool_names() == ["builtin.thread_status"]
+      assert "builtin.thread_status" in AI.enabled_tool_names()
 
       assert {:ok, %{enabled: false}} = AI.disable_tool("builtin.thread_status")
-      assert AI.enabled_tool_names() == []
+      refute "builtin.thread_status" in AI.enabled_tool_names()
     end
 
     test "enabling an unregistered tool is an error" do

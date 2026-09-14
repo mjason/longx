@@ -81,7 +81,9 @@ defmodule Longx.Codex.HomeTest do
     # one [features] table: TOML refuses a second
     assert length(String.split(config, "[features]")) == 2
 
-    {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1", memories: false)
+    {:ok, home} =
+      Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1", memories: false)
+
     config = File.read!(home.config_path)
     assert config =~ "[features]\nmemories = false\n"
     refute config =~ "[memories]"
@@ -201,7 +203,9 @@ defmodule Longx.Codex.HomeTest do
   test "without an explicit option the mode comes from Longx.AI.web_search_mode/0", %{dir: dir} do
     # nothing configured in the (sandboxed, cleared) DB → standalone (open needs no provider)
     {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
-    assert File.read!(home.config_path) =~ "[features]\nmemories = true\nstandalone_web_search = true"
+
+    assert File.read!(home.config_path) =~
+             "[features]\nmemories = true\nstandalone_web_search = true"
   end
 
   test "the env caps codex's tokio worker threads (musl allocator contention on many cores)",

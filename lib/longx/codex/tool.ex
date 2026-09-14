@@ -67,7 +67,14 @@ defmodule Longx.Codex.Tool do
 
   @callback call(arguments :: map, Context.t()) :: result
 
-  @optional_callbacks namespace: 0, available?: 1, timeout: 0
+  @doc """
+  Whether the tool's switch (`Longx.AI.Tool`) starts on when it is first
+  seen. Defaults to `false`: a new tool is registered, not injected, until
+  someone turns it on. A person's choice is never overridden by this.
+  """
+  @callback enabled_by_default?() :: boolean
+
+  @optional_callbacks namespace: 0, available?: 1, timeout: 0, enabled_by_default?: 0
 
   @default_namespace "builtin"
   @default_timeout 30_000

@@ -190,7 +190,8 @@ defmodule Longx.Projects do
              conn: conn
            ]
            |> Keyword.merge(model_opts)
-           |> without_web_search(web_search),
+           |> without_web_search(web_search)
+           |> with_global_memory(project),
          {:ok, codex_thread_id} <- Longx.Codex.Thread.start(codex_opts),
          {:ok, thread} <-
            create_thread(%{
@@ -210,6 +211,12 @@ defmodule Longx.Projects do
       {:ok, thread}
     end
   end
+
+  # what Longx remembers across projects, as the thread's developer instructions
+  defp with_global_memory(opts, %Project{global_memory: true}),
+    do: Keyword.put(opts, :developer_instructions, Longx.Memory.instructions())
+
+  defp with_global_memory(opts, _project), do: opts
 
   # the model's mode (thread_options) unless the thread wants no web.run at all
   defp without_web_search(opts, true), do: opts

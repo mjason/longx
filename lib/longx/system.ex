@@ -9,6 +9,11 @@ defmodule Longx.System do
       rpc_action :probe_sandbox, :probe_sandbox
       rpc_action :list_directory, :list_directory
       rpc_action :create_directory, :create_directory
+      rpc_action :memory_index, :memory_index
+      rpc_action :memory_write_index, :memory_write_index
+      rpc_action :memory_notes, :memory_notes
+      rpc_action :memory_search, :memory_search
+      rpc_action :memory_delete_note, :memory_delete_note
     end
   end
 

@@ -274,7 +274,9 @@ defmodule Longx.Codex.GatewayE2ETest do
 
     # the memories namespace, with its four tools, reaches the model through us
     assert_receive {:upstream_request, 1, first}, 5_000
-    memories = Enum.find(first["tools"], &(&1["type"] == "namespace" and &1["name"] == "memories"))
+
+    memories =
+      Enum.find(first["tools"], &(&1["type"] == "namespace" and &1["name"] == "memories"))
 
     assert memories,
            "memories namespace not offered: #{inspect(Enum.map(first["tools"], &{&1["type"], &1["name"]}))}"

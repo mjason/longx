@@ -426,6 +426,20 @@ defmodule Longx.Projects.ThreadsTest do
       assert Ash.get!(Thread, thread.id).sandbox == :danger_full_access
     end
 
+    test "the global memory reaches a new thread as developer instructions, unless the project opts out",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      assert params["developerInstructions"] =~ "Longx 全局记忆"
+      assert params["developerInstructions"] =~ "memory.note"
+
+      {:ok, quiet} = Projects.update_project(project, %{global_memory: false})
+      {:ok, thread} = Projects.start_thread(quiet, conn: conn)
+      %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      refute Map.has_key?(params, "developerInstructions")
+    end
+
     test "web_search: false at start turns codex's web.run off for the thread; the project's default applies otherwise",
          %{dir: dir, conn: conn} do
       project = git_project!(dir)

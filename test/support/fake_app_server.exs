@@ -29,6 +29,10 @@ defmodule FakeAppServer do
   @persist_file "fake_threads.txt"
 
   def main do
+    # raw bytes in and out: without a UTF-8 locale in the environment the VM
+    # runs stdio in latin1 mode and a frame with CJK in it ends the line read
+    :ok = :io.setopts(:standard_io, binary: true, encoding: :latin1)
+
     # ids unique per server process (like codex's UUIDs): the ETS-backed
     # ThreadState store outlives tests, so two fakes must never share ids
     loop(%{

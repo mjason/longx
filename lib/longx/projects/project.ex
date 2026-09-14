@@ -80,6 +80,7 @@ defmodule Longx.Projects.Project do
         :network_access,
         :web_search,
         :multi_agent,
+        :global_memory,
         :memory_limit_mb,
         :model_id
       ]
@@ -106,6 +107,7 @@ defmodule Longx.Projects.Project do
         :network_access,
         :web_search,
         :multi_agent,
+        :global_memory,
         :memory_limit_mb,
         :model_id
       ]
@@ -257,6 +259,10 @@ defmodule Longx.Projects.Project do
     # codex's sub-agent tools (multi_agent_v2: spawn / wait / send / …) for
     # new threads; decided at thread start
     attribute :multi_agent, :boolean, allow_nil?: false, default: true, public?: true
+
+    # Longx's global memory (Longx.Memory) goes to every new thread as
+    # developer instructions — unless this project wants none of it
+    attribute :global_memory, :boolean, allow_nil?: false, default: true, public?: true
 
     # Optional cap on the codex process tree (Linux RLIMIT_AS / Windows Job
     # memory). Off by default: a task that needs 30 GB gets 30 GB; the OOM
