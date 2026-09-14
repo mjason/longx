@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
 import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, resetCodexHome, updateProject, type UpdateProjectInput } from "@/ash_rpc";
-import { queryKeys, unwrap, useModels, useProject } from "@/core/projects";
+import { queryKeys, unwrap, useModels, useProject, useSandboxStatus } from "@/core/projects";
 import { Button } from "@/ui/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
 import { Input } from "@/ui/components/ui/input";
@@ -42,6 +42,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
   const client = useQueryClient();
   const navigate = useNavigate();
   const models = useModels();
+  const sandbox = useSandboxStatus();
   const [form, setForm] = useState<Form>({
     name: project.name,
     description: project.description ?? "",
@@ -174,6 +175,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
               </div>
             ))}
           </RadioGroup>
+          {sandbox.data?.gpu ? <p className="text-muted-foreground text-xs">{t.gpuHidden}</p> : null}
         </fieldset>
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">{t.approval}</legend>

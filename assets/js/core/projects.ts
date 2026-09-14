@@ -302,7 +302,7 @@ export function useSandboxStatus() {
     staleTime: Infinity,
     queryFn: async () =>
       unwrap(
-        await sandboxStatus({ fields: ["status", "reason", "bwrap", "checkedAt"] }),
+        await sandboxStatus({ fields: ["status", "reason", "bwrap", "gpu", "checkedAt"] }),
       ),
   });
 }

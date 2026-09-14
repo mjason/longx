@@ -3,11 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
-import { channel } from "@/ui/test-mocks";
+import { channel, ok } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, resetCodexHome, updateProject } from "@/ash_rpc";
+import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, resetCodexHome, sandboxStatus, updateProject } from "@/ash_rpc";
 
 describe("ProjectSettingsPage", () => {
   beforeEach(() => {
@@ -40,6 +40,14 @@ describe("ProjectSettingsPage", () => {
         expect.objectContaining({ identity: "id-1", input: expect.objectContaining({ sandbox: "read_only", approvalPolicy: "never", dirtyStart: "ask", multiAgent: false, globalMemory: false, writableRoots: ["~/.cache", "/data/models"] }) }),
       ),
     );
+  });
+
+  test("a machine with a GPU says the sandboxes hide it and full access is the mode for GPU work", async () => {
+    vi.mocked(sandboxStatus).mockResolvedValue(ok({ status: "ok", reason: null, bwrap: "/usr/bin/bwrap", gpu: true, checkedAt: "" }) as never);
+    renderAt("/p/app-1/settings");
+    const form = await screen.findByTestId("project-settings");
+    await waitFor(() => expect(form).toHaveTextContent("GPU"));
+    expect(form).toHaveTextContent("完全访问");
   });
 
   test("deleting the project asks for its name, then removes it (codex data included) and leaves", async () => {

@@ -129,14 +129,10 @@ defmodule Longx.Codex.SandboxTest do
     end
   end
 
-  describe "device_roots/1 (pure): GPU device nodes a sandboxed command needs" do
-    test "nvidia nodes and /dev/dri, nothing else" do
-      assert Sandbox.device_roots(
-               ~w(/dev/null /dev/nvidia0 /dev/nvidia1 /dev/nvidiactl /dev/nvidia-uvm /dev/nvidia-uvm-tools /dev/nvidia-caps /dev/dri /dev/tty /dev/nvidia-modeset)
-             ) ==
-               ~w(/dev/dri /dev/nvidia-caps /dev/nvidia-modeset /dev/nvidia-uvm /dev/nvidia-uvm-tools /dev/nvidia0 /dev/nvidia1 /dev/nvidiactl)
-
-      assert Sandbox.device_roots(~w(/dev/null /dev/tty)) == []
+  describe "gpu?/1 (pure): does this machine have an NVIDIA GPU the sandbox will hide" do
+    test "nvidia device nodes among /dev's entries" do
+      assert Sandbox.gpu?(~w(/dev/null /dev/nvidia0 /dev/nvidiactl))
+      refute Sandbox.gpu?(~w(/dev/null /dev/dri /dev/tty))
     end
   end
 
@@ -155,8 +151,10 @@ defmodule Longx.Codex.SandboxTest do
     test "status/0 is cached after the first probe and can be re-probed" do
       assert Sandbox.status() in [:ok, :no_net_isolation, :unavailable]
 
-      assert %{status: status, reason: _, bwrap: bwrap, checked_at: %DateTime{}} =
+      assert %{status: status, reason: _, bwrap: bwrap, gpu: gpu, checked_at: %DateTime{}} =
                Sandbox.report()
+
+      assert is_boolean(gpu)
 
       assert status in [:ok, :no_net_isolation, :unavailable]
       assert is_binary(bwrap) or is_nil(bwrap)
