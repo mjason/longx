@@ -639,16 +639,21 @@ export const t = {
     noNetHint: "这台机器允许用户命名空间，但 bubblewrap 建不了独立的网络命名空间（容器和一些虚拟机会这样）。codex 只在命令不能联网时才隔离网络：把项目的「网络访问」打开（沙箱内允许联网），命令就正常跑；关着的话每条命令都会被拒绝。",
     unavailable: "不可用",
     apparmor: "不可用：AppArmor 限制了用户命名空间",
-    apparmorHint: "Ubuntu 24.04 起默认 kernel.apparmor_restrict_unprivileged_userns=1：没有 AppArmor 配置的程序拿不到带权限的用户命名空间，bwrap 就建不了沙箱。和 Ubuntu 给 Chrome、bazel 的做法一样，给内置的 bwrap 一条配置（只需要做一次，升级后仍然有效；要 sudo）：",
-    apparmorFix: `sudo tee /etc/apparmor.d/longx-bwrap <<'EOF'
-abi <abi/4.0>,
-include <tunables/global>
-
-profile longx-bwrap /home/*/.longx/app*/lib/longx-*/priv/codex/*/codex-resources/bwrap flags=(unconfined) {
-  userns,
-}
-EOF
-sudo apparmor_parser -r /etc/apparmor.d/longx-bwrap`,
+    apparmorHint: "Ubuntu 24.04 起默认 kernel.apparmor_restrict_unprivileged_userns=1：没有 AppArmor 配置的程序拿不到带权限的用户命名空间，bwrap 就建不了沙箱。和 Ubuntu 给 Chrome、bazel 的做法一样，给 codex 会用到的 bwrap 一条配置（只需要做一次，升级后仍然有效；要 sudo）：",
+    apparmorFix: (paths: [string, string][]) =>
+      [
+        "sudo tee /etc/apparmor.d/longx-bwrap <<'EOF'",
+        "abi <abi/4.0>,",
+        "include <tunables/global>",
+        "",
+        ...paths.map(
+          ([name, path]) => `profile ${name} ${path} flags=(unconfined) {\n  userns,\n}`,
+        ),
+        "EOF",
+        "sudo apparmor_parser -r /etc/apparmor.d/longx-bwrap",
+      ].join("\n"),
+    bwrapSystem: (path: string) => `codex 用的是 ${path}（系统装的 bubblewrap；PATH 上有就优先用它，没有才用内置的）`,
+    bwrapBundled: "codex 用的是内置的 bubblewrap",
     apparmorAfter: "然后点「重新检测」。装在别的目录（LONGX_HOME）的话把路径换成自己的。不想加配置也可以整体关掉限制：sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0（写进 /etc/sysctl.d/ 才能重启后保留），但那会放开所有程序。",
     reason: "原因",
     checkedAt: (at: string) => `检测时间 ${at}`,

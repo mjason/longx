@@ -185,6 +185,7 @@ defmodule Longx.System.Status do
                       constraints: [one_of: [:ok, :no_net_isolation, :unavailable]]
                     ],
                     reason: [type: :string],
+                    bwrap: [type: :string],
                     checked_at: [type: :utc_datetime_usec, allow_nil?: false]
                   ]
 
@@ -200,6 +201,7 @@ defmodule Longx.System.Status do
                       constraints: [one_of: [:ok, :no_net_isolation, :unavailable]]
                     ],
                     reason: [type: :string],
+                    bwrap: [type: :string],
                     checked_at: [type: :utc_datetime_usec, allow_nil?: false]
                   ]
 
@@ -278,7 +280,12 @@ defmodule Longx.System.Status do
   end
 
   defp sandbox_report(report),
-    do: %{status: report.status, reason: reason(report.reason), checked_at: report.checked_at}
+    do: %{
+      status: report.status,
+      reason: reason(report.reason),
+      bwrap: report.bwrap,
+      checked_at: report.checked_at
+    }
 
   defp reason(nil), do: nil
   defp reason({kind, message}), do: "#{kind}: #{message}"

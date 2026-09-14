@@ -16,6 +16,14 @@ export function SandboxSection() {
   const ok = status.data.status === "ok";
   const noNet = status.data.status === "no_net_isolation";
   const apparmor = status.data.reason?.startsWith("apparmor:") ?? false;
+  const bwrap = status.data.bwrap ?? null;
+  const bundled = bwrap === null || bwrap.includes("/codex-resources/");
+  // the AppArmor profile: the bundled path (every version, app.old) and, when
+  // codex prefers a system bwrap, that binary too
+  const profiles: [string, string][] = [
+    ["longx-bwrap", "/home/*/.longx/app*/lib/longx-*/priv/codex/*/codex-resources/bwrap"],
+    ...(bundled ? [] : [["longx-system-bwrap", bwrap] as [string, string]]),
+  ];
   return (
     <div className="flex max-w-2xl flex-col gap-4" data-testid="section-sandbox">
       <p className="text-muted-foreground text-sm">{t.sandboxPage.hint}</p>
@@ -27,7 +35,7 @@ export function SandboxSection() {
           {apparmor ? (
             <div className="mt-2 flex flex-col gap-2 text-xs">
               <p className="text-muted-foreground">{t.sandboxPage.apparmorHint}</p>
-              <pre className="bg-muted overflow-x-auto rounded-md p-3 font-mono whitespace-pre">{t.sandboxPage.apparmorFix}</pre>
+              <pre className="bg-muted overflow-x-auto rounded-md p-3 font-mono whitespace-pre">{t.sandboxPage.apparmorFix(profiles)}</pre>
               <p className="text-muted-foreground">{t.sandboxPage.apparmorAfter}</p>
             </div>
           ) : null}
@@ -36,6 +44,7 @@ export function SandboxSection() {
               {t.sandboxPage.reason}: {status.data.reason}
             </p>
           ) : null}
+          {bwrap ? <p className="text-muted-foreground mt-1 text-xs">{bundled ? t.sandboxPage.bwrapBundled : t.sandboxPage.bwrapSystem(bwrap)}</p> : null}
           {status.data.checkedAt ? <p className="text-muted-foreground mt-1 text-xs">{t.sandboxPage.checkedAt(relativeTime(status.data.checkedAt))}</p> : null}
         </div>
         <Button variant="outline" size="sm" disabled={probe.isPending} onClick={() => probe.mutate(undefined, { onSuccess: () => toast.success(t.sandboxPage.probed), onError: (e) => toast.error(e.message) })}>

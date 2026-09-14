@@ -316,6 +316,7 @@ describe("SettingsPage", () => {
       ok({
         status: "unavailable",
         reason: "apparmor: bwrap: setting up uid map: Permission denied",
+        bwrap: "/usr/bin/bwrap",
         checkedAt: "2026-09-14T00:00:00Z",
       }) as never,
     );
@@ -323,7 +324,12 @@ describe("SettingsPage", () => {
     await waitFor(() =>
       expect(screen.getByTestId("section-sandbox")).toHaveTextContent("AppArmor"),
     );
-    expect(screen.getByTestId("section-sandbox")).toHaveTextContent("apparmor_parser -r /etc/apparmor.d/longx-bwrap");
+    const section = screen.getByTestId("section-sandbox");
+    expect(section).toHaveTextContent("apparmor_parser -r /etc/apparmor.d/longx-bwrap");
+    // the profile covers the bwrap codex runs — the system one here — and the bundled path
+    expect(section).toHaveTextContent("profile longx-system-bwrap /usr/bin/bwrap");
+    expect(section).toHaveTextContent("codex-resources/bwrap flags=(unconfined)");
+    expect(section).toHaveTextContent("codex 用的是 /usr/bin/bwrap");
     expect(await screen.findByTestId("sandbox-banner")).toHaveTextContent("AppArmor");
   });
 

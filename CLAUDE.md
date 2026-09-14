@@ -502,7 +502,12 @@ React Native client planned on the same core code.
     refusal while `kernel.apparmor_restrict_unprivileged_userns` is 1 (Ubuntu ≥ 24.04, e.g.
     a DGX Spark) is reason `:apparmor`, and the settings page prints the one-line AppArmor
     profile for the bundled bwrap (README) — the fix is not a kernel setting.
-    `evaluate/2` is the probe over an injected runner (pure, tested);
+    **The probe runs the bwrap codex will run** (`bwrap_for_codex/0`, `choose_bwrap/3`):
+    codex's launcher prefers a `bwrap` on PATH whose `--help` lists `--perms` (Ubuntu's
+    bubblewrap package) over the bundled `codex-resources/bwrap` — so an AppArmor profile for
+    the bundled path alone did nothing on a host with bubblewrap installed; the report carries
+    `bwrap` (the path), and the settings page / install.sh write a stanza for the system
+    binary too. `evaluate/2` is the probe over an injected runner (pure, tested);
     `report/0`/`status/0` are cached for the UI to warn.
   - **Server → client requests** (approvals, `requestUserInput`, elicitations, tool calls…) go
     through the `Longx.Codex.ServerRequest` behaviour: `{:reply, _}` / `{:error, code, msg}` /
