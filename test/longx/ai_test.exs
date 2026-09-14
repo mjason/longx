@@ -347,6 +347,17 @@ defmodule Longx.AITest do
   end
 
   describe "search providers" do
+    test "ensure_search_provider/0: the Tavily row exists and is the default — a release seeds nothing, so boot makes it; idempotent, never touches a key" do
+      assert {:ok, %AI.SearchProvider{slug: "tavily", default: true} = sp} =
+               AI.ensure_search_provider()
+
+      {:ok, _} = AI.update_search_provider(sp, %{api_key: "tvly-keep"})
+      assert {:ok, %AI.SearchProvider{id: id}} = AI.ensure_search_provider()
+      assert id == sp.id
+      assert [%{id: ^id}] = AI.list_search_providers!()
+      assert Ash.load!(sp, :api_key).api_key == "tvly-keep"
+    end
+
     test "tavily is the only kind for now and the key is encrypted" do
       sp =
         AI.create_search_provider!(%{
