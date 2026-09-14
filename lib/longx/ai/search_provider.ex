@@ -12,11 +12,6 @@ defmodule Longx.AI.SearchProvider do
     data_layer: AshSqlite.DataLayer,
     extensions: [AshCloak, AshTypescript.Resource]
 
-  typescript do
-    type_name "SearchProvider"
-    field_names has_api_key?: "hasApiKey"
-  end
-
   sqlite do
     table "ai_search_providers"
     repo Longx.Repo
@@ -27,6 +22,11 @@ defmodule Longx.AI.SearchProvider do
     attributes([:api_key])
     decrypt_by_default([])
     encrypt_nil?(false)
+  end
+
+  typescript do
+    type_name "SearchProvider"
+    field_names has_api_key?: "hasApiKey"
   end
 
   actions do

@@ -24,7 +24,10 @@ defmodule LongxWeb.AiRpcTest do
   test "providers: create (key never read back, only its presence), update, list, delete", %{
     conn: conn
   } do
-    assert %{"success" => true, "data" => %{"id" => id, "kind" => "openai_compatible", "hasApiKey" => true}} =
+    assert %{
+             "success" => true,
+             "data" => %{"id" => id, "kind" => "openai_compatible", "hasApiKey" => true}
+           } =
              rpc(conn, "create_provider", %{
                "fields" => ["id", "kind", "hasApiKey", "slug"],
                "input" => %{
@@ -58,13 +61,26 @@ defmodule LongxWeb.AiRpcTest do
     %{"success" => true, "data" => %{"id" => provider}} =
       rpc(conn, "create_provider", %{
         "fields" => ["id"],
-        "input" => %{"name" => "DS", "slug" => "ds", "baseUrl" => "https://api.deepseek.com/v1", "apiKey" => "k"}
+        "input" => %{
+          "name" => "DS",
+          "slug" => "ds",
+          "baseUrl" => "https://api.deepseek.com/v1",
+          "apiKey" => "k"
+        }
       })
 
-    assert %{"success" => true, "data" => %{"id" => m1, "slug" => "deepseek-flash", "default" => false}} =
+    assert %{
+             "success" => true,
+             "data" => %{"id" => m1, "slug" => "deepseek-flash", "default" => false}
+           } =
              rpc(conn, "create_model", %{
                "fields" => ["id", "slug", "default"],
-               "input" => %{"name" => "Flash", "upstreamId" => "deepseek-flash", "providerId" => provider, "contextWindow" => 1_000_000}
+               "input" => %{
+                 "name" => "Flash",
+                 "upstreamId" => "deepseek-flash",
+                 "providerId" => provider,
+                 "contextWindow" => 1_000_000
+               }
              })
 
     %{"success" => true, "data" => %{"id" => m2}} =
@@ -84,7 +100,9 @@ defmodule LongxWeb.AiRpcTest do
              rpc(conn, "make_default_model", %{"fields" => ["default"], "identity" => m1})
 
     assert %{"success" => true, "data" => models} =
-             rpc(conn, "list_models", %{"fields" => ["id", "default", %{"provider" => ["id", "name"]}]})
+             rpc(conn, "list_models", %{
+               "fields" => ["id", "default", %{"provider" => ["id", "name"]}]
+             })
 
     assert Enum.find(models, &(&1["id"] == m1))["default"]
     assert Enum.find(models, &(&1["id"] == m1))["provider"]["name"] == "DS"
@@ -102,30 +120,51 @@ defmodule LongxWeb.AiRpcTest do
     %{"success" => true, "data" => %{"id" => other}} =
       rpc(conn, "create_provider", %{
         "fields" => ["id"],
-        "input" => %{"name" => "O", "slug" => "o", "baseUrl" => "https://api.openai.com/v1", "apiKey" => "k"}
+        "input" => %{
+          "name" => "O",
+          "slug" => "o",
+          "baseUrl" => "https://api.openai.com/v1",
+          "apiKey" => "k"
+        }
       })
 
     %{"success" => true, "data" => %{"id" => m3}} =
-      rpc(conn, "create_model", %{"fields" => ["id"], "input" => %{"name" => "G", "upstreamId" => "gpt-5", "providerId" => other}})
+      rpc(conn, "create_model", %{
+        "fields" => ["id"],
+        "input" => %{"name" => "G", "upstreamId" => "gpt-5", "providerId" => other}
+      })
 
     %{"success" => true} = rpc(conn, "make_default_model", %{"identity" => m3})
     # now the first provider can go, its remaining models with it
     assert %{"success" => true} = rpc(conn, "delete_provider", %{"identity" => provider})
-    assert %{"success" => true, "data" => [%{"id" => ^m3}]} = rpc(conn, "list_models", %{"fields" => ["id"]})
+
+    assert %{"success" => true, "data" => [%{"id" => ^m3}]} =
+             rpc(conn, "list_models", %{"fields" => ["id"]})
   end
 
   test "check_model answers with ok / latency or the error, never a failure", %{conn: conn} do
     %{"success" => true, "data" => %{"id" => provider}} =
       rpc(conn, "create_provider", %{
         "fields" => ["id"],
-        "input" => %{"name" => "Dead", "slug" => "dead", "baseUrl" => "http://127.0.0.1:1/v1", "apiKey" => "k"}
+        "input" => %{
+          "name" => "Dead",
+          "slug" => "dead",
+          "baseUrl" => "http://127.0.0.1:1/v1",
+          "apiKey" => "k"
+        }
       })
 
     %{"success" => true, "data" => %{"id" => model}} =
-      rpc(conn, "create_model", %{"fields" => ["id"], "input" => %{"name" => "X", "upstreamId" => "x", "providerId" => provider}})
+      rpc(conn, "create_model", %{
+        "fields" => ["id"],
+        "input" => %{"name" => "X", "upstreamId" => "x", "providerId" => provider}
+      })
 
     assert %{"success" => true, "data" => %{"ok" => false, "error" => error}} =
-             rpc(conn, "check_model", %{"fields" => ["ok", "latencyMs", "error"], "input" => %{"id" => model}})
+             rpc(conn, "check_model", %{
+               "fields" => ["ok", "latencyMs", "error"],
+               "input" => %{"id" => model}
+             })
 
     assert is_binary(error)
 
@@ -137,7 +176,9 @@ defmodule LongxWeb.AiRpcTest do
 
   test "the search provider: listed with its key's presence, editable", %{conn: conn} do
     assert %{"success" => true, "data" => [%{"slug" => "tavily", "id" => id} | _]} =
-             rpc(conn, "list_search_providers", %{"fields" => ["id", "slug", "name", "hasApiKey", "default"]})
+             rpc(conn, "list_search_providers", %{
+               "fields" => ["id", "slug", "name", "hasApiKey", "default"]
+             })
 
     assert %{"success" => true, "data" => %{"hasApiKey" => true}} =
              rpc(conn, "update_search_provider", %{
@@ -149,7 +190,9 @@ defmodule LongxWeb.AiRpcTest do
 
   test "tools: the catalogue with its switches", %{conn: conn} do
     assert %{"success" => true, "data" => tools} =
-             rpc(conn, "list_tools", %{"fields" => ["id", "qualifiedName", "description", "enabled"]})
+             rpc(conn, "list_tools", %{
+               "fields" => ["id", "qualifiedName", "description", "enabled"]
+             })
 
     echo = Enum.find(tools, &(&1["qualifiedName"] == "builtin.echo"))
     assert is_binary(echo["description"])

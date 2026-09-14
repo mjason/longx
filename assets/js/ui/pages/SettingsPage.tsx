@@ -6,6 +6,9 @@ import { Label } from "@/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { Page, TopBar } from "@/ui/shell/Shell";
 import { t } from "@/ui/strings";
+import { ModelsSection } from "./settings/ModelsSection";
+import { SandboxSection } from "./settings/SandboxSection";
+import { ToolsSection } from "./settings/ToolsSection";
 
 const SECTIONS = ["models", "tools", "sandbox", "appearance"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -70,8 +73,16 @@ function SectionList() {
 }
 
 function SectionBody({ section }: { section: Section }) {
-  if (section === "appearance") return <Appearance />;
-  return <p className="text-muted-foreground text-sm" data-testid={`section-${section}`}>{t.sectionPending}</p>;
+  switch (section) {
+    case "models":
+      return <ModelsSection />;
+    case "tools":
+      return <ToolsSection />;
+    case "sandbox":
+      return <SandboxSection />;
+    case "appearance":
+      return <Appearance />;
+  }
 }
 
 function Appearance() {
