@@ -14,6 +14,9 @@ permissions:
 
 env:
   MIX_ENV: prod
+  # config/runtime.exs (prod) insists on a data dir even for the mix tasks that
+  # only fetch bundles — a scratch one for the build
+  LONGX_DATA_DIR: /tmp/longx-build-data
 
 jobs:
   build:
