@@ -749,7 +749,9 @@ defmodule Longx.Projects do
   ## The project's codex: process and CODEX_HOME
 
   # codex's own state inside the home; everything else there is ours (config)
-  @codex_state_globs ~w(*.sqlite *.sqlite-wal *.sqlite-shm sessions logs db-backups archived_sessions memories skills tmp)
+  # what codex keeps in the home besides our config — `memories` (what it
+  # learned about the project) is deliberately not history and survives a clear
+  @codex_state_globs ~w(*.sqlite *.sqlite-wal *.sqlite-shm sessions logs db-backups archived_sessions skills tmp)
 
   @doc """
   The project's codex resources: the `CODEX_HOME` directory (path, size,

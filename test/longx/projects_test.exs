@@ -161,12 +161,17 @@ defmodule Longx.ProjectsTest do
       fake_home!(home)
       {:ok, thread} = Projects.start_thread(project)
 
+      File.mkdir_p!(Path.join(home, "memories"))
+      File.write!(Path.join(home, "memories/MEMORY.md"), "# learned\n")
+
       assert :ok = Projects.clear_codex_history(project)
       assert Pool.status(project.id) == :stopped
       refute File.exists?(Path.join(home, "state_5.sqlite"))
       refute File.exists?(Path.join(home, "sessions"))
-      # the config is ours, it stays
+      # the config is ours, it stays; what codex learned about the project is
+      # not "history" — it stays too (reset_codex_home is the wipe)
       assert File.exists?(Path.join(home, "config.toml"))
+      assert File.exists?(Path.join(home, "memories/MEMORY.md"))
       assert Ash.get!(Projects.Thread, thread.id).status == :unrecoverable
     end
 
