@@ -1,5 +1,5 @@
 defmodule Longx.System do
-  @moduledoc "Node-level facts the SPA asks for: sandbox availability (more to come: version, updates)."
+  @moduledoc "Node-level facts the SPA asks for: sandbox availability, the global memory, the version and its upgrade; plus the encrypted settings store."
 
   use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
 
@@ -17,6 +17,10 @@ defmodule Longx.System do
       rpc_action :memory_status, :memory_status
       rpc_action :memory_set_auto_extract, :memory_set_auto_extract
       rpc_action :memory_run, :memory_run
+      rpc_action :upgrade_status, :upgrade_status
+      rpc_action :upgrade_check, :upgrade_check
+      rpc_action :upgrade_apply, :upgrade_apply
+      rpc_action :set_github_token, :set_github_token
     end
   end
 
@@ -25,6 +29,12 @@ defmodule Longx.System do
       define :sandbox_status, action: :sandbox
       define :list_directory, action: :list_directory
       define :create_directory, action: :create_directory
+    end
+
+    resource Longx.System.Setting do
+      define :put_setting, action: :put, args: [:key, :value]
+      define :get_setting, action: :by_key, args: [:key]
+      define :delete_setting, action: :destroy
     end
   end
 end

@@ -54,6 +54,20 @@ export const thread = (n: number) => ({
   insertedAt: "2026-09-12T00:00:00Z",
 });
 
+export const upgradeIdle = {
+  current: "0.1.0",
+  installed: true,
+  latest: null as string | null,
+  available: false,
+  notesUrl: null as string | null,
+  checkedAt: null as string | null,
+  error: null as string | null,
+  stage: "idle" as const,
+  message: null as string | null,
+  target: null as string | null,
+  hasGithubToken: false,
+};
+
 export function rpcMock() {
   return {
     listProjects: vi.fn(async () => ok([project(1), project(2)])),
@@ -198,6 +212,22 @@ export function rpcMock() {
     ),
     memorySetAutoExtract: vi.fn(async () => ok(null)),
     memoryRun: vi.fn(async () => ok(null)),
+    upgradeStatus: vi.fn(async () => ok(upgradeIdle)),
+    upgradeCheck: vi.fn(async () =>
+      ok({
+        ...upgradeIdle,
+        latest: "0.2.0",
+        available: true,
+        notesUrl: "https://github.com/mjason/longx/releases/tag/v0.2.0",
+        checkedAt: "2026-09-14T08:00:00Z",
+      }),
+    ),
+    upgradeApply: vi.fn(async () =>
+      ok({ ...upgradeIdle, latest: "0.2.0", available: true, stage: "downloading", target: "0.2.0" }),
+    ),
+    setGithubToken: vi.fn(async ({ input }: { input: { token?: string | null } }) =>
+      ok({ ...upgradeIdle, hasGithubToken: !!input.token }),
+    ),
     probeSandbox: vi.fn(async () =>
       ok({
         status: "unavailable",

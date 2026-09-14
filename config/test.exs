@@ -67,3 +67,6 @@ config :phoenix,
 config :longx, LongxWeb.Vite,
   dev_server: nil,
   manifest: Path.expand("../test/support/vite_manifest.json", __DIR__)
+
+# no background release checks in the suite; tests configure the rest
+config :longx, Longx.Upgrade, tick: nil

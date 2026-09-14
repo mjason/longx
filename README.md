@@ -57,7 +57,15 @@ loginctl enable-linger "$USER"                               # 服务器：不�
 
 ### 升级
 
-再跑一遍同一条命令：
+**在网页里升级**：「设置 → 版本与更新」显示当前版本，「检查更新」问 GitHub Releases 有没有新版本
+（服务端每 6 小时也自己查一次，有新版本时状态栏会提示）。点「升级到 x.y.z 并重启」：服务端下载对应架构的包并校验
+sha256 → 把数据库快照存到 `~/.longx/backups/longx-<旧版本>-<时间>.db`（`VACUUM INTO`，运行中也一致）→
+解到 `app.new`、旧程序改名 `app.old`、新程序就位 → `systemctl --user restart longx`。页面会等新版本起来后自动刷新。
+正在跑的一轮会被打断。没有 systemd 的环境会停在「已安装，等待手动重启」——自己重启进程就行。
+匿名调用 GitHub API 每小时限 60 次，同一页面可以填一个 GitHub token（只需读公开仓库的权限，加密存在数据目录里）来避开。
+镜像或 fork 用 `LONGX_UPDATE_REPO=<owner>/<repo>`、`LONGX_UPDATE_API=<host>` 换来源；服务名不是 `longx` 时设 `LONGX_SERVICE`。
+
+**用脚本升级**：再跑一遍安装命令：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install.sh | sh
@@ -76,8 +84,9 @@ sh install.sh --rollback        # 或 curl -fsSL …/install.sh | sh -s -- --rol
 
 把 `app.old` 换回来并重启。两种情况要多做一步——新版本跑过**数据库迁移**（旧版本可能认不得新表结构），
 或升级了**内置的 codex**（它会迁移每个项目 CODEX_HOME 里自己的状态库）：用 `backups` 里的备份恢复 `data`
-（`rm -rf ~/.longx/data && tar -C ~/.longx -xzf ~/.longx/backups/data-<时间>.tar.gz`），或者只对出问题的项目
-在「项目设置 → 危险操作」里重置 codex 目录。发布说明会标出带迁移或换了 codex 的版本。
+（脚本升级留的是整个 `data` 的 tar：`rm -rf ~/.longx/data && tar -C ~/.longx -xzf ~/.longx/backups/data-<时间>.tar.gz`；
+网页升级留的是数据库快照：`cp ~/.longx/backups/longx-<旧版本>-<时间>.db ~/.longx/data/longx.db`，先停服务），
+或者只对出问题的项目在「项目设置 → 危险操作」里重置 codex 目录。发布说明会标出带迁移或换了 codex 的版本。
 
 升级后顺手：状态栏提示「codex 需要重启」时在进程工具里重启项目的 codex；「模型与 Provider」里预设可能给已有模型
 补了新的思考档位；确认没问题后 `app.old` 可以删。

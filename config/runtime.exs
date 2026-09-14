@@ -20,6 +20,17 @@ if System.get_env("PHX_SERVER") do
   config :longx, LongxWeb.Endpoint, server: true
 end
 
+# Where the self-upgrade looks for releases (Longx.Upgrade): a fork or a
+# mirror sets its own repository / API host; the systemd unit's name is
+# LONGX_SERVICE (default longx), read by Longx.Upgrade itself.
+if repo = System.get_env("LONGX_UPDATE_REPO") do
+  config :longx, Longx.Upgrade, repo: repo
+end
+
+if api = System.get_env("LONGX_UPDATE_API") do
+  config :longx, Longx.Upgrade, api_url: api
+end
+
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :longx, LongxWeb.Endpoint,

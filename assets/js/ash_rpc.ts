@@ -6507,3 +6507,275 @@ export async function validateSandboxStatus(
   );
 }
 
+
+export type SetGithubTokenInput = {
+  token?: string | null;
+};
+
+export type SetGithubTokenFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}>[];
+
+export type InferSetGithubTokenResult<
+  Fields extends SetGithubTokenFields | undefined,
+> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}, Fields>;
+
+export type SetGithubTokenResult<Fields extends SetGithubTokenFields | undefined = undefined> = | { success: true; data: InferSetGithubTokenResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function setGithubToken<Fields extends SetGithubTokenFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input?: SetGithubTokenInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetGithubTokenResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_github_token",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetGithubTokenResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetGithubToken(
+  config: {
+  tenant?: string;
+  input?: SetGithubTokenInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_github_token",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type UpgradeApplyFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}>[];
+
+export type InferUpgradeApplyResult<
+  Fields extends UpgradeApplyFields | undefined,
+> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}, Fields>;
+
+export type UpgradeApplyResult<Fields extends UpgradeApplyFields | undefined = undefined> = | { success: true; data: InferUpgradeApplyResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function upgradeApply<Fields extends UpgradeApplyFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<UpgradeApplyResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "upgrade_apply",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<UpgradeApplyResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateUpgradeApply(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "upgrade_apply",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type UpgradeCheckFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}>[];
+
+export type InferUpgradeCheckResult<
+  Fields extends UpgradeCheckFields | undefined,
+> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}, Fields>;
+
+export type UpgradeCheckResult<Fields extends UpgradeCheckFields | undefined = undefined> = | { success: true; data: InferUpgradeCheckResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function upgradeCheck<Fields extends UpgradeCheckFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<UpgradeCheckResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "upgrade_check",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<UpgradeCheckResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateUpgradeCheck(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "upgrade_check",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type UpgradeStatusFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}>[];
+
+export type InferUpgradeStatusResult<
+  Fields extends UpgradeStatusFields | undefined,
+> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}, Fields>;
+
+export type UpgradeStatusResult<Fields extends UpgradeStatusFields | undefined = undefined> = | { success: true; data: InferUpgradeStatusResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function upgradeStatus<Fields extends UpgradeStatusFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<UpgradeStatusResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "upgrade_status",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<UpgradeStatusResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateUpgradeStatus(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "upgrade_status",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+

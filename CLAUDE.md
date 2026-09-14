@@ -561,6 +561,21 @@ React Native client planned on the same core code.
   It answers 404 for non-HTML `Accept`s and file-looking paths (a missing asset must never
   come back as HTML). `/rpc/*`, `/ai/v1/*`, `/socket`, `/dev/*` are matched before it.
   No LiveView pages (the `root` layout remains for the dev dashboard/errors).
+  - **Self-upgrade** — `Longx.Upgrade` (GenServer in the tree + `Longx.Upgrade.TaskSupervisor`):
+    `check/1` asks GitHub's `releases/latest` (`config :longx, Longx.Upgrade, repo:, api_url:`;
+    `LONGX_UPDATE_REPO` / `LONGX_UPDATE_API` at runtime; a saved GitHub token —
+    `Longx.System.Setting` `github_token`, encrypted like a provider key — goes out as the
+    bearer, since anonymous calls are capped at 60/h), caches the result and refreshes every
+    `tick` (6 h; nil in tests). `apply/0` works only inside an install (`RELEASE_ROOT/bin/longx`
+    exists, or `app_dir:` in tests): download tarball + `.sha256` into `<home>/downloads`,
+    verify, `VACUUM INTO <home>/backups/longx-<current>-<stamp>.db`, unpack to `app.new`, swap
+    `app` → `app.old` → `app`, then `restart_command` (default `systemctl --user restart
+    --no-block $LONGX_SERVICE`, `longx`); no way to restart → stage `:installed` with a
+    "restart by hand" message; every stage is broadcast as `{:upgrade, status}` on
+    `Upgrade.topic/0`. RPC: `upgrade_status` / `upgrade_check` / `upgrade_apply` /
+    `set_github_token` on `Longx.System.Status`; the SPA (`core/upgrade.ts`,
+    `pages/settings/UpdateSection`, a hint in the status strip) polls the status every second
+    while a stage runs and reloads once a status from another version answers.
   - `Longx.System` (domain) → `Longx.System.Status` generic actions: `sandbox` and
     `list_directory` (`Longx.System.Directory`: subdirectories of an absolute path, git
     flagged, hidden on request, roots home and `/`; arrays of typed maps are untyped in

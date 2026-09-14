@@ -10,6 +10,26 @@ defmodule Longx.System.Status do
     type_name "SystemStatus"
   end
 
+  @upgrade_fields [
+    current: [type: :string, allow_nil?: false],
+    installed: [type: :boolean, allow_nil?: false],
+    latest: [type: :string],
+    available: [type: :boolean, allow_nil?: false],
+    notes_url: [type: :string],
+    checked_at: [type: :string],
+    error: [type: :string],
+    stage: [
+      type: :atom,
+      allow_nil?: false,
+      constraints: [
+        one_of: [:idle, :downloading, :verifying, :installing, :restarting, :installed, :failed]
+      ]
+    ],
+    message: [type: :string],
+    target: [type: :string],
+    has_github_token: [type: :boolean, allow_nil?: false]
+  ]
+
   actions do
     # The directory picker: subdirectories of `path` (home when omitted),
     # each flagged when it is a git repository. Files are never listed;
@@ -188,6 +208,73 @@ defmodule Longx.System.Status do
         {:ok, sandbox_report(Longx.Codex.Sandbox.report())}
       end
     end
+
+    # Longx.Upgrade — the version, the last release check, the stage of an
+    # upgrade in progress; one shape for the four actions
+    action :upgrade_status, :map do
+      constraints fields: @upgrade_fields
+      run fn _input, _ -> {:ok, upgrade_status()} end
+    end
+
+    action :upgrade_check, :map do
+      constraints fields: @upgrade_fields
+
+      run fn _input, _ ->
+        # the failure is in the status (error), not an RPC error: the page shows it in place
+        _ = Longx.Upgrade.check(force: true)
+        {:ok, upgrade_status()}
+      end
+    end
+
+    action :upgrade_apply, :map do
+      constraints fields: @upgrade_fields
+
+      run fn _input, _ ->
+        case Longx.Upgrade.apply() do
+          {:ok, _} ->
+            {:ok, upgrade_status()}
+
+          {:error, message} ->
+            # a readable refusal (not an install, nothing newer, no package): on the action itself
+            {:error,
+             Ash.Error.to_error_class(
+               Ash.Error.Changes.InvalidArgument.exception(field: :upgrade, message: message)
+             )}
+        end
+      end
+    end
+
+    # the GitHub token for the release check (blank removes it); never read back
+    action :set_github_token, :map do
+      constraints fields: @upgrade_fields
+      argument :token, :string
+
+      run fn input, _ ->
+        case Longx.Upgrade.set_github_token(input.arguments[:token]) do
+          :ok -> {:ok, upgrade_status()}
+          {:error, reason} -> {:error, field: :token, message: inspect(reason)}
+        end
+      end
+    end
+  end
+
+  defp upgrade_status do
+    st = Longx.Upgrade.status()
+    check = st.check || %{}
+
+    %{
+      current: Longx.Upgrade.current_version(),
+      installed: st.installed,
+      latest: check[:latest],
+      available: check[:available] || false,
+      notes_url: check[:notes_url],
+      checked_at: check[:checked_at] && DateTime.to_iso8601(check.checked_at),
+      error: st.error,
+      stage: st.stage,
+      message: st.message,
+      target: st.target,
+      has_github_token: st.github_token?
+    }
   end
 
   defp sandbox_report(report),

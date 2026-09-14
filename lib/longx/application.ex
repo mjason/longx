@@ -43,6 +43,9 @@ defmodule Longx.Application do
       Longx.Codex.Recycler,
       # idle threads → notes → MEMORY.md, on a timer (Longx.Memory)
       Longx.Memory.Worker,
+      # new releases on GitHub, and the upgrade itself (Longx.Upgrade)
+      {Task.Supervisor, name: Longx.Upgrade.TaskSupervisor},
+      Longx.Upgrade,
       # is codex's command sandbox going to work here? (result cached, shown in the UI)
       Supervisor.child_spec({Task, &Longx.Codex.Sandbox.probe/0},
         id: :sandbox_probe,

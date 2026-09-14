@@ -143,7 +143,6 @@ After=network.target
 Environment=LONGX_DATA_DIR=$DATA
 Environment=PORT=$PORT
 ExecStart=$APP/bin/longx start
-ExecStop=$APP/bin/longx stop
 Restart=on-failure
 
 [Install]
