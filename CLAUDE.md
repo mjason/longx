@@ -113,9 +113,10 @@ React Native client planned on the same core code.
     `sandboxPolicy` / `approvalPolicy` (codex keeps them for the turns after) and is
     recorded on the `Thread` (`network_access` is a thread attribute too). `images:` (data
     urls, the composer's attachments) go on `turn/start` as `image` inputs after the text —
-    the gateway passes `input_image` parts through untouched, so what a model does with
-    them is the model's business (DeepSeek Flash is text-only and says so; a vision model
-    sees them). **Slash commands of the composer**: `compact_thread/2` (`thread/compact/start`,
+    the gateway passes `input_image` parts through untouched (`detail: high` from codex;
+    verified end to end against DeepSeek Flash's Responses API, which reads screenshots —
+    a solid-colour synthetic test image it answers about unreliably, so test with a
+    real one). **Slash commands of the composer**: `compact_thread/2` (`thread/compact/start`,
     refused while a turn runs; codex marks the fold with a `contextCompaction` item) and
     `review_thread/3` (`review/start` with `delivery: inline` — the review is a turn of the
     thread: a Turn row with `user_text` "/review …", bookmarked like any turn but **never
