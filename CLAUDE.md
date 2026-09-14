@@ -921,6 +921,10 @@ their symlinks (a plain copy turns git's 145 builtin links into 700 MB) and drop
 home and the two secrets live there — `secret_key_base` and `cloak_key` are generated on
 first boot into 0600 files unless given as env vars; `PORT` (7788), `PHX_HOST`; the
 release serves plain http itself (`server: true`, no `force_ssl` — TLS is a proxy's job).
+The endpoint has `check_origin: :conn` (config.exs): a self-hosted instance is opened by
+whatever address the person typed, so the socket's Origin is checked against the request's
+own Host, never against `PHX_HOST` (the default `true` refused every LAN-IP page with
+"Could not check origin" — the "连接已断开" banner on a fresh install; `socket_origin_test`).
 A release seeds nothing — providers and keys are created in Settings (presets); the dev /
 test database gets `Longx.AI.Seeds.run/0` through `priv/repo/seeds.exs` (DeepSeek preset
 without a key as the default model, the OpenAI provider, a Tavily row, the tools — no

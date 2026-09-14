@@ -85,6 +85,10 @@ config :longx,
 # Configure the endpoint
 config :longx, LongxWeb.Endpoint,
   url: [host: "localhost"],
+  # a self-hosted instance is opened by whatever address the person typed
+  # (LAN IP, hostname, Tailscale name): the socket's origin must match the
+  # request's own host, not a configured one (PHX_HOST is for links only)
+  check_origin: :conn,
   adapter: Bandit.PhoenixAdapter,
   render_errors: [
     formats: [html: LongxWeb.ErrorHTML, json: LongxWeb.ErrorJSON],
