@@ -10,7 +10,7 @@ export type UtcDateTimeUsec = string;
 // Model Schema
 export type ModelResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "contextWindow" | "default" | "id" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
+  __primitiveFields: "contextWindow" | "default" | "id" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevelLabels" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
   contextWindow: number;
   default: boolean;
   id: UUIDv7;
@@ -19,6 +19,7 @@ export type ModelResourceSchema = {
   name: string;
   providerId: UUID;
   reasoningEffort: string | null;
+  reasoningLevelLabels: Record<string, any>;
   reasoningLevels: Array<string>;
   reasoningSummary: "auto" | "concise" | "detailed" | "none" | null;
   slug: string | null;
@@ -31,7 +32,7 @@ export type ModelResourceSchema = {
 
 export type ModelAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "contextWindow" | "default" | "id" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
+  __primitiveFields: "contextWindow" | "default" | "id" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevelLabels" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
   contextWindow: number;
   default: boolean;
   id: UUIDv7;
@@ -40,6 +41,7 @@ export type ModelAttributesOnlySchema = {
   name: string;
   providerId: UUID;
   reasoningEffort: string | null;
+  reasoningLevelLabels: Record<string, any>;
   reasoningLevels: Array<string>;
   reasoningSummary: "auto" | "concise" | "detailed" | "none" | null;
   slug: string | null;
@@ -444,6 +446,16 @@ export type ModelFilterInput = {
     contains?: string;
     stringEndsWith?: string;
     stringStartsWith?: string;
+  };
+
+  reasoningLevelLabels?: {
+    eq?: Record<string, any>;
+    notEq?: Record<string, any>;
+    in?: Array<Record<string, any>>;
+    lessThan?: Record<string, any>;
+    greaterThan?: Record<string, any>;
+    lessThanOrEqual?: Record<string, any>;
+    greaterThanOrEqual?: Record<string, any>;
   };
 
   reasoningLevels?: {
@@ -1470,7 +1482,7 @@ export type SystemStatusFilterInput = {
 };
 
 
-export const modelFilterFields = ["contextWindow", "default", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId", "provider"] as const;
+export const modelFilterFields = ["contextWindow", "default", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevelLabels", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId", "provider"] as const;
 export type ModelFilterField = (typeof modelFilterFields)[number];
 
 
@@ -1496,7 +1508,7 @@ export type TurnFilterField = (typeof turnFilterFields)[number];
 
 
 
-export const modelSortFields = ["contextWindow", "default", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId"] as const;
+export const modelSortFields = ["contextWindow", "default", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevelLabels", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId"] as const;
 export type ModelSortField = (typeof modelSortFields)[number];
 
 

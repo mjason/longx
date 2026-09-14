@@ -96,6 +96,23 @@ defmodule LongxWeb.AiRpcTest do
                "input" => %{"reasoningEffort" => "high"}
              })
 
+    # a custom reasoning level carries a display name of its own
+    assert %{
+             "success" => true,
+             "data" => %{
+               "reasoningLevels" => ["low", "high", "deep"],
+               "reasoningLevelLabels" => %{"deep" => "深度"}
+             }
+           } =
+             rpc(conn, "update_model", %{
+               "fields" => ["reasoningLevels", "reasoningLevelLabels"],
+               "identity" => m2,
+               "input" => %{
+                 "reasoningLevels" => ["low", "high", "deep"],
+                 "reasoningLevelLabels" => %{"deep" => "深度"}
+               }
+             })
+
     assert %{"success" => true, "data" => %{"default" => true}} =
              rpc(conn, "make_default_model", %{"fields" => ["default"], "identity" => m1})
 

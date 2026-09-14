@@ -39,6 +39,7 @@ defmodule Longx.AI.Model do
         :context_window,
         :provider_id,
         :reasoning_levels,
+        :reasoning_level_labels,
         :reasoning_effort,
         :reasoning_summary,
         :max_output_tokens
@@ -59,6 +60,7 @@ defmodule Longx.AI.Model do
         :upstream_id,
         :context_window,
         :reasoning_levels,
+        :reasoning_level_labels,
         :reasoning_effort,
         :reasoning_summary,
         :max_output_tokens
@@ -146,6 +148,10 @@ defmodule Longx.AI.Model do
       allow_nil?: false,
       default: [],
       public?: true
+
+    # display names for levels the UI does not know (`"deep" => "深度"`);
+    # the known ones (none … max) are translated in the client
+    attribute :reasoning_level_labels, :map, allow_nil?: false, default: %{}, public?: true
 
     # Reasoning controls codex applies per thread/turn (`model_reasoning_*`),
     # both optional: nil leaves codex's own default in place. Effort is the

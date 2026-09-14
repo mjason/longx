@@ -282,6 +282,7 @@ export const modelFields: ListModelsFields = [
   "default",
   "contextWindow",
   "reasoningLevels",
+  "reasoningLevelLabels",
   "reasoningEffort",
   { provider: ["name"] },
 ];

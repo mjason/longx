@@ -370,7 +370,7 @@ export const model = (
   upstreamId: extra.upstreamId ?? `upstream-${n}`,
   default: extra.default ?? n === 1,
   contextWindow: extra.contextWindow ?? 128_000,
-  reasoningLevels: extra.reasoningLevels ?? [],
+  reasoningLevels: extra.reasoningLevels ?? [], reasoningLevelLabels: {},
   reasoningEffort:
     "reasoningEffort" in extra
       ? extra.reasoningEffort
@@ -402,7 +402,7 @@ const presetModel = (
   slug: upstreamId,
   name,
   contextWindow: extra.contextWindow ?? 1_000_000,
-  reasoningLevels: extra.reasoningLevels ?? ["low", "high", "max"],
+  reasoningLevels: extra.reasoningLevels ?? ["low", "high", "max"], reasoningLevelLabels: {},
   reasoningEffort: "reasoningEffort" in extra ? extra.reasoningEffort : "high",
   image: extra.image ?? false,
   recommended: extra.recommended ?? true,

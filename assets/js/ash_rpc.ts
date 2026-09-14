@@ -296,6 +296,7 @@ export type CreateModelInput = {
   contextWindow?: number;
   providerId: UUID;
   reasoningLevels?: Array<string>;
+  reasoningLevelLabels?: Record<string, any>;
   reasoningEffort?: string | null;
   reasoningSummary?: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens?: number | null;
@@ -612,6 +613,7 @@ export type UpdateModelInput = {
   upstreamId?: string;
   contextWindow?: number;
   reasoningLevels?: Array<string>;
+  reasoningLevelLabels?: Record<string, any>;
   reasoningEffort?: string | null;
   reasoningSummary?: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens?: number | null;

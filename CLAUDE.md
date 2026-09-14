@@ -278,7 +278,10 @@ React Native client planned on the same core code.
     upstream 401/403) and `Model` (`upstream_id`, `slug`, `context_window`, one `default`,
     `reasoning_levels` (the efforts the model offers, ordered — DeepSeek / GLM
     `low / high / max`; codex's `ReasoningEffort` is any non-empty string, so a row with
-    no levels takes free text), optional `reasoning_effort` (the default level, one of
+    no levels takes free text; `reasoning_level_labels` — `%{"deep" => "深度"}` — names
+    the levels the client does not know, shown on the chips, in the composer's model
+    menu and as the level's description in codex's catalog; the known ones are
+    `t.effortLevels`), optional `reasoning_effort` (the default level, one of
     the levels when declared — `Model.Validations.EffortInLevels`), `reasoning_summary`
     (codex's enum) and `max_output_tokens`).
     `Longx.AI.resolve_target/0` = default model + its provider's decrypted key.
