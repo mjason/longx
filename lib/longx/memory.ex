@@ -22,7 +22,8 @@ defmodule Longx.Memory do
 
   alias Longx.Git
 
-  @seed "# MEMORY\n\n(Longx 的全局记忆：跨项目的偏好、习惯和决定。用 `memory.note` 记，或直接编辑这个文件。)\n"
+  # an HTML comment: the consolidation model keeps it out of the entries
+  @seed "# MEMORY\n\n<!-- Longx 的全局记忆：跨项目的偏好、习惯和决定。用 memory.note 记，或直接编辑这个文件。 -->\n"
   @instructions_cap 32_768
   @recent_notes 20
   @search_limit 50

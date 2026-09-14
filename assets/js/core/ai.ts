@@ -13,6 +13,14 @@ import {
   listSearchProviders,
   listTools,
   makeDefaultModel,
+  memoryDeleteNote,
+  memoryIndex,
+  memoryNotes,
+  memoryRun,
+  memorySearch,
+  memorySetAutoExtract,
+  memoryStatus,
+  memoryWriteIndex,
   probeSandbox,
   setToolEnabled,
   updateModel,
@@ -126,4 +134,56 @@ export function useProbeSandbox() {
     mutationFn: async () => unwrap(await probeSandbox({ fields: ["status", "reason", "checkedAt"] })) as SandboxReport,
     onSuccess: (report) => client.setQueryData(queryKeys.sandbox, report),
   });
+}
+
+// ---- the global memory (Longx.Memory) ----
+
+export type MemoryNote = { file: string; at: string | null; project: string | null; thread: string | null; source: string | null; text: string };
+export type MemoryHit = { file: string; line: number; text: string };
+export type MemoryStatus = { autoExtract: boolean; lastRunAt: string | null; lastError: string | null; pending: number };
+
+export const memoryKeys = {
+  all: ["memory"] as const,
+  index: ["memory", "index"] as const,
+  notes: ["memory", "notes"] as const,
+  status: ["memory", "status"] as const,
+  search: (q: string) => ["memory", "search", q] as const,
+};
+
+export function useMemoryIndex() {
+  return useQuery({ queryKey: memoryKeys.index, queryFn: async () => (unwrap(await memoryIndex({ fields: ["text"] })) as { text: string }).text });
+}
+
+export function useMemoryNotes() {
+  return useQuery({ queryKey: memoryKeys.notes, queryFn: async () => unwrap(await memoryNotes({ fields: ["file", "at", "project", "thread", "source", "text"] })) as MemoryNote[] });
+}
+
+export function useMemoryStatus() {
+  return useQuery({
+    queryKey: memoryKeys.status,
+    queryFn: async () => unwrap(await memoryStatus({ fields: ["autoExtract", "lastRunAt", "lastError", "pending"] })) as MemoryStatus,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useMemorySearch(query: string) {
+  return useQuery({
+    queryKey: memoryKeys.search(query),
+    enabled: query.trim().length > 0,
+    queryFn: async () => unwrap(await memorySearch({ fields: ["file", "line", "text"], input: { query } })) as MemoryHit[],
+  });
+}
+
+function useMemoryWrite<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: fn, onSuccess: () => void client.invalidateQueries({ queryKey: memoryKeys.all }) });
+}
+
+export function useMemoryActions() {
+  return {
+    writeIndex: useMemoryWrite(async (text: string) => unwrap(await memoryWriteIndex({ input: { text } }))),
+    deleteNote: useMemoryWrite(async (file: string) => unwrap(await memoryDeleteNote({ input: { file } }))),
+    setAutoExtract: useMemoryWrite(async (enabled: boolean) => unwrap(await memorySetAutoExtract({ input: { enabled } }))),
+    run: useMemoryWrite(async () => unwrap(await memoryRun({}))),
+  };
 }

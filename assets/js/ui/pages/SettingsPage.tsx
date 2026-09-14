@@ -6,11 +6,12 @@ import { Label } from "@/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { Page, TopBar } from "@/ui/shell/Shell";
 import { t } from "@/ui/strings";
+import { MemorySection } from "./settings/MemorySection";
 import { ModelsSection } from "./settings/ModelsSection";
 import { SandboxSection } from "./settings/SandboxSection";
 import { ToolsSection } from "./settings/ToolsSection";
 
-const SECTIONS = ["models", "tools", "sandbox", "appearance"] as const;
+const SECTIONS = ["models", "memory", "tools", "sandbox", "appearance"] as const;
 type Section = (typeof SECTIONS)[number];
 
 /**
@@ -76,6 +77,8 @@ function SectionBody({ section }: { section: Section }) {
   switch (section) {
     case "models":
       return <ModelsSection />;
+    case "memory":
+      return <MemorySection />;
     case "tools":
       return <ToolsSection />;
     case "sandbox":

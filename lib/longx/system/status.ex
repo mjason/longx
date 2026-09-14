@@ -81,6 +81,7 @@ defmodule Longx.System.Status do
                       at: [type: :string],
                       project: [type: :string],
                       thread: [type: :string],
+                      source: [type: :string],
                       text: [type: :string, allow_nil?: false]
                     ]
                   ]

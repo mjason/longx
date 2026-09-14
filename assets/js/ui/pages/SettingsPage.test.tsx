@@ -6,7 +6,7 @@ import { ok, rpcMock, socketMock } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { checkModel, createModel, createProvider, deleteModel, listModels, makeDefaultModel, probeSandbox, setToolEnabled, updateSearchProvider } from "@/ash_rpc";
+import { checkModel, createModel, createProvider, deleteModel, listModels, makeDefaultModel, memoryDeleteNote, memoryRun, memorySearch, memorySetAutoExtract, memoryWriteIndex, probeSandbox, setToolEnabled, updateSearchProvider } from "@/ash_rpc";
 import { model } from "@/ui/test-mocks";
 import { within } from "@testing-library/react";
 
@@ -118,6 +118,42 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(probeSandbox).toHaveBeenCalled());
     await within(section).findByText("不可用");
     expect(section).toHaveTextContent("Permission denied");
+  });
+
+  test("memory: the index is editable, the notes are listed with their origin and can be deleted, search finds lines", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/memory");
+    const section = await screen.findByTestId("section-memory");
+    // the pipeline's state
+    await within(section).findByText("2 条待整理");
+    const auto = within(section).getByRole("switch", { name: /自动提炼/ });
+    expect(auto).toBeChecked();
+    await user.click(auto);
+    await waitFor(() => expect(memorySetAutoExtract).toHaveBeenCalledWith(expect.objectContaining({ input: { enabled: false } })));
+    await user.click(within(section).getByRole("button", { name: "现在整理" }));
+    await waitFor(() => expect(memoryRun).toHaveBeenCalled());
+
+    // the index in the editor, saved as a whole
+    const editor = await within(section).findByTestId("code-editor");
+    await waitFor(() => expect(editor.querySelector(".cm-content")).toHaveTextContent("Tabs over spaces"));
+    await user.click(editor.querySelector(".cm-content")!);
+    await user.keyboard("!");
+    await user.click(within(section).getByRole("button", { name: "保存 MEMORY.md" }));
+    await waitFor(() => expect(memoryWriteIndex).toHaveBeenCalledWith(expect.objectContaining({ input: { text: expect.stringContaining("!") } })));
+
+    // the notes, with where they came from
+    const note = within(section).getByTestId("note-notes/2026-09-14T04-48-17Z-tabs.md");
+    expect(note).toHaveTextContent("数学精灵");
+    expect(within(section).getByTestId("note-notes/2026-09-14T05-00-00Z-pnpm.md")).toHaveTextContent("自动提炼");
+    await user.click(within(note).getByRole("button", { name: "删除笔记" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "删除" }));
+    await waitFor(() => expect(memoryDeleteNote).toHaveBeenCalledWith(expect.objectContaining({ input: { file: "notes/2026-09-14T04-48-17Z-tabs.md" } })));
+
+    // search over everything
+    await user.type(within(section).getByRole("searchbox", { name: "搜索记忆" }), "tabs{Enter}");
+    await waitFor(() => expect(memorySearch).toHaveBeenCalledWith(expect.objectContaining({ input: { query: "tabs" } })));
+    expect(await within(section).findByText(/MEMORY\.md:3/)).toBeInTheDocument();
   });
 
   test("desktop: categories beside the content, models first", async () => {

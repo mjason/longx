@@ -5690,11 +5690,11 @@ export async function validateMemoryIndex(
 }
 
 
-export type MemoryNotesFields = UnifiedFieldSelection<{file: string, at: string | null, project: string | null, thread: string | null, text: string, __type: "TypedMap", __primitiveFields: "file" | "at" | "project" | "thread" | "text"}>[];
+export type MemoryNotesFields = UnifiedFieldSelection<{file: string, at: string | null, project: string | null, thread: string | null, source: string | null, text: string, __type: "TypedMap", __primitiveFields: "file" | "at" | "project" | "thread" | "source" | "text"}>[];
 
 export type InferMemoryNotesResult<
   Fields extends MemoryNotesFields | undefined,
-> = Array<InferResult<{file: string, at: string | null, project: string | null, thread: string | null, text: string, __type: "TypedMap", __primitiveFields: "file" | "at" | "project" | "thread" | "text"}, Fields>>;
+> = Array<InferResult<{file: string, at: string | null, project: string | null, thread: string | null, source: string | null, text: string, __type: "TypedMap", __primitiveFields: "file" | "at" | "project" | "thread" | "source" | "text"}, Fields>>;
 
 export type MemoryNotesResult<Fields extends MemoryNotesFields | undefined = undefined> = | { success: true; data: InferMemoryNotesResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }

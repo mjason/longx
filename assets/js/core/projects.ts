@@ -36,6 +36,7 @@ export const projectFields = [
   "networkAccess",
   "webSearch",
   "multiAgent",
+  "globalMemory",
   "dirtyStart",
   "tools",
   "memoryLimitMb",

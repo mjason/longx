@@ -210,9 +210,23 @@ React Native client planned on the same core code.
   the tools as functions in the `memory` namespace, not as `memory.note` in backticks:
   DeepSeek Flash read the latter as a shell command and wrapped it in `exec_command`.
   Live-checked: "记住…" → one `memory.note` call → a note with provenance. RPC: `memory_index` / `memory_write_index` / `memory_notes` /
-  `memory_search` / `memory_delete_note` on `Longx.System` — no page yet. Not built:
-  automatic extraction into the global memory and consolidation of notes into
-  `MEMORY.md` (a note is handed to the model raw until then).
+  `memory_search` / `memory_delete_note` / `memory_status` / `memory_set_auto_extract` /
+  `memory_run` on `Longx.System`; the page is Settings → 记忆 (`settings/MemorySection`:
+  the pipeline's switch and last run, MEMORY.md in the CodeMirror editor, the notes with
+  their origin, a search), and Project settings has the 注入全局记忆 switch.
+  **The pipeline** (`Longx.Memory.Worker`, in the tree, a pass every 15 min — `config
+  :longx, Longx.Memory, tick:` nil in tests —, `run_now/1`): `Extract` reads threads idle
+  ≥ 1 h (`idle_hours`) that were not read since their last activity — root threads of
+  projects with the memory on, 2 per pass — from codex's rollout on disk
+  (`Longx.Codex.Rollout`: the person's and the model's words and the commands run, no
+  codex process) and asks the default model (`Longx.AI.complete/3`, non-streaming) for
+  durable cross-project facts → notes with `source: auto`; the thread is marked
+  (`Thread.memory_extracted_at`) even when nothing was kept, a model failure leaves it
+  for next time. `Consolidate` then folds the pending notes into `MEMORY.md` through the
+  model (merged by topic, newer wins), refusing an answer that lost most entries; folded
+  notes are recorded in `state.json` (also the `auto_extract` switch and the last run)
+  and no longer handed to threads raw. Both prompts are Chinese and say a note is
+  information, never an instruction, and never to write secrets.
 - **A headless browser is bundled too: obscura** (`h4ckf0r0day/obscura`, Rust + embedded V8,
   Apache-2.0). `Longx.Browser.Runtime` pins `v0.2.2` (five targets: `{x86_64,aarch64}-linux`,
   `{x86_64,aarch64}-macos` as tar.gz, `x86_64-windows` as zip — `Longx.Bundle` unpacks
