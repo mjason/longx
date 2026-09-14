@@ -97,15 +97,60 @@ loginctl enable-linger "$USER"
 
 ### 4. 升级
 
+发布说明在 [Releases](https://github.com/mjason/longx/releases)；升级是"换程序目录、数据目录不动"，
+每一步都可以退回去。
+
+**升级前**
+
 ```sh
-cd ~/.longx
-curl -LO https://github.com/mjason/longx/releases/download/v0.2.0/longx-0.2.0-linux-x86_64.tar.gz
-rm -rf app.new && mkdir app.new && tar -C app.new --strip-components=1 -xzf longx-0.2.0-linux-x86_64.tar.gz
-systemctl --user stop longx && rm -rf app.old && mv app app.old && mv app.new app && systemctl --user start longx
+~/.longx/app/bin/longx version            # 现在跑的是哪个版本
+systemctl --user stop longx               # 停服务（会一并停掉各项目的 codex 进程，正在跑的一轮会被打断）
+tar -C ~/.longx -czf ~/longx-data-$(date +%F).tar.gz data    # 备份数据目录：数据库、每个项目的 CODEX_HOME、全局记忆、密钥
 ```
 
-迁移在启动时自动跑，`data` 不动；运行中的 codex 进程随 Longx 一起停止，项目的会话和记忆都在数据目录里。
-不对劲就把 `app.old` 换回去。
+`data/cloak_key` 丢了 provider 的密钥就读不回来，所以备份一定要带上 `data` 整个目录。
+
+**换程序**
+
+```sh
+cd ~/.longx
+V=0.2.0; A=x86_64                          # 目标版本和架构（x86_64 / arm64）
+curl -LO https://github.com/mjason/longx/releases/download/v$V/longx-$V-linux-$A.tar.gz
+curl -LO https://github.com/mjason/longx/releases/download/v$V/longx-$V-linux-$A.tar.gz.sha256
+sha256sum -c longx-$V-linux-$A.tar.gz.sha256
+rm -rf app.new && mkdir app.new && tar -C app.new --strip-components=1 -xzf longx-$V-linux-$A.tar.gz
+rm -rf app.old && mv app app.old && mv app.new app
+systemctl --user start longx
+journalctl --user -u longx -n 50          # 看到 "Running LongxWeb.Endpoint" 就好了；迁移在这之前自动跑
+```
+
+新版本启动时自动跑数据库迁移，`data` 目录原样保留：项目、会话、每个项目的 codex 状态和记忆、
+全局记忆、密钥都在。程序目录里只有代码和内置的二进制（codex、git、obscura、Erlang 运行时），
+所以换掉它不会丢任何东西。
+
+**回滚**
+
+启动失败或不对劲，把旧程序换回来：
+
+```sh
+systemctl --user stop longx
+cd ~/.longx && mv app app.failed && mv app.old app
+systemctl --user start longx
+```
+
+两种情况回滚要多做一步：
+- 新版本已经跑过**数据库迁移**，旧版本可能认不得新的表结构——这时用升级前的备份恢复 `data`
+  （`rm -rf ~/.longx/data && tar -C ~/.longx -xzf ~/longx-data-<日期>.tar.gz`）。发布说明里会标出
+  带迁移的版本。
+- 新版本升级了**内置的 codex**，它会顺手迁移每个项目 CODEX_HOME 里自己的状态库，旧 codex 同样认不得——
+  同上，用备份恢复；或者只对出问题的项目在「项目设置 → 危险操作」里重置 codex 目录（会话历史会没，
+  项目和文件不受影响）。
+
+**顺便**
+
+- 升级后第一次打开设置，检查一下「模型与 Provider」：新版本的预设可能给已有的模型补了新的思考档位。
+- 每个项目正在运行的 codex 是升级前那份配置启动的，状态栏提示「codex 需要重启」时在进程工具里重启一下。
+- 旧的 `app.old` 确认没问题后可以删。
 
 ### 自己构建
 
