@@ -175,7 +175,7 @@ defmodule LongxWeb.AiRpcTest do
     assert [
              %{
                "upstreamId" => "deepseek-flash",
-               "reasoningLevels" => ["low", "high", "max"],
+               "reasoningLevels" => ["none", "low", "high", "max"],
                "image" => true,
                "installed" => false
              }

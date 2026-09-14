@@ -49,7 +49,12 @@ defmodule Longx.AI.Presets do
         }
 
   @openai_levels ~w(low medium high xhigh max)
-  @ds_levels ~w(low high max)
+  # DeepSeek's Responses API takes `reasoning.effort` none / low / high / max
+  # (none = thinking off; minimal → low, medium / xhigh → high, ultra → max
+  # are only aliases) — docs: 思考模式 → 控制参数（Responses API 格式）
+  @ds_levels ~w(none low high max)
+  # GLM's own models.json for codex declares low / high / max
+  @glm_levels ~w(low high max)
 
   @presets [
     %{
@@ -99,7 +104,7 @@ defmodule Longx.AI.Presets do
           slug: "glm-5.3",
           name: "GLM 5.3",
           context_window: 1_000_000,
-          reasoning_levels: @ds_levels,
+          reasoning_levels: @glm_levels,
           reasoning_effort: "max",
           image: false,
           recommended: true
@@ -291,16 +296,26 @@ defmodule Longx.AI.Presets do
     end)
   end
 
-  # a row from before levels existed (none declared) learns the preset's;
-  # its default level stays when it is one of them, else the preset's applies
+  # a row from before levels existed (none declared) learns the preset's, and
+  # a row on a smaller set of the preset's levels gains the ones added since
+  # (a level more never breaks a thing); a set with a level of its own is the
+  # person's and stays. The default level stays when it is one of them.
   defp backfill_levels(
-         %Model{reasoning_levels: []} = model,
+         %Model{reasoning_levels: current} = model,
          %{reasoning_levels: [_ | _] = levels} = spec
        ) do
-    effort =
-      if model.reasoning_effort in levels, do: model.reasoning_effort, else: spec.reasoning_effort
+    subset? = current != levels and Enum.all?(current, &(&1 in levels))
 
-    AI.update_model(model, %{reasoning_levels: levels, reasoning_effort: effort})
+    if subset? do
+      effort =
+        if model.reasoning_effort in levels,
+          do: model.reasoning_effort,
+          else: spec.reasoning_effort
+
+      AI.update_model(model, %{reasoning_levels: levels, reasoning_effort: effort})
+    else
+      {:ok, model}
+    end
   end
 
   defp backfill_levels(model, _spec), do: {:ok, model}

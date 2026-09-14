@@ -42,11 +42,11 @@ defmodule Longx.AITest do
   describe "seeds (priv/repo/seeds.exs)" do
     @seeds Path.expand("priv/repo/seeds.exs")
 
-    test "deepseek-flash (1M, low / high / max) is the default; the OpenAI provider is there without models; a chosen value is kept" do
+    test "deepseek-flash (1M, none / low / high / max) is the default; the OpenAI provider is there without models; a chosen value is kept" do
       Code.eval_file(@seeds)
       flash = Enum.find(AI.list_models!(), &(&1.upstream_id == "deepseek-flash"))
       assert flash.context_window == 1_000_000
-      assert flash.reasoning_levels == ["low", "high", "max"]
+      assert flash.reasoning_levels == ["none", "low", "high", "max"]
       assert flash.reasoning_effort == "high"
       assert AI.default_model!().id == flash.id
       assert {:ok, %AI.Provider{kind: :openai}} = AI.get_provider_by_slug("openai")
@@ -63,7 +63,7 @@ defmodule Longx.AITest do
       })
 
       Code.eval_file(@seeds)
-      assert Ash.get!(AI.Model, flash.id).reasoning_levels == ["low", "high", "max"]
+      assert Ash.get!(AI.Model, flash.id).reasoning_levels == ["none", "low", "high", "max"]
     end
   end
 

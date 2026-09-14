@@ -19,7 +19,7 @@ defmodule Longx.AI.PresetsTest do
     assert deepseek.key_env == "DEEPSEEK_API_KEY"
     assert [flash, pro] = deepseek.models
     assert %{upstream_id: "deepseek-flash", context_window: 1_000_000, image: true} = flash
-    assert flash.reasoning_levels == ["low", "high", "max"]
+    assert flash.reasoning_levels == ["none", "low", "high", "max"]
     assert flash.reasoning_effort == "high"
     assert pro.upstream_id == "deepseek-v4-pro"
 
@@ -56,7 +56,7 @@ defmodule Longx.AI.PresetsTest do
       assert Enum.map(models, & &1.slug) == ["deepseek-flash", "deepseek-v4-pro"]
       [flash | _] = models
       assert flash.context_window == 1_000_000
-      assert flash.reasoning_levels == ["low", "high", "max"]
+      assert flash.reasoning_levels == ["none", "low", "high", "max"]
       assert flash.reasoning_effort == "high"
       assert flash.provider_id == provider.id
       # nothing was made the default unless asked
@@ -106,11 +106,22 @@ defmodule Longx.AI.PresetsTest do
 
       {:ok, %{models: [flash, pro]}} = Presets.apply("deepseek")
       assert flash.id == old.id
-      assert flash.reasoning_levels == ["low", "high", "max"]
+      assert flash.reasoning_levels == ["none", "low", "high", "max"]
       assert flash.reasoning_effort == "low"
       # "xhigh" is not a DeepSeek level: the preset's default replaces it
       assert pro.id == free.id
       assert pro.reasoning_effort == "high"
+
+      # a row on an older, smaller set of the preset's levels gains the new ones
+      # (DeepSeek added `none`); a set with a level of its own is left alone
+      AI.update_model!(flash, %{reasoning_levels: ["low", "high", "max"], reasoning_effort: "max"})
+
+      {:ok, %{models: [flash, _]}} = Presets.apply("deepseek")
+      assert flash.reasoning_levels == ["none", "low", "high", "max"]
+      assert flash.reasoning_effort == "max"
+      AI.update_model!(flash, %{reasoning_levels: ["low", "deep"], reasoning_effort: "low"})
+      {:ok, %{models: [flash, _]}} = Presets.apply("deepseek")
+      assert flash.reasoning_levels == ["low", "deep"]
     end
 
     test "models: picks by upstream id, :all takes everything; make_default: names the default" do

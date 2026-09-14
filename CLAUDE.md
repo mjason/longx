@@ -291,7 +291,11 @@ React Native client planned on the same core code.
     `models.json` each publishes for codex, OpenAI's from the catalog embedded in the
     pinned codex binary (`strings` it for `supported_reasoning_levels`). `apply/2` is
     idempotent (provider by slug — facts refreshed, a key never dropped; models by
-    `upstream_id` — a person's edits kept, a row without levels learns the preset's; a
+    `upstream_id` — a person's edits kept, a row without levels learns the preset's, a row
+    on a smaller set of the preset's levels gains the ones added since (DeepSeek's are
+    `none / low / high / max` per its 思考模式 docs, Responses format `reasoning.effort`,
+    `none` = thinking off, default `high`; minimal / medium / xhigh / ultra are aliases the
+    API maps down); a
     slug another provider took gets `<provider>-` prefixed) with `models:` (ids /
     `:recommended` / `:all`) and `make_default:`. Over RPC via the data-less
     `Longx.AI.Preset`: `list_presets` (each with `installed` / `provider_id`, models
