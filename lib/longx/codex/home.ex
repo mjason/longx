@@ -219,7 +219,6 @@ defmodule Longx.Codex.Home do
           required(:slug) => String.t(),
           required(:context_window) => pos_integer | nil,
           optional(:reasoning_levels) => [String.t()],
-          optional(:reasoning_level_labels) => %{optional(String.t()) => String.t()},
           optional(:reasoning_effort) => String.t() | nil
         }
 
@@ -244,7 +243,6 @@ defmodule Longx.Codex.Home do
       slug: slug,
       context_window: model.context_window,
       reasoning_levels: model.reasoning_levels,
-      reasoning_level_labels: model.reasoning_level_labels,
       reasoning_effort: model.reasoning_effort
     }
   end
@@ -276,12 +274,9 @@ defmodule Longx.Codex.Home do
         for %{slug: slug, context_window: window} = model <- models do
           window = window || @fallback_context_window
 
-          labels = Map.get(model, :reasoning_level_labels) || %{}
-
           levels =
             for level <- Map.get(model, :reasoning_levels) || [] do
-              description = Map.get(labels, level) || Map.get(@level_descriptions, level, level)
-              %{"effort" => level, "description" => description}
+              %{"effort" => level, "description" => Map.get(@level_descriptions, level, level)}
             end
 
           %{

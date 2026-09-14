@@ -92,7 +92,7 @@ export function ComposerTrailing() {
           ? {
               efforts: m.reasoningLevels.map((level) => ({
                 id: level,
-                name: m.reasoningLevelLabels?.[level] ?? effortLabel(level),
+                name: effortLabel(level),
               })),
             }
           : {}),
@@ -140,7 +140,7 @@ export function ComposerTrailing() {
               <span className="truncate">{row.slug}</span>
               {shownEffort ? (
                 <span className="text-muted-foreground font-sans">
-                  {row.reasoningLevelLabels?.[shownEffort] ?? effortLabel(shownEffort)}
+                  {effortLabel(shownEffort)}
                 </span>
               ) : null}
             </span>

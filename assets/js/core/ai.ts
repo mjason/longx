@@ -67,7 +67,6 @@ export type ModelRow = {
   contextWindow: number | null;
   default: boolean;
   reasoningLevels: string[];
-  reasoningLevelLabels: Record<string, string>;
   reasoningEffort: string | null;
   reasoningSummary: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens: number | null;
@@ -81,7 +80,6 @@ export type PresetModel = {
   name: string;
   contextWindow: number;
   reasoningLevels: string[];
-  reasoningLevelLabels: Record<string, string>;
   reasoningEffort: string | null;
   image: boolean;
   recommended: boolean;
@@ -152,7 +150,6 @@ const modelRowFields = [
   "contextWindow",
   "default",
   "reasoningLevels",
-  "reasoningLevelLabels",
   "reasoningEffort",
   "reasoningSummary",
   "maxOutputTokens",

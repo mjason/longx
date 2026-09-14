@@ -240,7 +240,7 @@ function PresetDialog({
     capabilities: [
       ...(m.image ? [s.image] : []),
       ...(m.reasoningLevels.length > 0
-        ? [`${m.reasoningLevels.map((l) => m.reasoningLevelLabels?.[l] ?? effortLabel(l)).join(" / ")}`]
+        ? [`${m.reasoningLevels.map(effortLabel).join(" / ")}`]
         : []),
     ],
   }));
@@ -536,7 +536,7 @@ function ModelRowView({
           {model.name} · {model.upstreamId}
           {model.contextWindow ? ` · ${formatWindow(model.contextWindow)}` : ""}
           {model.reasoningLevels.length > 0
-            ? ` · ${model.reasoningLevels.map((l) => model.reasoningLevelLabels[l] ?? effortLabel(l)).join(" / ")}`
+            ? ` · ${model.reasoningLevels.map(effortLabel).join(" / ")}`
             : ""}
           {model.reasoningEffort
             ? ` · ${s.default} ${effortLabel(model.reasoningEffort)}`
@@ -823,10 +823,8 @@ function ModelDialog({
       ? String(model.contextWindow)
       : "128000",
     reasoningLevels: model?.reasoningLevels ?? ([] as string[]),
-    reasoningLevelLabels: model?.reasoningLevelLabels ?? ({} as Record<string, string>),
     reasoningEffort: model?.reasoningEffort ?? "",
     customLevel: "",
-    customLabel: "",
     reasoningSummary: model?.reasoningSummary ?? "__none",
     maxOutputTokens: model?.maxOutputTokens
       ? String(model.maxOutputTokens)
@@ -842,8 +840,6 @@ function ModelDialog({
       upstreamId: form.upstreamId.trim(),
       contextWindow: Number(form.contextWindow) || undefined,
       reasoningLevels: form.reasoningLevels,
-      // only labels of levels still declared
-      reasoningLevelLabels: Object.fromEntries(Object.entries(form.reasoningLevelLabels).filter(([k]) => form.reasoningLevels.includes(k))),
       reasoningEffort: form.reasoningEffort.trim() || null,
       reasoningSummary:
         form.reasoningSummary === "__none"
@@ -918,16 +914,12 @@ function ModelDialog({
           </Field>
           <LevelsEditor
             levels={form.reasoningLevels}
-            labels={form.reasoningLevelLabels}
             custom={form.customLevel}
-            customLabel={form.customLabel}
             onCustom={(v) => set("customLevel", v)}
-            onCustomLabel={(v) => set("customLabel", v)}
-            onChange={(levels, labels) =>
+            onChange={(levels) =>
               setForm((f) => ({
                 ...f,
                 reasoningLevels: levels,
-                reasoningLevelLabels: labels,
                 reasoningEffort:
                   levels.length === 0 || levels.includes(f.reasoningEffort)
                     ? f.reasoningEffort
@@ -1032,26 +1024,17 @@ const KNOWN_LEVELS = [
   "ultra",
 ];
 
-/**
- * The levels a model offers: the known ones as toggles (kept in the known
- * order), any other typed in as a code plus the name it shows under.
- */
+/** The levels a model offers: the known ones as toggles (kept in the known order), any other typed in. */
 function LevelsEditor({
   levels,
-  labels,
   custom,
-  customLabel,
   onCustom,
-  onCustomLabel,
   onChange,
 }: {
   levels: string[];
-  labels: Record<string, string>;
   custom: string;
-  customLabel: string;
   onCustom: (v: string) => void;
-  onCustomLabel: (v: string) => void;
-  onChange: (levels: string[], labels: Record<string, string>) => void;
+  onChange: (levels: string[]) => void;
 }) {
   const order = [
     ...KNOWN_LEVELS,
@@ -1062,20 +1045,12 @@ function LevelsEditor({
       levels.includes(level)
         ? levels.filter((l) => l !== level)
         : order.filter((l) => l === level || levels.includes(l)),
-      labels,
     );
   const addCustom = () => {
     const level = custom.trim();
-    const label = customLabel.trim();
-    if (!level) return;
-    onChange(
-      levels.includes(level) ? levels : [...levels, level],
-      label ? { ...labels, [level]: label } : labels,
-    );
+    if (level && !levels.includes(level)) onChange([...levels, level]);
     onCustom("");
-    onCustomLabel("");
   };
-  const labelOf = (level: string) => labels[level] ?? effortLabel(level);
   return (
     <div className="flex flex-col gap-1.5">
       <Label>{s.reasoningLevels}</Label>
@@ -1088,48 +1063,35 @@ function LevelsEditor({
             variant={levels.includes(level) ? "default" : "outline"}
             className="h-7"
             aria-pressed={levels.includes(level)}
-            aria-label={labelOf(level)}
+            aria-label={effortLabel(level)}
             onClick={() => toggle(level)}
           >
-            {labelOf(level)}
-            {labelOf(level) !== level ? (
+            {effortLabel(level)}
+            {KNOWN_LEVELS.includes(level) ? (
               <span className="ml-1 font-mono text-[10px] opacity-70">
                 {level}
               </span>
             ) : null}
           </Button>
         ))}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        <Input
-          aria-label={s.customLevel}
-          placeholder={s.customLevelPlaceholder}
-          value={custom}
-          onChange={(e) => onCustom(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addCustom();
-            }
-          }}
-          className="h-7 w-36 font-mono text-xs"
-        />
-        <Input
-          aria-label={s.customLevelLabel}
-          placeholder={s.customLevelLabelPlaceholder}
-          value={customLabel}
-          onChange={(e) => onCustomLabel(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addCustom();
-            }
-          }}
-          className="h-7 w-36 text-xs"
-        />
-        <Button type="button" size="sm" variant="outline" className="h-7" onClick={addCustom} disabled={!custom.trim()}>
-          {s.addLevel}
-        </Button>
+        <div className="flex gap-1">
+          <Input
+            aria-label={s.customLevel}
+            placeholder={s.customLevelPlaceholder}
+            value={custom}
+            onChange={(e) => onCustom(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addCustom();
+              }
+            }}
+            className="h-7 w-44 font-mono text-xs"
+          />
+          <Button type="button" size="sm" variant="outline" className="h-7" onClick={addCustom} disabled={!custom.trim()}>
+            {s.addLevel}
+          </Button>
+        </div>
       </div>
       <p className="text-muted-foreground text-xs">{s.reasoningLevelsHint}</p>
     </div>
