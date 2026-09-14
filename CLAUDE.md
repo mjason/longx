@@ -607,8 +607,19 @@ React Native client planned on the same core code.
     `pages/ProjectSettingsPage` (`/p/:slug/settings`: name, description, the thread
     defaults — sandbox, approval, network, dirty_start, model, memory cap — via
     `update_project`; danger zone: clear codex history, archive, each behind a confirm),
-    `pages/SettingsPage` (categories tree on desktop, list → sub page on phones;
-    sections models / tools / sandbox / appearance, only appearance has content so far),
+    `pages/SettingsPage` (categories tree on desktop, list → sub page on phones):
+    `settings/ModelsSection` — every provider as a card (endpoint, kind, key present or
+    not, last error / check) with its models (slug, upstream id, window, effort, the
+    default starred; 检测 = `check_model`, 设为默认, edit / delete in a menu) and dialogs
+    to add / edit a provider (slug derived from the name on create) or a model; the
+    search provider's key below. Deletes confirm; the default model and its provider
+    refuse (`delete_model` / `delete_provider` are guarded actions apart from the plain
+    `destroy`; a provider's delete cascades to its models). `settings/ToolsSection` — the
+    registry's catalogue with a switch per tool (`set_tool_enabled`).
+    `settings/SandboxSection` — the bwrap probe's verdict with 重新检测 (`probe_sandbox`).
+    Hooks in `core/ai.ts` (`useProviders`, `useModelRows`, `useSearchProviders`,
+    `useTools`, `useAiActions`, `useProbeSandbox`; every write invalidates `["ai"]` and
+    the composer's model list). Appearance is the theme,
     `components/CommandPalette` (⌘K, desktop), `sonner` toasts for codex down/ready.
     `routes.tsx` (react-router, browser history; tests use a memory router via
     `ui/test-utils.tsx`, shared `vi.mock` factories in `ui/test-mocks.ts`), `shell/` (Shell,

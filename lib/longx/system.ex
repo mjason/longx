@@ -6,6 +6,7 @@ defmodule Longx.System do
   typescript_rpc do
     resource Longx.System.Status do
       rpc_action :sandbox_status, :sandbox
+      rpc_action :probe_sandbox, :probe_sandbox
       rpc_action :list_directory, :list_directory
       rpc_action :create_directory, :create_directory
     end

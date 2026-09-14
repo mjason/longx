@@ -64,14 +64,30 @@ defmodule Longx.System.Status do
                     checked_at: [type: :utc_datetime_usec, allow_nil?: false]
                   ]
 
-      run fn _input, _ ->
-        report = Longx.Codex.Sandbox.report()
+      run fn _input, _ -> {:ok, sandbox_report(Longx.Codex.Sandbox.report())} end
+    end
 
-        {:ok,
-         %{status: report.status, reason: reason(report.reason), checked_at: report.checked_at}}
+    # the same report after running the probe again (the settings page's "重新检测")
+    action :probe_sandbox, :map do
+      constraints fields: [
+                    status: [
+                      type: :atom,
+                      allow_nil?: false,
+                      constraints: [one_of: [:ok, :unavailable]]
+                    ],
+                    reason: [type: :string],
+                    checked_at: [type: :utc_datetime_usec, allow_nil?: false]
+                  ]
+
+      run fn _input, _ ->
+        Longx.Codex.Sandbox.probe()
+        {:ok, sandbox_report(Longx.Codex.Sandbox.report())}
       end
     end
   end
+
+  defp sandbox_report(report),
+    do: %{status: report.status, reason: reason(report.reason), checked_at: report.checked_at}
 
   defp reason(nil), do: nil
   defp reason({kind, message}), do: "#{kind}: #{message}"

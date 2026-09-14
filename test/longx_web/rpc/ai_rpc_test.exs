@@ -1,0 +1,215 @@
+defmodule LongxWeb.AiRpcTest do
+  @moduledoc """
+  The settings page's half of the RPC surface: providers and their models,
+  the search provider, the tool switches, the sandbox probe.
+  """
+  use LongxWeb.ConnCase, async: false
+
+  alias Longx.AI
+
+  setup do
+    # seeds put DeepSeek + deepseek-flash in place; start from nothing
+    Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
+    :ok
+  end
+
+  defp rpc(conn, action, params) do
+    conn
+    |> put_req_header("content-type", "application/json")
+    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
+    |> json_response(200)
+  end
+
+  test "providers: create (key never read back, only its presence), update, list, delete", %{
+    conn: conn
+  } do
+    assert %{
+             "success" => true,
+             "data" => %{"id" => id, "kind" => "openai_compatible", "hasApiKey" => true}
+           } =
+             rpc(conn, "create_provider", %{
+               "fields" => ["id", "kind", "hasApiKey", "slug"],
+               "input" => %{
+                 "name" => "GLM",
+                 "slug" => "glm",
+                 "baseUrl" => "https://open.bigmodel.cn/api/paas/v4",
+                 "apiKey" => "sk-secret"
+               }
+             })
+
+    # an update without the key keeps it; the key itself is never a field
+    assert %{"success" => true, "data" => %{"hasApiKey" => true, "requestTimeoutMs" => 30000}} =
+             rpc(conn, "update_provider", %{
+               "fields" => ["hasApiKey", "requestTimeoutMs"],
+               "identity" => id,
+               "input" => %{"requestTimeoutMs" => 30000}
+             })
+
+    assert %{"success" => false} =
+             rpc(conn, "list_providers", %{"fields" => ["id", "apiKey"]})
+
+    assert %{"success" => true, "data" => [%{"id" => ^id, "name" => "GLM"}]} =
+             rpc(conn, "list_providers", %{"fields" => ["id", "name", "hasApiKey", "lastError"]})
+
+    assert %{"success" => true} = rpc(conn, "delete_provider", %{"identity" => id})
+    assert %{"success" => true, "data" => []} = rpc(conn, "list_providers", %{"fields" => ["id"]})
+  end
+
+  test "models: create under a provider, edit, make default, delete — never the default; a provider goes with its models unless one is the default",
+       %{conn: conn} do
+    %{"success" => true, "data" => %{"id" => provider}} =
+      rpc(conn, "create_provider", %{
+        "fields" => ["id"],
+        "input" => %{
+          "name" => "DS",
+          "slug" => "ds",
+          "baseUrl" => "https://api.deepseek.com/v1",
+          "apiKey" => "k"
+        }
+      })
+
+    assert %{
+             "success" => true,
+             "data" => %{"id" => m1, "slug" => "deepseek-flash", "default" => false}
+           } =
+             rpc(conn, "create_model", %{
+               "fields" => ["id", "slug", "default"],
+               "input" => %{
+                 "name" => "Flash",
+                 "upstreamId" => "deepseek-flash",
+                 "providerId" => provider,
+                 "contextWindow" => 1_000_000
+               }
+             })
+
+    %{"success" => true, "data" => %{"id" => m2}} =
+      rpc(conn, "create_model", %{
+        "fields" => ["id"],
+        "input" => %{"name" => "Pro", "upstreamId" => "deepseek-pro", "providerId" => provider}
+      })
+
+    assert %{"success" => true, "data" => %{"reasoningEffort" => "high"}} =
+             rpc(conn, "update_model", %{
+               "fields" => ["reasoningEffort"],
+               "identity" => m2,
+               "input" => %{"reasoningEffort" => "high"}
+             })
+
+    assert %{"success" => true, "data" => %{"default" => true}} =
+             rpc(conn, "make_default_model", %{"fields" => ["default"], "identity" => m1})
+
+    assert %{"success" => true, "data" => models} =
+             rpc(conn, "list_models", %{
+               "fields" => ["id", "default", %{"provider" => ["id", "name"]}]
+             })
+
+    assert Enum.find(models, &(&1["id"] == m1))["default"]
+    assert Enum.find(models, &(&1["id"] == m1))["provider"]["name"] == "DS"
+
+    # the default model cannot go: pick another first
+    assert %{"success" => false, "errors" => [%{"message" => message}]} =
+             rpc(conn, "delete_model", %{"identity" => m1})
+
+    assert message =~ "默认"
+    assert %{"success" => true} = rpc(conn, "delete_model", %{"identity" => m2})
+
+    # nor a provider while one of its models is the default
+    assert %{"success" => false} = rpc(conn, "delete_provider", %{"identity" => provider})
+
+    %{"success" => true, "data" => %{"id" => other}} =
+      rpc(conn, "create_provider", %{
+        "fields" => ["id"],
+        "input" => %{
+          "name" => "O",
+          "slug" => "o",
+          "baseUrl" => "https://api.openai.com/v1",
+          "apiKey" => "k"
+        }
+      })
+
+    %{"success" => true, "data" => %{"id" => m3}} =
+      rpc(conn, "create_model", %{
+        "fields" => ["id"],
+        "input" => %{"name" => "G", "upstreamId" => "gpt-5", "providerId" => other}
+      })
+
+    %{"success" => true} = rpc(conn, "make_default_model", %{"identity" => m3})
+    # now the first provider can go, its remaining models with it
+    assert %{"success" => true} = rpc(conn, "delete_provider", %{"identity" => provider})
+
+    assert %{"success" => true, "data" => [%{"id" => ^m3}]} =
+             rpc(conn, "list_models", %{"fields" => ["id"]})
+  end
+
+  test "check_model answers with ok / latency or the error, never a failure", %{conn: conn} do
+    %{"success" => true, "data" => %{"id" => provider}} =
+      rpc(conn, "create_provider", %{
+        "fields" => ["id"],
+        "input" => %{
+          "name" => "Dead",
+          "slug" => "dead",
+          "baseUrl" => "http://127.0.0.1:1/v1",
+          "apiKey" => "k"
+        }
+      })
+
+    %{"success" => true, "data" => %{"id" => model}} =
+      rpc(conn, "create_model", %{
+        "fields" => ["id"],
+        "input" => %{"name" => "X", "upstreamId" => "x", "providerId" => provider}
+      })
+
+    assert %{"success" => true, "data" => %{"ok" => false, "error" => error}} =
+             rpc(conn, "check_model", %{
+               "fields" => ["ok", "latencyMs", "error"],
+               "input" => %{"id" => model}
+             })
+
+    assert is_binary(error)
+
+    assert %{"success" => true, "data" => [%{"lastError" => last, "lastCheckedAt" => at}]} =
+             rpc(conn, "list_providers", %{"fields" => ["lastError", "lastCheckedAt"]})
+
+    assert is_binary(last) and is_binary(at)
+  end
+
+  test "the search provider: listed with its key's presence, editable", %{conn: conn} do
+    assert %{"success" => true, "data" => [%{"slug" => "tavily", "id" => id} | _]} =
+             rpc(conn, "list_search_providers", %{
+               "fields" => ["id", "slug", "name", "hasApiKey", "default"]
+             })
+
+    assert %{"success" => true, "data" => %{"hasApiKey" => true}} =
+             rpc(conn, "update_search_provider", %{
+               "fields" => ["hasApiKey"],
+               "identity" => id,
+               "input" => %{"apiKey" => "tvly-x"}
+             })
+  end
+
+  test "tools: the catalogue with its switches", %{conn: conn} do
+    assert %{"success" => true, "data" => tools} =
+             rpc(conn, "list_tools", %{
+               "fields" => ["id", "qualifiedName", "description", "enabled"]
+             })
+
+    echo = Enum.find(tools, &(&1["qualifiedName"] == "builtin.echo"))
+    assert is_binary(echo["description"])
+
+    assert %{"success" => true, "data" => %{"enabled" => true}} =
+             rpc(conn, "set_tool_enabled", %{
+               "fields" => ["enabled"],
+               "identity" => echo["id"],
+               "input" => %{"enabled" => true}
+             })
+  end
+
+  test "sandbox: the cached report, and a fresh probe on request", %{conn: conn} do
+    assert %{"success" => true, "data" => %{"status" => status, "checkedAt" => at}} =
+             rpc(conn, "probe_sandbox", %{"fields" => ["status", "reason", "checkedAt"]})
+
+    assert status in ["ok", "unavailable"]
+    assert is_binary(at)
+  end
+end

@@ -32,6 +32,23 @@ export function rpcMock() {
     codexInfo: vi.fn(async () => ok({ home: "/x", exists: false, bytes: 0, files: {}, worker: null, stale: [] })),
     listThreads: vi.fn(async () => ok([thread(1)])),
     listModels: vi.fn(async () => ok([model(1, { slug: "deepseek-flash", default: true }), model(2, { slug: "glm-5" })])),
+    listProviders: vi.fn(async () => ok([provider(1), provider(2)])),
+    createProvider: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok(provider(3, input))),
+    updateProvider: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok(provider(1, input))),
+    deleteProvider: vi.fn(async () => ok(null)),
+    createModel: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok(model(3, input as never))),
+    updateModel: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok(model(2, input as never))),
+    deleteModel: vi.fn(async () => ok(null)),
+    makeDefaultModel: vi.fn(async () => ok(model(2, { default: true }))),
+    checkModel: vi.fn(async () => ok({ ok: true, latencyMs: 321, error: null })),
+    listSearchProviders: vi.fn(async () => ok([{ id: "s1", name: "Tavily", slug: "tavily", kind: "tavily", baseUrl: null, hasApiKey: false, default: true }])),
+    updateSearchProvider: vi.fn(async () => ok({ id: "s1", hasApiKey: true })),
+    listTools: vi.fn(async () => ok([
+      { id: "t1", namespace: "builtin", name: "echo", qualifiedName: "builtin.echo", description: "Echoes its input back.", inputSchema: {}, enabled: false },
+      { id: "t2", namespace: "builtin", name: "browser_fetch", qualifiedName: "builtin.browser_fetch", description: "Reads a rendered page.", inputSchema: {}, enabled: true },
+    ])),
+    setToolEnabled: vi.fn(async ({ input, identity }: { input: { enabled: boolean }; identity: string }) => ok({ id: identity, enabled: input.enabled })),
+    probeSandbox: vi.fn(async () => ok({ status: "unavailable", reason: "bwrap: setting up uid map: Permission denied", checkedAt: "2026-09-14T00:00:00Z" })),
     sendMessage: vi.fn(async () => ok({ id: "turn-row" })),
     compactThread: vi.fn(async () => ok(null)),
     reviewThread: vi.fn(async () => ok({ id: "turn-review" })),
@@ -89,9 +106,16 @@ export function rpcMock() {
   };
 }
 
-export const model = (n: number, extra: Partial<{ slug: string; default: boolean; name: string }> = {}) => ({
-  id: `m${n}`, name: extra.name ?? `Model ${n}`, slug: extra.slug ?? `model-${n}`, default: extra.default ?? n === 1,
-  reasoningEffort: n === 1 ? "medium" : null, provider: { name: "Prov" },
+export const model = (n: number, extra: Partial<{ slug: string; default: boolean; name: string; upstreamId: string; providerId: string; contextWindow: number | null; reasoningEffort: string | null }> = {}) => ({
+  id: `m${n}`, name: extra.name ?? `Model ${n}`, slug: extra.slug ?? `model-${n}`, upstreamId: extra.upstreamId ?? `upstream-${n}`, default: extra.default ?? n === 1,
+  contextWindow: extra.contextWindow ?? 128_000, reasoningEffort: extra.reasoningEffort ?? (n === 1 ? "medium" : null), reasoningSummary: null, maxOutputTokens: null,
+  providerId: extra.providerId ?? (n === 2 ? "p2" : "p1"), provider: { id: extra.providerId ?? (n === 2 ? "p2" : "p1"), name: n === 2 ? "GLM" : "Prov" },
+});
+
+export const provider = (n: number, extra: Record<string, unknown> = {}) => ({
+  id: `p${n}`, name: n === 2 ? "GLM" : "Prov", slug: n === 2 ? "glm" : `prov-${n}`, baseUrl: n === 2 ? "https://open.bigmodel.cn/api/paas/v4" : "https://api.deepseek.com/v1",
+  kind: "openai_compatible", hasApiKey: n === 1, supportsHostedWebSearch: false, requestTimeoutMs: 600000, maxConcurrentRequests: null,
+  lastCheckedAt: null, lastError: n === 2 ? "401 Authentication Fails" : null, lastErrorAt: null, ...extra,
 });
 
 /**

@@ -16,6 +16,7 @@ defmodule Longx.AI do
       rpc_action :list_providers, :read
       rpc_action :create_provider, :create
       rpc_action :update_provider, :update
+      rpc_action :delete_provider, :delete
     end
 
     resource Model do
@@ -24,6 +25,12 @@ defmodule Longx.AI do
       rpc_action :update_model, :update
       rpc_action :make_default_model, :make_default
       rpc_action :check_model, :check_model
+      rpc_action :delete_model, :delete
+    end
+
+    resource SearchProvider do
+      rpc_action :list_search_providers, :read
+      rpc_action :update_search_provider, :update
     end
 
     resource Longx.AI.Tool do
