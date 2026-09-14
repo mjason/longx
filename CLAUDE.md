@@ -297,9 +297,10 @@ React Native client planned on the same core code.
     `:recommended` / `:all`) and `make_default:`. Over RPC via the data-less
     `Longx.AI.Preset`: `list_presets` (each with `installed` / `provider_id`, models
     flagged `installed`; the model maps are untyped → camelCased there) and
-    `apply_preset`. Seeds (`priv/repo/seeds.exs`, run by `mix ash.setup`/`mix test`)
-    apply the DeepSeek preset (key from `DEEPSEEK_API_KEY`, `deepseek-flash` the default
-    when nothing is) and the OpenAI provider alone (`OPENAI_API_KEY`). Columns added
+    `apply_preset`. Seeds (`priv/repo/seeds.exs` → `Longx.AI.Seeds`, run by
+    `mix ash.setup`/`mix test`, never by a release) apply the DeepSeek preset without a
+    key (`deepseek-flash` the default when nothing is) and the OpenAI provider alone —
+    keys are entered in Settings, not read from the environment. Columns added
     after rows existed get a backfill migration (`kind` for api.openai.com rows, `slug` from
     `upstream_id`) — a new NOT NULL column needs a `default:` in the migration (SQLite).
   - **What codex is told about a model** comes from the row, per thread:
@@ -895,11 +896,15 @@ their symlinks (a plain copy turns git's 145 builtin links into 700 MB) and drop
 home and the two secrets live there — `secret_key_base` and `cloak_key` are generated on
 first boot into 0600 files unless given as env vars; `PORT` (7788), `PHX_HOST`; the
 release serves plain http itself (`server: true`, no `force_ssl` — TLS is a proxy's job).
-A release seeds itself at boot after migrating (`Longx.AI.Seeds.run/0`, a `Task` child
-right after the migrator, only when `RELEASE_NAME` is set; mix runs the same through
-`priv/repo/seeds.exs`), so `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` / `TAVILY_API_KEY` in the
-service's environment land in the rows. `rel/env.sh.eex` sets `ELIXIR_ERL_OPTIONS=+fnu`:
-file names stay UTF-8 in a bare environment. `.github/workflows/ci.yml` runs the precommit set on every push / PR (bundled git and
+A release seeds nothing — providers and keys are created in Settings (presets); the dev /
+test database gets `Longx.AI.Seeds.run/0` through `priv/repo/seeds.exs` (DeepSeek preset
+without a key as the default model, the OpenAI provider, a Tavily row, the tools — no
+API keys from the environment; the `:live` tests read `DEEPSEEK_API_KEY` themselves).
+`install.sh` (repo root, `curl … | sh`) installs or upgrades in `~/.longx` (`app` /
+`data` / `backups` / `downloads`) as a `systemd --user` service, verifying the sha256,
+backing `data` up before a swap, `--rollback` puts `app.old` back; `LONGX_TARBALL=` installs
+a local build (how it is tested). `rel/env.sh.eex` sets `ELIXIR_ERL_OPTIONS=+fnu`: file
+names stay UTF-8 in a bare environment. `.github/workflows/ci.yml` runs the precommit set on every push / PR (bundled git and
 codex fetched and cached; `:integration` stays excluded, and so is `:host_sandbox` — the
 bwrap probe test that only a real host passes, a runner cannot set up the loopback); `release.yml` builds on a
 `v*` tag for linux x86_64 and arm64, each natively on its own runner
