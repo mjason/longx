@@ -97,6 +97,7 @@ defmodule Longx.Projects do
     resource Longx.Projects.Thread do
       define :create_thread, action: :create
       define :touch_thread, action: :touch
+      define :mark_thread_extracted, action: :mark_extracted
       define :rename_thread, action: :rename
       define :archive_thread, action: :archive
       define :get_thread_by_codex_id, action: :by_codex_id, args: [:codex_thread_id]

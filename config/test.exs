@@ -34,7 +34,7 @@ config :longx, Longx.Mailer, adapter: Swoosh.Adapters.Test
 config :swoosh, :api_client, false
 
 # Longx's global memory directory (Longx.Memory)
-config :longx, Longx.Memory, dir: Path.expand("../data/memory_test", __DIR__)
+config :longx, Longx.Memory, dir: Path.expand("../data/memory_test", __DIR__), tick: nil
 
 config :longx, Longx.Codex.Home, dir: Path.expand("../data/codex_home_test", __DIR__)
 

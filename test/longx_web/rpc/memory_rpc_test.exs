@@ -51,6 +51,22 @@ defmodule LongxWeb.MemoryRpcTest do
 
     assert [%{"file" => "MEMORY.md", "line" => 3}] = hits
 
+    assert %{
+             "success" => true,
+             "data" => %{"autoExtract" => true, "pending" => 1, "lastRunAt" => nil}
+           } =
+             rpc(conn, "memory_status", %{
+               "fields" => ["autoExtract", "pending", "lastRunAt", "lastError"]
+             })
+
+    assert %{"success" => true} =
+             rpc(conn, "memory_set_auto_extract", %{"input" => %{"enabled" => false}})
+
+    assert %{"success" => true, "data" => %{"autoExtract" => false}} =
+             rpc(conn, "memory_status", %{"fields" => ["autoExtract"]})
+
+    assert %{"success" => true} = rpc(conn, "memory_run", %{})
+
     assert %{"success" => true} = rpc(conn, "memory_delete_note", %{"input" => %{"file" => file}})
     assert %{"success" => true, "data" => []} = rpc(conn, "memory_notes", %{"fields" => ["file"]})
 

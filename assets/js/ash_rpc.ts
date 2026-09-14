@@ -5756,6 +5756,66 @@ export async function validateMemoryNotes(
 }
 
 
+export type InferMemoryRunResult = {};
+
+export type MemoryRunResult = | { success: true; data: InferMemoryRunResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function memoryRun(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<MemoryRunResult> {
+  const payload = {
+    action: "memory_run",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeActionRpcRequest<MemoryRunResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateMemoryRun(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "memory_run",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type MemorySearchInput = {
   query: string;
 };
@@ -5821,6 +5881,140 @@ export async function validateMemorySearch(
     action: "memory_search",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type MemorySetAutoExtractInput = {
+  enabled: boolean;
+};
+
+export type InferMemorySetAutoExtractResult = {};
+
+export type MemorySetAutoExtractResult = | { success: true; data: InferMemorySetAutoExtractResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function memorySetAutoExtract(
+  config: {
+  tenant?: string;
+  input: MemorySetAutoExtractInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<MemorySetAutoExtractResult> {
+  const payload = {
+    action: "memory_set_auto_extract",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<MemorySetAutoExtractResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateMemorySetAutoExtract(
+  config: {
+  tenant?: string;
+  input: MemorySetAutoExtractInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "memory_set_auto_extract",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type MemoryStatusFields = UnifiedFieldSelection<{autoExtract: boolean, lastRunAt: string | null, lastError: string | null, pending: number, __type: "TypedMap", __primitiveFields: "autoExtract" | "lastRunAt" | "lastError" | "pending"}>[];
+
+export type InferMemoryStatusResult<
+  Fields extends MemoryStatusFields | undefined,
+> = InferResult<{autoExtract: boolean, lastRunAt: string | null, lastError: string | null, pending: number, __type: "TypedMap", __primitiveFields: "autoExtract" | "lastRunAt" | "lastError" | "pending"}, Fields>;
+
+export type MemoryStatusResult<Fields extends MemoryStatusFields | undefined = undefined> = | { success: true; data: InferMemoryStatusResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function memoryStatus<Fields extends MemoryStatusFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<MemoryStatusResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "memory_status",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<MemoryStatusResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateMemoryStatus(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "memory_status",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
   };
 
   return executeValidationRpcRequest<ValidationResult>(

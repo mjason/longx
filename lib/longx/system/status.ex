@@ -119,6 +119,42 @@ defmodule Longx.System.Status do
       end
     end
 
+    # the pipeline's switch and last run
+    action :memory_status, :map do
+      constraints fields: [
+                    auto_extract: [type: :boolean, allow_nil?: false],
+                    last_run_at: [type: :string],
+                    last_error: [type: :string],
+                    pending: [type: :integer, allow_nil?: false]
+                  ]
+
+      run fn _input, _ ->
+        st = Longx.Memory.status()
+        {:ok, %{st | last_run_at: st.last_run_at && DateTime.to_iso8601(st.last_run_at)}}
+      end
+    end
+
+    action :memory_set_auto_extract do
+      argument :enabled, :boolean, allow_nil?: false
+
+      run fn input, _ ->
+        Longx.Memory.set_auto_extract(Longx.Memory.dir(), input.arguments.enabled)
+      end
+    end
+
+    # one pass of the pipeline, now, in the background (it talks to the model
+    # for a while); the page polls memory_status for the outcome
+    action :memory_run do
+      run fn _input, _ ->
+        {:ok, _} =
+          Task.Supervisor.start_child(Longx.Codex.TaskSupervisor, fn ->
+            Longx.Memory.Worker.run_now()
+          end)
+
+        :ok
+      end
+    end
+
     # Longx.Codex.Sandbox.report/0 for the UI's banner
     action :sandbox, :map do
       constraints fields: [

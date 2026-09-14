@@ -32,8 +32,11 @@ defmodule Longx.Memory do
           at: DateTime.t() | nil,
           project: String.t() | nil,
           thread: String.t() | nil,
+          source: String.t() | nil,
           text: String.t()
         }
+
+  @state_file "state.json"
 
   @doc "The memory directory (`config :longx, Longx.Memory, dir:`)."
   @spec dir() :: Path.t()
@@ -103,7 +106,9 @@ defmodule Longx.Memory do
         [
           {"at", DateTime.to_iso8601(DateTime.truncate(now, :second))},
           {"project", Keyword.get(opts, :project)},
-          {"thread", Keyword.get(opts, :thread)}
+          {"thread", Keyword.get(opts, :thread)},
+          # "auto" when the pipeline distilled it, nothing when a person or the model asked
+          {"source", Keyword.get(opts, :source)}
         ]
         |> Enum.reject(fn {_, v} -> is_nil(v) end)
         |> Enum.map_join("", fn {k, v} -> "#{k}: #{v}\n" end)
@@ -152,6 +157,7 @@ defmodule Longx.Memory do
         ),
       project: front["project"],
       thread: front["thread"],
+      source: front["source"],
       text: String.trim(body)
     }
   end
@@ -223,9 +229,10 @@ defmodule Longx.Memory do
   def instructions(dir \\ dir()) do
     :ok = ensure(dir)
 
+    # the notes not folded into MEMORY.md yet — a folded one is in the index
     recent =
       dir
-      |> notes()
+      |> pending_notes()
       |> Enum.take(@recent_notes)
       |> Enum.map_join("\n", fn n ->
         origin = Enum.reject([n.project, n.thread], &is_nil/1) |> Enum.join(" / ")
@@ -244,6 +251,82 @@ defmodule Longx.Memory do
       |> Enum.join("\n")
 
     clip(body, @instructions_cap)
+  end
+
+  ## The state file: what was folded, the switch, the last run
+
+  @doc "Notes not yet folded into `MEMORY.md` (newest first)."
+  @spec pending_notes(Path.t()) :: [note]
+  def pending_notes(dir \\ dir()) do
+    folded = MapSet.new(state(dir)["consolidated"] || [])
+    dir |> notes() |> Enum.reject(&MapSet.member?(folded, &1.file))
+  end
+
+  @doc "Records that these notes are in `MEMORY.md` now."
+  @spec mark_consolidated(Path.t(), [String.t()]) :: :ok
+  def mark_consolidated(dir, files) do
+    update_state(dir, fn st ->
+      Map.update(st, "consolidated", files, &Enum.uniq(&1 ++ files))
+    end)
+  end
+
+  @doc "The switch and the last run, for the page."
+  @spec status(Path.t()) :: %{
+          auto_extract: boolean,
+          last_run_at: DateTime.t() | nil,
+          last_error: String.t() | nil,
+          pending: non_neg_integer
+        }
+  def status(dir \\ dir()) do
+    st = state(dir)
+
+    %{
+      auto_extract: Map.get(st, "auto_extract", auto_extract_default()),
+      last_run_at:
+        with(
+          at when is_binary(at) <- st["last_run_at"],
+          {:ok, dt, _} <- DateTime.from_iso8601(at),
+          do: dt
+        ),
+      last_error: st["last_error"],
+      pending: length(pending_notes(dir))
+    }
+  end
+
+  @doc "Whether idle threads are distilled into notes on their own."
+  @spec set_auto_extract(Path.t(), boolean) :: :ok
+  def set_auto_extract(dir, on?) when is_boolean(on?),
+    do: update_state(dir, &Map.put(&1, "auto_extract", on?))
+
+  @doc false
+  def record_run(dir, error) do
+    update_state(dir, fn st ->
+      st
+      |> Map.put("last_run_at", DateTime.to_iso8601(DateTime.utc_now()))
+      |> Map.put("last_error", error)
+    end)
+  end
+
+  defp auto_extract_default,
+    do: :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:auto_extract, true)
+
+  defp state(dir) do
+    case File.read(Path.join(dir, @state_file)) do
+      {:ok, raw} ->
+        case Jason.decode(raw) do
+          {:ok, map} when is_map(map) -> map
+          _ -> %{}
+        end
+
+      {:error, _} ->
+        %{}
+    end
+  end
+
+  defp update_state(dir, fun) do
+    File.mkdir_p!(dir)
+    File.write!(Path.join(dir, @state_file), Jason.encode!(fun.(state(dir)), pretty: true))
+    :ok
   end
 
   defp clip(text, max) when byte_size(text) <= max, do: text

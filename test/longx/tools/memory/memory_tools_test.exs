@@ -76,7 +76,7 @@ defmodule Longx.Tools.MemoryToolsTest do
     ctx: ctx,
     dir: dir
   } do
-    assert {:ok, _} = Note.call(%{"note" => "plain"}, %Context{ctx | thread_id: "thr_unknown"})
+    assert {:ok, _} = Note.call(%{"note" => "plain"}, %{ctx | thread_id: "thr_unknown"})
     assert [%{project: nil, thread: "thr_unknown"}] = Longx.Memory.notes(dir)
   end
 end

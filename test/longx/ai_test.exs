@@ -537,6 +537,65 @@ defmodule Longx.AITest do
     end
   end
 
+  describe "complete/3 (one non-streaming answer from the default model — the memory pipeline's model call)" do
+    setup do
+      bypass = Bypass.open()
+
+      provider =
+        create_provider!(%{base_url: "http://localhost:#{bypass.port}/v1", api_key: "sk-ok"})
+
+      model = create_model!(provider, %{upstream_id: "real-model"})
+      {:ok, _} = AI.make_default_model(model)
+      %{bypass: bypass}
+    end
+
+    test "sends instructions + input, hands back the output text", %{bypass: bypass} do
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        {:ok, raw, up} = Plug.Conn.read_body(up)
+        send(test_pid, {:upstream, Jason.decode!(raw)})
+
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            id: "resp_1",
+            object: "response",
+            status: "completed",
+            output: [
+              %{type: "reasoning", summary: []},
+              %{
+                type: "message",
+                role: "assistant",
+                content: [%{type: "output_text", text: "- tabs"}]
+              }
+            ]
+          })
+        )
+      end)
+
+      assert {:ok, "- tabs"} = AI.complete("merge these", "note one", max_output_tokens: 500)
+      assert_receive {:upstream, body}
+      assert body["model"] == "real-model"
+      assert body["instructions"] == "merge these"
+      assert body["input"] == "note one"
+      assert body["stream"] == false
+      assert body["max_output_tokens"] == 500
+    end
+
+    test "an upstream error is an error, never a raise", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(401, ~s({"error":{"message":"Authentication Fails"}}))
+      end)
+
+      assert {:error, {:status, 401, "Authentication Fails"}} = AI.complete("i", "x")
+    end
+  end
+
   describe "check_model/1 (does the provider answer with this key?)" do
     setup do
       bypass = Bypass.open()

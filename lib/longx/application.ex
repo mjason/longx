@@ -41,6 +41,8 @@ defmodule Longx.Application do
       Longx.Browser.Pool,
       # retires idle codex processes that got old or fat; publishes their numbers
       Longx.Codex.Recycler,
+      # idle threads → notes → MEMORY.md, on a timer (Longx.Memory)
+      Longx.Memory.Worker,
       # is codex's command sandbox going to work here? (result cached, shown in the UI)
       Supervisor.child_spec({Task, &Longx.Codex.Sandbox.probe/0},
         id: :sandbox_probe,

@@ -14,6 +14,9 @@ defmodule Longx.System do
       rpc_action :memory_notes, :memory_notes
       rpc_action :memory_search, :memory_search
       rpc_action :memory_delete_note, :memory_delete_note
+      rpc_action :memory_status, :memory_status
+      rpc_action :memory_set_auto_extract, :memory_set_auto_extract
+      rpc_action :memory_run, :memory_run
     end
   end
 
