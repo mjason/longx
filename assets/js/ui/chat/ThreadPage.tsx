@@ -1,5 +1,8 @@
 import { Thread, type ThreadComponents } from "@/ui/components/assistant-ui/elements/thread.aui";
+import type { ProjectContext } from "@/ui/frame/ProjectWindow";
+import { Link, useOutletContext } from "react-router";
 import { Alert, AlertDescription } from "@/ui/components/ui/alert";
+import { Button } from "@/ui/components/ui/button";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 import { FileMentions, FileMentionText } from "./FileMentions";
@@ -32,6 +35,7 @@ const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, Composer
  */
 export function ThreadPage() {
   const chat = useChat();
+  const ctx = useOutletContext<ProjectContext>();
 
   if (chat.missing) {
     return (
@@ -39,6 +43,9 @@ export function ThreadPage() {
         <Alert variant="destructive">
           <AlertDescription>{t.threadNotFound}</AlertDescription>
         </Alert>
+        <Button asChild variant="outline" className="mt-3">
+          <Link to={`/p/${ctx.slug}`}>{t.newThread}</Link>
+        </Button>
       </div>
     );
   }

@@ -41,7 +41,8 @@ export type CodexRuntimeOptions = {
   defaultModelId?: string | null;
   /** the thread row id from the route; undefined = new chat (the first message creates one) */
   threadId: string | undefined;
-  onOpenThread: (threadId: string) => void;
+  /** navigate to a thread; null = the project's new chat (after the thread on screen is gone) */
+  onOpenThread: (threadId: string | null) => void;
   onDirtyTree?: (changes: DirtyChange[]) => Promise<DirtyDecision>;
 };
 
@@ -193,10 +194,12 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
           archive: async (id) => {
             unwrap(await archiveThread({ identity: id }));
             await invalidate();
+            if (id === threadId) onOpenThread(null);
           },
           delete: async (id) => {
             unwrap(await deleteThread({ input: { threadId: id } }));
             await invalidate();
+            if (id === threadId) onOpenThread(null);
           },
         },
       }),

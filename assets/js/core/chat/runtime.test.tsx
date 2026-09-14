@@ -7,7 +7,7 @@ import { useCodexRuntime } from "./runtime";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { listThreads } from "@/ash_rpc";
+import { archiveThread, deleteThread, listThreads } from "@/ash_rpc";
 
 const defaults = { sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true, multiAgent: true } as const;
 
@@ -45,5 +45,26 @@ describe("useCodexRuntime", () => {
     await act(async () => {});
     expect(listSubscriber).not.toHaveBeenCalled();
     unsubscribe();
+  });
+
+  test("deleting or archiving the thread on screen leaves it for a new chat; another thread does not move the page", async () => {
+    vi.mocked(listThreads).mockResolvedValue(ok([thread(1), thread(2)]) as never);
+    const onOpenThread = vi.fn();
+    const { result } = renderHook(() => useCodexRuntime({ projectId: "id-1", defaults, threadId: "t1", onOpenThread }), { wrapper });
+    await waitFor(() => expect(result.current.thread).toBeDefined());
+    const list = result.current.runtime.threads;
+    await waitFor(() => expect(list.getState().threadIds.length + list.getState().archivedThreadIds.length).toBe(2));
+
+    await act(async () => { await list.getItemById("t2").delete(); });
+    expect(deleteThread).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t2" } }));
+    expect(onOpenThread).not.toHaveBeenCalled();
+
+    await act(async () => { await list.getItemById("t1").archive(); });
+    expect(archiveThread).toHaveBeenCalledWith(expect.objectContaining({ identity: "t1" }));
+    expect(onOpenThread).toHaveBeenCalledWith(null);
+
+    onOpenThread.mockClear();
+    await act(async () => { await list.getItemById("t1").delete(); });
+    expect(onOpenThread).toHaveBeenCalledWith(null);
   });
 });

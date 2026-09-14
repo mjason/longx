@@ -912,4 +912,12 @@ describe("ThreadPage", () => {
       within(screen.getByTestId("chat-area")).getByTestId("tool-command"),
     ).toBeInTheDocument();
   });
+
+  test("a thread that no longer exists (a stale link) says so and offers a new chat", async () => {
+    const user = userEvent.setup();
+    const { router } = renderAt("/p/app-1/t/gone");
+    await screen.findByText("找不到这个会话");
+    await user.click(screen.getByRole("link", { name: "新会话" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1"));
+  });
 });
