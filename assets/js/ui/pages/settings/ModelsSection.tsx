@@ -410,19 +410,21 @@ function SearchProviderCard() {
           {row.hasApiKey ? <Badge variant="secondary">{s.apiKeySet}</Badge> : <Badge variant="destructive">{s.apiKeyMissing}</Badge>}
         </div>
         <form
-          className="mt-3 flex flex-wrap items-end gap-2"
+          className="mt-3 flex flex-col gap-1.5"
           onSubmit={(e) => {
             e.preventDefault();
             if (!key) return;
             actions.setSearchKey.mutate({ id: row.id, apiKey: key }, { onSuccess: () => (toast.success(s.saved), setKey("")), onError: fail });
           }}
         >
-          <Field id="sp-key" label={s.apiKey} hint={row.hasApiKey ? s.keepKey : undefined} className="min-w-0 flex-1">
-            <Input id="sp-key" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} className="font-mono" />
-          </Field>
-          <Button type="submit" disabled={!key || actions.setSearchKey.isPending}>
-            {t.save}
-          </Button>
+          <Label htmlFor="sp-key">{s.apiKey}</Label>
+          <div className="flex gap-2">
+            <Input id="sp-key" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} className="min-w-0 flex-1 font-mono" />
+            <Button type="submit" disabled={!key || actions.setSearchKey.isPending}>
+              {t.save}
+            </Button>
+          </div>
+          {row.hasApiKey ? <p className="text-muted-foreground text-xs">{s.keepKey}</p> : null}
         </form>
       </div>
     </section>
