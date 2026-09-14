@@ -234,7 +234,9 @@ defmodule FakeAppServer do
         # not part of codex's protocol: what this fake was asked for
         "startParams" => Map.get(entry, :params, %{}),
         "resumeParams" => Map.get(entry, :resume_params),
-        "lastTurnParams" => Map.get(entry, :last_turn)
+        "lastTurnParams" => Map.get(entry, :last_turn),
+        "lastReview" => Map.get(entry, :last_review),
+        "compacted" => Map.get(entry, :compacted, 0)
       }
     })
 
@@ -262,6 +264,51 @@ defmodule FakeAppServer do
 
     state = %{state | next: state.next + 1, threads: threads}
     run_turn(text, id, thread_id, turn_id, state)
+  end
+
+  # a review is a turn of the thread that says what it found
+  defp handle(
+         %{
+           "id" => id,
+           "method" => "review/start",
+           "params" => %{"threadId" => thread_id} = params
+         },
+         state
+       ) do
+    turn_id = "turn_#{state.prefix}_#{state.next}"
+
+    threads =
+      Map.update(
+        state.threads,
+        thread_id,
+        %{turns: [], last_review: params},
+        &Map.put(&1, :last_review, params)
+      )
+
+    state = %{state | next: state.next + 1, threads: threads}
+    run_turn("say review: looks fine", id, thread_id, turn_id, state)
+  end
+
+  defp handle(
+         %{
+           "id" => id,
+           "method" => "thread/compact/start",
+           "params" => %{"threadId" => thread_id}
+         },
+         state
+       ) do
+    reply(id, %{})
+    notify("thread/compacted", %{"threadId" => thread_id})
+
+    threads =
+      Map.update(
+        state.threads,
+        thread_id,
+        %{turns: [], compacted: 1},
+        &Map.update(&1, :compacted, 1, fn n -> n + 1 end)
+      )
+
+    %{state | threads: threads}
   end
 
   defp handle(

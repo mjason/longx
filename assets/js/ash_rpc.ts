@@ -4046,6 +4046,74 @@ export async function validateArchiveThread(
 }
 
 
+export type CompactThreadInput = {
+  threadId: UUID;
+};
+
+export type InferCompactThreadResult = {};
+
+export type CompactThreadResult = | { success: true; data: InferCompactThreadResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function compactThread(
+  config: {
+  tenant?: string;
+  input: CompactThreadInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<CompactThreadResult> {
+  const payload = {
+    action: "compact_thread",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<CompactThreadResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateCompactThread(
+  config: {
+  tenant?: string;
+  input: CompactThreadInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "compact_thread",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type DeleteThreadInput = {
   threadId: UUID;
 };
@@ -4408,9 +4476,86 @@ export async function validateRespond(
 }
 
 
+export type ReviewThreadInput = {
+  threadId: UUID;
+  target: "base_branch" | "commit" | "custom" | "uncommitted";
+  value?: string | null;
+};
+
+export type ReviewThreadFields = UnifiedFieldSelection<TurnResourceSchema>[];
+
+export type InferReviewThreadResult<
+  Fields extends ReviewThreadFields | undefined,
+> = InferResult<TurnResourceSchema, Fields>;
+
+export type ReviewThreadResult<Fields extends ReviewThreadFields | undefined = undefined> = | { success: true; data: InferReviewThreadResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function reviewThread<Fields extends ReviewThreadFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: ReviewThreadInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ReviewThreadResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "review_thread",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ReviewThreadResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateReviewThread(
+  config: {
+  tenant?: string;
+  input: ReviewThreadInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "review_thread",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type SendMessageInput = {
   threadId: UUID;
   text: string;
+  images?: Array<string> | null;
   model?: string | null;
   dirty?: "commit" | "ignore" | null;
   sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;

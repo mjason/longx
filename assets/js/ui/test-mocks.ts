@@ -33,6 +33,8 @@ export function rpcMock() {
     listThreads: vi.fn(async () => ok([thread(1)])),
     listModels: vi.fn(async () => ok([model(1, { slug: "deepseek-flash", default: true }), model(2, { slug: "glm-5" })])),
     sendMessage: vi.fn(async () => ok({ id: "turn-row" })),
+    compactThread: vi.fn(async () => ok(null)),
+    reviewThread: vi.fn(async () => ok({ id: "turn-review" })),
     interruptTurn: vi.fn(async () => ok(null)),
     respond: vi.fn(async () => ok(null)),
     answerRequest: vi.fn(async () => ok(null)),

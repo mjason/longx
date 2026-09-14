@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ComposerAddAttachment,
   ComposerAttachments,
   UserMessageAttachments,
 } from "@/ui/components/assistant-ui/elements/attachment.aui";
@@ -33,6 +34,7 @@ import {
   type AssistantState,
   BranchPickerPrimitive,
   ComposerPrimitive,
+  unstable_useComposerInputHistory,
   ErrorPrimitive,
   groupPartByType,
   MessagePrimitive,
@@ -247,6 +249,8 @@ const ThreadWelcome: FC = () => {
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   const { ComposerPopovers } = useContext(ThreadComponentsContext);
+  // ↑ / ↓ on an empty draft walk the messages sent before (a terminal's habit)
+  const history = unstable_useComposerInputHistory();
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
@@ -264,6 +268,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
             autoFocus={autoFocus}
             enterKeyHint="send"
             aria-label={t.composerPlaceholder}
+            {...history}
           />
           <ComposerAction />
         </div>
@@ -277,20 +282,25 @@ const ComposerAction: FC = () => {
   const { ComposerLeading, ComposerTrailing } = useContext(ThreadComponentsContext);
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-2">{ComposerLeading ? <ComposerLeading /> : null}</div>
+      <div className="flex min-w-0 items-center gap-2">
+        <AuiIf condition={(s) => s.thread.capabilities.attachments}>
+          <ComposerAddAttachment />
+        </AuiIf>
+        {ComposerLeading ? <ComposerLeading /> : null}
+      </div>
       <div className="flex items-center gap-1.5">
         {ComposerTrailing ? <ComposerTrailing /> : null}
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>
             <ComposerPrimitive.Dictate asChild>
               <TooltipIconButton
-                tooltip="Voice input"
+                tooltip={t.dictate}
                 side="bottom"
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="aui-composer-dictate text-muted-foreground hover:text-foreground size-7 rounded-full"
-                aria-label="Start voice input"
+                aria-label={t.dictate}
               >
                 <MicIcon className="aui-composer-dictate-icon size-4" />
               </TooltipIconButton>
@@ -299,13 +309,13 @@ const ComposerAction: FC = () => {
           <AuiIf condition={(s) => s.composer.dictation != null}>
             <ComposerPrimitive.StopDictation asChild>
               <TooltipIconButton
-                tooltip="Stop dictation"
+                tooltip={t.stopDictation}
                 side="bottom"
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="aui-composer-stop-dictation text-destructive size-7 rounded-full"
-                aria-label="Stop voice input"
+                aria-label={t.stopDictation}
               >
                 <SquareIcon className="aui-composer-stop-dictation-icon size-3.5 animate-pulse fill-current" />
               </TooltipIconButton>

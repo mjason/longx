@@ -232,6 +232,23 @@ defmodule Longx.ShimTest do
       assert_receive {:DOWN, ^ref, :process, ^shim, :normal}, 2_000
     end
 
+    test "await_exit with close_streams: false keeps the output for a reader that comes later" do
+      {:ok, shim} = Shim.start_link(["echo", "kept"])
+      assert {:ok, 0} = Shim.await_exit(shim, 5_000, close_streams: false)
+      # the child is gone, its output is still to be had
+      assert {:ok, "kept\n"} = Shim.read(shim)
+      assert :eof = Shim.read(shim)
+      ref = Process.monitor(shim)
+      assert :eof = Shim.read_stderr(shim)
+      assert_receive {:DOWN, ^ref, :process, ^shim, :normal}, 2_000
+    end
+
+    test "run/2 never loses a fast command's output, however the scheduler orders things" do
+      for _ <- 1..200 do
+        assert {:ok, %{status: 0, stdout: "fast\n"}} = Shim.run(["echo", "fast"])
+      end
+    end
+
     test "exit status is delivered even when it arrives before output is read" do
       {:ok, shim} = Shim.start_link(["echo", "fast"])
       Process.sleep(100)

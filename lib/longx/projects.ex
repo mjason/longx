@@ -36,6 +36,8 @@ defmodule Longx.Projects do
       rpc_action :start_thread, :start_thread
       rpc_action :send_message, :send_message
       rpc_action :interrupt_turn, :interrupt_turn
+      rpc_action :compact_thread, :compact_thread
+      rpc_action :review_thread, :review_thread
       rpc_action :respond, :respond
       rpc_action :answer_request, :answer_request
       rpc_action :rename_thread, :rename
@@ -244,7 +246,8 @@ defmodule Longx.Projects do
            Longx.Codex.Thread.send(
              thread.codex_thread_id,
              text,
-             [{:conn, conn} | turn_opts] ++ mode_turn_opts(mode, thread)
+             [{:conn, conn}, {:images, Keyword.get(opts, :images, [])} | turn_opts] ++
+               mode_turn_opts(mode, thread)
            ),
          {:ok, turn} <-
            create_turn(%{
@@ -268,6 +271,66 @@ defmodule Longx.Projects do
       broadcast_changed(thread.project_id)
       {:ok, turn}
     end
+  end
+
+  @doc """
+  Asks codex to compact the thread's context (the `/compact` command) —
+  never while a turn runs, so a compaction cannot land mid-reply.
+  """
+  @spec compact_thread(Thread.t(), keyword) :: :ok | {:error, :turn_in_progress | term}
+  def compact_thread(%Thread{id: id}, opts \\ []) do
+    thread = Ash.get!(Thread, id, load: :project)
+
+    with :ok <- ensure_usable(thread),
+         :ok <- refuse_while_running(thread),
+         {:ok, conn} <- thread_connection(thread, opts),
+         do: Longx.Codex.Thread.compact(thread.codex_thread_id, conn: conn)
+  end
+
+  @doc """
+  Starts codex's code review (the `/review` command) as a turn of the
+  thread. Bookmarked like any turn, but nothing is committed first: with
+  `dirty_start: :commit` a review of the uncommitted changes would
+  otherwise have nothing left to look at.
+  """
+  @spec review_thread(Thread.t(), Longx.Codex.Thread.review_target(), keyword) ::
+          {:ok, Turn.t()} | {:error, term}
+  def review_thread(%Thread{id: id}, target, opts \\ []) do
+    thread = Ash.get!(Thread, id, load: :project)
+
+    with :ok <- ensure_usable(thread),
+         :ok <- refuse_while_running(thread),
+         {:ok, conn} <- thread_connection(thread, opts),
+         # bookmarked before codex is asked: its first events follow the reply at once
+         bookmark = bookmark_now(thread.cwd),
+         {:ok, codex_turn_id} <-
+           Longx.Codex.Thread.review(thread.codex_thread_id, target, conn: conn),
+         {:ok, turn} <-
+           create_turn(%{
+             codex_turn_id: codex_turn_id,
+             thread_id: thread.id,
+             user_text: review_text(target),
+             model_slug: thread.model_slug,
+             commit_before: bookmark.commit,
+             dirty_start: bookmark.dirty?,
+             started_at: DateTime.utc_now()
+           }) do
+      touch_thread!(thread, %{status: :active, last_activity_at: DateTime.utc_now()})
+      broadcast_changed(thread.project_id)
+      {:ok, turn}
+    end
+  end
+
+  defp review_text(:uncommitted), do: "/review"
+  defp review_text({:commit, sha}), do: "/review #{String.slice(sha, 0, 7)}"
+  defp review_text({:base_branch, branch}), do: "/review #{branch}"
+  defp review_text({:custom, text}), do: "/review #{text}"
+
+  # where the tree stands, without touching it
+  defp bookmark_now(dir) do
+    if Git.repository?(dir),
+      do: %{commit: head_or_nil(dir), dirty?: not Git.status(dir).clean?},
+      else: %{commit: nil, dirty?: false}
   end
 
   # the access-mode fields this call changes (only those that differ)

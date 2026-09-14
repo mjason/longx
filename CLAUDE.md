@@ -14,7 +14,12 @@ React Native client planned on the same core code.
   stdin/stdout, a separate stderr stream, `close_stdin` independent of stdout, and clean
   termination: `kill/2` SIGTERMs the child's whole process group then SIGKILLs after a grace
   period; if the owner process or the BEAM dies the shim sees its stdin close and does the
-  same. Protocol is defined twice — `native/shim/proto.go` and `lib/longx/shim/proto.ex` —
+  same. Output is pull-based (the shim sends a chunk per `read` credit), so `await_exit`
+  closes what nobody read to let the shim go — except with `close_streams: false`, which
+  `run/2` uses: its drain tasks may not have asked for anything yet when a fast child is
+  already gone, and closing then threw the output away (a silent empty stdout under
+  load, or a reader's call hitting a stopped server). Protocol is defined twice —
+  `native/shim/proto.go` and `lib/longx/shim/proto.ex` —
   keep them in sync and bump the version in both when it changes (now 3). The binary is
   built by `Mix.Tasks.Compile.Shim` into `priv/bin/` (gitignored) on `mix compile`; **Go must
   be on PATH**. `mix precommit` also runs `gofmt`, `go vet`, `go test` in `native/shim`;
@@ -106,7 +111,19 @@ React Native client planned on the same core code.
     **Access mode per turn**: `send_message/3` takes `sandbox:` / `approval_policy:` /
     `network_access:`; what differs from the thread row goes on `turn/start` as
     `sandboxPolicy` / `approvalPolicy` (codex keeps them for the turns after) and is
-    recorded on the `Thread` (`network_access` is a thread attribute too). `delete_thread/1`
+    recorded on the `Thread` (`network_access` is a thread attribute too). `images:` (data
+    urls, the composer's attachments) go on `turn/start` as `image` inputs after the text —
+    the gateway passes `input_image` parts through untouched (`detail: high` from codex;
+    verified end to end against DeepSeek Flash's Responses API, which reads screenshots —
+    a solid-colour synthetic test image it answers about unreliably, so test with a
+    real one). **Slash commands of the composer**: `compact_thread/2` (`thread/compact/start`,
+    refused while a turn runs; codex marks the fold with a `contextCompaction` item) and
+    `review_thread/3` (`review/start` with `delivery: inline` — the review is a turn of the
+    thread: a Turn row with `user_text` "/review …", bookmarked like any turn but **never
+    committed first**, since a review of the uncommitted changes needs them uncommitted;
+    targets `:uncommitted` | `{:commit, sha}` | `{:base_branch, name}` | `{:custom, text}`).
+    Over RPC: `images` on `send_message`, `compact_thread`, `review_thread` (`target` +
+    `value`). `delete_thread/1`
     removes the row and its turns (not while a turn runs; codex's own copy stays — the
     project-level wipe is `clear_codex_history/1`).
   - **Opening a thread** (`LongxWeb.ThreadChannel` join → `Projects.host_thread/1`): a
@@ -485,13 +502,14 @@ React Native client planned on the same core code.
     phoenix_vite was evaluated and rejected as immature — reference only). `<LongxWeb.Vite.assets />`
     in the layouts renders, in dev, the HMR client + raw entry from the Vite dev server
     (`config :longx, LongxWeb.Vite, dev_server:`; `LONGX_DEV_HOST=<lan-ip>` for phone
-    testing — Vite listens on `0.0.0.0:5173` and the phone loads scripts from it directly),
+    testing — Vite listens on `0.0.0.0:7789` (7788 + 1, so it never collides with another
+    project's Vite on 5173; `strictPort`) and the phone loads scripts from it directly),
     — first `js/dev/react-refresh.ts` (the React Fast Refresh preamble a non-Vite page must
     load itself, else "@vitejs/plugin-react can't detect preamble"), then `@vite/client`,
     then the entry — otherwise the hashed files from `priv/static/assets/.vite/manifest.json` (entry css,
     script, `modulepreload` for imported chunks; cached in `persistent_term`). The dev
     watcher runs `npm run dev` **through `Longx.Shim`** so Vite dies with the BEAM (a plain
-    npm watcher leaves node on 5173). `mix assets.build` = compile + `ash_typescript.codegen`
+    npm watcher leaves node on the port). `mix assets.build` = compile + `ash_typescript.codegen`
     + `npm run build` → `priv/static/assets/` (gitignored); no `phx.digest`. PWA bits are
     committed static files: `priv/static/manifest.webmanifest`, `icons/` (`static_paths/0`).
 - `assets/` — Vite + TypeScript + React 19, tests with vitest/testing-library
@@ -616,8 +634,14 @@ React Native client planned on the same core code.
     **renderers** (catalog section "Renderers"): `markdown-text` with `shiki-highlighter`
     for fenced code (tokenises once the part settles; `github-light/dark-default` themes)
     and `mermaid-diagram` for `mermaid` fences (skeleton while streaming, zoom dialog);
-    `reasoning.aui` streams the thinking through `streaming-text` (newest words tinted, a
-    caret) while the part runs and settles to markdown after; the `generative-ui` renderer
+    **reasoning is the element's step-panel design** (`reasoning-panel`, the catalog's
+    "Static" variant): `ui/chat/ReasoningSteps` fills the `ReasoningGroup` slot of
+    `thread.aui` and turns the group's reasoning parts into titled steps down a timeline
+    (`core/chat/reasoningSteps.ts`: OpenAI-style bold headings open a step, raw thinking
+    makes each paragraph a step titled by its first sentence — CJK stops or `.!?` before
+    a space, never inside brackets), a shimmering "思考中" while it streams (open) that
+    settles to "思考过程" (folded; the reader's toggle sticks). `reasoning.aui` /
+    `streaming-text` stay installed but unused by the thread; the `generative-ui` renderer
     is not wired — nothing produces `generative-ui` parts (codex emits none, OpenUI was
     dropped) —
     `thread-list.aui` (the threads tool is this element over `adapters.threadList`),
@@ -634,7 +658,29 @@ React Native client planned on the same core code.
     `ComposerTrailing` (the `context-display` ring — codex's last-turn token usage
     against the `modelContextWindow` it reports, `contextUsage(view)` — and the per-turn
     model with its reasoning effort) are slots our `thread.aui` copy adds, as are
-    `ComposerPopovers` and `UserText`: **`@` file mentions** — `FileMentions` is the
+    `ComposerPopovers` and `UserText`. **The composer has the catalog's Composer
+    element's full set** (https://www.assistant-ui.com/elements/composer, all wired
+    through the runtime, nothing hand-rolled): **attachments** — the runtime's
+    `adapters.attachments` is `CompositeAttachmentAdapter([SimpleImage, SimpleText])`
+    (built once in `useCodexRuntime`, like everything the adapter is made of), so the
+    `+` button (`ComposerAddAttachment` from `attachment.aui`), paste and drop onto the
+    bar stage files as tiles; on send `adapter.ts`'s `inputOf` puts images on the RPC as
+    `images` (data urls) and appends text files to the text; a sent image comes back in
+    codex's `userMessage` content as `image` and `messages.ts` renders it as an image
+    part (`UserImagePart`); **dictation** — `adapters.dictation` is
+    `WebSpeechDictationAdapter` where the browser has speech recognition (the mic in the
+    rail; absent otherwise) — **switched off for now** by `DICTATION = false` in
+    `core/chat/runtime.ts` (no adapter → no capability → no button), flip it to bring
+    the mic back; **`/` commands** — `ui/chat/SlashCommands` over
+    `unstable_useSlashCommandAdapter` and the same `composer-trigger-popover` element
+    (`action` behaviour, text cleared on pick): `/new`, `/review` (RPC `review_thread`,
+    uncommitted changes), `/compact` (RPC `compact_thread`), `/init` (sends
+    `t.initPrompt` through `aui.thread.append`), `/git` `/files` `/history` (tool
+    windows), `/settings`; the popover's list is capped and scrolls (the composer sits
+    mid-screen on a new chat, with little room above — smaller cap on phones);
+    **input history** — `unstable_useComposerInputHistory` spread on the Input: ↑ on an
+    empty draft recalls what was sent. jsdom needs `URL.createObjectURL` for the tiles
+    (`vitest.setup.ts`). **`@` file mentions** — `FileMentions` is the
     registry's `composer-trigger-popover` over `unstable_useLiveCompletionAdapter` →
     RPC `search_files` (`Projects.search_files/3`: codex's own `fuzzyFileSearch` index under
     the project root, `.git` dropped, 20 best); `core/chat/mentions.ts`'s `fileFormatter`

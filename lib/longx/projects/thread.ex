@@ -63,6 +63,8 @@ defmodule Longx.Projects.Thread do
       constraints instance_of: Longx.Projects.Turn
       argument :thread_id, :uuid, allow_nil?: false
       argument :text, :string, allow_nil?: false
+      # the composer's image attachments, as data: urls
+      argument :images, {:array, :string}
       argument :model, :string
       # what to do with a dirty tree when the project's policy is :ask
       argument :dirty, :atom, constraints: [one_of: [:commit, :ignore]]
@@ -76,13 +78,60 @@ defmodule Longx.Projects.Thread do
       run fn input, _ ->
         opts =
           input.arguments
-          |> Map.take([:model, :dirty, :sandbox, :approval_policy, :network_access])
+          |> Map.take([:images, :model, :dirty, :sandbox, :approval_policy, :network_access])
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
         with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
           case Longx.Projects.send_message(thread, input.arguments.text, opts) do
             {:error, {:dirty_tree, changes}} ->
               {:error, Longx.Projects.Errors.DirtyTree.exception(changes: changes)}
+
+            other ->
+              other
+          end
+        end
+      end
+    end
+
+    # /compact: codex folds the context (never while a turn runs)
+    action :compact_thread do
+      argument :thread_id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
+          case Longx.Projects.compact_thread(thread) do
+            :ok ->
+              :ok
+
+            {:error, :turn_in_progress} ->
+              {:error, field: :thread_id, message: "a turn is running"}
+
+            {:error, other} ->
+              {:error, other}
+          end
+        end
+      end
+    end
+
+    # /review: codex reviews the uncommitted changes, a commit, or the diff
+    # against a branch, as a turn of this thread
+    action :review_thread, :struct do
+      constraints instance_of: Longx.Projects.Turn
+      argument :thread_id, :uuid, allow_nil?: false
+
+      argument :target, :atom,
+        allow_nil?: false,
+        constraints: [one_of: [:uncommitted, :commit, :base_branch, :custom]]
+
+      # the sha, branch name or instructions the target needs
+      argument :value, :string
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             {:ok, target} <- review_target(input.arguments) do
+          case Longx.Projects.review_thread(thread, target) do
+            {:error, :turn_in_progress} ->
+              {:error, field: :thread_id, message: "a turn is running"}
 
             other ->
               other
@@ -296,4 +345,11 @@ defmodule Longx.Projects.Thread do
   identities do
     identity :unique_codex_thread_id, [:codex_thread_id]
   end
+
+  defp review_target(%{target: :uncommitted}), do: {:ok, :uncommitted}
+
+  defp review_target(%{target: kind, value: value}) when is_binary(value) and value != "",
+    do: {:ok, {kind, value}}
+
+  defp review_target(_), do: {:error, field: :value, message: "is required for this target"}
 end

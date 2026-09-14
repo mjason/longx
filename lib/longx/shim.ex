@@ -67,6 +67,8 @@ defmodule Longx.Shim do
       exit_status: nil,
       exit_waiters: [],
       awaited?: false,
+      # await_exit closes unread streams so the shim can go, unless told to keep them
+      close_on_exit?: true,
       shim_exited?: false,
       stats_waiters: []
     ]
@@ -138,7 +140,9 @@ defmodule Longx.Shim do
       if input, do: :ok = write(shim, input)
       :ok = close_stdin(shim)
 
-      case await_exit(shim, timeout) do
+      # the drains read to eof on their own; a fast child may be gone before
+      # their first read is even requested, so the streams are left to them
+      case await_exit(shim, timeout, close_streams: false) do
         {:ok, status} ->
           {:ok,
            %{
@@ -230,12 +234,15 @@ defmodule Longx.Shim do
   @doc """
   Waits for the child to exit and returns its status (`128 + signal` when
   killed by a signal). Closes any stream not yet at eof so the shim can exit,
-  after which the server stops with reason `:normal`.
+  after which the server stops with reason `:normal` — unless
+  `close_streams: false`, for a caller still reading: the output stays
+  until read to eof, and the server stops once every stream is done.
   """
-  @spec await_exit(GenServer.server(), timeout) ::
+  @spec await_exit(GenServer.server(), timeout, close_streams: boolean) ::
           {:ok, integer} | {:error, :timeout | :shim_exited}
-  def await_exit(shim, timeout \\ 5_000) do
-    GenServer.call(shim, {:await_exit, timeout}, :infinity)
+  def await_exit(shim, timeout \\ 5_000, opts \\ []) do
+    close? = Keyword.get(opts, :close_streams, true)
+    GenServer.call(shim, {:await_exit, timeout, close?}, :infinity)
   end
 
   ## Server
@@ -335,8 +342,8 @@ defmodule Longx.Shim do
     {:reply, :ok, state}
   end
 
-  def handle_call({:await_exit, timeout}, from, %State{} = state) do
-    state = %State{state | awaited?: true}
+  def handle_call({:await_exit, timeout, close?}, from, %State{} = state) do
+    state = %State{state | awaited?: true, close_on_exit?: close?}
 
     case state.exit_status do
       nil when state.shim_exited? ->
@@ -351,7 +358,7 @@ defmodule Longx.Shim do
         {:noreply, %State{state | exit_waiters: [{from, timer} | state.exit_waiters]}}
 
       status ->
-        state = close_remaining_streams(state)
+        state = if close?, do: close_remaining_streams(state), else: state
         maybe_stop({:reply, {:ok, status}, state})
     end
   end
@@ -439,7 +446,7 @@ defmodule Longx.Shim do
 
   defp handle_event({:exit_status, status}, %State{} = state) do
     state = %State{state | exit_status: status} |> reply_exit_waiters({:ok, status})
-    if state.awaited?, do: close_remaining_streams(state), else: state
+    if state.awaited? and state.close_on_exit?, do: close_remaining_streams(state), else: state
   end
 
   defp handle_event(event, state) do

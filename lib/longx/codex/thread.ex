@@ -156,6 +156,44 @@ defmodule Longx.Codex.Thread do
   defp put_if(map, _key, nil), do: map
   defp put_if(map, key, value), do: Map.put(map, key, value)
 
+  @doc "Asks codex to compact the thread's context (`thread/compact/start`)."
+  @spec compact(String.t(), keyword) :: :ok | {:error, term}
+  def compact(thread_id, opts \\ []) do
+    with {:ok, conn} <- conn(thread_id, opts),
+         {:ok, _} <- Connection.request(conn, "thread/compact/start", %{"threadId" => thread_id}),
+         do: :ok
+  end
+
+  @typedoc "What a review looks at."
+  @type review_target ::
+          :uncommitted
+          | {:commit, String.t()}
+          | {:base_branch, String.t()}
+          | {:custom, String.t()}
+
+  @doc """
+  Starts codex's code review (`review/start`) as a turn of the thread
+  (inline delivery), answering with the turn id like `send/3`.
+  """
+  @spec review(String.t(), review_target, keyword) :: {:ok, String.t()} | {:error, term}
+  def review(thread_id, target, opts \\ []) do
+    with {:ok, conn} <- conn(thread_id, opts),
+         {:ok, %{"turn" => %{"id" => turn_id}}} <-
+           Connection.request(conn, "review/start", review_params(thread_id, target)) do
+      {:ok, turn_id}
+    end
+  end
+
+  @spec review_params(String.t(), review_target) :: map
+  def review_params(thread_id, target) do
+    %{"threadId" => thread_id, "target" => review_target(target), "delivery" => "inline"}
+  end
+
+  defp review_target(:uncommitted), do: %{"type" => "uncommittedChanges"}
+  defp review_target({:commit, sha}), do: %{"type" => "commit", "sha" => sha}
+  defp review_target({:base_branch, branch}), do: %{"type" => "baseBranch", "branch" => branch}
+  defp review_target({:custom, text}), do: %{"type" => "custom", "instructions" => text}
+
   @spec interrupt(String.t(), String.t(), keyword) :: :ok | {:error, term}
   def interrupt(thread_id, turn_id, opts \\ []) do
     with {:ok, conn} <- conn(thread_id, opts),
@@ -227,7 +265,10 @@ defmodule Longx.Codex.Thread do
   @doc false
   @spec turn_params(String.t(), String.t(), keyword) :: map
   def turn_params(thread_id, text, opts) do
-    %{"threadId" => thread_id, "input" => [%{"type" => "text", "text" => text}]}
+    # images (data: or http(s): urls) go as their own inputs after the text
+    images = for url <- Keyword.get(opts, :images, []), do: %{"type" => "image", "url" => url}
+
+    %{"threadId" => thread_id, "input" => [%{"type" => "text", "text" => text} | images]}
     |> put_model(Keyword.get(opts, :model))
     |> put_if("effort", Keyword.get(opts, :effort))
     |> put_if("summary", opts |> Keyword.get(:summary) |> wire_atom())

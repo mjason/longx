@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
@@ -255,7 +255,61 @@ describe("ThreadPage", () => {
     r.unmount();
   });
 
-  test("renderers: fenced code highlights with shiki, a mermaid fence is a diagram, reasoning streams word by word then settles to markdown", async () => {
+  test("/ in the composer lists the commands: /review starts a review, /compact compacts, /init sends the prompt, /git opens the tool", async () => {
+    const { compactThread, reviewThread } = await import("@/ash_rpc");
+    const user = userEvent.setup();
+    await open();
+    const box = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(box, "/rev");
+    await user.click(await screen.findByRole("option", { name: /review/ }));
+    await waitFor(() => expect(reviewThread).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", target: "uncommitted" } })));
+    expect(box).toHaveValue("");
+
+    await user.type(box, "/comp");
+    await user.click(await screen.findByRole("option", { name: /compact/ }));
+    await waitFor(() => expect(compactThread).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1" } })));
+
+    await user.type(box, "/init");
+    await user.click(await screen.findByRole("option", { name: /init/ }));
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: expect.stringContaining("AGENTS.md") }) })));
+
+    await user.type(box, "/git");
+    await user.click(await screen.findByRole("option", { name: /git/ }));
+    expect(within(await screen.findByTestId("tool-panel")).getByTestId("git-tool")).toBeInTheDocument();
+  });
+
+  test("an image can be attached (the button, the picker) and goes with the message; a sent image shows in the transcript", async () => {
+    const user = userEvent.setup();
+    await open();
+    // the button opens the native picker (nothing a test can drive); a drop stages the file the same way
+    expect(screen.getByRole("button", { name: "添加附件" })).toBeEnabled();
+    const file = new File([new Uint8Array([137, 80, 78, 71])], "shot.png", { type: "image/png" });
+    const shell = document.querySelector("[data-slot=aui_composer-shell]")!;
+    fireEvent.drop(shell, { dataTransfer: { files: [file], types: ["Files"] } });
+    await screen.findByRole("button", { name: /image attachment/i });
+    const box = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(box, "what is this{Enter}");
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ text: "what is this", images: [expect.stringMatching(/^data:image\/png;base64,/)] }) })));
+
+    act(() => channel.deliver("codex", { seq: 4, method: "item/completed", params: { threadId: "thr_1", turnId: "turn_2", item: { id: "u2", type: "userMessage", content: [{ type: "text", text: "what is this" }, { type: "image", url: "data:image/png;base64,iVBORw0KGgo=" }] } } }));
+    await waitFor(() => expect(document.querySelector("img[src^='data:image/png']")).not.toBeNull());
+  });
+
+  test("voice input is switched off for now: no mic in the rail", async () => {
+    await open();
+    expect(screen.queryByRole("button", { name: "语音输入" })).toBeNull();
+  });
+
+  test("↑ on an empty composer recalls the last message sent", async () => {
+    const user = userEvent.setup();
+    await open();
+    const box = screen.getByRole("textbox", { name: "随心输入" });
+    await user.click(box);
+    await user.keyboard("{ArrowUp}");
+    expect(box).toHaveValue("run the tests");
+  });
+
+  test("renderers: fenced code highlights with shiki, a mermaid fence is a diagram, reasoning is the step panel — open while it streams, folded after", async () => {
     const r = renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
     act(() =>
@@ -264,21 +318,24 @@ describe("ThreadPage", () => {
         turn: { id: "turn_1", status: "inProgress" },
         items: [
           { id: "u1", type: "userMessage", turnId: "turn_1", content: [{ type: "text", text: "draw it" }] },
-          { id: "r1", type: "reasoning", turnId: "turn_1", summary: ["first the schema then the diagram"], content: [] },
+          { id: "r1", type: "reasoning", turnId: "turn_1", summary: ["**Planning**\n\nfirst the schema then the diagram"], content: [] },
         ],
       }),
     );
     await screen.findByText("draw it");
-    // the turn is running and reasoning is what streams: word by word (tinted, caret)
-    expect(document.querySelector("[data-slot=streaming-text]")).toHaveTextContent("schema");
+    // the turn is running and reasoning is what streams: the panel is open, its steps titled, the trigger shimmering
+    const panel = document.querySelector("[data-slot=reasoning-panel]")!;
+    expect(panel).toHaveAttribute("data-state", "open");
+    expect(within(panel as HTMLElement).getByText("Planning")).toBeInTheDocument();
+    expect(within(panel as HTMLElement).getByText("first the schema then the diagram")).toBeInTheDocument();
     act(() => {
       channel.deliver("codex", { seq: 4, method: "item/completed", params: { turnId: "turn_1", item: { id: "a1", type: "agentMessage", text: "```elixir\ndefmodule A do\nend\n```\n\n```mermaid\ngraph TD; A-->B;\n```\n" } } });
       channel.deliver("codex", { seq: 5, method: "turn/completed", params: { turn: { id: "turn_1", status: "completed" } } });
     });
-    await waitFor(() => expect(document.querySelector("[data-slot=streaming-text]")).toBeNull());
-    // settled, the disclosure folds; opened again it is markdown
-    await userEvent.click(screen.getByRole("button", { name: /思考/ }));
-    expect(await screen.findByText("first the schema then the diagram")).toBeInTheDocument();
+    // settled, the panel folds under its resting label; a click opens it again
+    await waitFor(() => expect(document.querySelector("[data-slot=reasoning-panel]")).toHaveAttribute("data-state", "closed"));
+    await userEvent.click(screen.getByRole("button", { name: /思考过程/ }));
+    await waitFor(() => expect(document.querySelector("[data-slot=reasoning-panel]")).toHaveAttribute("data-state", "open"));
     // code goes through the shiki highlighter (plain until tokenised), mermaid through the diagram element
     await waitFor(() => expect(document.querySelector(".aui-shiki-base")).toHaveTextContent("defmodule A do"));
     await waitFor(() => expect(document.querySelector("[data-slot^=mermaid-]")).not.toBeNull());

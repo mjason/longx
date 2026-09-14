@@ -166,6 +166,31 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"threadId" => thread_id, "codexTurnId" => codex_turn_id}
                })
 
+      # the composer's attachments: images ride along as data urls
+      assert %{"success" => true, "data" => %{"userText" => "say look"}} =
+               rpc(conn, "send_message", %{
+                 "fields" => ["userText"],
+                 "input" => %{
+                   "threadId" => thread_id,
+                   "text" => "say look",
+                   "images" => ["data:image/png;base64,iVBORw0KGgo="]
+                 }
+               })
+
+      thread_idle(conn, project["id"], thread_id)
+
+      # the slash commands: /compact and /review
+      assert %{"success" => true} =
+               rpc(conn, "compact_thread", %{"input" => %{"threadId" => thread_id}})
+
+      assert %{"success" => true, "data" => %{"userText" => "/review", "status" => "in_progress"}} =
+               rpc(conn, "review_thread", %{
+                 "fields" => ["userText", "status"],
+                 "input" => %{"threadId" => thread_id, "target" => "uncommitted"}
+               })
+
+      thread_idle(conn, project["id"], thread_id)
+
       assert %{"success" => true, "data" => [%{"id" => ^thread_id}]} =
                rpc(conn, "list_threads", %{
                  "fields" => ["id"],
@@ -200,9 +225,10 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"projectId" => project["id"]}
                })
 
-      assert %{"success" => true, "data" => [%{"id" => ^turn_id}]} =
+      # the first message, the one with the image, the review
+      assert %{"success" => true, "data" => [%{"id" => ^turn_id}, _, %{"userText" => "/review"}]} =
                rpc(conn, "list_turns", %{
-                 "fields" => ["id"],
+                 "fields" => ["id", "userText"],
                  "input" => %{"threadId" => thread_id}
                })
 

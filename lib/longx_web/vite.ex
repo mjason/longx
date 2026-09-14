@@ -4,7 +4,7 @@ defmodule LongxWeb.Vite do
   dependency): the SPA shell renders `<.assets />`, which emits
 
     * in dev — the HMR client and the raw entry from the Vite dev server
-      (`config :longx, LongxWeb.Vite, dev_server: "http://host:5173"`;
+      (`config :longx, LongxWeb.Vite, dev_server: "http://host:7789"`;
       `LONGX_DEV_HOST` makes it reachable from a phone on the LAN),
     * otherwise — the hashed files from Vite's `manifest.json`
       (`npm run build` → `priv/static/assets/`), with the entry's CSS and its
