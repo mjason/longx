@@ -7,8 +7,22 @@ defmodule Longx.Codex.Sandbox do
   sandbox). On Linux bubblewrap needs unprivileged user namespaces, which
   WSL1, most containers and some hardened distributions refuse — codex then
   rejects every sandboxed command at turn time. `probe/0` finds that out at
-  boot by running the bundled bwrap once; `status/0` is what the UI shows.
+  boot by running the bundled bwrap the way codex does (`--unshare-user
+  --unshare-pid --unshare-ipc`, `/proc` dropped when it cannot be mounted),
+  then once more with `--unshare-net` — what codex adds when a command runs
+  without network access. Some hosts (containers, some VMs, GitHub runners)
+  allow the first and refuse the second ("loopback: Failed RTM_NEWADDR"):
+  there the sandbox works only for commands allowed to reach the network,
+  which is `:no_net_isolation` — a project with network access on is fine,
+  one with it off has every command refused. Ubuntu ≥ 24.04 refuses the
+  namespaces to unconfined programs through AppArmor
+  (`kernel.apparmor_restrict_unprivileged_userns = 1`: "setting up uid map:
+  Permission denied") — reported as `:apparmor`, since the fix is a one-line
+  profile for the bundled bwrap (README), not a kernel setting. `status/0`
+  is what the UI shows.
   """
+
+  @apparmor_sysctl "/proc/sys/kernel/apparmor_restrict_unprivileged_userns"
 
   alias Longx.Codex.Runtime
   alias Longx.Shim
@@ -16,7 +30,11 @@ defmodule Longx.Codex.Sandbox do
   @key {__MODULE__, :report}
 
   @type reason ::
-          {:user_namespaces | :seccomp | :unknown, String.t()} | :not_installed | :unsupported
+          {:user_namespaces | :apparmor | :network_isolation | :seccomp | :unknown, String.t()}
+          | :not_installed
+          | :unsupported
+
+  @type status :: :ok | :no_net_isolation | :unavailable
 
   @doc "Runs the probe and caches the result. `:ok` or `{:error, reason}`."
   @spec probe() :: :ok | {:error, reason}
@@ -24,7 +42,7 @@ defmodule Longx.Codex.Sandbox do
     result = run_probe(:os.type())
 
     :persistent_term.put(@key, %{
-      status: if(result == :ok, do: :ok, else: :unavailable),
+      status: status_of(result),
       reason: unwrap(result),
       checked_at: DateTime.utc_now()
     })
@@ -32,12 +50,16 @@ defmodule Longx.Codex.Sandbox do
     result
   end
 
-  @doc "`:ok` | `:unavailable`; probes on first call."
-  @spec status() :: :ok | :unavailable
+  defp status_of(:ok), do: :ok
+  defp status_of({:error, {:network_isolation, _}}), do: :no_net_isolation
+  defp status_of({:error, _}), do: :unavailable
+
+  @doc "`:ok` | `:no_net_isolation` | `:unavailable`; probes on first call."
+  @spec status() :: status
   def status, do: report().status
 
   @doc "The cached probe result with its reason and time."
-  @spec report() :: %{status: :ok | :unavailable, reason: reason | nil, checked_at: DateTime.t()}
+  @spec report() :: %{status: status, reason: reason | nil, checked_at: DateTime.t()}
   def report do
     case :persistent_term.get(@key, nil) do
       nil ->
@@ -53,25 +75,12 @@ defmodule Longx.Codex.Sandbox do
   # Windows sandbox is set up by codex itself) — assume ok until turn time
   defp run_probe({:unix, :linux}) do
     with {:ok, bwrap} <- bundled_bwrap() do
-      # the smallest sandbox codex would build: read-only root, run `true`
-      case Shim.run(
-             [
-               bwrap,
-               "--ro-bind",
-               "/",
-               "/",
-               "--dev",
-               "/dev",
-               "--proc",
-               "/proc",
-               "--unshare-all",
-               "/bin/true"
-             ],
-             timeout: 10_000
-           ) do
-        {:ok, %{status: status, stderr: stderr}} -> interpret(status, stderr)
-        {:error, reason} -> {:error, {:unknown, inspect(reason)}}
-      end
+      evaluate(fn args ->
+        case Shim.run([bwrap | args], timeout: 10_000) do
+          {:ok, %{status: status, stderr: stderr}} -> {status, stderr}
+          {:error, reason} -> {1, inspect(reason)}
+        end
+      end)
     end
   end
 
@@ -84,12 +93,74 @@ defmodule Longx.Codex.Sandbox do
     end
   end
 
+  # codex's namespace flags (linux-sandbox/src/bwrap.rs); --unshare-net is
+  # added for commands without network access
+  @namespaces ~w(--unshare-user --unshare-pid --unshare-ipc)
+
+  @doc """
+  The probe over a runner that gets bwrap's arguments and answers
+  `{exit_status, stderr}` — the real one runs the bundled binary. The
+  smallest sandbox codex would build (read-only root, `/bin/true`): first
+  as codex runs a command with network, `/proc` dropped when it cannot be
+  mounted (codex's own preflight does that), then with `--unshare-net`.
+  """
+  @spec evaluate(([String.t()] -> {integer, String.t()}), apparmor_restricted: boolean) ::
+          :ok | {:error, reason}
+  def evaluate(run, opts \\ []) do
+    with {:ok, mounts} <- base_step(run),
+         :ok <- network_step(run.(mounts ++ @namespaces ++ ["--unshare-net", "/bin/true"])) do
+      :ok
+    else
+      {:error, {:user_namespaces, message}} = error ->
+        if Keyword.get_lazy(opts, :apparmor_restricted, &apparmor_restricted?/0),
+          do: {:error, {:apparmor, message}},
+          else: error
+
+      error ->
+        error
+    end
+  end
+
+  # Ubuntu's AppArmor switch: unconfined programs get user namespaces without
+  # capabilities, so bwrap cannot write its uid map
+  defp apparmor_restricted? do
+    case File.read(@apparmor_sysctl) do
+      {:ok, value} -> String.trim(value) == "1"
+      _ -> false
+    end
+  end
+
+  defp base_step(run) do
+    base = ["--ro-bind", "/", "/", "--dev", "/dev"]
+    with_proc = base ++ ["--proc", "/proc"]
+
+    case interpret(run.(with_proc ++ @namespaces ++ ["/bin/true"])) do
+      :ok ->
+        {:ok, with_proc}
+
+      {:error, {_, message}} = error ->
+        # a /proc that cannot be mounted: codex retries without it
+        if message =~ ~r/proc/i do
+          with :ok <- interpret(run.(base ++ @namespaces ++ ["/bin/true"])), do: {:ok, base}
+        else
+          error
+        end
+    end
+  end
+
+  defp network_step({0, _stderr}), do: :ok
+  defp network_step({_status, stderr}), do: {:error, {:network_isolation, trim(stderr)}}
+
+  defp interpret({status, stderr}), do: interpret(status, stderr)
+
+  defp trim(stderr), do: stderr |> String.trim() |> String.slice(0, 500)
+
   @doc "Turns bubblewrap's exit status and stderr into a reason."
   @spec interpret(integer, String.t()) :: :ok | {:error, reason}
   def interpret(0, _stderr), do: :ok
 
   def interpret(_status, stderr) do
-    message = stderr |> String.trim() |> String.slice(0, 500)
+    message = trim(stderr)
 
     cond do
       message =~ ~r/namespace|uid map|gid map|Operation not permitted|Permission denied/i ->

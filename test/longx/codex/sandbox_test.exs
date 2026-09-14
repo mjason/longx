@@ -25,6 +25,83 @@ defmodule Longx.Codex.SandboxTest do
     end
   end
 
+  describe "evaluate/1 (pure): the probe as codex would run bwrap, in two steps" do
+    # the runner gets bwrap's arguments and answers {status, stderr}
+    defp runner(answers) do
+      fn args ->
+        cond do
+          "--unshare-net" in args -> answers[:net]
+          "--proc" in args -> answers[:base]
+          true -> answers[:no_proc] || answers[:base]
+        end
+      end
+    end
+
+    test "user / pid / ipc namespaces and the network namespace both work → ok" do
+      assert :ok = Sandbox.evaluate(runner(base: {0, ""}, net: {0, ""}))
+    end
+
+    test "the flags are codex's own, not --unshare-all, and the command is /bin/true" do
+      assert :ok =
+               Sandbox.evaluate(fn args ->
+                 assert "--unshare-user" in args and "--unshare-pid" in args and
+                          "--unshare-ipc" in args
+
+                 refute "--unshare-all" in args
+                 assert List.last(args) == "/bin/true"
+                 {0, ""}
+               end)
+    end
+
+    test "namespaces refused → unavailable, whatever the network step would say" do
+      assert {:error, {:user_namespaces, msg}} =
+               Sandbox.evaluate(
+                 runner(base: {1, "bwrap: setting up uid map: Permission denied"}, net: {0, ""})
+               )
+
+      assert msg =~ "uid map"
+    end
+
+    test "namespaces refused while Ubuntu's AppArmor restriction is on → apparmor, the fix is a profile" do
+      assert {:error, {:apparmor, msg}} =
+               Sandbox.evaluate(
+                 runner(base: {1, "bwrap: setting up uid map: Permission denied"}, net: {0, ""}),
+                 apparmor_restricted: true
+               )
+
+      assert msg =~ "uid map"
+      # the same failure without the restriction stays what it is
+      assert {:error, {:user_namespaces, _}} =
+               Sandbox.evaluate(
+                 runner(base: {1, "bwrap: setting up uid map: Permission denied"}, net: {0, ""}),
+                 apparmor_restricted: false
+               )
+    end
+
+    test "only the network namespace fails (a host that cannot set up the loopback) → network isolation unavailable" do
+      assert {:error, {:network_isolation, msg}} =
+               Sandbox.evaluate(
+                 runner(
+                   base: {0, ""},
+                   net: {1, "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"}
+                 )
+               )
+
+      assert msg =~ "RTM_NEWADDR"
+    end
+
+    test "a /proc that cannot be mounted is retried without it, like codex does" do
+      assert :ok =
+               Sandbox.evaluate(
+                 runner(
+                   base: {1, "bwrap: Can't mount proc on /newroot/proc: Operation not permitted"},
+                   no_proc: {0, ""},
+                   net: {0, ""}
+                 )
+               )
+    end
+  end
+
   describe "probe/0" do
     # what the host allows: a WSL2 dev box passes, a GitHub runner does not
     # (bwrap cannot set up the loopback there) — CI excludes :host_sandbox
@@ -38,9 +115,9 @@ defmodule Longx.Codex.SandboxTest do
     end
 
     test "status/0 is cached after the first probe and can be re-probed" do
-      assert Sandbox.status() in [:ok, :unavailable]
+      assert Sandbox.status() in [:ok, :no_net_isolation, :unavailable]
       assert %{status: status, reason: _, checked_at: %DateTime{}} = Sandbox.report()
-      assert status in [:ok, :unavailable]
+      assert status in [:ok, :no_net_isolation, :unavailable]
     end
   end
 end

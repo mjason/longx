@@ -182,7 +182,7 @@ defmodule Longx.System.Status do
                     status: [
                       type: :atom,
                       allow_nil?: false,
-                      constraints: [one_of: [:ok, :unavailable]]
+                      constraints: [one_of: [:ok, :no_net_isolation, :unavailable]]
                     ],
                     reason: [type: :string],
                     checked_at: [type: :utc_datetime_usec, allow_nil?: false]
@@ -197,7 +197,7 @@ defmodule Longx.System.Status do
                     status: [
                       type: :atom,
                       allow_nil?: false,
-                      constraints: [one_of: [:ok, :unavailable]]
+                      constraints: [one_of: [:ok, :no_net_isolation, :unavailable]]
                     ],
                     reason: [type: :string],
                     checked_at: [type: :utc_datetime_usec, allow_nil?: false]

@@ -22,6 +22,7 @@ import {
   memorySetAutoExtract,
   memoryWriteIndex,
   probeSandbox,
+  sandboxStatus,
   setGithubToken,
   setToolEnabled,
   updateSearchProvider,
@@ -307,6 +308,42 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(probeSandbox).toHaveBeenCalled());
     await within(section).findByText("不可用");
     expect(section).toHaveTextContent("Permission denied");
+  });
+
+  test("sandbox: Ubuntu's AppArmor restriction is named with the profile that lifts it", async () => {
+    setViewport(1280);
+    vi.mocked(sandboxStatus).mockResolvedValue(
+      ok({
+        status: "unavailable",
+        reason: "apparmor: bwrap: setting up uid map: Permission denied",
+        checkedAt: "2026-09-14T00:00:00Z",
+      }) as never,
+    );
+    renderAt("/settings/sandbox");
+    await waitFor(() =>
+      expect(screen.getByTestId("section-sandbox")).toHaveTextContent("AppArmor"),
+    );
+    expect(screen.getByTestId("section-sandbox")).toHaveTextContent("apparmor_parser -r /etc/apparmor.d/longx-bwrap");
+    expect(await screen.findByTestId("sandbox-banner")).toHaveTextContent("AppArmor");
+  });
+
+  test("sandbox: no network isolation is a warning that names the way out, on the page and in the banner", async () => {
+    setViewport(1280);
+    vi.mocked(sandboxStatus).mockResolvedValue(
+      ok({
+        status: "no_net_isolation",
+        reason: "network_isolation: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
+        checkedAt: "2026-09-14T00:00:00Z",
+      }) as never,
+    );
+    renderAt("/settings/sandbox");
+    await waitFor(() =>
+      expect(screen.getByTestId("section-sandbox")).toHaveTextContent("可用，但断网隔离不可用"),
+    );
+    expect(screen.getByTestId("section-sandbox")).toHaveTextContent("网络访问");
+    const banner = await screen.findByTestId("sandbox-banner");
+    expect(banner).toHaveTextContent("断网隔离不可用");
+    expect(banner).toHaveTextContent("RTM_NEWADDR");
   });
 
   test("memory: the index is editable, the notes are listed with their origin and can be deleted, search finds lines", async () => {
