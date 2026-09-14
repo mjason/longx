@@ -3,6 +3,7 @@ import { Alert, AlertDescription } from "@/ui/components/ui/alert";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 import { FileMentions, FileMentionText } from "./FileMentions";
+import { ReasoningSteps } from "./ReasoningSteps";
 import { SlashCommands } from "./SlashCommands";
 import { ComposerLeading, ComposerTrailing } from "./TurnBar";
 
@@ -22,7 +23,7 @@ const ComposerPopovers = () => (
 );
 
 // module scope: a new object per render would remount every message
-const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers, UserText: FileMentionText };
+const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers, UserText: FileMentionText, ReasoningGroup: ReasoningSteps };
 
 /**
  * The centre of the project window: assistant-ui's Thread element over the

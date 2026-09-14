@@ -14,10 +14,10 @@ export default defineConfig(({ command }) => ({
   publicDir: false,
   server: {
     host: true,
-    port: 5173,
+    port: 7789,
     strictPort: true,
     cors: true,
-    origin: devHost ? `http://${devHost}:5173` : undefined,
+    origin: devHost ? `http://${devHost}:7789` : undefined,
   },
   build: {
     manifest: true,

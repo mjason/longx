@@ -502,13 +502,14 @@ React Native client planned on the same core code.
     phoenix_vite was evaluated and rejected as immature — reference only). `<LongxWeb.Vite.assets />`
     in the layouts renders, in dev, the HMR client + raw entry from the Vite dev server
     (`config :longx, LongxWeb.Vite, dev_server:`; `LONGX_DEV_HOST=<lan-ip>` for phone
-    testing — Vite listens on `0.0.0.0:5173` and the phone loads scripts from it directly),
+    testing — Vite listens on `0.0.0.0:7789` (7788 + 1, so it never collides with another
+    project's Vite on 5173; `strictPort`) and the phone loads scripts from it directly),
     — first `js/dev/react-refresh.ts` (the React Fast Refresh preamble a non-Vite page must
     load itself, else "@vitejs/plugin-react can't detect preamble"), then `@vite/client`,
     then the entry — otherwise the hashed files from `priv/static/assets/.vite/manifest.json` (entry css,
     script, `modulepreload` for imported chunks; cached in `persistent_term`). The dev
     watcher runs `npm run dev` **through `Longx.Shim`** so Vite dies with the BEAM (a plain
-    npm watcher leaves node on 5173). `mix assets.build` = compile + `ash_typescript.codegen`
+    npm watcher leaves node on the port). `mix assets.build` = compile + `ash_typescript.codegen`
     + `npm run build` → `priv/static/assets/` (gitignored); no `phx.digest`. PWA bits are
     committed static files: `priv/static/manifest.webmanifest`, `icons/` (`static_paths/0`).
 - `assets/` — Vite + TypeScript + React 19, tests with vitest/testing-library
@@ -633,8 +634,14 @@ React Native client planned on the same core code.
     **renderers** (catalog section "Renderers"): `markdown-text` with `shiki-highlighter`
     for fenced code (tokenises once the part settles; `github-light/dark-default` themes)
     and `mermaid-diagram` for `mermaid` fences (skeleton while streaming, zoom dialog);
-    `reasoning.aui` streams the thinking through `streaming-text` (newest words tinted, a
-    caret) while the part runs and settles to markdown after; the `generative-ui` renderer
+    **reasoning is the element's step-panel design** (`reasoning-panel`, the catalog's
+    "Static" variant): `ui/chat/ReasoningSteps` fills the `ReasoningGroup` slot of
+    `thread.aui` and turns the group's reasoning parts into titled steps down a timeline
+    (`core/chat/reasoningSteps.ts`: OpenAI-style bold headings open a step, raw thinking
+    makes each paragraph a step titled by its first sentence — CJK stops or `.!?` before
+    a space, never inside brackets), a shimmering "思考中" while it streams (open) that
+    settles to "思考过程" (folded; the reader's toggle sticks). `reasoning.aui` /
+    `streaming-text` stay installed but unused by the thread; the `generative-ui` renderer
     is not wired — nothing produces `generative-ui` parts (codex emits none, OpenUI was
     dropped) —
     `thread-list.aui` (the threads tool is this element over `adapters.threadList`),

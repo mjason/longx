@@ -37,7 +37,7 @@ config :longx, LongxWeb.Endpoint,
   watchers: [vite: {LongxWeb.Vite.Watcher, :run, [[cd: Path.expand("../assets", __DIR__)]]}]
 
 config :longx, LongxWeb.Vite,
-  dev_server: "http://#{System.get_env("LONGX_DEV_HOST", "localhost")}:5173"
+  dev_server: "http://#{System.get_env("LONGX_DEV_HOST", "localhost")}:7789"
 
 # ## SSL Support
 #

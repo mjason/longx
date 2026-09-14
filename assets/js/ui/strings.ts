@@ -300,6 +300,8 @@ export const t = {
   searching: "搜索中…",
   readSources: (n: number) => `读了 ${n} 个来源`,
   reasoning: "思考",
+  reasoningLive: "思考中",
+  reasoningDone: "思考过程",
   usedTool: "调用工具",
   toolCalls: (n: number) => `${n} 次工具调用`,
   cancelledTool: "已取消",

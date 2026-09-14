@@ -309,7 +309,7 @@ describe("ThreadPage", () => {
     expect(box).toHaveValue("run the tests");
   });
 
-  test("renderers: fenced code highlights with shiki, a mermaid fence is a diagram, reasoning streams word by word then settles to markdown", async () => {
+  test("renderers: fenced code highlights with shiki, a mermaid fence is a diagram, reasoning is the step panel — open while it streams, folded after", async () => {
     const r = renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
     act(() =>
@@ -318,21 +318,24 @@ describe("ThreadPage", () => {
         turn: { id: "turn_1", status: "inProgress" },
         items: [
           { id: "u1", type: "userMessage", turnId: "turn_1", content: [{ type: "text", text: "draw it" }] },
-          { id: "r1", type: "reasoning", turnId: "turn_1", summary: ["first the schema then the diagram"], content: [] },
+          { id: "r1", type: "reasoning", turnId: "turn_1", summary: ["**Planning**\n\nfirst the schema then the diagram"], content: [] },
         ],
       }),
     );
     await screen.findByText("draw it");
-    // the turn is running and reasoning is what streams: word by word (tinted, caret)
-    expect(document.querySelector("[data-slot=streaming-text]")).toHaveTextContent("schema");
+    // the turn is running and reasoning is what streams: the panel is open, its steps titled, the trigger shimmering
+    const panel = document.querySelector("[data-slot=reasoning-panel]")!;
+    expect(panel).toHaveAttribute("data-state", "open");
+    expect(within(panel as HTMLElement).getByText("Planning")).toBeInTheDocument();
+    expect(within(panel as HTMLElement).getByText("first the schema then the diagram")).toBeInTheDocument();
     act(() => {
       channel.deliver("codex", { seq: 4, method: "item/completed", params: { turnId: "turn_1", item: { id: "a1", type: "agentMessage", text: "```elixir\ndefmodule A do\nend\n```\n\n```mermaid\ngraph TD; A-->B;\n```\n" } } });
       channel.deliver("codex", { seq: 5, method: "turn/completed", params: { turn: { id: "turn_1", status: "completed" } } });
     });
-    await waitFor(() => expect(document.querySelector("[data-slot=streaming-text]")).toBeNull());
-    // settled, the disclosure folds; opened again it is markdown
-    await userEvent.click(screen.getByRole("button", { name: /思考/ }));
-    expect(await screen.findByText("first the schema then the diagram")).toBeInTheDocument();
+    // settled, the panel folds under its resting label; a click opens it again
+    await waitFor(() => expect(document.querySelector("[data-slot=reasoning-panel]")).toHaveAttribute("data-state", "closed"));
+    await userEvent.click(screen.getByRole("button", { name: /思考过程/ }));
+    await waitFor(() => expect(document.querySelector("[data-slot=reasoning-panel]")).toHaveAttribute("data-state", "open"));
     // code goes through the shiki highlighter (plain until tokenised), mermaid through the diagram element
     await waitFor(() => expect(document.querySelector(".aui-shiki-base")).toHaveTextContent("defmodule A do"));
     await waitFor(() => expect(document.querySelector("[data-slot^=mermaid-]")).not.toBeNull());
