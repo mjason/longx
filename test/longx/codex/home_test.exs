@@ -264,6 +264,16 @@ defmodule Longx.Codex.HomeTest do
              web_search: :hosted
            ) == [:config]
 
+    # codex appends its own sections to config.toml (a trusted project, on
+    # first use): what we wrote is still there, so nothing is stale
+    File.write!(
+      Path.join(dir, "config.toml"),
+      File.read!(Path.join(dir, "config.toml")) <>
+        "\n[projects.\"/home/mj/dev/python/jbt_lab\"]\ntrust_level = \"trusted\"\n"
+    )
+
+    assert Home.stale(dir, gateway_url: "http://127.0.0.1:4242/ai/v1", models: models) == []
+
     # nothing written yet: nothing is stale (there is no process to restart)
     assert Home.stale(Path.join(dir, "nope"),
              gateway_url: "http://127.0.0.1:4242/ai/v1",
