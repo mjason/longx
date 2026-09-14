@@ -133,11 +133,11 @@ describe("ThreadPage", () => {
     expect(screen.getByTestId("model-picker")).toHaveTextContent(
       "deepseek-flash",
     );
-    expect(screen.getByTestId("model-picker")).toHaveTextContent("高");
+    expect(screen.getByTestId("model-picker")).toHaveTextContent("high");
     await user.click(screen.getByTestId("model-picker"));
-    await user.click(await screen.findByRole("radio", { name: "最大" }));
+    await user.click(await screen.findByRole("radio", { name: "max" }));
     await user.keyboard("{Escape}");
-    expect(screen.getByTestId("model-picker")).toHaveTextContent("最大");
+    expect(screen.getByTestId("model-picker")).toHaveTextContent("max");
     await user.type(
       screen.getByRole("textbox", { name: "随心输入" }),
       "go{Enter}",
@@ -169,9 +169,9 @@ describe("ThreadPage", () => {
     await user.click(screen.getByTestId("model-picker"));
     await user.click(await screen.findByRole("option", { name: /glm-5/ }));
     // switching models lands on the new model's default level
-    expect(screen.getByTestId("model-picker")).toHaveTextContent(/glm-5\s*高/);
+    expect(screen.getByTestId("model-picker")).toHaveTextContent(/glm-5\s*high/);
     await user.click(screen.getByTestId("model-picker"));
-    await user.click(await screen.findByRole("radio", { name: "低" }));
+    await user.click(await screen.findByRole("radio", { name: "low" }));
     await user.keyboard("{Escape}");
     await user.type(
       screen.getByRole("textbox", { name: "随心输入" }),

@@ -139,7 +139,7 @@ export function ComposerTrailing() {
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="truncate">{row.slug}</span>
               {shownEffort ? (
-                <span className="text-muted-foreground font-sans">
+                <span className="text-muted-foreground">
                   {effortLabel(shownEffort)}
                 </span>
               ) : null}
@@ -177,9 +177,9 @@ export function ComposerTrailing() {
   );
 }
 
-/** a level as the rail names it (codex's known efforts; anything else as is) */
+/** a level as the rail names it: the provider's own word (none, low, high, …), never translated */
 export function effortLabel(level: string): string {
-  return t.effortLevels[level] ?? level;
+  return level;
 }
 
 function formatWindow(tokens: number | null | undefined): string {

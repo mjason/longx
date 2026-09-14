@@ -111,13 +111,13 @@ describe("SettingsPage", () => {
     await user.type(within(md).getByLabelText("上下文窗口"), "200000");
     // the reasoning levels the model offers, and its default among them
     await user.click(
-      within(md).getByRole("button", { name: "低", pressed: false }),
+      within(md).getByRole("button", { name: "low", pressed: false }),
     );
     await user.click(
-      within(md).getByRole("button", { name: "高", pressed: false }),
+      within(md).getByRole("button", { name: "high", pressed: false }),
     );
     await user.click(within(md).getByRole("combobox", { name: "默认档" }));
-    await user.click(await screen.findByRole("option", { name: "高" }));
+    await user.click(await screen.findByRole("option", { name: "high" }));
     await user.click(within(md).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(createModel).toHaveBeenCalledWith(

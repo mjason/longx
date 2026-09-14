@@ -1061,17 +1061,12 @@ function LevelsEditor({
             type="button"
             size="sm"
             variant={levels.includes(level) ? "default" : "outline"}
-            className="h-7"
+            className="h-7 font-mono"
             aria-pressed={levels.includes(level)}
-            aria-label={effortLabel(level)}
+            aria-label={level}
             onClick={() => toggle(level)}
           >
-            {effortLabel(level)}
-            {KNOWN_LEVELS.includes(level) ? (
-              <span className="ml-1 font-mono text-[10px] opacity-70">
-                {level}
-              </span>
-            ) : null}
+            {level}
           </Button>
         ))}
         <div className="flex gap-1">
