@@ -52,8 +52,9 @@ Docker 容器和一些加固过的系统不允许——不允许时 codex 会拒
 
   然后在「设置 → 沙箱与权限」点「重新检测」。`LONGX_HOME` 不是 `~/.longx` 的话改路径。整体关掉限制
   （`sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`）也行，但放开的是所有程序。
-- **缓存目录不可写**：可写工作区默认只能写项目目录和 /tmp，`uv run` / `pip` / `npm` 的缓存在 `~/.cache`，不可写就失败。
-  「项目设置 → 沙箱额外可写目录」默认放行 `~/.cache`；别的目录（比如数据集）加在同一处，一行一个。
+- **工具要写沙箱外的目录**：可写工作区只能写项目目录和 /tmp；`uv run` / `pip` / `npm` 的缓存在 home 下（Linux `~/.cache`，
+  macOS `~/Library/Caches`，Windows `%LOCALAPPDATA%`），不可写时会报错。「项目设置 → 沙箱额外可写目录」里按需添加（默认为空——
+  每加一个目录都是在放宽沙箱：缓存里被塞的东西会在沙箱外执行），数据集目录之类也加在这里。
 - **沙箱里看不到 GPU**：bubblewrap 的 `/dev` 只有最基本的设备节点，codex 没有设备直通（把 `/dev/nvidia*` 当可写目录传进去会让沙箱起不来）。
   要用 GPU 的会话选「完全访问」（项目默认或按会话选）；有 GPU 的机器项目设置里会提示。
 - **容器和部分虚拟机**允许用户命名空间但建不了网络命名空间（`bwrap: loopback: Failed RTM_NEWADDR`）：codex 只在命令不能联网时

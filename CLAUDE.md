@@ -84,9 +84,11 @@ React Native client planned on the same core code.
     has no network unless this is true → `sandbox_workspace_write.network_access`), `tools`
     (registered `"ns.name"`s), `model_id` (nil → global default), `dirty_start`
     (`:commit` | `:ask` | `:off`), `writable_roots` (directories the workspace-write
-    sandbox may write besides cwd and /tmp — default `["~/.cache"]`: uv / pip / npm / cargo
-    caches live there and `uv run` failed read-only; `Projects.writable_roots/1` expands `~`,
-    keeps only existing directories; they go on `thread/start` as
+    sandbox may write besides cwd and /tmp — **default `[]`**: 0.1.7 defaulted it to
+    `["~/.cache"]` for every project, which silently widened every sandbox (a tool cache is
+    where planted code runs later, outside it) and was Linux-only; the 0.1.9 migration resets
+    rows still on that value. `Projects.writable_roots/1` expands `~` and keeps only existing
+    directories; they go on `thread/start` as
     `sandbox_workspace_write.writable_roots`, on resume the same, and in
     `turn/start.sandboxPolicy.writableRoots` when a turn changes the mode). **A GPU cannot
     be let into the sandbox**: bwrap's `--dev /dev` is minimal and codex has no device

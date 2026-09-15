@@ -83,7 +83,7 @@ export const t = {
   network: "允许联网（workspace-write 沙箱内）",
   gpuHidden: "这台机器有 NVIDIA GPU，但只读和可写工作区两种沙箱里都看不到它（bubblewrap 只给最小的 /dev，codex 没有设备直通）。要用 GPU 的会话请选「完全访问」——项目默认，或在输入框旁按会话选。",
   writableRoots: "沙箱额外可写目录",
-  writableRootsHint: "一行一个。可写工作区默认只能写项目目录和 /tmp；uv、pip、npm 等的缓存在 ~/.cache，不可写会失败。~ 是服务器上运行 Longx 的用户；不存在的目录会被跳过。",
+  writableRootsHint: "一行一个；默认为空。可写工作区只能写项目目录和 /tmp，有的工具要写别处才能跑——比如包管理器的缓存（Linux ~/.cache、macOS ~/Library/Caches、Windows %LOCALAPPDATA%）或数据集目录。每加一个目录都在放宽沙箱：缓存里被塞的东西会在沙箱外被执行，只加确实需要的。~ 是服务器上运行 Longx 的用户；不存在的目录会被跳过。",
   sandboxOptions: {
     read_only: "只读",
     workspace_write: "可写工作区",

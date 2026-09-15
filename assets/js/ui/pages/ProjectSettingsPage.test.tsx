@@ -31,8 +31,7 @@ describe("ProjectSettingsPage", () => {
     await user.click(within(form).getByRole("switch", { name: /全局记忆/ }));
     // extra writable directories: one per line, blanks dropped
     const roots = within(form).getByLabelText(/沙箱额外可写目录/);
-    expect(roots).toHaveValue("~/.cache");
-    await user.clear(roots);
+    expect(roots).toHaveValue("");
     await user.type(roots, "~/.cache\n\n/data/models  ");
     await user.click(within(form).getByRole("button", { name: "保存" }));
     await waitFor(() =>
