@@ -82,7 +82,7 @@ export const t = {
   approval: "审批",
   network: "允许联网（workspace-write 沙箱内）",
   passthrough: "放进沙箱的宿主路径",
-  passthroughHint: "一行一个，可用通配符（/dev/nvidia*）。沙箱（bubblewrap）只给命令一个最小的 /dev，看不到 GPU、USB、串口这类设备，也连不上宿主的 socket；写在这里的路径会原样绑进沙箱，其余的文件系统和网络限制不变。每一项都在放宽隔离：设备通常无害，Docker socket 等于宿主 root。codex 启动时读取，改了要重启 codex（状态栏会提示）。仅 Linux 沙箱有效。",
+  passthroughHint: "一行一个，可用通配符（/dev/nvidia*）。沙箱（bubblewrap）只给命令一个最小的 /dev，看不到 GPU、USB、串口这类设备，也连不上宿主的 socket；写在这里的路径会原样绑进沙箱，其余的文件系统和网络限制不变。每一项都在放宽隔离：设备通常无害，Docker socket 等于宿主 root。GPU 还需要打开上面的「允许联网」——codex 断网时用 seccomp 拦掉所有 connect 调用，NVIDIA 驱动初始化时的本地 socket 也在其中（CUDA_ERROR_OPERATING_SYSTEM）。codex 启动时读取，改了要重启 codex（状态栏会提示）。仅 Linux 沙箱有效。",
   passthroughPreset: (label: string) => `添加 ${label}`,
   passthroughDanger: "等于宿主 root",
   writableRoots: "沙箱额外可写目录",

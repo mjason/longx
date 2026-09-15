@@ -107,8 +107,14 @@ React Native client planned on the same core code.
     `Sandbox.presets/1` (gpu: nvidia*/dxg/dri; usb: /dev/bus/usb, ttyUSB*, ttyACM*; docker:
     the socket, `danger: true`) is on the sandbox report for the settings page's one-click
     buttons. `sandbox_passthrough_integration_test` (`:integration`) proves it on the real
-    binary: a sandboxed `ls -la /dev/dxg` sees the device only with the passthrough. macOS
-    (seatbelt) and Windows are not covered. Whether it is a git repo is read live (`git_info/1`), never
+    binary: a sandboxed `ls -la /dev/dxg` sees the device only with the passthrough. **CUDA
+    also needs `network_access`**: with the network off codex's inner seccomp stage
+    (`linux-sandbox/src/landlock.rs`) denies `connect` for every socket family, and the
+    NVIDIA driver's init uses a local socket — `cuInit` fails with
+    `CUDA_ERROR_OPERATING_SYSTEM` while `nvidia-smi -L` works; with the network on JAX picks
+    the GPU (DGX Spark, 0.1.9). Landlock is not the problem (bwrap alone with the dev-binds,
+    all namespaces and `--cap-drop ALL` runs CUDA fine). macOS (seatbelt) and Windows are not
+    covered. Whether it is a git repo is read live (`git_info/1`), never
     stored; `init_git/1` sets git up with `Longx.Git.Ignore.default/0` and a first commit.
     The UI warns when a project has no git.
   - **Each project has its own codex process and its own `CODEX_HOME`**

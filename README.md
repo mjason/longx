@@ -60,7 +60,9 @@ Docker 容器和一些加固过的系统不允许——不允许时 codex 会拒
   出 GPU / USB / Docker socket 的一键预设）：Longx 自带的 bwrap 包装程序（`bwrapx`，随 shim 用 Go 构建）放在该项目 codex 的 PATH
   最前面，把这些路径以 `--dev-bind` / `--bind` 追加在 codex 生成的 bwrap 参数里，其余文件系统和网络限制原样不动。每一项都在放宽
   隔离——设备基本无害，Docker socket 等于宿主 root（界面上标红）。改了要重启项目的 codex（状态栏会提示）。只对 Linux 沙箱有效；
-  要更省事就把项目设成「完全访问」。
+  要更省事就把项目设成「完全访问」。**GPU 还要同时打开「允许联网」**：codex 在断网沙箱里用 seccomp 拦掉所有 `connect`，
+  NVIDIA 驱动初始化时的本地 socket 调用也被拦（`cuInit` 报 `CUDA_ERROR_OPERATING_SYSTEM`）；联网打开后 `nvidia-smi`、
+  JAX/PyTorch 的 CUDA 都正常（DGX Spark 上验证）。工具缓存（`uv` 的 `~/.cache/uv`）按需加到「沙箱额外可写目录」。
 - **容器和部分虚拟机**允许用户命名空间但建不了网络命名空间（`bwrap: loopback: Failed RTM_NEWADDR`）：codex 只在命令不能联网时
   才隔离网络，所以项目「网络访问」打开时沙箱正常，关着时每条命令都会被拒绝。设置页会标成「可用，但断网隔离不可用」。
 
