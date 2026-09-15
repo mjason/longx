@@ -272,13 +272,11 @@ defmodule Longx.Projects.Project do
 
     # Directories the workspace-write sandbox may write besides the project
     # and /tmp (codex `sandbox_workspace_write.writable_roots`); `~` is the
-    # server user's home, a path that does not exist is skipped. ~/.cache by
-    # default: uv, pip, npm, cargo, huggingface all cache there and fail
-    # read-only. (A GPU cannot be let in this way — see Longx.Codex.Sandbox.gpu?/1.)
-    attribute :writable_roots, {:array, :string},
-      allow_nil?: false,
-      default: ["~/.cache"],
-      public?: true
+    # server user's home, a path that does not exist is skipped. Empty by
+    # default — every entry widens the sandbox (a tool cache is where
+    # planted code runs later, outside it), so each one is the person's
+    # explicit choice. (A device cannot be let in this way: Longx.Codex.Sandbox.)
+    attribute :writable_roots, {:array, :string}, allow_nil?: false, default: [], public?: true
 
     # Whether threads get codex's `web.run` (search + open URL, executed by
     # Longx's own gateway — this is separate from the sandbox's network,

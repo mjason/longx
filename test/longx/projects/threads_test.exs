@@ -190,11 +190,18 @@ defmodule Longx.Projects.ThreadsTest do
       cache = Path.join(dir, "cache")
       File.mkdir_p!(cache)
 
-      project =
-        git_project!(dir, %{writable_roots: ["~/.cache", cache, Path.join(dir, "nope")]})
+      # nothing by default: the sandbox is exactly codex's (cwd + /tmp) until the person adds a path
+      assert git_project!(dir).writable_roots == []
 
-      assert Projects.writable_roots(project) ==
-               Enum.filter([Path.expand("~/.cache"), cache], &File.dir?/1)
+      assert Projects.writable_roots(
+               git_project!(Path.join(dir, "plain") |> tap(&File.mkdir_p!/1))
+             ) == []
+
+      sub = Path.join(dir, "sub")
+      File.mkdir_p!(sub)
+      project = git_project!(sub, %{writable_roots: ["~", cache, Path.join(dir, "nope")]})
+
+      assert Projects.writable_roots(project) == [Path.expand("~"), cache]
 
       {:ok, thread} = Projects.start_thread(project, conn: conn)
       %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
