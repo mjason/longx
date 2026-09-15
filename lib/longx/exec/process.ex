@@ -54,7 +54,9 @@ defmodule Longx.Exec.Process do
     waiters: [],
     output: [],
     denied?: false,
-    pending_exit: nil
+    pending_exit: nil,
+    pumps: %{},
+    waiter: nil
   ]
 
   @typedoc """
@@ -130,12 +132,16 @@ defmodule Longx.Exec.Process do
       {:ok, shim} ->
         unless stdin_open?, do: Shim.close_stdin(shim)
         me = self()
-        spawn_link(fn -> pump(shim, &Shim.read/3, if(tty?, do: "pty", else: "stdout"), me) end)
-        spawn_link(fn -> pump(shim, &Shim.read_stderr/3, "stderr", me) end)
 
-        spawn_link(fn ->
-          send(me, {:exited, Shim.await_exit(shim, :infinity, close_streams: false)})
-        end)
+        out =
+          spawn_link(fn -> pump(shim, &Shim.read/3, if(tty?, do: "pty", else: "stdout"), me) end)
+
+        err = spawn_link(fn -> pump(shim, &Shim.read_stderr/3, "stderr", me) end)
+
+        waiter =
+          spawn_link(fn ->
+            send(me, {:exited, Shim.await_exit(shim, :infinity, close_streams: false)})
+          end)
 
         {:ok,
          %__MODULE__{
@@ -144,7 +150,9 @@ defmodule Longx.Exec.Process do
            notify: Keyword.fetch!(spec, :notify),
            sandbox: Keyword.get(spec, :sandbox, :none),
            tty?: tty?,
-           stdin_open?: stdin_open?
+           stdin_open?: stdin_open?,
+           pumps: %{out => if(tty?, do: "pty", else: "stdout"), err => "stderr"},
+           waiter: waiter
          }}
 
       {:error, reason} ->
@@ -225,8 +233,11 @@ defmodule Longx.Exec.Process do
     {:noreply, wake(state)}
   end
 
-  def handle_info({:stream_eof, _stream}, state) do
-    state = Map.update!(state, :open_streams, &max(&1 - 1, 0))
+  def handle_info({:stream_eof, stream}, state) do
+    state =
+      state
+      |> Map.update!(:open_streams, &max(&1 - 1, 0))
+      |> Map.update!(:pumps, &Map.reject(&1, fn {_, name} -> name == stream end))
 
     case state do
       %{open_streams: 0, pending_exit: code} when is_integer(code) ->
@@ -276,10 +287,24 @@ defmodule Longx.Exec.Process do
     end
   end
 
-  # the shim went away without an exit status (it was killed, or crashed)
-  def handle_info({:EXIT, shim, reason}, %{shim: shim, exit_code: nil} = state) do
-    Logger.warning("exec: #{state.id} shim died: #{inspect(reason)}")
-    {:noreply, state |> exited(-1) |> Map.put(:open_streams, 0) |> maybe_close()}
+  # The shim server stopping is not news by itself: it stops normally right
+  # after it answered the waiter (which is on its way with the status), and
+  # a crash reaches the waiter as an error — every exit comes through the
+  # waiter. What can go wrong is a helper dying with its call: a pump that
+  # never got its EOF, a waiter that never got to send.
+  def handle_info({:EXIT, shim, _reason}, %{shim: shim} = state), do: {:noreply, state}
+
+  def handle_info({:EXIT, pid, reason}, %{pumps: pumps} = state) when is_map_key(pumps, pid) do
+    if reason != :normal,
+      do: Logger.debug("exec: #{state.id} #{pumps[pid]} pump died: #{inspect(reason)}")
+
+    handle_info({:stream_eof, pumps[pid]}, %{state | pumps: Map.delete(pumps, pid)})
+  end
+
+  def handle_info({:EXIT, waiter, reason}, %{waiter: waiter, exit_code: nil} = state)
+      when reason != :normal do
+    Logger.warning("exec: #{state.id} lost the exit status: #{inspect(reason)}")
+    {:noreply, exited(state, -1)}
   end
 
   # the session is gone: nobody will read this any more, take the tree down

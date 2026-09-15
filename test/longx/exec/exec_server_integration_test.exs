@@ -237,27 +237,27 @@ defmodule Longx.Exec.ExecServerIntegrationTest do
     assert File.exists?(Path.join(probe, "per-turn"))
   end
 
-  test "a project's passthrough paths are visible to a sandboxed command from the next command on, no restart",
+  test "a project's passthrough paths reach a sandboxed command from the next command on, no restart",
        %{bypass: bypass, gateway_url: gateway_url} do
-    device = Enum.find(["/dev/dxg", "/dev/nvidia0", "/dev/nvidiactl"], &File.exists?/1)
+    # a host path outside the workspace is read-only in the sandbox until the
+    # project lets it in (a device, a socket, or — here — a plain file)
+    probe = Path.join(System.user_home!(), "longx-exec-pt-#{System.unique_integer([:positive])}")
+    File.write!(probe, "")
+    on_exit(fn -> File.rm(probe) end)
 
-    if device do
-      dir = Path.join(Path.expand("data"), "exec_project_#{System.unique_integer([:positive])}")
-      File.mkdir_p!(dir)
-      on_exit(fn -> File.rm_rf!(dir) end)
-      {:ok, project} = Longx.Projects.create_project(%{name: "exec", root_path: dir})
+    dir = Path.join(Path.expand("data"), "exec_project_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf!(dir) end)
+    {:ok, project} = Longx.Projects.create_project(%{name: "exec", root_path: dir})
 
-      script(bypass, self(), %{cmd: "ls -la #{device} 2>&1"})
+    script(bypass, self(), %{cmd: "(echo x > #{probe} && echo written) 2>&1"})
+    home = prepare_home!(gateway_url, exec_server_url: exec_server_url!(gateway_url, project.id))
+    conn = start_connection!(home)
 
-      home =
-        prepare_home!(gateway_url, exec_server_url: exec_server_url!(gateway_url, project.id))
+    assert run!(conn, home, []) =~ ~r/read-only file system/i
 
-      conn = start_connection!(home)
-
-      assert run!(conn, home, []) =~ "No such file"
-
-      {:ok, _} = Longx.Projects.update_project(project, %{passthrough_paths: [device]})
-      assert run!(conn, home, []) =~ Path.basename(device)
-    end
+    {:ok, _} = Longx.Projects.update_project(project, %{passthrough_paths: [probe]})
+    assert run!(conn, home, []) =~ "written"
+    assert File.read!(probe) == "x\n"
   end
 end
