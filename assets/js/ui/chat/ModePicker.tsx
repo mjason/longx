@@ -66,6 +66,7 @@ export function ModePicker({ mode, onChange, disabled = false, started = false }
           </Label>
           <Switch id="mode-network" checked={mode.networkAccess} disabled={mode.sandbox !== "workspace_write"} onCheckedChange={(v) => onChange({ ...mode, networkAccess: v })} />
         </div>
+        <p className="text-muted-foreground text-xs">{t.networkHint}</p>
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor="mode-web-search" className="text-xs">
             {t.webSearch}

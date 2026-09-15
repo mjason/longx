@@ -76,6 +76,35 @@ describe("toMessages", () => {
     expect(msgs[0]!.status).toEqual({ type: "requires-action", reason: "interrupt" });
   });
 
+  test("a sandbox retry offers what codex listed: allow once, allow this command from now on, refuse — and says why in our words", () => {
+    const msgs = toMessages(
+      view({
+        turn: { id: "t5", status: "inProgress" },
+        items: [],
+        requests: [
+          {
+            id: 7,
+            method: "item/commandExecution/requestApproval",
+            params: {
+              requestId: 7,
+              itemId: "call_1",
+              command: "/usr/bin/zsh -lc 'uv run jbt'",
+              reason: "command failed; retry without sandbox?",
+              availableDecisions: ["accept", { acceptWithExecpolicyAmendment: { execpolicy_amendment: ["uv", "run"] } }, "cancel"],
+            },
+          },
+        ],
+      }),
+    );
+    const tool = parts(msgs[0]!)[0] as unknown as { approval: { options: { id: string; label: string }[]; prompt: string } };
+    expect(tool.approval.options.map((o) => [o.id, o.label])).toEqual([
+      ["accept", "允许"],
+      ["accept_for_session", "以后这条命令都允许"],
+      ["decline", "拒绝"],
+    ]);
+    expect(tool.approval.prompt).toMatch(/沙箱拦住了/);
+  });
+
   test("an approval whose item has not arrived still gets a place", () => {
     const msgs = toMessages(
       view({

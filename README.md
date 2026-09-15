@@ -26,45 +26,7 @@ Erlang 运行时、Go 中间件、codex-app-server、git、obscura（无头浏�
 **要求**：Linux x86_64 或 arm64，glibc ≥ 2.39（Ubuntu 24.04、Debian 13 及更新的发行版；包在
 `ubuntu-24.04` runner 上构建）；codex 的沙箱需要内核允许非特权用户命名空间（大多数发行版默认允许，
 Docker 容器和一些加固过的系统不允许——不允许时 codex 会拒绝所有沙箱内的命令，只能用「完全访问」模式；
-「设置 → 沙箱与权限」能看到检测结果和对策）。两种常见情况：
-
-- **Ubuntu 24.04 及更新**默认 `kernel.apparmor_restrict_unprivileged_userns=1`，没有 AppArmor 配置的程序拿不到带权限的
-  用户命名空间（`bwrap: setting up uid map: Permission denied`）。**install.sh 装完会自己检测**：遇到这种情况就用 sudo 给 codex
-  会用的 bwrap 加一条 AppArmor 配置（和 Ubuntu 给 Chrome、bazel 的做法一样，一次性，升级后仍有效；`LONGX_NO_SUDO=1` 则只打印不执行），
-  之后也可以单独跑 `sh install.sh --fix-sandbox`。注意 **codex 优先用系统里的 `bwrap`**（PATH 上有、支持 `--perms` 就用它，
-  比如 Ubuntu 的 bubblewrap 包），没有才用内置的——所以系统装了 bubblewrap 时配置里还要有 `/usr/bin/bwrap` 那一段。手动做就是：
-
-  ```sh
-  sudo tee /etc/apparmor.d/longx-bwrap <<'EOF'
-  abi <abi/4.0>,
-  include <tunables/global>
-
-  profile longx-bwrap /home/*/.longx/app*/lib/longx-*/priv/codex/*/codex-resources/bwrap flags=(unconfined) {
-    userns,
-  }
-
-  profile longx-system-bwrap /usr/bin/bwrap flags=(unconfined) {
-    userns,
-  }
-  EOF
-  sudo apparmor_parser -r /etc/apparmor.d/longx-bwrap
-  ```
-
-  然后在「设置 → 沙箱与权限」点「重新检测」。`LONGX_HOME` 不是 `~/.longx` 的话改路径。整体关掉限制
-  （`sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`）也行，但放开的是所有程序。
-- **工具要写沙箱外的目录**：可写工作区只能写项目目录和 /tmp；`uv run` / `pip` / `npm` 的缓存在 home 下（Linux `~/.cache`，
-  macOS `~/Library/Caches`，Windows `%LOCALAPPDATA%`），不可写时会报错。「项目设置 → 沙箱额外可写目录」里按需添加（默认为空——
-  每加一个目录都是在放宽沙箱：缓存里被塞的东西会在沙箱外执行），数据集目录之类也加在这里。
-- **沙箱里看不到 GPU / USB / 串口 / 宿主 socket**：bubblewrap 只给命令一个最小的 `/dev`，codex 自己没有设备直通
-  （把设备当可写目录传进去会让沙箱起不来）。「项目设置 → 放进沙箱的宿主路径」里写要放行的路径（可用通配符，机器上有的会给
-  出 GPU / USB / Docker socket 的一键预设）：Longx 自带的 bwrap 包装程序（`bwrapx`，随 shim 用 Go 构建）放在该项目 codex 的 PATH
-  最前面，把这些路径以 `--dev-bind` / `--bind` 追加在 codex 生成的 bwrap 参数里，其余文件系统和网络限制原样不动。每一项都在放宽
-  隔离——设备基本无害，Docker socket 等于宿主 root（界面上标红）。改了要重启项目的 codex（状态栏会提示）。只对 Linux 沙箱有效；
-  要更省事就把项目设成「完全访问」。**GPU 还要同时打开「允许联网」**：codex 在断网沙箱里用 seccomp 拦掉所有 `connect`，
-  NVIDIA 驱动初始化时的本地 socket 调用也被拦（`cuInit` 报 `CUDA_ERROR_OPERATING_SYSTEM`）；联网打开后 `nvidia-smi`、
-  JAX/PyTorch 的 CUDA 都正常（DGX Spark 上验证）。工具缓存（`uv` 的 `~/.cache/uv`）按需加到「沙箱额外可写目录」。
-- **容器和部分虚拟机**允许用户命名空间但建不了网络命名空间（`bwrap: loopback: Failed RTM_NEWADDR`）：codex 只在命令不能联网时
-  才隔离网络，所以项目「网络访问」打开时沙箱正常，关着时每条命令都会被拒绝。设置页会标成「可用，但断网隔离不可用」。
+「设置 → 沙箱与权限」能看到检测结果和对策；沙箱能做什么、怎么放行，见下面的「沙箱」一节）。
 
 全部装在用户自己的目录里（`~/.longx`），不需要 root。
 
@@ -135,6 +97,66 @@ sh install.sh --rollback        # 或 curl -fsSL …/install.sh | sh -s -- --rol
 `mix setup` 会下载内置的 codex / git / obscura）得到 `_build/prod/rel/longx`，和 Release 里的一样。
 发布由 `.github/workflows/release.yml` 完成：打 `v*` 标签就在 x86_64 和 arm64 的 runner 上各自原生构建并挂到
 GitHub Release。
+
+## 沙箱
+
+agent 的命令由 codex 放进沙箱里跑（Linux bubblewrap，macOS seatbelt，Windows 受限令牌）。三种模式：
+
+| 模式 | 能做什么 |
+|---|---|
+| 只读 | 读整个文件系统，什么都不能写 |
+| 可写工作区（默认） | 写项目目录和 /tmp；其余只读；看不到设备；联网和本机服务由开关决定 |
+| 完全访问 | 不进沙箱，和你自己在终端里一样 |
+
+可写工作区下有三个开关，都在「项目设置」里，也可以在聊天输入框旁按会话临时改（沙箱与联网从下一轮生效）：
+
+- **联网与本机服务**：关着时命令连不上任何东西，**包括本机的 socket**——Docker、本地数据库、NVIDIA 驱动初始化用的 socket
+  都算（codex 用 seccomp 拦掉全部 `connect`，`cuInit` 会报 `CUDA_ERROR_OPERATING_SYSTEM`）。
+- **沙箱额外可写目录**：默认为空。包管理器的缓存在 home 下（`uv run` 会锁 `~/.cache/uv`，pip / npm / cargo / Hugging Face 各有各的，
+  macOS 在 `~/Library/Caches`，Windows 在 `%LOCALAPPDATA%`），不可写就失败——机器上有的会给一键按钮；数据集目录之类也加在这里。
+  每加一个目录都在放宽沙箱（缓存里被塞的东西会在沙箱外执行），只加确实需要的。改了下一轮就生效。
+- **放进沙箱的宿主路径**（仅 Linux）：GPU、USB/串口、宿主 socket 这类沙箱看不到的东西。机器上有的给一键预设（GPU / USB·串口 /
+  Docker socket——后者等于宿主 root，界面标红）。实现是 Longx 自带的 bwrap 包装程序（`bwrapx`）在 codex 生成的 bwrap 参数里追加
+  `--dev-bind` / `--bind`，其余限制不动。codex 启动时读取，改了要重启项目的 codex（状态栏会提示）。
+
+**不用先去设置里猜**——两层：
+- 命令被沙箱**拒绝**时（写沙箱外的目录、连本机 socket 等，codex 按输出里的 "Read-only file system" / "Operation not permitted"
+  判定），codex 会停下来问「在沙箱外重新运行一次？」，聊天里出现审批卡：允许一次 / 以后这条命令都允许（写进该项目 codex 的
+  execpolicy 规则）/ 拒绝。这是 codex 自己的机制，Longx 把审批策略「按需询问」映射成 codex 的 granular 策略来打开它——普通的
+  `on-request` 在这种情况下只把失败交给模型自己琢磨。
+- 命令**没被拒绝但结果不对**时（CUDA 报 `CUDA_ERROR_OPERATING_SYSTEM`、`nvidia-smi` 找不到驱动），那条命令下面会说明原因并给一个
+  「允许」按钮，点一下就写进项目设置（打开联网与本机服务 / 放行 GPU），下一轮生效（放行设备需重启 codex）；想收回，去项目设置里改回来。
+
+GPU 的完整配方（DGX Spark、WSL2 上验证）：放行 GPU + 打开联网与本机服务 + 需要的话放行 `~/.cache/uv`。
+
+### 沙箱起不来时
+
+- **Ubuntu 24.04 及更新**默认 `kernel.apparmor_restrict_unprivileged_userns=1`，没有 AppArmor 配置的程序拿不到带权限的
+  用户命名空间（`bwrap: setting up uid map: Permission denied`）。**install.sh 装完会自己检测**：遇到这种情况就用 sudo 给 codex
+  会用的 bwrap 加一条 AppArmor 配置（和 Ubuntu 给 Chrome、bazel 的做法一样，一次性，升级后仍有效；`LONGX_NO_SUDO=1` 则只打印不执行），
+  之后也可以单独跑 `sh install.sh --fix-sandbox`。注意 **codex 优先用系统里的 `bwrap`**（PATH 上有、支持 `--perms` 就用它，
+  比如 Ubuntu 的 bubblewrap 包），没有才用内置的——所以系统装了 bubblewrap 时配置里还要有 `/usr/bin/bwrap` 那一段。手动做就是：
+
+  ```sh
+  sudo tee /etc/apparmor.d/longx-bwrap <<'EOF'
+  abi <abi/4.0>,
+  include <tunables/global>
+
+  profile longx-bwrap /home/*/.longx/app*/lib/longx-*/priv/codex/*/codex-resources/bwrap flags=(unconfined) {
+    userns,
+  }
+
+  profile longx-system-bwrap /usr/bin/bwrap flags=(unconfined) {
+    userns,
+  }
+  EOF
+  sudo apparmor_parser -r /etc/apparmor.d/longx-bwrap
+  ```
+
+  然后在「设置 → 沙箱与权限」点「重新检测」。`LONGX_HOME` 不是 `~/.longx` 的话改路径。整体关掉限制
+  （`sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`）也行，但放开的是所有程序。
+- **容器和部分虚拟机**允许用户命名空间但建不了网络命名空间（`bwrap: loopback: Failed RTM_NEWADDR`）：codex 只在命令不能联网时
+  才隔离网络，所以「联网与本机服务」打开时沙箱正常，关着时每条命令都会被拒绝。设置页会标成「可用，但断网隔离不可用」。
 
 ## 结构一览
 

@@ -158,6 +158,51 @@ defmodule Longx.Codex.SandboxTest do
     end
   end
 
+  describe "cache_presets/3 (pure): tool caches a sandboxed command wants to write, per platform" do
+    test "linux: uv / pip / npm / cargo / huggingface where they exist, as ~ paths" do
+      exists =
+        &(&1 in [
+            "/home/u/.cache/uv",
+            "/home/u/.npm",
+            "/home/u/.cargo/registry",
+            "/home/u/.cache/huggingface"
+          ])
+
+      assert [
+               %{id: "uv", paths: ["~/.cache/uv"]},
+               %{id: "npm", paths: ["~/.npm"]},
+               %{id: "cargo", paths: ["~/.cargo/registry"]},
+               %{id: "huggingface", paths: ["~/.cache/huggingface"]}
+             ] = Sandbox.cache_presets({:linux, :x86_64}, %{"HOME" => "/home/u"}, exists)
+    end
+
+    test "macOS keeps its Library/Caches, Windows its LOCALAPPDATA; nothing present → nothing" do
+      exists = &(&1 in ["/Users/u/Library/Caches/uv", "/Users/u/Library/Caches/pip"])
+
+      assert [
+               %{id: "uv", paths: ["~/Library/Caches/uv"]},
+               %{id: "pip", paths: ["~/Library/Caches/pip"]}
+             ] =
+               Sandbox.cache_presets({:darwin, :aarch64}, %{"HOME" => "/Users/u"}, exists)
+
+      exists =
+        &(&1 in ["C:/Users/u/AppData/Local/uv/cache", "C:/Users/u/AppData/Local/npm-cache"])
+
+      assert [
+               %{id: "uv", paths: ["C:/Users/u/AppData/Local/uv/cache"]},
+               %{id: "npm", paths: ["C:/Users/u/AppData/Local/npm-cache"]}
+             ] =
+               Sandbox.cache_presets(
+                 {:windows, :x86_64},
+                 %{"USERPROFILE" => "C:/Users/u", "LOCALAPPDATA" => "C:/Users/u/AppData/Local"},
+                 exists
+               )
+
+      assert Sandbox.cache_presets({:linux, :x86_64}, %{"HOME" => "/home/u"}, fn _ -> false end) ==
+               []
+    end
+  end
+
   describe "probe/0" do
     # what the host allows: a WSL2 dev box passes, a GitHub runner does not
     # (bwrap cannot set up the loopback there) — CI excludes :host_sandbox
@@ -173,8 +218,17 @@ defmodule Longx.Codex.SandboxTest do
     test "status/0 is cached after the first probe and can be re-probed" do
       assert Sandbox.status() in [:ok, :no_net_isolation, :unavailable]
 
-      assert %{status: status, reason: _, bwrap: bwrap, gpu: gpu, checked_at: %DateTime{}} =
+      assert %{
+               status: status,
+               reason: _,
+               bwrap: bwrap,
+               gpu: gpu,
+               platform: platform,
+               checked_at: %DateTime{}
+             } =
                Sandbox.report()
+
+      assert platform in [:linux, :darwin, :windows]
 
       assert is_boolean(gpu)
 

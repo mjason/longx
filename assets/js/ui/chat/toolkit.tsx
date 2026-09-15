@@ -23,6 +23,8 @@ import { CodeDiff, type DiffLine } from "@/ui/components/assistant-ui/elements/c
 import { ElicitationForm, type ElicitationField } from "@/ui/components/assistant-ui/elements/elicitation-form";
 import { FileTree, type FileTreeNode } from "@/ui/components/assistant-ui/elements/file-tree";
 import { TerminalBlock } from "@/ui/components/assistant-ui/elements/terminal-block";
+import { useChatMaybe } from "./ChatProvider";
+import { SandboxHint } from "./SandboxHint";
 import { ToolCall } from "@/ui/components/assistant-ui/elements/tool-call";
 import { ToolError } from "@/ui/components/assistant-ui/elements/tool-error";
 import { WebSearch } from "@/ui/components/assistant-ui/elements/web-search";
@@ -81,6 +83,8 @@ function ToolRow({ label, activeLabel, query, running, failed, children, testId 
 
 export const CommandExecutionTool: ToolCallMessagePartComponent<CommandArgs, CommandResult> = (p) => {
   const actions = useApprovalActions(p);
+  // the project window's runtime — the sandbox hint needs the mode and the project
+  const chat = useChatMaybe();
   const approval = pendingApproval(p);
   const command = p.args.command ?? "";
   const output = p.result?.output ?? (typeof p.artifact === "string" ? p.artifact : "");
@@ -100,7 +104,10 @@ export const CommandExecutionTool: ToolCallMessagePartComponent<CommandArgs, Com
         {couldNotRun ? (
           <ToolError name={t.command} target={command} message={output || t.commandFailed} attempt={0} maxAttempts={0} retrying={false} />
         ) : (
-          <TerminalBlock command={command} fullCommand={p.args.fullCommand} lines={lines} done={!running} exitCode={p.result?.exitCode ?? (running ? 0 : null)} exitLabel={exitLabel(p)} />
+          <>
+            <TerminalBlock command={command} fullCommand={p.args.fullCommand} lines={lines} done={!running} exitCode={p.result?.exitCode ?? (running ? 0 : null)} exitLabel={exitLabel(p)} />
+            {!running && chat ? <SandboxHint output={output} chat={chat} /> : null}
+          </>
         )}
       </ToolRow>
     </>

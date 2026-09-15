@@ -373,9 +373,10 @@ defmodule Longx.Projects do
     |> Map.new()
   end
 
-  # turn/start needs the whole sandbox policy when any of it changes
-  defp mode_turn_opts(mode, _thread) when map_size(mode) == 0, do: []
-
+  # turn/start carries the whole sandbox policy every turn: the mode in force
+  # (changed or not) with the project's *current* writable roots — codex keeps
+  # a turn's policy for the turns after, so an edit to the roots reaches an open
+  # thread on its next turn instead of waiting for a resume
   defp mode_turn_opts(mode, %Thread{} = thread) do
     [
       sandbox: Map.get(mode, :sandbox, thread.sandbox),

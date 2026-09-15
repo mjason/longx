@@ -8,6 +8,11 @@ import { chatConfig, CompactionUI, PlanUI } from "./toolkit";
 
 const ChatContext = createContext<CodexRuntime | null>(null);
 
+/** The runtime when inside a project window, null elsewhere (a tool UI rendered on its own). */
+export function useChatMaybe(): CodexRuntime | null {
+  return useContext(ChatContext);
+}
+
 /** The chat runtime for the project window: the thread in the route, or a new chat. */
 export function useChat(): CodexRuntime {
   const ctx = useContext(ChatContext);

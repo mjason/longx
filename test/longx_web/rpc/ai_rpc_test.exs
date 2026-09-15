@@ -286,18 +286,28 @@ defmodule LongxWeb.AiRpcTest do
                "status" => status,
                "checkedAt" => at,
                "bwrap" => bwrap,
-               "presets" => presets
+               "presets" => presets,
+               "cachePresets" => caches,
+               "platform" => platform,
+               "home" => home
              }
            } =
              rpc(conn, "probe_sandbox", %{
-               "fields" => ["status", "reason", "bwrap", "gpu", "presets", "checkedAt"]
+               "fields" =>
+                 ~w(status reason bwrap gpu presets cachePresets platform home checkedAt)
              })
 
+    assert platform in ["linux", "darwin", "windows"]
+    assert is_binary(home)
     # what this machine could let into the sandbox (id, label, paths, danger), maybe nothing
     assert is_list(presets)
 
     for preset <- presets,
         do: assert(%{"id" => _, "label" => _, "paths" => [_ | _], "danger" => _} = preset)
+
+    # tool caches found on this machine, as paths the settings can take
+    assert is_list(caches)
+    for c <- caches, do: assert(%{"id" => _, "label" => _, "paths" => [_ | _]} = c)
 
     assert status in ["ok", "no_net_isolation", "unavailable"]
     # the bwrap codex will run: the system one when installed, else the bundled

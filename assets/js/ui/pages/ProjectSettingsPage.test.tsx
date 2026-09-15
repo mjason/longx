@@ -52,6 +52,9 @@ describe("ProjectSettingsPage", () => {
           { id: "gpu", label: "GPU", paths: ["/dev/dxg"], danger: false },
           { id: "docker", label: "Docker socket", paths: ["/var/run/docker.sock"], danger: true },
         ],
+        cachePresets: [{ id: "uv", label: "uv", paths: ["~/.cache/uv"] }],
+        platform: "linux",
+        home: "/home/mj",
         checkedAt: "",
       }) as never,
     );
@@ -65,12 +68,24 @@ describe("ProjectSettingsPage", () => {
     await user.click(within(form).getByRole("button", { name: /添加 GPU/ }));
     expect(within(form).getByRole("button", { name: /Docker socket/ })).toHaveTextContent("等于宿主 root");
     expect(box).toHaveValue("/dev/ttyUSB*\n/dev/dxg");
+    // a tool cache found on the machine is one click into the writable directories
+    await user.click(within(form).getByRole("button", { name: "添加 uv 缓存" }));
+    expect(within(form).getByLabelText(/沙箱额外可写目录/)).toHaveValue("~/.cache/uv");
+    expect(form).toHaveTextContent("本机的服务和 socket");
     await user.click(within(form).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(updateProject).toHaveBeenCalledWith(
-        expect.objectContaining({ input: expect.objectContaining({ passthroughPaths: ["/dev/ttyUSB*", "/dev/dxg"] }) }),
+        expect.objectContaining({ input: expect.objectContaining({ passthroughPaths: ["/dev/ttyUSB*", "/dev/dxg"], writableRoots: ["~/.cache/uv"] }) }),
       ),
     );
+  });
+
+  test("on macOS / Windows the Linux-only passthrough field is not shown", async () => {
+    vi.mocked(sandboxStatus).mockResolvedValue(ok({ status: "ok", reason: null, bwrap: null, gpu: false, presets: [], cachePresets: [], platform: "darwin", home: "/Users/mj", checkedAt: "" }) as never);
+    renderAt("/p/app-1/settings");
+    const form = await screen.findByTestId("project-settings");
+    await within(form).findByLabelText(/沙箱额外可写目录/);
+    expect(within(form).queryByLabelText(/放进沙箱的宿主路径/)).not.toBeInTheDocument();
   });
 
   test("deleting the project asks for its name, then removes it (codex data included) and leaves", async () => {
