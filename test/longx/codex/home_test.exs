@@ -33,6 +33,16 @@ defmodule Longx.Codex.HomeTest do
     assert config =~ ~s(requires_openai_auth = false)
   end
 
+  test "prepare/1 turns codex's per-command permission requests on: the model asks for what it needs, the person grants it per turn or session",
+       %{dir: dir} do
+    {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
+    config = File.read!(home.config_path)
+    assert config =~ "exec_permission_approvals = true"
+    assert config =~ "request_permissions_tool = true"
+    # one [features] table: TOML refuses a second
+    assert length(String.split(config, "[features]")) == 2
+  end
+
   test "web search is standalone by default: open fetches pages without any provider", %{
     dir: dir
   } do

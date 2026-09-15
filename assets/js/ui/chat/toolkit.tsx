@@ -9,6 +9,7 @@
 // the runtime's extras.
 import { AuiConfig, defineToolkit, makeAssistantDataUI, MessagePartPrimitive, MessagePrimitive, Tools, useAuiState, useToolCallElapsed, type ToolCallMessagePartComponent, type ToolCallMessagePartProps } from "@assistant-ui/react";
 import { useState, type ReactNode } from "react";
+import { ShieldQuestion } from "lucide-react";
 import { toast } from "sonner";
 import type { CodexExtras } from "@/core/chat/adapter";
 import type { PlanStep } from "@/core/chat/thread";
@@ -42,7 +43,6 @@ type WebSearchAction = { type: "search"; query?: string | null; queries?: string
 type WebSearchArgs = { query?: string; action?: WebSearchAction | null };
 type WebSearchResult = { results?: { title?: string; url?: string }[] | null };
 
-const APPROVAL_LABELS: ApprovalLabels = { allowOnce: t.allowOnce, alwaysAllow: t.allowSession, deny: t.deny };
 
 type ApprovalSeam = Pick<ToolCallMessagePartProps, "approval" | "respondToApproval">;
 
@@ -51,6 +51,8 @@ function pendingApproval(p: ApprovalSeam) {
 }
 
 /** The three codex answers as assistant-ui option ids; disabled once one is sent. */
+// the card's buttons come from the approval's options (what codex offered:
+// a session variant only when it listed one), labels included
 function useApprovalActions(p: ApprovalSeam) {
   const [sent, setSent] = useState(false);
   const answer = (optionId: string) => {
@@ -61,11 +63,16 @@ function useApprovalActions(p: ApprovalSeam) {
       toast.error(error instanceof Error ? error.message : String(error));
     });
   };
+  const options = (p.approval?.options ?? []) as { id: string; kind: string; label: string }[];
+  const once = options.find((o) => o.kind === "allow-once");
+  const always = options.find((o) => o.kind === "allow-always");
+  const deny = options.find((o) => o.kind === "reject-once");
   return {
     disabled: sent,
-    onAllowOnce: () => answer("accept"),
-    onAlwaysAllow: () => answer("accept_for_session"),
-    onDeny: () => answer("decline"),
+    labels: { allowOnce: once?.label ?? t.allowOnce, alwaysAllow: always?.label ?? t.allowSession, deny: deny?.label ?? t.deny } as ApprovalLabels,
+    onAllowOnce: () => answer(once?.id ?? "accept"),
+    ...(always ? { onAlwaysAllow: () => answer(always.id) } : {}),
+    onDeny: () => answer(deny?.id ?? "decline"),
   };
 }
 
@@ -97,20 +104,51 @@ export const CommandExecutionTool: ToolCallMessagePartComponent<CommandArgs, Com
     <>
       {approval ? (
         <div className="py-1">
-          <ApprovalCard state="request" title={t.approvalNeeded} subtitle={approval.prompt ?? t.approveCommand} command={p.args.fullCommand ?? command} labels={APPROVAL_LABELS} {...actions} />
+          <ApprovalCard state="request" title={t.approvalNeeded} subtitle={approval.prompt ?? t.approveCommand} command={p.args.fullCommand ?? command} {...actions} />
         </div>
       ) : null}
       <ToolRow label={t.ranCommand} activeLabel={t.runningCommand} query={command} running={running || approval !== undefined} failed={failed} testId="tool-command">
         {couldNotRun ? (
           <ToolError name={t.command} target={command} message={output || t.commandFailed} attempt={0} maxAttempts={0} retrying={false} />
         ) : (
-          <>
-            <TerminalBlock command={command} fullCommand={p.args.fullCommand} lines={lines} done={!running} exitCode={p.result?.exitCode ?? (running ? 0 : null)} exitLabel={exitLabel(p)} />
-            {!running && chat ? <SandboxHint output={output} chat={chat} /> : null}
-          </>
+          <TerminalBlock command={command} fullCommand={p.args.fullCommand} lines={lines} done={!running} exitCode={p.result?.exitCode ?? (running ? 0 : null)} exitLabel={exitLabel(p)} />
         )}
       </ToolRow>
+      {/* below the row, not inside it: a finished command's row is folded, the hint must not be */}
+      {!running && chat ? <SandboxHint output={output} chat={chat} /> : null}
     </>
+  );
+};
+
+type PermissionsArgs = { reason?: string | null; lines?: string[] };
+
+/**
+ * codex's request_permissions: the agent asks for directories / the network
+ * for the rest of the turn or session — an approval card listing them,
+ * granted or refused through the same respond path (no item of its own).
+ */
+export const PermissionsTool: ToolCallMessagePartComponent<PermissionsArgs, unknown> = (p) => {
+  const actions = useApprovalActions(p);
+  const approval = pendingApproval(p);
+  const lines = p.args.lines ?? [];
+  const body = (
+    <ul className="flex flex-col gap-0.5" data-testid="permissions-lines">
+      {lines.map((l) => (
+        <li key={l}>{l}</li>
+      ))}
+    </ul>
+  );
+  if (!approval) {
+    return (
+      <ToolRow label={t.permissionsAsked} activeLabel={t.permissionsAsked} query={lines.join("、")} running={false} failed={false} testId="tool-permissions">
+        {body}
+      </ToolRow>
+    );
+  }
+  return (
+    <div className="py-1" data-testid="tool-permissions">
+      <ApprovalCard state="request" title={t.permissionsRequest} subtitle={approval.prompt ?? t.permissionsAsked} icon={<ShieldQuestion className="size-4" />} command={body} {...actions} />
+    </div>
   );
 };
 
@@ -145,7 +183,6 @@ export const FileChangeTool: ToolCallMessagePartComponent<FileChangeArgs, FileCh
                 ))}
               </ul>
             }
-            labels={APPROVAL_LABELS}
             {...actions}
           />
         </div>
@@ -320,7 +357,6 @@ export const SubagentTool: ToolCallMessagePartComponent<SubagentArgs, SubagentRe
             title={t.approvalNeeded}
             subtitle={approval.prompt ?? t.approveCommand}
             command={request?.command ?? (request?.paths?.length ? <ul>{request.paths.map((path) => <li key={path}>{path}</li>)}</ul> : p.args.name)}
-            labels={APPROVAL_LABELS}
             {...actions}
           />
         </div>
@@ -417,6 +453,7 @@ export const codexToolkit = defineToolkit({
   fileChange: { type: "backend", render: FileChangeTool, display: "standalone" },
   webSearch: { type: "backend", render: WebSearchTool, display: "standalone" },
   requestUserInput: { type: "backend", render: QuestionsTool, display: "standalone" },
+  permissions: { type: "backend", render: PermissionsTool, display: "standalone" },
   subagent: { type: "backend", render: SubagentTool, display: "standalone" },
   collab: { type: "backend", render: CollabTool, display: "standalone" },
 });

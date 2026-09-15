@@ -417,10 +417,16 @@ defmodule Longx.Codex.Home do
 
   # one [features] table (TOML refuses a second): codex's memories — the
   # per-home pipeline and its `memories.*` tools — and standalone search
+  # `exec_permission_approvals` / `request_permissions_tool`: the model asks
+  # for a directory or the network on a command (`with_additional_permissions`)
+  # or for the turn (`request_permissions`), the person grants it in the
+  # chat, per turn or session — the sandbox itself stays as narrow as it is
+  # (codex 0.154: UnderDevelopment, off by default; verified on the binary)
   defp features_toml(web_search, memories) do
     [
       "\n[features]\nmemories = #{memories}\n",
-      if(web_search == :standalone, do: "standalone_web_search = true\n", else: [])
+      if(web_search == :standalone, do: "standalone_web_search = true\n", else: []),
+      "exec_permission_approvals = true\nrequest_permissions_tool = true\n"
     ]
   end
 

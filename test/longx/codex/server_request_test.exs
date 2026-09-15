@@ -11,7 +11,7 @@ defmodule Longx.Codex.ServerRequestTest do
           {"item/fileChange/requestApproval", %{"decision" => "decline"}},
           {"execCommandApproval", %{"decision" => "timed_out"}},
           {"applyPatchApproval", %{"decision" => "timed_out"}},
-          {"item/permissions/requestApproval", %{"permissions" => %{}}},
+          {"item/permissions/requestApproval", %{"permissions" => %{}, "scope" => "turn"}},
           {"item/tool/requestUserInput", %{"answers" => %{}}},
           {"mcpServer/elicitation/request", %{"action" => "cancel"}}
         ] do

@@ -304,19 +304,13 @@ export function sandboxPresets(data: { presets?: unknown } | undefined): Sandbox
   return Array.isArray(data?.presets) ? (data.presets as SandboxPreset[]) : [];
 }
 
-export type SandboxCachePreset = { id: string; label: string; paths: string[] };
-
-export function sandboxCachePresets(data: { cachePresets?: unknown } | undefined): SandboxCachePreset[] {
-  return Array.isArray(data?.cachePresets) ? (data.cachePresets as SandboxCachePreset[]) : [];
-}
-
 export function useSandboxStatus() {
   return useQuery({
     queryKey: queryKeys.sandbox,
     staleTime: Infinity,
     queryFn: async () =>
       unwrap(
-        await sandboxStatus({ fields: ["status", "reason", "bwrap", "gpu", "presets", "cachePresets", "platform", "home", "checkedAt"] }),
+        await sandboxStatus({ fields: ["status", "reason", "bwrap", "gpu", "presets", "platform", "home", "checkedAt"] }),
       ),
   });
 }

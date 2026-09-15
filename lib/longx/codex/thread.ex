@@ -34,26 +34,11 @@ defmodule Longx.Codex.Thread do
           | {:tools, [module | String.t()]}
           | {:conn, GenServer.server()}
 
-  # codex's granular policy with every prompt kind on: on-request behaviour
-  # (the model asks when it wants out of the sandbox) plus what plain
-  # "on-request" deliberately does not do — a command the sandbox denied
-  # ("Read-only file system", "Operation not permitted"…) becomes an
-  # approval request "retry without sandbox?" instead of a silent failure
-  # the model has to reason about (orchestrator.rs: under Never / OnRequest
-  # codex never retries; Granular{sandbox_approval} does, after asking)
-  @granular_on_request %{
-    "granular" => %{
-      "sandbox_approval" => true,
-      "rules" => true,
-      "skill_approval" => true,
-      "request_permissions" => true,
-      "mcp_elicitations" => true
-    }
-  }
-  @approval_policies %{never: "never", on_request: @granular_on_request, untrusted: "untrusted"}
-
-  @doc "What `:on_request` is on the wire (see the module's approval policies)."
-  def granular_on_request, do: @granular_on_request
+  # codex's own on-request: the model asks for what a command needs
+  # (`with_additional_permissions`, `request_permissions`, `require_escalated`)
+  # and the person grants it in the chat; codex never widens the sandbox by
+  # itself — a denied command is reported to the model, which asks
+  @approval_policies %{never: "never", on_request: "on-request", untrusted: "untrusted"}
 
   @sandboxes %{
     read_only: "read-only",
@@ -248,34 +233,53 @@ defmodule Longx.Codex.Thread do
   """
   @spec respond(term, decision, keyword) :: :ok | {:error, :unknown_request | :no_connection}
   def respond(request_id, decision, opts \\ []) when is_map_key(@decisions, decision) do
-    respond_raw(request_id, decision_for(decision, pending_params(request_id, opts)), opts)
+    {method, params} = pending(request_id, opts)
+    respond_raw(request_id, decision_for(decision, method, params), opts)
   end
 
-  # the request as codex sent it, when the thread is known (for `availableDecisions`)
-  defp pending_params(request_id, opts) do
+  # the request as codex sent it, when the thread is known
+  defp pending(request_id, opts) do
     case Keyword.get(opts, :thread_id) do
       nil ->
-        %{}
+        {nil, %{}}
 
       thread_id ->
         thread_id
         |> ThreadState.Store.requests()
-        |> Enum.find_value(%{}, fn %{id: id, params: params} ->
-          if to_string(id) == to_string(request_id), do: params
+        |> Enum.find_value({nil, %{}}, fn %{id: id, method: method, params: params} ->
+          if to_string(id) == to_string(request_id), do: {method, params}
         end)
     end
   end
 
+  @permissions_request "item/permissions/requestApproval"
+
   @doc """
-  The answer to send for a decision, given the request's `availableDecisions`:
-  codex offers `acceptWithExecpolicyAmendment` (allow this command from now
-  on, an execpolicy rule) where it offers no `acceptForSession` — a sandbox
-  retry, for one — so "always allow" takes whichever the request lists;
-  "decline" is `cancel` when that is the only refusal on offer. A request
-  that lists nothing gets the plain words.
+  The answer to send for one of our decisions, given the request. A
+  **permissions request** (the `request_permissions` tool) is answered with
+  the grant: `accept` gives what was asked for the turn, `accept_for_session`
+  for the session, `decline` / `cancel` nothing. A **command approval** is
+  answered with what its `availableDecisions` offers: codex lists
+  `acceptWithExecpolicyAmendment` (allow this command from now on, an
+  execpolicy rule) where it offers no `acceptForSession`, so "always allow"
+  takes whichever is there; "decline" is `cancel` when that is the only
+  refusal on offer. A request that lists nothing gets the plain words.
   """
-  @spec decision_for(decision, map) :: map
-  def decision_for(decision, params) do
+  @spec decision_for(decision, String.t() | nil, map) :: map
+  def decision_for(decision, @permissions_request, params) do
+    case decision do
+      :accept ->
+        %{"permissions" => params["permissions"] || %{}, "scope" => "turn"}
+
+      :accept_for_session ->
+        %{"permissions" => params["permissions"] || %{}, "scope" => "session"}
+
+      _ ->
+        %{"permissions" => %{}, "scope" => "turn"}
+    end
+  end
+
+  def decision_for(decision, _method, params) do
     offered = List.wrap(params["availableDecisions"])
     names = Enum.map(offered, fn d -> if is_map(d), do: hd(Map.keys(d)), else: d end)
 

@@ -65,7 +65,7 @@ defmodule Longx.Codex.ServerRequest do
     def handle("applyPatchApproval", _params, _ctx), do: defer(%{"decision" => "timed_out"})
 
     def handle("item/permissions/requestApproval", _params, _ctx),
-      do: defer(%{"permissions" => %{}})
+      do: defer(%{"permissions" => %{}, "scope" => "turn"})
 
     def handle("item/tool/requestUserInput", _params, _ctx), do: defer(%{"answers" => %{}})
     def handle("mcpServer/elicitation/request", _params, _ctx), do: defer(%{"action" => "cancel"})

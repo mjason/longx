@@ -36,7 +36,7 @@ defmodule Longx.Codex.ThreadTest do
                %{
                  "cwd" => "/p",
                  "historyMode" => "paginated",
-                 "approvalPolicy" => Thread.granular_on_request(),
+                 "approvalPolicy" => "on-request",
                  "sandbox" => "workspace-write"
                }
 
@@ -244,7 +244,7 @@ defmodule Longx.Codex.ThreadTest do
     end
 
     test "defaults: on-request approvals in a workspace-write sandbox" do
-      assert %{"approvalPolicy" => %{"granular" => _}, "sandbox" => "workspace-write"} =
+      assert %{"approvalPolicy" => "on-request", "sandbox" => "workspace-write"} =
                Thread.start_params(cwd: "/p")
     end
 
@@ -434,32 +434,21 @@ defmodule Longx.Codex.ThreadTest do
     end
   end
 
-  describe "on-request is codex's granular policy; answers follow what the request offers (pure)" do
-    test "on_request → granular with every prompt kind on, so a sandbox-denied command asks the person to retry outside" do
-      assert Thread.granular_on_request() ==
-               %{
-                 "granular" => %{
-                   "sandbox_approval" => true,
-                   "rules" => true,
-                   "skill_approval" => true,
-                   "request_permissions" => true,
-                   "mcp_elicitations" => true
-                 }
-               }
-
+  describe "answers follow what the request offers (pure)" do
+    test "the approval policy is codex's own on-request: the model asks for permissions, codex never retries a denial on its own" do
       assert Thread.start_params(cwd: "/p", tools: [], approval_policy: :on_request)[
                "approvalPolicy"
              ] ==
-               Thread.granular_on_request()
+               "on-request"
 
       assert Thread.turn_params("t", "hi", approval_policy: :on_request)["approvalPolicy"] ==
-               Thread.granular_on_request()
+               "on-request"
 
       assert Thread.start_params(cwd: "/p", tools: [], approval_policy: :never)["approvalPolicy"] ==
                "never"
     end
 
-    test "accept_for_session becomes the execpolicy amendment when that is what the request offers" do
+    test "a command approval: accept_for_session becomes the execpolicy amendment when that is what is offered; decline → cancel" do
       offered = %{
         "availableDecisions" => [
           "accept",
@@ -469,18 +458,49 @@ defmodule Longx.Codex.ThreadTest do
         "proposedExecpolicyAmendment" => ["ls"]
       }
 
-      assert Thread.decision_for(:accept_for_session, offered) ==
+      method = "item/commandExecution/requestApproval"
+
+      assert Thread.decision_for(:accept_for_session, method, offered) ==
                %{
                  "decision" => %{
                    "acceptWithExecpolicyAmendment" => %{"execpolicy_amendment" => ["ls"]}
                  }
                }
 
-      assert Thread.decision_for(:decline, offered) == %{"decision" => "cancel"}
-      assert Thread.decision_for(:accept, offered) == %{"decision" => "accept"}
+      assert Thread.decision_for(:decline, method, offered) == %{"decision" => "cancel"}
+      assert Thread.decision_for(:accept, method, offered) == %{"decision" => "accept"}
       # a request that lists nothing (older codex, tests): the plain words
-      assert Thread.decision_for(:accept_for_session, %{}) == %{"decision" => "acceptForSession"}
-      assert Thread.decision_for(:decline, %{}) == %{"decision" => "decline"}
+      assert Thread.decision_for(:accept_for_session, method, %{}) == %{
+               "decision" => "acceptForSession"
+             }
+
+      assert Thread.decision_for(:decline, method, %{}) == %{"decision" => "decline"}
+    end
+
+    test "a permissions request (request_permissions tool): accept grants what was asked for the turn, accept_for_session for the session, decline grants nothing" do
+      method = "item/permissions/requestApproval"
+      asked = %{"fileSystem" => %{"write" => ["/home/u"]}, "network" => %{"enabled" => true}}
+      params = %{"permissions" => asked, "reason" => "x"}
+
+      assert Thread.decision_for(:accept, method, params) == %{
+               "permissions" => asked,
+               "scope" => "turn"
+             }
+
+      assert Thread.decision_for(:accept_for_session, method, params) == %{
+               "permissions" => asked,
+               "scope" => "session"
+             }
+
+      assert Thread.decision_for(:decline, method, params) == %{
+               "permissions" => %{},
+               "scope" => "turn"
+             }
+
+      assert Thread.decision_for(:cancel, method, params) == %{
+               "permissions" => %{},
+               "scope" => "turn"
+             }
     end
   end
 end
