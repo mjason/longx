@@ -26,7 +26,7 @@ defmodule Longx.Exec.Process do
   @retain_bytes 1024 * 1024
   @retain_chunks 50_000
   @kill_grace_ms 2_000
-  @exit_settle_ms 50
+  @exit_settle_ms 200
   @denial_words [
     "operation not permitted",
     "permission denied",
@@ -237,9 +237,10 @@ defmodule Longx.Exec.Process do
     end
   end
 
-  # the exit status can arrive before the last output does; a sandboxed
-  # command's denial is read off its output, so give the streams a moment
-  # (codex waits 20 ms too) unless they are already done
+  # the exit status can arrive before the last output does (the pipes still
+  # hold bytes): give the streams a moment so the output keeps its place
+  # before the exit — and a sandboxed command's denial is read off it
+  # (codex waits 20 ms too) — unless they are already done
   def handle_info({:exited, result}, state) do
     code =
       case result do
@@ -251,7 +252,7 @@ defmodule Longx.Exec.Process do
           -1
       end
 
-    if state.open_streams > 0 and state.sandbox != :none do
+    if state.open_streams > 0 do
       Process.send_after(self(), {:finish_exit, code}, @exit_settle_ms)
       {:noreply, %{state | pending_exit: code}}
     else
