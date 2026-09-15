@@ -213,11 +213,34 @@ defmodule Longx.ProjectsTest do
       assert Pool.status(project.id) == :stopped
       assert File.exists?(home)
 
+      # a project with history: its thread and turn rows go with it (they reference
+      # it — SQLite refused the delete as "referenced something that does not exist")
+      {:ok, thread} =
+        Projects.create_thread(%{
+          codex_thread_id: "thr_del_#{System.unique_integer([:positive])}",
+          project_id: project.id,
+          cwd: project.root_path,
+          approval_policy: :on_request,
+          sandbox: :workspace_write
+        })
+
+      {:ok, _turn} =
+        Projects.create_turn(%{
+          codex_turn_id: "turn_del",
+          thread_id: thread.id,
+          user_text: "hi",
+          started_at: DateTime.utc_now()
+        })
+
       assert {:error, %Ash.Error.Invalid{} = err} = Projects.delete_project(project)
       assert Exception.message(err) =~ "confirm"
       assert :ok = Projects.delete_project(project, confirm: true)
       refute File.exists?(home)
       assert {:error, _} = Projects.get_project_by_slug(project.slug)
+      assert Projects.list_threads_for_project!(project.id) == []
+
+      assert Ash.read!(Longx.Projects.Turn) |> Enum.reject(&(&1.codex_turn_id != "turn_del")) ==
+               []
     end
   end
 

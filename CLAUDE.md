@@ -115,11 +115,15 @@ React Native client planned on the same core code.
     cargo / Hugging Face / Go / Gradle / Maven cache dirs per OS — `~/.cache/…` on Linux,
     `~/Library/Caches/…` on macOS, `%LOCALAPPDATA%` on Windows — only what exists) for the
     settings page's one-click adds; the passthrough field is shown on Linux only.
+    **`Project.gpu_passthrough`** is the GPU as a switch: `Projects.passthrough_paths/1`
+    resolves this machine's `gpu` preset at launch (nvidia*, dxg, dri — a project moved to
+    another box gets that box's devices; the 0.1.13 migration turned hand-listed nodes into
+    the flag), shown in project settings only on a Linux machine with a GPU.
     `core/chat/sandboxHints.ts` + `ui/chat/SandboxHint` covers the one thing codex's
     permission model cannot express — a device: a command that could not see the GPU
     (`CUDA_ERROR_NO_DEVICE`, `Found no NVIDIA driver`, `NVIDIA-SMI has failed`, WSL2's cuPTI
     error…) gets a line **below the folded row** (inside it nobody would see it) with 允许
-    that puts the machine's `gpu` preset into `passthrough_paths` (restart codex);
+    that turns `gpu_passthrough` on (restart codex);
     `CUDA_ERROR_OPERATING_SYSTEM` (the driver's socket under the no-network seccomp, seen on
     a DGX Spark, not on WSL2) offers the network switch. Upstream has no GPU answer
     (openai/codex#3141, #19676; PR #8002 closed over security concerns). The network switch
@@ -149,7 +153,9 @@ React Native client planned on the same core code.
     `reset_codex_home/1` (the whole directory; threads `:unrecoverable`; the next use
     regenerates a clean config), archive stops the worker and keeps the home,
     `delete_project/2` needs `confirm: true` and removes the home (never the working
-    directory). All five are the project settings page's danger zone (delete asks for the
+    directory; its thread and turn rows go first — `Changes.DeleteThreads` — since they
+    reference the project and SQLite refused the delete of any project with history as
+    "referenced something that does not exist"). All five are the project settings page's danger zone (delete asks for the
     project's name); none touches the global memory.
   - **Permissions are codex's own, asked for on demand** (`Home.config_toml` turns on
     `features.exec_permission_approvals` + `request_permissions_tool`, both UnderDevelopment

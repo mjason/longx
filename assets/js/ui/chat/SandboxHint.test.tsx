@@ -19,14 +19,14 @@ function show(output: string, c = chat()) {
 }
 
 describe("SandboxHint (GPU only)", () => {
-  test("no GPU in the sandbox: the machine's GPU devices go into the project's passthrough; a codex restart makes it real", async () => {
+  test("no GPU in the sandbox: the project's GPU switch goes on (devices resolved per machine); a codex restart makes it real", async () => {
     vi.mocked(listProjects).mockResolvedValue(ok([project(1)]) as never);
     vi.mocked(sandboxStatus).mockResolvedValue(ok(gpuMachine) as never);
     const user = userEvent.setup();
     show("NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver.");
     await screen.findByText(/看不到这台机器的 GPU/);
     await user.click(screen.getByRole("button", { name: "允许" }));
-    await waitFor(() => expect(updateProject).toHaveBeenCalledWith(expect.objectContaining({ identity: "id-1", input: { passthroughPaths: ["/dev/dxg"] } })));
+    await waitFor(() => expect(updateProject).toHaveBeenCalledWith(expect.objectContaining({ identity: "id-1", input: { gpuPassthrough: true } })));
     await screen.findByText(/重启这个项目的 codex/);
   });
 

@@ -514,14 +514,20 @@ defmodule Longx.Projects do
   defp shim_options(%Project{memory_limit_mb: mb}), do: [memory_limit: mb * 1024 * 1024]
 
   @doc """
-  The host paths the project's sandbox lets in, resolved: globs expanded
-  (`/dev/nvidia*`, `/dev/ttyUSB*`), only what exists right now (a device
+  The host paths the project's sandbox lets in, resolved: this machine's GPU
+  devices when `gpu_passthrough` is on, plus the project's own patterns
+  (globs expanded — `/dev/ttyUSB*`), only what exists right now (a device
   plugged in later needs a codex restart — `codex_info.stale` says so),
   sorted, no duplicates.
   """
   @spec passthrough_paths(Project.t()) :: [Path.t()]
-  def passthrough_paths(%Project{passthrough_paths: patterns}) do
-    patterns
+  def passthrough_paths(%Project{passthrough_paths: patterns, gpu_passthrough: gpu?}) do
+    gpu =
+      if gpu?,
+        do: Enum.find(Longx.Codex.Sandbox.presets(), %{paths: []}, &(&1.id == "gpu")).paths,
+        else: []
+
+    (gpu ++ patterns)
     |> Enum.flat_map(fn pattern ->
       expanded = Path.expand(pattern)
 

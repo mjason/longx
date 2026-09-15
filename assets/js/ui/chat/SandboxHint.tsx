@@ -1,8 +1,8 @@
 // Under a command that could not see the GPU: the one sandbox limit codex
-// cannot express as a permission request. One button lets the project's
-// sandbox have the machine's GPU devices (a codex restart applies it) or,
-// for CUDA's driver socket, turns the network switch on. Settings stay the
-// place to take it back.
+// cannot express as a permission request. One button turns the project's
+// GPU switch on (the machine's devices are resolved at launch; a codex
+// restart applies it) or, for CUDA's driver socket, the network switch.
+// Settings stay the place to take it back.
 import { ShieldQuestion } from "lucide-react";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,7 +29,7 @@ export function SandboxHint({ output, chat }: { output: string; chat: CodexRunti
   const allow = async () => {
     setState("busy");
     try {
-      const input = hint.kind === "gpu" ? { passthroughPaths: [...new Set([...project.passthroughPaths, ...(gpu?.paths ?? [])])] } : { networkAccess: true };
+      const input = hint.kind === "gpu" ? { gpuPassthrough: true } : { networkAccess: true };
       unwrap(await updateProject({ identity: project.id, fields: ["id"], input }));
       if (hint.kind === "cuda_network") chat.setMode({ ...chat.mode, networkAccess: true });
       await client.invalidateQueries({ queryKey: queryKeys.projects });

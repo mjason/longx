@@ -120,13 +120,14 @@ execpolicy 规则）/ 拒绝。被沙箱拒绝的命令，codex 会把结果交�
 - **联网与本机服务**：关着时命令连不上任何东西，**包括本机的 socket**——Docker、本地数据库、NVIDIA 驱动初始化用的 socket
   都算（codex 用 seccomp 拦掉全部 `connect`）。agent 也可以按轮申请。
 - **长期放开的目录和设备（高级）**：平时不用碰。「沙箱额外可写目录」是对这个项目长期有效的例外（比如数据集目录）；
-  「放进沙箱的宿主路径」（仅 Linux）是 GPU、USB/串口、宿主 socket 这类沙箱看不到、agent 也申请不了的东西，由 Longx 自带的
+  「放进沙箱的宿主路径」（仅 Linux）是 USB/串口、宿主 socket 这类沙箱看不到、agent 也申请不了的东西，由 Longx 自带的
   bwrap 包装程序（`bwrapx`）以 `--dev-bind` / `--bind` 追加进 codex 生成的参数，其余限制不动；改了要重启项目的 codex。
 
 **GPU 是唯一的例外**：codex 的权限模型表达不了设备，官方到 0.154 也没有解决（openai/codex#3141、#19676，维护者的 PR #8002
-因安全顾虑关闭）。Longx 的做法：命令因看不到 GPU 失败时（`CUDA_ERROR_NO_DEVICE`、`Found no NVIDIA driver`、WSL2 上 JAX 的
-cuPTI 报错…），那条命令下面提示并给「允许」，点一下把机器的 GPU 设备（`/dev/nvidia*`，WSL2 是 `/dev/dxg`）写进这个项目的
-放行列表，重启 codex 生效；Linux 裸机上 CUDA 初始化还要连驱动的本机 socket，会再提示打开「联网与本机服务」。
+因安全顾虑关闭）。Longx 的做法是项目上一个开关「把 GPU 放进沙箱」（有 GPU 的 Linux 机器才显示）：打开后 codex 启动时把**这台机器**的
+GPU 设备节点（`/dev/nvidia*`，WSL2 是 `/dev/dxg`，加 `/dev/dri`）绑进沙箱，项目换机器不用改路径。命令因看不到 GPU 失败时
+（`CUDA_ERROR_NO_DEVICE`、`Found no NVIDIA driver`、WSL2 上 JAX 的 cuPTI 报错…），那条命令下面会提示并一键打开这个开关，重启
+codex 生效；Linux 裸机上 CUDA 初始化还要连驱动的本机 socket，agent 一般会连联网一起申请，没申请时也会提示。
 在 WSL2 和 DGX Spark 上验证过。
 
 ### 沙箱起不来时
