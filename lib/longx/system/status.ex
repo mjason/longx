@@ -31,6 +31,28 @@ defmodule Longx.System.Status do
   ]
 
   actions do
+    # Settings → codex 进程: every codex process running right now, across
+    # projects — what it costs (the tree's RSS, uptime, turns) and when it
+    # was last used, which is what the idle reaper (Longx.Codex.Recycler)
+    # goes by; `idle_after_ms` is that limit (null: never). Entries are
+    # untyped maps (arrays of typed maps are not selectable in ash_typescript
+    # 0.18); the shape is typed client-side.
+    action :list_codex_processes, :map do
+      constraints fields: [
+                    processes: [type: {:array, :map}, allow_nil?: false],
+                    idle_after_ms: [type: :integer]
+                  ]
+
+      run fn _input, _ ->
+        {:ok,
+         %{
+           # an untyped map crosses the wire as is: camelCase it here
+           processes: Enum.map(Longx.Projects.running_codex(), &camelize/1),
+           idle_after_ms: Longx.Codex.Recycler.idle_after_ms()
+         }}
+      end
+    end
+
     # The directory picker: subdirectories of `path` (home when omitted),
     # each flagged when it is a git repository. Files are never listed;
     # dot-directories only with `show_hidden`. Paths must be absolute.
@@ -146,7 +168,8 @@ defmodule Longx.System.Status do
                     auto_extract: [type: :boolean, allow_nil?: false],
                     last_run_at: [type: :string],
                     last_error: [type: :string],
-                    pending: [type: :integer, allow_nil?: false]
+                    pending: [type: :integer, allow_nil?: false],
+                    folded: [type: :integer, allow_nil?: false]
                   ]
 
       run fn _input, _ ->
@@ -316,4 +339,13 @@ defmodule Longx.System.Status do
   defp reason(nil), do: nil
   defp reason({kind, message}), do: "#{kind}: #{message}"
   defp reason(other), do: to_string(other)
+
+  defp camelize(map) do
+    Map.new(map, fn {key, value} ->
+      <<first, rest::binary>> = key |> Atom.to_string() |> Macro.camelize()
+
+      {<<String.downcase(<<first>>)::binary, rest::binary>>,
+       if(is_map(value), do: camelize(value), else: value)}
+    end)
+  end
 end

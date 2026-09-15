@@ -98,7 +98,7 @@ defmodule Longx.Memory do
     if text == "" do
       {:error, :empty}
     else
-      now = DateTime.utc_now()
+      now = Keyword.get(opts, :at, DateTime.utc_now())
       stamp = now |> DateTime.truncate(:second) |> Calendar.strftime("%Y-%m-%dT%H-%M-%SZ")
       slug = slug(Keyword.get(opts, :slug) || text)
       file = "notes/#{stamp}-#{slug}.md"
@@ -263,6 +263,57 @@ defmodule Longx.Memory do
     dir |> notes() |> Enum.reject(&MapSet.member?(folded, &1.file))
   end
 
+  @doc "Notes already folded into `MEMORY.md` (newest first) — kept a while, then pruned."
+  @spec folded_notes(Path.t()) :: [note]
+  def folded_notes(dir \\ dir()) do
+    folded = MapSet.new(state(dir)["consolidated"] || [])
+    dir |> notes() |> Enum.filter(&MapSet.member?(folded, &1.file))
+  end
+
+  @doc """
+  Deletes folded notes older than `keep_days` (nil: never) — what they said
+  is in `MEMORY.md`, the inbox does not have to keep them forever — and
+  forgets notes that are gone (pruned, or deleted by hand) so the state file
+  does not grow either. One commit per pass with something to drop.
+  """
+  @spec prune(Path.t(), pos_integer | nil) :: {:ok, non_neg_integer} | {:error, term}
+  def prune(dir, keep_days) do
+    folded = folded_notes(dir)
+    cutoff = if keep_days, do: DateTime.add(DateTime.utc_now(), -keep_days * 86_400, :second)
+
+    doomed =
+      if cutoff,
+        do: Enum.filter(folded, &(&1.at && DateTime.compare(&1.at, cutoff) == :lt)),
+        else: []
+
+    Enum.each(doomed, &File.rm!(Path.join(dir, &1.file)))
+    kept = MapSet.new(folded -- doomed, & &1.file)
+
+    update_state(
+      dir,
+      &Map.put(
+        &1,
+        "consolidated",
+        Enum.filter(&1["consolidated"] || [], fn f -> MapSet.member?(kept, f) end)
+      )
+    )
+
+    case doomed do
+      [] ->
+        {:ok, 0}
+
+      _ ->
+        with(
+          {:ok, _} <-
+            Git.commit_all(
+              dir,
+              "memory: prune #{length(doomed)} folded note#{if length(doomed) == 1, do: "", else: "s"}"
+            ),
+          do: {:ok, length(doomed)}
+        )
+    end
+  end
+
   @doc "Records that these notes are in `MEMORY.md` now."
   @spec mark_consolidated(Path.t(), [String.t()]) :: :ok
   def mark_consolidated(dir, files) do
@@ -276,7 +327,8 @@ defmodule Longx.Memory do
           auto_extract: boolean,
           last_run_at: DateTime.t() | nil,
           last_error: String.t() | nil,
-          pending: non_neg_integer
+          pending: non_neg_integer,
+          folded: non_neg_integer
         }
   def status(dir \\ dir()) do
     st = state(dir)
@@ -290,7 +342,8 @@ defmodule Longx.Memory do
           do: dt
         ),
       last_error: st["last_error"],
-      pending: length(pending_notes(dir))
+      pending: length(pending_notes(dir)),
+      folded: length(folded_notes(dir))
     }
   end
 

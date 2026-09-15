@@ -15,13 +15,21 @@ defmodule Longx.Memory.Worker do
   alias Longx.Memory.{Consolidate, Extract}
 
   @default_tick :timer.minutes(15)
+  # a folded note has said its piece (it is in MEMORY.md): a month in the
+  # inbox for the person to look at, then gone — `prune_after_days:` (nil: keep)
+  @default_prune_after_days 30
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
   @doc "One pass now (`complete:` overrides the model call — tests)."
   @spec run_now(keyword) ::
           {:ok,
-           %{extracted: non_neg_integer, notes: non_neg_integer, consolidated: non_neg_integer}}
+           %{
+             extracted: non_neg_integer,
+             notes: non_neg_integer,
+             consolidated: non_neg_integer,
+             pruned: non_neg_integer
+           }}
           | {:error, term}
   def run_now(opts \\ []) do
     dir = Keyword.get(opts, :dir, Memory.dir())
@@ -30,10 +38,18 @@ defmodule Longx.Memory.Worker do
     per_run = Keyword.get(opts, :per_run, Keyword.get(config, :per_run, 2))
     model = Keyword.take(opts, [:complete])
 
+    keep_days =
+      Keyword.get(
+        opts,
+        :prune_after_days,
+        Keyword.get(config, :prune_after_days, @default_prune_after_days)
+      )
+
     result =
       with {:ok, extracted, notes} <- extract(dir, idle_hours, per_run, model),
-           {:ok, folded} <- Consolidate.run(dir, model) do
-        {:ok, %{extracted: extracted, notes: notes, consolidated: folded}}
+           {:ok, folded} <- Consolidate.run(dir, model),
+           {:ok, pruned} <- Memory.prune(dir, keep_days) do
+        {:ok, %{extracted: extracted, notes: notes, consolidated: folded, pruned: pruned}}
       end
 
     :ok = Memory.record_run(dir, error_text(result))

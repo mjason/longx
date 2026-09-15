@@ -186,7 +186,10 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         loading: threads.isPending,
         actions: {
           switchTo: onOpenThread,
-          create: async () => onOpenThread((await createThread()).threadId),
+          // a new chat is the page without a thread: the first message creates
+          // the row (a row per click left "未命名会话"s behind and started a
+          // codex thread nobody used)
+          create: async () => onOpenThread(null),
           rename: async (id, title) => {
             unwrap(await renameThread({ identity: id, input: { title } }));
             await invalidate();
@@ -203,7 +206,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
           },
         },
       }),
-    [rows, threadId, threads.isPending, onOpenThread, createThread, invalidate],
+    [rows, threadId, threads.isPending, onOpenThread, invalidate],
   );
 
   // messages sent while a turn runs wait in assistant-ui's queue and go out

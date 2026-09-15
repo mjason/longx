@@ -210,6 +210,7 @@ export function rpcMock() {
         lastRunAt: "2026-09-14T05:10:00Z",
         lastError: null,
         pending: 2,
+        folded: 5,
       }),
     ),
     memorySetAutoExtract: vi.fn(async () => ok(null)),
@@ -334,8 +335,17 @@ export function rpcMock() {
     renameThread: vi.fn(async () => ok(thread(1))),
     archiveThread: vi.fn(async () => ok(thread(1))),
     startThread: vi.fn(async () => ok(thread(2))),
-    stopCodex: vi.fn(),
+    stopCodex: vi.fn(async () => ok(null)),
     restartCodex: vi.fn(),
+    listCodexProcesses: vi.fn(async () =>
+      ok({
+        idleAfterMs: 30 * 60 * 1000,
+        processes: [
+          { projectId: "id-1", name: "App One", slug: "app-1", osPid: 4242, stats: { rssBytes: 314572800, processes: 3, cpuMs: 1200 }, memoryLimit: null, startedAt: "2026-09-15T08:00:00Z", lastTurnAt: "2026-09-15T09:30:00Z", turns: 12, activeTurns: 0, threads: 2 },
+          { projectId: "id-2", name: "App Two", slug: "app-2", osPid: 4343, stats: { rssBytes: 52428800, processes: 1, cpuMs: 10 }, memoryLimit: null, startedAt: "2026-09-15T09:55:00Z", lastTurnAt: null, turns: 1, activeTurns: 1, threads: 1 },
+        ],
+      }),
+    ),
     sandboxStatus: vi.fn(async () =>
       ok({ status: "ok", reason: null, bwrap: null, gpu: false, presets: [], platform: "linux", home: "/home/mj", checkedAt: "" }),
     ),

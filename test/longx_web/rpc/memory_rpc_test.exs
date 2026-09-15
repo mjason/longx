@@ -53,10 +53,10 @@ defmodule LongxWeb.MemoryRpcTest do
 
     assert %{
              "success" => true,
-             "data" => %{"autoExtract" => true, "pending" => 1, "lastRunAt" => nil}
+             "data" => %{"autoExtract" => true, "pending" => 1, "folded" => 0, "lastRunAt" => nil}
            } =
              rpc(conn, "memory_status", %{
-               "fields" => ["autoExtract", "pending", "lastRunAt", "lastError"]
+               "fields" => ["autoExtract", "pending", "folded", "lastRunAt", "lastError"]
              })
 
     assert %{"success" => true} =

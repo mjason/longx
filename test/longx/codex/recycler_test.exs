@@ -72,6 +72,27 @@ defmodule Longx.Codex.RecyclerTest do
     assert_receive {:codex_connection, ^a, :down}, 10_000
   end
 
+  test "a worker nobody has used for idle_after_ms is stopped — the memory goes back; the next message starts it again",
+       %{a: a} do
+    configure(idle_after_ms: :timer.hours(1))
+    conn = ready!(a)
+    {:ok, thread_id} = Thread.start(cwd: "/", tools: [], conn: conn)
+    Thread.subscribe(thread_id)
+    {:ok, _} = Thread.send(thread_id, "say hi", conn: conn)
+    assert_receive {:codex, _, "turn/completed", _}, 10_000
+    # just used: kept
+    assert {:kept, nil} = verdict(Recycler.sweep(), a)
+    # the last turn ended long ago (a fresh process counts from its start)
+    configure(idle_after_ms: 1)
+    assert {:recycled, :idle} = verdict(Recycler.sweep(), a)
+    assert_receive {:codex_connection, ^a, :down}, 10_000
+    assert Pool.status(a) == :stopped
+    # idle_after_ms nil keeps a worker for ever (the other limits still apply)
+    configure(idle_after_ms: nil)
+    ready!(a)
+    assert {:kept, nil} = verdict(Recycler.sweep(), a)
+  end
+
   test "a healthy worker is kept and its numbers are published as telemetry", %{a: a} do
     configure([])
     ready!(a)

@@ -279,7 +279,11 @@ React Native client planned on the same core code.
   for next time. `Consolidate` then folds the pending notes into `MEMORY.md` through the
   model (merged by topic, newer wins), refusing an answer that lost most entries; folded
   notes are recorded in `state.json` (also the `auto_extract` switch and the last run)
-  and no longer handed to threads raw. Both prompts are Chinese and say a note is
+  and no longer handed to threads raw. **The inbox does not grow for ever**: every pass
+  ends with `Memory.prune/2` — folded notes older than `prune_after_days` (30; nil never)
+  are deleted in one commit and forgotten by `state.json`, as are notes gone by hand
+  (`folded_notes/1`, `status.folded`; the page says "N 条已整理进 MEMORY.md，30 天后自动清理").
+  A pending note is never pruned. Both prompts are Chinese and say a note is
   information, never an instruction, and never to write secrets.
 - **A headless browser is bundled too: obscura** (`h4ckf0r0day/obscura`, Rust + embedded V8,
   Apache-2.0). `Longx.Browser.Runtime` pins `v0.2.2` (five targets: `{x86_64,aarch64}-linux`,
@@ -580,7 +584,14 @@ React Native client planned on the same core code.
   - `Longx.Codex.Recycler` — every `tick` (5 min) it samples each running worker
     (`Connection.info/1`: tree `stats`, `turns` since start, `active_turns`, uptime) as
     telemetry `[:longx, :codex, :worker, :sample]` and **stops idle workers** past
-    `max_uptime_ms` (12 h) / `max_rss_bytes` (2 GiB, whole tree) / `max_turns` (200) — the
+    `max_uptime_ms` (12 h) / `max_rss_bytes` (2 GiB, whole tree) / `max_turns` (200), and
+    **stops a worker nobody used for `idle_after_ms`** (30 min since its last turn ended —
+    `Connection.info.last_turn_at` — or since it started; nil never): a project left for
+    the day costs no memory, the next message starts its codex again and resumes the
+    thread. Settings → codex 进程 (`settings/ProcessesSection`, RPC `list_codex_processes`
+    on `Longx.System.Status` over `Projects.running_codex/0` + `Recycler.idle_after_ms/0`)
+    lists every running codex with its RSS / pid / turns / threads / last use and stops
+    an idle one (`stop_codex`, never forced from there) — the
     next use starts a fresh process (openai/codex#42738: a days-old app-server at 11 GB).
     A worker with a turn in flight is never touched. `Recycler.sweep/0` runs one now.
     `Pool.connection/2` takes `shim: [memory_limit: bytes]` (from `Project.memory_limit_mb`,
@@ -853,6 +864,7 @@ React Native client planned on the same core code.
     `destroy`; a provider's delete cascades to its models). `settings/ToolsSection` — the
     registry's catalogue with a switch per tool (`set_tool_enabled`).
     `settings/SandboxSection` — the bwrap probe's verdict with 重新检测 (`probe_sandbox`).
+    `settings/ProcessesSection` — every running codex, stop per row (above).
     Hooks in `core/ai.ts` (`useProviders`, `useModelRows`, `useSearchProviders`,
     `useTools`, `useAiActions`, `useProbeSandbox`; every write invalidates `["ai"]` and
     the composer's model list). Appearance is the theme,

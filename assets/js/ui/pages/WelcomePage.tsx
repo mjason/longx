@@ -63,7 +63,7 @@ export function WelcomePage() {
         ) : shown.length === 0 ? (
           <p className="text-muted-foreground py-8 text-center text-sm">{t.noMatch}</p>
         ) : (
-          <ul className="grid gap-3 lg:grid-cols-2" data-testid="project-list">
+          <ul className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[repeat(2,minmax(0,1fr))]" data-testid="project-list">
             {shown.map((p) => (
               <li key={p.id}>
                 <Link to={`/p/${p.slug}`} className="bg-card hover:bg-accent/40 active:bg-accent/60 flex items-center gap-3 rounded-lg border p-4 transition-colors">

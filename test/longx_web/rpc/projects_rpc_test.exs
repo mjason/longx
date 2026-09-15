@@ -298,6 +298,32 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"id" => project["id"], "query" => "nts"}
                })
 
+      # Settings → codex 进程: every running codex across projects, with what
+      # it costs and when it was last used (the idle reaper's clock)
+      assert %{"success" => true, "data" => %{"processes" => processes, "idleAfterMs" => idle}} =
+               rpc(conn, "list_codex_processes", %{"fields" => ["processes", "idleAfterMs"]})
+
+      assert is_integer(idle)
+      pid = project["id"]
+
+      assert [
+               %{
+                 "projectId" => ^pid,
+                 "name" => "Demo App",
+                 "slug" => slug,
+                 "osPid" => os_pid,
+                 "turns" => turns,
+                 "activeTurns" => 0,
+                 "lastTurnAt" => last,
+                 "startedAt" => started,
+                 "threads" => 1
+               }
+             ] =
+               Enum.filter(processes, &(&1["projectId"] == pid))
+
+      assert slug == project["slug"] and is_integer(os_pid) and turns >= 4
+      assert is_binary(last) and is_binary(started)
+
       assert %{"success" => true} =
                rpc(conn, "stop_codex", %{"input" => %{"id" => project["id"], "force" => true}})
 
@@ -306,6 +332,11 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "fields" => ["worker"],
                  "input" => %{"id" => project["id"]}
                })
+
+      assert %{"success" => true, "data" => %{"processes" => processes}} =
+               rpc(conn, "list_codex_processes", %{"fields" => ["processes"]})
+
+      refute Enum.any?(processes, &(&1["projectId"] == pid))
     end
   end
 

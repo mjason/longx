@@ -7,7 +7,7 @@ import { channel, ok, rpcMock, socketMock } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { codexInfo, upgradeStatus } from "@/ash_rpc";
+import { codexInfo, startThread, upgradeStatus } from "@/ash_rpc";
 import { upgradeIdle } from "@/ui/test-mocks";
 
 describe("ProjectWindow", () => {
@@ -77,12 +77,13 @@ describe("ProjectWindow", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/settings/update"));
   });
 
-  test("new thread from the threads tool navigates into it", async () => {
+  test("新会话 from the threads tool opens the new-chat page (no row until the first message)", async () => {
     setViewport(1280);
     const user = userEvent.setup();
-    const { router } = renderAt("/p/app-1");
+    const { router } = renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(screen.getByTestId("threads-tool")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /新会话/ }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t2"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1"));
+    expect(startThread).not.toHaveBeenCalled();
   });
 });

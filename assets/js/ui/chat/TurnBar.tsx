@@ -132,14 +132,14 @@ export function ComposerTrailing() {
           variant="ghost"
           size="sm"
           aria-label={t.model}
-          className="h-7 gap-1 px-2 font-mono text-xs"
+          className="h-7 max-w-[42vw] gap-1 px-2 font-mono text-xs sm:max-w-none"
           data-testid="model-picker"
         >
           {row ? (
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="truncate">{row.slug}</span>
               {shownEffort ? (
-                <span className="text-muted-foreground">
+                <span className="text-muted-foreground hidden sm:inline">
                   {effortLabel(shownEffort)}
                 </span>
               ) : null}

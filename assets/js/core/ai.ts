@@ -342,6 +342,7 @@ export type MemoryStatus = {
   lastRunAt: string | null;
   lastError: string | null;
   pending: number;
+  folded: number;
 };
 
 export const memoryKeys = {
@@ -379,7 +380,7 @@ export function useMemoryStatus() {
     queryFn: async () =>
       unwrap(
         await memoryStatus({
-          fields: ["autoExtract", "lastRunAt", "lastError", "pending"],
+          fields: ["autoExtract", "lastRunAt", "lastError", "pending", "folded"],
         }),
       ) as MemoryStatus,
     refetchInterval: 30_000,

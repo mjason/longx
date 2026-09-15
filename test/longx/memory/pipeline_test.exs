@@ -212,9 +212,16 @@ defmodule Longx.Memory.PipelineTest do
           else: {:ok, ~s(["用户用 pnpm。"])}
       end
 
-      assert {:ok, %{extracted: 1, notes: 1, consolidated: 1}} =
+      # an old note folded long ago is pruned by the same pass
+      {:ok, stale} =
+        Memory.add_note(dir, "stale", at: DateTime.add(DateTime.utc_now(), -40 * 86_400, :second))
+
+      :ok = Memory.mark_consolidated(dir, [stale])
+
+      assert {:ok, %{extracted: 1, notes: 1, consolidated: 1, pruned: 1}} =
                Worker.run_now(complete: complete)
 
+      refute File.exists?(Path.join(dir, stale))
       assert Memory.index(dir) =~ "pnpm"
       assert %{auto_extract: true, last_run_at: %DateTime{}, last_error: nil} = Memory.status(dir)
       assert %DateTime{} = Ash.get!(Projects.Thread, thread.id).memory_extracted_at
