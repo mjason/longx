@@ -18,6 +18,14 @@ defmodule Longx.Codex.Pool do
 
   @default_oom_score_adj 500
 
+  @doc "The OOM preference every codex tree — and every command of the exec-server — runs with."
+  @spec oom_score_adj() :: -1000..1000
+  def oom_score_adj do
+    :longx
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:oom_score_adj, @default_oom_score_adj)
+  end
+
   alias Longx.Codex.{Connection, Home, Worker}
 
   @registry Longx.Codex.Registry
@@ -110,7 +118,9 @@ defmodule Longx.Codex.Pool do
   defp start(project_id, opts, attempts \\ 2) do
     home = home_dir(project_id)
     File.mkdir_p!(home)
-    spec = {Worker, project_id: project_id, home_dir: home, connection: launch(home, opts)}
+
+    spec =
+      {Worker, project_id: project_id, home_dir: home, connection: launch(project_id, home, opts)}
 
     case DynamicSupervisor.start_child(@supervisor, spec) do
       {:ok, worker} ->
@@ -160,16 +170,19 @@ defmodule Longx.Codex.Pool do
   # the process runs inside its home either way; a configured `command:` (the
   # test fake) ignores what Home.prepare writes there, but the files are what
   # `codex_info`'s stale check compares against, so they are written all the same
-  defp launch(home, opts) do
+  defp launch(project_id, home, opts) do
     config = Application.get_env(:longx, __MODULE__, [])
+    shim = Keyword.merge([oom_score_adj: oom_score_adj()], Keyword.get(opts, :shim, []))
 
-    shim =
-      [oom_score_adj: Keyword.get(config, :oom_score_adj, @default_oom_score_adj)]
-      |> Keyword.merge(Keyword.get(opts, :shim, []))
-
-    # `home:` — further Home.prepare/1 options for this project (host paths let into the sandbox)
+    # `home:` — further Home.prepare/1 options for this project; the
+    # exec-server url is this project's, so its commands come back to us
     configured = Keyword.get(config, :connection, [])
-    home_opts = Keyword.merge(Keyword.get(configured, :home, []), Keyword.get(opts, :home, []))
+
+    home_opts =
+      [exec_server_url: Home.exec_server_url(project_id)]
+      |> Keyword.merge(Keyword.get(configured, :home, []))
+      |> Keyword.merge(Keyword.get(opts, :home, []))
+
     extra = [shim: shim] |> Keyword.merge(configured) |> Keyword.put(:home, home_opts)
 
     case Keyword.fetch(config, :command) do

@@ -24,6 +24,13 @@ type config struct {
 	// MemoryLimit in bytes caps the child tree (Linux: RLIMIT_AS on the child,
 	// Windows: the Job's memory limit); 0 = none.
 	MemoryLimit uint64
+	// CleanEnv gives the child exactly the environment the host sent instead
+	// of the shim's own environment with the host's entries appended.
+	CleanEnv bool
+	// PTY runs the child on a pseudo-terminal (unix): its stdin, stdout and
+	// stderr are the terminal, the master is the one output stream and the
+	// input sink; there is no separate stderr and no EOF on stdin.
+	PTY bool
 }
 
 // frameWriter serialises packets to the host. Any write error means the host
@@ -89,7 +96,8 @@ func (s *stream) serve(out *frameWriter) {
 			out.write(s.dataTg, buf[:read])
 			continue
 		}
-		if err != nil && err != io.EOF {
+		// a pty master answers EIO once the terminal's last holder is gone: its EOF
+		if err != nil && err != io.EOF && s.name != "pty" {
 			logf("%s: read error: %v", s.name, err)
 		}
 		out.write(s.eofTag, nil)
@@ -308,9 +316,10 @@ type child struct {
 	proc    *exec.Cmd
 	stdin   *os.File
 	stdout  *stream
-	stderr  *stream // nil unless Stderr == "stream"
+	stderr  *stream // nil unless Stderr == "stream" (never with a pty)
 	streams []*stream
 	waitErr error
+	pty     bool  // stdin is the pty master: no EOF to give, stdout is the same file
 	guard   guard // platform resource guard (Job object on Windows)
 }
 
@@ -329,7 +338,12 @@ func startChild(cfg config, env []string) (*child, error) {
 
 	proc := exec.Command(path, cfg.Args[1:]...)
 	proc.Dir = cfg.Dir
-	proc.Env = append(os.Environ(), env...)
+	if cfg.CleanEnv {
+		// never nil: to exec.Cmd a nil Env means "inherit"
+		proc.Env = append([]string{}, env...)
+	} else {
+		proc.Env = append(os.Environ(), env...)
+	}
 	setProcessGroup(proc)
 
 	stdinR, stdinW, err := os.Pipe()
@@ -346,6 +360,14 @@ func startChild(cfg config, env []string) (*child, error) {
 	c := &child{proc: proc, stdin: stdinW}
 	c.stdout = newStream("stdout", TagOutput, TagOutputEOF, stdoutR)
 	c.streams = []*stream{c.stdout}
+
+	if cfg.PTY {
+		stdinR.Close()
+		stdinW.Close()
+		stdoutR.Close()
+		stdoutW.Close()
+		return startOnPty(proc, cfg, c)
+	}
 
 	var stderrW *os.File
 	switch cfg.Stderr {
@@ -391,9 +413,44 @@ func startChild(cfg config, env []string) (*child, error) {
 	return c, nil
 }
 
+// startOnPty launches the child with a pseudo-terminal as its stdio: the
+// master is both the stdout stream and the stdin sink; stderr is merged.
+func startOnPty(proc *exec.Cmd, cfg config, c *child) (*child, error) {
+	master, slave, err := openPty()
+	if err != nil {
+		return nil, err
+	}
+	if err := setWindowSize(master, 24, 80); err != nil {
+		logf("pty: window size: %v", err)
+	}
+	attachPty(proc, slave)
+	c.stdin = master
+	c.pty = true
+	c.stdout = newStream("pty", TagOutput, TagOutputEOF, master)
+	c.streams = []*stream{c.stdout}
+
+	if err := beforeStart(cfg); err != nil {
+		logf("resource guard: %v", err)
+	}
+	err = proc.Start()
+	slave.Close()
+	if err != nil {
+		master.Close()
+		return nil, err
+	}
+	if err := afterStart(c, cfg); err != nil {
+		logf("resource guard: %v", err)
+	}
+	return c, nil
+}
+
 // feedStdin writes host Input to the child, granting one credit at a time.
+// A terminal has no EOF: closing the input side leaves the master open (it
+// is the output stream too) — the reader closes it when the child is gone.
 func (c *child) feedStdin(inputCh <-chan []byte, out *frameWriter) {
-	defer c.stdin.Close()
+	if !c.pty {
+		defer c.stdin.Close()
+	}
 	for {
 		out.write(TagSendInput, nil)
 		data, ok := <-inputCh

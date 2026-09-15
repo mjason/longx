@@ -19,7 +19,7 @@ function show(output: string, c = chat()) {
 }
 
 describe("SandboxHint (GPU only)", () => {
-  test("no GPU in the sandbox: the project's GPU switch goes on (devices resolved per machine); a codex restart makes it real", async () => {
+  test("no GPU in the sandbox: the project's GPU switch goes on (devices resolved per machine, bound from the next command)", async () => {
     vi.mocked(listProjects).mockResolvedValue(ok([project(1)]) as never);
     vi.mocked(sandboxStatus).mockResolvedValue(ok(gpuMachine) as never);
     const user = userEvent.setup();
@@ -27,19 +27,7 @@ describe("SandboxHint (GPU only)", () => {
     await screen.findByText(/看不到这台机器的 GPU/);
     await user.click(screen.getByRole("button", { name: "允许" }));
     await waitFor(() => expect(updateProject).toHaveBeenCalledWith(expect.objectContaining({ identity: "id-1", input: { gpuPassthrough: true } })));
-    await screen.findByText(/重启这个项目的 codex/);
-  });
-
-  test("CUDA's driver socket: the network switch, on the project and on this thread's next turn", async () => {
-    vi.mocked(listProjects).mockResolvedValue(ok([project(1)]) as never);
-    vi.mocked(sandboxStatus).mockResolvedValue(ok(gpuMachine) as never);
-    const user = userEvent.setup();
-    const c = chat();
-    show("cuInit(0) failed: CUDA_ERROR_OPERATING_SYSTEM", c);
-    await screen.findByText(/驱动的本机 socket/);
-    await user.click(screen.getByRole("button", { name: "允许" }));
-    await waitFor(() => expect(updateProject).toHaveBeenCalledWith(expect.objectContaining({ input: { networkAccess: true } })));
-    expect(c.setMode).toHaveBeenCalledWith(expect.objectContaining({ networkAccess: true }));
+    await screen.findByText(/已允许，下一轮起生效/);
   });
 
   test("a read-only path is codex's own permission request now, not a hint; a machine without a GPU never hints", async () => {

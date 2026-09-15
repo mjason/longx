@@ -91,52 +91,21 @@ React Native client planned on the same core code.
     directories; they go on `thread/start` as
     `sandbox_workspace_write.writable_roots`, on resume the same, and in
     `turn/start.sandboxPolicy.writableRoots` when a turn changes the mode). **Devices and sockets go in through `passthrough_paths`, never as writable roots**:
-    bwrap's `--dev /dev` is minimal and codex has no device pass-through — a device node or
-    `/dev/dri` as a writable root breaks the launch (codex `--bind`s each root without device
-    access and seeds it with protected `.git`/`.codex` entries: "Can't mkdir /dev/dri/.git",
-    tried on a DGX Spark). `Project.passthrough_paths` (globs allowed; `Projects.passthrough_paths/1`
-    resolves to what exists, sorted) reaches `Home.prepare(passthrough:)`, which links
-    `<CODEX_HOME>/bin/bwrap` → `priv/bin/bwrapx_linux_<arch>` (`native/shim/cmd/bwrapx`, built by
-    the shim compiler for Linux targets) and puts that dir first on codex's PATH with
-    `LONGX_BWRAP_REAL` (the bwrap codex would have picked) and `LONGX_BWRAP_PASSTHROUGH`; codex
-    takes the first `bwrap` on PATH, the wrapper forwards `--help`/`--version` and otherwise
-    inserts `--dev-bind p p` (under /dev) / `--bind p p` right after codex's `--dev /dev` and
-    execs the real bwrap — filesystem and network policy untouched. The list is written to
-    `<CODEX_HOME>/passthrough` so `Home.stale/2` answers `:passthrough` after a change (codex
-    reads PATH at launch; `codex_info` / `restart_codex` carry the project's `pool_options`).
-    `Sandbox.presets/1` (gpu: nvidia*/dxg/dri; usb: /dev/bus/usb, ttyUSB*, ttyACM*; docker:
-    the socket, `danger: true`) is on the sandbox report for the settings page's one-click
-    buttons. `sandbox_passthrough_integration_test` (`:integration`) proves it on the real
-    binary: a sandboxed `ls -la /dev/dxg` sees the device only with the passthrough.
-    **Every `turn/start` carries the full `sandboxPolicy`** (mode + network + the project's
-    current `writableRoots`), so an edit to the roots reaches an open thread on its next turn;
-    passthrough still needs a codex restart (PATH at launch). The sandbox report also carries
-    `platform`, `home` and `cachePresets` (`Sandbox.cache_presets/3`: uv / pip / npm / pnpm /
-    cargo / Hugging Face / Go / Gradle / Maven cache dirs per OS — `~/.cache/…` on Linux,
-    `~/Library/Caches/…` on macOS, `%LOCALAPPDATA%` on Windows — only what exists) for the
-    settings page's one-click adds; the passthrough field is shown on Linux only.
-    **`Project.gpu_passthrough`** is the GPU as a switch: `Projects.passthrough_paths/1`
-    resolves this machine's `gpu` preset at launch (nvidia*, dxg, dri — a project moved to
-    another box gets that box's devices; the 0.1.13 migration turned hand-listed nodes into
-    the flag), shown in project settings only on a Linux machine with a GPU.
-    `core/chat/sandboxHints.ts` + `ui/chat/SandboxHint` covers the one thing codex's
-    permission model cannot express — a device: a command that could not see the GPU
+    bwrap's `--dev /dev` is minimal and a device node as a writable root breaks the launch.
+    `Project.passthrough_paths` (globs allowed; `Projects.passthrough_paths/1` resolves to
+    what exists, sorted) and **`Project.gpu_passthrough`** (the GPU as a switch: this
+    machine's `gpu` preset — nvidia*, dxg, dri — so a project moved to another box gets that
+    box's devices; the 0.1.13 migration turned hand-listed nodes into the flag; shown in
+    project settings only on a Linux machine with a GPU) are read by **the exec-server at
+    every command start** (`Projects.exec_context/1`), so a switch holds from the next
+    command — no restart, no `stale`. `Sandbox.presets/1` (gpu / usb / docker) is on the
+    sandbox report. `core/chat/sandboxHints.ts` + `ui/chat/SandboxHint` covers the one thing
+    codex's permission model cannot express — a device: a command that could not see the GPU
     (`CUDA_ERROR_NO_DEVICE`, `Found no NVIDIA driver`, `NVIDIA-SMI has failed`, WSL2's cuPTI
-    error…) gets a line **below the folded row** (inside it nobody would see it) with 允许
-    that turns `gpu_passthrough` on (restart codex);
-    `CUDA_ERROR_OPERATING_SYSTEM` (the driver's socket under the no-network seccomp, seen on
-    a DGX Spark, not on WSL2) offers the network switch. Upstream has no GPU answer
-    (openai/codex#3141, #19676; PR #8002 closed over security concerns). The network switch
-    is labelled 联网与本机服务: with it off codex's seccomp denies every `connect`, local
-    sockets included. Project settings keep only long-lived exceptions, folded under 高级
-    (writable roots, Linux passthrough) — no presets, no cache lists: the agent asks. **CUDA
-    also needs `network_access`**: with the network off codex's inner seccomp stage
-    (`linux-sandbox/src/landlock.rs`) denies `connect` for every socket family, and the
-    NVIDIA driver's init uses a local socket — `cuInit` fails with
-    `CUDA_ERROR_OPERATING_SYSTEM` while `nvidia-smi -L` works; with the network on JAX picks
-    the GPU (DGX Spark, 0.1.9). Landlock is not the problem (bwrap alone with the dev-binds,
-    all namespaces and `--cap-drop ALL` runs CUDA fine). macOS (seatbelt) and Windows are not
-    covered. Whether it is a git repo is read live (`git_info/1`), never
+    error…) gets a line **below the folded row** with 允许 that turns `gpu_passthrough` on.
+    Upstream has no GPU answer (openai/codex#3141, #19676; PR #8002 closed over security
+    concerns). Project settings keep only long-lived exceptions, folded under 高级 (writable
+    roots, Linux passthrough) — no presets, no cache lists: the agent asks. Whether it is a git repo is read live (`git_info/1`), never
     stored; `init_git/1` sets git up with `Longx.Git.Ignore.default/0` and a first commit.
     The UI warns when a project has no git.
   - **Each project has its own codex process and its own `CODEX_HOME`**
@@ -521,7 +490,68 @@ React Native client planned on the same core code.
     `$LONGX_DATA_DIR/codex_home`; never `~/.codex`, never a tmp dir) with a generated
     `config.toml`: one provider `longx` → `http://127.0.0.1:<port>/ai/v1`,
     `env_key = LONGX_GATEWAY_TOKEN`, `requires_openai_auth = false` → **codex needs no
-    login**. `Home.prepare/1` returns the env to spawn codex with.
+    login**; and `environments.toml` naming Longx's exec-server (above) when given
+    `exec_server_url:` — `Pool.launch` always does, per project. `Home.prepare/1` returns
+    the env to spawn codex with.
+- **Commands run through Longx's own exec-server — `lib/longx/exec/`.** codex 0.154 routes
+  every command and file operation of a thread through an "environment" (its
+  `codex-exec-server` protocol: JSON-RPC over a WebSocket, codex's dialect without the
+  `jsonrpc` field); `Longx.Codex.Home.prepare(exec_server_url:)` writes
+  `<CODEX_HOME>/environments.toml` (`default = "longx"`, `include_local = false`, one
+  `[[environments]]` with the url), so a project's codex never uses its built-in executor:
+  approvals, `request_permissions`, execpolicy and the `commandExecution` items stay codex's,
+  execution and the sandbox are ours. The url (`Home.exec_server_url/2`: the endpoint's
+  loopback port, `/exec/<project id>`, the gateway token as `?token=` — codex sends no
+  headers on a plain `ws://` environment; the file is 0600) is `nil` on Windows, where codex
+  keeps sandboxing itself. `LongxWeb.ExecController` (`GET /exec/:project_id`) checks the
+  token and upgrades to `LongxWeb.ExecSocket` (WebSock; pings every 30 s since codex sends
+  no keepalive; traps exits — the commands are linked to it, a closed connection takes them
+  down). `Longx.Exec.Session` is the protocol: `initialize` / `initialized` /
+  `environment/info|status` (shell = the user's bash/zsh/sh, home, tmp dirs, every
+  capability `false`), `process/start|read|write|signal|terminate`, `fs/*` (12 methods,
+  handles for `open`/`readBlock`/`close`), `capabilityRoots/discoverV1`; anything else
+  (`http/request`, `environmentConfig/read`) is `-32601`. Inline answers come back as
+  frames from `handle/2`; reads that wait, walks and discovery run under
+  `Longx.Exec.TaskSupervisor` and arrive as `{:exec_out, frame}`. Pieces, each pure and
+  unit-tested (`test/longx/exec/`): `Longx.Exec.PathUri` (`file:` URIs, percent-encoded
+  UTF-8 — project names are CJK); `Longx.Exec.Env` (codex's `envPolicy`: inherit
+  all/core/none, excludes, `set`, `includeOnly`, then codex's overlay; **`*KEY*`, `*SECRET*`,
+  `*TOKEN*`, `LONGX_*` and codex's non-inheritable names never reach a command whatever
+  the policy says** — codex-local strips the first three too; the shim runs commands with
+  `env_clear: true`, exactly that environment); `Longx.Exec.Policy` (the request's
+  `FileSystemSandboxContext` — `managed` with `entries` of special paths `root` /
+  `project_roots(+subpath)` / `slash_tmp` / `tmpdir`, plain paths and globs, `disabled`,
+  `external` — into writable roots, read-only pockets (`.git`, `.codex`), denied paths,
+  network; `sandboxed?/1`, `allowed?/3` — an unknown shape is refused, never opened);
+  `Longx.Exec.Sandbox` (policy → the wrapping command: **bubblewrap** with codex's own
+  shape — `--ro-bind / /`, `--dev /dev`, the roots `--bind`, pockets `--ro-bind`, all
+  namespaces unshared, `--cap-drop ALL`, `--unshare-net` when the network is off, `--proc` —
+  plus `--dev-bind`/`--bind` for the project's passthrough, and **no seccomp stage**:
+  codex's inner stage denies `connect` for every socket family with the network off, which
+  killed local IPC (CUDA's driver socket on a DGX); here "no network" is the namespace alone,
+  so a unix socket in the filesystem still works — proven on the real binary; **seatbelt**
+  on macOS from codex's `.sbpl` files vendored in `priv/seatbelt/` (Apache-2.0, NOTICE) with
+  `WRITABLE_ROOT_n` / `_EXCLUDED_m` params — unverified, no Mac here; `{:none, argv}` when
+  nothing needs enforcing; no bwrap / another platform is an error, a command is never run
+  open by accident); `Longx.Exec.Process` (one command over `Longx.Shim`: output, exit and
+  close on one `seq`, notifications to the session, 1 MiB retained for `process/read` with
+  `waitMs`, `write` deduped by `writeId`, `signal` = SIGINT to the group, `terminate` =
+  the shim's tree kill; `sandbox_denied?/3` is codex's heuristic — denial words in the
+  output or 128+SIGSYS, never on exits 2/126/127 — computed once the streams settle;
+  `tty: true` runs the command on a pseudo-terminal — the shim's `pty:` option, Go
+  `pty_{linux,darwin}.go` over `/dev/ptmx`, 80×24, stdin stays open, one `pty` stream);
+  `Longx.Exec.Fs` (`fs/*` over `File`, each checked with `Policy.allowed?/3` first —
+  apply_patch on a remote executor writes through these, so they are a sandbox boundary too;
+  codex's error codes `-32004` not found / `-32600` refused / `-32603`); `Longx.Exec.Discovery`
+  (`SKILL.md` + `agents/openai.yaml`, `.codex-plugin|.claude-plugin|.cursor-plugin/plugin.json`,
+  `.mcp.json`, the nearest ancestor's manifest, codex's scan limits). `Projects.exec_context/1`
+  gives the session the project's live sandbox options (passthrough) and shim guards
+  (`Pool.oom_score_adj/0`, the memory cap) at every start. `exec_server_integration_test`
+  (`:integration`) proves it on the real binary: cwd writable / home not, no network but a
+  unix socket answers, a tty, a passthrough device visible from the next command with no
+  restart. The bwrap PATH wrapper (`bwrapx`), `Home.prepare(passthrough:)` and the
+  `:passthrough` stale reason are gone with it. Protocol source: `codex-rs/exec-server-protocol`
+  of the pinned release (61 structs; a codex bump re-checks it through the integration suite).
 - `lib/longx/codex/` — the app-server client, layered:
   - **One codex per project** — `Longx.Codex.Pool` (DynamicSupervisor + the
     `Longx.Codex.Registry`): `Pool.connection(project_id)` returns the project's connection,
@@ -571,8 +601,8 @@ React Native client planned on the same core code.
     WAL mode) must be a local disk — never NFS/SMB (#44950, #35217). Codex stays pinned
     (0.154.0); an upgrade is a pin change + `mix test --include integration` green, never
     an alpha.
-  - `Longx.Codex.Sandbox` — codex sandboxes commands itself (Linux bubblewrap from the
-    bundle, macOS seatbelt, Windows restricted token); bubblewrap needs unprivileged user
+  - `Longx.Codex.Sandbox` — the bubblewrap probe (the exec-server runs the same bwrap codex
+    would have: system first, else the bundle's); bubblewrap needs unprivileged user
     namespaces (WSL1, most containers, hardened distros refuse → codex rejects every sandboxed
     command at turn time). `probe/0` runs the bundled `bwrap` at boot (a `Task` in the
     tree; non-Linux is assumed ok) **with codex's own flags** (`--unshare-user --unshare-pid

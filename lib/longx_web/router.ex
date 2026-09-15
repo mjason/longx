@@ -49,6 +49,13 @@ defmodule LongxWeb.Router do
     post "/alpha/search", SearchController, :create
   end
 
+  # codex's exec-server: its commands and file operations come in here (the
+  # `url` in each home's environments.toml) — a bare route, the token is in
+  # the URL and the controller upgrades to a WebSocket.
+  scope "/exec", LongxWeb do
+    get "/:project_id", ExecController, :connect
+  end
+
   # Other scopes may use custom stacks.
   # scope "/api", LongxWeb do
   #   pipe_through :api

@@ -14,11 +14,6 @@ describe("detectSandboxHint (GPU only — everything else is codex's own permiss
     expect(detectSandboxHint("cuInit(0) failed: CUDA_ERROR_NO_DEVICE", { ...ctx, gpu: false })).toBeNull();
   });
 
-  test("the driver's local socket caught by the no-network seccomp → the network switch, unless it is on", () => {
-    expect(detectSandboxHint("cuInit(0) failed: CUDA_ERROR_OPERATING_SYSTEM", ctx)).toEqual({ kind: "cuda_network" });
-    expect(detectSandboxHint("cuInit(0) failed: CUDA_ERROR_OPERATING_SYSTEM", { ...ctx, networkAccess: true })).toBeNull();
-  });
-
   test("full access never hints; a read-only path is codex's business now; plain failures stay quiet", () => {
     expect(detectSandboxHint("CUDA_ERROR_NO_DEVICE", { ...ctx, sandbox: "danger_full_access" })).toBeNull();
     expect(detectSandboxHint('Read-only file system (os error 30) at path "/home/mj/.cache/uv/.tmp"', ctx)).toBeNull();

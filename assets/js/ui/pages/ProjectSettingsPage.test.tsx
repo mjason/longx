@@ -49,7 +49,7 @@ describe("ProjectSettingsPage", () => {
     const user = userEvent.setup();
     renderAt("/p/app-1/settings");
     const form = await screen.findByTestId("project-settings");
-    expect(form).toHaveTextContent("本机的服务和 socket");
+    expect(form).toHaveTextContent("本机的 socket 文件");
     // a machine with a GPU: the switch, resolved per machine — no device paths to type
     await user.click(within(form).getByRole("switch", { name: /把 GPU 放进沙箱/ }));
     expect(within(form).queryByLabelText(/沙箱额外可写目录/)).not.toBeInTheDocument();
