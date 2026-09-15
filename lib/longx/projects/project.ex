@@ -85,7 +85,6 @@ defmodule Longx.Projects.Project do
         :network_access,
         :writable_roots,
         :passthrough_paths,
-        :gpu_passthrough,
         :web_search,
         :multi_agent,
         :global_memory,
@@ -115,7 +114,6 @@ defmodule Longx.Projects.Project do
         :network_access,
         :writable_roots,
         :passthrough_paths,
-        :gpu_passthrough,
         :web_search,
         :multi_agent,
         :global_memory,
@@ -298,12 +296,6 @@ defmodule Longx.Projects.Project do
       allow_nil?: false,
       default: [],
       public?: true
-
-    # The GPU as a switch: this machine's GPU device nodes (nvidia*, WSL2's
-    # dxg, /dev/dri — Longx.Codex.Sandbox.presets/0) are let into the sandbox
-    # at launch, whatever machine the project is on; nothing to type per box.
-    # The one sandbox limit codex's own permission requests cannot express.
-    attribute :gpu_passthrough, :boolean, allow_nil?: false, default: false, public?: true
 
     # Whether threads get codex's `web.run` (search + open URL, executed by
     # Longx's own gateway — this is separate from the sandbox's network,

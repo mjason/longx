@@ -127,11 +127,10 @@ execpolicy 规则）/ 拒绝。被沙箱拒绝的命令，codex 会把结果交�
   「放进沙箱的宿主路径」（仅 Linux）是 USB/串口、宿主 socket 这类沙箱看不到、agent 也申请不了的东西，每条命令启动时
   以 `--dev-bind` / `--bind` 绑进沙箱，其余限制不动；保存后下一条命令就生效，不用重启。
 
-**GPU 是唯一的例外**：codex 的权限模型表达不了设备，官方到 0.154 也没有解决（openai/codex#3141、#19676，维护者的 PR #8002
-因安全顾虑关闭）。Longx 的做法是项目上一个开关「把 GPU 放进沙箱」（有 GPU 的 Linux 机器才显示）：打开后每条命令都把**这台机器**的
-GPU 设备节点（`/dev/nvidia*`，WSL2 是 `/dev/dxg`，加 `/dev/dri`）绑进沙箱，项目换机器不用改路径。命令因看不到 GPU 失败时
-（`CUDA_ERROR_NO_DEVICE`、`Found no NVIDIA driver`、WSL2 上 JAX 的 cuPTI 报错…），那条命令下面会提示并一键打开这个开关，
-下一条命令起生效。在 WSL2 上验证过（DGX Spark 上 CUDA 不再需要打开联网：驱动的本机 socket 在沙箱里直接可用）。
+**GPU 不用设置**：有 GPU 的 Linux 机器上，每条命令的沙箱都带着**这台机器**的 GPU 设备节点（`/dev/nvidia*`，WSL2 是 `/dev/dxg`，
+加 `/dev/dri`），项目换机器不用改。设备节点不是文件也不是网络——agent 读不到你的数据、连不出去，暴露面只是驱动本身，和你在终端里
+跑一样（codex 的权限模型表达不了设备，官方到 0.154 也没有解决：openai/codex#3141、#19676，PR #8002 因安全顾虑关闭）。
+在 WSL2 上验证过：断网的沙箱里 `--backend cuda` 直接在 GPU 上跑（DGX Spark 上 CUDA 也不再需要打开联网：驱动的本机 socket 在沙箱里直接可用）。
 
 ### 沙箱起不来时
 

@@ -83,17 +83,9 @@ export const t = {
   network: "联网（workspace-write 沙箱内）",
   networkHint: "关着时命令连不上任何网络地址，127.0.0.1 也不行。本机的 socket 文件（Docker、GPU 驱动）在 Linux 沙箱里照常可用；macOS 沙箱会一并拦住。",
   passthrough: "放进沙箱的宿主路径",
-  passthroughHint: "一行一个，可用通配符。USB、串口、宿主 socket 这类设备是沙箱看不到、agent 也申请不了的东西，手动写在这里（GPU 用上面的开关）。每一项都在放宽隔离（Docker socket 等于宿主 root）。保存后从下一条命令起生效。仅 Linux 沙箱有效。",
-  gpuPassthrough: "把 GPU 放进沙箱",
-  gpuPassthroughHint: "这台机器有 GPU，沙箱默认看不到它（codex 的权限申请也表达不了设备）。打开后每条命令都把这台机器的 GPU 设备节点绑进沙箱——换机器不用改，从下一条命令起生效。仅 Linux 沙箱有效。",
+  passthroughHint: "一行一个，可用通配符。USB、串口、宿主 socket 这类设备是沙箱看不到、agent 也申请不了的东西，手动写在这里（这台机器的 GPU 设备节点已经在沙箱里，不用写）。每一项都在放宽隔离（Docker socket 等于宿主 root）。保存后从下一条命令起生效。仅 Linux 沙箱有效。",
   sandboxAdvanced: "长期放开的目录和设备（高级）",
   sandboxAdvancedHint: "平时不用碰：agent 缺什么权限会在聊天里申请，批准只对本轮或本会话有效。这里写的是对这个项目长期有效的例外。",
-  sandboxHint: {
-    gpu: "沙箱里看不到这台机器的 GPU（codex 的权限申请表达不了设备）。为这个项目打开「把 GPU 放进沙箱」？",
-    allow: "允许",
-    allowed: "已允许，下一轮起生效",
-    failed: (reason: string) => `没改成：${reason}`,
-  },
   writableRoots: "沙箱额外可写目录",
   writableRootsHint: "一行一个，默认为空。agent 需要写哪里时会自己来申请，你在聊天里按轮或按会话批准；写在这里的目录则是长期放开，只放确实需要的（比如数据集目录）。~ 是服务器上运行 Longx 的用户；不存在的目录会被跳过。",
   sandboxOptions: {

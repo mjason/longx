@@ -93,19 +93,17 @@ React Native client planned on the same core code.
     `turn/start.sandboxPolicy.writableRoots` when a turn changes the mode). **Devices and sockets go in through `passthrough_paths`, never as writable roots**:
     bwrap's `--dev /dev` is minimal and a device node as a writable root breaks the launch.
     `Project.passthrough_paths` (globs allowed; `Projects.passthrough_paths/1` resolves to
-    what exists, sorted) and **`Project.gpu_passthrough`** (the GPU as a switch: this
-    machine's `gpu` preset — nvidia*, dxg, dri — so a project moved to another box gets that
-    box's devices; the 0.1.13 migration turned hand-listed nodes into the flag; shown in
-    project settings only on a Linux machine with a GPU) are read by **the exec-server at
-    every command start** (`Projects.exec_context/1`), so a switch holds from the next
-    command — no restart, no `stale`. `Sandbox.presets/1` (gpu / usb / docker) is on the
-    sandbox report. `core/chat/sandboxHints.ts` + `ui/chat/SandboxHint` covers the one thing
-    codex's permission model cannot express — a device: a command that could not see the GPU
-    (`CUDA_ERROR_NO_DEVICE`, `Found no NVIDIA driver`, `NVIDIA-SMI has failed`, WSL2's cuPTI
-    error…) gets a line **below the folded row** with 允许 that turns `gpu_passthrough` on.
-    Upstream has no GPU answer (openai/codex#3141, #19676; PR #8002 closed over security
-    concerns). Project settings keep only long-lived exceptions, folded under 高级 (writable
-    roots, Linux passthrough) — no presets, no cache lists: the agent asks. Whether it is a git repo is read live (`git_info/1`), never
+    what exists, sorted) is read by **the exec-server at every command start**
+    (`Projects.exec_context/1`) — no restart, no `stale`. **The GPU is no setting**:
+    `passthrough_paths/1` always adds this machine's `gpu` preset (`Sandbox.presets/1`:
+    nvidia*, dxg, dri), so every sandbox on a box with a GPU has it — a device node is
+    neither a file nor the network (nothing to read or reach through it, the driver surface
+    every process has), codex's permission requests cannot ask for one, and Longx's users
+    run backtests on it. The `gpu_passthrough` switch of 0.1.13 and the chat's GPU hint
+    (`sandboxHints` / `SandboxHint`) are gone (migration drops the column). Upstream has no
+    GPU answer (openai/codex#3141, #19676; PR #8002 closed over security concerns). Project
+    settings keep only long-lived exceptions, folded under 高级 (writable roots, Linux
+    passthrough for USB / sockets) — no presets, no cache lists: the agent asks. Whether it is a git repo is read live (`git_info/1`), never
     stored; `init_git/1` sets git up with `Longx.Git.Ignore.default/0` and a first commit.
     The UI warns when a project has no git.
   - **Each project has its own codex process and its own `CODEX_HOME`**

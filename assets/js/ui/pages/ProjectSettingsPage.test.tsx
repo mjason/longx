@@ -50,8 +50,8 @@ describe("ProjectSettingsPage", () => {
     renderAt("/p/app-1/settings");
     const form = await screen.findByTestId("project-settings");
     expect(form).toHaveTextContent("本机的 socket 文件");
-    // a machine with a GPU: the switch, resolved per machine — no device paths to type
-    await user.click(within(form).getByRole("switch", { name: /把 GPU 放进沙箱/ }));
+    // the GPU is no setting: a machine that has one puts it in every sandbox
+    expect(within(form).queryByRole("switch", { name: /GPU/ })).not.toBeInTheDocument();
     expect(within(form).queryByLabelText(/沙箱额外可写目录/)).not.toBeInTheDocument();
     await user.click(within(form).getByRole("button", { name: /长期放开的目录和设备/ }));
     const roots = within(form).getByLabelText(/沙箱额外可写目录/);
@@ -63,7 +63,7 @@ describe("ProjectSettingsPage", () => {
     await user.click(within(form).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(updateProject).toHaveBeenCalledWith(
-        expect.objectContaining({ input: expect.objectContaining({ writableRoots: ["/data/models"], passthroughPaths: ["/dev/ttyUSB*"], gpuPassthrough: true }) }),
+        expect.objectContaining({ input: expect.objectContaining({ writableRoots: ["/data/models"], passthroughPaths: ["/dev/ttyUSB*"] }) }),
       ),
     );
   });
@@ -76,7 +76,6 @@ describe("ProjectSettingsPage", () => {
     await user.click(await within(form).findByRole("button", { name: /长期放开的目录和设备/ }));
     await within(form).findByLabelText(/沙箱额外可写目录/);
     expect(within(form).queryByLabelText(/放进沙箱的宿主路径/)).not.toBeInTheDocument();
-    expect(within(form).queryByRole("switch", { name: /把 GPU 放进沙箱/ })).not.toBeInTheDocument();
   });
 
   test("deleting the project asks for its name, then removes it (codex data included) and leaves", async () => {

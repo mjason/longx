@@ -96,7 +96,7 @@ defmodule Longx.Projects.ResilienceTest do
     # command: a change is not a restart
     {:ok, project} = Projects.update_project(project, %{passthrough_paths: ["/dev/null"]})
     assert Projects.codex_info(project).stale == []
-    assert Projects.exec_context(project.id).sandbox == [passthrough: ["/dev/null"]]
+    assert "/dev/null" in Projects.exec_context(project.id).sandbox[:passthrough]
   end
 
   test "codex dies mid-turn: the turn fails, the thread is disconnected, then resumed when codex is back",

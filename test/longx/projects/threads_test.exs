@@ -229,11 +229,14 @@ defmodule Longx.Projects.ThreadsTest do
       assert Projects.writable_roots(project) == [cache]
     end
 
-    test "passthrough_paths: the project's host paths for the sandbox — globs expanded, only what exists, none by default",
+    test "passthrough_paths: this machine's GPU nodes always, plus the project's own patterns — globs expanded, only what exists",
          %{dir: dir} do
+      # the GPU is part of every sandbox on a machine that has one (nvidia nodes,
+      # WSL2's dxg, /dev/dri): a project moved to another box gets that box's devices
+      gpu = Enum.find(Longx.Codex.Sandbox.presets(), %{paths: []}, &(&1.id == "gpu")).paths
       plain = git_project!(dir)
       assert plain.passthrough_paths == []
-      assert Projects.passthrough_paths(plain) == []
+      assert Projects.passthrough_paths(plain) == gpu
 
       for n <- ~w(x1 x2), do: File.touch!(Path.join(dir, n))
       sub = Path.join(dir, "sub")
@@ -243,14 +246,6 @@ defmodule Longx.Projects.ThreadsTest do
         git_project!(sub, %{
           passthrough_paths: ["/dev/null", Path.join(dir, "x*"), "/nope/at/all", "/dev/null"]
         })
-
-      assert Projects.passthrough_paths(project) ==
-               ["/dev/null", Path.join(dir, "x1"), Path.join(dir, "x2")]
-
-      # the GPU is a switch, resolved on this machine (nvidia nodes, WSL2's dxg, /dev/dri):
-      # a project moved to another box gets that box's devices, nothing to retype
-      gpu = Enum.find(Longx.Codex.Sandbox.presets(), %{paths: []}, &(&1.id == "gpu")).paths
-      {:ok, project} = Projects.update_project(project, %{gpu_passthrough: true})
 
       assert Projects.passthrough_paths(project) ==
                Enum.sort(gpu ++ ["/dev/null", Path.join(dir, "x1"), Path.join(dir, "x2")])

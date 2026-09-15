@@ -28,7 +28,6 @@ export const project = (n: number) => ({
   networkAccess: false,
   writableRoots: [],
   passthroughPaths: [],
-  gpuPassthrough: false,
   webSearch: true,
   multiAgent: true,
   dirtyStart: "commit",

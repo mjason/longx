@@ -537,18 +537,17 @@ defmodule Longx.Projects do
 
   @doc """
   The host paths the project's sandbox lets in, resolved: this machine's GPU
-  devices when `gpu_passthrough` is on, plus the project's own patterns
-  (globs expanded — `/dev/ttyUSB*`), only what exists right now — read by
-  the exec-server at every command start (`exec_context/1`), so a switch
-  flipped or a device plugged in holds from the next command; sorted, no
-  duplicates.
+  device nodes — always, on a machine that has them (a device is neither a
+  file nor the network: nothing to read or reach through it, the same
+  driver surface every process on the box has; and codex's permission
+  requests cannot ask for one) — plus the project's own patterns (globs
+  expanded — `/dev/ttyUSB*`), only what exists right now; read by the
+  exec-server at every command start (`exec_context/1`), so a device
+  plugged in holds from the next command; sorted, no duplicates.
   """
   @spec passthrough_paths(Project.t()) :: [Path.t()]
-  def passthrough_paths(%Project{passthrough_paths: patterns, gpu_passthrough: gpu?}) do
-    gpu =
-      if gpu?,
-        do: Enum.find(Longx.Codex.Sandbox.presets(), %{paths: []}, &(&1.id == "gpu")).paths,
-        else: []
+  def passthrough_paths(%Project{passthrough_paths: patterns}) do
+    gpu = Enum.find(Longx.Codex.Sandbox.presets(), %{paths: []}, &(&1.id == "gpu")).paths
 
     (gpu ++ patterns)
     |> Enum.flat_map(fn pattern ->
