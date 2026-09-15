@@ -1,6 +1,5 @@
-// Project data for the screens: TanStack Query over the generated client.
-// Everything here is DOM-free (the phone app reuses it).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ThreadRow } from "@/core/chat/threadList";
 import {
   codexInfo,
   createProject,
@@ -400,7 +399,13 @@ export function useStartThread(id: string) {
           input: { projectId: id, ...(input ?? {}) },
         }),
       ),
-    onSuccess: () => {
+    onSuccess: (row) => {
+      // the page moves to the new thread as soon as this resolves: the row
+      // goes into the list now, before the refetch lands, or the thread page
+      // would show "not found" for a moment
+      client.setQueryData<ThreadRow[]>(queryKeys.threads(id), (rows) =>
+        rows && !rows.some((r) => r.id === row.id) ? [row, ...rows] : rows,
+      );
       client.invalidateQueries({ queryKey: queryKeys.threads(id) });
       client.invalidateQueries({ queryKey: queryKeys.codex(id) });
     },
