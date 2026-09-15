@@ -292,6 +292,37 @@ defmodule Longx.Codex.ThreadTest do
       assert snapshot.thread["id"] == thread_id
     end
 
+    test "resume carries the thread's access mode and developer instructions — codex would otherwise fall back to its defaults",
+         %{conn: conn} do
+      {:ok, thread_id} = Thread.start(cwd: "/p", tools: [], conn: conn)
+
+      assert {:ok, ^thread_id} =
+               Thread.resume(thread_id,
+                 conn: conn,
+                 sandbox: :danger_full_access,
+                 approval_policy: :never,
+                 developer_instructions: "notes"
+               )
+
+      assert {:ok, %{"thread" => %{"resumeParams" => params}}} =
+               Connection.request(conn, "thread/read", %{"threadId" => thread_id})
+
+      assert %{
+               "sandbox" => "danger-full-access",
+               "approvalPolicy" => "never",
+               "developerInstructions" => "notes"
+             } = params
+
+      # nothing given: nothing sent (codex keeps its own)
+      {:ok, _} = Thread.resume(thread_id, conn: conn)
+
+      assert {:ok, %{"thread" => %{"resumeParams" => params}}} =
+               Connection.request(conn, "thread/read", %{"threadId" => thread_id})
+
+      refute Map.has_key?(params, "sandbox")
+      refute Map.has_key?(params, "approvalPolicy")
+    end
+
     test "resume carries the model's config overrides like start does", %{conn: conn} do
       {:ok, thread_id} = Thread.start(cwd: "/", conn: conn)
       ThreadState.stop(thread_id)

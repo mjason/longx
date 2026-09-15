@@ -532,18 +532,25 @@ defmodule Longx.Projects do
   """
   @spec resume_thread(Thread.t(), pid) :: {:ok, String.t()} | {:error, term}
   def resume_thread(%Thread{codex_thread_id: codex_id} = thread, conn) do
+    project = Ash.get!(Project, thread.project_id)
+
     with {:ok, model_opts} <- Longx.AI.thread_options(thread.model_slug) do
       opts =
         [
           conn: conn,
+          # the access mode the thread is on — codex would resume on its defaults otherwise
+          cwd: thread.cwd,
+          sandbox: thread.sandbox,
+          approval_policy: thread.approval_policy,
           network_access: thread.network_access,
-          writable_roots: writable_roots(Ash.get!(Project, thread.project_id)),
+          writable_roots: writable_roots(project),
           multi_agent: thread.multi_agent
         ]
         |> Keyword.merge(model_opts)
         # the level the thread was left on, not the row's default
         |> put_if(:reasoning_effort, thread.reasoning_effort)
         |> without_web_search(thread.web_search)
+        |> with_global_memory(project)
 
       Longx.Codex.Thread.resume(codex_id, opts)
     end

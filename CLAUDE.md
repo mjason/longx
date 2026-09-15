@@ -149,7 +149,13 @@ React Native client planned on the same core code.
     thread nobody hosts is resumed on its project's codex; an *empty* one codex cannot
     resume (it only writes a thread to disk on its first turn) is started again under a
     new codex id (`Thread` action `rehost`; the join reply carries the id to follow);
-    `:unrecoverable`/`:archived` threads join read-only. A resume (`ThreadState.backfill`)
+    `:unrecoverable`/`:archived` threads join read-only. **A resume carries the thread's
+    access mode** (`Projects.resume_thread/2` → `Thread.resume/2` with `cwd`, `sandbox`,
+    `approval_policy`, `network_access`, `writable_roots`, the model's config and the
+    global-memory `developer_instructions`): codex takes none of it from the stored
+    thread — a resume without them ran on codex's defaults (read-only) after every
+    restart / recycle while the row and the UI still said 完全访问 (verified against the
+    real binary: rollout `turn_context.sandbox_policy`). A resume (`ThreadState.backfill`)
     and a dying connection (`Connection.terminate` → `withdraw_inbound`) both withdraw
     pending approvals nobody can answer any more.
   - **When codex dies** (`Longx.Projects.Tracker` on `"codex:connection"`): `:down` → every

@@ -62,7 +62,11 @@ defmodule Longx.Codex.Thread do
   Resumes a stored thread and rebuilds its `ThreadState` from `thread/read`.
   Takes the same model / config options as `start/1` (`model_context_window:`,
   `reasoning_effort:`, `web_search:`, …): a resumed thread runs with what the
-  model row says *now*, not what it was started with.
+  model row says *now*, not what it was started with. **The access mode must
+  be given again** (`sandbox:`, `approval_policy:`, `cwd:`) and so must
+  `developer_instructions:`: codex does not take them from the stored
+  thread — a resume without them runs on its defaults (read-only here)
+  while the caller still believes the mode it recorded.
   """
   @spec resume(String.t(), keyword) :: {:ok, String.t()} | {:error, term}
   def resume(thread_id, opts \\ []) do
@@ -70,6 +74,16 @@ defmodule Longx.Codex.Thread do
 
     params =
       %{"threadId" => thread_id}
+      |> put_if("cwd", Keyword.get(opts, :cwd))
+      |> put_if(
+        "sandbox",
+        opts |> Keyword.get(:sandbox) |> then(&(&1 && Map.fetch!(@sandboxes, &1)))
+      )
+      |> put_if(
+        "approvalPolicy",
+        opts |> Keyword.get(:approval_policy) |> then(&(&1 && Map.fetch!(@approval_policies, &1)))
+      )
+      |> put_if("developerInstructions", Keyword.get(opts, :developer_instructions))
       |> put_model(Keyword.get(opts, :model))
       |> put_config(opts)
 
