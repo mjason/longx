@@ -21,6 +21,10 @@ defmodule Longx.Projects.Project do
   sqlite do
     table "projects"
     repo Longx.Repo
+    # writable_roots: the column was created (0.1.7) with a SQLite default of
+    # '["~/.cache"]'; SQLite cannot alter a column default and Ash always
+    # writes the attribute, so the generator is told to leave it alone
+    migration_defaults writable_roots: "nil"
   end
 
   typescript do
@@ -79,6 +83,7 @@ defmodule Longx.Projects.Project do
         :dirty_start,
         :network_access,
         :writable_roots,
+        :passthrough_paths,
         :web_search,
         :multi_agent,
         :global_memory,
@@ -107,6 +112,7 @@ defmodule Longx.Projects.Project do
         :dirty_start,
         :network_access,
         :writable_roots,
+        :passthrough_paths,
         :web_search,
         :multi_agent,
         :global_memory,
@@ -277,6 +283,18 @@ defmodule Longx.Projects.Project do
     # planted code runs later, outside it), so each one is the person's
     # explicit choice. (A device cannot be let in this way: Longx.Codex.Sandbox.)
     attribute :writable_roots, {:array, :string}, allow_nil?: false, default: [], public?: true
+
+    # Host paths let into the bubblewrap sandbox (Linux): device nodes (GPU,
+    # USB, serial), a socket, a file — things codex's sandbox cannot show
+    # (`--dev /dev` is a minimal device tree; codex has no device bind).
+    # Globs allowed (`/dev/nvidia*`), resolved when codex starts. Bound by
+    # Longx's bwrap wrapper (`Longx.Codex.Home`), leaving the filesystem and
+    # network policy untouched. Each one weakens isolation in its own way —
+    # a docker socket is host root; the UI says so. Empty by default.
+    attribute :passthrough_paths, {:array, :string},
+      allow_nil?: false,
+      default: [],
+      public?: true
 
     # Whether threads get codex's `web.run` (search + open URL, executed by
     # Longx's own gateway — this is separate from the sandbox's network,

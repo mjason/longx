@@ -500,12 +500,38 @@ defmodule Longx.Projects do
   defp project_connection(%Project{} = project, opts) do
     case Keyword.fetch(opts, :conn) do
       {:ok, conn} -> {:ok, conn}
-      :error -> Pool.connection(project.id, shim: shim_options(project))
+      :error -> Pool.connection(project.id, pool_options(project))
     end
   end
 
+  # what a project's codex is launched with: the memory cap on its tree, the
+  # host paths its sandbox lets in (both read at launch — a restart applies a change)
+  defp pool_options(%Project{} = project),
+    do: [shim: shim_options(project), home: [passthrough: passthrough_paths(project)]]
+
   defp shim_options(%Project{memory_limit_mb: nil}), do: []
   defp shim_options(%Project{memory_limit_mb: mb}), do: [memory_limit: mb * 1024 * 1024]
+
+  @doc """
+  The host paths the project's sandbox lets in, resolved: globs expanded
+  (`/dev/nvidia*`, `/dev/ttyUSB*`), only what exists right now (a device
+  plugged in later needs a codex restart — `codex_info.stale` says so),
+  sorted, no duplicates.
+  """
+  @spec passthrough_paths(Project.t()) :: [Path.t()]
+  def passthrough_paths(%Project{passthrough_paths: patterns}) do
+    patterns
+    |> Enum.flat_map(fn pattern ->
+      expanded = Path.expand(pattern)
+
+      if String.contains?(expanded, ["*", "?", "["]),
+        do: Path.wildcard(expanded),
+        else: [expanded]
+    end)
+    |> Enum.filter(&File.exists?/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
 
   # `conn:` when given; else the codex hosting the thread — after a restart
   # nobody hosts it yet, so it is resumed on the project's codex first
@@ -843,9 +869,9 @@ defmodule Longx.Projects do
           bytes: non_neg_integer,
           files: %{String.t() => non_neg_integer},
           worker: :stopped | map,
-          stale: [:models | :config]
+          stale: [:models | :config | :passthrough]
         }
-  def codex_info(%Project{id: project_id}) do
+  def codex_info(%Project{id: project_id} = project) do
     home = Pool.home_dir(project_id)
     exists? = File.dir?(home)
     worker = Pool.status(project_id)
@@ -867,7 +893,11 @@ defmodule Longx.Projects do
       worker: worker,
       # what the running codex read at boot that has changed since (a
       # model's window, the search mode): it needs a restart to see it
-      stale: if(worker == :stopped, do: [], else: Longx.Codex.Home.stale(home))
+      stale:
+        if(worker == :stopped,
+          do: [],
+          else: Longx.Codex.Home.stale(home, passthrough: passthrough_paths(project))
+        )
     }
   end
 
@@ -889,7 +919,7 @@ defmodule Longx.Projects do
   @doc "Stops (forced) and starts the project's codex again."
   @spec restart_codex(Project.t()) :: {:ok, pid} | {:error, term}
   def restart_codex(%Project{id: project_id} = project),
-    do: Pool.restart(project_id, shim: shim_options(project))
+    do: Pool.restart(project_id, pool_options(project))
 
   @doc """
   Forgets everything codex knows about this project: stops the worker and

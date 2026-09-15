@@ -2364,6 +2364,7 @@ export type CreateProjectInput = {
   dirtyStart?: "ask" | "commit" | "off";
   networkAccess?: boolean;
   writableRoots?: Array<string>;
+  passthroughPaths?: Array<string>;
   webSearch?: boolean;
   multiAgent?: boolean;
   globalMemory?: boolean;
@@ -3053,6 +3054,7 @@ export type UpdateProjectInput = {
   dirtyStart?: "ask" | "commit" | "off";
   networkAccess?: boolean;
   writableRoots?: Array<string>;
+  passthroughPaths?: Array<string>;
   webSearch?: boolean;
   multiAgent?: boolean;
   globalMemory?: boolean;
@@ -6378,11 +6380,11 @@ export async function validateMemoryWriteIndex(
 }
 
 
-export type ProbeSandboxFields = UnifiedFieldSelection<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "checkedAt"}>[];
+export type ProbeSandboxFields = UnifiedFieldSelection<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, presets: Array<Record<string, any>>, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "presets" | "checkedAt"}>[];
 
 export type InferProbeSandboxResult<
   Fields extends ProbeSandboxFields | undefined,
-> = InferResult<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "checkedAt"}, Fields>;
+> = InferResult<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, presets: Array<Record<string, any>>, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "presets" | "checkedAt"}, Fields>;
 
 export type ProbeSandboxResult<Fields extends ProbeSandboxFields | undefined = undefined> = | { success: true; data: InferProbeSandboxResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -6444,11 +6446,11 @@ export async function validateProbeSandbox(
 }
 
 
-export type SandboxStatusFields = UnifiedFieldSelection<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "checkedAt"}>[];
+export type SandboxStatusFields = UnifiedFieldSelection<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, presets: Array<Record<string, any>>, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "presets" | "checkedAt"}>[];
 
 export type InferSandboxStatusResult<
   Fields extends SandboxStatusFields | undefined,
-> = InferResult<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "checkedAt"}, Fields>;
+> = InferResult<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, presets: Array<Record<string, any>>, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "presets" | "checkedAt"}, Fields>;
 
 export type SandboxStatusResult<Fields extends SandboxStatusFields | undefined = undefined> = | { success: true; data: InferSandboxStatusResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }

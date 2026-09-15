@@ -35,6 +35,7 @@ export const projectFields = [
   "approvalPolicy",
   "networkAccess",
   "writableRoots",
+  "passthroughPaths",
   "webSearch",
   "multiAgent",
   "globalMemory",
@@ -296,13 +297,20 @@ export function useModels() {
   });
 }
 
+/** a group of host paths worth letting into the sandbox on this machine (server-typed loosely) */
+export type SandboxPreset = { id: string; label: string; paths: string[]; danger: boolean };
+
+export function sandboxPresets(data: { presets?: unknown } | undefined): SandboxPreset[] {
+  return Array.isArray(data?.presets) ? (data.presets as SandboxPreset[]) : [];
+}
+
 export function useSandboxStatus() {
   return useQuery({
     queryKey: queryKeys.sandbox,
     staleTime: Infinity,
     queryFn: async () =>
       unwrap(
-        await sandboxStatus({ fields: ["status", "reason", "bwrap", "gpu", "checkedAt"] }),
+        await sandboxStatus({ fields: ["status", "reason", "bwrap", "gpu", "presets", "checkedAt"] }),
       ),
   });
 }
