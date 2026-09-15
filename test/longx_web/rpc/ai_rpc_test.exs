@@ -282,9 +282,22 @@ defmodule LongxWeb.AiRpcTest do
   test "sandbox: the cached report, and a fresh probe on request", %{conn: conn} do
     assert %{
              "success" => true,
-             "data" => %{"status" => status, "checkedAt" => at, "bwrap" => bwrap}
+             "data" => %{
+               "status" => status,
+               "checkedAt" => at,
+               "bwrap" => bwrap,
+               "presets" => presets
+             }
            } =
-             rpc(conn, "probe_sandbox", %{"fields" => ["status", "reason", "bwrap", "checkedAt"]})
+             rpc(conn, "probe_sandbox", %{
+               "fields" => ["status", "reason", "bwrap", "gpu", "presets", "checkedAt"]
+             })
+
+    # what this machine could let into the sandbox (id, label, paths, danger), maybe nothing
+    assert is_list(presets)
+
+    for preset <- presets,
+        do: assert(%{"id" => _, "label" => _, "paths" => [_ | _], "danger" => _} = preset)
 
     assert status in ["ok", "no_net_isolation", "unavailable"]
     # the bwrap codex will run: the system one when installed, else the bundled

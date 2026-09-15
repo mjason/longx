@@ -27,6 +27,7 @@ export const project = (n: number) => ({
   approvalPolicy: "on_request",
   networkAccess: false,
   writableRoots: [],
+  passthroughPaths: [],
   webSearch: true,
   multiAgent: true,
   dirtyStart: "commit",
@@ -336,7 +337,7 @@ export function rpcMock() {
     stopCodex: vi.fn(),
     restartCodex: vi.fn(),
     sandboxStatus: vi.fn(async () =>
-      ok({ status: "ok", reason: null, bwrap: null, gpu: false, checkedAt: "" }),
+      ok({ status: "ok", reason: null, bwrap: null, gpu: false, presets: [], checkedAt: "" }),
     ),
     createDirectory: vi.fn(
       async ({ input }: { input: { parent: string; name: string } }) =>

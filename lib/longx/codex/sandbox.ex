@@ -151,10 +151,40 @@ defmodule Longx.Codex.Sandbox do
   def gpu?(entries \\ dev_entries()),
     do: Enum.any?(entries, &String.starts_with?(Path.basename(&1), "nvidia"))
 
+  @doc """
+  Host paths worth letting into the sandbox on this machine, grouped for the
+  settings page: `gpu` (nvidia nodes, WSL2's dxg, /dev/dri), `usb` (the USB
+  bus, serial adapters), `docker` (the daemon socket — host root, flagged).
+  Only groups with something present.
+  """
+  @spec presets([Path.t()]) :: [
+          %{id: String.t(), label: String.t(), paths: [Path.t()], danger: boolean}
+        ]
+  def presets(entries \\ dev_entries() ++ socket_entries()) do
+    groups = [
+      {"gpu", "GPU", false, &(String.starts_with?(&1, "nvidia") or &1 in ["dxg", "dri"])},
+      {"usb", "USB / 串口", false,
+       &(&1 == "usb" or String.starts_with?(&1, "ttyUSB") or String.starts_with?(&1, "ttyACM"))},
+      {"docker", "Docker socket", true, &(&1 == "docker.sock")}
+    ]
+
+    for {id, label, danger, match?} <- groups,
+        paths = entries |> Enum.filter(&match?.(Path.basename(&1))) |> Enum.uniq() |> Enum.sort(),
+        paths != [] do
+      %{id: id, label: label, paths: paths, danger: danger}
+    end
+  end
+
+  defp socket_entries, do: Enum.filter(["/var/run/docker.sock"], &File.exists?/1)
+
+  # /dev one level down, plus the USB bus directory
   defp dev_entries do
     case File.ls("/dev") do
-      {:ok, names} -> Enum.map(names, &Path.join("/dev", &1))
-      _ -> []
+      {:ok, names} ->
+        Enum.map(names, &Path.join("/dev", &1)) ++ Enum.filter(["/dev/bus/usb"], &File.dir?/1)
+
+      _ ->
+        []
     end
   end
 

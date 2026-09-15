@@ -187,6 +187,9 @@ defmodule Longx.System.Status do
                     reason: [type: :string],
                     bwrap: [type: :string],
                     gpu: [type: :boolean, allow_nil?: false],
+                    # host paths worth letting into the sandbox here (id, label, paths, danger);
+                    # arrays of typed maps are untyped in ash_typescript 0.18 → typed client-side
+                    presets: [type: {:array, :map}, allow_nil?: false],
                     checked_at: [type: :utc_datetime_usec, allow_nil?: false]
                   ]
 
@@ -204,6 +207,9 @@ defmodule Longx.System.Status do
                     reason: [type: :string],
                     bwrap: [type: :string],
                     gpu: [type: :boolean, allow_nil?: false],
+                    # host paths worth letting into the sandbox here (id, label, paths, danger);
+                    # arrays of typed maps are untyped in ash_typescript 0.18 → typed client-side
+                    presets: [type: {:array, :map}, allow_nil?: false],
                     checked_at: [type: :utc_datetime_usec, allow_nil?: false]
                   ]
 
@@ -287,6 +293,7 @@ defmodule Longx.System.Status do
       reason: reason(report.reason),
       bwrap: report.bwrap,
       gpu: report.gpu,
+      presets: Longx.Codex.Sandbox.presets(),
       checked_at: report.checked_at
     }
 

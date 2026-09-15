@@ -81,7 +81,10 @@ export const t = {
   sandbox: "沙箱",
   approval: "审批",
   network: "允许联网（workspace-write 沙箱内）",
-  gpuHidden: "这台机器有 NVIDIA GPU，但只读和可写工作区两种沙箱里都看不到它（bubblewrap 只给最小的 /dev，codex 没有设备直通）。要用 GPU 的会话请选「完全访问」——项目默认，或在输入框旁按会话选。",
+  passthrough: "放进沙箱的宿主路径",
+  passthroughHint: "一行一个，可用通配符（/dev/nvidia*）。沙箱（bubblewrap）只给命令一个最小的 /dev，看不到 GPU、USB、串口这类设备，也连不上宿主的 socket；写在这里的路径会原样绑进沙箱，其余的文件系统和网络限制不变。每一项都在放宽隔离：设备通常无害，Docker socket 等于宿主 root。codex 启动时读取，改了要重启 codex（状态栏会提示）。仅 Linux 沙箱有效。",
+  passthroughPreset: (label: string) => `添加 ${label}`,
+  passthroughDanger: "等于宿主 root",
   writableRoots: "沙箱额外可写目录",
   writableRootsHint: "一行一个；默认为空。可写工作区只能写项目目录和 /tmp，有的工具要写别处才能跑——比如包管理器的缓存（Linux ~/.cache、macOS ~/Library/Caches、Windows %LOCALAPPDATA%）或数据集目录。每加一个目录都在放宽沙箱：缓存里被塞的东西会在沙箱外被执行，只加确实需要的。~ 是服务器上运行 Longx 的用户；不存在的目录会被跳过。",
   sandboxOptions: {
@@ -275,6 +278,7 @@ export const t = {
   codexStaleReasons: {
     models: "模型设置改了（上下文窗口、新增的模型）",
     config: "网页搜索等配置改了",
+    passthrough: "放进沙箱的宿主路径改了",
   } as Record<string, string>,
   codexStaleHint:
     "codex 只在启动时读这些；重启后生效。正在进行的轮次会被打断，所以由你来决定什么时候重启。",

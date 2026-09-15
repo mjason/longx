@@ -167,11 +167,14 @@ defmodule Longx.Codex.Pool do
       [oom_score_adj: Keyword.get(config, :oom_score_adj, @default_oom_score_adj)]
       |> Keyword.merge(Keyword.get(opts, :shim, []))
 
-    extra = Keyword.merge([shim: shim], Keyword.get(config, :connection, []))
+    # `home:` — further Home.prepare/1 options for this project (host paths let into the sandbox)
+    configured = Keyword.get(config, :connection, [])
+    home_opts = Keyword.merge(Keyword.get(configured, :home, []), Keyword.get(opts, :home, []))
+    extra = [shim: shim] |> Keyword.merge(configured) |> Keyword.put(:home, home_opts)
 
     case Keyword.fetch(config, :command) do
       {:ok, command} ->
-        {:ok, _} = Home.prepare(dir: home)
+        {:ok, _} = Home.prepare([dir: home] ++ home_opts)
         Keyword.merge([command: command, env: [], cd: home], extra)
 
       :error ->

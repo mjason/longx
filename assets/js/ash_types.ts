@@ -173,7 +173,7 @@ export type ProjectFilesAttributesOnlySchema = {
 // Project Schema
 export type ProjectResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "approvalPolicy" | "archivedAt" | "description" | "dirtyStart" | "globalMemory" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "rootPath" | "sandbox" | "slug" | "tools" | "updatedAt" | "webSearch" | "writableRoots";
+  __primitiveFields: "approvalPolicy" | "archivedAt" | "description" | "dirtyStart" | "globalMemory" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "passthroughPaths" | "rootPath" | "sandbox" | "slug" | "tools" | "updatedAt" | "webSearch" | "writableRoots";
   approvalPolicy: "never" | "on_request" | "untrusted";
   archivedAt: UtcDateTimeUsec | null;
   description: string | null;
@@ -186,6 +186,7 @@ export type ProjectResourceSchema = {
   multiAgent: boolean;
   name: string;
   networkAccess: boolean;
+  passthroughPaths: Array<string>;
   rootPath: string;
   sandbox: "danger_full_access" | "read_only" | "workspace_write";
   slug: string;
@@ -200,7 +201,7 @@ export type ProjectResourceSchema = {
 
 export type ProjectAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "approvalPolicy" | "archivedAt" | "description" | "dirtyStart" | "globalMemory" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "rootPath" | "sandbox" | "slug" | "tools" | "updatedAt" | "webSearch" | "writableRoots";
+  __primitiveFields: "approvalPolicy" | "archivedAt" | "description" | "dirtyStart" | "globalMemory" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "passthroughPaths" | "rootPath" | "sandbox" | "slug" | "tools" | "updatedAt" | "webSearch" | "writableRoots";
   approvalPolicy: "never" | "on_request" | "untrusted";
   archivedAt: UtcDateTimeUsec | null;
   description: string | null;
@@ -213,6 +214,7 @@ export type ProjectAttributesOnlySchema = {
   multiAgent: boolean;
   name: string;
   networkAccess: boolean;
+  passthroughPaths: Array<string>;
   rootPath: string;
   sandbox: "danger_full_access" | "read_only" | "workspace_write";
   slug: string;
@@ -949,6 +951,13 @@ export type ProjectFilterInput = {
     in?: Array<boolean>;
   };
 
+  passthroughPaths?: {
+    eq?: Array<string>;
+    notEq?: Array<string>;
+    in?: Array<Array<string>>;
+    has?: string;
+  };
+
   rootPath?: {
     eq?: string;
     notEq?: string;
@@ -1493,7 +1502,7 @@ export const toolFilterFields = ["enabled", "id", "insertedAt", "name", "namespa
 export type ToolFilterField = (typeof toolFilterFields)[number];
 
 
-export const projectFilterFields = ["approvalPolicy", "archivedAt", "description", "dirtyStart", "globalMemory", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "rootPath", "sandbox", "slug", "tools", "updatedAt", "webSearch", "writableRoots", "model"] as const;
+export const projectFilterFields = ["approvalPolicy", "archivedAt", "description", "dirtyStart", "globalMemory", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "passthroughPaths", "rootPath", "sandbox", "slug", "tools", "updatedAt", "webSearch", "writableRoots", "model"] as const;
 export type ProjectFilterField = (typeof projectFilterFields)[number];
 
 
@@ -1519,7 +1528,7 @@ export const toolSortFields = ["enabled", "id", "insertedAt", "name", "namespace
 export type ToolSortField = (typeof toolSortFields)[number];
 
 
-export const projectSortFields = ["approvalPolicy", "archivedAt", "description", "dirtyStart", "globalMemory", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "rootPath", "sandbox", "slug", "tools", "updatedAt", "webSearch", "writableRoots"] as const;
+export const projectSortFields = ["approvalPolicy", "archivedAt", "description", "dirtyStart", "globalMemory", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "passthroughPaths", "rootPath", "sandbox", "slug", "tools", "updatedAt", "webSearch", "writableRoots"] as const;
 export type ProjectSortField = (typeof projectSortFields)[number];
 
 

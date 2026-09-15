@@ -74,7 +74,10 @@ defmodule Longx.Codex.Home do
   (default: `Longx.AI.web_search_mode/0`, i.e. whatever is configured),
   `:models` — the catalog entries (`%{slug, context_window, reasoning_levels,
   reasoning_effort}`, the last two optional; default: `catalog_models/0`, the
-  AI domain's models with `longx` as the default one).
+  AI domain's models with `longx` as the default one), `:passthrough` — host
+  paths to let into the bubblewrap sandbox (resolved, existing; default
+  none; see `prepare_passthrough/3`), `:bwrap` — the real bubblewrap for
+  the wrapper (default: what codex would pick, `Longx.Codex.Sandbox.bwrap_for_codex/0`).
 
   Besides `config.toml` it writes `model_catalog.json`: codex knows nothing
   about the models behind the gateway, and for an unknown slug its fallback
@@ -90,25 +93,84 @@ defmodule Longx.Codex.Home do
       config_path: config_path,
       catalog_path: catalog_path,
       config: config,
-      catalog: catalog
+      catalog: catalog,
+      passthrough_path: passthrough_path,
+      passthrough: passthrough
     } =
       render(opts)
 
     with :ok <- File.mkdir_p(dir),
          :ok <- File.write(catalog_path, catalog),
-         :ok <- File.write(config_path, config) do
+         :ok <- File.write(config_path, config),
+         :ok <- File.write(passthrough_path, passthrough),
+         {:ok, passthrough_env} <- prepare_passthrough(dir, passthrough, opts) do
       {:ok,
        %__MODULE__{
          dir: dir,
          config_path: config_path,
-         env: [
-           {"CODEX_HOME", dir},
-           {Token.env_var(), Token.current()},
-           # tokio honours this; codex's musl build contends on its allocator
-           # with one worker per core on big machines (openai/codex#43170)
-           {"TOKIO_WORKER_THREADS", Integer.to_string(tokio_worker_threads())}
-         ]
+         env:
+           [
+             {"CODEX_HOME", dir},
+             {Token.env_var(), Token.current()},
+             # tokio honours this; codex's musl build contends on its allocator
+             # with one worker per core on big machines (openai/codex#43170)
+             {"TOKIO_WORKER_THREADS", Integer.to_string(tokio_worker_threads())}
+           ] ++ passthrough_env
        }}
+    end
+  end
+
+  # Host paths let into the sandbox (`passthrough:` — GPU nodes, USB, a
+  # socket): codex cannot bind a device itself, so `<dir>/bin/bwrap` links
+  # to our wrapper (native/shim/cmd/bwrapx) and goes first on codex's PATH —
+  # codex picks the first `bwrap` on PATH — with the real bwrap and the
+  # paths in the environment; the wrapper adds the binds after codex's
+  # `--dev /dev` and execs the real one. Nothing else in codex's sandbox
+  # changes. No paths: the link is removed, the environment stays plain.
+  defp prepare_passthrough(dir, "", _opts) do
+    File.rm(Path.join(dir, "bin/bwrap"))
+    {:ok, []}
+  end
+
+  defp prepare_passthrough(dir, passthrough, opts) do
+    bin = Path.join(dir, "bin")
+    link = Path.join(bin, "bwrap")
+
+    with {:ok, wrapper} <- wrapper_executable(),
+         {:ok, real} <- real_bwrap(opts),
+         :ok <- File.mkdir_p(bin),
+         _ <- File.rm(link),
+         :ok <- File.ln_s(wrapper, link) do
+      {:ok,
+       [
+         {"PATH", bin <> ":" <> (System.get_env("PATH") || "")},
+         {"LONGX_BWRAP_REAL", real},
+         {"LONGX_BWRAP_PASSTHROUGH", passthrough}
+       ]}
+    end
+  end
+
+  defp wrapper_executable do
+    case Longx.Platform.bwrapx_executable_name() do
+      nil ->
+        {:error, :unsupported}
+
+      name ->
+        path = Application.app_dir(:longx, ["priv", "bin", name])
+        if File.regular?(path), do: {:ok, path}, else: {:error, :enoent}
+    end
+  end
+
+  # the bubblewrap codex would have run on its own (`bwrap:` pins it for tests)
+  defp real_bwrap(opts) do
+    case Keyword.get_lazy(opts, :bwrap, fn ->
+           case Longx.Codex.Sandbox.bwrap_for_codex() do
+             {which, path} when which in [:system, :bundled] -> path
+             {:error, _} -> nil
+           end
+         end) do
+      nil -> {:error, :enoent}
+      path -> {:ok, path}
     end
   end
 
@@ -123,18 +185,25 @@ defmodule Longx.Codex.Home do
   current when it *starts with* what we wrote — a byte-for-byte comparison
   flagged every project as stale after its first turn.
   """
-  @spec stale(Path.t(), keyword) :: [:models | :config]
+  @spec stale(Path.t(), keyword) :: [:models | :config | :passthrough]
   def stale(dir, opts \\ []) do
-    %{config_path: config_path, catalog_path: catalog_path, config: config, catalog: catalog} =
-      render(Keyword.put(opts, :dir, dir))
+    %{
+      config_path: config_path,
+      catalog_path: catalog_path,
+      config: config,
+      catalog: catalog,
+      passthrough_path: passthrough_path,
+      passthrough: passthrough
+    } = render(Keyword.put(opts, :dir, dir))
 
     case File.read(config_path) do
       {:ok, _} ->
         for {tag, path, wanted} <- [
               {:models, catalog_path, catalog},
-              {:config, config_path, config}
+              {:config, config_path, config},
+              {:passthrough, passthrough_path, passthrough}
             ],
-            not current?(File.read(path), wanted),
+            not current?(tag, File.read(path), wanted),
             do: tag
 
       {:error, _} ->
@@ -142,8 +211,12 @@ defmodule Longx.Codex.Home do
     end
   end
 
-  defp current?({:ok, on_disk}, wanted), do: String.starts_with?(on_disk, wanted)
-  defp current?(_, _wanted), do: false
+  # the passthrough list is ours alone: exact; a home from before it existed
+  # has no file, which is "none"
+  defp current?(:passthrough, {:ok, on_disk}, wanted), do: on_disk == wanted
+  defp current?(:passthrough, {:error, :enoent}, wanted), do: wanted == ""
+  defp current?(_tag, {:ok, on_disk}, wanted), do: String.starts_with?(on_disk, wanted)
+  defp current?(_tag, _, _wanted), do: false
 
   # everything prepare/1 writes, from the options (and the DB for what is not given)
   defp render(opts) do
@@ -160,7 +233,9 @@ defmodule Longx.Codex.Home do
       catalog_path: catalog_path,
       config:
         config_toml(gateway_url, web_search, catalog_path: catalog_path, memories: memories),
-      catalog: Jason.encode!(model_catalog(models))
+      catalog: Jason.encode!(model_catalog(models)),
+      passthrough_path: Path.join(dir, "passthrough"),
+      passthrough: opts |> Keyword.get(:passthrough, []) |> Enum.join("\n")
     }
   end
 

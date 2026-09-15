@@ -2,7 +2,11 @@ defmodule Mix.Tasks.Compile.Shim do
   @shortdoc "Builds the Go shim used by Longx.Shim"
 
   @moduledoc """
-  Compiles `native/shim` into `priv/bin/shim_<os>_<arch>` with `go build`.
+  Compiles `native/shim` into `priv/bin/shim_<os>_<arch>` with `go build`,
+  and, for Linux targets, `native/shim/cmd/bwrapx` into
+  `priv/bin/bwrapx_linux_<arch>` — the bubblewrap wrapper
+  `Longx.Codex.Home` puts on codex's PATH when a project lets host paths
+  into its sandbox.
 
   Runs as part of `mix compile` (see `:compilers` in `mix.exs`) and only
   rebuilds when a Go source file is newer than the binary. Set `SHIM_GOOS` /
@@ -38,25 +42,40 @@ defmodule Mix.Tasks.Compile.Shim do
 
   @impl Mix.Task.Compiler
   def clean do
-    Path.wildcard("priv/bin/shim_*") |> Enum.each(&File.rm/1)
+    Path.wildcard("priv/bin/{shim,bwrapx}_*") |> Enum.each(&File.rm/1)
     :ok
   end
 
   @doc "File name of the shim binary for the current platform."
   def executable_name, do: Longx.Platform.shim_executable_name()
 
-  defp build(output, {os, arch}) do
+  defp build(output, {os, arch} = platform) do
     File.mkdir_p!(Path.dirname(output))
     Mix.shell().info("Compiling Go shim (#{os}/#{arch})")
 
+    with {:ok, _} <- go_build(".", output, platform),
+         {:ok, _} <- build_bwrapx(platform) do
+      {:ok, []}
+    end
+  end
+
+  # the bwrap wrapper only makes sense where codex sandboxes with bubblewrap
+  defp build_bwrapx({"linux", _} = platform),
+    do: go_build("./cmd/bwrapx", bwrapx_path(platform), platform)
+
+  defp build_bwrapx(_platform), do: {:ok, []}
+
+  defp go_build(package, output, {os, arch}) do
     env = [{"GOOS", os}, {"GOARCH", arch}, {"CGO_ENABLED", "0"}]
-    args = ["build", "-trimpath", "-ldflags", "-s -w", "-o", Path.expand(output)]
+    args = ["build", "-trimpath", "-ldflags", "-s -w", "-o", Path.expand(output), package]
 
     case System.cmd("go", args, cd: @source_dir, env: env, stderr_to_stdout: true) do
       {_, 0} -> {:ok, []}
-      {out, _} -> error("go build failed:\n\n" <> out)
+      {out, _} -> error("go build #{package} failed:\n\n" <> out)
     end
   end
+
+  defp bwrapx_path({os, arch}), do: Path.join("priv/bin", "bwrapx_#{os}_#{arch}")
 
   defp stale?(output) do
     case File.stat(output, time: :posix) do

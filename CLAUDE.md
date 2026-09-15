@@ -90,13 +90,25 @@ React Native client planned on the same core code.
     rows still on that value. `Projects.writable_roots/1` expands `~` and keeps only existing
     directories; they go on `thread/start` as
     `sandbox_workspace_write.writable_roots`, on resume the same, and in
-    `turn/start.sandboxPolicy.writableRoots` when a turn changes the mode). **A GPU cannot
-    be let into the sandbox**: bwrap's `--dev /dev` is minimal and codex has no device
-    pass-through — a device node or `/dev/dri` as a writable root breaks the launch (codex
-    `--bind`s each root without device access and seeds it with protected `.git`/`.codex`
-    entries: "Can't mkdir /dev/dri/.git", tried on a DGX Spark). `Longx.Codex.Sandbox.gpu?/1`
-    (`/dev/nvidia*` present) is in the sandbox report (`gpu`), and project settings say GPU
-    work is for the full-access mode. Whether it is a git repo is read live (`git_info/1`), never
+    `turn/start.sandboxPolicy.writableRoots` when a turn changes the mode). **Devices and sockets go in through `passthrough_paths`, never as writable roots**:
+    bwrap's `--dev /dev` is minimal and codex has no device pass-through — a device node or
+    `/dev/dri` as a writable root breaks the launch (codex `--bind`s each root without device
+    access and seeds it with protected `.git`/`.codex` entries: "Can't mkdir /dev/dri/.git",
+    tried on a DGX Spark). `Project.passthrough_paths` (globs allowed; `Projects.passthrough_paths/1`
+    resolves to what exists, sorted) reaches `Home.prepare(passthrough:)`, which links
+    `<CODEX_HOME>/bin/bwrap` → `priv/bin/bwrapx_linux_<arch>` (`native/shim/cmd/bwrapx`, built by
+    the shim compiler for Linux targets) and puts that dir first on codex's PATH with
+    `LONGX_BWRAP_REAL` (the bwrap codex would have picked) and `LONGX_BWRAP_PASSTHROUGH`; codex
+    takes the first `bwrap` on PATH, the wrapper forwards `--help`/`--version` and otherwise
+    inserts `--dev-bind p p` (under /dev) / `--bind p p` right after codex's `--dev /dev` and
+    execs the real bwrap — filesystem and network policy untouched. The list is written to
+    `<CODEX_HOME>/passthrough` so `Home.stale/2` answers `:passthrough` after a change (codex
+    reads PATH at launch; `codex_info` / `restart_codex` carry the project's `pool_options`).
+    `Sandbox.presets/1` (gpu: nvidia*/dxg/dri; usb: /dev/bus/usb, ttyUSB*, ttyACM*; docker:
+    the socket, `danger: true`) is on the sandbox report for the settings page's one-click
+    buttons. `sandbox_passthrough_integration_test` (`:integration`) proves it on the real
+    binary: a sandboxed `ls -la /dev/dxg` sees the device only with the passthrough. macOS
+    (seatbelt) and Windows are not covered. Whether it is a git repo is read live (`git_info/1`), never
     stored; `init_git/1` sets git up with `Longx.Git.Ignore.default/0` and a first commit.
     The UI warns when a project has no git.
   - **Each project has its own codex process and its own `CODEX_HOME`**

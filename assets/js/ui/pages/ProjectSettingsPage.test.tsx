@@ -41,12 +41,36 @@ describe("ProjectSettingsPage", () => {
     );
   });
 
-  test("a machine with a GPU says the sandboxes hide it and full access is the mode for GPU work", async () => {
-    vi.mocked(sandboxStatus).mockResolvedValue(ok({ status: "ok", reason: null, bwrap: "/usr/bin/bwrap", gpu: true, checkedAt: "" }) as never);
+  test("host paths let into the sandbox: typed, or added from the machine's presets — docker flagged as host root", async () => {
+    vi.mocked(sandboxStatus).mockResolvedValue(
+      ok({
+        status: "ok",
+        reason: null,
+        bwrap: "/usr/bin/bwrap",
+        gpu: true,
+        presets: [
+          { id: "gpu", label: "GPU", paths: ["/dev/dxg"], danger: false },
+          { id: "docker", label: "Docker socket", paths: ["/var/run/docker.sock"], danger: true },
+        ],
+        checkedAt: "",
+      }) as never,
+    );
+    const user = userEvent.setup();
     renderAt("/p/app-1/settings");
     const form = await screen.findByTestId("project-settings");
-    await waitFor(() => expect(form).toHaveTextContent("GPU"));
-    expect(form).toHaveTextContent("完全访问");
+    const box = within(form).getByLabelText(/放进沙箱的宿主路径/);
+    expect(box).toHaveValue("");
+    await user.type(box, "/dev/ttyUSB*");
+    await user.click(await within(form).findByRole("button", { name: /添加 GPU/ }));
+    await user.click(within(form).getByRole("button", { name: /添加 GPU/ }));
+    expect(within(form).getByRole("button", { name: /Docker socket/ })).toHaveTextContent("等于宿主 root");
+    expect(box).toHaveValue("/dev/ttyUSB*\n/dev/dxg");
+    await user.click(within(form).getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(updateProject).toHaveBeenCalledWith(
+        expect.objectContaining({ input: expect.objectContaining({ passthroughPaths: ["/dev/ttyUSB*", "/dev/dxg"] }) }),
+      ),
+    );
   });
 
   test("deleting the project asks for its name, then removes it (codex data included) and leaves", async () => {

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
 import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, resetCodexHome, updateProject, type UpdateProjectInput } from "@/ash_rpc";
-import { queryKeys, unwrap, useModels, useProject, useSandboxStatus } from "@/core/projects";
+import { queryKeys, sandboxPresets, unwrap, useModels, useProject, useSandboxStatus } from "@/core/projects";
 import { Button } from "@/ui/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
 import { Input } from "@/ui/components/ui/input";
@@ -21,6 +21,7 @@ type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPoli
   memoryLimitMb: string;
   modelId: string;
   writableRoots: string;
+  passthroughPaths: string;
 };
 
 /**
@@ -56,9 +57,17 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
     memoryLimitMb: project.memoryLimitMb ? String(project.memoryLimitMb) : "",
     modelId: "__default",
     writableRoots: project.writableRoots.join("\n"),
+    passthroughPaths: project.passthroughPaths.join("\n"),
   });
   const [confirming, setConfirming] = useState<"clear" | "memories" | "reset" | "archive" | "delete" | null>(null);
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const presets = sandboxPresets(sandbox.data);
+  // a preset appends the paths it stands for, once each
+  const addPassthrough = (paths: string[]) =>
+    setForm((f) => {
+      const have = new Set(f.passthroughPaths.split("\n").map((l) => l.trim()).filter(Boolean));
+      return { ...f, passthroughPaths: [...have, ...paths.filter((p) => !have.has(p))].join("\n") };
+    });
 
   const save = useMutation({
     mutationFn: async () =>
@@ -79,6 +88,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
             memoryLimitMb: form.memoryLimitMb ? Number(form.memoryLimitMb) : null,
             modelId: form.modelId === "__default" ? null : form.modelId,
             writableRoots: form.writableRoots.split("\n").map((l) => l.trim()).filter(Boolean),
+            passthroughPaths: form.passthroughPaths.split("\n").map((l) => l.trim()).filter(Boolean),
           },
         }),
       ),
@@ -175,7 +185,6 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
               </div>
             ))}
           </RadioGroup>
-          {sandbox.data?.gpu ? <p className="text-muted-foreground text-xs">{t.gpuHidden}</p> : null}
         </fieldset>
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">{t.approval}</legend>
@@ -196,6 +205,21 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
           <Label htmlFor="ps-writable-roots">{t.writableRoots}</Label>
           <Textarea id="ps-writable-roots" rows={2} value={form.writableRoots} onChange={(e) => set("writableRoots", e.target.value)} className="font-mono text-sm" />
           <p className="text-muted-foreground text-xs">{t.writableRootsHint}</p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="ps-passthrough">{t.passthrough}</Label>
+          <Textarea id="ps-passthrough" rows={2} value={form.passthroughPaths} onChange={(e) => set("passthroughPaths", e.target.value)} className="font-mono text-sm" />
+          {presets.length ? (
+            <div className="flex flex-wrap gap-2">
+              {presets.map((p) => (
+                <Button key={p.id} type="button" size="sm" variant="outline" onClick={() => addPassthrough(p.paths)}>
+                  {t.passthroughPreset(p.label)}
+                  {p.danger ? <span className="text-destructive">{t.passthroughDanger}</span> : null}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+          <p className="text-muted-foreground text-xs">{t.passthroughHint}</p>
         </div>
         <div className="flex items-center justify-between gap-4">
           <Label htmlFor="ps-web-search">{t.webSearch}</Label>

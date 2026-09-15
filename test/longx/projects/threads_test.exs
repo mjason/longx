@@ -215,6 +215,25 @@ defmodule Longx.Projects.ThreadsTest do
       assert turn["sandboxPolicy"]["writableRoots"] == Projects.writable_roots(project)
     end
 
+    test "passthrough_paths: the project's host paths for the sandbox — globs expanded, only what exists, none by default",
+         %{dir: dir} do
+      plain = git_project!(dir)
+      assert plain.passthrough_paths == []
+      assert Projects.passthrough_paths(plain) == []
+
+      for n <- ~w(x1 x2), do: File.touch!(Path.join(dir, n))
+      sub = Path.join(dir, "sub")
+      File.mkdir_p!(sub)
+
+      project =
+        git_project!(sub, %{
+          passthrough_paths: ["/dev/null", Path.join(dir, "x*"), "/nope/at/all", "/dev/null"]
+        })
+
+      assert Projects.passthrough_paths(project) ==
+               ["/dev/null", Path.join(dir, "x1"), Path.join(dir, "x2")]
+    end
+
     test "an unknown model is refused before codex is involved", %{dir: dir, conn: conn} do
       project = git_project!(dir)
 

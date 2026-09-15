@@ -136,6 +136,26 @@ defmodule Longx.Codex.SandboxTest do
     end
   end
 
+  describe "presets/1 (pure): host paths worth letting into the sandbox on this machine" do
+    test "GPU nodes, USB / serial, the docker socket — only the groups that exist, docker flagged dangerous" do
+      entries =
+        ~w(/dev/null /dev/nvidia0 /dev/nvidiactl /dev/nvidia-uvm /dev/dri /dev/bus/usb /dev/ttyUSB0 /dev/ttyACM3 /dev/snd /var/run/docker.sock)
+
+      assert [
+               %{
+                 id: "gpu",
+                 paths: ~w(/dev/dri /dev/nvidia-uvm /dev/nvidia0 /dev/nvidiactl),
+                 danger: false
+               },
+               %{id: "usb", paths: ~w(/dev/bus/usb /dev/ttyACM3 /dev/ttyUSB0), danger: false},
+               %{id: "docker", paths: ["/var/run/docker.sock"], danger: true}
+             ] = Sandbox.presets(entries)
+
+      assert [%{id: "gpu", paths: ["/dev/dxg"]}] = Sandbox.presets(~w(/dev/null /dev/dxg))
+      assert Sandbox.presets(~w(/dev/null /dev/tty)) == []
+    end
+  end
+
   describe "probe/0" do
     # what the host allows: a WSL2 dev box passes, a GitHub runner does not
     # (bwrap cannot set up the loopback there) — CI excludes :host_sandbox

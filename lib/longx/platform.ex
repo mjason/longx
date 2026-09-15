@@ -84,4 +84,16 @@ defmodule Longx.Platform do
     {goos, goarch} = go_target(platform)
     "shim_#{goos}_#{goarch}#{exe_suffix(platform)}"
   end
+
+  @doc """
+  File name of the bubblewrap wrapper (`native/shim/cmd/bwrapx`) for
+  `platform` — Linux only, where codex sandboxes with bubblewrap.
+  """
+  @spec bwrapx_executable_name(t) :: String.t() | nil
+  def bwrapx_executable_name(platform \\ current())
+
+  def bwrapx_executable_name({:linux, _} = platform),
+    do: "bwrapx_linux_#{elem(go_target(platform), 1)}"
+
+  def bwrapx_executable_name(_platform), do: nil
 end
