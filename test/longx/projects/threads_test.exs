@@ -246,6 +246,14 @@ defmodule Longx.Projects.ThreadsTest do
 
       assert Projects.passthrough_paths(project) ==
                ["/dev/null", Path.join(dir, "x1"), Path.join(dir, "x2")]
+
+      # the GPU is a switch, resolved on this machine (nvidia nodes, WSL2's dxg, /dev/dri):
+      # a project moved to another box gets that box's devices, nothing to retype
+      gpu = Enum.find(Longx.Codex.Sandbox.presets(), %{paths: []}, &(&1.id == "gpu")).paths
+      {:ok, project} = Projects.update_project(project, %{gpu_passthrough: true})
+
+      assert Projects.passthrough_paths(project) ==
+               Enum.sort(gpu ++ ["/dev/null", Path.join(dir, "x1"), Path.join(dir, "x2")])
     end
 
     test "an unknown model is refused before codex is involved", %{dir: dir, conn: conn} do

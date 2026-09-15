@@ -2365,6 +2365,7 @@ export type CreateProjectInput = {
   networkAccess?: boolean;
   writableRoots?: Array<string>;
   passthroughPaths?: Array<string>;
+  gpuPassthrough?: boolean;
   webSearch?: boolean;
   multiAgent?: boolean;
   globalMemory?: boolean;
@@ -3055,6 +3056,7 @@ export type UpdateProjectInput = {
   networkAccess?: boolean;
   writableRoots?: Array<string>;
   passthroughPaths?: Array<string>;
+  gpuPassthrough?: boolean;
   webSearch?: boolean;
   multiAgent?: boolean;
   globalMemory?: boolean;

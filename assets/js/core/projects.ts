@@ -36,6 +36,7 @@ export const projectFields = [
   "networkAccess",
   "writableRoots",
   "passthroughPaths",
+  "gpuPassthrough",
   "webSearch",
   "multiAgent",
   "globalMemory",

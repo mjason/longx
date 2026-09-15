@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
 import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, resetCodexHome, updateProject, type UpdateProjectInput } from "@/ash_rpc";
-import { queryKeys, unwrap, useModels, useProject, useSandboxStatus } from "@/core/projects";
+import { queryKeys, sandboxPresets, unwrap, useModels, useProject, useSandboxStatus } from "@/core/projects";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/ui/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/ui/components/ui/collapsible";
@@ -18,7 +18,7 @@ import { Textarea } from "@/ui/components/ui/textarea";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { t } from "@/ui/strings";
 
-type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "webSearch" | "multiAgent" | "globalMemory" | "dirtyStart">> & {
+type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "gpuPassthrough" | "webSearch" | "multiAgent" | "globalMemory" | "dirtyStart">> & {
   description: string;
   memoryLimitMb: string;
   modelId: string;
@@ -52,6 +52,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
     sandbox: project.sandbox,
     approvalPolicy: project.approvalPolicy,
     networkAccess: project.networkAccess,
+    gpuPassthrough: project.gpuPassthrough,
     webSearch: project.webSearch,
     multiAgent: project.multiAgent,
     globalMemory: project.globalMemory,
@@ -64,6 +65,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
   const [confirming, setConfirming] = useState<"clear" | "memories" | "reset" | "archive" | "delete" | null>(null);
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
   const linux = sandbox.data?.platform === "linux";
+  const hasGpu = linux && sandboxPresets(sandbox.data).some((p) => p.id === "gpu");
 
   const save = useMutation({
     mutationFn: async () =>
@@ -77,6 +79,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
             sandbox: form.sandbox,
             approvalPolicy: form.approvalPolicy,
             networkAccess: form.networkAccess,
+            gpuPassthrough: form.gpuPassthrough,
             webSearch: form.webSearch,
             multiAgent: form.multiAgent,
             globalMemory: form.globalMemory,
@@ -200,6 +203,15 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
           </div>
           <Switch id="ps-network" checked={form.networkAccess} onCheckedChange={(v) => set("networkAccess", v)} />
         </div>
+        {hasGpu ? (
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <Label htmlFor="ps-gpu">{t.gpuPassthrough}</Label>
+              <p className="text-muted-foreground text-xs">{t.gpuPassthroughHint}</p>
+            </div>
+            <Switch id="ps-gpu" checked={form.gpuPassthrough} onCheckedChange={(v) => set("gpuPassthrough", v)} />
+          </div>
+        ) : null}
         <Collapsible>
           <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm [&[data-state=open]>svg]:rotate-90">
             <ChevronRight className="size-4 transition-transform" /> {t.sandboxAdvanced}
