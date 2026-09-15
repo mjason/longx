@@ -91,7 +91,9 @@ export function toMessages(view: ThreadView, subviews: SubViews = {}): ThreadMes
   // an approval for an item we have not seen yet still needs a place to be answered
   for (const [itemId, request] of approvals) {
     if (!view.items.some((i) => i.id === itemId)) {
-      attachPending(out, itemId, toolPart(itemId, toolNameFor(request.method), {}, undefined, request));
+      // a permissions request (the request_permissions tool) has no item of its own
+      const args = request.method === PERMISSIONS_REQUEST ? { reason: request.params["reason"] ?? null, lines: permissionLines(request.params["permissions"]) } : {};
+      attachPending(out, itemId, toolPart(itemId, toolNameFor(request.method), args, undefined, request));
     }
   }
   // questions codex asks (requestUserInput) are standalone parts; the
@@ -219,6 +221,7 @@ function approvalsByItem(requests: PendingRequest[]): Map<string, PendingRequest
 }
 
 function toolNameFor(method: string): string {
+  if (method === PERMISSIONS_REQUEST) return "permissions";
   return method.includes("fileChange") ? "fileChange" : "commandExecution";
 }
 
@@ -366,27 +369,47 @@ function toolPart(
 }
 
 // codex's reason when it gives one; the renderer shows the command / files itself
-/** codex's own reasons, in our words; anything else verbatim */
-const KNOWN_REASONS: Record<string, string> = {
-  "command failed; retry without sandbox?": "命令被沙箱拦住了（写不了沙箱外的目录、连不上本机服务之类）。在沙箱外重新运行一次？",
-};
+const PERMISSIONS_REQUEST = "item/permissions/requestApproval";
+
+/** what a permission profile asks for, one line each: 写 /x · 读 /y · 联网 */
+export function permissionLines(perms: unknown): string[] {
+  if (!perms || typeof perms !== "object") return [];
+  const p = perms as { fileSystem?: { read?: string[] | null; write?: string[] | null } | null; network?: { enabled?: boolean | null } | null };
+  const lines: string[] = [];
+  for (const path of p.fileSystem?.write ?? []) lines.push(`写 ${path}`);
+  for (const path of p.fileSystem?.read ?? []) lines.push(`读 ${path}`);
+  if (p.network?.enabled) lines.push("联网");
+  return lines;
+}
 
 function approvalPrompt(request: PendingRequest): string {
   const p = request.params;
-  if (typeof p["reason"] === "string" && p["reason"]) return KNOWN_REASONS[p["reason"]] ?? p["reason"];
+  const reason = typeof p["reason"] === "string" && p["reason"] ? p["reason"] : "";
+  if (request.method === PERMISSIONS_REQUEST) return reason || "agent 申请额外权限";
+  const extra = permissionLines(p["additionalPermissions"]);
+  if (extra.length) return `这条命令要额外权限：${extra.join("、")}${reason ? `——${reason}` : ""}`;
+  if (reason) return reason;
   return request.method.includes("fileChange") ? "允许修改这些文件？" : "允许执行这条命令？";
 }
 
-/**
- * The options as the request offers them (`availableDecisions`): codex offers
- * `acceptForSession` for a normal approval and `acceptWithExecpolicyAmendment`
- * (allow this command from now on) for a sandbox retry — both ride on our
- * `accept_for_session`, the server sends whichever the request listed. A
- * request that lists nothing gets the three usual ones.
- */
 type ApprovalOption = { id: ApprovalDecision; kind: (typeof APPROVAL_OPTIONS)[number]["kind"]; label: string };
 
+/**
+ * The options as the request offers them. A permissions request is
+ * granted for the turn or the session, or refused. A command approval lists
+ * its `availableDecisions`: `acceptForSession` for a normal approval,
+ * `acceptWithExecpolicyAmendment` (allow this command from now on) for an
+ * escalation — both ride on our `accept_for_session`, the server sends
+ * whichever the request listed; a request that lists nothing gets the usual three.
+ */
 export function approvalOptions(request: PendingRequest): ApprovalOption[] {
+  if (request.method === PERMISSIONS_REQUEST) {
+    return [
+      { id: "accept", kind: "allow-once", label: "本轮允许" },
+      { id: "accept_for_session", kind: "allow-always", label: "本会话允许" },
+      { id: "decline", kind: "reject-once", label: "拒绝" },
+    ];
+  }
   const offered = request.params["availableDecisions"];
   if (!Array.isArray(offered) || offered.length === 0) return APPROVAL_OPTIONS.map((o) => ({ ...o }));
   const names = offered.map((d) => (d && typeof d === "object" ? Object.keys(d as object)[0] : String(d)));

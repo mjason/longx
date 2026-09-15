@@ -108,26 +108,26 @@ agent 的命令由 codex 放进沙箱里跑（Linux bubblewrap，macOS seatbelt�
 | 可写工作区（默认） | 写项目目录和 /tmp；其余只读；看不到设备；联网和本机服务由开关决定 |
 | 完全访问 | 不进沙箱，和你自己在终端里一样 |
 
-可写工作区下有三个开关，都在「项目设置」里，也可以在聊天输入框旁按会话临时改（沙箱与联网从下一轮生效）：
+**权限按需申请，不预先放开。** 这是 codex 自己的机制（Longx 打开了它的 `exec_permission_approvals` /
+`request_permissions_tool`）：命令需要写沙箱外的目录或联网时，agent 在那条命令上申请（`with_additional_permissions`），
+或者为整轮申请（`request_permissions`）；聊天里出现一张卡：申请了什么（写 ~/.cache/uv、联网…）和理由，按钮是
+**本轮允许 / 本会话允许 / 拒绝**。批准后命令仍在沙箱里跑，只多了那一项权限；授权只活在这个会话里，不会写进项目设置。
+agent 要彻底出沙箱跑一条命令（`require_escalated`）时也是一张卡：允许一次 / 以后这条命令都允许（写进该项目 codex 的
+execpolicy 规则）/ 拒绝。被沙箱拒绝的命令，codex 会把结果交给 agent，由它决定申请什么——这和 codex 官方 TUI/桌面端一致。
+
+可写工作区下的开关（项目设置里，也可以在输入框旁按会话临时改）：
 
 - **联网与本机服务**：关着时命令连不上任何东西，**包括本机的 socket**——Docker、本地数据库、NVIDIA 驱动初始化用的 socket
-  都算（codex 用 seccomp 拦掉全部 `connect`，`cuInit` 会报 `CUDA_ERROR_OPERATING_SYSTEM`）。
-- **沙箱额外可写目录**：默认为空。包管理器的缓存在 home 下（`uv run` 会锁 `~/.cache/uv`，pip / npm / cargo / Hugging Face 各有各的，
-  macOS 在 `~/Library/Caches`，Windows 在 `%LOCALAPPDATA%`），不可写就失败——机器上有的会给一键按钮；数据集目录之类也加在这里。
-  每加一个目录都在放宽沙箱（缓存里被塞的东西会在沙箱外执行），只加确实需要的。改了下一轮就生效。
-- **放进沙箱的宿主路径**（仅 Linux）：GPU、USB/串口、宿主 socket 这类沙箱看不到的东西。机器上有的给一键预设（GPU / USB·串口 /
-  Docker socket——后者等于宿主 root，界面标红）。实现是 Longx 自带的 bwrap 包装程序（`bwrapx`）在 codex 生成的 bwrap 参数里追加
-  `--dev-bind` / `--bind`，其余限制不动。codex 启动时读取，改了要重启项目的 codex（状态栏会提示）。
+  都算（codex 用 seccomp 拦掉全部 `connect`）。agent 也可以按轮申请。
+- **长期放开的目录和设备（高级）**：平时不用碰。「沙箱额外可写目录」是对这个项目长期有效的例外（比如数据集目录）；
+  「放进沙箱的宿主路径」（仅 Linux）是 GPU、USB/串口、宿主 socket 这类沙箱看不到、agent 也申请不了的东西，由 Longx 自带的
+  bwrap 包装程序（`bwrapx`）以 `--dev-bind` / `--bind` 追加进 codex 生成的参数，其余限制不动；改了要重启项目的 codex。
 
-**不用先去设置里猜**——两层：
-- 命令被沙箱**拒绝**时（写沙箱外的目录、连本机 socket 等，codex 按输出里的 "Read-only file system" / "Operation not permitted"
-  判定），codex 会停下来问「在沙箱外重新运行一次？」，聊天里出现审批卡：允许一次 / 以后这条命令都允许（写进该项目 codex 的
-  execpolicy 规则）/ 拒绝。这是 codex 自己的机制，Longx 把审批策略「按需询问」映射成 codex 的 granular 策略来打开它——普通的
-  `on-request` 在这种情况下只把失败交给模型自己琢磨。
-- 命令**没被拒绝但结果不对**时（CUDA 报 `CUDA_ERROR_OPERATING_SYSTEM`、`nvidia-smi` 找不到驱动），那条命令下面会说明原因并给一个
-  「允许」按钮，点一下就写进项目设置（打开联网与本机服务 / 放行 GPU），下一轮生效（放行设备需重启 codex）；想收回，去项目设置里改回来。
-
-GPU 的完整配方（DGX Spark、WSL2 上验证）：放行 GPU + 打开联网与本机服务 + 需要的话放行 `~/.cache/uv`。
+**GPU 是唯一的例外**：codex 的权限模型表达不了设备，官方到 0.154 也没有解决（openai/codex#3141、#19676，维护者的 PR #8002
+因安全顾虑关闭）。Longx 的做法：命令因看不到 GPU 失败时（`CUDA_ERROR_NO_DEVICE`、`Found no NVIDIA driver`、WSL2 上 JAX 的
+cuPTI 报错…），那条命令下面提示并给「允许」，点一下把机器的 GPU 设备（`/dev/nvidia*`，WSL2 是 `/dev/dxg`）写进这个项目的
+放行列表，重启 codex 生效；Linux 裸机上 CUDA 初始化还要连驱动的本机 socket，会再提示打开「联网与本机服务」。
+在 WSL2 和 DGX Spark 上验证过。
 
 ### 沙箱起不来时
 

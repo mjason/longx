@@ -115,11 +115,17 @@ React Native client planned on the same core code.
     cargo / Hugging Face / Go / Gradle / Maven cache dirs per OS — `~/.cache/…` on Linux,
     `~/Library/Caches/…` on macOS, `%LOCALAPPDATA%` on Windows — only what exists) for the
     settings page's one-click adds; the passthrough field is shown on Linux only.
-    `core/chat/sandboxHints.ts` + `ui/chat/SandboxHint` is the second layer, for failures
-    codex does *not* treat as denials (CUDA_ERROR_OPERATING_SYSTEM → network switch, no GPU
-    device → GPU preset, a read-only path → writable dir): a line under the command with 允许
-    that writes the project setting. The network switch is labelled 联网与本机服务: with it
-    off codex's seccomp denies every `connect`, local sockets included. **CUDA
+    `core/chat/sandboxHints.ts` + `ui/chat/SandboxHint` covers the one thing codex's
+    permission model cannot express — a device: a command that could not see the GPU
+    (`CUDA_ERROR_NO_DEVICE`, `Found no NVIDIA driver`, `NVIDIA-SMI has failed`, WSL2's cuPTI
+    error…) gets a line **below the folded row** (inside it nobody would see it) with 允许
+    that puts the machine's `gpu` preset into `passthrough_paths` (restart codex);
+    `CUDA_ERROR_OPERATING_SYSTEM` (the driver's socket under the no-network seccomp, seen on
+    a DGX Spark, not on WSL2) offers the network switch. Upstream has no GPU answer
+    (openai/codex#3141, #19676; PR #8002 closed over security concerns). The network switch
+    is labelled 联网与本机服务: with it off codex's seccomp denies every `connect`, local
+    sockets included. Project settings keep only long-lived exceptions, folded under 高级
+    (writable roots, Linux passthrough) — no presets, no cache lists: the agent asks. **CUDA
     also needs `network_access`**: with the network off codex's inner seccomp stage
     (`linux-sandbox/src/landlock.rs`) denies `connect` for every socket family, and the
     NVIDIA driver's init uses a local socket — `cuInit` fails with
@@ -145,20 +151,27 @@ React Native client planned on the same core code.
     `delete_project/2` needs `confirm: true` and removes the home (never the working
     directory). All five are the project settings page's danger zone (delete asks for the
     project's name); none touches the global memory.
-  - **Approval policy on the wire**: `:on_request` is codex's *granular* policy with every
-    prompt kind on (`Thread.granular_on_request/0`), not the string `"on-request"`: under
-    plain on-request codex never retries a sandbox-denied command (`orchestrator.rs`: "Under
-    Never or OnRequest, do not retry without sandbox") and, worse, emits **no
-    `commandExecution` item** for it — the model gets the output, the UI nothing (verified on
-    the real binary). With `granular{sandbox_approval: true}` a denial (output matching
-    codex's keywords: "Read-only file system", "Operation not permitted", "Permission denied",
-    "seccomp"…, non-zero exit) becomes `item/commandExecution/requestApproval` with reason
-    "command failed; retry without sandbox?" and `availableDecisions` `accept` /
-    `acceptWithExecpolicyAmendment` / `cancel`; an accept reruns it unsandboxed and the item
-    is reported (`sandbox_denial_integration_test`). `Thread.decision_for/2` maps our
-    `:accept_for_session` to the amendment (an execpolicy rule in the project's home) when
-    that is what the request offers, `:decline` to `cancel`; `messages.ts` builds the card's
-    options from `availableDecisions` and puts codex's reason in our words.
+  - **Permissions are codex's own, asked for on demand** (`Home.config_toml` turns on
+    `features.exec_permission_approvals` + `request_permissions_tool`, both UnderDevelopment
+    in 0.154 and verified on the binary): `:on_request` is the plain `"on-request"` string —
+    codex never widens the sandbox by itself, a denied command is reported to the model, which
+    asks. A command asking for a directory / the network (`with_additional_permissions`)
+    arrives as `item/commandExecution/requestApproval` with `additionalPermissions` and
+    `availableDecisions` (`accept` / `cancel` — no session variant); accepted, it runs
+    *inside* the sandbox with that one grant. The `request_permissions` tool arrives as
+    `item/permissions/requestApproval` (`permissions`, `reason`; no item of its own),
+    answered with `{permissions, scope: turn | session}` — `Thread.decision_for/3` maps our
+    `:accept` / `:accept_for_session` / `:decline` to that, and for command approvals to
+    what `availableDecisions` lists (`acceptWithExecpolicyAmendment` = an execpolicy rule in
+    the project's home for "always"). `messages.ts` builds the card from the request:
+    `approvalOptions` (本轮允许 / 本会话允许 / 拒绝 for a permissions request; the offered
+    decisions otherwise — the session button only when offered), `permissionLines` (写 /x ·
+    读 /y · 联网), a standalone `permissions` tool part rendered by `PermissionsTool`.
+    `sandbox_permissions_integration_test` proves both flows on the real binary; live with
+    DeepSeek: a read-only `~/.cache/uv` → `request_permissions` → card → 本轮允许 → the run.
+    A granular policy (`sandbox_approval: true`, which makes codex ask "retry without
+    sandbox?" on a denial) was tried and dropped: codex refuses `with_additional_permissions`
+    under anything but plain on-request.
   - `Thread` = codex thread ↔ project (`codex_thread_id`, `cwd`, the settings it started with,
     `model_slug`, `preview`, `status`, `last_activity_at`). Statuses: `:idle`, `:active`,
     `:disconnected` (its codex died mid-turn; resumed → `:idle` when it is back),

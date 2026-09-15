@@ -76,11 +76,11 @@ describe("toMessages", () => {
     expect(msgs[0]!.status).toEqual({ type: "requires-action", reason: "interrupt" });
   });
 
-  test("a sandbox retry offers what codex listed: allow once, allow this command from now on, refuse — and says why in our words", () => {
+  test("a command asking for extra permissions: the card says what it wants, with the options codex offered", () => {
     const msgs = toMessages(
       view({
         turn: { id: "t5", status: "inProgress" },
-        items: [],
+        items: [{ id: "call_1", type: "commandExecution", turnId: "t5", command: "uv run x", status: "inProgress" }],
         requests: [
           {
             id: 7,
@@ -88,21 +88,52 @@ describe("toMessages", () => {
             params: {
               requestId: 7,
               itemId: "call_1",
-              command: "/usr/bin/zsh -lc 'uv run jbt'",
-              reason: "command failed; retry without sandbox?",
-              availableDecisions: ["accept", { acceptWithExecpolicyAmendment: { execpolicy_amendment: ["uv", "run"] } }, "cancel"],
+              command: "/usr/bin/zsh -lc 'uv run x'",
+              reason: "uv keeps its cache there",
+              additionalPermissions: { fileSystem: { write: ["/home/mj/.cache/uv"], read: null }, network: null },
+              availableDecisions: ["accept", "cancel"],
             },
           },
         ],
       }),
     );
     const tool = parts(msgs[0]!)[0] as unknown as { approval: { options: { id: string; label: string }[]; prompt: string } };
+    expect(tool.approval.prompt).toBe("这条命令要额外权限：写 /home/mj/.cache/uv——uv keeps its cache there");
+    // no session option offered → none shown
     expect(tool.approval.options.map((o) => [o.id, o.label])).toEqual([
       ["accept", "允许"],
-      ["accept_for_session", "以后这条命令都允许"],
       ["decline", "拒绝"],
     ]);
-    expect(tool.approval.prompt).toMatch(/沙箱拦住了/);
+  });
+
+  test("a permissions request (request_permissions) is a standalone part: what it asks, granted for the turn or the session, or refused", () => {
+    const msgs = toMessages(
+      view({
+        turn: { id: "t5", status: "inProgress" },
+        items: [{ id: "u1", type: "userMessage", turnId: "t5", text: "go" }],
+        requests: [
+          {
+            id: 9,
+            method: "item/permissions/requestApproval",
+            params: {
+              requestId: 9,
+              itemId: "call_9",
+              reason: "install into the home and fetch a package",
+              permissions: { fileSystem: { write: ["/home/mj"], read: ["/etc/x"] }, network: { enabled: true } },
+            },
+          },
+        ],
+      }),
+    );
+    const last = msgs[msgs.length - 1]!;
+    const tool = parts(last).find((p) => (p as { toolName?: string }).toolName === "permissions") as unknown as {
+      args: { reason: string; lines: string[] };
+      approval: { options: { id: string; label: string }[]; prompt: string };
+    };
+    expect(tool.args.lines).toEqual(["写 /home/mj", "读 /etc/x", "联网"]);
+    expect(tool.approval.prompt).toBe("install into the home and fetch a package");
+    expect(tool.approval.options.map((o) => o.label)).toEqual(["本轮允许", "本会话允许", "拒绝"]);
+    expect(last.status).toEqual({ type: "requires-action", reason: "interrupt" });
   });
 
   test("an approval whose item has not arrived still gets a place", () => {

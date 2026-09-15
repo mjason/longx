@@ -134,6 +134,7 @@ defmodule Longx.Codex.SandboxTest do
   describe "gpu?/1 (pure): does this machine have an NVIDIA GPU the sandbox will hide" do
     test "nvidia device nodes among /dev's entries" do
       assert Sandbox.gpu?(~w(/dev/null /dev/nvidia0 /dev/nvidiactl))
+      assert Sandbox.gpu?(~w(/dev/null /dev/dxg))
       refute Sandbox.gpu?(~w(/dev/null /dev/dri /dev/tty))
     end
   end
@@ -155,51 +156,6 @@ defmodule Longx.Codex.SandboxTest do
 
       assert [%{id: "gpu", paths: ["/dev/dxg"]}] = Sandbox.presets(~w(/dev/null /dev/dxg))
       assert Sandbox.presets(~w(/dev/null /dev/tty)) == []
-    end
-  end
-
-  describe "cache_presets/3 (pure): tool caches a sandboxed command wants to write, per platform" do
-    test "linux: uv / pip / npm / cargo / huggingface where they exist, as ~ paths" do
-      exists =
-        &(&1 in [
-            "/home/u/.cache/uv",
-            "/home/u/.npm",
-            "/home/u/.cargo/registry",
-            "/home/u/.cache/huggingface"
-          ])
-
-      assert [
-               %{id: "uv", paths: ["~/.cache/uv"]},
-               %{id: "npm", paths: ["~/.npm"]},
-               %{id: "cargo", paths: ["~/.cargo/registry"]},
-               %{id: "huggingface", paths: ["~/.cache/huggingface"]}
-             ] = Sandbox.cache_presets({:linux, :x86_64}, %{"HOME" => "/home/u"}, exists)
-    end
-
-    test "macOS keeps its Library/Caches, Windows its LOCALAPPDATA; nothing present → nothing" do
-      exists = &(&1 in ["/Users/u/Library/Caches/uv", "/Users/u/Library/Caches/pip"])
-
-      assert [
-               %{id: "uv", paths: ["~/Library/Caches/uv"]},
-               %{id: "pip", paths: ["~/Library/Caches/pip"]}
-             ] =
-               Sandbox.cache_presets({:darwin, :aarch64}, %{"HOME" => "/Users/u"}, exists)
-
-      exists =
-        &(&1 in ["C:/Users/u/AppData/Local/uv/cache", "C:/Users/u/AppData/Local/npm-cache"])
-
-      assert [
-               %{id: "uv", paths: ["C:/Users/u/AppData/Local/uv/cache"]},
-               %{id: "npm", paths: ["C:/Users/u/AppData/Local/npm-cache"]}
-             ] =
-               Sandbox.cache_presets(
-                 {:windows, :x86_64},
-                 %{"USERPROFILE" => "C:/Users/u", "LOCALAPPDATA" => "C:/Users/u/AppData/Local"},
-                 exists
-               )
-
-      assert Sandbox.cache_presets({:linux, :x86_64}, %{"HOME" => "/home/u"}, fn _ -> false end) ==
-               []
     end
   end
 

@@ -29,7 +29,8 @@ describe("ProjectSettingsPage", () => {
     await user.click(within(form).getByRole("switch", { name: /子 agent/ }));
     expect(within(form).getByRole("switch", { name: /全局记忆/ })).toBeChecked();
     await user.click(within(form).getByRole("switch", { name: /全局记忆/ }));
-    // extra writable directories: one per line, blanks dropped
+    // extra writable directories (under 高级): one per line, blanks dropped
+    await user.click(within(form).getByRole("button", { name: /长期放开的目录和设备/ }));
     const roots = within(form).getByLabelText(/沙箱额外可写目录/);
     expect(roots).toHaveValue("");
     await user.type(roots, "~/.cache\n\n/data/models  ");
@@ -41,49 +42,36 @@ describe("ProjectSettingsPage", () => {
     );
   });
 
-  test("host paths let into the sandbox: typed, or added from the machine's presets — docker flagged as host root", async () => {
+  test("the long-lived exceptions sit under 高级: writable directories, and (Linux) host paths typed by hand — no presets", async () => {
     vi.mocked(sandboxStatus).mockResolvedValue(
-      ok({
-        status: "ok",
-        reason: null,
-        bwrap: "/usr/bin/bwrap",
-        gpu: true,
-        presets: [
-          { id: "gpu", label: "GPU", paths: ["/dev/dxg"], danger: false },
-          { id: "docker", label: "Docker socket", paths: ["/var/run/docker.sock"], danger: true },
-        ],
-        cachePresets: [{ id: "uv", label: "uv", paths: ["~/.cache/uv"] }],
-        platform: "linux",
-        home: "/home/mj",
-        checkedAt: "",
-      }) as never,
+      ok({ status: "ok", reason: null, bwrap: "/usr/bin/bwrap", gpu: true, presets: [{ id: "gpu", label: "GPU", paths: ["/dev/dxg"], danger: false }], platform: "linux", home: "/home/mj", checkedAt: "" }) as never,
     );
     const user = userEvent.setup();
     renderAt("/p/app-1/settings");
     const form = await screen.findByTestId("project-settings");
-    const box = within(form).getByLabelText(/放进沙箱的宿主路径/);
-    expect(box).toHaveValue("");
-    await user.type(box, "/dev/ttyUSB*");
-    await user.click(await within(form).findByRole("button", { name: /添加 GPU/ }));
-    await user.click(within(form).getByRole("button", { name: /添加 GPU/ }));
-    expect(within(form).getByRole("button", { name: /Docker socket/ })).toHaveTextContent("等于宿主 root");
-    expect(box).toHaveValue("/dev/ttyUSB*\n/dev/dxg");
-    // a tool cache found on the machine is one click into the writable directories
-    await user.click(within(form).getByRole("button", { name: "添加 uv 缓存" }));
-    expect(within(form).getByLabelText(/沙箱额外可写目录/)).toHaveValue("~/.cache/uv");
     expect(form).toHaveTextContent("本机的服务和 socket");
+    expect(within(form).queryByLabelText(/沙箱额外可写目录/)).not.toBeInTheDocument();
+    await user.click(within(form).getByRole("button", { name: /长期放开的目录和设备/ }));
+    const roots = within(form).getByLabelText(/沙箱额外可写目录/);
+    expect(roots).toHaveValue("");
+    await user.type(roots, "/data/models");
+    const box = within(form).getByLabelText(/放进沙箱的宿主路径/);
+    await user.type(box, "/dev/ttyUSB*");
+    expect(within(form).queryByRole("button", { name: /添加 GPU/ })).not.toBeInTheDocument();
     await user.click(within(form).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(updateProject).toHaveBeenCalledWith(
-        expect.objectContaining({ input: expect.objectContaining({ passthroughPaths: ["/dev/ttyUSB*", "/dev/dxg"], writableRoots: ["~/.cache/uv"] }) }),
+        expect.objectContaining({ input: expect.objectContaining({ writableRoots: ["/data/models"], passthroughPaths: ["/dev/ttyUSB*"] }) }),
       ),
     );
   });
 
   test("on macOS / Windows the Linux-only passthrough field is not shown", async () => {
-    vi.mocked(sandboxStatus).mockResolvedValue(ok({ status: "ok", reason: null, bwrap: null, gpu: false, presets: [], cachePresets: [], platform: "darwin", home: "/Users/mj", checkedAt: "" }) as never);
+    vi.mocked(sandboxStatus).mockResolvedValue(ok({ status: "ok", reason: null, bwrap: null, gpu: false, presets: [], platform: "darwin", home: "/Users/mj", checkedAt: "" }) as never);
+    const user = userEvent.setup();
     renderAt("/p/app-1/settings");
     const form = await screen.findByTestId("project-settings");
+    await user.click(await within(form).findByRole("button", { name: /长期放开的目录和设备/ }));
     await within(form).findByLabelText(/沙箱额外可写目录/);
     expect(within(form).queryByLabelText(/放进沙箱的宿主路径/)).not.toBeInTheDocument();
   });

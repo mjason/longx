@@ -3,8 +3,10 @@ import { useState } from "react";
 import { useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
 import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, resetCodexHome, updateProject, type UpdateProjectInput } from "@/ash_rpc";
-import { queryKeys, sandboxCachePresets, sandboxPresets, unwrap, useModels, useProject, useSandboxStatus } from "@/core/projects";
+import { queryKeys, unwrap, useModels, useProject, useSandboxStatus } from "@/core/projects";
+import { ChevronRight } from "lucide-react";
 import { Button } from "@/ui/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/ui/components/ui/collapsible";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
 import { Input } from "@/ui/components/ui/input";
 import { Label } from "@/ui/components/ui/label";
@@ -61,16 +63,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
   });
   const [confirming, setConfirming] = useState<"clear" | "memories" | "reset" | "archive" | "delete" | null>(null);
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
-  const presets = sandboxPresets(sandbox.data);
-  const caches = sandboxCachePresets(sandbox.data);
   const linux = sandbox.data?.platform === "linux";
-  // a preset appends the paths it stands for, once each
-  const addLines = (key: "writableRoots" | "passthroughPaths", paths: string[]) =>
-    setForm((f) => {
-      const have = new Set(f[key].split("\n").map((l) => l.trim()).filter(Boolean));
-      return { ...f, [key]: [...have, ...paths.filter((p) => !have.has(p))].join("\n") };
-    });
-  const addPassthrough = (paths: string[]) => addLines("passthroughPaths", paths);
 
   const save = useMutation({
     mutationFn: async () =>
@@ -207,37 +200,26 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
           </div>
           <Switch id="ps-network" checked={form.networkAccess} onCheckedChange={(v) => set("networkAccess", v)} />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="ps-writable-roots">{t.writableRoots}</Label>
-          <Textarea id="ps-writable-roots" rows={2} value={form.writableRoots} onChange={(e) => set("writableRoots", e.target.value)} className="font-mono text-sm" />
-          {caches.length ? (
-            <div className="flex flex-wrap gap-2">
-              {caches.map((c) => (
-                <Button key={c.id} type="button" size="sm" variant="outline" onClick={() => addLines("writableRoots", c.paths)}>
-                  {t.cachePreset(c.label)}
-                </Button>
-              ))}
+        <Collapsible>
+          <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm [&[data-state=open]>svg]:rotate-90">
+            <ChevronRight className="size-4 transition-transform" /> {t.sandboxAdvanced}
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3 flex flex-col gap-4">
+            <p className="text-muted-foreground text-xs">{t.sandboxAdvancedHint}</p>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ps-writable-roots">{t.writableRoots}</Label>
+              <Textarea id="ps-writable-roots" rows={2} value={form.writableRoots} onChange={(e) => set("writableRoots", e.target.value)} className="font-mono text-sm" />
+              <p className="text-muted-foreground text-xs">{t.writableRootsHint}</p>
             </div>
-          ) : null}
-          <p className="text-muted-foreground text-xs">{t.writableRootsHint}</p>
-        </div>
-        {linux ? (
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="ps-passthrough">{t.passthrough}</Label>
-          <Textarea id="ps-passthrough" rows={2} value={form.passthroughPaths} onChange={(e) => set("passthroughPaths", e.target.value)} className="font-mono text-sm" />
-          {presets.length ? (
-            <div className="flex flex-wrap gap-2">
-              {presets.map((p) => (
-                <Button key={p.id} type="button" size="sm" variant="outline" onClick={() => addPassthrough(p.paths)}>
-                  {t.passthroughPreset(p.label)}
-                  {p.danger ? <span className="text-destructive">{t.passthroughDanger}</span> : null}
-                </Button>
-              ))}
-            </div>
-          ) : null}
-          <p className="text-muted-foreground text-xs">{t.passthroughHint}</p>
-        </div>
-        ) : null}
+            {linux ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ps-passthrough">{t.passthrough}</Label>
+                <Textarea id="ps-passthrough" rows={2} value={form.passthroughPaths} onChange={(e) => set("passthroughPaths", e.target.value)} className="font-mono text-sm" />
+                <p className="text-muted-foreground text-xs">{t.passthroughHint}</p>
+              </div>
+            ) : null}
+          </CollapsibleContent>
+        </Collapsible>
         <div className="flex items-center justify-between gap-4">
           <Label htmlFor="ps-web-search">{t.webSearch}</Label>
           <Switch id="ps-web-search" checked={form.webSearch} onCheckedChange={(v) => set("webSearch", v)} />

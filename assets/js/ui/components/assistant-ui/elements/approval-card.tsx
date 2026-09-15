@@ -103,6 +103,7 @@ export function ApprovalCard({
             >
               {labels.deny}
             </button>
+            {onAlwaysAllow ? (
             <button
               type="button"
               onClick={onAlwaysAllow}
@@ -111,6 +112,7 @@ export function ApprovalCard({
             >
               {labels.alwaysAllow}
             </button>
+            ) : null}
             <button
               type="button"
               onClick={onAllowOnce}

@@ -190,8 +190,6 @@ defmodule Longx.System.Status do
                     # host paths worth letting into the sandbox here (id, label, paths, danger);
                     # arrays of typed maps are untyped in ash_typescript 0.18 → typed client-side
                     presets: [type: {:array, :map}, allow_nil?: false],
-                    # tool caches on this machine a sandboxed command may need to write (id, label, paths)
-                    cache_presets: [type: {:array, :map}, allow_nil?: false],
                     platform: [
                       type: :atom,
                       allow_nil?: false,
@@ -219,8 +217,6 @@ defmodule Longx.System.Status do
                     # host paths worth letting into the sandbox here (id, label, paths, danger);
                     # arrays of typed maps are untyped in ash_typescript 0.18 → typed client-side
                     presets: [type: {:array, :map}, allow_nil?: false],
-                    # tool caches on this machine a sandboxed command may need to write (id, label, paths)
-                    cache_presets: [type: {:array, :map}, allow_nil?: false],
                     platform: [
                       type: :atom,
                       allow_nil?: false,
@@ -312,7 +308,6 @@ defmodule Longx.System.Status do
       bwrap: report.bwrap,
       gpu: report.gpu,
       presets: Longx.Codex.Sandbox.presets(),
-      cache_presets: Longx.Codex.Sandbox.cache_presets(),
       platform: report.platform,
       home: System.user_home(),
       checked_at: report.checked_at
