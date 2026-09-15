@@ -490,6 +490,25 @@ defmodule Longx.Projects.ThreadsTest do
       assert turn5.reasoning_effort == "ultra"
     end
 
+    test "a thread resumes with its own access mode and the memory, not codex's defaults (a full-access thread fell back to workspace-write after every restart)",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+
+      {:ok, thread} =
+        Projects.start_thread(project,
+          conn: conn,
+          sandbox: :danger_full_access,
+          approval_policy: :never
+        )
+
+      assert {:ok, _} = Projects.resume_thread(Ash.get!(Thread, thread.id, load: :project), conn)
+      %{"resumeParams" => params} = read_thread!(conn, thread.codex_thread_id)
+      assert params["sandbox"] == "danger-full-access"
+      assert params["approvalPolicy"] == "never"
+      assert params["cwd"] == project.root_path
+      assert params["developerInstructions"] =~ "Longx 全局记忆"
+    end
+
     test "a thread resumes with the level it was left on, not the model's default", %{
       dir: dir,
       conn: conn
