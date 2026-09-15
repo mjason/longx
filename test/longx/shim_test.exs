@@ -116,13 +116,14 @@ defmodule Longx.ShimTest do
         )
 
       :ok = Shim.write(shim, "hello\n")
+      # stderr is merged into the terminal: no separate stream (asked before
+      # the server is gone — it stops once the child exited and stdout is drained)
+      assert Shim.read_stderr(shim) == :eof
       assert {:ok, 0} = Shim.await_exit(shim, 10_000, close_streams: false)
       out = read_all(shim)
       assert out =~ ~r{/dev/(pts/\d+|ttys\d+)}
       assert out =~ "is-a-tty"
       assert out =~ "got:hello"
-      # a terminal echoes what is typed; stderr is merged into it
-      assert Shim.read_stderr(shim) == :eof
     end
   end
 
