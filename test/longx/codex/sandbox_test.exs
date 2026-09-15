@@ -54,9 +54,11 @@ defmodule Longx.Codex.SandboxTest do
     end
 
     test "namespaces refused → unavailable, whatever the network step would say" do
+      # pinned: a GitHub runner has Ubuntu's AppArmor restriction on, which is its own reason
       assert {:error, {:user_namespaces, msg}} =
                Sandbox.evaluate(
-                 runner(base: {1, "bwrap: setting up uid map: Permission denied"}, net: {0, ""})
+                 runner(base: {1, "bwrap: setting up uid map: Permission denied"}, net: {0, ""}),
+                 apparmor_restricted: false
                )
 
       assert msg =~ "uid map"
