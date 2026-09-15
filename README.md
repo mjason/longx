@@ -267,8 +267,10 @@ codex 是 project 的资源，`Longx.Projects` 上可以管：
   想限制时用 Job 的内存上限让**任务自己**分配失败，而不是拖垮 BEAM。Job 也让树杀变可靠。
 * 真想限制某个 project 就设 `memory_limit_mb`（Linux 是地址空间上限 RLIMIT_AS，JVM/Go/BEAM
   这类预留地址空间的运行时要给得宽）。
-* 每 5 分钟 `Longx.Codex.Recycler` 看一遍所有 codex 进程：空闲且跑了 12 小时 / 树的 RSS 超 2 GB /
-  跑过 200 轮的就停掉，下次用再起（codex 长时间运行会持续涨内存）。有 turn 在跑的绝不碰。
+* 每 5 分钟 `Longx.Codex.Recycler` 看一遍所有 codex 进程：**30 分钟没跑过轮次的停掉**（`idle_after_ms`，
+  放一天的项目不占内存，下一条消息再拉起来、会话不丢），空闲且跑了 12 小时 / 树的 RSS 超 2 GB /
+  跑过 200 轮的也停掉（codex 长时间运行会持续涨内存）。有 turn 在跑的绝不碰。
+  设置 → codex 进程 能看到每个在跑的 codex（内存、PID、轮次、上次活动）并提前停掉。
   每次采样也发 telemetry `[:longx, :codex, :worker, :sample]`，UI 可以画资源曲线。
 
 沙箱由 codex 自己做（Linux 用包里的 bubblewrap，需要非特权 user namespace；WSL1、多数容器不行）。

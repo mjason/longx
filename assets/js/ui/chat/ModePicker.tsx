@@ -27,7 +27,7 @@ export function ModePicker({ mode, onChange, disabled = false, started = false }
         disabled={disabled}
         data-testid="mode-picker"
         aria-label={t.accessMode}
-        className={`flex items-center gap-1 rounded-md px-1.5 py-1 text-xs hover:bg-accent disabled:opacity-50 ${full ? "text-destructive" : "text-muted-foreground"}`}
+        className={`flex min-w-0 max-w-full items-center gap-1 rounded-md px-1.5 py-1 text-xs hover:bg-accent disabled:opacity-50 ${full ? "text-destructive" : "text-muted-foreground"}`}
       >
         <Icon className="size-3.5" />
         <span className="truncate">{t.sandboxOptions[mode.sandbox]}</span>

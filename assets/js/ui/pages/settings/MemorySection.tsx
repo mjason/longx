@@ -59,6 +59,7 @@ function Pipeline() {
       </div>
       <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         <span>{s.pending(st.pending)}</span>
+        <span>{s.folded(st.folded)}</span>
         <span>{st.lastRunAt ? s.lastRun(relativeTime(st.lastRunAt)) : s.neverRan}</span>
         {st.lastError ? (
           <span className="text-destructive">
@@ -127,7 +128,7 @@ function IndexEditor({ text }: { text: string }) {
         </Button>
       </div>
       <div className="h-80 overflow-hidden rounded-lg border">
-        <CodeEditor path="MEMORY.md" value={draft} onChange={setDraft} onSave={save} className="h-full" />
+        <CodeEditor path="MEMORY.md" value={draft} onChange={setDraft} onSave={save} wrap className="h-full" />
       </div>
     </section>
   );

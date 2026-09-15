@@ -14,6 +14,7 @@ import {
   createModel,
   createProvider,
   deleteModel,
+  listCodexProcesses,
   listModels,
   makeDefaultModel,
   memoryDeleteNote,
@@ -25,6 +26,7 @@ import {
   sandboxStatus,
   setGithubToken,
   setToolEnabled,
+  stopCodex,
   updateSearchProvider,
   upgradeApply,
   upgradeCheck,
@@ -298,6 +300,31 @@ describe("SettingsPage", () => {
     ).toBeChecked();
   });
 
+  test("processes: every running codex with its cost and last use; an idle one can be stopped, a busy one is said so", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/processes");
+    const section = await screen.findByTestId("section-processes");
+    expect(section).toHaveTextContent("30 分钟");
+    const one = await within(section).findByTestId("codex-process-id-1");
+    expect(one).toHaveTextContent("App One");
+    expect(one).toHaveTextContent("300 MB");
+    expect(one).toHaveTextContent("12");
+    const two = within(section).getByTestId("codex-process-id-2");
+    expect(two).toHaveTextContent("1 轮进行中");
+    await user.click(within(one).getByRole("button", { name: "停止" }));
+    await waitFor(() => expect(stopCodex).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "id-1", force: false } })));
+    expect(listCodexProcesses).toHaveBeenCalled();
+  });
+
+  test("processes: nothing running is said, not an empty table", async () => {
+    setViewport(1280);
+    vi.mocked(listCodexProcesses).mockResolvedValue(ok({ idleAfterMs: null, processes: [] }) as never);
+    renderAt("/settings/processes");
+    const section = await screen.findByTestId("section-processes");
+    await within(section).findByText("没有在运行的 codex");
+  });
+
   test("sandbox: the report, and a fresh probe on request", async () => {
     setViewport(1280);
     const user = userEvent.setup();
@@ -359,6 +386,7 @@ describe("SettingsPage", () => {
     const section = await screen.findByTestId("section-memory");
     // the pipeline's state
     await within(section).findByText("2 条待整理");
+    await within(section).findByText(/5 条已整理进 MEMORY.md/);
     const auto = within(section).getByRole("switch", { name: /自动提炼/ });
     expect(auto).toBeChecked();
     await user.click(auto);

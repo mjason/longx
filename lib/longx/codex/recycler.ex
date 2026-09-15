@@ -10,8 +10,15 @@ defmodule Longx.Codex.Recycler do
   worker is never touched. Each sweep also publishes every worker's numbers
   as telemetry `[:longx, :codex, :worker, :sample]` (the UI's resource view).
 
+  A codex nobody talks to still costs its memory: a worker whose last turn
+  ended `idle_after_ms` ago (a fresh one: since it started) is stopped too —
+  the next message to any of its threads starts it again and resumes the
+  thread (a second or two), which is what a project someone left for the
+  day should cost.
+
   `config :longx, Longx.Codex.Recycler`:
     * `tick:` — sweep interval (default 5 min)
+    * `idle_after_ms:` — default 30 min; nil never
     * `max_uptime_ms:` — default 12 h
     * `max_rss_bytes:` — the whole tree, default 2 GiB
     * `max_turns:` — default 200
@@ -25,6 +32,7 @@ defmodule Longx.Codex.Recycler do
 
   @defaults [
     tick: :timer.minutes(5),
+    idle_after_ms: :timer.minutes(30),
     max_uptime_ms: :timer.hours(12),
     max_rss_bytes: 2 * 1024 * 1024 * 1024,
     max_turns: 200
@@ -33,6 +41,10 @@ defmodule Longx.Codex.Recycler do
   @type verdict :: {Pool.project_id(), :recycled | :kept | :busy, atom | nil}
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+
+  @doc "The idle limit in force (`idle_after_ms:`), nil when workers are never stopped for idleness."
+  @spec idle_after_ms() :: pos_integer | nil
+  def idle_after_ms, do: config(:idle_after_ms)
 
   @doc "One sweep, now: what happened to each running worker."
   @spec sweep() :: [verdict]
@@ -82,6 +94,7 @@ defmodule Longx.Codex.Recycler do
       uptime_ms(info) > config(:max_uptime_ms) -> :max_uptime
       rss(info) > config(:max_rss_bytes) -> :max_rss
       info.turns >= config(:max_turns) -> :max_turns
+      idle?(info) -> :idle
       true -> nil
     end
   end
@@ -107,6 +120,20 @@ defmodule Longx.Codex.Recycler do
       "project:" <> project_id,
       {:codex_sample, project_id, measurements}
     )
+  end
+
+  # nothing ran for idle_after_ms (a worker that never ran a turn: since it started)
+  defp idle?(info) do
+    case config(:idle_after_ms) do
+      nil ->
+        false
+
+      limit ->
+        since = Map.get(info, :last_turn_at) || info.started_at
+
+        is_struct(since, DateTime) and
+          DateTime.diff(DateTime.utc_now(), since, :millisecond) > limit
+    end
   end
 
   defp rss(%{stats: %{rss_bytes: rss}}), do: rss

@@ -5769,6 +5769,72 @@ export async function validateCreateDirectory(
 }
 
 
+export type ListCodexProcessesFields = UnifiedFieldSelection<{processes: Array<Record<string, any>>, idleAfterMs: number | null, __type: "TypedMap", __primitiveFields: "processes" | "idleAfterMs"}>[];
+
+export type InferListCodexProcessesResult<
+  Fields extends ListCodexProcessesFields | undefined,
+> = InferResult<{processes: Array<Record<string, any>>, idleAfterMs: number | null, __type: "TypedMap", __primitiveFields: "processes" | "idleAfterMs"}, Fields>;
+
+export type ListCodexProcessesResult<Fields extends ListCodexProcessesFields | undefined = undefined> = | { success: true; data: InferListCodexProcessesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function listCodexProcesses<Fields extends ListCodexProcessesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListCodexProcessesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "list_codex_processes",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ListCodexProcessesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateListCodexProcesses(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_codex_processes",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ListDirectoryInput = {
   path?: string | null;
   showHidden?: boolean | null;
@@ -6246,11 +6312,11 @@ export async function validateMemorySetAutoExtract(
 }
 
 
-export type MemoryStatusFields = UnifiedFieldSelection<{autoExtract: boolean, lastRunAt: string | null, lastError: string | null, pending: number, __type: "TypedMap", __primitiveFields: "autoExtract" | "lastRunAt" | "lastError" | "pending"}>[];
+export type MemoryStatusFields = UnifiedFieldSelection<{autoExtract: boolean, lastRunAt: string | null, lastError: string | null, pending: number, folded: number, __type: "TypedMap", __primitiveFields: "autoExtract" | "lastRunAt" | "lastError" | "pending" | "folded"}>[];
 
 export type InferMemoryStatusResult<
   Fields extends MemoryStatusFields | undefined,
-> = InferResult<{autoExtract: boolean, lastRunAt: string | null, lastError: string | null, pending: number, __type: "TypedMap", __primitiveFields: "autoExtract" | "lastRunAt" | "lastError" | "pending"}, Fields>;
+> = InferResult<{autoExtract: boolean, lastRunAt: string | null, lastError: string | null, pending: number, folded: number, __type: "TypedMap", __primitiveFields: "autoExtract" | "lastRunAt" | "lastError" | "pending" | "folded"}, Fields>;
 
 export type MemoryStatusResult<Fields extends MemoryStatusFields | undefined = undefined> = | { success: true; data: InferMemoryStatusResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }

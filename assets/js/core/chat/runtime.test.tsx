@@ -7,7 +7,7 @@ import { useCodexRuntime } from "./runtime";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { archiveThread, deleteThread, listThreads } from "@/ash_rpc";
+import { archiveThread, deleteThread, listThreads, startThread } from "@/ash_rpc";
 
 const defaults = { sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true, multiAgent: true } as const;
 
@@ -68,18 +68,30 @@ describe("useCodexRuntime", () => {
     expect(onOpenThread).toHaveBeenCalledWith(null);
   });
 
-  test("a new chat from the list opens without a moment of 找不到这个会话: the row is in the list before the page moves", async () => {
+  test("新会话 opens the new-chat page — no row, no codex thread until the first message", async () => {
+    vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
+    const onOpenThread = vi.fn();
+    const { result } = renderHook(() => useCodexRuntime({ projectId: "id-1", defaults, threadId: "t1", onOpenThread }), { wrapper });
+    await waitFor(() => expect(result.current.thread).toBeDefined());
+
+    await act(async () => { await result.current.runtime.threads.switchToNewThread(); });
+    expect(onOpenThread).toHaveBeenCalledWith(null);
+    expect(startThread).not.toHaveBeenCalled();
+  });
+
+  test("the first message of a new chat opens its thread without a moment of 找不到这个会话: the row is in the list before the page moves", async () => {
     // the refetch after start_thread is still in flight when the router
     // already shows the new id
     vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
-    let threadId: string | undefined = "t1";
+    let threadId: string | undefined = undefined;
     const onOpenThread = vi.fn((id: string | null) => { threadId = id ?? undefined; });
     const { result, rerender } = renderHook(() => useCodexRuntime({ projectId: "id-1", defaults, threadId, onOpenThread }), { wrapper });
-    await waitFor(() => expect(result.current.thread).toBeDefined());
+    await waitFor(() => expect(result.current.runtime).toBeDefined());
     let land: (rows: unknown) => void = () => {};
     vi.mocked(listThreads).mockImplementation(() => new Promise((resolve) => { land = resolve; }) as never);
 
-    await act(async () => { await result.current.runtime.threads.switchToNewThread(); });
+    await act(async () => { await result.current.runtime.thread.append({ role: "user", content: [{ type: "text", text: "hi" }] }); });
+    expect(startThread).toHaveBeenCalled();
     expect(onOpenThread).toHaveBeenCalledWith("t2");
     rerender();
     expect(result.current.missing).toBe(false);

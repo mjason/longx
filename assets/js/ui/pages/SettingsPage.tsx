@@ -8,11 +8,12 @@ import { Page, TopBar } from "@/ui/shell/Shell";
 import { t } from "@/ui/strings";
 import { MemorySection } from "./settings/MemorySection";
 import { ModelsSection } from "./settings/ModelsSection";
+import { ProcessesSection } from "./settings/ProcessesSection";
 import { SandboxSection } from "./settings/SandboxSection";
 import { ToolsSection } from "./settings/ToolsSection";
 import { UpdateSection } from "./settings/UpdateSection";
 
-const SECTIONS = ["models", "memory", "tools", "sandbox", "update", "appearance"] as const;
+const SECTIONS = ["models", "memory", "tools", "processes", "sandbox", "update", "appearance"] as const;
 type Section = (typeof SECTIONS)[number];
 
 /**
@@ -41,7 +42,7 @@ export function SettingsPage() {
   return (
     <>
       <TopBar title={t.settings} back="/" />
-      <Page className="grid grid-cols-[220px_1fr] gap-6">
+      <Page className="grid grid-cols-[220px_minmax(0,1fr)] gap-6">
         <nav aria-label={t.settings} className="flex flex-col gap-1">
           {SECTIONS.map((s) => (
             <Link key={s} to={`/settings/${s}`} aria-current={s === active ? "page" : undefined} className={`rounded-md px-3 py-2 text-sm ${s === active ? "bg-accent" : "hover:bg-accent/40"}`}>
@@ -49,7 +50,7 @@ export function SettingsPage() {
             </Link>
           ))}
         </nav>
-        <section><SectionBody section={active} /></section>
+        <section className="min-w-0"><SectionBody section={active} /></section>
       </Page>
     </>
   );
@@ -82,6 +83,8 @@ function SectionBody({ section }: { section: Section }) {
       return <MemorySection />;
     case "tools":
       return <ToolsSection />;
+    case "processes":
+      return <ProcessesSection />;
     case "sandbox":
       return <SandboxSection />;
     case "update":

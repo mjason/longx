@@ -931,6 +931,39 @@ defmodule Longx.Projects do
   end
 
   @doc """
+  Every codex process running right now, one map per project (its name and
+  slug, the OS pid, the tree's stats, uptime, turns, turns in flight, when
+  the last turn ended, how many threads it hosts) — the settings page's
+  process list. A worker whose project row is gone is listed by id alone.
+  """
+  @spec running_codex() :: [map]
+  def running_codex do
+    for project_id <- Pool.running(),
+        info = Pool.status(project_id),
+        is_map(info) do
+      project =
+        case Ash.get(Project, project_id, authorize?: false) do
+          {:ok, project} -> project
+          {:error, _} -> nil
+        end
+
+      %{
+        project_id: project_id,
+        name: project && project.name,
+        slug: project && project.slug,
+        os_pid: info.os_pid || nil,
+        stats: info.stats || nil,
+        memory_limit: info.memory_limit,
+        started_at: info.started_at && DateTime.to_iso8601(info.started_at),
+        last_turn_at: info[:last_turn_at] && DateTime.to_iso8601(info[:last_turn_at]),
+        turns: info.turns,
+        active_turns: info.active_turns,
+        threads: length(info.threads)
+      }
+    end
+  end
+
+  @doc """
   Stops the project's codex. Refuses with `{:error, {:turn_in_progress, id}}`
   while a turn runs, unless `force: true` (the turn then fails as "codex
   restarted", see `Longx.Projects.Tracker`).

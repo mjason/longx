@@ -7,6 +7,7 @@ defmodule Longx.System do
     resource Longx.System.Status do
       rpc_action :sandbox_status, :sandbox
       rpc_action :probe_sandbox, :probe_sandbox
+      rpc_action :list_codex_processes, :list_codex_processes
       rpc_action :list_directory, :list_directory
       rpc_action :create_directory, :create_directory
       rpc_action :memory_index, :memory_index

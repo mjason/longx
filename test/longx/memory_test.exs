@@ -113,4 +113,30 @@ defmodule Longx.MemoryTest do
     :ok = Memory.write_index(dir, String.duplicate("x", 100_000))
     assert byte_size(Memory.instructions(dir)) <= 32_768
   end
+
+  test "prune/2 drops folded notes past their keep time and forgets them; pending and recent ones stay",
+       %{dir: dir} do
+    {:ok, old_folded} = Memory.add_note(dir, "old and folded", at: days_ago(40))
+    {:ok, old_pending} = Memory.add_note(dir, "old but never folded", at: days_ago(40))
+    {:ok, fresh_folded} = Memory.add_note(dir, "fresh and folded", at: days_ago(3))
+    :ok = Memory.mark_consolidated(dir, [old_folded, fresh_folded, "notes/gone-by-hand.md"])
+
+    assert {:ok, 1} = Memory.prune(dir, 30)
+    refute File.exists?(Path.join(dir, old_folded))
+    assert File.exists?(Path.join(dir, old_pending))
+    assert File.exists?(Path.join(dir, fresh_folded))
+    # the state forgets what is gone (pruned, or deleted by hand)
+    assert Memory.folded_notes(dir) |> Enum.map(& &1.file) == [fresh_folded]
+    assert Memory.status(dir).folded == 1
+    assert Memory.status(dir).pending == 1
+    # committed, like every change to the directory
+    assert [%{subject: "memory: prune 1 folded note"} | _] = Longx.Git.log(dir, limit: 1)
+    # nothing to do is not a commit
+    assert {:ok, 0} = Memory.prune(dir, 30)
+    assert [%{subject: "memory: prune 1 folded note"} | _] = Longx.Git.log(dir, limit: 1)
+    # nil keeps everything
+    assert {:ok, 0} = Memory.prune(dir, nil)
+  end
+
+  defp days_ago(n), do: DateTime.add(DateTime.utc_now(), -n * 86_400, :second)
 end

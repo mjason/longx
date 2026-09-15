@@ -74,6 +74,8 @@ defmodule Longx.Codex.Connection do
       threads: MapSet.new(),
       turns: 0,
       active_turns: MapSet.new(),
+      # when the last turn ended (nil: none yet) — the recycler's idle clock
+      last_turn_at: nil,
       phase: :handshaking,
       next_id: 1,
       pending: %{},
@@ -251,6 +253,7 @@ defmodule Longx.Codex.Connection do
       memory_limit: state.memory_limit,
       turns: state.turns,
       active_turns: MapSet.size(state.active_turns),
+      last_turn_at: state.last_turn_at,
       threads: MapSet.to_list(state.threads)
     }
 
@@ -460,7 +463,11 @@ defmodule Longx.Codex.Connection do
     do: %State{state | turns: state.turns + 1, active_turns: MapSet.put(state.active_turns, id)}
 
   defp count_turn(%State{} = state, "turn/completed", %{"turn" => %{"id" => id}}),
-    do: %State{state | active_turns: MapSet.delete(state.active_turns, id)}
+    do: %State{
+      state
+      | active_turns: MapSet.delete(state.active_turns, id),
+        last_turn_at: DateTime.utc_now()
+    }
 
   defp count_turn(state, _method, _params), do: state
 
