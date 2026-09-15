@@ -95,8 +95,11 @@ defmodule Longx.Exec.ProcessTest do
   end
 
   test "the environment and cwd are the command's" do
-    pid = start!(sh("echo $FOO; pwd"), env: %{"FOO" => "bar"}, cwd: "/tmp")
-    assert {:ok, %{"chunks" => chunks}} = ExecProcess.read(pid, 0, nil, 5_000)
+    id = "p-env"
+    pid = start!(sh("echo $FOO; pwd"), id: id, env: %{"FOO" => "bar"}, cwd: "/tmp")
+    # two lines may come as two chunks: read once everything is in
+    assert_receive {:exec_process, ^id, "process/closed", _}, 5_000
+    assert {:ok, %{"chunks" => chunks}} = ExecProcess.read(pid, 0, nil, 0)
     assert Enum.map_join(chunks, &Base.decode64!(&1["chunk"])) =~ "bar\n/tmp"
   end
 
