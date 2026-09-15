@@ -36,7 +36,7 @@ defmodule Longx.Codex.ThreadTest do
                %{
                  "cwd" => "/p",
                  "historyMode" => "paginated",
-                 "approvalPolicy" => "on-request",
+                 "approvalPolicy" => Thread.granular_on_request(),
                  "sandbox" => "workspace-write"
                }
 
@@ -244,7 +244,7 @@ defmodule Longx.Codex.ThreadTest do
     end
 
     test "defaults: on-request approvals in a workspace-write sandbox" do
-      assert %{"approvalPolicy" => "on-request", "sandbox" => "workspace-write"} =
+      assert %{"approvalPolicy" => %{"granular" => _}, "sandbox" => "workspace-write"} =
                Thread.start_params(cwd: "/p")
     end
 
@@ -431,6 +431,56 @@ defmodule Longx.Codex.ThreadTest do
                      10_000
 
       assert Enum.any?(Thread.snapshot(thread_id).items, &(&1["type"] == "commandExecution"))
+    end
+  end
+
+  describe "on-request is codex's granular policy; answers follow what the request offers (pure)" do
+    test "on_request → granular with every prompt kind on, so a sandbox-denied command asks the person to retry outside" do
+      assert Thread.granular_on_request() ==
+               %{
+                 "granular" => %{
+                   "sandbox_approval" => true,
+                   "rules" => true,
+                   "skill_approval" => true,
+                   "request_permissions" => true,
+                   "mcp_elicitations" => true
+                 }
+               }
+
+      assert Thread.start_params(cwd: "/p", tools: [], approval_policy: :on_request)[
+               "approvalPolicy"
+             ] ==
+               Thread.granular_on_request()
+
+      assert Thread.turn_params("t", "hi", approval_policy: :on_request)["approvalPolicy"] ==
+               Thread.granular_on_request()
+
+      assert Thread.start_params(cwd: "/p", tools: [], approval_policy: :never)["approvalPolicy"] ==
+               "never"
+    end
+
+    test "accept_for_session becomes the execpolicy amendment when that is what the request offers" do
+      offered = %{
+        "availableDecisions" => [
+          "accept",
+          %{"acceptWithExecpolicyAmendment" => %{"execpolicy_amendment" => ["ls"]}},
+          "cancel"
+        ],
+        "proposedExecpolicyAmendment" => ["ls"]
+      }
+
+      assert Thread.decision_for(:accept_for_session, offered) ==
+               %{
+                 "decision" => %{
+                   "acceptWithExecpolicyAmendment" => %{"execpolicy_amendment" => ["ls"]}
+                 }
+               }
+
+      assert Thread.decision_for(:decline, offered) == %{"decision" => "cancel"}
+      assert Thread.decision_for(:accept, offered) == %{"decision" => "accept"}
+      # a request that lists nothing (older codex, tests): the plain words
+      assert Thread.decision_for(:accept_for_session, %{}) == %{"decision" => "acceptForSession"}
+      assert Thread.decision_for(:decline, %{}) == %{"decision" => "decline"}
     end
   end
 end

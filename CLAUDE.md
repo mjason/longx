@@ -107,7 +107,19 @@ React Native client planned on the same core code.
     `Sandbox.presets/1` (gpu: nvidia*/dxg/dri; usb: /dev/bus/usb, ttyUSB*, ttyACM*; docker:
     the socket, `danger: true`) is on the sandbox report for the settings page's one-click
     buttons. `sandbox_passthrough_integration_test` (`:integration`) proves it on the real
-    binary: a sandboxed `ls -la /dev/dxg` sees the device only with the passthrough. **CUDA
+    binary: a sandboxed `ls -la /dev/dxg` sees the device only with the passthrough.
+    **Every `turn/start` carries the full `sandboxPolicy`** (mode + network + the project's
+    current `writableRoots`), so an edit to the roots reaches an open thread on its next turn;
+    passthrough still needs a codex restart (PATH at launch). The sandbox report also carries
+    `platform`, `home` and `cachePresets` (`Sandbox.cache_presets/3`: uv / pip / npm / pnpm /
+    cargo / Hugging Face / Go / Gradle / Maven cache dirs per OS — `~/.cache/…` on Linux,
+    `~/Library/Caches/…` on macOS, `%LOCALAPPDATA%` on Windows — only what exists) for the
+    settings page's one-click adds; the passthrough field is shown on Linux only.
+    `core/chat/sandboxHints.ts` + `ui/chat/SandboxHint` is the second layer, for failures
+    codex does *not* treat as denials (CUDA_ERROR_OPERATING_SYSTEM → network switch, no GPU
+    device → GPU preset, a read-only path → writable dir): a line under the command with 允许
+    that writes the project setting. The network switch is labelled 联网与本机服务: with it
+    off codex's seccomp denies every `connect`, local sockets included. **CUDA
     also needs `network_access`**: with the network off codex's inner seccomp stage
     (`linux-sandbox/src/landlock.rs`) denies `connect` for every socket family, and the
     NVIDIA driver's init uses a local socket — `cuInit` fails with
@@ -133,6 +145,20 @@ React Native client planned on the same core code.
     `delete_project/2` needs `confirm: true` and removes the home (never the working
     directory). All five are the project settings page's danger zone (delete asks for the
     project's name); none touches the global memory.
+  - **Approval policy on the wire**: `:on_request` is codex's *granular* policy with every
+    prompt kind on (`Thread.granular_on_request/0`), not the string `"on-request"`: under
+    plain on-request codex never retries a sandbox-denied command (`orchestrator.rs`: "Under
+    Never or OnRequest, do not retry without sandbox") and, worse, emits **no
+    `commandExecution` item** for it — the model gets the output, the UI nothing (verified on
+    the real binary). With `granular{sandbox_approval: true}` a denial (output matching
+    codex's keywords: "Read-only file system", "Operation not permitted", "Permission denied",
+    "seccomp"…, non-zero exit) becomes `item/commandExecution/requestApproval` with reason
+    "command failed; retry without sandbox?" and `availableDecisions` `accept` /
+    `acceptWithExecpolicyAmendment` / `cancel`; an accept reruns it unsandboxed and the item
+    is reported (`sandbox_denial_integration_test`). `Thread.decision_for/2` maps our
+    `:accept_for_session` to the amendment (an execpolicy rule in the project's home) when
+    that is what the request offers, `:decline` to `cancel`; `messages.ts` builds the card's
+    options from `availableDecisions` and puts codex's reason in our words.
   - `Thread` = codex thread ↔ project (`codex_thread_id`, `cwd`, the settings it started with,
     `model_slug`, `preview`, `status`, `last_activity_at`). Statuses: `:idle`, `:active`,
     `:disconnected` (its codex died mid-turn; resumed → `:idle` when it is back),

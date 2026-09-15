@@ -358,7 +358,7 @@ function toolPart(
         id: String(approval.id),
         prompt: approvalPrompt(approval),
         display: "select",
-        options: APPROVAL_OPTIONS.map((o) => ({ ...o })),
+        options: approvalOptions(approval),
       },
     };
   }
@@ -366,10 +366,36 @@ function toolPart(
 }
 
 // codex's reason when it gives one; the renderer shows the command / files itself
+/** codex's own reasons, in our words; anything else verbatim */
+const KNOWN_REASONS: Record<string, string> = {
+  "command failed; retry without sandbox?": "命令被沙箱拦住了（写不了沙箱外的目录、连不上本机服务之类）。在沙箱外重新运行一次？",
+};
+
 function approvalPrompt(request: PendingRequest): string {
   const p = request.params;
-  if (typeof p["reason"] === "string" && p["reason"]) return p["reason"];
+  if (typeof p["reason"] === "string" && p["reason"]) return KNOWN_REASONS[p["reason"]] ?? p["reason"];
   return request.method.includes("fileChange") ? "允许修改这些文件？" : "允许执行这条命令？";
+}
+
+/**
+ * The options as the request offers them (`availableDecisions`): codex offers
+ * `acceptForSession` for a normal approval and `acceptWithExecpolicyAmendment`
+ * (allow this command from now on) for a sandbox retry — both ride on our
+ * `accept_for_session`, the server sends whichever the request listed. A
+ * request that lists nothing gets the three usual ones.
+ */
+type ApprovalOption = { id: ApprovalDecision; kind: (typeof APPROVAL_OPTIONS)[number]["kind"]; label: string };
+
+export function approvalOptions(request: PendingRequest): ApprovalOption[] {
+  const offered = request.params["availableDecisions"];
+  if (!Array.isArray(offered) || offered.length === 0) return APPROVAL_OPTIONS.map((o) => ({ ...o }));
+  const names = offered.map((d) => (d && typeof d === "object" ? Object.keys(d as object)[0] : String(d)));
+  const options: ApprovalOption[] = [];
+  if (names.includes("accept")) options.push({ id: "accept", kind: "allow-once", label: "允许" });
+  if (names.includes("acceptForSession")) options.push({ id: "accept_for_session", kind: "allow-always", label: "本会话都允许" });
+  else if (names.includes("acceptWithExecpolicyAmendment")) options.push({ id: "accept_for_session", kind: "allow-always", label: "以后这条命令都允许" });
+  if (names.includes("decline") || names.includes("cancel")) options.push({ id: "decline", kind: "reject-once", label: "拒绝" });
+  return options.length ? options : APPROVAL_OPTIONS.map((o) => ({ ...o }));
 }
 
 /** The request id (as codex knows it) for an approval id we handed to assistant-ui. */

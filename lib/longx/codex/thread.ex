@@ -34,7 +34,27 @@ defmodule Longx.Codex.Thread do
           | {:tools, [module | String.t()]}
           | {:conn, GenServer.server()}
 
-  @approval_policies %{never: "never", on_request: "on-request", untrusted: "untrusted"}
+  # codex's granular policy with every prompt kind on: on-request behaviour
+  # (the model asks when it wants out of the sandbox) plus what plain
+  # "on-request" deliberately does not do — a command the sandbox denied
+  # ("Read-only file system", "Operation not permitted"…) becomes an
+  # approval request "retry without sandbox?" instead of a silent failure
+  # the model has to reason about (orchestrator.rs: under Never / OnRequest
+  # codex never retries; Granular{sandbox_approval} does, after asking)
+  @granular_on_request %{
+    "granular" => %{
+      "sandbox_approval" => true,
+      "rules" => true,
+      "skill_approval" => true,
+      "request_permissions" => true,
+      "mcp_elicitations" => true
+    }
+  }
+  @approval_policies %{never: "never", on_request: @granular_on_request, untrusted: "untrusted"}
+
+  @doc "What `:on_request` is on the wire (see the module's approval policies)."
+  def granular_on_request, do: @granular_on_request
+
   @sandboxes %{
     read_only: "read-only",
     workspace_write: "workspace-write",
@@ -228,7 +248,53 @@ defmodule Longx.Codex.Thread do
   """
   @spec respond(term, decision, keyword) :: :ok | {:error, :unknown_request | :no_connection}
   def respond(request_id, decision, opts \\ []) when is_map_key(@decisions, decision) do
-    respond_raw(request_id, decision(decision), opts)
+    respond_raw(request_id, decision_for(decision, pending_params(request_id, opts)), opts)
+  end
+
+  # the request as codex sent it, when the thread is known (for `availableDecisions`)
+  defp pending_params(request_id, opts) do
+    case Keyword.get(opts, :thread_id) do
+      nil ->
+        %{}
+
+      thread_id ->
+        thread_id
+        |> ThreadState.Store.requests()
+        |> Enum.find_value(%{}, fn %{id: id, params: params} ->
+          if to_string(id) == to_string(request_id), do: params
+        end)
+    end
+  end
+
+  @doc """
+  The answer to send for a decision, given the request's `availableDecisions`:
+  codex offers `acceptWithExecpolicyAmendment` (allow this command from now
+  on, an execpolicy rule) where it offers no `acceptForSession` — a sandbox
+  retry, for one — so "always allow" takes whichever the request lists;
+  "decline" is `cancel` when that is the only refusal on offer. A request
+  that lists nothing gets the plain words.
+  """
+  @spec decision_for(decision, map) :: map
+  def decision_for(decision, params) do
+    offered = List.wrap(params["availableDecisions"])
+    names = Enum.map(offered, fn d -> if is_map(d), do: hd(Map.keys(d)), else: d end)
+
+    amendment =
+      Enum.find(offered, &(is_map(&1) and Map.has_key?(&1, "acceptWithExecpolicyAmendment")))
+
+    cond do
+      names == [] ->
+        decision(decision)
+
+      (decision == :accept_for_session and amendment) && "acceptForSession" not in names ->
+        %{"decision" => amendment}
+
+      decision == :decline and "decline" not in names and "cancel" in names ->
+        %{"decision" => "cancel"}
+
+      true ->
+        decision(decision)
+    end
   end
 
   @doc "Answers any pending server request with a raw result map (`conn:` or `thread_id:`)."

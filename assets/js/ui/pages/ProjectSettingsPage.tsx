@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
 import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, resetCodexHome, updateProject, type UpdateProjectInput } from "@/ash_rpc";
-import { queryKeys, sandboxPresets, unwrap, useModels, useProject, useSandboxStatus } from "@/core/projects";
+import { queryKeys, sandboxCachePresets, sandboxPresets, unwrap, useModels, useProject, useSandboxStatus } from "@/core/projects";
 import { Button } from "@/ui/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
 import { Input } from "@/ui/components/ui/input";
@@ -62,12 +62,15 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
   const [confirming, setConfirming] = useState<"clear" | "memories" | "reset" | "archive" | "delete" | null>(null);
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
   const presets = sandboxPresets(sandbox.data);
+  const caches = sandboxCachePresets(sandbox.data);
+  const linux = sandbox.data?.platform === "linux";
   // a preset appends the paths it stands for, once each
-  const addPassthrough = (paths: string[]) =>
+  const addLines = (key: "writableRoots" | "passthroughPaths", paths: string[]) =>
     setForm((f) => {
-      const have = new Set(f.passthroughPaths.split("\n").map((l) => l.trim()).filter(Boolean));
-      return { ...f, passthroughPaths: [...have, ...paths.filter((p) => !have.has(p))].join("\n") };
+      const have = new Set(f[key].split("\n").map((l) => l.trim()).filter(Boolean));
+      return { ...f, [key]: [...have, ...paths.filter((p) => !have.has(p))].join("\n") };
     });
+  const addPassthrough = (paths: string[]) => addLines("passthroughPaths", paths);
 
   const save = useMutation({
     mutationFn: async () =>
@@ -198,14 +201,27 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
           </RadioGroup>
         </fieldset>
         <div className="flex items-center justify-between gap-4">
-          <Label htmlFor="ps-network">{t.network}</Label>
+          <div>
+            <Label htmlFor="ps-network">{t.network}</Label>
+            <p className="text-muted-foreground text-xs">{t.networkHint}</p>
+          </div>
           <Switch id="ps-network" checked={form.networkAccess} onCheckedChange={(v) => set("networkAccess", v)} />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="ps-writable-roots">{t.writableRoots}</Label>
           <Textarea id="ps-writable-roots" rows={2} value={form.writableRoots} onChange={(e) => set("writableRoots", e.target.value)} className="font-mono text-sm" />
+          {caches.length ? (
+            <div className="flex flex-wrap gap-2">
+              {caches.map((c) => (
+                <Button key={c.id} type="button" size="sm" variant="outline" onClick={() => addLines("writableRoots", c.paths)}>
+                  {t.cachePreset(c.label)}
+                </Button>
+              ))}
+            </div>
+          ) : null}
           <p className="text-muted-foreground text-xs">{t.writableRootsHint}</p>
         </div>
+        {linux ? (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="ps-passthrough">{t.passthrough}</Label>
           <Textarea id="ps-passthrough" rows={2} value={form.passthroughPaths} onChange={(e) => set("passthroughPaths", e.target.value)} className="font-mono text-sm" />
@@ -221,6 +237,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
           ) : null}
           <p className="text-muted-foreground text-xs">{t.passthroughHint}</p>
         </div>
+        ) : null}
         <div className="flex items-center justify-between gap-4">
           <Label htmlFor="ps-web-search">{t.webSearch}</Label>
           <Switch id="ps-web-search" checked={form.webSearch} onCheckedChange={(v) => set("webSearch", v)} />

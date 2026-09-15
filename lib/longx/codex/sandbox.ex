@@ -46,6 +46,7 @@ defmodule Longx.Codex.Sandbox do
       reason: unwrap(result),
       bwrap: bwrap,
       gpu: gpu?(),
+      platform: elem(Longx.Platform.current(), 0),
       checked_at: DateTime.utc_now()
     })
 
@@ -66,6 +67,7 @@ defmodule Longx.Codex.Sandbox do
           reason: reason | nil,
           bwrap: String.t() | nil,
           gpu: boolean,
+          platform: Longx.Platform.os(),
           checked_at: DateTime.t()
         }
   def report do
@@ -176,6 +178,68 @@ defmodule Longx.Codex.Sandbox do
   end
 
   defp socket_entries, do: Enum.filter(["/var/run/docker.sock"], &File.exists?/1)
+
+  # where package managers keep their caches, per platform — a sandboxed `uv
+  # run` / `pip` / `npm` fails on a read-only one; `~` stands for the home
+  # (Windows: LOCALAPPDATA has no `~` form, so absolute), only what exists
+  @caches [
+    {"uv", "uv",
+     linux: "~/.cache/uv", darwin: "~/Library/Caches/uv", windows: "%LOCALAPPDATA%/uv/cache"},
+    {"pip", "pip",
+     linux: "~/.cache/pip", darwin: "~/Library/Caches/pip", windows: "%LOCALAPPDATA%/pip/Cache"},
+    {"npm", "npm", linux: "~/.npm", darwin: "~/.npm", windows: "%LOCALAPPDATA%/npm-cache"},
+    {"pnpm", "pnpm",
+     linux: "~/.local/share/pnpm/store",
+     darwin: "~/Library/pnpm/store",
+     windows: "%LOCALAPPDATA%/pnpm/store"},
+    {"cargo", "cargo",
+     linux: "~/.cargo/registry", darwin: "~/.cargo/registry", windows: "~/.cargo/registry"},
+    {"huggingface", "Hugging Face",
+     linux: "~/.cache/huggingface",
+     darwin: "~/.cache/huggingface",
+     windows: "~/.cache/huggingface"},
+    {"go", "Go build",
+     linux: "~/.cache/go-build",
+     darwin: "~/Library/Caches/go-build",
+     windows: "%LOCALAPPDATA%/go-build"},
+    {"gradle", "Gradle",
+     linux: "~/.gradle/caches", darwin: "~/.gradle/caches", windows: "~/.gradle/caches"},
+    {"maven", "Maven",
+     linux: "~/.m2/repository", darwin: "~/.m2/repository", windows: "~/.m2/repository"}
+  ]
+
+  @doc """
+  Tool caches present on this machine that a sandboxed command may need to
+  write (`uv run` locks `~/.cache/uv`, pip / npm / cargo / Hugging Face
+  download there), as `%{id, label, paths}` for the settings page's
+  quick-adds — per platform (`Longx.Platform.t/0`, the environment for
+  `HOME` / `USERPROFILE` / `LOCALAPPDATA`), only what `exists?` says is there.
+  """
+  @spec cache_presets(Longx.Platform.t(), %{optional(String.t()) => String.t()}, (Path.t() ->
+                                                                                    boolean)) ::
+          [%{id: String.t(), label: String.t(), paths: [String.t()]}]
+  def cache_presets({os, _arch}, env, exists?) do
+    home = env["HOME"] || env["USERPROFILE"]
+    local = env["LOCALAPPDATA"]
+
+    for {id, label, per_os} <- @caches,
+        pattern = per_os[os],
+        pattern != nil,
+        path = cache_path(pattern, local),
+        path != nil,
+        exists?.(expand_home(path, home)) do
+      %{id: id, label: label, paths: [path]}
+    end
+  end
+
+  def cache_presets, do: cache_presets(Longx.Platform.current(), System.get_env(), &File.dir?/1)
+
+  defp cache_path("%LOCALAPPDATA%" <> rest, local) when is_binary(local), do: local <> rest
+  defp cache_path("%LOCALAPPDATA%" <> _, nil), do: nil
+  defp cache_path(pattern, _local), do: pattern
+
+  defp expand_home("~" <> rest, home) when is_binary(home), do: home <> rest
+  defp expand_home(path, _home), do: path
 
   # /dev one level down, plus the USB bus directory
   defp dev_entries do

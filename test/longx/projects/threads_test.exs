@@ -209,10 +209,24 @@ defmodule Longx.Projects.ThreadsTest do
       assert params["config"]["sandbox_workspace_write.writable_roots"] ==
                Projects.writable_roots(project)
 
-      # a turn that changes the mode carries them in the policy
-      {:ok, _} = Projects.send_message(thread, "hi", conn: conn, network_access: true)
+      # every turn carries the policy with the project's current roots: an edit in the
+      # settings reaches the open thread on its next turn, no resume needed
+      {:ok, _} = Projects.send_message(thread, "hi", conn: conn)
       %{"lastTurnParams" => turn} = read_thread!(conn, thread.codex_thread_id)
       assert turn["sandboxPolicy"]["writableRoots"] == Projects.writable_roots(project)
+
+      {:ok, project} = Projects.update_project(project, %{writable_roots: [cache]})
+      thread = Ash.get!(Thread, thread.id)
+      {:ok, _} = Projects.send_message(thread, "again", conn: conn)
+      %{"lastTurnParams" => turn} = read_thread!(conn, thread.codex_thread_id)
+
+      assert turn["sandboxPolicy"] == %{
+               "type" => "workspaceWrite",
+               "networkAccess" => false,
+               "writableRoots" => [cache]
+             }
+
+      assert Projects.writable_roots(project) == [cache]
     end
 
     test "passthrough_paths: the project's host paths for the sandbox — globs expanded, only what exists, none by default",
@@ -575,8 +589,10 @@ defmodule Longx.Projects.ThreadsTest do
       # nothing given: the thread keeps its mode, nothing is sent
       {:ok, turn2} = Projects.send_message(thread, "say b", conn: conn)
       eventually(turn_done(turn2.id))
+      # every turn carries the policy in force (codex keeps it, but the writable roots
+      # are the project's *current* ones — an edit applies from the next turn on)
       %{"lastTurnParams" => params2} = read_thread!(conn, thread.codex_thread_id)
-      refute Map.has_key?(params2, "sandboxPolicy")
+      assert params2["sandboxPolicy"] == %{"type" => "dangerFullAccess"}
       assert Ash.get!(Thread, thread.id).sandbox == :danger_full_access
     end
 
