@@ -87,6 +87,45 @@ defmodule Longx.ShimTest do
     end
   end
 
+  describe "environment" do
+    test "env_clear: the child gets exactly the given environment, nothing of the BEAM's" do
+      System.put_env("LONGX_SHIM_PROBE", "leak")
+      on_exit(fn -> System.delete_env("LONGX_SHIM_PROBE") end)
+
+      assert {:ok, %{stdout: inherited}} =
+               Shim.run(sh("echo $LONGX_SHIM_PROBE $ONLY"), env: %{"ONLY" => "1"})
+
+      assert inherited == "leak 1\n"
+
+      assert {:ok, %{stdout: clean}} =
+               Shim.run(sh("echo $LONGX_SHIM_PROBE $ONLY $PATH"),
+                 env: %{"ONLY" => "1", "PATH" => "/usr/bin:/bin"},
+                 env_clear: true
+               )
+
+      assert clean == "1 /usr/bin:/bin\n"
+    end
+  end
+
+  describe "pty" do
+    test "pty: the child has a controlling terminal, its output is one stream, stdin stays open" do
+      {:ok, shim} =
+        Shim.start_link(
+          sh("tty; [ -t 0 ] && [ -t 2 ] && echo is-a-tty; read line; echo got:$line"),
+          pty: true
+        )
+
+      :ok = Shim.write(shim, "hello\n")
+      assert {:ok, 0} = Shim.await_exit(shim, 10_000, close_streams: false)
+      out = read_all(shim)
+      assert out =~ ~r{/dev/(pts/\d+|ttys\d+)}
+      assert out =~ "is-a-tty"
+      assert out =~ "got:hello"
+      # a terminal echoes what is typed; stderr is merged into it
+      assert Shim.read_stderr(shim) == :eof
+    end
+  end
+
   describe "stdout" do
     test "reads output until eof and reports exit status" do
       {:ok, shim} = Shim.start_link(["echo", "hello"])

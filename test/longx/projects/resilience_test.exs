@@ -92,13 +92,11 @@ defmodule Longx.Projects.ResilienceTest do
     assert_receive {:codex_connection, ^project_id, :ready}, 15_000
     assert Projects.codex_info(project).stale == []
 
-    # host paths let into the sandbox go on codex's PATH at launch: a change is a restart too
+    # host paths let into the sandbox are read by the exec-server at every
+    # command: a change is not a restart
     {:ok, project} = Projects.update_project(project, %{passthrough_paths: ["/dev/null"]})
-    assert Projects.codex_info(project).stale == [:passthrough]
-    {:ok, _} = Projects.restart_codex(project)
-    assert_receive {:codex_connection, ^project_id, :ready}, 15_000
     assert Projects.codex_info(project).stale == []
-    assert File.read!(Path.join(Projects.codex_info(project).home, "passthrough")) == "/dev/null"
+    assert "/dev/null" in Projects.exec_context(project.id).sandbox[:passthrough]
   end
 
   test "codex dies mid-turn: the turn fails, the thread is disconnected, then resumed when codex is back",

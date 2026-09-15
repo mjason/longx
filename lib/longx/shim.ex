@@ -45,6 +45,8 @@ defmodule Longx.Shim do
           | {:log, :stderr | Path.t()}
           | {:oom_score_adj, -1000..1000}
           | {:memory_limit, pos_integer}
+          | {:env_clear, boolean}
+          | {:pty, boolean}
 
   @type read_result :: {:ok, binary} | :eof | {:error, :pending_read | :closed}
 
@@ -104,6 +106,13 @@ defmodule Longx.Shim do
         grace: Keyword.get(opts, :grace, @default_grace_ms),
         oom_score_adj: oom_score_adj,
         memory_limit: memory_limit,
+        # `env_clear: true` — the child's environment is exactly `env:`, nothing
+        # of the BEAM's (the exec-server builds a command's environment itself)
+        env_clear: Keyword.get(opts, :env_clear, false) == true,
+        # `pty: true` — the child runs on a pseudo-terminal (unix): stdout is
+        # the terminal (stderr merged, `read_stderr` answers eof at once) and
+        # stdin never reaches EOF — `close_stdin` only stops feeding it
+        pty: Keyword.get(opts, :pty, false) == true,
         caller: self()
       }
 
@@ -587,6 +596,8 @@ defmodule Longx.Shim do
         if(spec.log, do: ["-log", spec.log], else: []) ++
         if(spec.oom_score_adj, do: ["-oom_score_adj", "#{spec.oom_score_adj}"], else: []) ++
         if(spec.memory_limit, do: ["-memory_limit", "#{spec.memory_limit}"], else: []) ++
+        if(spec.env_clear, do: ["-clean_env"], else: []) ++
+        if(spec.pty, do: ["-pty"], else: []) ++
         ["--" | spec.cmd]
 
     Port.open({:spawn_executable, executable()}, [

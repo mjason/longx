@@ -34,6 +34,8 @@ defmodule Longx.Application do
       {DynamicSupervisor, name: Longx.Codex.ThreadState.Supervisor, strategy: :one_for_one},
       # dynamic tool calls and other async work for the codex connection
       {Task.Supervisor, name: Longx.Codex.TaskSupervisor},
+      # the exec-server's slow requests (reads that wait, walks) run off the socket
+      {Task.Supervisor, name: Longx.Exec.TaskSupervisor},
       # keeps project thread/turn rows in step with codex events
       Longx.Projects.Tracker,
       # Start to serve requests, typically the last entry

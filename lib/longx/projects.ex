@@ -505,27 +505,49 @@ defmodule Longx.Projects do
     end
   end
 
-  # what a project's codex is launched with: the memory cap on its tree, the
-  # host paths its sandbox lets in (both read at launch — a restart applies a change)
-  defp pool_options(%Project{} = project),
-    do: [shim: shim_options(project), home: [passthrough: passthrough_paths(project)]]
+  # what a project's codex is launched with: the memory cap on its tree
+  # (read at launch — a restart applies a change)
+  defp pool_options(%Project{} = project), do: [shim: shim_options(project)]
 
   defp shim_options(%Project{memory_limit_mb: nil}), do: []
   defp shim_options(%Project{memory_limit_mb: mb}), do: [memory_limit: mb * 1024 * 1024]
 
   @doc """
+  What the exec-server runs a project's commands with, read at every
+  `process/start` (`LongxWeb.ExecSocket`): the sandbox options — the host
+  paths let in (`passthrough_paths/1`: the GPU switch, the project's own
+  patterns), the bubblewrap to use — and the shim's resource guards (the
+  memory cap, the OOM preference every codex tree gets). A project id
+  nobody knows (an ad-hoc home, a test) gets the defaults.
+  """
+  @spec exec_context(String.t()) :: %{sandbox: keyword, shim: keyword}
+  def exec_context(project_id) do
+    project =
+      case Ash.get(Project, project_id, authorize?: false) do
+        {:ok, project} -> project
+        {:error, _} -> nil
+      end
+
+    %{
+      sandbox: if(project, do: [passthrough: passthrough_paths(project)], else: []),
+      shim:
+        [oom_score_adj: Pool.oom_score_adj()] ++ if(project, do: shim_options(project), else: [])
+    }
+  end
+
+  @doc """
   The host paths the project's sandbox lets in, resolved: this machine's GPU
-  devices when `gpu_passthrough` is on, plus the project's own patterns
-  (globs expanded — `/dev/ttyUSB*`), only what exists right now (a device
-  plugged in later needs a codex restart — `codex_info.stale` says so),
-  sorted, no duplicates.
+  device nodes — always, on a machine that has them (a device is neither a
+  file nor the network: nothing to read or reach through it, the same
+  driver surface every process on the box has; and codex's permission
+  requests cannot ask for one) — plus the project's own patterns (globs
+  expanded — `/dev/ttyUSB*`), only what exists right now; read by the
+  exec-server at every command start (`exec_context/1`), so a device
+  plugged in holds from the next command; sorted, no duplicates.
   """
   @spec passthrough_paths(Project.t()) :: [Path.t()]
-  def passthrough_paths(%Project{passthrough_paths: patterns, gpu_passthrough: gpu?}) do
-    gpu =
-      if gpu?,
-        do: Enum.find(Longx.Codex.Sandbox.presets(), %{paths: []}, &(&1.id == "gpu")).paths,
-        else: []
+  def passthrough_paths(%Project{passthrough_paths: patterns}) do
+    gpu = Enum.find(Longx.Codex.Sandbox.presets(), %{paths: []}, &(&1.id == "gpu")).paths
 
     (gpu ++ patterns)
     |> Enum.flat_map(fn pattern ->
@@ -876,9 +898,9 @@ defmodule Longx.Projects do
           bytes: non_neg_integer,
           files: %{String.t() => non_neg_integer},
           worker: :stopped | map,
-          stale: [:models | :config | :passthrough]
+          stale: [:models | :config]
         }
-  def codex_info(%Project{id: project_id} = project) do
+  def codex_info(%Project{id: project_id}) do
     home = Pool.home_dir(project_id)
     exists? = File.dir?(home)
     worker = Pool.status(project_id)
@@ -903,7 +925,7 @@ defmodule Longx.Projects do
       stale:
         if(worker == :stopped,
           do: [],
-          else: Longx.Codex.Home.stale(home, passthrough: passthrough_paths(project))
+          else: Longx.Codex.Home.stale(home)
         )
     }
   end

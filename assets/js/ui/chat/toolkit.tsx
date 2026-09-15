@@ -24,8 +24,6 @@ import { CodeDiff, type DiffLine } from "@/ui/components/assistant-ui/elements/c
 import { ElicitationForm, type ElicitationField } from "@/ui/components/assistant-ui/elements/elicitation-form";
 import { FileTree, type FileTreeNode } from "@/ui/components/assistant-ui/elements/file-tree";
 import { TerminalBlock } from "@/ui/components/assistant-ui/elements/terminal-block";
-import { useChatMaybe } from "./ChatProvider";
-import { SandboxHint } from "./SandboxHint";
 import { ToolCall } from "@/ui/components/assistant-ui/elements/tool-call";
 import { ToolError } from "@/ui/components/assistant-ui/elements/tool-error";
 import { WebSearch } from "@/ui/components/assistant-ui/elements/web-search";
@@ -90,8 +88,6 @@ function ToolRow({ label, activeLabel, query, running, failed, children, testId 
 
 export const CommandExecutionTool: ToolCallMessagePartComponent<CommandArgs, CommandResult> = (p) => {
   const actions = useApprovalActions(p);
-  // the project window's runtime — the sandbox hint needs the mode and the project
-  const chat = useChatMaybe();
   const approval = pendingApproval(p);
   const command = p.args.command ?? "";
   const output = p.result?.output ?? (typeof p.artifact === "string" ? p.artifact : "");
@@ -115,7 +111,6 @@ export const CommandExecutionTool: ToolCallMessagePartComponent<CommandArgs, Com
         )}
       </ToolRow>
       {/* below the row, not inside it: a finished command's row is folded, the hint must not be */}
-      {!running && chat ? <SandboxHint output={output} chat={chat} /> : null}
     </>
   );
 };

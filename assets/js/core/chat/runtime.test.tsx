@@ -67,4 +67,24 @@ describe("useCodexRuntime", () => {
     await act(async () => { await list.getItemById("t1").delete(); });
     expect(onOpenThread).toHaveBeenCalledWith(null);
   });
+
+  test("a new chat from the list opens without a moment of 找不到这个会话: the row is in the list before the page moves", async () => {
+    // the refetch after start_thread is still in flight when the router
+    // already shows the new id
+    vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
+    let threadId: string | undefined = "t1";
+    const onOpenThread = vi.fn((id: string | null) => { threadId = id ?? undefined; });
+    const { result, rerender } = renderHook(() => useCodexRuntime({ projectId: "id-1", defaults, threadId, onOpenThread }), { wrapper });
+    await waitFor(() => expect(result.current.thread).toBeDefined());
+    let land: (rows: unknown) => void = () => {};
+    vi.mocked(listThreads).mockImplementation(() => new Promise((resolve) => { land = resolve; }) as never);
+
+    await act(async () => { await result.current.runtime.threads.switchToNewThread(); });
+    expect(onOpenThread).toHaveBeenCalledWith("t2");
+    rerender();
+    expect(result.current.missing).toBe(false);
+    expect(result.current.thread?.id).toBe("t2");
+    await act(async () => { land(ok([thread(2), thread(1)])); });
+    expect(result.current.thread?.id).toBe("t2");
+  });
 });

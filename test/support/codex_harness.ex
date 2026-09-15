@@ -22,6 +22,17 @@ defmodule Longx.Test.CodexHarness do
     "http://127.0.0.1:#{port}/ai/v1"
   end
 
+  @doc """
+  The exec-server url on the served endpoint (`serve_endpoint!/0`'s port) for
+  a project id — `prepare_home!(gateway_url, exec_server_url: …)` makes codex
+  run its commands through Longx.
+  """
+  def exec_server_url!(gateway_url, project_id \\ "harness") do
+    %URI{port: port} = URI.parse(gateway_url)
+
+    "ws://127.0.0.1:#{port}/exec/#{project_id}?token=#{URI.encode_www_form(Longx.AI.Gateway.Token.current())}"
+  end
+
   @doc "A fresh CODEX_HOME under ./data (codex refuses tmp dirs), removed after the test."
   def prepare_home!(gateway_url, opts \\ []) do
     dir = Path.join(Path.expand("data"), "codex_home_test_#{System.unique_integer([:positive])}")
