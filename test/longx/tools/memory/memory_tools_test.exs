@@ -13,7 +13,7 @@ defmodule Longx.Tools.MemoryToolsTest do
 
     on_exit(fn ->
       Application.put_env(:longx, Longx.Memory, previous)
-      File.rm_rf!(dir)
+      Longx.Test.TmpDirs.rm_rf!(dir)
     end)
 
     %{dir: dir, ctx: %Context{cwd: "/tmp", thread_id: "thr_x"}}

@@ -30,9 +30,7 @@ defmodule Longx.Codex.ThreadState.Store do
     token_usage: nil,
     plan: nil,
     # codex's goal mode: the thread's goal (objective, status, budget, usage) or nil
-    goal: nil,
-    # 全部放行: Longx answers every approval of the thread itself (ServerRequest.Default)
-    auto_accept: false
+    goal: nil
   }
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -69,11 +67,21 @@ defmodule Longx.Codex.ThreadState.Store do
 
   @doc "Whether Longx answers every approval request of the thread itself (approval policy 全部放行)."
   @spec auto_accept?(String.t()) :: boolean
-  def auto_accept?(thread_id), do: meta(thread_id).auto_accept == true
+  def auto_accept?(thread_id) do
+    case :ets.lookup(@meta, {thread_id, :auto_accept}) do
+      [{_, flag}] -> flag
+      [] -> false
+    end
+  end
 
+  # its own key, not a field of the meta map: `Thread.start` / `send` set it
+  # from the caller while the writer folds `thread/started` / `turn/started`
+  # into the map, and two processes read-merge-writing one map lost the flag
   @spec set_auto_accept(String.t(), boolean) :: :ok
-  def set_auto_accept(thread_id, flag) when is_boolean(flag),
-    do: put_meta(thread_id, %{auto_accept: flag})
+  def set_auto_accept(thread_id, flag) when is_boolean(flag) do
+    :ets.insert(@meta, {{thread_id, :auto_accept}, flag})
+    :ok
+  end
 
   @doc "Allocates the next event sequence number for the thread."
   @spec next_seq(String.t()) :: pos_integer
@@ -291,6 +299,7 @@ defmodule Longx.Codex.ThreadState.Store do
   @spec delete(String.t()) :: :ok
   def delete(thread_id) do
     :ets.delete(@meta, thread_id)
+    :ets.delete(@meta, {thread_id, :auto_accept})
     :ets.match_delete(@items, {{thread_id, :_}, :_, :_})
     :ets.match_delete(@requests, {{thread_id, :_}, :_, :_, :_})
     :ok

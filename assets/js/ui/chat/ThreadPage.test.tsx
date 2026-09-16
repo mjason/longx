@@ -357,6 +357,10 @@ describe("ThreadPage", () => {
     await user.keyboard("{Escape}");
     expect(screen.getByTestId("mode-picker")).toHaveTextContent("完全访问");
     expect(screen.getByTestId("mode-picker")).toHaveTextContent("全部放行");
+    // a phone's rail has no room for the words: the shield icon and the
+    // badges say it, the name is the accessible label and lives in the popover
+    expect(within(screen.getByTestId("mode-picker")).getByText(/完全访问/)).toHaveClass("hidden", "sm:inline");
+    expect(screen.getByTestId("mode-picker")).toHaveAttribute("title", expect.stringContaining("完全访问"));
     await user.type(
       screen.getByRole("textbox", { name: "随心输入" }),
       "go wild{Enter}",

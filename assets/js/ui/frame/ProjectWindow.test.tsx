@@ -30,7 +30,12 @@ describe("ProjectWindow", () => {
     const sheet = await screen.findByTestId("tool-sheet");
     await within(sheet).findByTestId("git-tool");
     // the git tool opens on the branch; the status bar keeps the short HEAD
-    expect(screen.getByTestId("status-strip")).toHaveTextContent("372bb036");
+    const strip = screen.getByTestId("status-strip");
+    expect(strip).toHaveTextContent("372bb036");
+    // a narrow screen scrolls the strip sideways; no item breaks into two lines
+    for (const item of Array.from(strip.children)) {
+      expect(item).toHaveClass("whitespace-nowrap", "shrink-0");
+    }
   });
 
   test("desktop: icon rail + docked panel, ⌘2 switches tools, the status bar is there", async () => {

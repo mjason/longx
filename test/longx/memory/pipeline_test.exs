@@ -21,8 +21,8 @@ defmodule Longx.Memory.PipelineTest do
     on_exit(fn ->
       Application.put_env(:longx, Longx.Memory, previous)
       Application.put_env(:longx, Longx.Codex.Home, previous_home)
-      File.rm_rf!(dir)
-      File.rm_rf!(homes)
+      Longx.Test.TmpDirs.rm_rf!(dir)
+      Longx.Test.TmpDirs.rm_rf!(homes)
     end)
 
     root = Path.join(System.tmp_dir!(), "longx-memproj-#{System.unique_integer([:positive])}")

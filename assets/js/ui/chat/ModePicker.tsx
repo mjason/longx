@@ -27,10 +27,12 @@ export function ModePicker({ mode, onChange, disabled = false, started = false }
         disabled={disabled}
         data-testid="mode-picker"
         aria-label={t.accessMode}
-        className={`flex min-w-0 max-w-full items-center gap-1 rounded-md px-1.5 py-1 text-xs hover:bg-accent disabled:opacity-50 ${full ? "text-destructive" : "text-muted-foreground"}`}
+        title={t.sandboxOptions[mode.sandbox]}
+        className={`flex min-w-0 max-w-full shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs hover:bg-accent disabled:opacity-50 ${full ? "text-destructive" : "text-muted-foreground"}`}
       >
         <Icon className="size-3.5" />
-        <span className="truncate">{t.sandboxOptions[mode.sandbox]}</span>
+        {/* a phone's rail has no room for the words: the shield says it, the popover names it */}
+        <span className="hidden truncate sm:inline">{t.sandboxOptions[mode.sandbox]}</span>
         {mode.networkAccess && mode.sandbox === "workspace_write" ? <Globe className="size-3" /> : null}
         {!mode.webSearch ? <span className="text-[10px]">{t.noWebSearch}</span> : null}
         {!mode.multiAgent ? <span className="text-[10px]">{t.noMultiAgent}</span> : null}

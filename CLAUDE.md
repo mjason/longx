@@ -194,9 +194,11 @@ React Native client planned on the same core code.
     next to codex's three; per turn like the others): codex runs plain `on-request` and
     `ServerRequest.Default` answers every approval request of the thread at once —
     commands / patches `accept`, a permissions request as asked for the *session* — off a
-    flag on the ThreadState meta (`Store.auto_accept?/1`, set by `Thread.start` / `resume` /
-    `send` whenever `approval_policy:` is given, and by the Tracker on a sub-agent's row from
-    its parent); no card, no review. The reviewer would judge first, so
+    flag in the ThreadState store (`Store.auto_accept?/1` — **its own ETS key**, not a field
+    of the meta map: `Thread.start` / `send` set it from the caller while the writer folds
+    `thread/started` / `turn/started` into the map, and two processes read-merge-writing
+    one map lost the flag on CI; set whenever `approval_policy:` is given, and by the
+    Tracker on a sub-agent's row from its parent); no card, no review. The reviewer would judge first, so
     `start_params` forces `approvals_reviewer = "user"` under it and
     `Projects.send_message` sends `thread/settings/update` (`Thread.update_settings/2`) when
     a turn moves onto or off it (`reviewer_for/2`: the row's `auto_review` comes back).
@@ -967,7 +969,9 @@ React Native client planned on the same core code.
     plus "now" — are the `checkpoint-history` element on top, its restore opening the same
     dialog; `AgentsTool` is the thread's sub-agents as the `background-inbox`
     element over `useSubagents` — a finished one opens its own thread page),
-    `frame/StatusStrip` (HEAD, codex, memory, sandbox warning).
+    `frame/StatusStrip` (HEAD, codex, memory, sandbox warning; every item `whitespace-nowrap
+    shrink-0` — a narrow phone scrolls the strip sideways, it never folds "codex 就绪" into
+    two rows).
     **The centre is an editor area** (`ui/workbench/Workbench`, state in `core/workbench.ts`
     per project on the device): a tab strip — the chat first and always, then files and
     diffs opened from the tools — the chat kept mounted behind an open file; a dirty tab
@@ -1071,7 +1075,9 @@ React Native client planned on the same core code.
     chat whose first message creates the thread — and `/p/:slug/t/:threadId`; Thread
     element; the composer rail is Codex's: `ComposerLeading` (`ModePicker` — the access
     mode for the next turn: sandbox / approval / network in a popover, from the thread row
-    or the project defaults, sent with every message — and the turn's state) /
+    or the project defaults, sent with every message; below `sm` the trigger is the shield
+    icon and badges alone, the sandbox's name is its `title` and lives in the popover — a
+    phone's rail had squeezed it to "可…" — and the turn's state) /
     `ComposerTrailing` (the `context-display` ring — codex's last-turn token usage
     against the `modelContextWindow` it reports, `contextUsage(view)`; **its breakdown is a
     click-to-open popover, not the registry's hover tooltip**: the composer sits in the
@@ -1315,7 +1321,10 @@ Where tests live / what to use:
   `vi.mock`; `setViewport(390)` for phone-width assertions.
 - `mix test` runs `ash.setup --quiet` first; the test DB is `longx_test.db` (SQLite) —
   avoid `async: true` on DB-backed tests. Prefer `start_supervised!/1`; never `Process.sleep`
-  in tests (monitor / `assert_receive` instead).
+  in tests (monitor / `assert_receive` instead). A test that points a global directory
+  (the memory's) at a tmp dir of its own removes it with `Longx.Test.TmpDirs.rm_rf!/1`
+  (retries): an async test starting a thread meanwhile re-creates the memory repository
+  through `Memory.instructions/1`, and a plain `rm_rf!` failed the cleanup on CI.
 
 ## Dev server
 

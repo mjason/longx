@@ -207,6 +207,31 @@ defmodule Longx.Codex.ThreadStateTest do
       refute Store.auto_accept?(t)
     end
 
+    test "the flag survives folds landing at the same moment from the writer (its own key, no read-merge-write of the meta map)" do
+      # Thread.start sets the flag right after thread/start's reply while the
+      # writer folds thread/started and turn/started: two processes merging
+      # into one meta map lost the flag on CI
+      for _ <- 1..200 do
+        t = new_thread()
+
+        folder =
+          Task.async(fn ->
+            for i <- 1..50 do
+              Store.fold(t, "thread/started", %{"thread" => %{"id" => t, "n" => i}})
+
+              Store.fold(t, "turn/started", %{
+                "turn" => %{"id" => "turn-#{i}", "status" => "inProgress"}
+              })
+            end
+          end)
+
+        Store.set_auto_accept(t, true)
+        Task.await(folder)
+        assert Store.auto_accept?(t), "flag lost for #{t}"
+        assert Store.meta(t).thread["n"] == 50
+      end
+    end
+
     test "the thread's goal (codex's goal mode) is part of the view: updated replaces, cleared removes" do
       t = new_thread()
 
@@ -358,12 +383,14 @@ defmodule Longx.Codex.ThreadStateTest do
     test "snapshot reads ETS directly: it works even when the thread process is gone", %{
       thread_id: thread_id
     } do
+      # subscribed before the ingest: the writer broadcasts as soon as it folds
+      ThreadState.subscribe(thread_id)
+
       ThreadState.ingest(thread_id, "item/started", %{
         "turnId" => "t",
         "item" => %{"id" => "m1", "type" => "agentMessage", "text" => "kept"}
       })
 
-      ThreadState.subscribe(thread_id)
       assert_receive {:codex, 1, "item/started", _}
 
       ThreadState.stop(thread_id)

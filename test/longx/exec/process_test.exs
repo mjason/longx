@@ -105,7 +105,10 @@ defmodule Longx.Exec.ProcessTest do
 
   test "interrupt reaches the process group; terminate kills it and reports whether it was running" do
     id = "p-int"
-    pid = start!(sh("sleep 30"), id: id)
+    # a line first: the interrupt must find the command running (on a slow
+    # runner a signal sent right after start landed before `sleep` existed)
+    pid = start!(sh("echo up; sleep 30"), id: id)
+    assert_receive {:exec_process, ^id, "process/output", _}, 5_000
     :ok = ExecProcess.signal(pid, :interrupt)
     assert_receive {:exec_process, ^id, "process/exited", %{"exitCode" => code}}, 5_000
     assert code == 130

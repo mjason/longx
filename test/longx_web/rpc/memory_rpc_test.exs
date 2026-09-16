@@ -9,7 +9,7 @@ defmodule LongxWeb.MemoryRpcTest do
 
     on_exit(fn ->
       Application.put_env(:longx, Longx.Memory, previous)
-      File.rm_rf!(dir)
+      Longx.Test.TmpDirs.rm_rf!(dir)
     end)
 
     :ok
