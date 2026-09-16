@@ -156,7 +156,16 @@ React Native client planned on the same core code.
     `with_additional_permissions`, a `request_permissions` call, an MCP/network one) goes to
     a read-only reviewer sub-session on the thread's model (its `low` effort when declared;
     codex's preferred reviewer model is not in our catalog, so it falls back to the active
-    slug) through our gateway — one extra model call per request — with
+    slug) — **or on a model of its own**: `Longx.AI.set_review_model/2` / `review_model/0`
+    (`Longx.System.Setting` keys `review_model` / `review_effort`; RPC `review_settings` /
+    `set_review_model` on `Longx.AI.Model`, the 自动审核 card of Settings → 模型) makes
+    `Home.catalog_models/0` add a `longx-review` entry — that model's, its levels narrowed
+    to the pinned one (codex takes `low` whenever an entry offers it) — that every other
+    entry names as `auto_review_model_override`; the gateway resolves the slug
+    `longx-review` (`AI.review_model_slug/0`) to that model, the default one when none is
+    set. A catalog change, so `stale: [:models]` and a codex restart. Proven in
+    `auto_review_integration_test`: the reviewer's request carries the review model and
+    its level, the agent's the thread's — through our gateway — one extra model call per request — with
     `core/assets/guardian/policy.md` as instructions and a strict-JSON verdict
     (`text.format` is sent; the parser also takes JSON inside prose, so third-party models
     work: live with DeepSeek Flash a whole-home write was denied, a single file allowed).

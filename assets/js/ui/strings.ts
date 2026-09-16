@@ -671,6 +671,13 @@ export const t = {
     checkOk: (ms: number) => `模型可用，${ms} ms`,
     checkFailed: (error: string) => `检测失败：${error}`,
     noModels: "还没有模型",
+    review: "自动审核",
+    reviewHint:
+      "自动审核由一个只读的审核员会话判定；默认用会话本身的模型。可以换成一个便宜、快的模型，并固定它的思考档位。改动在下次启动 codex 时生效。",
+    reviewModel: "自动审核用的模型",
+    reviewSameModel: "和会话相同",
+    reviewEffort: "思考档位",
+    reviewEffortAuto: "自动（有 low 就用 low，否则用模型默认）",
     search: "联网搜索",
     searchHint:
       "codex 的 web.run 搜索由 Longx 代为执行；需要一个搜索服务的密钥。",

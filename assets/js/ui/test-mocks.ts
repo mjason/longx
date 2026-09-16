@@ -109,9 +109,11 @@ export function rpcMock() {
     listModels: vi.fn(async () =>
       ok([
         model(1, { slug: "deepseek-flash", default: true }),
-        model(2, { slug: "glm-5" }),
+        model(2, { slug: "glm-5", reasoningLevels: ["low", "high"] }),
       ]),
     ),
+    reviewSettings: vi.fn(async () => ok({ modelSlug: null, effort: null })),
+    setReviewModel: vi.fn(async () => ok(null)),
     listProviders: vi.fn(async () => ok([provider(1), provider(2)])),
     createProvider: vi.fn(
       async ({ input }: { input: Record<string, unknown> }) =>

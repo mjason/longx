@@ -223,6 +223,55 @@ defmodule LongxWeb.AiRpcTest do
              })
   end
 
+  test "the reviewer model: read, set with a level the model offers (errors on the argument), cleared",
+       %{conn: conn} do
+    %{"success" => true, "data" => %{"id" => provider}} =
+      rpc(conn, "create_provider", %{
+        "fields" => ["id"],
+        "input" => %{
+          "name" => "DS",
+          "slug" => "ds",
+          "baseUrl" => "https://api.deepseek.com/v1",
+          "apiKey" => "k"
+        }
+      })
+
+    %{"success" => true} =
+      rpc(conn, "create_model", %{
+        "fields" => ["id"],
+        "input" => %{
+          "name" => "Cheap",
+          "upstreamId" => "cheap",
+          "providerId" => provider,
+          "reasoningLevels" => ["low", "high"]
+        }
+      })
+
+    assert %{"success" => true, "data" => %{"modelSlug" => nil, "effort" => nil}} =
+             rpc(conn, "review_settings", %{"fields" => ["modelSlug", "effort"]})
+
+    assert %{"success" => true} =
+             rpc(conn, "set_review_model", %{
+               "input" => %{"modelSlug" => "cheap", "effort" => "high"}
+             })
+
+    assert %{"success" => true, "data" => %{"modelSlug" => "cheap", "effort" => "high"}} =
+             rpc(conn, "review_settings", %{"fields" => ["modelSlug", "effort"]})
+
+    assert %{"success" => false, "errors" => [%{"fields" => ["effort"]}]} =
+             rpc(conn, "set_review_model", %{
+               "input" => %{"modelSlug" => "cheap", "effort" => "max"}
+             })
+
+    assert %{"success" => false, "errors" => [%{"fields" => ["modelSlug"]}]} =
+             rpc(conn, "set_review_model", %{"input" => %{"modelSlug" => "nope"}})
+
+    assert %{"success" => true} = rpc(conn, "set_review_model", %{"input" => %{}})
+
+    assert %{"success" => true, "data" => %{"modelSlug" => nil}} =
+             rpc(conn, "review_settings", %{"fields" => ["modelSlug"]})
+  end
+
   test "check_model answers with ok / latency or the error, never a failure", %{conn: conn} do
     %{"success" => true, "data" => %{"id" => provider}} =
       rpc(conn, "create_provider", %{

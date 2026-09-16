@@ -13,6 +13,8 @@ import {
   listPresets,
   listProviders,
   listSearchProviders,
+  reviewSettings,
+  setReviewModel,
   listTools,
   makeDefaultModel,
   memoryDeleteNote,
@@ -42,7 +44,19 @@ export const aiKeys = {
   search: ["ai", "search"] as const,
   tools: ["ai", "tools"] as const,
   presets: ["ai", "presets"] as const,
+  review: ["ai", "review"] as const,
 };
+
+/** codex's automatic approval review: the model it runs on (null = the thread's own) and a pinned level */
+export type ReviewSettings = { modelSlug: string | null; effort: string | null };
+
+export function useReviewSettings() {
+  return useQuery({
+    queryKey: aiKeys.review,
+    queryFn: async () =>
+      unwrap(await reviewSettings({ fields: ["modelSlug", "effort"] })) as ReviewSettings,
+  });
+}
 
 export type Provider = {
   id: string;
@@ -293,6 +307,9 @@ export function useAiActions() {
             input: { id },
           }),
         ) as { ok: boolean; latencyMs: number | null; error: string | null },
+    ),
+    setReviewModel: useAiWrite(async (input: ReviewSettings) =>
+      unwrap(await setReviewModel({ input })),
     ),
     setSearchKey: useAiWrite(
       async ({ id, apiKey }: { id: string; apiKey: string }) =>

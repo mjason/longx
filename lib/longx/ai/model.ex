@@ -100,6 +100,52 @@ defmodule Longx.AI.Model do
       end
     end
 
+    # codex's automatic approval review on a model of its own (Longx.AI.review_model/0)
+    action :review_settings, :map do
+      constraints fields: [model_slug: [type: :string], effort: [type: :string]]
+
+      run fn _input, _ ->
+        case Longx.AI.review_model() do
+          nil -> {:ok, %{model_slug: nil, effort: nil}}
+          %{model: model, effort: effort} -> {:ok, %{model_slug: model.slug, effort: effort}}
+        end
+      end
+    end
+
+    action :set_review_model do
+      argument :model_slug, :string
+      argument :effort, :string
+
+      run fn input, _ ->
+        case Longx.AI.set_review_model(input.arguments[:model_slug], input.arguments[:effort]) do
+          :ok ->
+            :ok
+
+          {:error, {:unknown_model, slug}} ->
+            {:error,
+             Ash.Error.Invalid.exception(
+               errors: [
+                 %Ash.Error.Changes.InvalidArgument{
+                   field: :model_slug,
+                   message: "unknown model #{slug}"
+                 }
+               ]
+             )}
+
+          {:error, {:unknown_effort, effort}} ->
+            {:error,
+             Ash.Error.Invalid.exception(
+               errors: [
+                 %Ash.Error.Changes.InvalidArgument{
+                   field: :effort,
+                   message: "the model offers no level #{effort}"
+                 }
+               ]
+             )}
+        end
+      end
+    end
+
     # Exactly one model is the default: clear the flag everywhere else first.
     update :clear_default do
       change set_attribute(:default, false)

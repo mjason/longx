@@ -804,6 +804,53 @@ defmodule Longx.AITest do
     end
   end
 
+  describe "the reviewer model (codex's automatic approval review on a model of its own)" do
+    test "set_review_model/2 names a model and a level it offers; review_model/0 reads it back; nil clears it" do
+      provider = create_provider!(%{api_key: "sk-a"})
+      main = create_model!(provider, %{upstream_id: "main", slug: "main"})
+      AI.make_default_model!(main)
+
+      cheap =
+        create_model!(provider, %{
+          upstream_id: "cheap",
+          slug: "cheap",
+          reasoning_levels: ["low", "high"],
+          reasoning_effort: "high"
+        })
+
+      assert AI.review_model() == nil
+
+      assert :ok = AI.set_review_model("cheap", "high")
+      assert %{model: %AI.Model{slug: "cheap"}, effort: "high"} = AI.review_model()
+
+      # no level: codex's own rule applies (low when offered, else the model's default)
+      assert :ok = AI.set_review_model("cheap", nil)
+      assert %{model: %AI.Model{slug: "cheap"}, effort: nil} = AI.review_model()
+
+      assert {:error, {:unknown_effort, "max"}} = AI.set_review_model("cheap", "max")
+      assert {:error, {:unknown_model, "nope"}} = AI.set_review_model("nope", nil)
+
+      assert :ok = AI.set_review_model(nil, nil)
+      assert AI.review_model() == nil
+
+      # a deleted model is no reviewer any more
+      assert :ok = AI.set_review_model("cheap", "low")
+      Ash.destroy!(cheap, action: :delete)
+      assert AI.review_model() == nil
+    end
+
+    test "resolve_target/1: `longx-review` is the reviewer model, the default model when none is set" do
+      provider = create_provider!(%{api_key: "sk-a"})
+      main = create_model!(provider, %{upstream_id: "main", slug: "main"})
+      AI.make_default_model!(main)
+      create_model!(provider, %{upstream_id: "cheap", slug: "cheap"})
+
+      assert {:ok, %AI.Target{model: "main"}} = AI.resolve_target("longx-review")
+      :ok = AI.set_review_model("cheap", nil)
+      assert {:ok, %AI.Target{model: "cheap"}} = AI.resolve_target("longx-review")
+    end
+  end
+
   describe "resolve_target/0" do
     test "combines the default model with its provider's credentials" do
       provider = create_provider!(%{base_url: "https://api.deepseek.com/v1", api_key: "sk-ds"})

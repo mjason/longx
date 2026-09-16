@@ -23,8 +23,10 @@ import {
   memorySetAutoExtract,
   memoryWriteIndex,
   probeSandbox,
+  reviewSettings,
   sandboxStatus,
   setGithubToken,
+  setReviewModel,
   setToolEnabled,
   stopCodex,
   updateSearchProvider,
@@ -66,7 +68,7 @@ describe("SettingsPage", () => {
     vi.mocked(listModels).mockResolvedValue(
       ok([
         model(1, { slug: "deepseek-flash", default: true }),
-        model(2, { slug: "glm-5" }),
+        model(2, { slug: "glm-5", reasoningLevels: ["low", "high"] }),
       ]) as never,
     );
   });
@@ -281,6 +283,28 @@ describe("SettingsPage", () => {
         }),
       ),
     );
+  });
+
+  test("models: the reviewer model — a model and one of its levels, or the thread's own", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/models");
+    const card = await screen.findByTestId("review-model");
+    // the thread's own model by default: no level to pick
+    expect(within(card).getByRole("combobox", { name: "自动审核用的模型" })).toHaveTextContent("和会话相同");
+    expect(within(card).queryByRole("combobox", { name: "思考档位" })).not.toBeInTheDocument();
+
+    await user.click(within(card).getByRole("combobox", { name: "自动审核用的模型" }));
+    // what the server answers once the pick is saved (the write refetches the settings)
+    vi.mocked(reviewSettings).mockResolvedValue(ok({ modelSlug: "glm-5", effort: null }) as never);
+    await user.click(await screen.findByRole("option", { name: "glm-5" }));
+    await waitFor(() => expect(setReviewModel).toHaveBeenCalledWith(expect.objectContaining({ input: { modelSlug: "glm-5", effort: null } })));
+
+    await waitFor(() => expect(within(card).getByRole("combobox", { name: "思考档位" })).toBeInTheDocument());
+    await user.click(within(card).getByRole("combobox", { name: "思考档位" }));
+    await user.click(await screen.findByRole("option", { name: "high" }));
+    await waitFor(() => expect(setReviewModel).toHaveBeenLastCalledWith(expect.objectContaining({ input: { modelSlug: "glm-5", effort: "high" } })));
+    vi.mocked(reviewSettings).mockResolvedValue(ok({ modelSlug: null, effort: null }) as never);
   });
 
   test("tools: the catalogue with a switch per tool", async () => {

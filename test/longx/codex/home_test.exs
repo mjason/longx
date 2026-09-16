@@ -254,6 +254,74 @@ defmodule Longx.Codex.HomeTest do
     assert Home.stale(dir, gateway_url: "http://127.0.0.1:4242/ai/v1") == [:models]
   end
 
+  test "a reviewer model set in the AI domain: a `longx-review` catalog entry pinned to its level, named by every entry as the auto-review model",
+       %{dir: dir} do
+    provider =
+      Longx.AI.create_provider!(%{
+        name: "P",
+        slug: "p-#{System.unique_integer([:positive])}",
+        base_url: "https://api.deepseek.com/v1",
+        api_key: "k"
+      })
+
+    a =
+      Longx.AI.create_model!(%{
+        name: "A",
+        upstream_id: "a-model",
+        context_window: 1_000_000,
+        reasoning_levels: ["low", "high"],
+        provider_id: provider.id
+      })
+
+    Longx.AI.make_default_model!(a)
+
+    Longx.AI.create_model!(%{
+      name: "Cheap",
+      upstream_id: "cheap",
+      context_window: 128_000,
+      reasoning_levels: ["low", "medium", "high"],
+      reasoning_effort: "medium",
+      provider_id: provider.id
+    })
+
+    url = "http://127.0.0.1:4242/ai/v1"
+    {:ok, _} = Home.prepare(dir: dir, gateway_url: url)
+    %{"models" => entries} = Jason.decode!(File.read!(Path.join(dir, "model_catalog.json")))
+    refute Enum.any?(entries, &(&1["slug"] == "longx-review"))
+    refute Enum.any?(entries, &Map.has_key?(&1, "auto_review_model_override"))
+
+    :ok = Longx.AI.set_review_model("cheap", "high")
+    # the catalog on disk is stale now, like any model edit
+    assert Home.stale(dir, gateway_url: url) == [:models]
+
+    {:ok, _} = Home.prepare(dir: dir, gateway_url: url)
+    %{"models" => entries} = Jason.decode!(File.read!(Path.join(dir, "model_catalog.json")))
+    review = Enum.find(entries, &(&1["slug"] == "longx-review"))
+    # one level only: codex takes `low` whenever an entry offers it, so pinning
+    # another level means offering nothing else
+    assert Enum.map(review["supported_reasoning_levels"], & &1["effort"]) == ["high"]
+    assert review["default_reasoning_level"] == "high"
+    assert review["context_window"] == 128_000
+
+    for entry <- entries, entry["slug"] != "longx-review" do
+      assert entry["auto_review_model_override"] == "longx-review"
+    end
+
+    # no level chosen: the model's own levels and default (codex picks low if offered)
+    :ok = Longx.AI.set_review_model("cheap", nil)
+    {:ok, _} = Home.prepare(dir: dir, gateway_url: url)
+    %{"models" => entries} = Jason.decode!(File.read!(Path.join(dir, "model_catalog.json")))
+    review = Enum.find(entries, &(&1["slug"] == "longx-review"))
+
+    assert Enum.map(review["supported_reasoning_levels"], & &1["effort"]) == [
+             "low",
+             "medium",
+             "high"
+           ]
+
+    assert review["default_reasoning_level"] == "medium"
+  end
+
   test "stale/2 says which of the written files no longer match what prepare would write", %{
     dir: dir
   } do

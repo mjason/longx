@@ -49,6 +49,8 @@ defmodule Longx.AI do
       rpc_action :update_model, :update
       rpc_action :make_default_model, :make_default
       rpc_action :check_model, :check_model
+      rpc_action :review_settings, :review_settings
+      rpc_action :set_review_model, :set_review_model
       rpc_action :delete_model, :delete
     end
 
@@ -191,6 +193,73 @@ defmodule Longx.AI do
   @spec placeholder_model() :: String.t()
   def placeholder_model, do: @placeholder_model
 
+  # codex's automatic approval review on a model of its own: the catalog
+  # entry every model names as its `auto_review_model_override` (built by
+  # Longx.Codex.Home from the row + level chosen here), resolved by the
+  # gateway to that model — or the default one while nothing is chosen
+  @review_model "longx-review"
+  @review_model_key "review_model"
+  @review_effort_key "review_effort"
+
+  @doc "The catalog slug codex's reviewer session asks the gateway for."
+  @spec review_model_slug() :: String.t()
+  def review_model_slug, do: @review_model
+
+  @doc """
+  The model (and the level, when pinned) codex's automatic approval review
+  runs on; nil = the thread's own model. Stored in `Longx.System.Setting`;
+  a model deleted since counts as none.
+  """
+  @spec review_model() :: %{model: Model.t(), effort: String.t() | nil} | nil
+  def review_model do
+    with {:ok, %{value: slug}} when is_binary(slug) <- Longx.System.get_setting(@review_model_key),
+         {:ok, %Model{} = model} <- get_model_by_slug(slug) do
+      effort =
+        case Longx.System.get_setting(@review_effort_key) do
+          {:ok, %{value: effort}} when is_binary(effort) and effort != "" -> effort
+          _ -> nil
+        end
+
+      %{model: Ash.load!(model, :provider), effort: effort}
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Chooses the reviewer model by slug (nil clears it) and, optionally, the
+  level it reviews at — one the model offers; nil leaves codex's rule (`low`
+  when offered, else the model's default). Takes effect on the next codex
+  start (the catalog is read at launch: `codex_info.stale`).
+  """
+  @spec set_review_model(String.t() | nil, String.t() | nil) ::
+          :ok | {:error, {:unknown_model, String.t()} | {:unknown_effort, String.t()}}
+  def set_review_model(nil, _effort) do
+    put_or_clear_setting(@review_model_key, nil)
+    put_or_clear_setting(@review_effort_key, nil)
+  end
+
+  def set_review_model(slug, effort) when is_binary(slug) do
+    with {:ok, _model, _} <- fetch_model(slug),
+         :ok <- check_effort(slug, effort),
+         {:ok, _} <- Longx.System.put_setting(@review_model_key, slug) do
+      put_or_clear_setting(@review_effort_key, effort)
+    end
+  end
+
+  defp put_or_clear_setting(key, nil) do
+    case Longx.System.get_setting(key) do
+      {:ok, setting} -> Longx.System.delete_setting!(setting)
+      _ -> :ok
+    end
+
+    :ok
+  end
+
+  defp put_or_clear_setting(key, value) do
+    with {:ok, _} <- Longx.System.put_setting(key, value), do: :ok
+  end
+
   @doc """
   The upstream to forward a request to, by the model name codex sent:
   `"longx"` (or nothing) is the global default model, anything else a
@@ -202,6 +271,13 @@ defmodule Longx.AI do
              :no_default_model | {:unknown_model, String.t()} | {:missing_api_key, String.t()}}
   def resolve_target(nil), do: resolve_target()
   def resolve_target(@placeholder_model), do: resolve_target()
+
+  def resolve_target(@review_model) do
+    case review_model() do
+      %{model: model} -> target_for(model)
+      nil -> resolve_target()
+    end
+  end
 
   def resolve_target(slug) when is_binary(slug) do
     case get_model_by_slug(slug) do

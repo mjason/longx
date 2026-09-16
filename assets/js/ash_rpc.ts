@@ -607,6 +607,141 @@ export async function validateListModels(
 }
 
 
+export type ReviewSettingsFields = UnifiedFieldSelection<{modelSlug: string | null, effort: string | null, __type: "TypedMap", __primitiveFields: "modelSlug" | "effort"}>[];
+
+export type InferReviewSettingsResult<
+  Fields extends ReviewSettingsFields | undefined,
+> = InferResult<{modelSlug: string | null, effort: string | null, __type: "TypedMap", __primitiveFields: "modelSlug" | "effort"}, Fields>;
+
+export type ReviewSettingsResult<Fields extends ReviewSettingsFields | undefined = undefined> = | { success: true; data: InferReviewSettingsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Model
+ *
+ * @ashActionType :action
+ */
+export async function reviewSettings<Fields extends ReviewSettingsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ReviewSettingsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "review_settings",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ReviewSettingsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Model
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateReviewSettings(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "review_settings",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetReviewModelInput = {
+  modelSlug?: string | null;
+  effort?: string | null;
+};
+
+export type InferSetReviewModelResult = {};
+
+export type SetReviewModelResult = | { success: true; data: InferSetReviewModelResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Model
+ *
+ * @ashActionType :action
+ */
+export async function setReviewModel(
+  config: {
+  tenant?: string;
+  input?: SetReviewModelInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetReviewModelResult> {
+  const payload = {
+    action: "set_review_model",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<SetReviewModelResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Model
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetReviewModel(
+  config: {
+  tenant?: string;
+  input?: SetReviewModelInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_review_model",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type UpdateModelInput = {
   name?: string;
   slug?: string | null;
