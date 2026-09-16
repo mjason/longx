@@ -115,6 +115,21 @@ export function inputOf(message: AppendMessage): {
   return { text, images };
 }
 
+/** Words are no side effect: thinking and a half-said answer go with a retracted turn. */
+const HARMLESS_ITEMS = new Set(["userMessage", "agentMessage", "reasoning", "plan"]);
+
+/**
+ * Whether the turn ran anything — a command, a patch, a tool, a search, a
+ * sub-agent — or waits to (an approval or a question pending): then a revert
+ * cannot take it back, and a stop is only an interrupt.
+ */
+export function turnHadEffects(view: ThreadView, turnId: string): boolean {
+  return (
+    view.items.some((i) => i.turnId === turnId && !HARMLESS_ITEMS.has(i.type)) ||
+    view.requests.some((r) => r.params["turnId"] === turnId)
+  );
+}
+
 export function buildAdapter(
   opts: AdapterOptions,
 ): ExternalStoreAdapter<ThreadMessageLike> {
@@ -210,9 +225,8 @@ export function buildAdapter(
       const turnId = runningTurnId(view);
       const id = threadId();
       if (!turnId || !id) return;
-      // nothing came back yet: take the turn back, the text returns to the composer
-      const answered = view.items.some((i) => i.turnId === turnId && i.type !== "userMessage");
-      if (!answered && opts.onRetract) {
+      // nothing ran yet: take the turn back, the text returns to the composer
+      if (!turnHadEffects(view, turnId) && opts.onRetract) {
         const { text } = unwrap(
           await retractTurn({ fields: ["text"], input: { threadId: id, codexTurnId: turnId } }),
         );

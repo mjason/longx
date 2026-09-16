@@ -233,17 +233,25 @@ React Native client planned on the same core code.
     committed first**, since a review of the uncommitted changes needs them uncommitted;
     targets `:uncommitted` | `{:commit, sha}` | `{:base_branch, name}` | `{:custom, text}`).
     Over RPC: `images` on `send_message`, `compact_thread`, `review_thread` (`target` +
-    `value`). **Stop before anything came back = take the message back** (Claude Code's
-    behaviour): `retract_turn/3` — only for an `:in_progress` turn whose items in the
-    ThreadState are nothing but its own `userMessage` (`{:error, :has_output}` otherwise,
-    `:not_running` for a settled one) — `turn/interrupt`, waits for `turn/completed`
-    (15 s), then `thread/revert` of that one turn (`ThreadState.drop_turns` broadcasts
-    `thread/reverted`, clients re-snapshot), marks the row `:reverted`, idles the thread
-    and answers `%{text: user_text}`. RPC `retract_turn` on `Thread`; `adapter.ts`'s
-    `onCancel` calls it instead of `interruptTurn` when the running turn has produced
-    nothing yet and hands the text to `onRetract` → `ChatProvider`'s `ComposerBridge`
-    puts it back in the composer (`aui.composer.setText`) for editing. Proven on the
-    real binary from the page (bubble gone, text back). `delete_thread/1`
+    `value`). **Stop before anything ran = take the message back** (Claude Code's
+    behaviour): `retract_turn/3` — for an `:in_progress` turn that had no side effect
+    yet: its items in the ThreadState are only words (`userMessage`, `reasoning`,
+    `agentMessage`, `plan` — a revert drops them with the turn) and no request of the
+    turn is pending; a command, a patch, a tool, a search, a sub-agent or an approval /
+    question waiting is `{:error, :has_output}` (interrupt instead), a settled turn
+    `:not_running` — marks the row `:reverted` **first** (the Tracker's `turn/completed`
+    leaves a reverted row alone; it lands after a git call and used to overwrite the
+    status with `:interrupted`), then `turn/interrupt`, waits for `turn/completed`
+    (15 s), `thread/revert` of that one turn (`ThreadState.drop_turns` broadcasts
+    `thread/reverted`, clients re-snapshot), idles the thread and answers
+    `%{text: user_text}`; a failure puts the row back (`:in_progress` when the turn
+    never ended, `:interrupted` when only the revert failed). RPC `retract_turn` on
+    `Thread`; `adapter.ts`'s `onCancel` calls it instead of `interruptTurn` while
+    `turnHadEffects(view, turnId)` is false (the same rule on the client's view) and
+    hands the text to `onRetract` → `ChatProvider`'s `ComposerBridge` puts it back in
+    the composer (`aui.composer.setText`) for editing. Proven on the real binary from
+    the page: stopped mid-thinking → bubble and thinking gone, text back; stopped with a
+    command running → the turn stays, the command 已取消. `delete_thread/1`
     removes the row and its turns (not while a turn runs; codex's own copy stays — the
     project-level wipe is `clear_codex_history/1`).
   - **Opening a thread** (`LongxWeb.ThreadChannel` join → `Projects.host_thread/1`): a
@@ -921,7 +929,7 @@ React Native client planned on the same core code.
     controls), `adapter.ts` (`buildAdapter` → `ExternalStoreAdapter`: `onNew` →
     `sendMessage` (no thread yet → `createThread` first; a `dirty_tree` RPC error asks
     `onDirtyTree` for commit / ignore and resends), `onCancel` → `interruptTurn` (or
-    `retractTurn` + `onRetract(text)` while the turn has only its user message),
+    `retractTurn` + `onRetract(text)` while the turn ran nothing — `turnHadEffects`),
     `onRespondToToolApproval` → `respond`, `onRefetchThread`, `isLoading` /
     `isSendDisabled` (disconnected: typing yes, sending no) / `isDisabled`
     (unrecoverable, archived), `adapters.threadList`, `queue`, `extras.answerRequest` →

@@ -789,7 +789,7 @@ defmodule Longx.Projects.ThreadsTest do
                params["input"]
     end
 
-    test "retract_turn/2: a running turn that produced nothing is interrupted and taken out of the history, its text handed back; one with output is only interrupted",
+    test "retract_turn/2: a running turn that did no I/O is interrupted and taken out of the history, its text handed back; one that ran something (or waits to) is only interrupted",
          %{dir: dir, conn: conn} do
       project = git_project!(dir)
       {:ok, thread} = Projects.start_thread(project, conn: conn)
@@ -809,16 +809,50 @@ defmodule Longx.Projects.ThreadsTest do
 
       assert Ash.get!(Thread, thread.id).status == :idle
 
-      # a turn that already answered something is not retracted
+      # text the model started to say is no side effect: still safe to take back
       {:ok, stalled} = Projects.send_message(thread, "stall", conn: conn)
       assert_receive {:codex, _, "item/agentMessage/delta", _}, 5_000
-      assert {:error, :has_output} = Projects.retract_turn(thread, stalled, conn: conn)
-      assert Ash.get!(Turn, stalled.id).status == :in_progress
-      Longx.Codex.Connection.notify(conn, "fake/continue", %{})
-      eventually(turn_done(stalled.id))
+      assert {:ok, %{text: "stall"}} = Projects.retract_turn(thread, stalled, conn: conn)
+      assert %{status: :reverted} = Ash.get!(Turn, stalled.id)
+      assert Projects.list_turns!(thread) == []
+
+      # a turn waiting to run a command (an approval pending) is not retracted
+      {:ok, asking} = Projects.send_message(thread, "approve ls", conn: conn)
+
+      assert_receive {:codex, _, "item/commandExecution/requestApproval", %{"requestId" => rid}},
+                     5_000
+
+      assert {:error, :has_output} = Projects.retract_turn(thread, asking, conn: conn)
+      assert Ash.get!(Turn, asking.id).status == :in_progress
+      :ok = Longx.Codex.Thread.respond(rid, :decline, conn: conn)
+      eventually(turn_done(asking.id))
 
       # a turn that is over is not retracted either
-      assert {:error, :not_running} = Projects.retract_turn(thread, stalled, conn: conn)
+      assert {:error, :not_running} = Projects.retract_turn(thread, asking, conn: conn)
+    end
+
+    test "a turn reverted while it was still ending stays reverted when its turn/completed lands",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      :ok = Longx.Codex.Thread.subscribe(thread.codex_thread_id)
+      {:ok, turn} = Projects.send_message(thread, "wait", conn: conn)
+      assert_receive {:codex, _, "item/completed", %{"item" => %{"type" => "userMessage"}}}, 5_000
+
+      # the retract marks the row before the interrupt; the Tracker's completion
+      # (a git call later) must not turn it back into an interrupted turn
+      Projects.mark_turn_reverted!(turn)
+      :ok = Longx.Codex.Thread.interrupt(thread.codex_thread_id, turn.codex_turn_id, conn: conn)
+      assert_receive {:codex, _, "turn/completed", _}, 5_000
+
+      eventually(fn ->
+        case Ash.get!(Thread, thread.id) do
+          %{status: :idle} = t -> {:ok, t}
+          _ -> :pending
+        end
+      end)
+
+      assert Ash.get!(Turn, turn.id).status == :reverted
     end
 
     test "turns are listed oldest first", %{dir: dir, conn: conn} do

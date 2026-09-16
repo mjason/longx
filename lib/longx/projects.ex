@@ -603,6 +603,8 @@ defmodule Longx.Projects do
   is interrupted, its completion awaited, then `thread/revert`ed and the
   row marked `:reverted`. `{:error, :has_output}` once the model answered
   anything (interrupt it instead), `{:error, :not_running}` when it is over.
+  Thinking and a half-said answer do not count as output — nothing happened
+  that a revert cannot take back.
   """
   @spec retract_turn(Thread.t(), Turn.t(), keyword) ::
           {:ok, %{text: String.t()}} | {:error, :has_output | :not_running | term}
@@ -611,21 +613,32 @@ defmodule Longx.Projects do
     turn = Ash.get!(Turn, turn.id)
     codex_id = thread.codex_thread_id
 
-    items =
-      Enum.filter(
-        Longx.Codex.ThreadState.snapshot(codex_id).items,
-        &(&1["turnId"] == turn.codex_turn_id)
-      )
-
-    with :ok <- retractable(turn, items),
-         {:ok, conn} <- thread_connection(thread, opts),
-         :ok <- interrupt_and_revert(codex_id, turn.codex_turn_id, conn) do
+    with :ok <- retractable(turn, Longx.Codex.ThreadState.snapshot(codex_id)),
+         {:ok, conn} <- thread_connection(thread, opts) do
+      # marked before the interrupt: the Tracker's turn/completed (after a git
+      # call) would otherwise land on the row after us and make it interrupted
       mark_turn_reverted!(turn)
-      touch_thread!(thread, %{status: :idle, last_activity_at: DateTime.utc_now()})
-      broadcast_changed(thread.project_id)
-      {:ok, %{text: turn.user_text || ""}}
+
+      case interrupt_and_revert(codex_id, turn.codex_turn_id, conn) do
+        :ok ->
+          touch_thread!(thread, %{status: :idle, last_activity_at: DateTime.utc_now()})
+          broadcast_changed(thread.project_id)
+          {:ok, %{text: turn.user_text || ""}}
+
+        {:error, reason} ->
+          unretract!(turn, reason)
+          {:error, reason}
+      end
     end
   end
+
+  # the retract failed: the row goes back to what the turn is — ended when
+  # only the revert failed (the Tracker left the reverted row alone), still
+  # running when codex refused the interrupt or never ended the turn
+  defp unretract!(turn, {:revert_failed, _}),
+    do: complete_turn!(turn, %{status: :interrupted, completed_at: DateTime.utc_now()})
+
+  defp unretract!(turn, _reason), do: complete_turn!(turn, %{status: :in_progress})
 
   # in a task of its own: the wait for turn/completed subscribes to the thread's
   # topic, and the caller's mailbox stays out of it
@@ -634,17 +647,31 @@ defmodule Longx.Projects do
       with :ok <- Longx.Codex.Thread.subscribe(codex_id),
            :ok <- Longx.Codex.Thread.interrupt(codex_id, codex_turn_id, conn: conn),
            :ok <- await_turn_end(codex_id, codex_turn_id) do
-        Longx.Codex.Thread.revert(codex_id, codex_turn_id, turn_ids: [codex_turn_id], conn: conn)
+        case Longx.Codex.Thread.revert(codex_id, codex_turn_id,
+               turn_ids: [codex_turn_id],
+               conn: conn
+             ) do
+          :ok -> :ok
+          {:error, reason} -> {:error, {:revert_failed, reason}}
+        end
       end
     end)
     |> Task.await(30_000)
   end
 
-  defp retractable(%Turn{status: status}, _items) when status != :in_progress,
+  # Words are no side effect: thinking and a half-said answer are dropped with
+  # the turn. Anything that runs — a command, a patch, a tool, a search, a
+  # sub-agent — or waits to (an approval, a question) leaves traces a revert
+  # cannot undo, so that turn is only interrupted.
+  @harmless_items ~w(userMessage agentMessage reasoning plan)
+
+  defp retractable(%Turn{status: status}, _snapshot) when status != :in_progress,
     do: {:error, :not_running}
 
-  defp retractable(_turn, items) do
-    if Enum.any?(items, &(&1["type"] != "userMessage")), do: {:error, :has_output}, else: :ok
+  defp retractable(%Turn{codex_turn_id: turn_id}, %{items: items, pending_requests: requests}) do
+    ran? = Enum.any?(items, &(&1["turnId"] == turn_id and &1["type"] not in @harmless_items))
+    asked? = Enum.any?(requests, &(&1.params["turnId"] == turn_id))
+    if ran? or asked?, do: {:error, :has_output}, else: :ok
   end
 
   # the interrupt lands as turn/completed; codex refuses a revert of a turn still running

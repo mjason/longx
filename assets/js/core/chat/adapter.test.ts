@@ -200,7 +200,7 @@ describe("chat adapter", () => {
     );
   });
 
-  test("onCancel before anything came back retracts the turn and hands the text back to the composer; once the model answered it only interrupts", async () => {
+  test("onCancel while the turn did no I/O retracts it and hands the text back to the composer; once something ran, or waits to, it only interrupts", async () => {
     vi.mocked(interruptTurn).mockClear();
     const onRetract = vi.fn();
     const untouched = buildAdapter({
@@ -218,6 +218,7 @@ describe("chat adapter", () => {
     expect(onRetract).toHaveBeenCalledWith("look at it");
     expect(interruptTurn).not.toHaveBeenCalled();
 
+    // thinking and a half-said answer are words, not side effects: still taken back
     const answering = buildAdapter({
       target,
       view: {
@@ -226,14 +227,49 @@ describe("chat adapter", () => {
         items: [
           { id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] },
           { id: "r9", type: "reasoning", turnId: "turn_9", summary: ["thinking"] },
+          { id: "m9", type: "agentMessage", turnId: "turn_9", text: "Let me" },
         ],
       },
       model: null,
       onRetract,
     });
     await answering.onCancel!();
+    expect(interruptTurn).not.toHaveBeenCalled();
+    expect(onRetract).toHaveBeenCalledTimes(2);
+
+    // a command ran: only an interrupt
+    const ran = buildAdapter({
+      target,
+      view: {
+        ...emptyView("thr_1"),
+        turn: { id: "turn_9", status: "inProgress" },
+        items: [
+          { id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] },
+          { id: "c9", type: "commandExecution", turnId: "turn_9", command: "ls", status: "inProgress" },
+        ],
+      },
+      model: null,
+      onRetract,
+    });
+    await ran.onCancel!();
     expect(interruptTurn).toHaveBeenCalledTimes(1);
-    expect(onRetract).toHaveBeenCalledTimes(1);
+    expect(onRetract).toHaveBeenCalledTimes(2);
+
+    // a request waiting on the person (a permission asked for): the same
+    const asking = buildAdapter({
+      target,
+      view: {
+        ...emptyView("thr_1"),
+        turn: { id: "turn_9", status: "inProgress" },
+        items: [{ id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] }],
+        requests: [{ id: 7, method: "item/permissions/requestApproval", params: { threadId: "thr_1", turnId: "turn_9", permissions: {} } }],
+      },
+      model: null,
+      onRetract,
+    });
+    await asking.onCancel!();
+    expect(interruptTurn).toHaveBeenCalledTimes(2);
+    expect(onRetract).toHaveBeenCalledTimes(2);
   });
 
   test("an approval answer goes back as codex's request id and our decision", async () => {

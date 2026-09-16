@@ -144,12 +144,16 @@ defmodule Longx.Projects.Tracker do
        }) do
     with {:ok, %Turn{} = row} <- Projects.get_turn_by_codex_id(turn_id),
          {:ok, %Thread{} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id) do
-      Projects.complete_turn!(row, %{
-        status: turn_status(turn["status"]),
-        completed_at: DateTime.utc_now(),
-        commit_after: head(thread.cwd),
-        error: get_in(turn, ["error", "message"]) || row.error
-      })
+      # a retract marks its row reverted before the interrupt that ends the
+      # turn: that row is out of the history already, its ending is no news
+      if row.status != :reverted do
+        Projects.complete_turn!(row, %{
+          status: turn_status(turn["status"]),
+          completed_at: DateTime.utc_now(),
+          commit_after: head(thread.cwd),
+          error: get_in(turn, ["error", "message"]) || row.error
+        })
+      end
 
       Projects.touch_thread!(thread, %{status: :idle, last_activity_at: DateTime.utc_now()})
       Projects.broadcast_changed(thread.project_id)
