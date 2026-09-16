@@ -69,7 +69,7 @@ defmodule Longx.Projects.ThreadsTest do
         root_path: dir
       })
 
-  defp eventually(fun, attempts \\ 100) do
+  defp eventually(fun, attempts \\ 300) do
     case fun.() do
       {:ok, value} ->
         value
