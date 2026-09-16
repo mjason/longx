@@ -119,7 +119,9 @@ describe("SettingsPage", () => {
     await user.type(within(md).getByLabelText("名称"), "GLM 5");
     await user.type(within(md).getByLabelText("模型 ID"), "glm-5-turbo");
     await user.clear(within(md).getByLabelText("上下文窗口"));
-    await user.type(within(md).getByLabelText("上下文窗口"), "200000");
+    // any whole number: a vendor's window need not be a round thousand (Bailian's qwen3.8 is 983616)
+    await user.type(within(md).getByLabelText("上下文窗口"), "983616");
+    expect((within(md).getByLabelText("上下文窗口") as HTMLInputElement).validity.stepMismatch).toBe(false);
     // the reasoning levels the model offers, and its default among them
     await user.click(
       within(md).getByRole("button", { name: "low", pressed: false }),
@@ -140,7 +142,7 @@ describe("SettingsPage", () => {
             name: "GLM 5",
             upstreamId: "glm-5-turbo",
             providerId: "p2",
-            contextWindow: 200000,
+            contextWindow: 983616,
             reasoningLevels: ["low", "high"],
             reasoningEffort: "high",
             hostedWebSearch: false,

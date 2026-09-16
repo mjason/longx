@@ -946,7 +946,7 @@ function ModelDialog({
                 id="md-window"
                 type="number"
                 min={1000}
-                step={1000}
+                step={1}
                 value={form.contextWindow}
                 onChange={(e) => set("contextWindow", e.target.value)}
                 required
