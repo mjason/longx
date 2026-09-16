@@ -372,7 +372,9 @@ describe("SettingsPage", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveTextContent("deepseek-flash");
     expect(rows[0]).toHaveTextContent("deepseek-v4-flash");
+    // the reasoning effort codex asked for, per request; absent = the model's default
     expect(rows[0]).toHaveTextContent("low");
+    expect(rows[1]).toHaveTextContent("未指定");
     expect(rows[0]).toHaveTextContent("200");
     expect(rows[0]).toHaveTextContent("1 s");
     expect(rows[1]).toHaveTextContent("400");
@@ -381,6 +383,7 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     await user.click(within(rows[0]!).getByRole("button", { name: /详情/ }));
     expect(await within(section).findByText(/exec_command, memory/)).toBeInTheDocument();
+    expect(within(section).getByText(/思考档位: low · summary auto/)).toBeInTheDocument();
   });
 
   test("tools: the built-in browser's private-network switch (a fake-ip network needs it)", async () => {

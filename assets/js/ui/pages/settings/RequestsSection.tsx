@@ -74,6 +74,15 @@ export function RequestsSection() {
         <p className="text-muted-foreground text-sm">{s.empty}</p>
       ) : (
         <ul className="divide-y rounded-lg border text-xs">
+          <li className="text-muted-foreground flex items-center gap-3 px-3 py-1.5" aria-hidden="true">
+            <span className="size-6 shrink-0" />
+            <span className="w-20 shrink-0">{s.columns.at}</span>
+            <span className="min-w-0 flex-1">{s.columns.model}</span>
+            <span className="w-14 shrink-0 text-center">{s.columns.effort}</span>
+            <span className="hidden w-16 shrink-0 sm:inline">{s.columns.kind}</span>
+            <span className="w-10 shrink-0 text-right">{s.columns.status}</span>
+            <span className="w-14 shrink-0 text-right">{s.columns.duration}</span>
+          </li>
           {requests.map((r) => (
             <li key={r.id} className="px-3 py-2" data-testid="request-row">
               <div className="flex items-center gap-3">
@@ -90,7 +99,9 @@ export function RequestsSection() {
                   {r.model ?? "—"}
                   {r.upstreamId && r.upstreamId !== r.model ? <span className="text-muted-foreground"> → {r.upstreamId}</span> : null}
                 </span>
-                <span className="w-12 shrink-0 text-center">{r.effort ?? "—"}</span>
+                <span className={`w-14 shrink-0 text-center ${r.effort ? "font-medium" : "text-muted-foreground"}`} title={s.columns.effort}>
+                  {r.effort ?? s.noEffort}
+                </span>
                 <span className="text-muted-foreground hidden w-16 shrink-0 sm:inline">{r.requestKind ?? ""}</span>
                 <span className={`w-10 shrink-0 text-right font-mono ${statusClass(r.status)}`}>{r.status ?? "…"}</span>
                 <span className="text-muted-foreground w-14 shrink-0 text-right font-mono">{r.durationMs === null ? "" : formatDuration(r.durationMs)}</span>
@@ -98,6 +109,10 @@ export function RequestsSection() {
               {r.error ? <p className="text-destructive mt-1 pl-9">{r.error}</p> : null}
               {open === r.id ? (
                 <dl className="text-muted-foreground mt-2 grid gap-1 pl-9">
+                  <div>
+                    {s.reasoning}: {r.effort ?? s.noEffort}
+                    {r.summary ? ` · summary ${r.summary}` : ""}
+                  </div>
                   <div>
                     {s.thread} <span className="font-mono">{r.threadId ?? "—"}</span> · {s.turn} <span className="font-mono">{r.turnId ?? "—"}</span>
                   </div>
@@ -107,7 +122,6 @@ export function RequestsSection() {
                   <div>
                     {s.input(r.inputItems, r.inputChars)} · {s.instructions(r.instructionsChars)}
                     {r.maxOutputTokens ? ` · ${s.maxOutput(r.maxOutputTokens)}` : ""}
-                    {r.summary ? ` · summary ${r.summary}` : ""}
                     {r.provider ? ` · ${r.provider}` : ""}
                   </div>
                 </dl>
