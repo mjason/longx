@@ -170,7 +170,7 @@ function PresetChooser({
               key={preset.slug}
               type="button"
               onClick={() => onPick(preset)}
-              className="hover:bg-accent flex min-h-16 flex-col items-start gap-1 rounded-lg border p-3 text-start transition-colors"
+              className="hover:bg-accent flex min-h-16 min-w-0 flex-col items-start gap-1 rounded-lg border p-3 text-start transition-colors"
             >
               <span className="flex w-full items-center justify-between gap-2">
                 <span className="font-medium">{preset.name}</span>
@@ -178,7 +178,7 @@ function PresetChooser({
                   <Badge variant="secondary">{s.presetInstalled}</Badge>
                 ) : null}
               </span>
-              <span className="text-muted-foreground truncate font-mono text-xs">
+              <span className="text-muted-foreground w-full truncate font-mono text-xs" title={preset.baseUrl}>
                 {preset.baseUrl}
               </span>
               <span className="text-muted-foreground text-xs">
@@ -276,7 +276,7 @@ function PresetDialog({
                 ? s.presetMoreTitle(preset.name)
                 : s.presetTitle(preset.name)}
             </DialogTitle>
-            <DialogDescription className="font-mono text-xs">
+            <DialogDescription className="font-mono text-xs break-all">
               {preset.baseUrl}
             </DialogDescription>
           </DialogHeader>
