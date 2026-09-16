@@ -861,7 +861,12 @@ React Native client planned on the same core code.
     the mode object is memoised, callbacks are `useCallback`.
   - `js/ui/` — React DOM, **shaped like an IDE with the chat where the editor would be**
     (IDEA's interactions, not its looks): `pages/WelcomePage` (recent projects, search, one
-    door to open/create), `pages/ProjectWizard` (two steps: `components/DirectoryPicker` on
+    door to open/create; on top, **what is running now** — `RunningThreads` over
+    `useRunningThreads` (RPC `list_running_threads` on `Longx.Projects.Thread` →
+    `Projects.running_threads/0`: every root thread with status `:active` across projects,
+    its project's slug/name, `waiting` when its ThreadState holds a request for the person;
+    polled every 3 s while the page shows), each a link into the thread, the ones waiting on
+    the person first and amber; nothing running, no section), `pages/ProjectWizard` (two steps: `components/DirectoryPicker` on
     the server's file system — `Longx.System.list_directory`, git repositories marked, hidden
     toggle, typed path — then name / "initialise git" / advanced sandbox+approval+network;
     a repository directory is an *open*, anything else may get `init_git: true`),

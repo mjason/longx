@@ -76,6 +76,7 @@ export const upgradeIdle = {
 export function rpcMock() {
   return {
     listProjects: vi.fn(async () => ok([project(1), project(2)])),
+    listRunningThreads: vi.fn(async () => ok({ threads: [] })),
     getProject: vi.fn(async () => ok(project(1))),
     createProject: vi.fn(),
     updateProject: vi.fn(async () => ok(project(1))),

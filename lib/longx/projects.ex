@@ -43,6 +43,7 @@ defmodule Longx.Projects do
       rpc_action :respond, :respond
       rpc_action :answer_request, :answer_request
       rpc_action :approve_review, :approve_review
+      rpc_action :list_running_threads, :list_running
       rpc_action :rename_thread, :rename
       rpc_action :archive_thread, :archive
       rpc_action :delete_thread, :delete_thread
@@ -107,6 +108,7 @@ defmodule Longx.Projects do
       define :rehost_thread, action: :rehost
       define :list_threads_for_project, action: :for_project, args: [:project_id]
       define :list_threads_with_status, action: :with_status, args: [:project_id, :status]
+      define :list_active_threads, action: :active_roots
       define :list_subagents, action: :subagents_of, args: [:parent_thread_id]
     end
 
@@ -424,6 +426,30 @@ defmodule Longx.Projects do
     |> Enum.map(&Path.expand/1)
     |> Enum.filter(&File.dir?/1)
     |> Enum.uniq()
+  end
+
+  @doc """
+  Every root thread with a turn in flight, across projects, newest activity
+  first — the welcome page's way back into what is running. `waiting` is
+  whether the thread's codex is holding a question for the person (an
+  approval, a permissions request, a `requestUserInput`).
+  """
+  @spec running_threads() :: [map]
+  def running_threads do
+    list_active_threads!(load: :project)
+    |> Enum.map(fn %Thread{} = thread ->
+      %{
+        id: thread.id,
+        codex_thread_id: thread.codex_thread_id,
+        title: thread.title,
+        preview: thread.preview,
+        last_activity_at: thread.last_activity_at,
+        project_id: thread.project_id,
+        project_slug: thread.project.slug,
+        project_name: thread.project.name,
+        waiting: Longx.Codex.ThreadState.Store.requests(thread.codex_thread_id) != []
+      }
+    end)
   end
 
   @doc """

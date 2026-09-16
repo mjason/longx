@@ -392,6 +392,46 @@ defmodule LongxWeb.ProjectsRpcTest do
     end
   end
 
+  describe "running threads" do
+    test "list_running_threads: every thread with a turn in flight, its project, and whether it waits on the person",
+         %{
+           conn: conn,
+           dir: dir
+         } do
+      project = create!(conn, dir)
+      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
+
+      assert %{"success" => true, "data" => %{"threads" => []}} =
+               rpc(conn, "list_running_threads", %{"fields" => ["threads"]})
+
+      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
+        rpc(conn, "start_thread", %{
+          "fields" => ["id", "codexThreadId"],
+          "input" => %{"projectId" => project["id"]}
+        })
+
+      :ok = Longx.Codex.Thread.subscribe(codex_id)
+
+      %{"success" => true} =
+        rpc(conn, "send_message", %{
+          "fields" => ["id"],
+          "input" => %{"threadId" => thread_id, "text" => "approve make"}
+        })
+
+      assert_receive {:codex, _, "item/commandExecution/requestApproval", _}, 10_000
+
+      assert %{"success" => true, "data" => %{"threads" => [running]}} =
+               rpc(conn, "list_running_threads", %{"fields" => ["threads"]})
+
+      assert running["id"] == thread_id
+      assert running["projectSlug"] == project["slug"]
+      assert running["projectName"] == "Demo App"
+      assert running["preview"] == "approve make"
+      assert running["waiting"] == true
+      assert is_binary(running["lastActivityAt"])
+    end
+  end
+
   describe "questions" do
     test "answer_request answers codex's requestUserInput with the answers map", %{
       conn: conn,

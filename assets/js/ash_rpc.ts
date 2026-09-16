@@ -4995,6 +4995,72 @@ export async function validateInterruptTurn(
 }
 
 
+export type ListRunningThreadsFields = UnifiedFieldSelection<{threads: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "threads"}>[];
+
+export type InferListRunningThreadsResult<
+  Fields extends ListRunningThreadsFields | undefined,
+> = InferResult<{threads: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "threads"}, Fields>;
+
+export type ListRunningThreadsResult<Fields extends ListRunningThreadsFields | undefined = undefined> = | { success: true; data: InferListRunningThreadsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function listRunningThreads<Fields extends ListRunningThreadsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListRunningThreadsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "list_running_threads",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ListRunningThreadsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateListRunningThreads(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_running_threads",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type RenameThreadInput = {
   title?: string | null;
 };

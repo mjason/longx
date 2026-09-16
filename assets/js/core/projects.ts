@@ -9,6 +9,7 @@ import {
   createDirectory,
   listDirectory,
   listModels,
+  listRunningThreads,
   listTurns,
   redoTurn,
   restoreFiles,
@@ -126,7 +127,32 @@ export const queryKeys = {
   models: ["models"] as const,
   turns: (threadId: string) => ["turns", threadId] as const,
   subagents: (threadId: string) => ["subagents", threadId] as const,
+  running: ["running-threads"] as const,
 };
+
+/** A thread with a turn in flight, anywhere (the welcome page's way back in). */
+export type RunningThread = {
+  id: string;
+  codexThreadId: string;
+  title: string | null;
+  preview: string | null;
+  lastActivityAt: string | null;
+  projectId: string;
+  projectSlug: string;
+  projectName: string;
+  /** codex holds a question for the person (an approval, a permissions request…) */
+  waiting: boolean;
+};
+
+/** Every running thread, refreshed every few seconds while the caller shows. */
+export function useRunningThreads(intervalMs = 3000) {
+  return useQuery({
+    queryKey: queryKeys.running,
+    queryFn: async () =>
+      unwrap(await listRunningThreads({ fields: ["threads"] })).threads as RunningThread[],
+    refetchInterval: intervalMs,
+  });
+}
 
 export function useProjects() {
   return useQuery({

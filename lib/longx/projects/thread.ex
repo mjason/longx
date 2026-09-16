@@ -326,6 +326,22 @@ defmodule Longx.Projects.Thread do
       prepare build(sort: [inserted_at: :asc])
     end
 
+    read :active_roots do
+      filter expr(status == :active and is_nil(parent_thread_id))
+      prepare build(sort: [last_activity_at: :desc_nils_last, inserted_at: :desc])
+    end
+
+    # the welcome page: what is running right now, with a way back to it
+    # (entries are untyped maps, camelCased here — arrays of typed maps are
+    # not selectable in ash_typescript 0.18)
+    action :list_running, :map do
+      constraints fields: [threads: [type: {:array, :map}, allow_nil?: false]]
+
+      run fn _input, _ ->
+        {:ok, %{threads: Enum.map(Longx.Projects.running_threads(), &camelize/1)}}
+      end
+    end
+
     read :with_status do
       argument :project_id, :uuid, allow_nil?: false
       argument :status, :atom, allow_nil?: false
@@ -438,6 +454,17 @@ defmodule Longx.Projects.Thread do
     do: {:ok, {kind, value}}
 
   defp review_target(_), do: argument_error(:value, "is required for this target")
+
+  # an untyped map crosses the wire as is: camelCase it here (dates as ISO strings)
+  defp camelize(map) do
+    Map.new(map, fn {key, value} ->
+      <<first, rest::binary>> = key |> Atom.to_string() |> Macro.camelize()
+      {<<String.downcase(<<first>>)::binary, rest::binary>>, wire_value(value)}
+    end)
+  end
+
+  defp wire_value(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp wire_value(value), do: value
 
   defp invalid_review(message) do
     {:error,
