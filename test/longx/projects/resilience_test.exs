@@ -238,7 +238,8 @@ defmodule Longx.Projects.ResilienceTest do
     {:ok, turn} = Projects.send_message(thread, "stall")
     done = eventually(turn_status(turn.id, :interrupted))
     assert done.error =~ "no progress"
-    assert %{status: :idle} = Ash.get!(Thread, thread.id)
+    # the thread row is written right after the turn's: poll it too
+    assert %{status: :idle} = eventually(thread_status(thread.id, :idle))
   end
 
   describe "sub-agents" do

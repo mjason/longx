@@ -232,12 +232,49 @@ defmodule FakeAppServer do
     |> remember(new_id)
   end
 
+  # the paginated history codex wants clients to use (thread/read with
+  # includeTurns is deprecated for paginated threads): turns oldest first,
+  # `limit` per page, the cursor an offset
   defp handle(
-         %{"id" => id, "method" => "thread/read", "params" => %{"threadId" => thread_id}},
+         %{
+           "id" => id,
+           "method" => "thread/turns/list",
+           "params" => %{"threadId" => thread_id} = params
+         },
+         state
+       ) do
+    all = state.threads |> get_in([thread_id, :turns]) |> List.wrap() |> Enum.reverse()
+    all = if params["sortDirection"] == "desc", do: Enum.reverse(all), else: all
+    offset = String.to_integer(params["cursor"] || "0")
+    limit = params["limit"] || 100
+    page = all |> Enum.drop(offset) |> Enum.take(limit)
+    next = if offset + limit < length(all), do: Integer.to_string(offset + limit)
+    reply(id, %{"data" => page, "nextCursor" => next, "backwardsCursor" => nil})
+
+    update_in(
+      state,
+      [:threads, thread_id],
+      &Map.update(&1 || %{turns: []}, :turns_list_calls, 1, fn n -> n + 1 end)
+    )
+  end
+
+  defp handle(
+         %{
+           "id" => id,
+           "method" => "thread/read",
+           "params" => %{"threadId" => thread_id} = params
+         },
          state
        ) do
     entry = Map.get(state.threads, thread_id, %{turns: []})
     turns = entry |> Map.get(:turns) |> Enum.reverse()
+    # what codex deprecates: asked for the whole history in one read
+    if params["includeTurns"] == true,
+      do:
+        notify("deprecationNotice", %{
+          "summary" => "Full-history hydration is deprecated for paginated threads",
+          "details" => nil
+        })
 
     reply(id, %{
       "thread" => %{
@@ -251,6 +288,7 @@ defmodule FakeAppServer do
         "approvedGuardianEvents" => Map.get(entry, :approved_guardian, []),
         "settings" => Map.get(entry, :settings),
         "watches" => Map.get(state, :watches, %{}),
+        "turnsListCalls" => Map.get(entry, :turns_list_calls, 0),
         "compacted" => Map.get(entry, :compacted, 0)
       }
     })

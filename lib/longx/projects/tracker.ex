@@ -87,14 +87,21 @@ defmodule Longx.Projects.Tracker do
     {:noreply, state}
   end
 
-  def handle_info({:codex_server, project_id, method, params}, state)
-      when is_binary(project_id) and method in ["configWarning", "deprecationNotice"] do
+  def handle_info({:codex_server, project_id, "configWarning", params}, state)
+      when is_binary(project_id) do
     Projects.broadcast_notice(project_id, %{
-      kind: method,
+      kind: "configWarning",
       summary: params["summary"],
       details: params["details"]
     })
 
+    {:noreply, state}
+  end
+
+  # a deprecation notice is addressed to Longx (the client), not the person:
+  # logged, so a codex bump that retires something Longx calls is noticed
+  def handle_info({:codex_server, _project_id, "deprecationNotice", params}, state) do
+    Logger.warning("codex deprecation: #{params["summary"]} #{params["details"] || ""}")
     {:noreply, state}
   end
 
