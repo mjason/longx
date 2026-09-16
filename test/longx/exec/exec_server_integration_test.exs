@@ -112,6 +112,19 @@ defmodule Longx.Exec.ExecServerIntegrationTest do
     refute File.exists?(probe)
   end
 
+  test "apply_patch is on a command's PATH: codex's own alias, which the built-in executor puts there and the exec-server has to",
+       %{bypass: bypass, gateway_url: gateway_url} do
+    patch = "*** Begin Patch\n*** Add File: notes.txt\n+hello from apply_patch\n*** End Patch"
+    script(bypass, self(), %{cmd: "apply_patch <<'PATCH'\n#{patch}\nPATCH\ncat notes.txt"})
+
+    home = prepare_home!(gateway_url, exec_server_url: exec_server_url!(gateway_url))
+    conn = start_connection!(home)
+    output = run!(conn, home, [])
+
+    assert output =~ "hello from apply_patch"
+    assert File.read!(Path.join(home.dir, "notes.txt")) == "hello from apply_patch\n"
+  end
+
   test "no network means no network — a local socket still answers (CUDA's driver socket, a daemon)",
        %{bypass: bypass, gateway_url: gateway_url} do
     sock = Path.join(System.tmp_dir!(), "longx-exec-#{System.unique_integer([:positive])}.sock")

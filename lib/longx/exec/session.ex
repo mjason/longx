@@ -355,7 +355,10 @@ defmodule Longx.Exec.Session do
          id: id,
          argv: wrapped,
          cwd: cwd,
-         env: Env.build(System.get_env(), params["envPolicy"], params["env"] || %{}),
+         env:
+           Env.build(System.get_env(), params["envPolicy"], params["env"] || %{},
+             tool_bin: Longx.Codex.Home.tool_bin()
+           ),
          tty: params["tty"] || false,
          pipe_stdin: params["pipeStdin"] || false,
          sandbox: kind,

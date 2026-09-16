@@ -591,7 +591,12 @@ React Native client planned on the same core code.
   all/core/none, excludes, `set`, `includeOnly`, then codex's overlay; **`*KEY*`, `*SECRET*`,
   `*TOKEN*`, `LONGX_*` and codex's non-inheritable names never reach a command whatever
   the policy says** — codex-local strips the first three too; the shim runs commands with
-  `env_clear: true`, exactly that environment); `Longx.Exec.Policy` (the request's
+  `env_clear: true`, exactly that environment; **`Home.tool_bin/0` leads every command's
+  PATH** (`tool_bin:` option): `<data>/codex_home/bin/apply_patch`, a symlink to the bundled
+  codex binary that `Home.prepare/1` (re)points — codex dispatches on arg0, and its built-in
+  executor made the same alias in a temp dir on *its own* PATH, which a command inherited
+  there; under the exec-server a command inherits Longx's PATH, and `apply_patch` was
+  "command not found" until 0.1.17 — proven in `exec_server_integration_test`); `Longx.Exec.Policy` (the request's
   `FileSystemSandboxContext` — `managed` with `entries` of special paths `root` /
   `project_roots(+subpath)` / `slash_tmp` / `tmpdir`, plain paths and globs, `disabled`,
   `external` — into writable roots, read-only pockets (`.git`, `.codex`), denied paths,

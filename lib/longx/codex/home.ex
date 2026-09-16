@@ -102,7 +102,8 @@ defmodule Longx.Codex.Home do
     with :ok <- File.mkdir_p(dir),
          :ok <- File.write(catalog_path, catalog),
          :ok <- File.write(config_path, config),
-         :ok <- write_environments(dir, Keyword.get(opts, :exec_server_url)) do
+         :ok <- write_environments(dir, Keyword.get(opts, :exec_server_url)),
+         :ok <- link_tools() do
       {:ok,
        %__MODULE__{
          dir: dir,
@@ -119,6 +120,39 @@ defmodule Longx.Codex.Home do
   end
 
   @environments_file "environments.toml"
+
+  @doc """
+  The directory of Longx's own command-line tools for the agent, shared by
+  every home: `apply_patch`, a symlink to the bundled codex binary (codex
+  dispatches on its arg0 — its built-in executor makes the same alias in a
+  temp dir on its own PATH). The exec-server puts it first on every
+  command's PATH (`Longx.Exec.Env`).
+  """
+  @spec tool_bin() :: Path.t()
+  def tool_bin, do: Path.join(default_dir(), "bin")
+
+  # (re)points the alias at the codex binary; nothing to link while codex is
+  # not installed (unit tests run a fake)
+  defp link_tools do
+    case Longx.Codex.Runtime.executable() do
+      {:ok, exe} ->
+        link = Path.join(tool_bin(), "apply_patch")
+
+        with :ok <- File.mkdir_p(tool_bin()) do
+          case File.read_link(link) do
+            {:ok, ^exe} ->
+              :ok
+
+            _ ->
+              File.rm(link)
+              File.ln_s(exe, link)
+          end
+        end
+
+      {:error, _} ->
+        :ok
+    end
+  end
 
   # codex reads `<CODEX_HOME>/environments.toml` at start (exec-server's
   # `environment_toml.rs`): `default` names the environment every thread

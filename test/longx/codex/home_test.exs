@@ -322,6 +322,31 @@ defmodule Longx.Codex.HomeTest do
     assert review["default_reasoning_level"] == "medium"
   end
 
+  test "prepare/1 links codex's apply_patch alias into the shared tool directory the exec-server puts on every command's PATH",
+       %{dir: dir} do
+    File.mkdir_p!(dir)
+    fake_codex = Path.join(dir, "codex-app-server")
+    File.write!(fake_codex, "#!/bin/sh\n")
+    System.put_env("LONGX_CODEX_APP_SERVER", fake_codex)
+    on_exit(fn -> System.delete_env("LONGX_CODEX_APP_SERVER") end)
+
+    {:ok, _} =
+      Home.prepare(dir: Path.join(dir, "home"), gateway_url: "http://127.0.0.1:4242/ai/v1")
+
+    link = Path.join(Home.tool_bin(), "apply_patch")
+    assert {:ok, ^fake_codex} = File.read_link(link)
+
+    # a moved binary (a codex bump) re-points the link
+    other = Path.join(dir, "codex-app-server-2")
+    File.write!(other, "#!/bin/sh\n")
+    System.put_env("LONGX_CODEX_APP_SERVER", other)
+
+    {:ok, _} =
+      Home.prepare(dir: Path.join(dir, "home"), gateway_url: "http://127.0.0.1:4242/ai/v1")
+
+    assert {:ok, ^other} = File.read_link(link)
+  end
+
   test "stale/2 says which of the written files no longer match what prepare would write", %{
     dir: dir
   } do
