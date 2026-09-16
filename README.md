@@ -208,7 +208,9 @@ codex 自带的 goal 机制；模型也有 `create_goal` 工具，但只在你�
 
 - **桥**：页面里有 `LongxAndroid.post(json)`（iOS 是 `webkit.messageHandlers.longx`）时，页面装上 `window.LongxShell`。
   页面 → 壳：`{"type":"ready","version":1,"theme":{…}}`、`{"type":"theme","theme":{"scheme":"dark","frame":"#15171c","ground":"#1c1e24"}}`
-  （拿去刷状态栏/导航栏颜色）、`{"type":"openExternal","url":…}`（交给系统浏览器）。
+  （拿去刷状态栏/导航栏颜色）、`{"type":"openExternal","url":…}`（交给系统浏览器）、
+  `{"type":"pick","id":…,"title":"模型","sections":[{"label":"DeepSeek","options":[{"id":…,"label":…,"detail":…}]}],"selected":…}`
+  （请壳弹一个原生的单选列表，选完调 `LongxShell.picked(id, optionId)`，取消传 null——手机上 popover 难用，模型/思考档位就这样选）。
   壳 → 页面：`LongxShell.back()` 返回 true 表示关掉了一个抽屉/弹窗（false 就自己 `goBack()` 或退后台）、
   `LongxShell.navigate("/p/<slug>/t/<id>")` 处理通知深链接、`LongxShell.resume()` 回前台时重连。
 - **通知 feed**：Phoenix channel `notify`（`ws://<host>/socket/websocket?vsn=2.0.0`，消息是 `[join_ref, ref, topic, event, payload]`：

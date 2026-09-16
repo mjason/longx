@@ -3,8 +3,8 @@
 // .longx`). Everything is asynchronous JSON in both directions, the smallest
 // contract both platforms can implement:
 //
-//   page → shell   shellPost({type, …})           ready · theme · openExternal
-//   shell → page   window.LongxShell.<fn>(…)      back() · navigate(path) · resume()
+//   page → shell   shellPost({type, …})           ready · theme · openExternal · pick
+//   shell → page   window.LongxShell.<fn>(…)      back() · navigate(path) · resume() · picked(id, value)
 //
 // In a plain browser nothing is installed and every call is a no-op.
 
@@ -12,10 +12,16 @@ export type ShellPlatform = "android" | "ios";
 
 export type ShellTheme = { scheme: "dark" | "light"; frame: string; ground: string };
 
+/** A native single-choice list: sections of options, one selected; the answer is `picked(id, optionId | null)`. */
+export type ShellPickOption = { id: string; label: string; detail?: string };
+export type ShellPickSection = { label?: string; options: ShellPickOption[] };
+export type ShellPickRequest = { title: string; sections: ShellPickSection[]; selected: string | null };
+
 export type ShellMessage =
   | { type: "ready"; version: number; theme: ShellTheme }
   | { type: "theme"; theme: ShellTheme }
-  | { type: "openExternal"; url: string };
+  | { type: "openExternal"; url: string }
+  | ({ type: "pick"; id: string } & ShellPickRequest);
 
 export type ShellApi = {
   version: number;
@@ -25,6 +31,8 @@ export type ShellApi = {
   navigate: (path: string) => void;
   /** back from the background: reconnect and refetch */
   resume: () => void;
+  /** the answer to a `pick`: the chosen option's id, null when dismissed */
+  picked: (id: string, value: string | null) => void;
 };
 
 type AndroidBridge = { post: (json: string) => void };
@@ -80,6 +88,29 @@ export function closeTopLayer(): boolean {
   return true;
 }
 
+const picks = new Map<string, (value: string | null) => void>();
+let pickSeq = 0;
+
+/**
+ * Asks the shell for a native single-choice list (a bottom sheet on Android)
+ * — a popover is a poor fit for a phone. Resolves with the option picked,
+ * null when dismissed. Only meaningful while a shell is present.
+ */
+export function shellPick(request: ShellPickRequest): Promise<string | null> {
+  const id = `pick-${++pickSeq}`;
+  return new Promise((resolve) => {
+    picks.set(id, resolve);
+    shellPost({ type: "pick", id, ...request });
+  });
+}
+
+function picked(id: string, value: string | null): void {
+  const resolve = picks.get(id);
+  if (!resolve) return;
+  picks.delete(id);
+  resolve(value);
+}
+
 export type ShellHandlers = {
   navigate: (path: string) => void;
   resume: () => void;
@@ -103,6 +134,7 @@ export function installShell(handlers: ShellHandlers): () => void {
     back: closeTopLayer,
     navigate: handlers.navigate,
     resume: handlers.resume,
+    picked,
   };
 
   const vv = window.visualViewport;

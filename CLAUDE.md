@@ -1049,7 +1049,12 @@ React Native client planned on the same core code.
     both platforms can implement; a browser has neither and nothing is installed. Page →
     shell: `ready {version, theme}` (on mount; twice under StrictMode, harmless), `theme
     {scheme, frame, ground}` (our `--sidebar` / `--background` for the shell's own bars),
-    `openExternal {url}` (a link to another origin — intercepted on click). Shell → page:
+    `openExternal {url}` (a link to another origin — intercepted on click), `pick {id, title,
+    sections: [{label?, options: [{id, label, detail?}]}], selected}` (`shellPick()` — a
+    native single-choice list, a bottom sheet on Android, answered by `LongxShell.picked(id,
+    optionId | null)`; a popover is a poor fit for a phone: inside a shell `ComposerTrailing`
+    asks for the model this way, then its levels when it has them, instead of opening the
+    model-selector popover). Shell → page:
     `window.LongxShell.back()` (closes the top Radix layer — dialog / sheet / popover /
     menu — with an Escape and returns true; false = nothing open, the shell goes back
     itself), `navigate(path)` (a notification's deep link, in-app), `resume()` (back from

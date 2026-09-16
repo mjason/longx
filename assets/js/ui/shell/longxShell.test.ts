@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { closeTopLayer, installShell, shellPost, shellPresent } from "./longxShell";
+import { closeTopLayer, installShell, shellPick, shellPost, shellPresent } from "./longxShell";
 
 // the Android shell injects `LongxAndroid.post(json)`; iOS will inject
 // `webkit.messageHandlers.longx`; a browser has neither
@@ -69,6 +69,30 @@ describe("LongxShell bridge", () => {
     post.mockClear();
     document.getElementById("int")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     expect(post).not.toHaveBeenCalled();
+  });
+
+  test("pick: a native single-choice list — the request goes out, the answer comes back through LongxShell.picked", async () => {
+    installShell({ navigate: vi.fn(), resume: vi.fn() });
+    post.mockClear();
+    const choice = shellPick({
+      title: "模型",
+      sections: [{ label: "DeepSeek", options: [{ id: "deepseek-flash", label: "deepseek-flash", detail: "1M" }] }],
+      selected: "deepseek-flash",
+    });
+    const msg = JSON.parse(post.mock.calls[0]![0] as string);
+    expect(msg.type).toBe("pick");
+    expect(msg.title).toBe("模型");
+    expect(msg.sections[0].options[0].id).toBe("deepseek-flash");
+    expect(typeof msg.id).toBe("string");
+    window.LongxShell!.picked(msg.id, "deepseek-flash");
+    await expect(choice).resolves.toBe("deepseek-flash");
+
+    // dismissed: null; an unknown id is ignored
+    const second = shellPick({ title: "x", sections: [], selected: null });
+    const id2 = JSON.parse(post.mock.calls[1]![0] as string).id;
+    window.LongxShell!.picked("nope", "a");
+    window.LongxShell!.picked(id2, null);
+    await expect(second).resolves.toBeNull();
   });
 
   test("the keyboard: the visual viewport's height becomes --app-height", () => {

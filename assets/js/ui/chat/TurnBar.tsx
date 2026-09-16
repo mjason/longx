@@ -15,6 +15,8 @@ import {
   ModelSelectorTrigger,
   type ModelOption,
 } from "@/ui/components/assistant-ui/elements/model-selector";
+import { Button } from "@/ui/components/ui/button";
+import { shellPick, shellPresent } from "@/ui/shell/longxShell";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 import { ModePicker } from "./ModePicker";
@@ -110,17 +112,74 @@ export function ComposerTrailing() {
   // one object per token-usage update: the ring stores what it is given and
   // re-syncs (a render-phase setState) whenever the identity changes
   const usage = useMemo(() => contextUsage(view), [view.tokenUsage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // inside a native shell the popover gives way to the shell's own list
+  // (a bottom sheet): the model, then — when it has them — its levels
+  const pickNatively = async () => {
+    const slug = await shellPick({
+      title: t.model,
+      sections: groups.map(([name, group]) => ({
+        label: name,
+        options: group.map((o) => ({ id: o.id, label: o.name, detail: o.description })),
+      })),
+      selected: selected ?? null,
+    });
+    if (slug === null) return;
+    setModel(slug === current ? null : slug);
+    const picked = rows.find((m) => m.slug === slug);
+    if (!picked || picked.reasoningLevels.length === 0) return;
+    const level = await shellPick({
+      title: t.reasoningLevel,
+      sections: [{ options: picked.reasoningLevels.map((l) => ({ id: l, label: effortLabel(l) })) }],
+      selected: (slug === selected ? shownEffort : null) ?? picked.reasoningEffort ?? null,
+    });
+    if (level !== null) setEffort(level);
+  };
+
+  const label = row ? (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="truncate">{row.slug}</span>
+      {shownEffort ? (
+        <span className="text-muted-foreground hidden sm:inline">
+          {effortLabel(shownEffort)}
+        </span>
+      ) : null}
+    </span>
+  ) : (
+    <span className="text-muted-foreground">{t.defaultModel}</span>
+  );
+
+  const ring = usage ? (
+    <ContextDisplay.Ring
+      modelContextWindow={usage.modelContextWindow}
+      usage={usage.usage}
+      resetKey={view.threadId}
+      labels={t.context}
+      className="h-7"
+    />
+  ) : null;
+
+  if (shellPresent()) {
+    return (
+      <>
+        {ring}
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={t.model}
+          className="h-7 max-w-[42vw] gap-1 px-2 font-mono text-xs sm:max-w-none"
+          data-testid="model-picker"
+          onClick={() => void pickNatively()}
+        >
+          {label}
+        </Button>
+      </>
+    );
+  }
+
   return (
     <>
-      {usage ? (
-        <ContextDisplay.Ring
-          modelContextWindow={usage.modelContextWindow}
-          usage={usage.usage}
-          resetKey={view.threadId}
-          labels={t.context}
-          className="h-7"
-        />
-      ) : null}
+      {ring}
       <ModelSelectorRoot
         models={options}
         value={selected}
@@ -135,18 +194,7 @@ export function ComposerTrailing() {
           className="h-7 max-w-[42vw] gap-1 px-2 font-mono text-xs sm:max-w-none"
           data-testid="model-picker"
         >
-          {row ? (
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate">{row.slug}</span>
-              {shownEffort ? (
-                <span className="text-muted-foreground hidden sm:inline">
-                  {effortLabel(shownEffort)}
-                </span>
-              ) : null}
-            </span>
-          ) : (
-            <span className="text-muted-foreground">{t.defaultModel}</span>
-          )}
+          {label}
         </ModelSelectorTrigger>
         <ModelSelectorContent
           align="end"

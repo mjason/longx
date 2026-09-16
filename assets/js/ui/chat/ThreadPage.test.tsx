@@ -119,6 +119,47 @@ describe("ThreadPage", () => {
     );
   });
 
+  test("inside a native shell the model picker is the shell's own list: model, then its levels; the choice rides on the turn", async () => {
+    const posts: Record<string, unknown>[] = [];
+    window.LongxAndroid = { post: (json: string) => posts.push(JSON.parse(json)) };
+    try {
+      const user = userEvent.setup();
+      vi.mocked(listModels).mockResolvedValue(
+        ok([
+          model(1, { slug: "deepseek-flash", default: true, reasoningLevels: ["low", "high", "max"], reasoningEffort: "high" }),
+          model(2, { slug: "glm-5", reasoningLevels: ["low", "high"], reasoningEffort: "high" }),
+        ]) as never,
+      );
+      await open();
+      await waitFor(() => expect(window.LongxShell).toBeDefined());
+      await user.click(screen.getByTestId("model-picker"));
+      // no popover: a pick request instead, models grouped by provider
+      expect(screen.queryByRole("option", { name: /glm-5/ })).not.toBeInTheDocument();
+      const pick = posts.find((p) => p["type"] === "pick") as { id: string; title: string; sections: { label: string; options: { id: string }[] }[]; selected: string };
+      expect(pick.title).toBe("模型");
+      expect(pick.selected).toBe("deepseek-flash");
+      expect(pick.sections.flatMap((s) => s.options.map((o) => o.id))).toEqual(["deepseek-flash", "glm-5"]);
+      window.LongxShell!.picked(pick.id, "glm-5");
+      // the model has levels: a second list, the model's default preselected
+      await waitFor(() => expect(posts.filter((p) => p["type"] === "pick")).toHaveLength(2));
+      const levels = posts.filter((p) => p["type"] === "pick")[1] as { id: string; title: string; sections: { options: { id: string }[] }[]; selected: string };
+      expect(levels.title).toBe("思考");
+      expect(levels.selected).toBe("high");
+      expect(levels.sections[0]!.options.map((o) => o.id)).toEqual(["low", "high"]);
+      window.LongxShell!.picked(levels.id, "low");
+      await waitFor(() => expect(screen.getByTestId("model-picker")).toHaveTextContent("glm-5"));
+      await user.type(screen.getByRole("textbox", { name: "随心输入" }), "go{Enter}");
+      await waitFor(() =>
+        expect(sendMessage).toHaveBeenCalledWith(
+          expect.objectContaining({ input: expect.objectContaining({ model: "glm-5", effort: "low" }) }),
+        ),
+      );
+    } finally {
+      delete window.LongxAndroid;
+      delete window.LongxShell;
+    }
+  });
+
   test("the model picker offers the model's reasoning levels; the picked level rides on the turn and the new-chat start", async () => {
     const user = userEvent.setup();
     vi.mocked(listModels).mockResolvedValue(
