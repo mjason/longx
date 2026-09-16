@@ -984,7 +984,11 @@ React Native client planned on the same core code.
     mode for the next turn: sandbox / approval / network in a popover, from the thread row
     or the project defaults, sent with every message — and the turn's state) /
     `ComposerTrailing` (the `context-display` ring — codex's last-turn token usage
-    against the `modelContextWindow` it reports, `contextUsage(view)` — and the per-turn
+    against the `modelContextWindow` it reports, `contextUsage(view)`; **its breakdown is a
+    click-to-open popover, not the registry's hover tooltip**: the composer sits in the
+    thread's scrolling viewport (`ViewportFooter`) and Radix's tooltip closes itself
+    whenever an ancestor of its trigger scrolls, which the auto-scroll did on every
+    streamed line — and the per-turn
     model with its reasoning level: the registry's **`model-selector`** element used
     standalone (`ModelSelectorRoot` with our `value` / `effort`; no model-context
     registration — our RPC carries the choice), models grouped by provider,
