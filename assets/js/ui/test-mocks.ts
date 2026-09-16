@@ -656,6 +656,7 @@ export function socketMock(status: "open" | "closed" = "open") {
   return {
     socketStatus: () => status,
     onSocketStatus: () => () => {},
+    reconnectSocket: () => {},
     getSocket: () => ({
       channel: (topic: string) => {
         channel.topics.push(topic);

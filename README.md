@@ -201,6 +201,22 @@ codex 自带的 goal 机制；模型也有 `create_goal` 工具，但只在你�
 - **容器和部分虚拟机**允许用户命名空间但建不了网络命名空间（`bwrap: loopback: Failed RTM_NEWADDR`）：codex 只在命令不能联网时
   才隔离网络，所以「联网与本机服务」打开时沙箱正常，关着时每条命令都会被拒绝。设置页会标成「可用，但断网隔离不可用」。
 
+## 手机：Android 壳
+
+局域网裸 HTTP 装不了 PWA，所以手机端是一个自己的 WebView 壳：[longx-android](https://github.com/mjason/longx-android)
+（首次启动填服务器地址，之后可改；返回键先关抽屉和弹窗；通知不依赖 FCM）。它靠 Longx 的两样东西，写别的壳（iOS）也是这两样：
+
+- **桥**：页面里有 `LongxAndroid.post(json)`（iOS 是 `webkit.messageHandlers.longx`）时，页面装上 `window.LongxShell`。
+  页面 → 壳：`{"type":"ready","version":1,"theme":{…}}`、`{"type":"theme","theme":{"scheme":"dark","frame":"#15171c","ground":"#1c1e24"}}`
+  （拿去刷状态栏/导航栏颜色）、`{"type":"openExternal","url":…}`（交给系统浏览器）。
+  壳 → 页面：`LongxShell.back()` 返回 true 表示关掉了一个抽屉/弹窗（false 就自己 `goBack()` 或退后台）、
+  `LongxShell.navigate("/p/<slug>/t/<id>")` 处理通知深链接、`LongxShell.resume()` 回前台时重连。
+- **通知 feed**：Phoenix channel `notify`（`ws://<host>/socket/websocket?vsn=2.0.0`，消息是 `[join_ref, ref, topic, event, payload]`：
+  加入 `["1","1","notify","phx_join",{}]`，每 30 s 心跳 `[null,"2","phoenix","heartbeat",{}]`）。加入的回复带 `running`（正在跑的会话，
+  `waiting` 为 true 的在等你）；之后每条 `"event"` 是
+  `{"kind":"approval"|"turn_completed"|"turn_failed"|"codex_down","title":…,"body":…,"url":"/p/<slug>/t/<id>","project_id":…,"thread_id":…,"at":…}`，
+  `url` 前面拼上自己的服务器地址就是要打开的页面。
+
 ## 结构一览
 
 ```

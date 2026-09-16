@@ -5,6 +5,7 @@ defmodule LongxWeb.UserSocket do
 
   channel "thread:*", LongxWeb.ThreadChannel
   channel "project:*", LongxWeb.ProjectChannel
+  channel "notify", LongxWeb.NotifyChannel
 
   @impl true
   def connect(params, socket, connect_info) do

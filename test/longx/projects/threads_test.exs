@@ -831,6 +831,28 @@ defmodule Longx.Projects.ThreadsTest do
       assert {:error, :not_running} = Projects.retract_turn(thread, asking, conn: conn)
     end
 
+    test "the notify feed hears about a turn waiting on the person and a turn done",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      :ok = Phoenix.PubSub.subscribe(Longx.PubSub, Longx.Notify.topic())
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      :ok = Longx.Codex.Thread.subscribe(thread.codex_thread_id)
+      url = "/p/#{project.slug}/t/#{thread.id}"
+
+      # an approval request = the turn waits on the person
+      {:ok, asking} = Projects.send_message(thread, "approve ls", conn: conn)
+
+      assert_receive {:codex, _, "item/commandExecution/requestApproval", %{"requestId" => rid}},
+                     5_000
+
+      assert_receive {:notify, %{kind: "approval", url: ^url, body: body, thread_id: tid}}, 5_000
+      assert body =~ "ls"
+      assert tid == thread.id
+      :ok = Longx.Codex.Thread.respond(rid, :decline, conn: conn)
+      eventually(turn_done(asking.id))
+      assert_receive {:notify, %{kind: "turn_completed", url: ^url}}, 5_000
+    end
+
     test "a turn reverted while it was still ending stays reverted when its turn/completed lands",
          %{dir: dir, conn: conn} do
       project = git_project!(dir)

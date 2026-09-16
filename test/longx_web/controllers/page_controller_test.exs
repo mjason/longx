@@ -46,6 +46,8 @@ defmodule LongxWeb.PageControllerTest do
       html = conn |> get(~p"/") |> html_response(200)
       assert html =~ ~s(rel="manifest")
       assert html =~ "viewport-fit=cover"
+      # a WebView / Chromium resizes the layout viewport for the keyboard
+      assert html =~ "interactive-widget=resizes-content"
       assert html =~ ~s(name="theme-color")
     end
   end

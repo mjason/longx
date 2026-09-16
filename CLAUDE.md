@@ -604,7 +604,21 @@ React Native client planned on the same core code.
     client invalidates the tree and git status (`invalidateFiles`); `configWarning` →
     `broadcast_notice/2` → `"notice"` → a toast (`deprecationNotice` is only logged); `model/rerouted`
     (thread-scoped) reaches the client as a signal (`useThreadView(_, onSignal)` →
-    `ChatProvider` toast "模型已切换"). Dev aid: `config :longx, Longx.AI.Gateway, dump_requests_to:`
+    `ChatProvider` toast "模型已切换").
+  - **The notify feed — `Longx.Notify`** (`lib/longx/notify.ex`): one event shape for what
+    the person should hear about across projects, `%{kind, title, body, url, project_id,
+    thread_id, at}` — `kind` `approval` (a request waiting on them: an approval, a
+    permission, a question; `body` the command / reason) | `turn_completed` |
+    `turn_failed` (the error, or "codex 退出了…" from the Tracker's `codex_down`) |
+    `codex_down`; `url` is an SPA path, `/p/<slug>/t/<root thread id>` (a sub-agent's row
+    points at its parent's page — `Projects.notify/3`, `thread_label/1`). The Tracker
+    pushes them (root threads only for turn ends; every `*/requestApproval` /
+    `requestUserInput` / elicitation event with a `requestId`). Delivery is
+    `LongxWeb.NotifyChannel` (`notify` on the user socket): the join reply carries
+    `running` (`Projects.running_threads/0`, `waiting` marked) so a client that was away
+    sees the state, then one `"event"` push per event — what the Android shell's foreground
+    service joins to raise notifications without FCM; APNs for iOS is the planned second
+    leg with the same payload. `PubSub.broadcast(topic/0, {:notify, event})`. Dev aid: `config :longx, Longx.AI.Gateway, dump_requests_to:`
     writes what the model actually receives.
     Standalone = codex's `ext/web-search`: with the feature on codex offers a `web.run`
     namespace tool and,
@@ -1028,6 +1042,23 @@ React Native client planned on the same core code.
     `useTools`, `useAiActions`, `useProbeSandbox`; every write invalidates `["ai"]` and
     the composer's model list). Appearance is the theme,
     `components/CommandPalette` (⌘K, desktop), `sonner` toasts for codex down/ready.
+    **The native-shell bridge** (`ui/shell/longxShell.ts`, mounted as `ShellBridge` in
+    `Shell`): the Android app (github.com/mjason/longx-android, a WebView loading the SPA
+    from the address the person typed; iOS later) injects `LongxAndroid.post(json)` (iOS:
+    `webkit.messageHandlers.longx`) — asynchronous JSON both ways, the smallest contract
+    both platforms can implement; a browser has neither and nothing is installed. Page →
+    shell: `ready {version, theme}` (on mount; twice under StrictMode, harmless), `theme
+    {scheme, frame, ground}` (our `--sidebar` / `--background` for the shell's own bars),
+    `openExternal {url}` (a link to another origin — intercepted on click). Shell → page:
+    `window.LongxShell.back()` (closes the top Radix layer — dialog / sheet / popover /
+    menu — with an Escape and returns true; false = nothing open, the shell goes back
+    itself), `navigate(path)` (a notification's deep link, in-app), `resume()` (back from
+    the background: `reconnectSocket()` tears a dead socket down and reopens it at once,
+    every query invalidated). `<html data-shell="android">` while installed; the bridge
+    keeps `--app-height` at `visualViewport.height` and `app.css` makes `h-dvh` /
+    `min-h-dvh` follow it under `[data-shell]` — the keyboard shrinks the visual viewport,
+    a WebView does not always resize the layout one, and the composer sat under the
+    keyboard. The viewport meta also says `interactive-widget=resizes-content`.
     `routes.tsx` (react-router, browser history; tests use a memory router via
     `ui/test-utils.tsx`, shared `vi.mock` factories in `ui/test-mocks.ts`), `shell/` (Shell,
     TopBar `wide` for the IDE window, Page, BottomBar — **fixed at the bottom on every screen

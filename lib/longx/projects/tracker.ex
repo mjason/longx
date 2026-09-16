@@ -147,16 +147,35 @@ defmodule Longx.Projects.Tracker do
       # a retract marks its row reverted before the interrupt that ends the
       # turn: that row is out of the history already, its ending is no news
       if row.status != :reverted do
+        status = turn_status(turn["status"])
+        error = get_in(turn, ["error", "message"]) || row.error
+
         Projects.complete_turn!(row, %{
-          status: turn_status(turn["status"]),
+          status: status,
           completed_at: DateTime.utc_now(),
           commit_after: head(thread.cwd),
-          error: get_in(turn, ["error", "message"]) || row.error
+          error: error
         })
+
+        notify_turn_end(thread, status, error)
       end
 
       Projects.touch_thread!(thread, %{status: :idle, last_activity_at: DateTime.utc_now()})
       Projects.broadcast_changed(thread.project_id)
+    end
+  end
+
+  # a request the person has to answer: an approval, a permission, a
+  # question — the phone's reason to buzz
+  defp handle_event(method, %{"threadId" => codex_thread_id, "requestId" => _} = params)
+       when method in ~w(item/commandExecution/requestApproval item/fileChange/requestApproval item/permissions/requestApproval item/tool/requestUserInput item/mcpServer/elicitation) do
+    with {:ok, %Thread{} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id) do
+      question? = method in ~w(item/tool/requestUserInput item/mcpServer/elicitation)
+
+      Projects.notify(thread, "approval",
+        title: if(question?, do: "等待回答", else: "等待审批"),
+        body: request_summary(method, params, thread)
+      )
     end
   end
 
@@ -262,6 +281,10 @@ defmodule Longx.Projects.Tracker do
         completed_at: now,
         error: "codex restarted while this turn was running"
       })
+
+      with {:ok, %Thread{parent_thread_id: nil} = thread} <- Ash.get(Thread, turn.thread_id) do
+        Projects.notify(thread, "turn_failed", title: "出错了", body: "codex 退出了，这一轮没有完成")
+      end
     end
 
     # idle threads need nothing now: they are resumed lazily on their next
@@ -365,6 +388,30 @@ defmodule Longx.Projects.Tracker do
     do: :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(key, default)
 
   defp now, do: System.monotonic_time(:millisecond)
+
+  # root threads only: a sub-agent's turn is a step of its parent's
+  defp notify_turn_end(%Thread{parent_thread_id: nil} = thread, :completed, _error),
+    do: Projects.notify(thread, "turn_completed", title: "完成了")
+
+  defp notify_turn_end(%Thread{parent_thread_id: nil} = thread, :failed, error),
+    do:
+      Projects.notify(thread, "turn_failed",
+        title: "出错了",
+        body: error || Projects.thread_label(thread)
+      )
+
+  defp notify_turn_end(_thread, _status, _error), do: :ok
+
+  defp request_summary("item/commandExecution/requestApproval", %{"command" => cmd}, _thread)
+       when is_binary(cmd),
+       do: cmd
+
+  defp request_summary("item/fileChange/requestApproval", _params, _thread), do: "修改文件"
+
+  defp request_summary("item/permissions/requestApproval", params, _thread),
+    do: params["reason"] || "申请权限"
+
+  defp request_summary(_method, _params, thread), do: Projects.thread_label(thread)
 
   defp turn_status("completed"), do: :completed
   defp turn_status("interrupted"), do: :interrupted

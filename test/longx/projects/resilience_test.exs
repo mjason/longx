@@ -173,6 +173,7 @@ defmodule Longx.Projects.ResilienceTest do
     assert_receive {:codex_connection, ^project_id, :ready}, 15_000
 
     # a turn is running when the fake is told to exit
+    :ok = Phoenix.PubSub.subscribe(Longx.PubSub, Longx.Notify.topic())
     {:ok, running} = Projects.send_message(thread, "stall")
     _ = Projects.send_message(thread, "die")
     assert_receive {:codex_connection, ^project_id, :down}, 5_000
@@ -180,6 +181,11 @@ defmodule Longx.Projects.ResilienceTest do
     failed = eventually(turn_status(running.id, :failed))
     assert failed.error =~ "codex"
     assert %DateTime{} = failed.completed_at
+
+    # the notify feed hears of it, pointing at the thread
+    url = "/p/#{project.slug}/t/#{thread.id}"
+    assert_receive {:notify, %{kind: "turn_failed", url: ^url, body: body}}, 5_000
+    assert body =~ "codex"
 
     # the worker restarts on its own; the thread is resumed there
     assert_receive {:codex_connection, ^project_id, :ready}, 15_000

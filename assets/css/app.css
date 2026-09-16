@@ -232,6 +232,17 @@
   min-width: 44px;
 }
 
+/* inside a native shell (ui/shell/longxShell): the keyboard shrinks the
+   visual viewport but a WebView does not always resize the layout one, so
+   the bridge keeps --app-height at the visual viewport's height and the
+   full-height frames follow it — the composer stays above the keyboard */
+:root[data-shell] .h-dvh {
+  height: var(--app-height, 100dvh);
+}
+:root[data-shell] .min-h-dvh {
+  min-height: var(--app-height, 100dvh);
+}
+
 /* the diff view (ui/editor/DiffView): CodeMirror's merge view clips long
    lines by default; each side scrolls sideways instead, with a rule between */
 .cm-mergeView .cm-mergeViewEditor {

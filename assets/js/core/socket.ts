@@ -27,6 +27,12 @@ export function getSocket(): Socket {
   return socket;
 }
 
+/** A shell back from the background: a dead connection is torn down and reopened at once, not after the backoff. */
+export function reconnectSocket(): void {
+  if (!socket || socket.isConnected()) return;
+  socket.disconnect(() => socket?.connect());
+}
+
 export function socketStatus(): SocketStatus {
   return status;
 }

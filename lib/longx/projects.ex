@@ -465,6 +465,38 @@ defmodule Longx.Projects do
     end)
   end
 
+  ## The notify feed
+
+  @doc """
+  Pushes a `Longx.Notify` event about a thread: the page it points at is
+  the root thread's (a sub-agent's row answers through its parent), the
+  body what happened. `kind` and `title`/`body` are the caller's.
+  """
+  @spec notify(Thread.t(), String.t(), keyword) :: :ok
+  def notify(%Thread{} = thread, kind, opts) do
+    thread = Ash.get!(Thread, thread.id, load: :project)
+    root_id = thread.parent_thread_id || thread.id
+
+    Longx.Notify.push(%{
+      kind: kind,
+      title: Keyword.fetch!(opts, :title),
+      body: Keyword.get(opts, :body) || thread_label(thread),
+      url: "/p/#{thread.project.slug}/t/#{root_id}",
+      project_id: thread.project_id,
+      thread_id: root_id
+    })
+  end
+
+  @doc "How a thread is named to the person: its title, else its first message, else the project."
+  @spec thread_label(Thread.t()) :: String.t()
+  def thread_label(%Thread{title: title}) when is_binary(title) and title != "", do: title
+
+  def thread_label(%Thread{preview: preview}) when is_binary(preview) and preview != "",
+    do: preview
+
+  def thread_label(%Thread{project: %Project{name: name}}), do: name
+  def thread_label(%Thread{}), do: "会话"
+
   ## Goals (codex's goal mode) and skills
 
   @doc """

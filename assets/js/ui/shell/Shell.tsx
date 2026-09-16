@@ -8,6 +8,7 @@ import { Toaster } from "@/ui/components/ui/sonner";
 import { TooltipProvider } from "@/ui/components/ui/tooltip";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { SandboxBanner } from "./SandboxBanner";
+import { ShellBridge } from "./ShellBridge";
 
 /**
  * Mobile-first frame: one column, a thin top bar that respects the notch,
@@ -18,6 +19,7 @@ export function Shell() {
   useEffect(() => applyTheme(), []);
   return (
     <TooltipProvider delayDuration={300}>
+      <ShellBridge />
       <div className="min-h-dvh flex flex-col">
         <ConnectionBanner />
         <SandboxBanner />
