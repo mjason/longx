@@ -167,8 +167,11 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
         ["--composer-padding" as string]: "8px",
       }}
     >
+      {/* no turnAnchor="top": that pins the latest user message to the top and turns
+          the viewport's auto-scroll off, so a long turn (a streaming command, the
+          thinking panel growing) ran below the fold — here the viewport follows the
+          bottom while the reader is there and stops when they scroll up */}
       <ThreadPrimitive.Viewport
-        turnAnchor="top"
         data-slot="aui_thread-viewport"
         className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
       >

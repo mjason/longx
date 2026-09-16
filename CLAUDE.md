@@ -1005,7 +1005,12 @@ React Native client planned on the same core code.
     scratch — pick the element from the catalog first** (https://www.assistant-ui.com/elements,
     section "Tool use"). `thread.aui` also shows a
     stall hint (`unstable_useMessageStallDetection`, 15 s) and the timing badge.
-    `ProjectWindow` is `h-dvh`: the thread scrolls in its own viewport, never the page. Headers and bars are
+    `ProjectWindow` is `h-dvh`: the thread scrolls in its own viewport, never the page.
+    **The viewport follows the bottom** (no `turnAnchor="top"` on `ThreadPrimitive.Viewport`:
+    the registry's top anchor pins the latest user message to the top and switches
+    assistant-ui's auto-scroll off, so a long turn — a streaming command, the thinking
+    panel growing — ran below the fold); a reader who scrolls up stays put and gets the
+    scroll-to-bottom button (measured live: gap to bottom 0 throughout a 12 s stream). Headers and bars are
     solid (`backdrop-blur` on sticky/fixed bars ghosted text in Chromium screenshots).
     After `npm install` adds packages while `mix phx.server` runs, restart it: Vite's
     dependency re-optimisation can otherwise load two copies of React ("Invalid hook call").
