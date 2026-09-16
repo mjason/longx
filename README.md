@@ -1,7 +1,7 @@
 # Longx
 
 Ash + Phoenix 上的 agent 应用：内置 OpenAI 的 `codex-app-server` 作为 agent 引擎，
-模型请求全部经过 Longx 自己的 AI 网关（`/ai/v1/*`）转发到你配置的上游（DeepSeek、GLM、OpenAI……），
+模型请求全部经过 Longx 自己的 AI 网关（`/ai/v1/*`）转发到你配置的上游（DeepSeek、GLM、阿里云百炼 Token Plan、OpenAI……），
 codex 的工具能力可以用 Elixir 直接扩展。
 
 ## 启动
@@ -108,7 +108,7 @@ agent 的命令由 **Longx 自己**放进沙箱里跑：codex 0.154 把命令执
 | 模式 | 能做什么 |
 |---|---|
 | 只读 | 读整个文件系统，什么都不能写 |
-| 可写工作区（默认） | 写项目目录和 /tmp；其余只读；看不到设备；联网由开关决定 |
+| 可写工作区（默认） | 写项目目录、/tmp 和用户的工具缓存（Linux `~/.cache`、macOS `~/Library/Caches`、Windows `%LOCALAPPDATA%`——uv/pip/npm 都放那儿）；其余只读；看不到设备；联网由开关决定 |
 | 完全访问 | 不进沙箱，和你自己在终端里一样 |
 
 **权限按需申请，不预先放开。** 这是 codex 自己的机制（Longx 打开了它的 `exec_permission_approvals` /
@@ -117,6 +117,27 @@ agent 的命令由 **Longx 自己**放进沙箱里跑：codex 0.154 把命令执
 **本轮允许 / 本会话允许 / 拒绝**。批准后命令仍在沙箱里跑，只多了那一项权限；授权只活在这个会话里，不会写进项目设置。
 agent 要彻底出沙箱跑一条命令（`require_escalated`）时也是一张卡：允许一次 / 以后这条命令都允许（写进该项目 codex 的
 execpolicy 规则）/ 拒绝。被沙箱拒绝的命令，codex 会把结果交给 agent，由它决定申请什么——这和 codex 官方 TUI/桌面端一致。
+
+**自动审核（默认开）。** 每次都点「允许」很烦，所以默认由 codex 自带的审核员（Guardian，`approvals_reviewer = "auto_review"`）
+替你判：每个权限申请先交给一个只读的子会话——用的就是这个会话的模型（能用 low 思考档就用 low），走 Longx 的网关，按 codex
+内置的风险策略（数据外泄、探测凭据、削弱安全、破坏性操作）给出 allow / deny、风险等级和理由；命令行上方一行小字
+「自动审核通过 · 风险低：…」，没有卡片。审核员**拒绝**时命令不跑，agent 被告知不许绕过、要么换更安全的做法、要么停下来问你；
+聊天里是一张「自动审核拒绝」卡（风险、理由、那条命令），按 **仍然允许** 就把这个动作以「用户已批准」写回 codex 的上下文
+并自动发一句「请继续」，agent 下一轮重试时审核员看得到这条授权。一轮里连续拒绝 3 次 codex 会中断这一轮。真机上用 DeepSeek
+Flash 验证过：申请整个 home 的写权限被拒（「比需要的宽，home 里有凭据和 SSH 材料」），只申请一个文件则通过。代价是每次申请多
+一次模型调用。关掉（项目设置或新会话的访问模式里「自动审核」）就回到卡片；完全访问模式本来就不问，也不审。审核员和会话
+本身一样是 `thread/start` 的配置，所以只能在新会话时选，不用重启 codex。
+
+**全部放行（申请一律通过）。** 有时就是不想被拦：审批策略选「全部放行」（项目设置里设默认，或在输入框旁按会话切，下一轮
+生效），codex 发来的每个申请——命令要的目录、整轮的权限、出沙箱跑——由 Longx 当场答「允许」（权限申请按 session 授予，
+不会再问），没有卡片也不经过审核员，模型只看到申请通过。沙箱本身还在：这只是把「问你」换成了「替你点允许」，要连沙箱也
+不要就选「完全访问」。注意「从不询问」是 codex 自己的 `never`：不问，但申请**一律拒绝**——想要不被拦的是「全部放行」，
+不是它。
+
+**「以后都允许」存在哪？** codex 只在 `untrusted`（每条命令都问）审批策略下才提供「以后这条命令都允许」，写进
+`<数据目录>/codex_home/<项目 id>/rules/default.rules`；Longx 用的是按需申请（on-request），卡片上只有本轮 / 本会话，
+「本会话允许」只活在这个 codex 进程里（进程回收后没了），所以那个 rules 目录一直是空的——长期放行请用「沙箱额外可写目录」，
+或者交给自动审核。
 
 可写工作区下的开关（项目设置里，也可以在输入框旁按会话临时改）：
 
@@ -171,7 +192,7 @@ lib/longx/browser*         内置 obscura 无头浏览器（mix obscura.fetch）
 lib/longx/ai/              模型 provider / 搜索 provider（密钥加密存库）、网关、Tavily 搜索
 lib/longx/codex/           app-server 客户端：Connection、ThreadState（ETS 视图）、Thread API、Tool 体系
 lib/longx/tools/           给 codex 的 Elixir 工具 —— 见下文
-lib/longx_web/             SPA 壳（所有路径）、/rpc（ash_typescript）、/socket（thread / project channel）、/ai/v1 网关
+lib/longx_web/             SPA 壳（所有路径）、/rpc（ash_typescript）、/socket（thread / project channel）、/ai/v1 网关、/attachments 附件上传（zip/PDF/数据集存到数据目录，消息里给 agent 一个路径）
 assets/js/core/            不碰 DOM 的前端核心（RPC 客户端、socket、channel、reducer）——以后 React Native 复用
 assets/js/ui/              React DOM：路由、页面、shadcn 组件；移动端优先
 ```
@@ -179,7 +200,12 @@ assets/js/ui/              React DOM：路由、页面、shadcn 组件；移动�
 ## 模型 provider：一个 provider 用一把 key，不要用号池
 
 模型在数据库里配置（`Longx.AI.Provider` + `Longx.AI.Model`），每个 provider 一条记录，
-一个 `base_url` 和一把 `api_key`。同一个 thread 可以按轮次换模型（`turn/start.model`、fork），
+一个 `base_url` 和一把 `api_key`。设置里的「从模版添加」备好了 DeepSeek、GLM、阿里云百炼
+Token Plan（个人版 / 团队版，key 各一把、互不通用；Coding Plan 只有 Chat Completions，codex 0.154
+不支持；按量计费的地址带 WorkspaceId，用「自定义」填）和 OpenAI。**联网搜索按模型决定**：
+模型自带搜索的（OpenAI；百炼上的 Qwen 3.5+、DeepSeek-v4、glm-5.2）由 provider 在服务端跑 codex 的
+`web_search` 工具，搜索的问题和来源会显示在聊天里；不支持的（百炼上的 kimi、MiniMax、glm-5）自动改走
+Longx 的 Tavily 搜索——模板已经标好，模型编辑框里也能改。同一个 thread 可以按轮次换模型（`turn/start.model`、fork），
 网关（`Longx.AI.Gateway`）负责让不同上游能接着同一段历史继续跑，其中最麻烦的是推理块：
 
 * OpenAI 返回的 `reasoning.encrypted_content` 是**真正的密文**，只有 OpenAI 自己解得开；

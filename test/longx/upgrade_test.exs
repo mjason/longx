@@ -152,20 +152,37 @@ defmodule Longx.UpgradeTest do
         Plug.Conn.resp(conn, 200, release_json(bypass, @version, [name, name <> ".sha256"]))
       end)
 
+      # the tarball comes in chunks with a content-length: the page shows a bar
       Bypass.expect_once(bypass, "GET", "/dl/#{name}", fn conn ->
-        Plug.Conn.send_file(conn, 200, path)
+        data = File.read!(path)
+
+        conn =
+          conn
+          |> Plug.Conn.put_resp_header("content-length", Integer.to_string(byte_size(data)))
+          |> Plug.Conn.send_chunked(200)
+
+        for chunk <- chunks(data, 3) do
+          {:ok, conn} = Plug.Conn.chunk(conn, chunk)
+        end
+
+        conn
       end)
 
       Bypass.expect_once(bypass, "GET", "/dl/#{name}.sha256", fn conn ->
         Plug.Conn.resp(conn, 200, sha)
       end)
 
-      assert {:ok, %{stage: :downloading, target: @version}} = Upgrade.apply()
+      assert {:ok, %{stage: :downloading, target: @version, progress: nil}} = Upgrade.apply()
       # a second click while one runs is refused
       assert {:error, message} = Upgrade.apply()
       assert message =~ "正在"
 
-      assert_receive {:upgrade, %{stage: :restarting}}, 10_000
+      # progress: bytes received against the total, the last one complete
+      assert_receive {:upgrade, %{stage: :downloading, progress: %{received: r, total: total}}},
+                     10_000
+
+      assert is_integer(r) and r > 0 and total == File.stat!(path).size
+      assert_receive {:upgrade, %{stage: :restarting, progress: nil}}, 10_000
 
       assert File.read!(Path.join(app, "bin/longx")) =~ "longx " <> @version
       assert File.read!(Path.join(root, "app.old/bin/longx")) =~ "longx 0.0.1"
@@ -294,5 +311,16 @@ defmodule Longx.UpgradeTest do
 
     assert %{service: "longx-dev"} =
              Upgrade.install(%{"RELEASE_ROOT" => app, "LONGX_SERVICE" => "longx-dev"})
+  end
+
+  defp chunks(data, n) do
+    size = max(div(byte_size(data), n), 1)
+
+    Stream.unfold(data, fn
+      "" -> nil
+      rest when byte_size(rest) <= size -> {rest, ""}
+      rest -> {binary_part(rest, 0, size), binary_part(rest, size, byte_size(rest) - size)}
+    end)
+    |> Enum.to_list()
   end
 end

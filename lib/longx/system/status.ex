@@ -27,6 +27,8 @@ defmodule Longx.System.Status do
     ],
     message: [type: :string],
     target: [type: :string],
+    # the tarball's bytes so far while downloading (total nil without a content-length)
+    progress: [type: :map],
     has_github_token: [type: :boolean, allow_nil?: false]
   ]
 
@@ -320,6 +322,7 @@ defmodule Longx.System.Status do
       stage: st.stage,
       message: st.message,
       target: st.target,
+      progress: st.progress,
       has_github_token: st.github_token?
     }
   end

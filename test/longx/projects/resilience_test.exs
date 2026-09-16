@@ -129,6 +129,7 @@ defmodule Longx.Projects.ResilienceTest do
 
     assert config["model_context_window"] == Longx.AI.default_model!().context_window
     assert config["features.multi_agent_v2"] == true
+    assert config["approvals_reviewer"] == "auto_review"
 
     # and it keeps working on the new process
     {:ok, turn} = Projects.send_message(thread, "say again")

@@ -152,6 +152,61 @@ defmodule Longx.Codex.ThreadStateTest do
       assert Store.meta(t).status == %{"type" => "active", "activeFlags" => ["waitingOnApproval"]}
     end
 
+    test "an automatic approval review (codex's Guardian) is an item keyed by its review id: started, completed, then approved by the person" do
+      t = new_thread()
+      action = %{"type" => "command", "command" => "zsh -lc 'touch ~/x'", "cwd" => "/p"}
+
+      Store.fold(t, "item/autoApprovalReview/started", %{
+        "threadId" => t,
+        "turnId" => "turn-1",
+        "reviewId" => "rev-1",
+        "targetItemId" => "call_1",
+        "action" => action,
+        "review" => %{"status" => "inProgress", "rationale" => nil},
+        "startedAtMs" => 10
+      })
+
+      assert [
+               %{
+                 "id" => "rev-1",
+                 "type" => "autoApprovalReview",
+                 "turnId" => "turn-1",
+                 "targetItemId" => "call_1",
+                 "action" => ^action,
+                 "review" => %{"status" => "inProgress"},
+                 "startedAtMs" => 10
+               }
+             ] = Store.items(t)
+
+      Store.fold(t, "item/autoApprovalReview/completed", %{
+        "threadId" => t,
+        "turnId" => "turn-1",
+        "reviewId" => "rev-1",
+        "targetItemId" => "call_1",
+        "action" => action,
+        "review" => %{"status" => "denied", "riskLevel" => "high", "rationale" => "exfil"},
+        "decisionSource" => "agent",
+        "startedAtMs" => 10,
+        "completedAtMs" => 20
+      })
+
+      assert [%{"id" => "rev-1", "review" => %{"status" => "denied"}, "completedAtMs" => 20}] =
+               Store.items(t)
+
+      # Longx's own mark once the person overrode the denial
+      Store.fold(t, "item/autoApprovalReview/userApproved", %{"reviewId" => "rev-1"})
+      assert [%{"id" => "rev-1", "userApproved" => true}] = Store.items(t)
+    end
+
+    test "auto_accept is a flag of the thread's meta (Longx answers every approval itself while it is set)" do
+      t = new_thread()
+      refute Store.auto_accept?(t)
+      Store.set_auto_accept(t, true)
+      assert Store.auto_accept?(t)
+      Store.set_auto_accept(t, false)
+      refute Store.auto_accept?(t)
+    end
+
     test "unknown notifications change nothing" do
       t = new_thread()
       before = Store.snapshot(t)

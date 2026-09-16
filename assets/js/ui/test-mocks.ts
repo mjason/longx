@@ -30,6 +30,7 @@ export const project = (n: number) => ({
   passthroughPaths: [],
   webSearch: true,
   multiAgent: true,
+  autoReview: true,
   dirtyStart: "commit",
   tools: [],
   memoryLimitMb: null,
@@ -52,6 +53,7 @@ export const thread = (n: number) => ({
   networkAccess: false,
   webSearch: true,
   multiAgent: true,
+  autoReview: true,
   lastActivityAt: "2026-09-12T00:00:00Z",
   insertedAt: "2026-09-12T00:00:00Z",
 });
@@ -67,6 +69,7 @@ export const upgradeIdle = {
   stage: "idle" as const,
   message: null as string | null,
   target: null as string | null,
+  progress: null as { received: number; total: number | null } | null,
   hasGithubToken: false,
 };
 
@@ -421,6 +424,7 @@ export const model = (
         : null,
   reasoningSummary: null,
   maxOutputTokens: null,
+  hostedWebSearch: null,
   providerId: extra.providerId ?? (n === 2 ? "p2" : "p1"),
   provider: {
     id: extra.providerId ?? (n === 2 ? "p2" : "p1"),

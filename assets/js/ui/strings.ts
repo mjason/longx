@@ -87,25 +87,29 @@ export const t = {
   sandboxAdvanced: "长期放开的目录和设备（高级）",
   sandboxAdvancedHint: "平时不用碰：agent 缺什么权限会在聊天里申请，批准只对本轮或本会话有效。这里写的是对这个项目长期有效的例外。",
   writableRoots: "沙箱额外可写目录",
-  writableRootsHint: "一行一个，默认为空。agent 需要写哪里时会自己来申请，你在聊天里按轮或按会话批准；写在这里的目录则是长期放开，只放确实需要的（比如数据集目录）。~ 是服务器上运行 Longx 的用户；不存在的目录会被跳过。",
+  writableRootsHint: "一行一个，默认为空。项目目录、/tmp 和这台机器上用户的工具缓存（Linux ~/.cache、macOS ~/Library/Caches、Windows %LOCALAPPDATA%）本来就可写，不用填。agent 需要写别的地方时会自己来申请，你在聊天里按轮或按会话批准；写在这里的目录则是长期放开，只放确实需要的（比如数据集目录）。~ 是服务器上运行 Longx 的用户；不存在的目录会被跳过。",
   sandboxOptions: {
     read_only: "只读",
     workspace_write: "可写工作区",
     danger_full_access: "完全访问（危险）",
   } as Record<string, string>,
   approvalOptions: {
-    never: "从不询问",
     on_request: "按需询问",
+    auto_accept: "全部放行（申请一律通过，不审核不询问）",
     untrusted: "不信任时询问",
+    never: "从不询问（申请一律拒绝）",
   } as Record<string, string>,
+  autoAcceptBadge: "全部放行",
   accessMode: "访问模式",
   modeHint:
-    "沙箱和审批从下一轮开始生效，之后的轮次沿用；网页搜索和子 agent 在会话开始时定下。",
+    "沙箱和审批从下一轮开始生效，之后的轮次沿用；网页搜索、子 agent 和自动审核在会话开始时定下。",
   modeHintStarted:
-    "沙箱和审批从下一轮开始生效；网页搜索和子 agent 只能在新会话时选择。",
+    "沙箱和审批从下一轮开始生效；网页搜索、子 agent 和自动审核只能在新会话时选择。",
   webSearch: "网页搜索（搜索 + 读网页，由 Longx 代为访问）",
   multiAgent: "子 agent（agent 可以派出并行的子 agent）",
   noMultiAgent: "无子 agent",
+  autoReviewSwitch: "自动审核（权限申请由模型按 codex 的风险策略判定，拒绝时可在对话里放行）",
+  noAutoReview: "人工审批",
   noWebSearch: "无搜索",
   next: "下一步",
   // frame
@@ -352,6 +356,19 @@ export const t = {
   stalledFor: (s: number) => `${s} 秒没有新输出`,
   // chat: tools
   approvalNeeded: "需要审批",
+  // codex's automatic approval review (Guardian)
+  autoReview: {
+    running: "自动审核中…",
+    approved: "自动审核通过",
+    denied: "自动审核拒绝",
+    timedOut: "自动审核超时",
+    aborted: "自动审核中止",
+    overridden: "你已允许，模型可以重试",
+    override: "仍然允许",
+    risk: (level: string) => `风险${({ low: "低", medium: "中", high: "高", critical: "极高" } as Record<string, string>)[level] ?? level}`,
+    reviewed: "审核了",
+    continueAfterOverride: "上一步被自动审核拒绝的操作我已允许，请继续。",
+  },
   permissionsRequest: "申请权限",
   permissionsAsked: "申请了权限",
   agentAsks: "agent 有问题要问",
@@ -611,6 +628,13 @@ export const t = {
     reasoningEffortFree: "推理强度",
     reasoningEffortFreeHint: "模型接受的任意值；留空不传",
     reasoningSummary: "推理摘要",
+    hostedWebSearch: "联网搜索",
+    hostedWebSearchOptions: {
+      provider: "跟 Provider 的设置",
+      hosted: "模型自带（provider 服务端执行）",
+      longx: "Longx 代搜（Tavily）",
+    },
+    hostedWebSearchHint: "模型自带的搜索是 provider 在服务端跑 codex 的 web_search 工具；同一个 provider 下有的模型不支持（百炼的 kimi、MiniMax、glm-5），那些模型选「Longx 代搜」。",
     advanced: "高级",
     // templates
     chooseTemplate: "从模版添加",

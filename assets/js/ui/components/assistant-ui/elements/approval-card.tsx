@@ -16,6 +16,8 @@ export type ApprovalLabels = {
   running?: string;
   denied?: string;
   done?: string;
+  /** Longx: the button next to a denial that lets the person allow the action anyway */
+  override?: string;
 };
 
 const DEFAULT_LABELS: ApprovalLabels = {
@@ -38,6 +40,7 @@ export function ApprovalCard({
   onAllowOnce,
   onAlwaysAllow,
   onDeny,
+  onOverride,
   className,
   ...props
 }: Omit<
@@ -50,6 +53,7 @@ export function ApprovalCard({
   | "onAllowOnce"
   | "onAlwaysAllow"
   | "onDeny"
+  | "onOverride"
 > & {
   state: ApprovalState;
   command: ReactNode;
@@ -61,6 +65,8 @@ export function ApprovalCard({
   onAllowOnce?: () => void;
   onAlwaysAllow?: () => void;
   onDeny?: () => void;
+  /** shown in the `denied` state: allow the action after all (an automatic review's denial) */
+  onOverride?: () => void;
 }) {
   return (
     <div
@@ -139,6 +145,16 @@ export function ApprovalCard({
               <>
                 <XIcon className="text-foreground/45 size-3.5" />
                 {labels.denied ?? DEFAULT_LABELS.denied}
+                {onOverride ? (
+                  <button
+                    type="button"
+                    onClick={onOverride}
+                    disabled={disabled}
+                    className={cn(inkButton, "ml-2 flex h-8 items-center rounded-full px-3.5 text-xs font-medium")}
+                  >
+                    {labels.override ?? "Allow anyway"}
+                  </button>
+                ) : null}
               </>
             ) : (
               <>

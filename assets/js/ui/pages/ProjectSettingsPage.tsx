@@ -18,7 +18,7 @@ import { Textarea } from "@/ui/components/ui/textarea";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { t } from "@/ui/strings";
 
-type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "webSearch" | "multiAgent" | "globalMemory" | "dirtyStart">> & {
+type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "webSearch" | "multiAgent" | "autoReview" | "globalMemory" | "dirtyStart">> & {
   description: string;
   memoryLimitMb: string;
   modelId: string;
@@ -54,6 +54,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
     networkAccess: project.networkAccess,
     webSearch: project.webSearch,
     multiAgent: project.multiAgent,
+    autoReview: project.autoReview,
     globalMemory: project.globalMemory,
     dirtyStart: project.dirtyStart,
     memoryLimitMb: project.memoryLimitMb ? String(project.memoryLimitMb) : "",
@@ -79,6 +80,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
             networkAccess: form.networkAccess,
             webSearch: form.webSearch,
             multiAgent: form.multiAgent,
+            autoReview: form.autoReview,
             globalMemory: form.globalMemory,
             dirtyStart: form.dirtyStart,
             memoryLimitMb: form.memoryLimitMb ? Number(form.memoryLimitMb) : null,
@@ -185,10 +187,12 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">{t.approval}</legend>
           <RadioGroup value={form.approvalPolicy} onValueChange={(v) => set("approvalPolicy", v as Form["approvalPolicy"])}>
-            {(["untrusted", "on_request", "never"] as const).map((a) => (
+            {(["on_request", "auto_accept", "untrusted", "never"] as const).map((a) => (
               <div key={a} className="flex items-center gap-2">
                 <RadioGroupItem value={a} id={`ps-approval-${a}`} />
-                <Label htmlFor={`ps-approval-${a}`}>{t.approvalOptions[a]}</Label>
+                <Label htmlFor={`ps-approval-${a}`} className={a === "auto_accept" ? "text-destructive" : ""}>
+                  {t.approvalOptions[a]}
+                </Label>
               </div>
             ))}
           </RadioGroup>
@@ -227,6 +231,10 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         <div className="flex items-center justify-between gap-4">
           <Label htmlFor="ps-multi-agent">{t.multiAgent}</Label>
           <Switch id="ps-multi-agent" checked={form.multiAgent} onCheckedChange={(v) => set("multiAgent", v)} />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="ps-auto-review">{t.autoReviewSwitch}</Label>
+          <Switch id="ps-auto-review" checked={form.autoReview} disabled={form.approvalPolicy === "auto_accept"} onCheckedChange={(v) => set("autoReview", v)} />
         </div>
         <div className="flex items-center justify-between gap-4">
           <div>

@@ -42,6 +42,7 @@ defmodule Longx.Projects do
       rpc_action :review_thread, :review_thread
       rpc_action :respond, :respond
       rpc_action :answer_request, :answer_request
+      rpc_action :approve_review, :approve_review
       rpc_action :rename_thread, :rename
       rpc_action :archive_thread, :archive
       rpc_action :delete_thread, :delete_thread
@@ -159,6 +160,7 @@ defmodule Longx.Projects do
           | {:network_access, boolean}
           | {:web_search, boolean}
           | {:multi_agent, boolean}
+          | {:auto_review, boolean}
           | {:conn, GenServer.server()}
 
   @doc """
@@ -186,6 +188,7 @@ defmodule Longx.Projects do
     network_access = Keyword.get(opts, :network_access, project.network_access)
     web_search = Keyword.get(opts, :web_search, project.web_search)
     multi_agent = Keyword.get(opts, :multi_agent, project.multi_agent)
+    auto_review = Keyword.get(opts, :auto_review, project.auto_review)
 
     # the model's own settings (context window, reasoning, web search mode);
     # an unknown slug, a missing default or a level the model does not offer
@@ -203,6 +206,7 @@ defmodule Longx.Projects do
              network_access: network_access,
              writable_roots: writable_roots(project),
              multi_agent: multi_agent,
+             auto_review: auto_review,
              conn: conn
            ]
            |> Keyword.merge(model_opts)
@@ -221,6 +225,7 @@ defmodule Longx.Projects do
              network_access: network_access,
              web_search: web_search,
              multi_agent: multi_agent,
+             auto_review: auto_review,
              tools: tools
            }) do
       :ok = Tracker.track(codex_thread_id)
@@ -267,6 +272,7 @@ defmodule Longx.Projects do
          :ok <- Longx.AI.check_effort(model_slug, opts[:effort]),
          {turn_opts, effort} = effort_change(turn_opts, thread, opts[:effort]),
          {:ok, conn} <- thread_connection(thread, opts),
+         :ok <- sync_reviewer(thread, mode, conn),
          {:ok, bookmark} <- preflight(thread, text, opts),
          {:ok, codex_turn_id} <-
            Longx.Codex.Thread.send(
@@ -373,6 +379,23 @@ defmodule Longx.Projects do
     |> Map.new()
   end
 
+  # codex's reviewer is a thread setting, not a turn's: a turn that moves
+  # onto or off 全部放行 (which answers every request before a reviewer
+  # could) updates it — the thread's `auto_review` is what comes back
+  defp sync_reviewer(%Thread{} = thread, %{approval_policy: policy}, conn)
+       when policy == :auto_accept or thread.approval_policy == :auto_accept do
+    Longx.Codex.Thread.update_settings(thread.codex_thread_id,
+      approvals_reviewer: reviewer_for(thread.auto_review, policy),
+      conn: conn
+    )
+  end
+
+  defp sync_reviewer(_thread, _mode, _conn), do: :ok
+
+  defp reviewer_for(_auto_review, :auto_accept), do: :user
+  defp reviewer_for(true, _policy), do: :auto_review
+  defp reviewer_for(false, _policy), do: :user
+
   # turn/start carries the whole sandbox policy every turn: the mode in force
   # (changed or not) with the project's *current* writable roots — codex keeps
   # a turn's policy for the turns after, so an edit to the roots reaches an open
@@ -388,18 +411,30 @@ defmodule Longx.Projects do
 
   @doc """
   What the workspace-write sandbox may write besides the project and /tmp:
-  the project's `writable_roots` (`~` = this user's home; only directories
-  that exist and are writable — codex seeds every root with protected
-  `.git` / `.codex` entries, so a root it cannot write into, or a device
-  node, makes bwrap fail to launch).
+  this user's tool cache (`Longx.Codex.Sandbox.cache_dir/0` — `~/.cache`,
+  `~/Library/Caches`, `%LOCALAPPDATA%`; uv / pip / npm fail on the first
+  run without it) and the project's `writable_roots` (`~` = this user's
+  home); only directories that exist (a device node as a root breaks the
+  launch — devices go through `passthrough_paths`).
   """
   @spec writable_roots(Project.t()) :: [Path.t()]
   def writable_roots(%Project{writable_roots: roots}) do
-    roots
+    ([Longx.Codex.Sandbox.cache_dir()] ++ roots)
+    |> Enum.reject(&is_nil/1)
     |> Enum.map(&Path.expand/1)
     |> Enum.filter(&File.dir?/1)
     |> Enum.uniq()
   end
+
+  @doc """
+  Overrides a denial of codex's automatic approval review on the thread
+  (`Longx.Codex.Thread.approve_denied_review/3`); the person then tells the
+  model to go on. `{:error, :not_found}` / `{:error, :not_denied}` when the
+  review is unknown or was not a denial.
+  """
+  @spec approve_denied_review(Thread.t(), String.t(), keyword) :: :ok | {:error, term}
+  def approve_denied_review(%Thread{codex_thread_id: id}, review_id, opts \\ []),
+    do: Longx.Codex.Thread.approve_denied_review(id, review_id, opts)
 
   @doc """
   Deletes the thread row and its turns (never while a turn runs). Codex's
@@ -479,6 +514,7 @@ defmodule Longx.Projects do
              network_access: thread.network_access,
              writable_roots: writable_roots(project),
              multi_agent: thread.multi_agent,
+             auto_review: thread.auto_review,
              conn: conn
            ]
            |> Keyword.merge(model_opts)
@@ -599,7 +635,8 @@ defmodule Longx.Projects do
           approval_policy: thread.approval_policy,
           network_access: thread.network_access,
           writable_roots: writable_roots(project),
-          multi_agent: thread.multi_agent
+          multi_agent: thread.multi_agent,
+          auto_review: thread.auto_review
         ]
         |> Keyword.merge(model_opts)
         # the level the thread was left on, not the row's default
@@ -763,6 +800,7 @@ defmodule Longx.Projects do
          fork_opts =
            model_opts
            |> put_if(:last_turn_id, previous && previous.codex_turn_id)
+           |> Keyword.put(:auto_review, thread.auto_review)
            |> put_if(:conn, conn),
          {:ok, codex_thread_id} <- Longx.Codex.Thread.fork(thread.codex_thread_id, fork_opts),
          {:ok, forked} <-
@@ -774,6 +812,7 @@ defmodule Longx.Projects do
              reasoning_effort: model_opts[:reasoning_effort],
              approval_policy: thread.approval_policy,
              sandbox: thread.sandbox,
+             auto_review: thread.auto_review,
              tools: thread.tools,
              forked_from_id: thread.id
            }) do

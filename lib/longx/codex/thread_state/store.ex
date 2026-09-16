@@ -28,7 +28,9 @@ defmodule Longx.Codex.ThreadState.Store do
     turn: nil,
     status: nil,
     token_usage: nil,
-    plan: nil
+    plan: nil,
+    # 全部放行: Longx answers every approval of the thread itself (ServerRequest.Default)
+    auto_accept: false
   }
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -62,6 +64,14 @@ defmodule Longx.Codex.ThreadState.Store do
     :ets.insert(@meta, {thread_id, Map.merge(meta(thread_id), changes)})
     :ok
   end
+
+  @doc "Whether Longx answers every approval request of the thread itself (approval policy 全部放行)."
+  @spec auto_accept?(String.t()) :: boolean
+  def auto_accept?(thread_id), do: meta(thread_id).auto_accept == true
+
+  @spec set_auto_accept(String.t(), boolean) :: :ok
+  def set_auto_accept(thread_id, flag) when is_boolean(flag),
+    do: put_meta(thread_id, %{auto_accept: flag})
 
   @doc "Allocates the next event sequence number for the thread."
   @spec next_seq(String.t()) :: pos_integer
@@ -97,6 +107,15 @@ defmodule Longx.Codex.ThreadState.Store do
 
     :ets.insert(@items, {{thread_id, id}, order, item})
     :ok
+  end
+
+  @doc "One item of the thread, or nil."
+  @spec get_item(String.t(), String.t()) :: map | nil
+  def get_item(thread_id, item_id) do
+    case :ets.lookup(@items, {thread_id, item_id}) do
+      [{_, _, item}] -> item
+      [] -> nil
+    end
   end
 
   # `index` = nil appends to a string field; an integer addresses one entry of
@@ -210,6 +229,23 @@ defmodule Longx.Codex.ThreadState.Store do
 
   def fold(t, "item/plan/delta", %{"itemId" => id, "delta" => d}), do: append(t, id, "text", d)
 
+  # codex's automatic approval review (Guardian): no item of its own on the
+  # wire, so one is made here, keyed by the review id — started, then
+  # completed (the verdict replaces it); `userApproved` is Longx's own mark
+  # once the person overrode a denial (Thread.approve_denied_review/3).
+  def fold(t, "item/autoApprovalReview/started", %{"reviewId" => id} = params),
+    do: put_item(t, review_item(id, params))
+
+  def fold(t, "item/autoApprovalReview/completed", %{"reviewId" => id} = params),
+    do: put_item(t, review_item(id, params))
+
+  def fold(t, "item/autoApprovalReview/userApproved", %{"reviewId" => id}) do
+    case get_item(t, id) do
+      nil -> :ok
+      item -> put_item(t, Map.put(item, "userApproved", true))
+    end
+  end
+
   def fold(_t, _method, _params), do: :ok
 
   @doc "Seeds the view from a `thread/read` (`includeTurns: true`) result."
@@ -255,4 +291,12 @@ defmodule Longx.Codex.ThreadState.Store do
 
   defp with_turn(item, %{"turnId" => turn_id}), do: Map.put_new(item, "turnId", turn_id)
   defp with_turn(item, _), do: item
+
+  @review_fields ~w(turnId targetItemId action review decisionSource startedAtMs completedAtMs)
+
+  defp review_item(id, params),
+    do:
+      params
+      |> Map.take(@review_fields)
+      |> Map.merge(%{"id" => id, "type" => "autoApprovalReview"})
 end

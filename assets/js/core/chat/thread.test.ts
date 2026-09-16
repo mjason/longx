@@ -100,3 +100,30 @@ describe("plan", () => {
     expect(fromSnapshot(snapshot).plan).toBeNull();
   });
 });
+
+describe("automatic approval review", () => {
+  const action = { type: "command", source: "unifiedExec", command: "zsh -lc 'touch ~/x'", cwd: "/p" };
+
+  test("started / completed make one item keyed by the review id; userApproved marks it (like the Store)", () => {
+    let v = fromSnapshot(snapshot);
+    v = applyEvent(v, {
+      seq: 11,
+      method: "item/autoApprovalReview/started",
+      params: { threadId: "thr_1", turnId: "turn_2", reviewId: "rev-1", targetItemId: "c1", action, review: { status: "inProgress", rationale: null }, startedAtMs: 10 },
+    });
+    expect(v.items.at(-1)).toMatchObject({ id: "rev-1", type: "autoApprovalReview", turnId: "turn_2", targetItemId: "c1", action, review: { status: "inProgress" } });
+
+    v = applyEvent(v, {
+      seq: 12,
+      method: "item/autoApprovalReview/completed",
+      params: { threadId: "thr_1", turnId: "turn_2", reviewId: "rev-1", targetItemId: "c1", action, review: { status: "denied", riskLevel: "high", rationale: "exfil" }, decisionSource: "agent", startedAtMs: 10, completedAtMs: 20 },
+    });
+    expect(v.items.filter((i) => i.type === "autoApprovalReview")).toHaveLength(1);
+    expect(v.items.at(-1)).toMatchObject({ id: "rev-1", review: { status: "denied", riskLevel: "high" }, completedAtMs: 20 });
+
+    v = applyEvent(v, { seq: 13, method: "item/autoApprovalReview/userApproved", params: { threadId: "thr_1", reviewId: "rev-1" } });
+    expect(v.items.at(-1)).toMatchObject({ id: "rev-1", userApproved: true });
+    // a mark for a review we never saw changes nothing
+    expect(applyEvent(v, { seq: 14, method: "item/autoApprovalReview/userApproved", params: { reviewId: "rev-9" } }).items).toEqual(v.items);
+  });
+});

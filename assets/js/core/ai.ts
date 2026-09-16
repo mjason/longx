@@ -70,6 +70,8 @@ export type ModelRow = {
   reasoningEffort: string | null;
   reasoningSummary: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens: number | null;
+  /** the model runs codex's web_search tool itself; null = the provider's say */
+  hostedWebSearch: boolean | null;
   providerId: string;
 };
 
@@ -153,6 +155,7 @@ const modelRowFields = [
   "reasoningEffort",
   "reasoningSummary",
   "maxOutputTokens",
+  "hostedWebSearch",
   "providerId",
 ] as const;
 const presetFields = [

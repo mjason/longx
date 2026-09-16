@@ -527,6 +527,20 @@ defmodule Longx.AITest do
       assert AI.web_search_mode() == :hosted
     end
 
+    test "the model can override its provider: a Bailian model without agent capabilities searches through Longx, a capable one through Bailian" do
+      bailian = create_provider!(%{slug: "bailian-#{uniq()}", supports_hosted_web_search: true})
+
+      # kimi-k2.x on Bailian: the web_search tool is refused ("Agent capabilities are not enabled")
+      kimi = create_model!(bailian, %{upstream_id: "kimi-k2.7-code", hosted_web_search: false})
+      qwen = create_model!(bailian, %{upstream_id: "qwen3.8-max"})
+      assert AI.web_search_mode(kimi) == :standalone
+      assert AI.web_search_mode(qwen) == :hosted
+      # and the other way round: one model on an otherwise plain provider
+      plain = create_provider!(%{slug: "plain-#{uniq()}", supports_hosted_web_search: false})
+      assert AI.web_search_mode(create_model!(plain, %{hosted_web_search: true})) == :hosted
+      assert AI.web_search_mode(create_model!(plain)) == :standalone
+    end
+
     test "a hosted-capable provider without a key falls back to what is left" do
       openai =
         create_provider!(%{

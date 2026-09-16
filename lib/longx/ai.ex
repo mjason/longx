@@ -227,7 +227,11 @@ defmodule Longx.AI do
          api_key: api_key,
          context_window: model.context_window,
          provider_slug: provider.slug,
-         hosted_web_search?: provider.supports_hosted_web_search,
+         hosted_web_search?:
+           if(is_nil(model.hosted_web_search),
+             do: provider.supports_hosted_web_search,
+             else: model.hosted_web_search
+           ),
          kind: provider.kind,
          request_timeout_ms: provider.request_timeout_ms,
          max_concurrent_requests: provider.max_concurrent_requests,

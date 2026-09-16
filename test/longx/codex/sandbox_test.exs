@@ -131,6 +131,44 @@ defmodule Longx.Codex.SandboxTest do
     end
   end
 
+  describe "cache_dir/2 (pure): the user's tool cache, per platform — writable in every workspace sandbox like /tmp" do
+    test "Linux: XDG_CACHE_HOME, else ~/.cache" do
+      assert Sandbox.cache_dir({:linux, :x86_64}, %{"HOME" => "/home/mj"}) == "/home/mj/.cache"
+
+      assert Sandbox.cache_dir({:linux, :x86_64}, %{
+               "HOME" => "/home/mj",
+               "XDG_CACHE_HOME" => "/data/cache"
+             }) ==
+               "/data/cache"
+
+      # an empty or relative XDG value does not count (the spec says ignore it)
+      assert Sandbox.cache_dir({:linux, :aarch64}, %{
+               "HOME" => "/home/mj",
+               "XDG_CACHE_HOME" => "cache"
+             }) ==
+               "/home/mj/.cache"
+    end
+
+    test "macOS: ~/Library/Caches (uv, pip, npm, Hugging Face all live there)" do
+      assert Sandbox.cache_dir({:darwin, :aarch64}, %{"HOME" => "/Users/mj"}) ==
+               "/Users/mj/Library/Caches"
+    end
+
+    test "Windows: LOCALAPPDATA, else ~/AppData/Local" do
+      assert Sandbox.cache_dir({:windows, :x86_64}, %{
+               "LOCALAPPDATA" => "C:\\Users\\mj\\AppData\\Local"
+             }) ==
+               "C:\\Users\\mj\\AppData\\Local"
+
+      assert Sandbox.cache_dir({:windows, :x86_64}, %{"USERPROFILE" => "C:\\Users\\mj"}) ==
+               "C:\\Users\\mj\\AppData\\Local"
+    end
+
+    test "no home at all: nothing" do
+      assert Sandbox.cache_dir({:linux, :x86_64}, %{}) == nil
+    end
+  end
+
   describe "gpu?/1 (pure): does this machine have an NVIDIA GPU the sandbox will hide" do
     test "nvidia device nodes among /dev's entries" do
       assert Sandbox.gpu?(~w(/dev/null /dev/nvidia0 /dev/nvidiactl))

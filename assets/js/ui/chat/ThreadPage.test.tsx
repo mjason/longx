@@ -278,6 +278,10 @@ describe("ThreadPage", () => {
     const multiAgent = screen.getByRole("switch", { name: /子 agent/ });
     expect(multiAgent).toBeChecked();
     await user.click(multiAgent);
+    // and codex's automatic approval review (on by default)
+    const autoReview = screen.getByRole("switch", { name: /自动审核/ });
+    expect(autoReview).toBeChecked();
+    await user.click(autoReview);
     await user.keyboard("{Escape}");
     await user.type(
       screen.getByRole("textbox", { name: "随心输入" }),
@@ -290,6 +294,7 @@ describe("ThreadPage", () => {
             projectId: "id-1",
             webSearch: false,
             multiAgent: false,
+            autoReview: false,
             sandbox: "workspace_write",
           }),
         }),
@@ -321,9 +326,12 @@ describe("ThreadPage", () => {
     await user.click(
       await screen.findByRole("radio", { name: "完全访问（危险）" }),
     );
-    await user.click(screen.getByRole("radio", { name: "从不询问" }));
+    await user.click(screen.getByRole("radio", { name: /全部放行/ }));
+    // 全部放行 answers before any reviewer could: the switch is moot
+    expect(screen.getByRole("switch", { name: /自动审核/ })).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(screen.getByTestId("mode-picker")).toHaveTextContent("完全访问");
+    expect(screen.getByTestId("mode-picker")).toHaveTextContent("全部放行");
     await user.type(
       screen.getByRole("textbox", { name: "随心输入" }),
       "go wild{Enter}",
@@ -334,7 +342,7 @@ describe("ThreadPage", () => {
           input: expect.objectContaining({
             text: "go wild",
             sandbox: "danger_full_access",
-            approvalPolicy: "never",
+            approvalPolicy: "auto_accept",
             networkAccess: false,
           }),
         }),
@@ -806,6 +814,31 @@ describe("ThreadPage", () => {
         document.querySelector("img[src^='data:image/png']"),
       ).not.toBeNull(),
     );
+  });
+
+  test("any other file — a zip — is uploaded to the server when dropped and the message names its path", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ path: "/data/attachments/id-1/20260916T020000-data.zip", name: "data.zip", bytes: 4 }), { status: 200 }),
+    );
+    await open();
+    const file = new File([new Uint8Array([80, 75, 3, 4])], "data.zip", { type: "application/zip" });
+    const shell = document.querySelector("[data-slot=aui_composer-shell]")!;
+    fireEvent.drop(shell, { dataTransfer: { files: [file], types: ["Files"] } });
+    await screen.findByRole("button", { name: /file attachment/i });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/attachments/id-1", expect.objectContaining({ method: "POST" })));
+    const box = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(box, "unpack it{Enter}");
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            text: expect.stringMatching(/^unpack it\n\n<attachment name="data\.zip" path="\/data\/attachments\/id-1\/20260916T020000-data\.zip"/),
+          }),
+        }),
+      ),
+    );
+    fetchMock.mockRestore();
   });
 
   test("voice input is switched off for now: no mic in the rail", async () => {

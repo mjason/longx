@@ -829,6 +829,8 @@ function ModelDialog({
     maxOutputTokens: model?.maxOutputTokens
       ? String(model.maxOutputTokens)
       : "",
+    hostedWebSearch:
+      model?.hostedWebSearch === true ? "hosted" : model?.hostedWebSearch === false ? "longx" : "provider",
   });
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -848,6 +850,7 @@ function ModelDialog({
       maxOutputTokens: form.maxOutputTokens
         ? Number(form.maxOutputTokens)
         : null,
+      hostedWebSearch: form.hostedWebSearch === "hosted" ? true : form.hostedWebSearch === "longx" ? false : null,
       ...(form.slug.trim() ? { slug: form.slug.trim() } : {}),
     };
     const done = {
@@ -997,6 +1000,19 @@ function ModelDialog({
               value={form.maxOutputTokens}
               onChange={(e) => set("maxOutputTokens", e.target.value)}
             />
+          </Field>
+          <Field id="md-search" label={s.hostedWebSearch}>
+            <Select value={form.hostedWebSearch} onValueChange={(v) => set("hostedWebSearch", v)}>
+              <SelectTrigger id="md-search" aria-label={s.hostedWebSearch}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="provider">{s.hostedWebSearchOptions.provider}</SelectItem>
+                <SelectItem value="hosted">{s.hostedWebSearchOptions.hosted}</SelectItem>
+                <SelectItem value="longx">{s.hostedWebSearchOptions.longx}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">{s.hostedWebSearchHint}</p>
           </Field>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>

@@ -37,6 +37,7 @@ export const projectFields = [
   "passthroughPaths",
   "webSearch",
   "multiAgent",
+  "autoReview",
   "globalMemory",
   "dirtyStart",
   "tools",
@@ -59,6 +60,7 @@ export const threadFields = [
   "networkAccess",
   "webSearch",
   "multiAgent",
+  "autoReview",
   "lastActivityAt",
   "insertedAt",
 ] as const;
@@ -378,10 +380,11 @@ export function useInitGit(id: string) {
 
 export type StartThreadMode = {
   sandbox: "read_only" | "workspace_write" | "danger_full_access";
-  approvalPolicy: "never" | "on_request" | "untrusted";
+  approvalPolicy: "never" | "on_request" | "untrusted" | "auto_accept";
   networkAccess: boolean;
   webSearch: boolean;
   multiAgent: boolean;
+  autoReview: boolean;
 };
 /** what a new chat starts with: the mode, and the model / reasoning level when picked (a thread-start config, unlike a mid-thread switch) */
 export type StartThreadInput = Partial<StartThreadMode> & {

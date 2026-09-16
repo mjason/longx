@@ -47,7 +47,8 @@ defmodule LongxWeb.Endpoint do
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
   plug Plug.Parsers,
-    parsers: [:urlencoded, :multipart, :json],
+    # multipart: the composer's attachments (a zip, a dataset) — 512 MB
+    parsers: [:urlencoded, {:multipart, length: 512_000_000}, :json],
     pass: ["*/*"],
     json_decoder: Phoenix.json_library()
 

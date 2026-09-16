@@ -299,6 +299,7 @@ export type CreateModelInput = {
   reasoningEffort?: string | null;
   reasoningSummary?: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens?: number | null;
+  hostedWebSearch?: boolean | null;
 };
 
 export type CreateModelFields = UnifiedFieldSelection<ModelResourceSchema>[];
@@ -615,6 +616,7 @@ export type UpdateModelInput = {
   reasoningEffort?: string | null;
   reasoningSummary?: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens?: number | null;
+  hostedWebSearch?: boolean | null;
 };
 
 export type UpdateModelFields = UnifiedFieldSelection<ModelResourceSchema>[];
@@ -2358,7 +2360,7 @@ export type CreateProjectInput = {
   name: string;
   description?: string | null;
   rootPath: string;
-  approvalPolicy?: "never" | "on_request" | "untrusted";
+  approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted";
   sandbox?: "danger_full_access" | "read_only" | "workspace_write";
   tools?: Array<string>;
   dirtyStart?: "ask" | "commit" | "off";
@@ -2367,6 +2369,7 @@ export type CreateProjectInput = {
   passthroughPaths?: Array<string>;
   webSearch?: boolean;
   multiAgent?: boolean;
+  autoReview?: boolean;
   globalMemory?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
@@ -3048,7 +3051,7 @@ export type UpdateProjectInput = {
   name?: string;
   slug?: string;
   description?: string | null;
-  approvalPolicy?: "never" | "on_request" | "untrusted";
+  approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted";
   sandbox?: "danger_full_access" | "read_only" | "workspace_write";
   tools?: Array<string>;
   dirtyStart?: "ask" | "commit" | "off";
@@ -3057,6 +3060,7 @@ export type UpdateProjectInput = {
   passthroughPaths?: Array<string>;
   webSearch?: boolean;
   multiAgent?: boolean;
+  autoReview?: boolean;
   globalMemory?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
@@ -4570,6 +4574,75 @@ export async function validateAnswerRequest(
 }
 
 
+export type ApproveReviewInput = {
+  threadId: UUID;
+  reviewId: string;
+};
+
+export type InferApproveReviewResult = {};
+
+export type ApproveReviewResult = | { success: true; data: InferApproveReviewResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function approveReview(
+  config: {
+  tenant?: string;
+  input: ApproveReviewInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ApproveReviewResult> {
+  const payload = {
+    action: "approve_review",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<ApproveReviewResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateApproveReview(
+  config: {
+  tenant?: string;
+  input: ApproveReviewInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "approve_review",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ArchiveThreadFields = UnifiedFieldSelection<ThreadResourceSchema>[];
 
 export type InferArchiveThreadResult<
@@ -5154,7 +5227,7 @@ export type SendMessageInput = {
   effort?: string | null;
   dirty?: "commit" | "ignore" | null;
   sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
-  approvalPolicy?: "never" | "on_request" | "untrusted" | null;
+  approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted" | null;
   networkAccess?: boolean | null;
 };
 
@@ -5233,11 +5306,12 @@ export type StartThreadInput = {
   model?: string | null;
   effort?: string | null;
   tools?: Array<string> | null;
-  approvalPolicy?: "never" | "on_request" | "untrusted" | null;
+  approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted" | null;
   sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
   networkAccess?: boolean | null;
   webSearch?: boolean | null;
   multiAgent?: boolean | null;
+  autoReview?: boolean | null;
 };
 
 export type StartThreadFields = UnifiedFieldSelection<ThreadResourceSchema>[];
@@ -6582,11 +6656,11 @@ export type SetGithubTokenInput = {
   token?: string | null;
 };
 
-export type SetGithubTokenFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}>[];
+export type SetGithubTokenFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}>[];
 
 export type InferSetGithubTokenResult<
   Fields extends SetGithubTokenFields | undefined,
-> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}, Fields>;
+> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}, Fields>;
 
 export type SetGithubTokenResult<Fields extends SetGithubTokenFields | undefined = undefined> = | { success: true; data: InferSetGithubTokenResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -6652,11 +6726,11 @@ export async function validateSetGithubToken(
 }
 
 
-export type UpgradeApplyFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}>[];
+export type UpgradeApplyFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}>[];
 
 export type InferUpgradeApplyResult<
   Fields extends UpgradeApplyFields | undefined,
-> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}, Fields>;
+> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}, Fields>;
 
 export type UpgradeApplyResult<Fields extends UpgradeApplyFields | undefined = undefined> = | { success: true; data: InferUpgradeApplyResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -6718,11 +6792,11 @@ export async function validateUpgradeApply(
 }
 
 
-export type UpgradeCheckFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}>[];
+export type UpgradeCheckFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}>[];
 
 export type InferUpgradeCheckResult<
   Fields extends UpgradeCheckFields | undefined,
-> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}, Fields>;
+> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}, Fields>;
 
 export type UpgradeCheckResult<Fields extends UpgradeCheckFields | undefined = undefined> = | { success: true; data: InferUpgradeCheckResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -6784,11 +6858,11 @@ export async function validateUpgradeCheck(
 }
 
 
-export type UpgradeStatusFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}>[];
+export type UpgradeStatusFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}>[];
 
 export type InferUpgradeStatusResult<
   Fields extends UpgradeStatusFields | undefined,
-> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}, Fields>;
+> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}, Fields>;
 
 export type UpgradeStatusResult<Fields extends UpgradeStatusFields | undefined = undefined> = | { success: true; data: InferUpgradeStatusResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }

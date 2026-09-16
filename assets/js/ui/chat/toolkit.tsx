@@ -7,11 +7,12 @@
 // ToolFallback element. Approvals answer through assistant-ui's
 // `respondToApproval` seam (option id = our decision), questions through
 // the runtime's extras.
-import { AuiConfig, defineToolkit, makeAssistantDataUI, MessagePartPrimitive, MessagePrimitive, Tools, useAuiState, useToolCallElapsed, type ToolCallMessagePartComponent, type ToolCallMessagePartProps } from "@assistant-ui/react";
+import { AuiConfig, defineToolkit, makeAssistantDataUI, MessagePartPrimitive, MessagePrimitive, Tools, useAui, useAuiState, useToolCallElapsed, type ToolCallMessagePartComponent, type ToolCallMessagePartProps } from "@assistant-ui/react";
 import { useState, type ReactNode } from "react";
-import { ShieldQuestion } from "lucide-react";
+import { CheckIcon, Loader2Icon, ShieldAlert, ShieldQuestion } from "lucide-react";
 import { toast } from "sonner";
 import type { CodexExtras } from "@/core/chat/adapter";
+import type { AutoReview } from "@/core/chat/messages";
 import type { PlanStep } from "@/core/chat/thread";
 import { AgentHandoff } from "@/ui/components/assistant-ui/elements/agent-handoff";
 import { AgentPlan, type PlanStepState } from "@/ui/components/assistant-ui/elements/agent-plan";
@@ -29,11 +30,11 @@ import { ToolError } from "@/ui/components/assistant-ui/elements/tool-error";
 import { WebSearch } from "@/ui/components/assistant-ui/elements/web-search";
 import { t } from "@/ui/strings";
 
-type CommandArgs = { command?: string; fullCommand?: string; cwd?: string };
+type CommandArgs = { command?: string; fullCommand?: string; cwd?: string; review?: AutoReview };
 type CommandResult = { status: string; exitCode: number | null; output: string; durationMs?: number | null };
 
 type FileChange = { path: string; kind?: { type?: string; move_path?: string | null }; diff?: string };
-type FileChangeArgs = { changes?: FileChange[] };
+type FileChangeArgs = { changes?: FileChange[]; review?: AutoReview };
 type FileChangeResult = { status: string; output: string };
 
 // codex records every web.run call as a webSearch item; the action says what it was
@@ -74,6 +75,66 @@ function useApprovalActions(p: ApprovalSeam) {
   };
 }
 
+/**
+ * codex's automatic approval review of the action a row shows: one quiet
+ * line while it runs and once approved; a denial is an approval-card in its
+ * denied state whose 仍然允许 hands the action back as approved by the
+ * person (extras.approveDeniedReview) and tells the model to go on.
+ */
+function AutoReviewVerdict({ review, command }: { review: AutoReview; command: ReactNode }) {
+  const approve = useAuiState((s) => (s.thread.extras as CodexExtras | undefined)?.approveDeniedReview);
+  const aui = useAui();
+  const [sent, setSent] = useState(false);
+  const rationale = review.rationale ? `：${review.rationale}` : "";
+  const risk = review.riskLevel ? ` · ${t.autoReview.risk(review.riskLevel)}` : "";
+
+  if (review.status === "inProgress") {
+    return (
+      <p className="text-foreground/55 flex items-center gap-1.5 py-1 text-xs" data-testid="auto-review">
+        <Loader2Icon className="size-3.5 animate-spin" />
+        {t.autoReview.running}
+      </p>
+    );
+  }
+  if (review.status !== "denied") {
+    const label = review.status === "approved" ? t.autoReview.approved : review.status === "timedOut" ? t.autoReview.timedOut : t.autoReview.aborted;
+    return (
+      <p className="text-foreground/55 flex items-start gap-1.5 py-1 text-xs" data-testid="auto-review">
+        <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />
+        <span>
+          {label}
+          {risk}
+          {rationale}
+        </span>
+      </p>
+    );
+  }
+  const override = () => {
+    if (!approve || sent) return;
+    setSent(true);
+    void approve(review.id)
+      .then(() => aui.thread.append({ role: "user", content: [{ type: "text", text: t.autoReview.continueAfterOverride }] }))
+      .catch((error: unknown) => {
+        setSent(false);
+        toast.error(error instanceof Error ? error.message : String(error));
+      });
+  };
+  return (
+    <div className="py-1" data-testid="auto-review">
+      <ApprovalCard
+        state={review.userApproved ? "done" : "denied"}
+        title={t.autoReview.denied}
+        subtitle={`${review.riskLevel ? t.autoReview.risk(review.riskLevel) : ""}${rationale}`}
+        icon={<ShieldAlert className="size-4" />}
+        command={command}
+        labels={{ allowOnce: t.allowOnce, alwaysAllow: t.allowSession, deny: t.deny, denied: t.declined, done: t.autoReview.overridden, override: t.autoReview.override }}
+        disabled={sent}
+        {...(review.userApproved || !approve ? {} : { onOverride: override })}
+      />
+    </div>
+  );
+}
+
 /** A ToolCall row that opens itself while the work runs or when it failed, and can be toggled after. */
 function ToolRow({ label, activeLabel, query, running, failed, children, testId }: { label: string; activeLabel: string; query: string; running: boolean; failed: boolean; children: ReactNode; testId: string }) {
   const [open, setOpen] = useState<boolean | null>(null);
@@ -103,6 +164,7 @@ export const CommandExecutionTool: ToolCallMessagePartComponent<CommandArgs, Com
           <ApprovalCard state="request" title={t.approvalNeeded} subtitle={approval.prompt ?? t.approveCommand} command={p.args.fullCommand ?? command} {...actions} />
         </div>
       ) : null}
+      {p.args.review ? <AutoReviewVerdict review={p.args.review} command={p.args.fullCommand ?? command} /> : null}
       <ToolRow label={t.ranCommand} activeLabel={t.runningCommand} query={command} running={running || approval !== undefined} failed={failed} testId="tool-command">
         {couldNotRun ? (
           <ToolError name={t.command} target={command} message={output || t.commandFailed} attempt={0} maxAttempts={0} retrying={false} />
@@ -147,6 +209,38 @@ export const PermissionsTool: ToolCallMessagePartComponent<PermissionsArgs, unkn
   );
 };
 
+type AutoReviewArgs = { review: AutoReview; reason?: string | null; lines?: string[]; command?: string; fullCommand?: string };
+
+/**
+ * An automatic review with no item of its own (a request_permissions call
+ * the reviewer judged): a row naming what was asked, the verdict above it.
+ */
+export const AutoReviewTool: ToolCallMessagePartComponent<AutoReviewArgs, unknown> = (p) => {
+  const lines = p.args.lines ?? [];
+  const body = (
+    <div className="flex flex-col gap-1">
+      {p.args.reason ? <p>{p.args.reason}</p> : null}
+      <ul className="flex flex-col gap-0.5" data-testid="permissions-lines">
+        {lines.map((l) => (
+          <li key={l}>{l}</li>
+        ))}
+      </ul>
+    </div>
+  );
+  const query = p.args.command ?? [p.args.reason, lines.join("、")].filter((x) => x).join(" · ");
+  // a denial is the card alone — it already shows what was asked
+  return (
+    <div data-testid="tool-auto-review">
+      <AutoReviewVerdict review={p.args.review} command={p.args.fullCommand ?? body} />
+      {p.args.review.status === "denied" ? null : (
+        <ToolRow label={t.autoReview.reviewed} activeLabel={t.autoReview.running} query={query} running={p.args.review.status === "inProgress"} failed={false} testId="tool-auto-review-row">
+          {body}
+        </ToolRow>
+      )}
+    </div>
+  );
+};
+
 function exitLabel(p: ToolCallMessagePartProps<CommandArgs, CommandResult>): string | undefined {
   if (p.result?.status === "declined") return t.declined;
   if (p.status.type === "incomplete") return t.cancelledTool;
@@ -181,6 +275,18 @@ export const FileChangeTool: ToolCallMessagePartComponent<FileChangeArgs, FileCh
             {...actions}
           />
         </div>
+      ) : null}
+      {p.args.review ? (
+        <AutoReviewVerdict
+          review={p.args.review}
+          command={
+            <ul>
+              {changes.map((c) => (
+                <li key={c.path}>{c.path}</li>
+              ))}
+            </ul>
+          }
+        />
       ) : null}
       <ToolRow label={t.changedFiles} activeLabel={t.changingFiles} query={changes.length === 1 ? changes[0]!.path : t.fileChanges(changes.length)} running={running || approval !== undefined} failed={failed} testId="tool-file-change">
         <div className="flex flex-col gap-2">
@@ -449,6 +555,7 @@ export const codexToolkit = defineToolkit({
   webSearch: { type: "backend", render: WebSearchTool, display: "standalone" },
   requestUserInput: { type: "backend", render: QuestionsTool, display: "standalone" },
   permissions: { type: "backend", render: PermissionsTool, display: "standalone" },
+  autoReview: { type: "backend", render: AutoReviewTool, display: "standalone" },
   subagent: { type: "backend", render: SubagentTool, display: "standalone" },
   collab: { type: "backend", render: CollabTool, display: "standalone" },
 });

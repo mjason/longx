@@ -18,6 +18,19 @@ defmodule Longx.AI.Presets do
       Responses endpoint is `/api/v1` (not the chat-completions `/api/paas/v4`),
       `glm-5.3` (1M, `low / high / max`, default `max`) and `glm-5-turbo`
       (200k, no levels).
+    * **阿里云百炼 Token Plan** (个人版 / 团队版) — the `model-catalog.local.json`
+      on docs.bailian.console.aliyun.com ("Codex"): one endpoint for both
+      plans (`token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`,
+      Responses API; the keys differ per plan and are not interchangeable),
+      windows / levels / default levels / image input as published; the
+      team plan lists nine models more. **Search is per model**: Bailian
+      runs codex's standard `web_search` tool for Qwen 3.5+, DeepSeek-v4 and
+      glm-5.2 (`web_search_call` items with the query and sources come back
+      in the stream — verified live through codex) and refuses it for
+      kimi-k2.x, MiniMax and glm-5 / 5.1 ("Agent capabilities are not
+      enabled"), so those get `hosted_search: false` → Longx's own search.
+      Coding Plan is chat-completions only (codex 0.154 dropped that);
+      pay-as-you-go needs a WorkspaceId in the URL — a custom provider.
 
   A bump of these is a code change, reviewed like one.
   """
@@ -26,14 +39,16 @@ defmodule Longx.AI.Presets do
   alias Longx.AI.{Model, Provider}
 
   @type preset_model :: %{
-          upstream_id: String.t(),
-          slug: String.t(),
-          name: String.t(),
-          context_window: pos_integer,
-          reasoning_levels: [String.t()],
-          reasoning_effort: String.t() | nil,
-          image: boolean,
-          recommended: boolean
+          required(:upstream_id) => String.t(),
+          required(:slug) => String.t(),
+          required(:name) => String.t(),
+          required(:context_window) => pos_integer,
+          required(:reasoning_levels) => [String.t()],
+          required(:reasoning_effort) => String.t() | nil,
+          required(:image) => boolean,
+          required(:recommended) => boolean,
+          # the model runs codex's web_search tool itself (absent: the provider's say)
+          optional(:hosted_search) => boolean
         }
 
   @type preset :: %{
@@ -49,6 +64,36 @@ defmodule Longx.AI.Presets do
         }
 
   @openai_levels ~w(low medium high xhigh max)
+  # Bailian's catalog: qwen3.8 declares low / medium / xhigh (default xhigh),
+  # everything else low / medium / high / xhigh (default medium)
+  @bailian_short ~w(low medium xhigh)
+  @bailian_full ~w(low medium high xhigh)
+  @bailian_url "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+
+  # {upstream id, window, levels, default, image, hosted search, recommended}
+  @bailian_personal [
+    {"qwen3.8-max", 983_616, @bailian_short, "xhigh", true, true, true},
+    {"qwen3.8-flash", 983_616, @bailian_short, "xhigh", true, true, true},
+    {"qwen3.7-max", 1_000_000, @bailian_full, "medium", false, true, false},
+    {"qwen3.7-plus", 1_000_000, @bailian_full, "medium", true, true, false},
+    {"qwen3.6-flash", 1_000_000, @bailian_full, "medium", true, true, false},
+    {"glm-5.2", 1_000_000, @bailian_full, "medium", false, true, true},
+    {"deepseek-v4.1-flash", 1_000_000, @bailian_full, "medium", true, true, false},
+    {"deepseek-v4-pro", 163_840, @bailian_full, "medium", false, true, true},
+    {"deepseek-v4-pro-0813", 163_840, @bailian_full, "medium", false, true, false},
+    {"deepseek-v4-flash-0731", 1_000_000, @bailian_full, "medium", false, true, false}
+  ]
+  @bailian_team_extra [
+    {"qwen3.6-plus", 1_000_000, @bailian_full, "medium", true, true, false},
+    {"deepseek-v4-flash", 163_840, @bailian_full, "medium", false, true, false},
+    {"deepseek-v3.2", 163_840, @bailian_full, "medium", false, false, false},
+    {"kimi-k2.7-code", 262_144, @bailian_full, "medium", true, false, true},
+    {"kimi-k2.6", 262_144, @bailian_full, "medium", true, false, false},
+    {"kimi-k2.5", 262_144, @bailian_full, "medium", true, false, false},
+    {"glm-5.1", 202_752, @bailian_full, "medium", false, false, false},
+    {"glm-5", 202_752, @bailian_full, "medium", false, false, false},
+    {"MiniMax-M2.5", 204_800, @bailian_full, "medium", false, false, false}
+  ]
   # DeepSeek's Responses API takes `reasoning.effort` none / low / high / max
   # (none = thinking off; minimal → low, medium / xhigh → high, ultra → max
   # are only aliases) — docs: 思考模式 → 控制参数（Responses API 格式）
@@ -120,6 +165,55 @@ defmodule Longx.AI.Presets do
           recommended: true
         }
       ]
+    },
+    %{
+      slug: "bailian-token-plan-personal",
+      name: "阿里云百炼 Token Plan 个人版",
+      kind: :openai_compatible,
+      base_url: @bailian_url,
+      supports_hosted_web_search: true,
+      key_env: "BAILIAN_TOKEN_PLAN_API_KEY",
+      key_url: "https://bailian.console.aliyun.com/?tab=tokenplan#/token-plan",
+      docs_url: "https://docs.bailian.console.aliyun.com/zh/model-studio/codex",
+      models:
+        for {id, window, levels, effort, image, search, recommended} <- @bailian_personal do
+          %{
+            upstream_id: id,
+            slug: id,
+            name: id,
+            context_window: window,
+            reasoning_levels: levels,
+            reasoning_effort: effort,
+            image: image,
+            hosted_search: search,
+            recommended: recommended
+          }
+        end
+    },
+    %{
+      slug: "bailian-token-plan-team",
+      name: "阿里云百炼 Token Plan 团队版",
+      kind: :openai_compatible,
+      base_url: @bailian_url,
+      supports_hosted_web_search: true,
+      key_env: "BAILIAN_TOKEN_PLAN_TEAM_API_KEY",
+      key_url: "https://bailian.console.aliyun.com/?tab=tokenplan#/token-plan",
+      docs_url: "https://docs.bailian.console.aliyun.com/zh/model-studio/codex",
+      models:
+        for {id, window, levels, effort, image, search, recommended} <-
+              @bailian_personal ++ @bailian_team_extra do
+          %{
+            upstream_id: id,
+            slug: id,
+            name: id,
+            context_window: window,
+            reasoning_levels: levels,
+            reasoning_effort: effort,
+            image: image,
+            hosted_search: search,
+            recommended: recommended
+          }
+        end
     },
     %{
       slug: "openai",
@@ -287,6 +381,7 @@ defmodule Longx.AI.Presets do
                  context_window: spec.context_window,
                  reasoning_levels: spec.reasoning_levels,
                  reasoning_effort: spec.reasoning_effort,
+                 hosted_web_search: Map.get(spec, :hosted_search),
                  provider_id: provider.id
                }) do
             {:ok, model} -> {:cont, {:ok, acc ++ [model]}}

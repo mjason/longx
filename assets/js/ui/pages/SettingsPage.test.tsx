@@ -126,6 +126,9 @@ describe("SettingsPage", () => {
     );
     await user.click(within(md).getByRole("combobox", { name: "默认档" }));
     await user.click(await screen.findByRole("option", { name: "high" }));
+    // web search per model: this one searches through Longx whatever the provider says
+    await user.click(within(md).getByRole("combobox", { name: "联网搜索" }));
+    await user.click(await screen.findByRole("option", { name: /Longx 代搜/ }));
     await user.click(within(md).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(createModel).toHaveBeenCalledWith(
@@ -137,6 +140,7 @@ describe("SettingsPage", () => {
             contextWindow: 200000,
             reasoningLevels: ["low", "high"],
             reasoningEffort: "high",
+            hostedWebSearch: false,
           }),
         }),
       ),
@@ -510,6 +514,9 @@ describe("SettingsPage", () => {
     const reload = vi.spyOn(page, "reload").mockImplementation(() => {});
     vi.mocked(upgradeStatus)
       .mockResolvedValueOnce(
+        ok({ ...upgradeIdle, latest: "0.2.0", available: true, stage: "downloading", target: "0.2.0", progress: { received: 150000000, total: 500000000 } }) as never,
+      )
+      .mockResolvedValueOnce(
         ok({ ...upgradeIdle, latest: "0.2.0", available: true, stage: "installing", target: "0.2.0" }) as never,
       )
       .mockResolvedValueOnce(
@@ -527,6 +534,9 @@ describe("SettingsPage", () => {
     );
     await waitFor(() => expect(upgradeApply).toHaveBeenCalled());
     await within(section).findByText(/正在下载/);
+    const bar = await within(section).findByRole("progressbar");
+    expect(bar).toHaveAttribute("aria-valuenow", "150000000");
+    expect(section).toHaveTextContent("143 MB / 477 MB");
     await within(section).findByText(/正在安装/, undefined, { timeout: 5000 });
     await within(section).findByText(/正在重启/, undefined, { timeout: 5000 });
     await waitFor(() => expect(reload).toHaveBeenCalled(), { timeout: 8000 });

@@ -39,6 +39,8 @@ defmodule LongxWeb.Router do
 
     post "/rpc/run", AshTypescriptRpcController, :run
     post "/rpc/validate", AshTypescriptRpcController, :validate
+    # the composer's file attachments (multipart; CSRF like the RPC calls)
+    post "/attachments/:project_id", AttachmentController, :create
   end
 
   scope "/ai/v1", LongxWeb.AI do

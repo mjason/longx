@@ -14,7 +14,7 @@ defmodule Longx.Codex.Thread do
   alias Longx.Codex.{Connection, Pool, ThreadState}
   alias Longx.Codex.Tool.{Context, Registry}
 
-  @type approval_policy :: :never | :on_request | :untrusted
+  @type approval_policy :: :never | :on_request | :untrusted | :auto_accept
   @type sandbox :: :read_only | :workspace_write | :danger_full_access
   @type decision :: :accept | :accept_for_session | :decline | :cancel
   @type web_search :: :hosted | :standalone | :disabled
@@ -30,6 +30,7 @@ defmodule Longx.Codex.Thread do
           | {:network_access, boolean}
           | {:writable_roots, [Path.t()]}
           | {:multi_agent, boolean}
+          | {:auto_review, boolean}
           | {:developer_instructions, String.t()}
           | {:tools, [module | String.t()]}
           | {:conn, GenServer.server()}
@@ -38,7 +39,15 @@ defmodule Longx.Codex.Thread do
   # (`with_additional_permissions`, `request_permissions`, `require_escalated`)
   # and the person grants it in the chat; codex never widens the sandbox by
   # itself — a denied command is reported to the model, which asks
-  @approval_policies %{never: "never", on_request: "on-request", untrusted: "untrusted"}
+  # `:auto_accept` (全部放行) is Longx's own: codex runs on-request and every
+  # request it sends is answered "yes" here (ServerRequest.Default, flag on
+  # the ThreadState meta) — codex's `never` would *refuse* them instead
+  @approval_policies %{
+    never: "never",
+    on_request: "on-request",
+    untrusted: "untrusted",
+    auto_accept: "on-request"
+  }
 
   @sandboxes %{
     read_only: "read-only",
@@ -59,7 +68,16 @@ defmodule Longx.Codex.Thread do
            Connection.request(Keyword.fetch!(opts, :conn), "thread/start", start_params(opts)),
          # so callers can subscribe/snapshot right away; thread/started fills it in
          {:ok, _} <- ThreadState.ensure(thread_id) do
+      note_auto_accept(thread_id, opts)
       {:ok, thread_id}
+    end
+  end
+
+  # the 全部放行 flag follows the approval policy whenever one is given
+  defp note_auto_accept(thread_id, opts) do
+    case Keyword.fetch(opts, :approval_policy) do
+      {:ok, policy} -> ThreadState.Store.set_auto_accept(thread_id, policy == :auto_accept)
+      :error -> :ok
     end
   end
 
@@ -100,6 +118,7 @@ defmodule Longx.Codex.Thread do
            }),
          {:ok, _} <- ThreadState.ensure(thread_id),
          :ok <- ThreadState.backfill(thread_id, read) do
+      note_auto_accept(thread_id, opts)
       {:ok, thread_id}
     end
   end
@@ -114,8 +133,25 @@ defmodule Longx.Codex.Thread do
     with {:ok, conn} <- conn(thread_id, opts),
          {:ok, %{"turn" => %{"id" => turn_id}}} <-
            Connection.request(conn, "turn/start", turn_params(thread_id, text, opts)) do
+      note_auto_accept(thread_id, opts)
       {:ok, turn_id}
     end
+  end
+
+  @doc """
+  Changes a running thread's settings (`thread/settings/update`); today
+  only `approvals_reviewer:` (`:auto_review` | `:user`) — the automatic
+  review is a thread-start config otherwise, and 全部放行 needs it off.
+  """
+  @spec update_settings(String.t(), keyword) :: :ok | {:error, term}
+  def update_settings(thread_id, opts) do
+    params =
+      %{"threadId" => thread_id}
+      |> put_if("approvalsReviewer", opts |> Keyword.get(:approvals_reviewer) |> wire_atom())
+
+    with {:ok, conn} <- conn(thread_id, opts),
+         {:ok, _} <- Connection.request(conn, "thread/settings/update", params),
+         do: :ok
   end
 
   @doc "Adds input to the in-flight turn without starting a new one."
@@ -183,6 +219,93 @@ defmodule Longx.Codex.Thread do
     with {:ok, conn} <- conn(thread_id, opts),
          {:ok, _} <- Connection.request(conn, "thread/compact/start", %{"threadId" => thread_id}),
          do: :ok
+  end
+
+  @doc """
+  Overrides a denial of codex's automatic approval review
+  (`thread/approveGuardianDeniedAction`): the denied action goes back to
+  codex as approved by the person, which puts a developer note in the
+  thread's context — the model may retry the action on its next turn and
+  the reviewer sees the authorization. The review item is marked
+  `userApproved` in the ThreadState. Only a denied review can be approved.
+  """
+  @spec approve_denied_review(String.t(), String.t(), keyword) :: :ok | {:error, term}
+  def approve_denied_review(thread_id, review_id, opts \\ []) do
+    with {:ok, item} <- denied_review(thread_id, review_id),
+         {:ok, conn} <- conn(thread_id, opts),
+         {:ok, _} <-
+           Connection.request(conn, "thread/approveGuardianDeniedAction", %{
+             "threadId" => thread_id,
+             "event" => guardian_event(item)
+           }) do
+      ThreadState.ingest(thread_id, "item/autoApprovalReview/userApproved", %{
+        "threadId" => thread_id,
+        "reviewId" => review_id
+      })
+    end
+  end
+
+  defp denied_review(thread_id, review_id) do
+    case ThreadState.Store.get_item(thread_id, review_id) do
+      %{"type" => "autoApprovalReview", "review" => %{"status" => "denied"}} = item -> {:ok, item}
+      %{"type" => "autoApprovalReview"} -> {:error, :not_denied}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  The stored review item as codex's core `GuardianAssessmentEvent`: the
+  app-server reports reviews in its v2 shape (camelCase, `unifiedExec`) but
+  takes the approval in the core one (snake_case keys and enum values).
+  """
+  @spec guardian_event(map) :: map
+  def guardian_event(%{"id" => id} = item) do
+    review = Map.get(item, "review", %{})
+
+    %{
+      "id" => id,
+      "status" => review["status"],
+      "risk_level" => review["riskLevel"],
+      "user_authorization" => review["userAuthorization"],
+      "rationale" => review["rationale"],
+      "turn_id" => item["turnId"],
+      "target_item_id" => item["targetItemId"],
+      "decision_source" => item["decisionSource"],
+      "started_at_ms" => item["startedAtMs"],
+      "completed_at_ms" => item["completedAtMs"],
+      "action" => snake_action(item["action"])
+    }
+    |> Map.reject(fn {_, v} -> is_nil(v) end)
+  end
+
+  # keys snake_cased at every level; the tag values (`type`, `source`, a
+  # special path's `value`) are codex enums that change case with the shape,
+  # the rest stay as they are. A file-system profile is either the legacy
+  # read/write lists or entries in core — the v2 shape carries both when the
+  # lists suffice, and core refuses the mix.
+  defp snake_action(%{} = map) do
+    map
+    |> Map.reject(fn {_, v} -> is_nil(v) end)
+    |> Map.new(fn
+      {key, value} when key in ["type", "source", "value"] and is_binary(value) ->
+        {key, Macro.underscore(value)}
+
+      {"fileSystem", %{} = fs} ->
+        {"file_system", snake_file_system(fs)}
+
+      {key, value} ->
+        {Macro.underscore(key), snake_action(value)}
+    end)
+  end
+
+  defp snake_action(list) when is_list(list), do: Enum.map(list, &snake_action/1)
+  defp snake_action(other), do: other
+
+  defp snake_file_system(fs) do
+    case Map.take(fs, ["read", "write"]) |> Map.reject(fn {_, v} -> is_nil(v) end) do
+      legacy when map_size(legacy) > 0 -> legacy
+      _ -> fs |> Map.drop(["read", "write"]) |> snake_action()
+    end
   end
 
   @typedoc "What a review looks at."
@@ -460,6 +583,19 @@ defmodule Longx.Codex.Thread do
 
         _ ->
           config
+      end
+
+    # codex's Guardian: every approval request goes to a read-only reviewer
+    # sub-session (the thread's model) instead of the person — `user` is
+    # codex's default, written explicitly so a project that turned it off
+    # never inherits a home's setting
+    config =
+      case {Keyword.fetch(opts, :auto_review), Keyword.get(opts, :approval_policy)} do
+        # 全部放行 answers before any reviewer could: the reviewer stays off
+        {_, :auto_accept} -> Map.put(config, "approvals_reviewer", "user")
+        {{:ok, true}, _} -> Map.put(config, "approvals_reviewer", "auto_review")
+        {{:ok, false}, _} -> Map.put(config, "approvals_reviewer", "user")
+        {:error, _} -> config
       end
 
     if map_size(config) == 0, do: params, else: Map.put(params, "config", config)

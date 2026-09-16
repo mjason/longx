@@ -16,6 +16,7 @@ export type ThreadRow = {
   networkAccess?: boolean;
   webSearch?: boolean;
   multiAgent?: boolean;
+  autoReview?: boolean;
 };
 
 export type ThreadListActions = {

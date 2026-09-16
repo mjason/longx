@@ -83,14 +83,18 @@ React Native client planned on the same core code.
     its threads: `approval_policy`, `sandbox`, `network_access` (the workspace-write sandbox
     has no network unless this is true → `sandbox_workspace_write.network_access`), `tools`
     (registered `"ns.name"`s), `model_id` (nil → global default), `dirty_start`
-    (`:commit` | `:ask` | `:off`), `writable_roots` (directories the workspace-write
-    sandbox may write besides cwd and /tmp — **default `[]`**: 0.1.7 defaulted it to
-    `["~/.cache"]` for every project, which silently widened every sandbox (a tool cache is
-    where planted code runs later, outside it) and was Linux-only; the 0.1.9 migration resets
-    rows still on that value. `Projects.writable_roots/1` expands `~` and keeps only existing
-    directories; they go on `thread/start` as
+    (`:commit` | `:ask` | `:off`), `writable_roots` (the project's own extra directories
+    the workspace-write sandbox may write — default `[]`). **The user's tool cache is
+    writable in every workspace sandbox, like /tmp**: `Projects.writable_roots/1` always
+    starts with `Longx.Codex.Sandbox.cache_dir/0` — per platform, never a hard-coded
+    `~/.cache` (0.1.7 stored that as a row default, Linux-only, and it was reverted):
+    Linux `$XDG_CACHE_HOME` (absolute) else `~/.cache`, macOS `~/Library/Caches`, Windows
+    `%LOCALAPPDATA%` else `~/AppData/Local` — uv / pip / npm / cargo / Hugging Face all
+    live there and fail on the first run without it. Then the project's roots (`~`
+    expanded), only existing directories; they go on `thread/start` as
     `sandbox_workspace_write.writable_roots`, on resume the same, and in
-    `turn/start.sandboxPolicy.writableRoots` when a turn changes the mode). **Devices and sockets go in through `passthrough_paths`, never as writable roots**:
+    `turn/start.sandboxPolicy.writableRoots` on every turn — one path for every platform,
+    including Windows where codex enforces the sandbox itself. **Devices and sockets go in through `passthrough_paths`, never as writable roots**:
     bwrap's `--dev /dev` is minimal and a device node as a writable root breaks the launch.
     `Project.passthrough_paths` (globs allowed; `Projects.passthrough_paths/1` resolves to
     what exists, sorted) is read by **the exec-server at every command start**
@@ -145,6 +149,52 @@ React Native client planned on the same core code.
     A granular policy (`sandbox_approval: true`, which makes codex ask "retry without
     sandbox?" on a denial) was tried and dropped: codex refuses `with_additional_permissions`
     under anything but plain on-request.
+    **Automatic approval review — codex's Guardian, on by default** (`Project.auto_review` →
+    `Thread.auto_review`, fixed at start: `thread/start.config.approvals_reviewer =
+    "auto_review" | "user"`, on resume / fork / sub-agent rows too; the ModePicker switch is
+    new-chat only, like web search). Every approval request (a command with
+    `with_additional_permissions`, a `request_permissions` call, an MCP/network one) goes to
+    a read-only reviewer sub-session on the thread's model (its `low` effort when declared;
+    codex's preferred reviewer model is not in our catalog, so it falls back to the active
+    slug) through our gateway — one extra model call per request — with
+    `core/assets/guardian/policy.md` as instructions and a strict-JSON verdict
+    (`text.format` is sent; the parser also takes JSON inside prose, so third-party models
+    work: live with DeepSeek Flash a whole-home write was denied, a single file allowed).
+    No card: `item/autoApprovalReview/started` / `completed` (`reviewId`, `targetItemId`,
+    `action` in v2 camelCase, `review.status inProgress|approved|denied|timedOut|aborted`,
+    `riskLevel`, `rationale`) plus a `guardianWarning` text we ignore. The Store / `thread.ts`
+    fold them into one `autoApprovalReview` item per review id; `messages.ts` puts the
+    review on its target's part (`args.review`, an `AutoReview`) or, with no item of its
+    own (a permissions request), a standalone `autoReview` part; `AutoReviewVerdict` in the
+    toolkit is a line above the row (running / approved) or an `approval-card` in its
+    `denied` state. **A denial never falls back to asking the person**: the command item is
+    `declined`, the model is told to stop or ask; the card's 仍然允许 →
+    `extras.approveDeniedReview` → RPC `approve_review` → `Projects.approve_denied_review/3`
+    → `Longx.Codex.Thread.approve_denied_review/3`: the stored item back in codex's *core*
+    shape (`Thread.guardian_event/1`: snake_case keys, `unified_exec`, `request_permissions`)
+    on `thread/approveGuardianDeniedAction`, then Longx's own
+    `item/autoApprovalReview/userApproved` event marks the item; the renderer appends
+    "请继续" as a user message, and the next request carries codex's developer note
+    ("The user has manually approved…") the reviewer treats as authorization. Circuit
+    breaker: 3 consecutive denials (10 in 50) interrupt the turn. Full access is never
+    reviewed. `auto_review_integration_test` (`:integration`, Bypass plays agent and
+    reviewer) proves allow, deny and the override on the real binary. codex's "always
+    allow" (`rules/default.rules` in the project's home) only exists under `untrusted`, so
+    it stays empty here.
+    **全部放行 — `approval_policy: :auto_accept`, Longx's own value** (Project / Thread enum
+    next to codex's three; per turn like the others): codex runs plain `on-request` and
+    `ServerRequest.Default` answers every approval request of the thread at once —
+    commands / patches `accept`, a permissions request as asked for the *session* — off a
+    flag on the ThreadState meta (`Store.auto_accept?/1`, set by `Thread.start` / `resume` /
+    `send` whenever `approval_policy:` is given, and by the Tracker on a sub-agent's row from
+    its parent); no card, no review. The reviewer would judge first, so
+    `start_params` forces `approvals_reviewer = "user"` under it and
+    `Projects.send_message` sends `thread/settings/update` (`Thread.update_settings/2`) when
+    a turn moves onto or off it (`reviewer_for/2`: the row's `auto_review` comes back).
+    codex's `never` is the opposite — it *refuses* every request — hence the label
+    从不询问（申请一律拒绝）. Proven on the real binary in
+    `auto_review_integration_test` (no reviewer request, the file written; the settings
+    update takes effect on the next turn).
   - `Thread` = codex thread ↔ project (`codex_thread_id`, `cwd`, the settings it started with,
     `model_slug`, `preview`, `status`, `last_activity_at`). Statuses: `:idle`, `:active`,
     `:disconnected` (its codex died mid-turn; resumed → `:idle` when it is back),
@@ -335,11 +385,16 @@ React Native client planned on the same core code.
     the levels when declared — `Model.Validations.EffortInLevels`), `reasoning_summary`
     (codex's enum) and `max_output_tokens`).
     `Longx.AI.resolve_target/0` = default model + its provider's decrypted key.
-    **Presets** (`Longx.AI.Presets`, pure data + `apply/2`): DeepSeek, GLM and OpenAI with
-    endpoint / kind / hosted search / key env + url / docs url and their models (window,
-    levels, default level, image input, recommended) — DeepSeek's and GLM's from the
-    `models.json` each publishes for codex, OpenAI's from the catalog embedded in the
-    pinned codex binary (`strings` it for `supported_reasoning_levels`). `apply/2` is
+    **Presets** (`Longx.AI.Presets`, pure data + `apply/2`): DeepSeek, GLM, 阿里云百炼
+    Token Plan (个人版 / 团队版) and OpenAI with endpoint / kind / hosted search / key env
+    + url / docs url and their models (window, levels, default level, image input,
+    recommended, per-model `hosted_search`) — DeepSeek's and GLM's from the `models.json`
+    each publishes for codex, Bailian's from the `model-catalog.local.json` on its Codex
+    page (one endpoint for both plans, `…/compatible-mode/v1`, Responses API, plan-specific
+    keys; the team plan lists nine models more; Coding Plan is chat-only and out;
+    pay-as-you-go needs a WorkspaceId in the URL → a custom provider), OpenAI's from the
+    catalog embedded in the pinned codex binary (`strings` it for
+    `supported_reasoning_levels`). `apply/2` is
     idempotent (provider by slug — facts refreshed, a key never dropped; models by
     `upstream_id` — a person's edits kept, a row without levels learns the preset's, a row
     on a smaller set of the preset's levels gains the ones added since (DeepSeek's are
@@ -433,8 +488,13 @@ React Native client planned on the same core code.
     default (written into codex's config by `Home.prepare/1`) and `web_search_mode/1` per
     model (a thread's `config` override, via `thread_options/1`) — pattern-matched on the
     resolved model target and search target, never an `&&`/`||` chain at the call site:
-    `:hosted` when the model's provider has `supports_hosted_web_search` (OpenAI —
-    the Responses API runs `web_search` inside the provider; config `web_search = "live"`),
+    `:hosted` when the model runs codex's standard `web_search` tool itself —
+    `Model.hosted_web_search` when set, else the provider's `supports_hosted_web_search`
+    (OpenAI; Bailian for Qwen 3.5+ / DeepSeek-v4 / glm-5.2, which answer with
+    `web_search_call` items carrying the query and sources — verified live through codex —
+    and refuse the tool for kimi-k2.x / MiniMax / glm-5 with "Agent capabilities are not
+    enabled", hence per model; the model dialog's 联网搜索 select) (config
+    `web_search = "live"`; the gateway passes the tool through, `external_web_access` and all),
     else `:standalone` — always: `open` needs no provider (below), and a `search_query`
     without one is told "no search provider" inside the output. `:disabled` is only ever an
     explicit choice: `Project.web_search` / `Thread.web_search` (a `thread/start` config,
@@ -486,8 +546,10 @@ React Native client planned on the same core code.
     entries to that is a separate, e2e-verified change, not done yet.
   - Upstreams are all OpenAI **Responses API** (codex 0.154 dropped `wire_api = "chat"`):
     OpenAI `https://api.openai.com/v1`, DeepSeek `https://api.deepseek.com/v1`, GLM
-    `https://open.bigmodel.cn/api/v1` (its `/api/paas/v4` is chat completions). Adding a
-    provider = a DB row, no code — `Longx.AI.Presets` has the three ready-made.
+    `https://open.bigmodel.cn/api/v1` (its `/api/paas/v4` is chat completions), Bailian
+    Token Plan `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`. Adding
+    a provider = a DB row, no code — `Longx.AI.Presets` has the ready-made ones;
+    `bailian_live_test` (`:live`, `BAILIAN_TOKEN_PLAN_API_KEY`) drives the real endpoint.
   - `Longx.Codex.Home` writes our own `CODEX_HOME` (`data/codex_home`, prod
     `$LONGX_DATA_DIR/codex_home`; never `~/.codex`, never a tmp dir) with a generated
     `config.toml`: one provider `longx` → `http://127.0.0.1:<port>/ai/v1`,
@@ -707,7 +769,9 @@ React Native client planned on the same core code.
     verify, `VACUUM INTO <home>/backups/longx-<current>-<stamp>.db`, unpack to `app.new`, swap
     `app` → `app.old` → `app`, then `restart_command` (default `systemctl --user restart
     --no-block $LONGX_SERVICE`, `longx`); no way to restart → stage `:installed` with a
-    "restart by hand" message; every stage is broadcast as `{:upgrade, status}` on
+    "restart by hand" message; the download streams through a Req `into:` sink that
+    reports `progress: %{received, total}` (total from `content-length`, at most every
+    200 ms) — the page draws a bar with the bytes; every stage is broadcast as `{:upgrade, status}` on
     `Upgrade.topic/0`. RPC: `upgrade_status` / `upgrade_check` / `upgrade_apply` /
     `set_github_token` on `Longx.System.Status`; the SPA (`core/upgrade.ts`,
     `pages/settings/UpdateSection`, a hint in the status strip) polls the status every second
@@ -929,11 +993,23 @@ React Native client planned on the same core code.
     `ComposerPopovers` and `UserText`. **The composer has the catalog's Composer
     element's full set** (https://www.assistant-ui.com/elements/composer, all wired
     through the runtime, nothing hand-rolled): **attachments** — the runtime's
-    `adapters.attachments` is `CompositeAttachmentAdapter([SimpleImage, SimpleText])`
-    (built once in `useCodexRuntime`, like everything the adapter is made of), so the
-    `+` button (`ComposerAddAttachment` from `attachment.aui`), paste and drop onto the
-    bar stage files as tiles; on send `adapter.ts`'s `inputOf` puts images on the RPC as
-    `images` (data urls) and appends text files to the text; a sent image comes back in
+    `adapters.attachments` is `CompositeAttachmentAdapter([SimpleImage, SimpleText,
+    FileUpload])` (built once in `useCodexRuntime`, like everything the adapter is made
+    of), so the `+` button (`ComposerAddAttachment` from `attachment.aui`), paste and drop
+    onto the bar stage files as tiles; on send `adapter.ts`'s `inputOf` puts images on
+    the RPC as `images` (data urls) and appends text files to the text. **Any other file
+    (a zip, a PDF, a dataset)** is `core/chat/fileAttachments.ts`'s
+    `FileUploadAttachmentAdapter` (`accept: "*"`, so it is last): `add` uploads it at once
+    to `POST /attachments/:project_id` (multipart, the RPC's CSRF token; parser limit
+    512 MB) — `LongxWeb.AttachmentController` → `Longx.Projects.Attachments.store/3`, which
+    keeps the file as `<stamp>-<name>` under `<attachments dir>/<project id>/` in the data
+    directory (`config :longx, Longx.Projects.Attachments, dir:`; dev `data/attachments`,
+    prod `$LONGX_DATA_DIR/attachments` — never the working directory, the repository
+    stays clean; the name is reduced to a basename); `send` puts one line in the message,
+    `<attachment name="…" path="…" size="…" />` + a hint, and the agent reads or unzips
+    the path itself (the sandbox sees `/` read-only; live-checked with DeepSeek: a zip
+    dropped on the composer, `unzip` into /tmp, contents read back). Deleting a project
+    removes its attachments (`Changes.DeleteAttachments`); a sent image comes back in
     codex's `userMessage` content as `image` and `messages.ts` renders it as an image
     part (`UserImagePart`); **dictation** — `adapters.dictation` is
     `WebSpeechDictationAdapter` where the browser has speech recognition (the mic in the
@@ -987,7 +1063,12 @@ React Native client planned on the same core code.
     scratch — pick the element from the catalog first** (https://www.assistant-ui.com/elements,
     section "Tool use"). `thread.aui` also shows a
     stall hint (`unstable_useMessageStallDetection`, 15 s) and the timing badge.
-    `ProjectWindow` is `h-dvh`: the thread scrolls in its own viewport, never the page. Headers and bars are
+    `ProjectWindow` is `h-dvh`: the thread scrolls in its own viewport, never the page.
+    **The viewport follows the bottom** (no `turnAnchor="top"` on `ThreadPrimitive.Viewport`:
+    the registry's top anchor pins the latest user message to the top and switches
+    assistant-ui's auto-scroll off, so a long turn — a streaming command, the thinking
+    panel growing — ran below the fold); a reader who scrolls up stays put and gets the
+    scroll-to-bottom button (measured live: gap to bottom 0 throughout a 12 s stream). Headers and bars are
     solid (`backdrop-blur` on sticky/fixed bars ghosted text in Chromium screenshots).
     After `npm install` adds packages while `mix phx.server` runs, restart it: Vite's
     dependency re-optimisation can otherwise load two copies of React ("Invalid hook call").

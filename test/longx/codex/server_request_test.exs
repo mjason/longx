@@ -20,6 +20,33 @@ defmodule Longx.Codex.ServerRequestTest do
     end
   end
 
+  test "a thread on 全部放行 (auto_accept) gets every approval answered at once: accept, the permissions asked for the session" do
+    t = "auto-#{System.unique_integer([:positive])}"
+    Longx.Codex.ThreadState.Store.set_auto_accept(t, true)
+    ctx = %{thread_id: t}
+
+    assert {:reply, %{"decision" => "accept"}} =
+             Default.handle(
+               "item/commandExecution/requestApproval",
+               %{"availableDecisions" => ["accept", "cancel"]},
+               ctx
+             )
+
+    assert {:reply, %{"decision" => "accept"}} =
+             Default.handle("item/fileChange/requestApproval", %{}, ctx)
+
+    perms = %{"fileSystem" => %{"write" => ["/home/mj"]}, "network" => %{"enabled" => true}}
+
+    assert {:reply, %{"permissions" => ^perms, "scope" => "session"}} =
+             Default.handle("item/permissions/requestApproval", %{"permissions" => perms}, ctx)
+
+    # questions are still questions
+    assert {:defer, _, _} = Default.handle("item/tool/requestUserInput", %{}, ctx)
+    # a request without a thread is deferred as before
+    assert {:defer, _, _} =
+             Default.handle("item/commandExecution/requestApproval", %{}, %{thread_id: nil})
+  end
+
   test "dynamic tool calls run asynchronously through the Runner, with a failed-call fallback" do
     params = %{
       "tool" => "echo",

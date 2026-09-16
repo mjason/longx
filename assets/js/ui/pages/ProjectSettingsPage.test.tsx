@@ -24,9 +24,11 @@ describe("ProjectSettingsPage", () => {
     expect(within(form).getByLabelText("名称")).toHaveValue("App 1");
     expect(within(form).getByRole("radio", { name: "可写工作区" })).toBeChecked();
     await user.click(within(form).getByRole("radio", { name: "只读" }));
-    await user.click(within(form).getByRole("radio", { name: "从不询问" }));
+    await user.click(within(form).getByRole("radio", { name: /从不询问/ }));
     await user.click(within(form).getByRole("radio", { name: "先问我" }));
     await user.click(within(form).getByRole("switch", { name: /子 agent/ }));
+    expect(within(form).getByRole("switch", { name: /自动审核/ })).toBeChecked();
+    await user.click(within(form).getByRole("switch", { name: /自动审核/ }));
     expect(within(form).getByRole("switch", { name: /全局记忆/ })).toBeChecked();
     await user.click(within(form).getByRole("switch", { name: /全局记忆/ }));
     // extra writable directories (under 高级): one per line, blanks dropped
@@ -37,7 +39,7 @@ describe("ProjectSettingsPage", () => {
     await user.click(within(form).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(updateProject).toHaveBeenCalledWith(
-        expect.objectContaining({ identity: "id-1", input: expect.objectContaining({ sandbox: "read_only", approvalPolicy: "never", dirtyStart: "ask", multiAgent: false, globalMemory: false, writableRoots: ["~/.cache", "/data/models"] }) }),
+        expect.objectContaining({ identity: "id-1", input: expect.objectContaining({ sandbox: "read_only", approvalPolicy: "never", dirtyStart: "ask", multiAgent: false, autoReview: false, globalMemory: false, writableRoots: ["~/.cache", "/data/models"] }) }),
       ),
     );
   });

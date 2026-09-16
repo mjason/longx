@@ -150,7 +150,8 @@ defmodule Longx.Projects.ThreadsTest do
                "model_reasoning_summary" => "auto",
                "web_search" => "live",
                "features.standalone_web_search" => true,
-               "features.multi_agent_v2" => true
+               "features.multi_agent_v2" => true,
+               "approvals_reviewer" => "auto_review"
              }
     end
 
@@ -185,23 +186,26 @@ defmodule Longx.Projects.ThreadsTest do
       assert params["config"]["sandbox_workspace_write.network_access"] == true
     end
 
-    test "writable_roots: the project's extra directories reach the sandbox — ~ expanded, missing ones skipped",
+    test "writable_roots: this user's cache directory always (like /tmp), plus the project's own — ~ expanded, missing ones skipped",
          %{dir: dir, conn: conn} do
       cache = Path.join(dir, "cache")
       File.mkdir_p!(cache)
+      user_cache = Longx.Codex.Sandbox.cache_dir()
 
-      # nothing by default: the sandbox is exactly codex's (cwd + /tmp) until the person adds a path
+      # the project stores nothing by default; the sandbox still gets the user's
+      # tool cache (uv, pip, npm… would fail read-only otherwise), when it exists
       assert git_project!(dir).writable_roots == []
 
       assert Projects.writable_roots(
                git_project!(Path.join(dir, "plain") |> tap(&File.mkdir_p!/1))
-             ) == []
+             ) == Enum.filter([user_cache], &File.dir?/1)
 
       sub = Path.join(dir, "sub")
       File.mkdir_p!(sub)
       project = git_project!(sub, %{writable_roots: ["~", cache, Path.join(dir, "nope")]})
 
-      assert Projects.writable_roots(project) == [Path.expand("~"), cache]
+      assert Projects.writable_roots(project) ==
+               Enum.uniq(Enum.filter([user_cache], &File.dir?/1) ++ [Path.expand("~"), cache])
 
       {:ok, thread} = Projects.start_thread(project, conn: conn)
       %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
@@ -223,10 +227,11 @@ defmodule Longx.Projects.ThreadsTest do
       assert turn["sandboxPolicy"] == %{
                "type" => "workspaceWrite",
                "networkAccess" => false,
-               "writableRoots" => [cache]
+               "writableRoots" => Projects.writable_roots(project)
              }
 
-      assert Projects.writable_roots(project) == [cache]
+      assert Projects.writable_roots(project) ==
+               Enum.filter([user_cache], &File.dir?/1) ++ [cache]
     end
 
     test "passthrough_paths: this machine's GPU nodes always, plus the project's own patterns — globs expanded, only what exists",
@@ -649,6 +654,88 @@ defmodule Longx.Projects.ThreadsTest do
       assert off.multi_agent == false
       %{"startParams" => params} = read_thread!(conn, off.codex_thread_id)
       assert params["config"]["features.multi_agent"] == false
+    end
+
+    test "auto_review: on by default — codex's Guardian reviews approvals instead of the person; off at start or as the project's default",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      assert project.auto_review == true
+
+      {:ok, on} = Projects.start_thread(project, conn: conn)
+      assert on.auto_review == true
+      %{"startParams" => params} = read_thread!(conn, on.codex_thread_id)
+      assert params["config"]["approvals_reviewer"] == "auto_review"
+
+      {:ok, off} = Projects.start_thread(project, conn: conn, auto_review: false)
+      assert off.auto_review == false
+      %{"startParams" => params} = read_thread!(conn, off.codex_thread_id)
+      assert params["config"]["approvals_reviewer"] == "user"
+
+      manual = Projects.update_project!(project, %{auto_review: false})
+      {:ok, inherited} = Projects.start_thread(manual, conn: conn)
+      assert inherited.auto_review == false
+    end
+
+    test "approve_denied_review/2 hands a denied review back to codex as approved by the person",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      id = thread.codex_thread_id
+      :ok = Longx.Codex.Thread.subscribe(id)
+
+      Longx.Codex.ThreadState.ingest(id, "item/autoApprovalReview/completed", %{
+        "threadId" => id,
+        "turnId" => "t1",
+        "reviewId" => "rev-1",
+        "action" => %{
+          "type" => "command",
+          "source" => "unifiedExec",
+          "command" => "ls",
+          "cwd" => dir
+        },
+        "review" => %{"status" => "denied", "riskLevel" => "high", "rationale" => "no"}
+      })
+
+      assert_receive {:codex, _, "item/autoApprovalReview/completed", _}, 5_000
+      assert :ok = Projects.approve_denied_review(thread, "rev-1", conn: conn)
+      assert_receive {:codex, _, "item/autoApprovalReview/userApproved", _}, 5_000
+      assert %{"approvedGuardianEvents" => [%{"id" => "rev-1"}]} = read_thread!(conn, id)
+      assert {:error, :not_found} = Projects.approve_denied_review(thread, "rev-9", conn: conn)
+    end
+
+    test "approval_policy :auto_accept (全部放行): the turn switches the reviewer off and Longx answers every approval; back to on-request restores the reviewer",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      id = thread.codex_thread_id
+      :ok = Longx.Codex.Thread.subscribe(id)
+
+      {:ok, turn} =
+        Projects.send_message(thread, "approve make", conn: conn, approval_policy: :auto_accept)
+
+      eventually(turn_done(turn.id))
+      refute_received {:codex, _, "item/commandExecution/requestApproval", _}
+      assert Ash.get!(Thread, thread.id).approval_policy == :auto_accept
+      assert Longx.Codex.ThreadState.Store.auto_accept?(id)
+      read = read_thread!(conn, id)
+      assert read["lastTurnParams"]["approvalPolicy"] == "on-request"
+      assert read["settings"]["approvalsReviewer"] == "user"
+
+      {:ok, turn2} =
+        Projects.send_message(thread, "say b", conn: conn, approval_policy: :on_request)
+
+      eventually(turn_done(turn2.id))
+      refute Longx.Codex.ThreadState.Store.auto_accept?(id)
+      assert read_thread!(conn, id)["settings"]["approvalsReviewer"] == "auto_review"
+
+      # a project default of 全部放行 starts threads that way (the reviewer never on)
+      open = Projects.update_project!(project, %{approval_policy: :auto_accept})
+      {:ok, t2} = Projects.start_thread(open, conn: conn)
+      assert t2.approval_policy == :auto_accept
+      assert Longx.Codex.ThreadState.Store.auto_accept?(t2.codex_thread_id)
+
+      assert read_thread!(conn, t2.codex_thread_id)["startParams"]["config"]["approvals_reviewer"] ==
+               "user"
     end
 
     test "turns are listed oldest first", %{dir: dir, conn: conn} do

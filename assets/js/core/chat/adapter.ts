@@ -12,7 +12,7 @@ import type {
   ExternalThreadQueueAdapter,
   ThreadMessageLike,
 } from "@assistant-ui/react";
-import { answerRequest, interruptTurn, respond, sendMessage } from "@/ash_rpc";
+import { answerRequest, approveReview, interruptTurn, respond, sendMessage } from "@/ash_rpc";
 import { RpcFailure, unwrap } from "@/core/projects";
 import {
   requestIdFor,
@@ -29,12 +29,14 @@ export type DirtyChange = { path: string; status: string };
 /** The access mode codex runs a turn with; codex keeps it for the turns after. */
 export type AccessMode = {
   sandbox: "read_only" | "workspace_write" | "danger_full_access";
-  approvalPolicy: "never" | "on_request" | "untrusted";
+  approvalPolicy: "never" | "on_request" | "untrusted" | "auto_accept";
   networkAccess: boolean;
   /** codex's web.run (search + open URL, run by Longx, not the sandbox); fixed at thread start */
   webSearch: boolean;
   /** codex's sub-agent tools (spawn / wait / …); fixed at thread start */
   multiAgent: boolean;
+  /** codex's automatic approval review (Guardian) instead of a card; fixed at thread start */
+  autoReview: boolean;
 };
 /** what to do with uncommitted changes when the project's policy is "ask"; null = don't send */
 export type DirtyDecision = "commit" | "ignore" | null;
@@ -46,6 +48,8 @@ export type CodexExtras = {
     requestId: string,
     answers: Record<string, string[]>,
   ) => Promise<void>;
+  /** overrides a denial of codex's automatic approval review (the person allows the action) */
+  approveDeniedReview: (reviewId: string) => Promise<void>;
 };
 
 export type AdapterOptions = {
@@ -123,6 +127,11 @@ export function buildAdapter(
           input: { threadId: id, requestId, answers: shaped },
         }),
       );
+    },
+    approveDeniedReview: async (reviewId) => {
+      const id = threadId();
+      if (!id) return;
+      unwrap(await approveReview({ input: { threadId: id, reviewId } }));
     },
   };
   return {

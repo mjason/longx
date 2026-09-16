@@ -183,10 +183,17 @@ defmodule Longx.Projects.Tracker do
               network_access: parent.network_access,
               web_search: parent.web_search,
               multi_agent: parent.multi_agent,
+              auto_review: parent.auto_review,
               tools: parent.tools,
               status: :active
             })
         end
+
+      # 全部放行 covers the children too: their approvals are their own requests
+      Longx.Codex.ThreadState.Store.set_auto_accept(
+        child.codex_thread_id,
+        parent.approval_policy == :auto_accept
+      )
 
       status = if kind in ["started", "interacted"], do: :active, else: :idle
       Projects.touch_thread!(child, %{status: status, last_activity_at: DateTime.utc_now()})
