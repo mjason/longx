@@ -236,6 +236,22 @@ defmodule Longx.Codex.ThreadTest do
              }
     end
 
+    test "approval_policy: :auto_accept is codex's on-request with no reviewer — Longx answers the requests itself" do
+      params =
+        Thread.start_params(
+          cwd: "/p",
+          tools: [],
+          approval_policy: :auto_accept,
+          auto_review: true
+        )
+
+      assert params["approvalPolicy"] == "on-request"
+      assert params["config"]["approvals_reviewer"] == "user"
+
+      assert Thread.turn_params("t", "go", approval_policy: :auto_accept)["approvalPolicy"] ==
+               "on-request"
+    end
+
     test "start_params/1: developer instructions ride on thread/start when given" do
       assert Thread.start_params(cwd: "/p", tools: [], developer_instructions: "remember X")[
                "developerInstructions"
@@ -543,6 +559,47 @@ defmodule Longx.Codex.ThreadTest do
                      10_000
 
       assert Enum.any?(Thread.snapshot(thread_id).items, &(&1["type"] == "commandExecution"))
+    end
+  end
+
+  describe "auto_accept (全部放行)" do
+    setup do
+      %{conn: start_supervised!({Connection, name: nil, command: ["elixir", @fake], env: []})}
+    end
+
+    test "start / send / resume with the policy set the thread's flag, and Longx answers the approval on its own",
+         %{conn: conn} do
+      {:ok, thread_id} = Thread.start(cwd: "/", approval_policy: :auto_accept, conn: conn)
+      assert ThreadState.Store.auto_accept?(thread_id)
+      Thread.subscribe(thread_id)
+
+      {:ok, _} = Thread.send(thread_id, "approve make", conn: conn)
+
+      assert_receive {:codex, _, "turn/completed", %{"turn" => %{"status" => "completed"}}},
+                     10_000
+
+      refute_received {:codex, _, "item/commandExecution/requestApproval", _}
+      assert Enum.any?(Thread.snapshot(thread_id).items, &(&1["type"] == "commandExecution"))
+
+      # a turn back on on-request clears it; a resume with the policy sets it again
+      {:ok, _} = Thread.send(thread_id, "say hi", approval_policy: :on_request, conn: conn)
+      refute ThreadState.Store.auto_accept?(thread_id)
+      assert_receive {:codex, _, "turn/completed", _}, 10_000
+      {:ok, _} = Thread.resume(thread_id, cwd: "/", approval_policy: :auto_accept, conn: conn)
+      assert ThreadState.Store.auto_accept?(thread_id)
+    end
+
+    test "update_settings/2 changes the reviewer of a running thread (thread/settings/update)", %{
+      conn: conn
+    } do
+      {:ok, thread_id} = Thread.start(cwd: "/", conn: conn)
+      assert :ok = Thread.update_settings(thread_id, approvals_reviewer: :user, conn: conn)
+      {:ok, read} = Connection.request(conn, "thread/read", %{"threadId" => thread_id})
+
+      assert read["thread"]["settings"] == %{
+               "threadId" => thread_id,
+               "approvalsReviewer" => "user"
+             }
     end
   end
 

@@ -187,10 +187,12 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">{t.approval}</legend>
           <RadioGroup value={form.approvalPolicy} onValueChange={(v) => set("approvalPolicy", v as Form["approvalPolicy"])}>
-            {(["untrusted", "on_request", "never"] as const).map((a) => (
+            {(["on_request", "auto_accept", "untrusted", "never"] as const).map((a) => (
               <div key={a} className="flex items-center gap-2">
                 <RadioGroupItem value={a} id={`ps-approval-${a}`} />
-                <Label htmlFor={`ps-approval-${a}`}>{t.approvalOptions[a]}</Label>
+                <Label htmlFor={`ps-approval-${a}`} className={a === "auto_accept" ? "text-destructive" : ""}>
+                  {t.approvalOptions[a]}
+                </Label>
               </div>
             ))}
           </RadioGroup>
@@ -232,7 +234,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         </div>
         <div className="flex items-center justify-between gap-4">
           <Label htmlFor="ps-auto-review">{t.autoReviewSwitch}</Label>
-          <Switch id="ps-auto-review" checked={form.autoReview} onCheckedChange={(v) => set("autoReview", v)} />
+          <Switch id="ps-auto-review" checked={form.autoReview} disabled={form.approvalPolicy === "auto_accept"} onCheckedChange={(v) => set("autoReview", v)} />
         </div>
         <div className="flex items-center justify-between gap-4">
           <div>

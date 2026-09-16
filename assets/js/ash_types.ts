@@ -176,7 +176,7 @@ export type ProjectFilesAttributesOnlySchema = {
 export type ProjectResourceSchema = {
   __type: "Resource";
   __primitiveFields: "approvalPolicy" | "archivedAt" | "autoReview" | "description" | "dirtyStart" | "globalMemory" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "passthroughPaths" | "rootPath" | "sandbox" | "slug" | "tools" | "updatedAt" | "webSearch" | "writableRoots";
-  approvalPolicy: "never" | "on_request" | "untrusted";
+  approvalPolicy: "auto_accept" | "never" | "on_request" | "untrusted";
   archivedAt: UtcDateTimeUsec | null;
   autoReview: boolean;
   description: string | null;
@@ -205,7 +205,7 @@ export type ProjectResourceSchema = {
 export type ProjectAttributesOnlySchema = {
   __type: "Resource";
   __primitiveFields: "approvalPolicy" | "archivedAt" | "autoReview" | "description" | "dirtyStart" | "globalMemory" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "passthroughPaths" | "rootPath" | "sandbox" | "slug" | "tools" | "updatedAt" | "webSearch" | "writableRoots";
-  approvalPolicy: "never" | "on_request" | "untrusted";
+  approvalPolicy: "auto_accept" | "never" | "on_request" | "untrusted";
   archivedAt: UtcDateTimeUsec | null;
   autoReview: boolean;
   description: string | null;
@@ -248,7 +248,7 @@ export type ThreadResourceSchema = {
   __type: "Resource";
   __primitiveFields: "agentPath" | "approvalPolicy" | "autoReview" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "memoryExtractedAt" | "modelSlug" | "multiAgent" | "networkAccess" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "sandbox" | "status" | "title" | "tools" | "updatedAt" | "webSearch";
   agentPath: string | null;
-  approvalPolicy: "never" | "on_request" | "untrusted";
+  approvalPolicy: "auto_accept" | "never" | "on_request" | "untrusted";
   autoReview: boolean;
   codexThreadId: string;
   cwd: string;
@@ -281,7 +281,7 @@ export type ThreadAttributesOnlySchema = {
   __type: "Resource";
   __primitiveFields: "agentPath" | "approvalPolicy" | "autoReview" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "memoryExtractedAt" | "modelSlug" | "multiAgent" | "networkAccess" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "sandbox" | "status" | "title" | "tools" | "updatedAt" | "webSearch";
   agentPath: string | null;
-  approvalPolicy: "never" | "on_request" | "untrusted";
+  approvalPolicy: "auto_accept" | "never" | "on_request" | "untrusted";
   autoReview: boolean;
   codexThreadId: string;
   cwd: string;
@@ -847,13 +847,13 @@ export type ProjectFilterInput = {
   not?: Array<ProjectFilterInput>;
 
   approvalPolicy?: {
-    eq?: "never" | "on_request" | "untrusted";
-    notEq?: "never" | "on_request" | "untrusted";
-    in?: Array<"never" | "on_request" | "untrusted">;
-    lessThan?: "never" | "on_request" | "untrusted";
-    greaterThan?: "never" | "on_request" | "untrusted";
-    lessThanOrEqual?: "never" | "on_request" | "untrusted";
-    greaterThanOrEqual?: "never" | "on_request" | "untrusted";
+    eq?: "auto_accept" | "never" | "on_request" | "untrusted";
+    notEq?: "auto_accept" | "never" | "on_request" | "untrusted";
+    in?: Array<"auto_accept" | "never" | "on_request" | "untrusted">;
+    lessThan?: "auto_accept" | "never" | "on_request" | "untrusted";
+    greaterThan?: "auto_accept" | "never" | "on_request" | "untrusted";
+    lessThanOrEqual?: "auto_accept" | "never" | "on_request" | "untrusted";
+    greaterThanOrEqual?: "auto_accept" | "never" | "on_request" | "untrusted";
   };
 
   archivedAt?: {
@@ -1074,13 +1074,13 @@ export type ThreadFilterInput = {
   };
 
   approvalPolicy?: {
-    eq?: "never" | "on_request" | "untrusted";
-    notEq?: "never" | "on_request" | "untrusted";
-    in?: Array<"never" | "on_request" | "untrusted">;
-    lessThan?: "never" | "on_request" | "untrusted";
-    greaterThan?: "never" | "on_request" | "untrusted";
-    lessThanOrEqual?: "never" | "on_request" | "untrusted";
-    greaterThanOrEqual?: "never" | "on_request" | "untrusted";
+    eq?: "auto_accept" | "never" | "on_request" | "untrusted";
+    notEq?: "auto_accept" | "never" | "on_request" | "untrusted";
+    in?: Array<"auto_accept" | "never" | "on_request" | "untrusted">;
+    lessThan?: "auto_accept" | "never" | "on_request" | "untrusted";
+    greaterThan?: "auto_accept" | "never" | "on_request" | "untrusted";
+    lessThanOrEqual?: "auto_accept" | "never" | "on_request" | "untrusted";
+    greaterThanOrEqual?: "auto_accept" | "never" | "on_request" | "untrusted";
   };
 
   autoReview?: {

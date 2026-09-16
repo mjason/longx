@@ -14,7 +14,7 @@ defmodule Longx.Codex.Thread do
   alias Longx.Codex.{Connection, Pool, ThreadState}
   alias Longx.Codex.Tool.{Context, Registry}
 
-  @type approval_policy :: :never | :on_request | :untrusted
+  @type approval_policy :: :never | :on_request | :untrusted | :auto_accept
   @type sandbox :: :read_only | :workspace_write | :danger_full_access
   @type decision :: :accept | :accept_for_session | :decline | :cancel
   @type web_search :: :hosted | :standalone | :disabled
@@ -39,7 +39,15 @@ defmodule Longx.Codex.Thread do
   # (`with_additional_permissions`, `request_permissions`, `require_escalated`)
   # and the person grants it in the chat; codex never widens the sandbox by
   # itself — a denied command is reported to the model, which asks
-  @approval_policies %{never: "never", on_request: "on-request", untrusted: "untrusted"}
+  # `:auto_accept` (全部放行) is Longx's own: codex runs on-request and every
+  # request it sends is answered "yes" here (ServerRequest.Default, flag on
+  # the ThreadState meta) — codex's `never` would *refuse* them instead
+  @approval_policies %{
+    never: "never",
+    on_request: "on-request",
+    untrusted: "untrusted",
+    auto_accept: "on-request"
+  }
 
   @sandboxes %{
     read_only: "read-only",
@@ -60,7 +68,16 @@ defmodule Longx.Codex.Thread do
            Connection.request(Keyword.fetch!(opts, :conn), "thread/start", start_params(opts)),
          # so callers can subscribe/snapshot right away; thread/started fills it in
          {:ok, _} <- ThreadState.ensure(thread_id) do
+      note_auto_accept(thread_id, opts)
       {:ok, thread_id}
+    end
+  end
+
+  # the 全部放行 flag follows the approval policy whenever one is given
+  defp note_auto_accept(thread_id, opts) do
+    case Keyword.fetch(opts, :approval_policy) do
+      {:ok, policy} -> ThreadState.Store.set_auto_accept(thread_id, policy == :auto_accept)
+      :error -> :ok
     end
   end
 
@@ -101,6 +118,7 @@ defmodule Longx.Codex.Thread do
            }),
          {:ok, _} <- ThreadState.ensure(thread_id),
          :ok <- ThreadState.backfill(thread_id, read) do
+      note_auto_accept(thread_id, opts)
       {:ok, thread_id}
     end
   end
@@ -115,8 +133,25 @@ defmodule Longx.Codex.Thread do
     with {:ok, conn} <- conn(thread_id, opts),
          {:ok, %{"turn" => %{"id" => turn_id}}} <-
            Connection.request(conn, "turn/start", turn_params(thread_id, text, opts)) do
+      note_auto_accept(thread_id, opts)
       {:ok, turn_id}
     end
+  end
+
+  @doc """
+  Changes a running thread's settings (`thread/settings/update`); today
+  only `approvals_reviewer:` (`:auto_review` | `:user`) — the automatic
+  review is a thread-start config otherwise, and 全部放行 needs it off.
+  """
+  @spec update_settings(String.t(), keyword) :: :ok | {:error, term}
+  def update_settings(thread_id, opts) do
+    params =
+      %{"threadId" => thread_id}
+      |> put_if("approvalsReviewer", opts |> Keyword.get(:approvals_reviewer) |> wire_atom())
+
+    with {:ok, conn} <- conn(thread_id, opts),
+         {:ok, _} <- Connection.request(conn, "thread/settings/update", params),
+         do: :ok
   end
 
   @doc "Adds input to the in-flight turn without starting a new one."
@@ -555,10 +590,12 @@ defmodule Longx.Codex.Thread do
     # codex's default, written explicitly so a project that turned it off
     # never inherits a home's setting
     config =
-      case Keyword.fetch(opts, :auto_review) do
-        {:ok, true} -> Map.put(config, "approvals_reviewer", "auto_review")
-        {:ok, false} -> Map.put(config, "approvals_reviewer", "user")
-        :error -> config
+      case {Keyword.fetch(opts, :auto_review), Keyword.get(opts, :approval_policy)} do
+        # 全部放行 answers before any reviewer could: the reviewer stays off
+        {_, :auto_accept} -> Map.put(config, "approvals_reviewer", "user")
+        {{:ok, true}, _} -> Map.put(config, "approvals_reviewer", "auto_review")
+        {{:ok, false}, _} -> Map.put(config, "approvals_reviewer", "user")
+        {:error, _} -> config
       end
 
     if map_size(config) == 0, do: params, else: Map.put(params, "config", config)

@@ -62,7 +62,6 @@ defmodule Longx.Codex.AutoReviewIntegrationTest do
     Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
       {:ok, raw, conn} = Plug.Conn.read_body(conn)
       body = Jason.decode!(raw)
-      outputs = for %{"type" => "function_call_output", "output" => o} <- body["input"], do: o
       send(test_pid, {:request, body})
 
       cond do
@@ -74,7 +73,8 @@ defmodule Longx.Codex.AutoReviewIntegrationTest do
             )
           )
 
-        outputs == [] ->
+        # a fresh turn (the person spoke last): ask; after the call's output: report
+        List.last(body["input"])["type"] != "function_call_output" ->
           send_sse(
             conn,
             ResponsesFixture.function_call("exec_command", nil, %{
@@ -256,5 +256,50 @@ defmodule Longx.Codex.AutoReviewIntegrationTest do
 
     assert_receive {:codex, _, "item/autoApprovalReview/userApproved",
                     %{"reviewId" => ^review_id}}
+  end
+
+  test "全部放行 (auto_accept): no reviewer, no card — Longx accepts the request and the command runs; switching the reviewer mid-thread is a settings update codex takes",
+       %{bypass: bypass, gateway_url: gateway_url} do
+    probe = probe_path()
+    on_exit(fn -> File.rm(probe) end)
+    script(bypass, self(), probe, "deny")
+
+    home = prepare_home!(gateway_url)
+    conn = start_connection!(home)
+
+    params =
+      Thread.start_params(
+        cwd: home.dir,
+        sandbox: :workspace_write,
+        approval_policy: :auto_accept,
+        auto_review: true,
+        tools: []
+      )
+
+    {:ok, %{"thread" => %{"id" => thread_id}}} = Connection.request(conn, "thread/start", params)
+    ThreadState.Store.set_auto_accept(thread_id, true)
+    {:ok, _} = ThreadState.ensure(thread_id)
+    :ok = Thread.subscribe(thread_id)
+    {:ok, _} = Thread.send(thread_id, "go", conn: conn)
+
+    assert_receive {:codex, _, "turn/completed", _}, 60_000
+    refute_received {:codex, _, "item/commandExecution/requestApproval", _}
+    refute_received {:codex, _, "item/autoApprovalReview/started", _}
+    assert File.regular?(probe)
+    # the reviewer was never asked (its request would have been denied)
+    refute_received {:request, %{"instructions" => "You are judging" <> _}}
+
+    # back to the reviewer for the turns after: the next request is reviewed (and denied)
+    assert :ok = Thread.update_settings(thread_id, approvals_reviewer: :auto_review, conn: conn)
+    ThreadState.Store.set_auto_accept(thread_id, false)
+    File.rm(probe)
+    {:ok, _} = Thread.send(thread_id, "again", conn: conn)
+
+    assert_receive {:codex, _, "item/autoApprovalReview/completed",
+                    %{"review" => %{"status" => "denied"}}},
+                   30_000
+
+    assert_receive {:codex, _, "turn/completed", _}, 60_000
+    refute File.regular?(probe)
   end
 end

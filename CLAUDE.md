@@ -181,6 +181,20 @@ React Native client planned on the same core code.
     reviewer) proves allow, deny and the override on the real binary. codex's "always
     allow" (`rules/default.rules` in the project's home) only exists under `untrusted`, so
     it stays empty here.
+    **全部放行 — `approval_policy: :auto_accept`, Longx's own value** (Project / Thread enum
+    next to codex's three; per turn like the others): codex runs plain `on-request` and
+    `ServerRequest.Default` answers every approval request of the thread at once —
+    commands / patches `accept`, a permissions request as asked for the *session* — off a
+    flag on the ThreadState meta (`Store.auto_accept?/1`, set by `Thread.start` / `resume` /
+    `send` whenever `approval_policy:` is given, and by the Tracker on a sub-agent's row from
+    its parent); no card, no review. The reviewer would judge first, so
+    `start_params` forces `approvals_reviewer = "user"` under it and
+    `Projects.send_message` sends `thread/settings/update` (`Thread.update_settings/2`) when
+    a turn moves onto or off it (`reviewer_for/2`: the row's `auto_review` comes back).
+    codex's `never` is the opposite — it *refuses* every request — hence the label
+    从不询问（申请一律拒绝）. Proven on the real binary in
+    `auto_review_integration_test` (no reviewer request, the file written; the settings
+    update takes effect on the next turn).
   - `Thread` = codex thread ↔ project (`codex_thread_id`, `cwd`, the settings it started with,
     `model_slug`, `preview`, `status`, `last_activity_at`). Statuses: `:idle`, `:active`,
     `:disconnected` (its codex died mid-turn; resumed → `:idle` when it is back),

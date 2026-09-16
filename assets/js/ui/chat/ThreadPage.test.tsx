@@ -326,9 +326,12 @@ describe("ThreadPage", () => {
     await user.click(
       await screen.findByRole("radio", { name: "完全访问（危险）" }),
     );
-    await user.click(screen.getByRole("radio", { name: "从不询问" }));
+    await user.click(screen.getByRole("radio", { name: /全部放行/ }));
+    // 全部放行 answers before any reviewer could: the switch is moot
+    expect(screen.getByRole("switch", { name: /自动审核/ })).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(screen.getByTestId("mode-picker")).toHaveTextContent("完全访问");
+    expect(screen.getByTestId("mode-picker")).toHaveTextContent("全部放行");
     await user.type(
       screen.getByRole("textbox", { name: "随心输入" }),
       "go wild{Enter}",
@@ -339,7 +342,7 @@ describe("ThreadPage", () => {
           input: expect.objectContaining({
             text: "go wild",
             sandbox: "danger_full_access",
-            approvalPolicy: "never",
+            approvalPolicy: "auto_accept",
             networkAccess: false,
           }),
         }),

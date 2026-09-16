@@ -54,7 +54,30 @@ defmodule Longx.Codex.ServerRequest do
     @method_not_found -32601
     @not_applicable -32000
 
+    # 全部放行: a thread whose approval policy is `:auto_accept` (the flag on
+    # its ThreadState meta) gets every approval answered here and now — the
+    # command / patch as offered, a permissions request as asked, for the
+    # session. Questions to the person stay questions.
     @impl true
+    def handle(method, params, %{thread_id: thread_id} = _ctx)
+        when is_binary(thread_id) and
+               method in [
+                 "item/commandExecution/requestApproval",
+                 "item/fileChange/requestApproval",
+                 "item/permissions/requestApproval"
+               ] do
+      if Longx.Codex.ThreadState.Store.auto_accept?(thread_id) do
+        # a command / patch: plain accept (always offered); a permissions
+        # request: what was asked, for the session, so it is not asked again
+        decision =
+          if method == "item/permissions/requestApproval", do: :accept_for_session, else: :accept
+
+        {:reply, Longx.Codex.Thread.decision_for(decision, method, params)}
+      else
+        handle(method, params, %{})
+      end
+    end
+
     def handle("item/commandExecution/requestApproval", _params, _ctx),
       do: defer(%{"decision" => "decline"})
 

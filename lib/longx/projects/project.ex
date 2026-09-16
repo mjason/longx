@@ -252,7 +252,7 @@ defmodule Longx.Projects.Project do
       allow_nil? false
       public? true
       default :on_request
-      constraints one_of: [:never, :on_request, :untrusted]
+      constraints one_of: [:never, :on_request, :untrusted, :auto_accept]
     end
 
     attribute :sandbox, :atom do

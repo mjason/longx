@@ -272,6 +272,7 @@ defmodule Longx.Projects do
          :ok <- Longx.AI.check_effort(model_slug, opts[:effort]),
          {turn_opts, effort} = effort_change(turn_opts, thread, opts[:effort]),
          {:ok, conn} <- thread_connection(thread, opts),
+         :ok <- sync_reviewer(thread, mode, conn),
          {:ok, bookmark} <- preflight(thread, text, opts),
          {:ok, codex_turn_id} <-
            Longx.Codex.Thread.send(
@@ -377,6 +378,23 @@ defmodule Longx.Projects do
     end)
     |> Map.new()
   end
+
+  # codex's reviewer is a thread setting, not a turn's: a turn that moves
+  # onto or off 全部放行 (which answers every request before a reviewer
+  # could) updates it — the thread's `auto_review` is what comes back
+  defp sync_reviewer(%Thread{} = thread, %{approval_policy: policy}, conn)
+       when policy == :auto_accept or thread.approval_policy == :auto_accept do
+    Longx.Codex.Thread.update_settings(thread.codex_thread_id,
+      approvals_reviewer: reviewer_for(thread.auto_review, policy),
+      conn: conn
+    )
+  end
+
+  defp sync_reviewer(_thread, _mode, _conn), do: :ok
+
+  defp reviewer_for(_auto_review, :auto_accept), do: :user
+  defp reviewer_for(true, _policy), do: :auto_review
+  defp reviewer_for(false, _policy), do: :user
 
   # turn/start carries the whole sandbox policy every turn: the mode in force
   # (changed or not) with the project's *current* writable roots — codex keeps

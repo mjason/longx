@@ -94,10 +94,12 @@ export const t = {
     danger_full_access: "完全访问（危险）",
   } as Record<string, string>,
   approvalOptions: {
-    never: "从不询问",
     on_request: "按需询问",
+    auto_accept: "全部放行（申请一律通过，不审核不询问）",
     untrusted: "不信任时询问",
+    never: "从不询问（申请一律拒绝）",
   } as Record<string, string>,
+  autoAcceptBadge: "全部放行",
   accessMode: "访问模式",
   modeHint:
     "沙箱和审批从下一轮开始生效，之后的轮次沿用；网页搜索、子 agent 和自动审核在会话开始时定下。",

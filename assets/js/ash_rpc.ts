@@ -2360,7 +2360,7 @@ export type CreateProjectInput = {
   name: string;
   description?: string | null;
   rootPath: string;
-  approvalPolicy?: "never" | "on_request" | "untrusted";
+  approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted";
   sandbox?: "danger_full_access" | "read_only" | "workspace_write";
   tools?: Array<string>;
   dirtyStart?: "ask" | "commit" | "off";
@@ -3051,7 +3051,7 @@ export type UpdateProjectInput = {
   name?: string;
   slug?: string;
   description?: string | null;
-  approvalPolicy?: "never" | "on_request" | "untrusted";
+  approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted";
   sandbox?: "danger_full_access" | "read_only" | "workspace_write";
   tools?: Array<string>;
   dirtyStart?: "ask" | "commit" | "off";
@@ -5227,7 +5227,7 @@ export type SendMessageInput = {
   effort?: string | null;
   dirty?: "commit" | "ignore" | null;
   sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
-  approvalPolicy?: "never" | "on_request" | "untrusted" | null;
+  approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted" | null;
   networkAccess?: boolean | null;
 };
 
@@ -5306,7 +5306,7 @@ export type StartThreadInput = {
   model?: string | null;
   effort?: string | null;
   tools?: Array<string> | null;
-  approvalPolicy?: "never" | "on_request" | "untrusted" | null;
+  approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted" | null;
   sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
   networkAccess?: boolean | null;
   webSearch?: boolean | null;

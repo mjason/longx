@@ -24,7 +24,7 @@ describe("ProjectSettingsPage", () => {
     expect(within(form).getByLabelText("名称")).toHaveValue("App 1");
     expect(within(form).getByRole("radio", { name: "可写工作区" })).toBeChecked();
     await user.click(within(form).getByRole("radio", { name: "只读" }));
-    await user.click(within(form).getByRole("radio", { name: "从不询问" }));
+    await user.click(within(form).getByRole("radio", { name: /从不询问/ }));
     await user.click(within(form).getByRole("radio", { name: "先问我" }));
     await user.click(within(form).getByRole("switch", { name: /子 agent/ }));
     expect(within(form).getByRole("switch", { name: /自动审核/ })).toBeChecked();

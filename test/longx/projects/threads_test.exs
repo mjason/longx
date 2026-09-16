@@ -703,6 +703,41 @@ defmodule Longx.Projects.ThreadsTest do
       assert {:error, :not_found} = Projects.approve_denied_review(thread, "rev-9", conn: conn)
     end
 
+    test "approval_policy :auto_accept (全部放行): the turn switches the reviewer off and Longx answers every approval; back to on-request restores the reviewer",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      id = thread.codex_thread_id
+      :ok = Longx.Codex.Thread.subscribe(id)
+
+      {:ok, turn} =
+        Projects.send_message(thread, "approve make", conn: conn, approval_policy: :auto_accept)
+
+      eventually(turn_done(turn.id))
+      refute_received {:codex, _, "item/commandExecution/requestApproval", _}
+      assert Ash.get!(Thread, thread.id).approval_policy == :auto_accept
+      assert Longx.Codex.ThreadState.Store.auto_accept?(id)
+      read = read_thread!(conn, id)
+      assert read["lastTurnParams"]["approvalPolicy"] == "on-request"
+      assert read["settings"]["approvalsReviewer"] == "user"
+
+      {:ok, turn2} =
+        Projects.send_message(thread, "say b", conn: conn, approval_policy: :on_request)
+
+      eventually(turn_done(turn2.id))
+      refute Longx.Codex.ThreadState.Store.auto_accept?(id)
+      assert read_thread!(conn, id)["settings"]["approvalsReviewer"] == "auto_review"
+
+      # a project default of 全部放行 starts threads that way (the reviewer never on)
+      open = Projects.update_project!(project, %{approval_policy: :auto_accept})
+      {:ok, t2} = Projects.start_thread(open, conn: conn)
+      assert t2.approval_policy == :auto_accept
+      assert Longx.Codex.ThreadState.Store.auto_accept?(t2.codex_thread_id)
+
+      assert read_thread!(conn, t2.codex_thread_id)["startParams"]["config"]["approvals_reviewer"] ==
+               "user"
+    end
+
     test "turns are listed oldest first", %{dir: dir, conn: conn} do
       project = git_project!(dir)
       {:ok, thread} = Projects.start_thread(project, conn: conn)

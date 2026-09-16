@@ -29,7 +29,7 @@ export type DirtyChange = { path: string; status: string };
 /** The access mode codex runs a turn with; codex keeps it for the turns after. */
 export type AccessMode = {
   sandbox: "read_only" | "workspace_write" | "danger_full_access";
-  approvalPolicy: "never" | "on_request" | "untrusted";
+  approvalPolicy: "never" | "on_request" | "untrusted" | "auto_accept";
   networkAccess: boolean;
   /** codex's web.run (search + open URL, run by Longx, not the sandbox); fixed at thread start */
   webSearch: boolean;

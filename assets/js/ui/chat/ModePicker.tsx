@@ -7,7 +7,7 @@ import { Switch } from "@/ui/components/ui/switch";
 import { t } from "@/ui/strings";
 
 const SANDBOXES: AccessMode["sandbox"][] = ["read_only", "workspace_write", "danger_full_access"];
-const APPROVALS: AccessMode["approvalPolicy"][] = ["untrusted", "on_request", "never"];
+const APPROVALS: AccessMode["approvalPolicy"][] = ["on_request", "auto_accept", "untrusted", "never"];
 
 export function modeIcon(sandbox: AccessMode["sandbox"]) {
   return sandbox === "danger_full_access" ? ShieldOff : sandbox === "read_only" ? ShieldCheck : ShieldAlert;
@@ -34,7 +34,7 @@ export function ModePicker({ mode, onChange, disabled = false, started = false }
         {mode.networkAccess && mode.sandbox === "workspace_write" ? <Globe className="size-3" /> : null}
         {!mode.webSearch ? <span className="text-[10px]">{t.noWebSearch}</span> : null}
         {!mode.multiAgent ? <span className="text-[10px]">{t.noMultiAgent}</span> : null}
-        {!mode.autoReview ? <span className="text-[10px]">{t.noAutoReview}</span> : null}
+        {mode.approvalPolicy === "auto_accept" ? <span className="text-[10px] text-destructive">{t.autoAcceptBadge}</span> : !mode.autoReview ? <span className="text-[10px]">{t.noAutoReview}</span> : null}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 space-y-4" data-testid="mode-popover">
         <fieldset className="space-y-2">
@@ -56,7 +56,9 @@ export function ModePicker({ mode, onChange, disabled = false, started = false }
             {APPROVALS.map((a) => (
               <div key={a} className="flex items-center gap-2">
                 <RadioGroupItem value={a} id={`approval-${a}`} />
-                <Label htmlFor={`approval-${a}`}>{t.approvalOptions[a]}</Label>
+                <Label htmlFor={`approval-${a}`} className={a === "auto_accept" ? "text-destructive" : ""}>
+                  {t.approvalOptions[a]}
+                </Label>
               </div>
             ))}
           </RadioGroup>
@@ -84,7 +86,7 @@ export function ModePicker({ mode, onChange, disabled = false, started = false }
           <Label htmlFor="mode-auto-review" className="text-xs">
             {t.autoReviewSwitch}
           </Label>
-          <Switch id="mode-auto-review" checked={mode.autoReview} disabled={started} onCheckedChange={(v) => onChange({ ...mode, autoReview: v })} />
+          <Switch id="mode-auto-review" checked={mode.autoReview} disabled={started || mode.approvalPolicy === "auto_accept"} onCheckedChange={(v) => onChange({ ...mode, autoReview: v })} />
         </div>
         <p className="text-muted-foreground text-xs">{started ? t.modeHintStarted : t.modeHint}</p>
       </PopoverContent>

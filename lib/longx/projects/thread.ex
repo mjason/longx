@@ -33,7 +33,9 @@ defmodule Longx.Projects.Thread do
       # the reasoning level to start on (absent: the model's default)
       argument :effort, :string
       argument :tools, {:array, :string}
-      argument :approval_policy, :atom, constraints: [one_of: [:never, :on_request, :untrusted]]
+
+      argument :approval_policy, :atom,
+        constraints: [one_of: [:never, :on_request, :untrusted, :auto_accept]]
 
       argument :sandbox, :atom,
         constraints: [one_of: [:read_only, :workspace_write, :danger_full_access]]
@@ -79,7 +81,9 @@ defmodule Longx.Projects.Thread do
       argument :sandbox, :atom,
         constraints: [one_of: [:read_only, :workspace_write, :danger_full_access]]
 
-      argument :approval_policy, :atom, constraints: [one_of: [:never, :on_request, :untrusted]]
+      argument :approval_policy, :atom,
+        constraints: [one_of: [:never, :on_request, :untrusted, :auto_accept]]
+
       argument :network_access, :boolean
 
       run fn input, _ ->
@@ -372,7 +376,7 @@ defmodule Longx.Projects.Thread do
     attribute :approval_policy, :atom do
       allow_nil? false
       public? true
-      constraints one_of: [:never, :on_request, :untrusted]
+      constraints one_of: [:never, :on_request, :untrusted, :auto_accept]
     end
 
     attribute :sandbox, :atom do

@@ -28,7 +28,9 @@ defmodule Longx.Codex.ThreadState.Store do
     turn: nil,
     status: nil,
     token_usage: nil,
-    plan: nil
+    plan: nil,
+    # 全部放行: Longx answers every approval of the thread itself (ServerRequest.Default)
+    auto_accept: false
   }
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -62,6 +64,14 @@ defmodule Longx.Codex.ThreadState.Store do
     :ets.insert(@meta, {thread_id, Map.merge(meta(thread_id), changes)})
     :ok
   end
+
+  @doc "Whether Longx answers every approval request of the thread itself (approval policy 全部放行)."
+  @spec auto_accept?(String.t()) :: boolean
+  def auto_accept?(thread_id), do: meta(thread_id).auto_accept == true
+
+  @spec set_auto_accept(String.t(), boolean) :: :ok
+  def set_auto_accept(thread_id, flag) when is_boolean(flag),
+    do: put_meta(thread_id, %{auto_accept: flag})
 
   @doc "Allocates the next event sequence number for the thread."
   @spec next_seq(String.t()) :: pos_integer

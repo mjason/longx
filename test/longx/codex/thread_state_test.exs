@@ -198,6 +198,15 @@ defmodule Longx.Codex.ThreadStateTest do
       assert [%{"id" => "rev-1", "userApproved" => true}] = Store.items(t)
     end
 
+    test "auto_accept is a flag of the thread's meta (Longx answers every approval itself while it is set)" do
+      t = new_thread()
+      refute Store.auto_accept?(t)
+      Store.set_auto_accept(t, true)
+      assert Store.auto_accept?(t)
+      Store.set_auto_accept(t, false)
+      refute Store.auto_accept?(t)
+    end
+
     test "unknown notifications change nothing" do
       t = new_thread()
       before = Store.snapshot(t)

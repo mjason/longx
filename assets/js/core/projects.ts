@@ -380,7 +380,7 @@ export function useInitGit(id: string) {
 
 export type StartThreadMode = {
   sandbox: "read_only" | "workspace_write" | "danger_full_access";
-  approvalPolicy: "never" | "on_request" | "untrusted";
+  approvalPolicy: "never" | "on_request" | "untrusted" | "auto_accept";
   networkAccess: boolean;
   webSearch: boolean;
   multiAgent: boolean;
