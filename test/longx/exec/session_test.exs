@@ -135,7 +135,9 @@ defmodule Longx.Exec.SessionTest do
         "waitMs" => 100
       })
 
-    assert %{"result" => %{"chunks" => [_], "closed" => true, "exitCode" => 0}} = await_reply(2)
+    # two echo lines may arrive as one chunk or two
+    assert %{"result" => %{"chunks" => [_ | _], "closed" => true, "exitCode" => 0}} =
+             await_reply(2)
 
     {s, []} = request(s, 3, "process/read", %{"processId" => "nope", "afterSeq" => 0})
     assert %{"error" => %{"code" => -32600}} = await_reply(3)
