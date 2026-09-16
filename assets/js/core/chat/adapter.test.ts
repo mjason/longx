@@ -9,8 +9,9 @@ vi.mock("@/ash_rpc", () => ({
   answerRequest: vi.fn(async () => ({ success: true, data: null })),
   approveReview: vi.fn(async () => ({ success: true, data: null })),
   setGoal: vi.fn(async () => ({ success: true, data: { objective: "x", status: "active" } })),
+  retractTurn: vi.fn(async () => ({ success: true, data: { text: "look at it" } })),
 }));
-import { answerRequest, approveReview, interruptTurn, respond, sendMessage, setGoal } from "@/ash_rpc";
+import { answerRequest, approveReview, interruptTurn, respond, retractTurn, sendMessage, setGoal } from "@/ash_rpc";
 
 const target = { threadId: "row-1", codexThreadId: "thr_1" };
 const append = (text: string) =>
@@ -197,6 +198,42 @@ describe("chat adapter", () => {
         input: { threadId: "row-1", codexTurnId: "turn_9" },
       }),
     );
+  });
+
+  test("onCancel before anything came back retracts the turn and hands the text back to the composer; once the model answered it only interrupts", async () => {
+    vi.mocked(interruptTurn).mockClear();
+    const onRetract = vi.fn();
+    const untouched = buildAdapter({
+      target,
+      view: {
+        ...emptyView("thr_1"),
+        turn: { id: "turn_9", status: "inProgress" },
+        items: [{ id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] }],
+      },
+      model: null,
+      onRetract,
+    });
+    await untouched.onCancel!();
+    expect(retractTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", codexTurnId: "turn_9" } }));
+    expect(onRetract).toHaveBeenCalledWith("look at it");
+    expect(interruptTurn).not.toHaveBeenCalled();
+
+    const answering = buildAdapter({
+      target,
+      view: {
+        ...emptyView("thr_1"),
+        turn: { id: "turn_9", status: "inProgress" },
+        items: [
+          { id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] },
+          { id: "r9", type: "reasoning", turnId: "turn_9", summary: ["thinking"] },
+        ],
+      },
+      model: null,
+      onRetract,
+    });
+    await answering.onCancel!();
+    expect(interruptTurn).toHaveBeenCalledTimes(1);
+    expect(onRetract).toHaveBeenCalledTimes(1);
   });
 
   test("an approval answer goes back as codex's request id and our decision", async () => {

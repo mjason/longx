@@ -477,6 +477,49 @@ defmodule LongxWeb.ProjectsRpcTest do
     end
   end
 
+  describe "retracting a turn" do
+    test "retract_turn stops a turn nothing came back for and hands the text back; a turn with output says has_output",
+         %{
+           conn: conn,
+           dir: dir
+         } do
+      project = create!(conn, dir)
+      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
+
+      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
+        rpc(conn, "start_thread", %{
+          "fields" => ["id", "codexThreadId"],
+          "input" => %{"projectId" => project["id"]}
+        })
+
+      :ok = Longx.Codex.Thread.subscribe(codex_id)
+
+      %{"success" => true, "data" => %{"codexTurnId" => turn_id}} =
+        rpc(conn, "send_message", %{
+          "fields" => ["codexTurnId"],
+          "input" => %{"threadId" => thread_id, "text" => "wait"}
+        })
+
+      assert_receive {:codex, _, "item/completed", %{"item" => %{"type" => "userMessage"}}},
+                     10_000
+
+      assert %{"success" => true, "data" => %{"text" => "wait"}} =
+               rpc(conn, "retract_turn", %{
+                 "fields" => ["text"],
+                 "input" => %{"threadId" => thread_id, "codexTurnId" => turn_id}
+               })
+
+      assert %{
+               "success" => false,
+               "errors" => [%{"fields" => ["codexTurnId"], "message" => "not_running"}]
+             } =
+               rpc(conn, "retract_turn", %{
+                 "fields" => ["text"],
+                 "input" => %{"threadId" => thread_id, "codexTurnId" => turn_id}
+               })
+    end
+  end
+
   describe "goals and skills" do
     test "set_goal / clear_goal drive codex's goal mode; list_skills names the $-mentionable skills; send_message carries them",
          %{

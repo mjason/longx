@@ -27,6 +27,7 @@ import {
   listSkills,
   listThreads,
   respond,
+  retractTurn,
   searchFiles,
   sendMessage,
   setGoal,
@@ -247,6 +248,22 @@ describe("ThreadPage", () => {
     );
     // the composer offers stop while the turn runs
     expect(screen.getByRole("button", { name: /停止/ })).toBeInTheDocument();
+  });
+
+  test("stop before anything came back: the turn is taken back and its text is in the composer again, ready to edit", async () => {
+    const user = userEvent.setup();
+    await open();
+    act(() => {
+      channel.deliver("codex", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("codex", {
+        seq: 5,
+        method: "item/completed",
+        params: { turnId: "turn_2", item: { id: "u2", type: "userMessage", turnId: "turn_2", content: [{ type: "text", text: "look at pandas" }] } },
+      });
+    });
+    await user.click(await screen.findByRole("button", { name: /停止/ }));
+    await waitFor(() => expect(retractTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", codexTurnId: "turn_2" } })));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "随心输入" })).toHaveValue("look at pandas"));
   });
 
   test("an unrecoverable thread cannot take messages", async () => {

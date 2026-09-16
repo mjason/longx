@@ -7,6 +7,7 @@
 #                      then run or decline it depending on the answer
 #   "ask <question>"   ask the client a question (item/tool/requestUserInput with one
 #                      question `q1`), then say the answer back
+#   "wait"             start the turn and produce nothing (until turn/interrupt)
 #   "stall"            emit 3 deltas, wait for a `fake/continue` notification,
 #                      then finish
 #   "slow <ms>"        sleep <ms> before answering turn/start
@@ -311,8 +312,10 @@ defmodule FakeAppServer do
       Map.update(
         state.threads,
         thread_id,
-        %{turns: [], last_turn: params},
-        &Map.put(&1, :last_turn, params)
+        %{turns: [], last_turn: params, texts: %{turn_id => text}},
+        &(&1
+          |> Map.put(:last_turn, params)
+          |> Map.update(:texts, %{turn_id => text}, fn t -> Map.put(t, turn_id, text) end))
       )
 
     state = %{state | next: state.next + 1, threads: threads}
@@ -541,7 +544,22 @@ defmodule FakeAppServer do
       "turn" => %{"id" => turn_id, "status" => "interrupted", "items" => []}
     })
 
-    state
+    # codex keeps an interrupted turn in the history (the user's message at least)
+    text = get_in(state.threads, [thread_id, :texts, turn_id]) || ""
+
+    recorded = %{
+      "id" => turn_id,
+      "status" => "interrupted",
+      "items" => [
+        %{
+          "id" => "user_#{turn_id}",
+          "type" => "userMessage",
+          "content" => [%{"type" => "text", "text" => text}]
+        }
+      ]
+    }
+
+    update_in(state, [:threads, thread_id, :turns], &[recorded | &1 || []])
   end
 
   # fuzzyFileSearch: the files under the roots whose relative path contains
@@ -725,6 +743,12 @@ defmodule FakeAppServer do
     end
 
     %{state | next: state.next + 1, pending: Map.put(state.pending, request_id, continuation)}
+  end
+
+  # the user's message went out, nothing came back yet: what a stop retracts
+  defp run_turn("wait", id, thread_id, turn_id, state) do
+    start_turn(id, thread_id, turn_id, "wait")
+    state
   end
 
   defp run_turn("stall", id, thread_id, turn_id, state) do

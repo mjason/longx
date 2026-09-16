@@ -48,6 +48,8 @@ export type CodexRuntimeOptions = {
   onDirtyTree?: (changes: DirtyChange[]) => Promise<DirtyDecision>;
   /** a thread event worth telling the person about as it happens (model/rerouted) */
   onSignal?: (method: string, params: Record<string, unknown>) => void;
+  /** a stop before anything came back: the message's text, to be put back in the composer */
+  onRetract?: (text: string) => void;
 };
 
 export type TurnState = "idle" | "running" | "approval";
@@ -98,6 +100,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     onOpenThread,
     onDirtyTree,
     onSignal,
+    onRetract,
   } = opts;
   const client = useQueryClient();
   const threads = useThreads(projectId);
@@ -276,6 +279,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         createThread,
         onSent,
         onDirtyTree,
+        onRetract,
         refetch,
         threadList,
         queue: queue.adapter,
@@ -299,6 +303,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
       createThread,
       onSent,
       onDirtyTree,
+      onRetract,
       refetch,
       threadList,
       queue,

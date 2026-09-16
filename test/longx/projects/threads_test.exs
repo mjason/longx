@@ -789,6 +789,38 @@ defmodule Longx.Projects.ThreadsTest do
                params["input"]
     end
 
+    test "retract_turn/2: a running turn that produced nothing is interrupted and taken out of the history, its text handed back; one with output is only interrupted",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      :ok = Longx.Codex.Thread.subscribe(thread.codex_thread_id)
+
+      {:ok, turn} = Projects.send_message(thread, "wait", conn: conn)
+      assert_receive {:codex, _, "item/completed", %{"item" => %{"type" => "userMessage"}}}, 5_000
+
+      assert {:ok, %{text: "wait"}} = Projects.retract_turn(thread, turn, conn: conn)
+      assert %{status: :reverted} = Ash.get!(Turn, turn.id)
+      assert Projects.list_turns!(thread) == []
+      # the view no longer shows the message either
+      refute Enum.any?(
+               Longx.Codex.Thread.snapshot(thread.codex_thread_id).items,
+               &(&1["turnId"] == turn.codex_turn_id)
+             )
+
+      assert Ash.get!(Thread, thread.id).status == :idle
+
+      # a turn that already answered something is not retracted
+      {:ok, stalled} = Projects.send_message(thread, "stall", conn: conn)
+      assert_receive {:codex, _, "item/agentMessage/delta", _}, 5_000
+      assert {:error, :has_output} = Projects.retract_turn(thread, stalled, conn: conn)
+      assert Ash.get!(Turn, stalled.id).status == :in_progress
+      Longx.Codex.Connection.notify(conn, "fake/continue", %{})
+      eventually(turn_done(stalled.id))
+
+      # a turn that is over is not retracted either
+      assert {:error, :not_running} = Projects.retract_turn(thread, stalled, conn: conn)
+    end
+
     test "turns are listed oldest first", %{dir: dir, conn: conn} do
       project = git_project!(dir)
       {:ok, thread} = Projects.start_thread(project, conn: conn)

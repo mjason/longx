@@ -174,6 +174,36 @@ defmodule Longx.Projects.Thread do
       end
     end
 
+    # a stop right after sending: the turn is taken back and its text returned
+    # to the composer (has_output / not_running are errors on the argument)
+    action :retract_turn, :map do
+      constraints fields: [text: [type: :string, allow_nil?: false]]
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :codex_turn_id, :string, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             {:ok, turn} <- Longx.Projects.get_turn_by_codex_id(input.arguments.codex_turn_id),
+             {:ok, result} <- Longx.Projects.retract_turn(thread, turn) do
+          {:ok, result}
+        else
+          {:error, reason} when reason in [:has_output, :not_running] ->
+            {:error,
+             Ash.Error.Invalid.exception(
+               errors: [
+                 %Ash.Error.Changes.InvalidArgument{
+                   field: :codex_turn_id,
+                   message: Atom.to_string(reason)
+                 }
+               ]
+             )}
+
+          other ->
+            other
+        end
+      end
+    end
+
     # answers a pending approval shown in the thread's snapshot
     action :respond do
       argument :thread_id, :uuid, allow_nil?: false

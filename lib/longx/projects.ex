@@ -39,6 +39,7 @@ defmodule Longx.Projects do
       rpc_action :start_thread, :start_thread
       rpc_action :send_message, :send_message
       rpc_action :interrupt_turn, :interrupt_turn
+      rpc_action :retract_turn, :retract_turn
       rpc_action :compact_thread, :compact_thread
       rpc_action :review_thread, :review_thread
       rpc_action :respond, :respond
@@ -594,6 +595,71 @@ defmodule Longx.Projects do
         topic(project_id),
         {:codex_notice, project_id, notice}
       )
+
+  @doc """
+  Stops a running turn that has produced nothing yet and takes it out of
+  the history — what a stop right after sending means: the message comes
+  back to be edited (`text`), not left in the conversation twice. The turn
+  is interrupted, its completion awaited, then `thread/revert`ed and the
+  row marked `:reverted`. `{:error, :has_output}` once the model answered
+  anything (interrupt it instead), `{:error, :not_running}` when it is over.
+  """
+  @spec retract_turn(Thread.t(), Turn.t(), keyword) ::
+          {:ok, %{text: String.t()}} | {:error, :has_output | :not_running | term}
+  def retract_turn(%Thread{} = thread, %Turn{} = turn, opts \\ []) do
+    thread = Ash.get!(Thread, thread.id, load: :project)
+    turn = Ash.get!(Turn, turn.id)
+    codex_id = thread.codex_thread_id
+
+    items =
+      Enum.filter(
+        Longx.Codex.ThreadState.snapshot(codex_id).items,
+        &(&1["turnId"] == turn.codex_turn_id)
+      )
+
+    with :ok <- retractable(turn, items),
+         {:ok, conn} <- thread_connection(thread, opts),
+         :ok <- interrupt_and_revert(codex_id, turn.codex_turn_id, conn) do
+      mark_turn_reverted!(turn)
+      touch_thread!(thread, %{status: :idle, last_activity_at: DateTime.utc_now()})
+      broadcast_changed(thread.project_id)
+      {:ok, %{text: turn.user_text || ""}}
+    end
+  end
+
+  # in a task of its own: the wait for turn/completed subscribes to the thread's
+  # topic, and the caller's mailbox stays out of it
+  defp interrupt_and_revert(codex_id, codex_turn_id, conn) do
+    Task.Supervisor.async_nolink(Longx.Codex.TaskSupervisor, fn ->
+      with :ok <- Longx.Codex.Thread.subscribe(codex_id),
+           :ok <- Longx.Codex.Thread.interrupt(codex_id, codex_turn_id, conn: conn),
+           :ok <- await_turn_end(codex_id, codex_turn_id) do
+        Longx.Codex.Thread.revert(codex_id, codex_turn_id, turn_ids: [codex_turn_id], conn: conn)
+      end
+    end)
+    |> Task.await(30_000)
+  end
+
+  defp retractable(%Turn{status: status}, _items) when status != :in_progress,
+    do: {:error, :not_running}
+
+  defp retractable(_turn, items) do
+    if Enum.any?(items, &(&1["type"] != "userMessage")), do: {:error, :has_output}, else: :ok
+  end
+
+  # the interrupt lands as turn/completed; codex refuses a revert of a turn still running
+  defp await_turn_end(codex_id, codex_turn_id) do
+    receive do
+      {:codex, _, "turn/completed",
+       %{"threadId" => ^codex_id, "turn" => %{"id" => ^codex_turn_id}}} ->
+        :ok
+
+      {:codex, _, _, _} ->
+        await_turn_end(codex_id, codex_turn_id)
+    after
+      15_000 -> {:error, :interrupt_timeout}
+    end
+  end
 
   @doc """
   Overrides a denial of codex's automatic approval review on the thread

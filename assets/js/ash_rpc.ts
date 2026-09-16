@@ -5566,6 +5566,81 @@ export async function validateRespond(
 }
 
 
+export type RetractTurnInput = {
+  threadId: UUID;
+  codexTurnId: string;
+};
+
+export type RetractTurnFields = UnifiedFieldSelection<{text: string, __type: "TypedMap", __primitiveFields: "text"}>[];
+
+export type InferRetractTurnResult<
+  Fields extends RetractTurnFields | undefined,
+> = InferResult<{text: string, __type: "TypedMap", __primitiveFields: "text"}, Fields>;
+
+export type RetractTurnResult<Fields extends RetractTurnFields | undefined = undefined> = | { success: true; data: InferRetractTurnResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function retractTurn<Fields extends RetractTurnFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: RetractTurnInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<RetractTurnResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "retract_turn",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<RetractTurnResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateRetractTurn(
+  config: {
+  tenant?: string;
+  input: RetractTurnInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "retract_turn",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ReviewThreadInput = {
   threadId: UUID;
   target: "base_branch" | "commit" | "custom" | "uncommitted";

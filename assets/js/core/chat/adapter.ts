@@ -12,7 +12,7 @@ import type {
   ExternalThreadQueueAdapter,
   ThreadMessageLike,
 } from "@assistant-ui/react";
-import { answerRequest, approveReview, interruptTurn, respond, sendMessage, setGoal } from "@/ash_rpc";
+import { answerRequest, approveReview, interruptTurn, respond, retractTurn, sendMessage, setGoal } from "@/ash_rpc";
 import { skillsIn, type SkillRef } from "./mentions";
 import { RpcFailure, unwrap } from "@/core/projects";
 import {
@@ -85,6 +85,8 @@ export type AdapterOptions = {
   dictation?: DictationAdapter;
   /** the project's skills: a `$name` in the text rides on the turn as a skill input */
   skills?: readonly SkillRef[];
+  /** a stop before anything came back took the turn out; its text comes back to the composer */
+  onRetract?: (text: string) => void;
 };
 
 export function textOf(message: AppendMessage): string {
@@ -208,6 +210,15 @@ export function buildAdapter(
       const turnId = runningTurnId(view);
       const id = threadId();
       if (!turnId || !id) return;
+      // nothing came back yet: take the turn back, the text returns to the composer
+      const answered = view.items.some((i) => i.turnId === turnId && i.type !== "userMessage");
+      if (!answered && opts.onRetract) {
+        const { text } = unwrap(
+          await retractTurn({ fields: ["text"], input: { threadId: id, codexTurnId: turnId } }),
+        );
+        opts.onRetract(text);
+        return;
+      }
       unwrap(
         await interruptTurn({ input: { threadId: id, codexTurnId: turnId } }),
       );

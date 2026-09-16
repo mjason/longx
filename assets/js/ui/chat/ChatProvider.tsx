@@ -1,5 +1,5 @@
-import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { AssistantRuntimeProvider, useAui } from "@assistant-ui/react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 import type { AccessMode, DirtyChange, DirtyDecision } from "@/core/chat/adapter";
 import { useCodexRuntime, type CodexRuntime } from "@/core/chat/runtime";
@@ -57,11 +57,17 @@ export function ChatProvider({ projectId, slug, defaults, defaultModelId, childr
     }
   }, []);
 
-  const chat = useCodexRuntime({ projectId, defaults, defaultModelId, threadId, onOpenThread, onDirtyTree, onSignal });
+  // a stop before anything came back: the message's text goes back into the
+  // composer (assistant-ui's composer lives under the runtime provider below)
+  const composerRef = useRef<((text: string) => void) | null>(null);
+  const onRetract = useCallback((text: string) => composerRef.current?.(text), []);
+
+  const chat = useCodexRuntime({ projectId, defaults, defaultModelId, threadId, onOpenThread, onDirtyTree, onSignal, onRetract });
 
   return (
     <ChatContext.Provider value={chat}>
       <AssistantRuntimeProvider runtime={chat.runtime} config={chatConfig}>
+        <ComposerBridge composerRef={composerRef} />
         <PlanUI />
         <CompactionUI />
         <GoalProvider threadId={chat.thread?.id} goal={chat.view.goal}>
@@ -71,4 +77,16 @@ export function ChatProvider({ projectId, slug, defaults, defaultModelId, childr
       </AssistantRuntimeProvider>
     </ChatContext.Provider>
   );
+}
+
+// reaches the composer from outside the runtime provider (the adapter's onRetract)
+function ComposerBridge({ composerRef }: { composerRef: React.MutableRefObject<((text: string) => void) | null> }) {
+  const aui = useAui();
+  useEffect(() => {
+    composerRef.current = (text) => aui.composer.setText(text);
+    return () => {
+      composerRef.current = null;
+    };
+  }, [aui, composerRef]);
+  return null;
 }
