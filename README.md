@@ -1,7 +1,7 @@
 # Longx
 
 Ash + Phoenix 上的 agent 应用：内置 OpenAI 的 `codex-app-server` 作为 agent 引擎，
-模型请求全部经过 Longx 自己的 AI 网关（`/ai/v1/*`）转发到你配置的上游（DeepSeek、GLM、OpenAI……），
+模型请求全部经过 Longx 自己的 AI 网关（`/ai/v1/*`）转发到你配置的上游（DeepSeek、GLM、阿里云百炼 Token Plan、OpenAI……），
 codex 的工具能力可以用 Elixir 直接扩展。
 
 ## 启动
@@ -179,7 +179,12 @@ assets/js/ui/              React DOM：路由、页面、shadcn 组件；移动�
 ## 模型 provider：一个 provider 用一把 key，不要用号池
 
 模型在数据库里配置（`Longx.AI.Provider` + `Longx.AI.Model`），每个 provider 一条记录，
-一个 `base_url` 和一把 `api_key`。同一个 thread 可以按轮次换模型（`turn/start.model`、fork），
+一个 `base_url` 和一把 `api_key`。设置里的「从模版添加」备好了 DeepSeek、GLM、阿里云百炼
+Token Plan（个人版 / 团队版，key 各一把、互不通用；Coding Plan 只有 Chat Completions，codex 0.154
+不支持；按量计费的地址带 WorkspaceId，用「自定义」填）和 OpenAI。**联网搜索按模型决定**：
+模型自带搜索的（OpenAI；百炼上的 Qwen 3.5+、DeepSeek-v4、glm-5.2）由 provider 在服务端跑 codex 的
+`web_search` 工具，搜索的问题和来源会显示在聊天里；不支持的（百炼上的 kimi、MiniMax、glm-5）自动改走
+Longx 的 Tavily 搜索——模板已经标好，模型编辑框里也能改。同一个 thread 可以按轮次换模型（`turn/start.model`、fork），
 网关（`Longx.AI.Gateway`）负责让不同上游能接着同一段历史继续跑，其中最麻烦的是推理块：
 
 * OpenAI 返回的 `reasoning.encrypted_content` 是**真正的密文**，只有 OpenAI 自己解得开；

@@ -41,7 +41,8 @@ defmodule Longx.AI.Model do
         :reasoning_levels,
         :reasoning_effort,
         :reasoning_summary,
-        :max_output_tokens
+        :max_output_tokens,
+        :hosted_web_search
       ]
 
       change Longx.AI.Model.Changes.DeriveSlug
@@ -61,7 +62,8 @@ defmodule Longx.AI.Model do
         :reasoning_levels,
         :reasoning_effort,
         :reasoning_summary,
-        :max_output_tokens
+        :max_output_tokens,
+        :hosted_web_search
       ]
 
       validate Longx.AI.Model.Validations.EffortInLevels
@@ -157,6 +159,14 @@ defmodule Longx.AI.Model do
       public? true
       constraints one_of: [:auto, :concise, :detailed, :none]
     end
+
+    # Whether the model runs codex's `web_search` tool itself (the provider's
+    # hosted search — OpenAI, Bailian's Qwen / DeepSeek-v4 / glm-5.2); nil =
+    # whatever the provider says. A provider that hosts search for some
+    # models refuses the tool for others (Bailian: "Agent capabilities are
+    # not enabled" for kimi-k2.x, MiniMax, glm-5.1), so this is per model;
+    # false sends the thread to Longx's own search instead.
+    attribute :hosted_web_search, :boolean, public?: true
 
     # Cap on one response, applied by the gateway (`max_output_tokens` on the
     # Responses request) when codex sets none; nil = the provider's default.

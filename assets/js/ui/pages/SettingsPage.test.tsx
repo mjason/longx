@@ -126,6 +126,9 @@ describe("SettingsPage", () => {
     );
     await user.click(within(md).getByRole("combobox", { name: "默认档" }));
     await user.click(await screen.findByRole("option", { name: "high" }));
+    // web search per model: this one searches through Longx whatever the provider says
+    await user.click(within(md).getByRole("combobox", { name: "联网搜索" }));
+    await user.click(await screen.findByRole("option", { name: /Longx 代搜/ }));
     await user.click(within(md).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(createModel).toHaveBeenCalledWith(
@@ -137,6 +140,7 @@ describe("SettingsPage", () => {
             contextWindow: 200000,
             reasoningLevels: ["low", "high"],
             reasoningEffort: "high",
+            hostedWebSearch: false,
           }),
         }),
       ),

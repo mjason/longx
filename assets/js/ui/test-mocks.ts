@@ -422,6 +422,7 @@ export const model = (
         : null,
   reasoningSummary: null,
   maxOutputTokens: null,
+  hostedWebSearch: null,
   providerId: extra.providerId ?? (n === 2 ? "p2" : "p1"),
   provider: {
     id: extra.providerId ?? (n === 2 ? "p2" : "p1"),

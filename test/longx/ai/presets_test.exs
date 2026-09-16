@@ -11,7 +11,13 @@ defmodule Longx.AI.PresetsTest do
   end
 
   test "the catalogue: DeepSeek, GLM and OpenAI with the facts codex needs" do
-    assert Enum.map(Presets.all(), & &1.slug) == ["deepseek", "glm", "openai"]
+    assert Enum.map(Presets.all(), & &1.slug) == [
+             "deepseek",
+             "glm",
+             "bailian-token-plan-personal",
+             "bailian-token-plan-team",
+             "openai"
+           ]
 
     {:ok, deepseek} = Presets.fetch("deepseek")
     assert deepseek.base_url == "https://api.deepseek.com/v1"
@@ -31,6 +37,39 @@ defmodule Longx.AI.PresetsTest do
              %{upstream_id: "glm-5.3", reasoning_effort: "max"},
              %{upstream_id: "glm-5-turbo", reasoning_levels: []}
            ] = glm.models
+
+    # Bailian: one endpoint for both plans, the team plan's catalogue is a superset;
+    # search is the model's own for Qwen / DeepSeek-v4 / glm-5.2, Longx's for the rest
+    {:ok, personal} = Presets.fetch("bailian-token-plan-personal")
+    {:ok, team} = Presets.fetch("bailian-token-plan-team")
+    assert personal.base_url == team.base_url
+    assert personal.base_url =~ "token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    assert personal.supports_hosted_web_search and team.supports_hosted_web_search
+    assert length(personal.models) == 10 and length(team.models) == 19
+
+    assert Enum.map(personal.models, & &1.upstream_id) ==
+             Enum.map(Enum.take(team.models, 10), & &1.upstream_id)
+
+    assert %{
+             context_window: 983_616,
+             reasoning_levels: ["low", "medium", "xhigh"],
+             reasoning_effort: "xhigh",
+             image: true,
+             hosted_search: true
+           } = hd(personal.models)
+
+    assert Enum.all?(personal.models, & &1.hosted_search)
+
+    assert Enum.map(Enum.filter(team.models, &(not &1.hosted_search)), & &1.upstream_id) ==
+             [
+               "deepseek-v3.2",
+               "kimi-k2.7-code",
+               "kimi-k2.6",
+               "kimi-k2.5",
+               "glm-5.1",
+               "glm-5",
+               "MiniMax-M2.5"
+             ]
 
     {:ok, openai} = Presets.fetch("openai")
     assert openai.kind == :openai
@@ -122,6 +161,27 @@ defmodule Longx.AI.PresetsTest do
       AI.update_model!(flash, %{reasoning_levels: ["low", "deep"], reasoning_effort: "low"})
       {:ok, %{models: [flash, _]}} = Presets.apply("deepseek")
       assert flash.reasoning_levels == ["low", "deep"]
+    end
+
+    test "Bailian: the model rows carry the per-model search flag, so kimi searches through Longx and qwen through Bailian" do
+      assert {:ok, %{provider: provider, models: [qwen, kimi]}} =
+               Presets.apply("bailian-token-plan-team",
+                 api_key: "sk-sp-x",
+                 models: ["qwen3.8-max", "kimi-k2.7-code"]
+               )
+
+      assert provider.supports_hosted_web_search
+      assert qwen.hosted_web_search == true and kimi.hosted_web_search == false
+      assert AI.web_search_mode(qwen) == :hosted
+      assert AI.web_search_mode(kimi) == :standalone
+      # the slugs are the upstream ids (deepseek-v4-pro would collide with DeepSeek's: prefixed)
+      {:ok, %{models: [pro]}} = Presets.apply("deepseek", models: ["deepseek-v4-pro"])
+
+      {:ok, %{models: [bailian_pro]}} =
+        Presets.apply("bailian-token-plan-personal", api_key: "k", models: ["deepseek-v4-pro"])
+
+      assert pro.slug == "deepseek-v4-pro" and
+               bailian_pro.slug == "bailian-token-plan-personal-deepseek-v4-pro"
     end
 
     test "models: picks by upstream id, :all takes everything; make_default: names the default" do

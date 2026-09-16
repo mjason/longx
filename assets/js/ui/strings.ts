@@ -611,6 +611,13 @@ export const t = {
     reasoningEffortFree: "推理强度",
     reasoningEffortFreeHint: "模型接受的任意值；留空不传",
     reasoningSummary: "推理摘要",
+    hostedWebSearch: "联网搜索",
+    hostedWebSearchOptions: {
+      provider: "跟 Provider 的设置",
+      hosted: "模型自带（provider 服务端执行）",
+      longx: "Longx 代搜（Tavily）",
+    },
+    hostedWebSearchHint: "模型自带的搜索是 provider 在服务端跑 codex 的 web_search 工具；同一个 provider 下有的模型不支持（百炼的 kimi、MiniMax、glm-5），那些模型选「Longx 代搜」。",
     advanced: "高级",
     // templates
     chooseTemplate: "从模版添加",

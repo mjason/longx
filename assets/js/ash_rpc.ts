@@ -299,6 +299,7 @@ export type CreateModelInput = {
   reasoningEffort?: string | null;
   reasoningSummary?: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens?: number | null;
+  hostedWebSearch?: boolean | null;
 };
 
 export type CreateModelFields = UnifiedFieldSelection<ModelResourceSchema>[];
@@ -615,6 +616,7 @@ export type UpdateModelInput = {
   reasoningEffort?: string | null;
   reasoningSummary?: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens?: number | null;
+  hostedWebSearch?: boolean | null;
 };
 
 export type UpdateModelFields = UnifiedFieldSelection<ModelResourceSchema>[];

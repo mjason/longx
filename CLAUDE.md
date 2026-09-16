@@ -339,11 +339,16 @@ React Native client planned on the same core code.
     the levels when declared — `Model.Validations.EffortInLevels`), `reasoning_summary`
     (codex's enum) and `max_output_tokens`).
     `Longx.AI.resolve_target/0` = default model + its provider's decrypted key.
-    **Presets** (`Longx.AI.Presets`, pure data + `apply/2`): DeepSeek, GLM and OpenAI with
-    endpoint / kind / hosted search / key env + url / docs url and their models (window,
-    levels, default level, image input, recommended) — DeepSeek's and GLM's from the
-    `models.json` each publishes for codex, OpenAI's from the catalog embedded in the
-    pinned codex binary (`strings` it for `supported_reasoning_levels`). `apply/2` is
+    **Presets** (`Longx.AI.Presets`, pure data + `apply/2`): DeepSeek, GLM, 阿里云百炼
+    Token Plan (个人版 / 团队版) and OpenAI with endpoint / kind / hosted search / key env
+    + url / docs url and their models (window, levels, default level, image input,
+    recommended, per-model `hosted_search`) — DeepSeek's and GLM's from the `models.json`
+    each publishes for codex, Bailian's from the `model-catalog.local.json` on its Codex
+    page (one endpoint for both plans, `…/compatible-mode/v1`, Responses API, plan-specific
+    keys; the team plan lists nine models more; Coding Plan is chat-only and out;
+    pay-as-you-go needs a WorkspaceId in the URL → a custom provider), OpenAI's from the
+    catalog embedded in the pinned codex binary (`strings` it for
+    `supported_reasoning_levels`). `apply/2` is
     idempotent (provider by slug — facts refreshed, a key never dropped; models by
     `upstream_id` — a person's edits kept, a row without levels learns the preset's, a row
     on a smaller set of the preset's levels gains the ones added since (DeepSeek's are
@@ -437,8 +442,13 @@ React Native client planned on the same core code.
     default (written into codex's config by `Home.prepare/1`) and `web_search_mode/1` per
     model (a thread's `config` override, via `thread_options/1`) — pattern-matched on the
     resolved model target and search target, never an `&&`/`||` chain at the call site:
-    `:hosted` when the model's provider has `supports_hosted_web_search` (OpenAI —
-    the Responses API runs `web_search` inside the provider; config `web_search = "live"`),
+    `:hosted` when the model runs codex's standard `web_search` tool itself —
+    `Model.hosted_web_search` when set, else the provider's `supports_hosted_web_search`
+    (OpenAI; Bailian for Qwen 3.5+ / DeepSeek-v4 / glm-5.2, which answer with
+    `web_search_call` items carrying the query and sources — verified live through codex —
+    and refuse the tool for kimi-k2.x / MiniMax / glm-5 with "Agent capabilities are not
+    enabled", hence per model; the model dialog's 联网搜索 select) (config
+    `web_search = "live"`; the gateway passes the tool through, `external_web_access` and all),
     else `:standalone` — always: `open` needs no provider (below), and a `search_query`
     without one is told "no search provider" inside the output. `:disabled` is only ever an
     explicit choice: `Project.web_search` / `Thread.web_search` (a `thread/start` config,
@@ -490,8 +500,10 @@ React Native client planned on the same core code.
     entries to that is a separate, e2e-verified change, not done yet.
   - Upstreams are all OpenAI **Responses API** (codex 0.154 dropped `wire_api = "chat"`):
     OpenAI `https://api.openai.com/v1`, DeepSeek `https://api.deepseek.com/v1`, GLM
-    `https://open.bigmodel.cn/api/v1` (its `/api/paas/v4` is chat completions). Adding a
-    provider = a DB row, no code — `Longx.AI.Presets` has the three ready-made.
+    `https://open.bigmodel.cn/api/v1` (its `/api/paas/v4` is chat completions), Bailian
+    Token Plan `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`. Adding
+    a provider = a DB row, no code — `Longx.AI.Presets` has the ready-made ones;
+    `bailian_live_test` (`:live`, `BAILIAN_TOKEN_PLAN_API_KEY`) drives the real endpoint.
   - `Longx.Codex.Home` writes our own `CODEX_HOME` (`data/codex_home`, prod
     `$LONGX_DATA_DIR/codex_home`; never `~/.codex`, never a tmp dir) with a generated
     `config.toml`: one provider `longx` → `http://127.0.0.1:<port>/ai/v1`,

@@ -151,7 +151,14 @@ defmodule LongxWeb.AiRpcTest do
                "fields" => ["slug", "name", "kind", "installed", "providerId", "keyUrl", "models"]
              })
 
-    assert Enum.map(presets, & &1["slug"]) == ["deepseek", "glm", "openai"]
+    assert Enum.map(presets, & &1["slug"]) == [
+             "deepseek",
+             "glm",
+             "bailian-token-plan-personal",
+             "bailian-token-plan-team",
+             "openai"
+           ]
+
     [deepseek | _] = presets
     assert %{"installed" => false, "providerId" => nil, "kind" => "openai_compatible"} = deepseek
 
