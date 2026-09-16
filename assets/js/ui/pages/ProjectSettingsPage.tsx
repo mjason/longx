@@ -12,6 +12,7 @@ import { Input } from "@/ui/components/ui/input";
 import { Label } from "@/ui/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/ui/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
+import { Badge } from "@/ui/components/ui/badge";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { Switch } from "@/ui/components/ui/switch";
 import { Textarea } from "@/ui/components/ui/textarea";
@@ -287,7 +288,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         </Button>
       </section>
 
-      <SkillsSection projectId={project.id} />
+      <SkillsSection projectId={project.id} rootPath={project.rootPath} />
 
       <section className="space-y-3">
         <h2 className="text-destructive text-lg font-medium">{t.dangerZone}</h2>
@@ -343,7 +344,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
 }
 
 /** The skills codex finds for the project — read-only, the files are the source. */
-function SkillsSection({ projectId }: { projectId: string }) {
+function SkillsSection({ projectId, rootPath }: { projectId: string; rootPath: string }) {
   const skills = useSkills(projectId);
   return (
     <section className="space-y-3" data-testid="project-skills">
@@ -355,17 +356,36 @@ function SkillsSection({ projectId }: { projectId: string }) {
         <p className="text-muted-foreground text-sm">{t.skills.none}</p>
       ) : (
         <ul className="divide-y rounded-lg border">
-          {skills.data.map((s) => (
-            <li key={s.path ?? s.name} className="flex flex-col gap-0.5 px-3 py-2">
-              <span className="flex items-baseline gap-2">
-                <span className="font-mono text-sm">${s.name}</span>
-                <span className="text-muted-foreground min-w-0 truncate text-sm">{s.shortDescription ?? s.description}</span>
-              </span>
-              {s.path ? <span className="text-muted-foreground truncate font-mono text-xs">{s.path}</span> : null}
-            </li>
-          ))}
+          {skills.data.map((s) => {
+            const where = skillOrigin(s.path, rootPath);
+            return (
+              <li key={s.path ?? s.name} className="flex flex-col gap-1 px-3 py-2">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="shrink-0 whitespace-nowrap font-mono text-sm">${s.name}</span>
+                  {where.kind === "project" ? (
+                    <span className="text-muted-foreground min-w-0 truncate font-mono text-xs" title={s.path ?? undefined}>
+                      {where.label}
+                    </span>
+                  ) : (
+                    <Badge variant="outline" title={s.path ?? undefined}>
+                      {where.label}
+                    </Badge>
+                  )}
+                </span>
+                <span className="text-muted-foreground text-sm">{s.shortDescription ?? s.description}</span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
   );
+}
+
+// a project skill is shown by its path under the root; codex's own samples
+// and the user's global ones by a word — their absolute paths say nothing
+function skillOrigin(path: string | null, rootPath: string): { kind: "project" | "builtin" | "global"; label: string } {
+  if (path && path.startsWith(rootPath + "/")) return { kind: "project", label: path.slice(rootPath.length + 1) };
+  if (path && path.includes("/skills/.system/")) return { kind: "builtin", label: t.skills.builtin };
+  return { kind: "global", label: t.skills.global };
 }

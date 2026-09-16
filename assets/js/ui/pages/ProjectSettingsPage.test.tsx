@@ -46,13 +46,23 @@ describe("ProjectSettingsPage", () => {
 
   test("the skills codex finds for the project are listed with their paths; none is said", async () => {
     vi.mocked(listSkills).mockResolvedValue(
-      ok([{ name: "docs", description: "Write the docs", shortDescription: null, path: "/srv/app-1/.agents/skills/docs/SKILL.md", enabled: true }]) as never,
+      ok([
+        { name: "docs", description: "Write the docs", shortDescription: null, path: "/srv/app-1/.agents/skills/docs/SKILL.md", enabled: true },
+        { name: "review-agent", description: "Review", shortDescription: null, path: "/data/codex_home/id-1/skills/.system/review-agent/SKILL.md", enabled: true },
+        { name: "mine", description: "Mine", shortDescription: null, path: "/home/mj/.agents/skills/mine/SKILL.md", enabled: true },
+      ]) as never,
     );
     renderAt("/p/app-1/settings");
     const skills = await screen.findByTestId("project-skills");
     await waitFor(() => expect(skills).toHaveTextContent("Write the docs"));
-    expect(skills).toHaveTextContent("$docs");
-    expect(skills).toHaveTextContent(".agents/skills/docs/SKILL.md");
+    const rows = within(skills).getAllByRole("listitem");
+    // a project skill: its path relative to the root; codex's own and the user's are labelled, not pathed
+    expect(rows[0]).toHaveTextContent("$docs");
+    expect(rows[0]).toHaveTextContent(".agents/skills/docs/SKILL.md");
+    expect(rows[0]).not.toHaveTextContent("/srv/app-1/");
+    expect(rows[1]).toHaveTextContent("codex 自带");
+    expect(rows[1]).not.toHaveTextContent("codex_home");
+    expect(rows[2]).toHaveTextContent("全局");
     vi.mocked(listSkills).mockResolvedValue(ok([]) as never);
   });
 
