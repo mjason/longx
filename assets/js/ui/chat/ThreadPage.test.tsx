@@ -808,6 +808,31 @@ describe("ThreadPage", () => {
     );
   });
 
+  test("any other file — a zip — is uploaded to the server when dropped and the message names its path", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ path: "/data/attachments/id-1/20260916T020000-data.zip", name: "data.zip", bytes: 4 }), { status: 200 }),
+    );
+    await open();
+    const file = new File([new Uint8Array([80, 75, 3, 4])], "data.zip", { type: "application/zip" });
+    const shell = document.querySelector("[data-slot=aui_composer-shell]")!;
+    fireEvent.drop(shell, { dataTransfer: { files: [file], types: ["Files"] } });
+    await screen.findByRole("button", { name: /file attachment/i });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/attachments/id-1", expect.objectContaining({ method: "POST" })));
+    const box = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(box, "unpack it{Enter}");
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            text: expect.stringMatching(/^unpack it\n\n<attachment name="data\.zip" path="\/data\/attachments\/id-1\/20260916T020000-data\.zip"/),
+          }),
+        }),
+      ),
+    );
+    fetchMock.mockRestore();
+  });
+
   test("voice input is switched off for now: no mic in the rail", async () => {
     await open();
     expect(screen.queryByRole("button", { name: "语音输入" })).toBeNull();

@@ -65,6 +65,7 @@ defmodule Longx.Projects.Project do
       change Changes.StopCodex
       change Changes.DeleteThreads
       change Changes.ResetCodexHome
+      change Changes.DeleteAttachments
     end
 
     create :create do

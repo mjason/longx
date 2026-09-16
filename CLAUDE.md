@@ -935,11 +935,23 @@ React Native client planned on the same core code.
     `ComposerPopovers` and `UserText`. **The composer has the catalog's Composer
     element's full set** (https://www.assistant-ui.com/elements/composer, all wired
     through the runtime, nothing hand-rolled): **attachments** — the runtime's
-    `adapters.attachments` is `CompositeAttachmentAdapter([SimpleImage, SimpleText])`
-    (built once in `useCodexRuntime`, like everything the adapter is made of), so the
-    `+` button (`ComposerAddAttachment` from `attachment.aui`), paste and drop onto the
-    bar stage files as tiles; on send `adapter.ts`'s `inputOf` puts images on the RPC as
-    `images` (data urls) and appends text files to the text; a sent image comes back in
+    `adapters.attachments` is `CompositeAttachmentAdapter([SimpleImage, SimpleText,
+    FileUpload])` (built once in `useCodexRuntime`, like everything the adapter is made
+    of), so the `+` button (`ComposerAddAttachment` from `attachment.aui`), paste and drop
+    onto the bar stage files as tiles; on send `adapter.ts`'s `inputOf` puts images on
+    the RPC as `images` (data urls) and appends text files to the text. **Any other file
+    (a zip, a PDF, a dataset)** is `core/chat/fileAttachments.ts`'s
+    `FileUploadAttachmentAdapter` (`accept: "*"`, so it is last): `add` uploads it at once
+    to `POST /attachments/:project_id` (multipart, the RPC's CSRF token; parser limit
+    512 MB) — `LongxWeb.AttachmentController` → `Longx.Projects.Attachments.store/3`, which
+    keeps the file as `<stamp>-<name>` under `<attachments dir>/<project id>/` in the data
+    directory (`config :longx, Longx.Projects.Attachments, dir:`; dev `data/attachments`,
+    prod `$LONGX_DATA_DIR/attachments` — never the working directory, the repository
+    stays clean; the name is reduced to a basename); `send` puts one line in the message,
+    `<attachment name="…" path="…" size="…" />` + a hint, and the agent reads or unzips
+    the path itself (the sandbox sees `/` read-only; live-checked with DeepSeek: a zip
+    dropped on the composer, `unzip` into /tmp, contents read back). Deleting a project
+    removes its attachments (`Changes.DeleteAttachments`); a sent image comes back in
     codex's `userMessage` content as `image` and `messages.ts` renders it as an image
     part (`UserImagePart`); **dictation** — `adapters.dictation` is
     `WebSpeechDictationAdapter` where the browser has speech recognition (the mic in the

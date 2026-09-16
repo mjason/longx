@@ -29,6 +29,8 @@ import {
 } from "./adapter";
 import { subagentsOf, type SubViews } from "./messages";
 import { runningTurnId, type ThreadView } from "./thread";
+import { csrfToken } from "@/core/rpcHooks";
+import { FileUploadAttachmentAdapter } from "./fileAttachments";
 import { buildThreadListAdapter, type ThreadRow } from "./threadList";
 import { useThreadView } from "./useThreadView";
 import { useThreadViews } from "./useThreadViews";
@@ -218,14 +220,16 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   const [queue] = useState(() =>
     createMessageQueue({ run: (message) => void onNewRef.current(message) }),
   );
-  // what the composer can take: images (to the model as data urls) and text
-  // files (inlined), and the browser's speech recognition where it exists —
+  // what the composer can take: images (to the model as data urls), text
+  // files (inlined) and any other file (uploaded to the server, its path in
+  // the message), and the browser's speech recognition where it exists —
   // built once, like everything the adapter is made of
   const [attachments] = useState(
     () =>
       new CompositeAttachmentAdapter([
         new SimpleImageAttachmentAdapter(),
         new SimpleTextAttachmentAdapter(),
+        new FileUploadAttachmentAdapter({ projectId, csrf: csrfToken }),
       ]),
   );
   const [dictation] = useState(() =>

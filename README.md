@@ -171,7 +171,7 @@ lib/longx/browser*         内置 obscura 无头浏览器（mix obscura.fetch）
 lib/longx/ai/              模型 provider / 搜索 provider（密钥加密存库）、网关、Tavily 搜索
 lib/longx/codex/           app-server 客户端：Connection、ThreadState（ETS 视图）、Thread API、Tool 体系
 lib/longx/tools/           给 codex 的 Elixir 工具 —— 见下文
-lib/longx_web/             SPA 壳（所有路径）、/rpc（ash_typescript）、/socket（thread / project channel）、/ai/v1 网关
+lib/longx_web/             SPA 壳（所有路径）、/rpc（ash_typescript）、/socket（thread / project channel）、/ai/v1 网关、/attachments 附件上传（zip/PDF/数据集存到数据目录，消息里给 agent 一个路径）
 assets/js/core/            不碰 DOM 的前端核心（RPC 客户端、socket、channel、reducer）——以后 React Native 复用
 assets/js/ui/              React DOM：路由、页面、shadcn 组件；移动端优先
 ```
