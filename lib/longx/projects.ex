@@ -112,6 +112,7 @@ defmodule Longx.Projects do
       define :list_threads_for_project, action: :for_project, args: [:project_id]
       define :list_threads_with_status, action: :with_status, args: [:project_id, :status]
       define :list_active_threads, action: :active_roots
+      define :list_all_active_threads, action: :active
       define :list_subagents, action: :subagents_of, args: [:parent_thread_id]
     end
 
@@ -125,6 +126,7 @@ defmodule Longx.Projects do
       define :mark_turn_reverted, action: :mark_reverted
       define :get_turn_by_codex_id, action: :by_codex_id, args: [:codex_turn_id]
       define :list_turns_in_progress, action: :in_progress_for_project, args: [:project_id]
+      define :list_all_turns_in_progress, action: :in_progress
 
       define :list_turns_for_thread,
         action: :for_thread,
@@ -277,6 +279,9 @@ defmodule Longx.Projects do
          :ok <- Longx.AI.check_effort(model_slug, opts[:effort]),
          {turn_opts, effort} = effort_change(turn_opts, thread, opts[:effort]),
          {:ok, conn} <- thread_connection(thread, opts),
+         # a Longx restart forgets every thread the Tracker followed; the
+         # turn's completion must reach the row whatever happened before
+         :ok <- Tracker.track(thread.codex_thread_id),
          :ok <- sync_reviewer(thread, mode, conn),
          {:ok, bookmark} <- preflight(thread, text, opts),
          {:ok, codex_turn_id} <-
@@ -544,6 +549,32 @@ defmodule Longx.Projects do
     end
   end
 
+  @doc """
+  What a previous boot left running: no codex survives the BEAM, so every
+  `:in_progress` turn failed and every `:active` thread is idle. Run once at
+  start (`Longx.Application`), before anything can start a new turn.
+  """
+  @spec settle_after_restart() :: %{turns: non_neg_integer, threads: non_neg_integer}
+  def settle_after_restart do
+    turns = list_all_turns_in_progress!()
+
+    for turn <- turns do
+      complete_turn!(turn, %{
+        status: :failed,
+        completed_at: DateTime.utc_now(),
+        error: "Longx restarted while this turn was running"
+      })
+    end
+
+    threads = list_all_active_threads!()
+    for thread <- threads, do: touch_thread!(thread, %{status: :idle})
+
+    for project_id <- Enum.uniq(Enum.map(threads, & &1.project_id)),
+        do: broadcast_changed(project_id)
+
+    %{turns: length(turns), threads: length(threads)}
+  end
+
   @doc "Files changed under the project (codex's `fs/changed`): the UI refetches the tree and git."
   @spec broadcast_files_changed(String.t(), [String.t()]) :: :ok
   def broadcast_files_changed(project_id, paths),
@@ -782,7 +813,10 @@ defmodule Longx.Projects do
         |> without_web_search(thread.web_search)
         |> with_global_memory(project)
 
-      Longx.Codex.Thread.resume(codex_id, opts)
+      with {:ok, id} <- Longx.Codex.Thread.resume(codex_id, opts) do
+        :ok = Tracker.track(id)
+        {:ok, id}
+      end
     end
   end
 

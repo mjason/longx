@@ -125,6 +125,47 @@ defmodule Longx.Projects.ResilienceTest do
     assert "/dev/null" in Projects.exec_context(project.id).sandbox[:passthrough]
   end
 
+  test "Longx restarted (the Tracker forgot every thread): the next message on a thread follows it again, so its turn still completes",
+       %{project: project} do
+    project_id = project.id
+    {:ok, thread} = Projects.start_thread(project)
+    assert_receive {:codex_connection, ^project_id, :ready}, 15_000
+
+    # what a BEAM restart leaves: a fresh Tracker with nothing tracked
+    pid = Process.whereis(Longx.Projects.Tracker)
+    ref = Process.monitor(pid)
+    Process.exit(pid, :kill)
+    assert_receive {:DOWN, ^ref, _, _, _}, 5_000
+
+    eventually(fn ->
+      if Process.whereis(Longx.Projects.Tracker), do: {:ok, :up}, else: :pending
+    end)
+
+    {:ok, turn} = Projects.send_message(thread, "say hello again")
+    assert %{status: :completed} = eventually(turn_status(turn.id, :completed))
+    assert %{status: :idle} = eventually(thread_status(thread.id, :idle))
+  end
+
+  test "settle_after_restart/0: turns and threads a previous boot left running are closed — no codex survives the BEAM",
+       %{project: project} do
+    {:ok, thread} = Projects.start_thread(project)
+    Projects.touch_thread!(thread, %{status: :active})
+
+    {:ok, turn} =
+      Projects.create_turn(%{
+        codex_turn_id: "turn_from_last_boot",
+        thread_id: thread.id,
+        user_text: "left running",
+        started_at: DateTime.utc_now()
+      })
+
+    assert %{turns: 1, threads: 1} = Projects.settle_after_restart()
+    assert %{status: :failed, error: error, completed_at: %DateTime{}} = Ash.get!(Turn, turn.id)
+    assert error =~ "Longx restarted"
+    assert Ash.get!(Thread, thread.id).status == :idle
+    assert %{turns: 0, threads: 0} = Projects.settle_after_restart()
+  end
+
   test "codex dies mid-turn: the turn fails, the thread is disconnected, then resumed when codex is back",
        %{project: project} do
     project_id = project.id

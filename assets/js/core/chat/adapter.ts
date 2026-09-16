@@ -12,7 +12,7 @@ import type {
   ExternalThreadQueueAdapter,
   ThreadMessageLike,
 } from "@assistant-ui/react";
-import { answerRequest, approveReview, interruptTurn, respond, sendMessage } from "@/ash_rpc";
+import { answerRequest, approveReview, interruptTurn, respond, sendMessage, setGoal } from "@/ash_rpc";
 import { skillsIn, type SkillRef } from "./mentions";
 import { RpcFailure, unwrap } from "@/core/projects";
 import {
@@ -160,6 +160,18 @@ export function buildAdapter(
       if (!target) {
         if (!opts.createThread) throw new Error("no thread to send to");
         target = await opts.createThread();
+      }
+      // `/goal <objective>` typed past the command popover: the goal, not a message
+      const goal = text.match(/^\/goal\s+(\S[\s\S]*)$/);
+      if (goal) {
+        unwrap(
+          await setGoal({
+            fields: ["objective", "status"],
+            input: { threadId: target.threadId, objective: goal[1]!.trim() },
+          }),
+        );
+        opts.onSent?.(target);
+        return;
       }
       const send = (dirty?: "commit" | "ignore") =>
         sendMessage({

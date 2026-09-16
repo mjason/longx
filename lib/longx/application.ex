@@ -38,6 +38,11 @@ defmodule Longx.Application do
       {Task.Supervisor, name: Longx.Exec.TaskSupervisor},
       # keeps project thread/turn rows in step with codex events
       Longx.Projects.Tracker,
+      # rows a previous boot left running: no codex survives the BEAM
+      Supervisor.child_spec({Task, fn -> Longx.Projects.settle_after_restart() end},
+        id: :settle_after_restart,
+        restart: :temporary
+      ),
       # Start to serve requests, typically the last entry
       LongxWeb.Endpoint,
       # one codex per project, started lazily (needs the endpoint's port for

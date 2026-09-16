@@ -8,8 +8,9 @@ vi.mock("@/ash_rpc", () => ({
   respond: vi.fn(async () => ({ success: true, data: null })),
   answerRequest: vi.fn(async () => ({ success: true, data: null })),
   approveReview: vi.fn(async () => ({ success: true, data: null })),
+  setGoal: vi.fn(async () => ({ success: true, data: { objective: "x", status: "active" } })),
 }));
-import { answerRequest, approveReview, interruptTurn, respond, sendMessage } from "@/ash_rpc";
+import { answerRequest, approveReview, interruptTurn, respond, sendMessage, setGoal } from "@/ash_rpc";
 
 const target = { threadId: "row-1", codexThreadId: "thr_1" };
 const append = (text: string) =>
@@ -363,6 +364,20 @@ describe("chat adapter", () => {
     // none named: no skills field at all
     await adapter.onNew!(append("plain"));
     expect((vi.mocked(sendMessage).mock.calls.at(-1)![0] as { input: Record<string, unknown> }).input).not.toHaveProperty("skills");
+  });
+
+  test("a message that is `/goal <objective>` sets the thread's goal instead of being sent (a new chat gets its thread first)", async () => {
+    vi.mocked(sendMessage).mockClear();
+    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null });
+    await adapter.onNew!(append("/goal 简单写一个 hello"));
+    expect(setGoal).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", objective: "简单写一个 hello" } }));
+    expect(sendMessage).not.toHaveBeenCalled();
+
+    const createThread = vi.fn(async () => ({ threadId: "row-9", codexThreadId: "thr_9" }));
+    const fresh = buildAdapter({ target: null, view: emptyView(""), model: null, createThread });
+    await fresh.onNew!(append("/goal 跑通回测"));
+    expect(createThread).toHaveBeenCalled();
+    expect(setGoal).toHaveBeenLastCalledWith(expect.objectContaining({ input: { threadId: "row-9", objective: "跑通回测" } }));
   });
 
   test("extras.approveDeniedReview overrides a denied automatic review on the thread row", async () => {

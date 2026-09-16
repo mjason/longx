@@ -253,6 +253,12 @@ React Native client planned on the same core code.
     `:in_progress` turn of that project fails with "codex restarted…", its `:active` threads
     become `:disconnected`; `:ready` → those are `thread/resume`d on the new process (→
     `:idle`) or marked `:unrecoverable`. Idle threads are resumed lazily by `send_message/3`.
+    **The Tracker's list of followed threads is in memory**: a Longx restart forgets it, so
+    `resume_thread/2` and `send_message/3` both `Tracker.track/1` (idempotent) — without
+    that a turn after a restart never completed its row and the thread showed 进行中 for
+    ever; and `Projects.settle_after_restart/0` (a boot `Task` after the Tracker) fails every
+    `:in_progress` turn ("Longx restarted while this turn was running") and idles every
+    `:active` thread a previous boot left, since no codex survives the BEAM.
     **Stall watchdog**: a turn whose thread produced no event for `stall_after` (default
     10 min; `config :longx, Longx.Projects.Tracker, stall_after:, tick:`) gets
     `turn/interrupt` and ends `:interrupted` with error "no progress for N seconds".
@@ -558,7 +564,9 @@ React Native client planned on the same core code.
     history, the restore points and the welcome page see it. RPC `set_goal` / `clear_goal`
     on `Thread`; the UI is `ui/chat/GoalBar` (`GoalProvider` in `ChatProvider` holds the
     dialog, `GoalBar` above the thread: objective, status, tokens / budget, elapsed;
-    pause / resume / edit / clear) and the `/goal` command opens the dialog. Proven on
+    pause / resume / edit / clear) and the `/goal` command opens the dialog; `/goal <目标>`
+    typed past the popover is caught in `adapter.ts`'s `onNew` and sets the goal instead of
+    going out as a message. Proven on
     the real binary in `goals_skills_integration_test`.
   - **Skills**: codex loads `SKILL.md` files (`<cwd>/.agents/skills/<name>/SKILL.md`, the
     user's, the home's `skills/` incl. codex's own samples) and lists them in the prompt;

@@ -382,6 +382,10 @@ defmodule Longx.Projects.Thread do
       prepare build(sort: [last_activity_at: :desc_nils_last, inserted_at: :desc])
     end
 
+    read :active do
+      filter expr(status == :active)
+    end
+
     # the welcome page: what is running right now, with a way back to it
     # (entries are untyped maps, camelCased here — arrays of typed maps are
     # not selectable in ash_typescript 0.18)
