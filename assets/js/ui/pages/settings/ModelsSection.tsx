@@ -46,6 +46,7 @@ import { Badge } from "@/ui/components/ui/badge";
 import { Button } from "@/ui/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -162,44 +163,49 @@ function PresetChooser({
 }) {
   return (
     <Dialog open onOpenChange={(o) => (o ? null : onClose())}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{s.chooseTemplate}</DialogTitle>
           <DialogDescription>{s.chooseTemplateHint}</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {presets.map((preset) => (
+        <DialogBody className="flex flex-col gap-4">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {presets.map((preset) => (
+              <button
+                key={preset.slug}
+                type="button"
+                onClick={() => onPick(preset)}
+                className="hover:bg-accent flex min-h-16 min-w-0 flex-col items-start gap-1 rounded-lg border p-3 text-start transition-colors"
+              >
+                <span className="flex w-full items-center justify-between gap-2">
+                  <span className="font-medium">{preset.name}</span>
+                  {preset.installed ? (
+                    <Badge variant="secondary">{s.presetInstalled}</Badge>
+                  ) : null}
+                </span>
+                <span
+                  className="text-muted-foreground w-full truncate font-mono text-xs"
+                  title={preset.baseUrl}
+                >
+                  {preset.baseUrl}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  {preset.models.map((m) => m.upstreamId).join(" · ")}
+                </span>
+              </button>
+            ))}
             <button
-              key={preset.slug}
               type="button"
-              onClick={() => onPick(preset)}
-              className="hover:bg-accent flex min-h-16 min-w-0 flex-col items-start gap-1 rounded-lg border p-3 text-start transition-colors"
+              onClick={() => onPick(null)}
+              className="hover:bg-accent flex min-h-16 flex-col items-start gap-1 rounded-lg border border-dashed p-3 text-start transition-colors"
             >
-              <span className="flex w-full items-center justify-between gap-2">
-                <span className="font-medium">{preset.name}</span>
-                {preset.installed ? (
-                  <Badge variant="secondary">{s.presetInstalled}</Badge>
-                ) : null}
-              </span>
-              <span className="text-muted-foreground w-full truncate font-mono text-xs" title={preset.baseUrl}>
-                {preset.baseUrl}
-              </span>
+              <span className="font-medium">{s.custom}</span>
               <span className="text-muted-foreground text-xs">
-                {preset.models.map((m) => m.upstreamId).join(" · ")}
+                {s.customHint}
               </span>
             </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => onPick(null)}
-            className="hover:bg-accent flex min-h-16 flex-col items-start gap-1 rounded-lg border border-dashed p-3 text-start transition-colors"
-          >
-            <span className="font-medium">{s.custom}</span>
-            <span className="text-muted-foreground text-xs">
-              {s.customHint}
-            </span>
-          </button>
-        </div>
+          </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );
@@ -271,8 +277,8 @@ function PresetDialog({
   };
   return (
     <Dialog open onOpenChange={(o) => (o ? null : onClose())}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
-        <form onSubmit={submit} className="flex flex-col gap-4">
+      <DialogContent>
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col gap-4">
           <DialogHeader>
             <DialogTitle>
               {preset.installed
@@ -283,72 +289,74 @@ function PresetDialog({
               {preset.baseUrl}
             </DialogDescription>
           </DialogHeader>
-          {needsKey ? (
-            <Field
-              id="ps-key"
-              label={s.apiKey}
-              hint={s.presetKeyHint(preset.keyEnv)}
-            >
-              <Input
+          <DialogBody className="flex flex-col gap-4">
+            {needsKey ? (
+              <Field
                 id="ps-key"
-                type="password"
-                autoComplete="off"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="font-mono"
-              />
-            </Field>
-          ) : null}
-          <div className="flex flex-wrap gap-3 text-xs">
-            <a
-              href={preset.keyUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary inline-flex items-center gap-1 underline-offset-4 hover:underline"
-            >
-              {s.getKey} <ExternalLink className="size-3" />
-            </a>
-            <a
-              href={preset.docsUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-muted-foreground inline-flex items-center gap-1 underline-offset-4 hover:underline"
-            >
-              {s.presetDocs} <ExternalLink className="size-3" />
-            </a>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>{s.presetModels}</Label>
-            {rows.length > 0 ? (
-              <ModelPicker
-                models={rows}
-                selectedIds={chosen}
-                onToggle={toggle}
-                className="max-w-none"
-              />
-            ) : (
-              <p className="text-muted-foreground text-sm">
-                {s.presetAllInstalled}
-              </p>
-            )}
-          </div>
-          {chosen.length > 0 ? (
-            <Field id="ps-default" label={s.defaultModel}>
-              <Select value={makeDefault} onValueChange={setMakeDefault}>
-                <SelectTrigger id="ps-default" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__keep">{s.keepDefault}</SelectItem>
-                  {chosen.map((id) => (
-                    <SelectItem key={id} value={id} className="font-mono">
-                      {id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          ) : null}
+                label={s.apiKey}
+                hint={s.presetKeyHint(preset.keyEnv)}
+              >
+                <Input
+                  id="ps-key"
+                  type="password"
+                  autoComplete="off"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  className="font-mono"
+                />
+              </Field>
+            ) : null}
+            <div className="flex flex-wrap gap-3 text-xs">
+              <a
+                href={preset.keyUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary inline-flex items-center gap-1 underline-offset-4 hover:underline"
+              >
+                {s.getKey} <ExternalLink className="size-3" />
+              </a>
+              <a
+                href={preset.docsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-muted-foreground inline-flex items-center gap-1 underline-offset-4 hover:underline"
+              >
+                {s.presetDocs} <ExternalLink className="size-3" />
+              </a>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>{s.presetModels}</Label>
+              {rows.length > 0 ? (
+                <ModelPicker
+                  models={rows}
+                  selectedIds={chosen}
+                  onToggle={toggle}
+                  className="max-w-none"
+                />
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  {s.presetAllInstalled}
+                </p>
+              )}
+            </div>
+            {chosen.length > 0 ? (
+              <Field id="ps-default" label={s.defaultModel}>
+                <Select value={makeDefault} onValueChange={setMakeDefault}>
+                  <SelectTrigger id="ps-default" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__keep">{s.keepDefault}</SelectItem>
+                    {chosen.map((id) => (
+                      <SelectItem key={id} value={id} className="font-mono">
+                        {id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            ) : null}
+          </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               {t.cancel}
@@ -472,7 +480,10 @@ function ProviderCard({
         />
       ) : null}
       {discovering ? (
-        <DiscoverDialog provider={provider} onClose={() => setDiscovering(false)} />
+        <DiscoverDialog
+          provider={provider}
+          onClose={() => setDiscovering(false)}
+        />
       ) : null}
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
@@ -698,109 +709,111 @@ function ProviderDialog({
   };
   return (
     <Dialog open onOpenChange={(o) => (o ? null : onClose())}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
-        <form onSubmit={submit} className="flex flex-col gap-4">
+      <DialogContent>
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col gap-4">
           <DialogHeader>
             <DialogTitle>
               {provider ? s.editProvider : s.addProvider}
             </DialogTitle>
           </DialogHeader>
-          <Field id="pv-name" label={s.name}>
-            <Input
-              id="pv-name"
-              value={form.name}
-              onChange={(e) => set("name", e.target.value)}
-              required
-            />
-          </Field>
-          {!provider ? (
-            <Field id="pv-slug" label={s.slug} hint={s.slugHint}>
+          <DialogBody className="flex flex-col gap-4">
+            <Field id="pv-name" label={s.name}>
               <Input
-                id="pv-slug"
-                value={form.slug}
-                placeholder={slugOf(form.name)}
-                onChange={(e) => set("slug", e.target.value)}
+                id="pv-name"
+                value={form.name}
+                onChange={(e) => set("name", e.target.value)}
+                required
+              />
+            </Field>
+            {!provider ? (
+              <Field id="pv-slug" label={s.slug} hint={s.slugHint}>
+                <Input
+                  id="pv-slug"
+                  value={form.slug}
+                  placeholder={slugOf(form.name)}
+                  onChange={(e) => set("slug", e.target.value)}
+                  className="font-mono"
+                />
+              </Field>
+            ) : null}
+            <Field id="pv-url" label={s.baseUrl}>
+              <Input
+                id="pv-url"
+                type="url"
+                value={form.baseUrl}
+                placeholder="https://api.deepseek.com/v1"
+                onChange={(e) => set("baseUrl", e.target.value)}
+                required
                 className="font-mono"
               />
             </Field>
-          ) : null}
-          <Field id="pv-url" label={s.baseUrl}>
-            <Input
-              id="pv-url"
-              type="url"
-              value={form.baseUrl}
-              placeholder="https://api.deepseek.com/v1"
-              onChange={(e) => set("baseUrl", e.target.value)}
-              required
-              className="font-mono"
-            />
-          </Field>
-          <Field
-            id="pv-key"
-            label={s.apiKey}
-            hint={provider?.hasApiKey ? s.keepKey : undefined}
-          >
-            <Input
+            <Field
               id="pv-key"
-              type="password"
-              autoComplete="off"
-              value={form.apiKey}
-              onChange={(e) => set("apiKey", e.target.value)}
-              className="font-mono"
-            />
-          </Field>
-          <Field id="pv-kind" label={s.kind} hint={s.kindHint}>
-            <Select
-              value={form.kind}
-              onValueChange={(v) => set("kind", v as Provider["kind"])}
+              label={s.apiKey}
+              hint={provider?.hasApiKey ? s.keepKey : undefined}
             >
-              <SelectTrigger id="pv-kind" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(["openai_compatible", "openai"] as const).map((k) => (
-                  <SelectItem key={k} value={k}>
-                    {s.kinds[k]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <div className="flex items-center justify-between gap-4">
-            <Label htmlFor="pv-search">{s.hostedSearch}</Label>
-            <Switch
-              id="pv-search"
-              checked={form.supportsHostedWebSearch}
-              onCheckedChange={(v) => set("supportsHostedWebSearch", v)}
-            />
-          </div>
-          <details className="group">
-            <summary className="text-muted-foreground flex cursor-pointer list-none items-center gap-1 text-sm">
-              <ChevronDown className="size-4 transition-transform group-open:rotate-180" />{" "}
-              {s.advanced}
-            </summary>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <Field id="pv-timeout" label={s.timeout}>
-                <Input
-                  id="pv-timeout"
-                  type="number"
-                  min={1}
-                  value={form.timeoutS}
-                  onChange={(e) => set("timeoutS", e.target.value)}
-                />
-              </Field>
-              <Field id="pv-conc" label={s.concurrency}>
-                <Input
-                  id="pv-conc"
-                  type="number"
-                  min={1}
-                  placeholder={s.unlimited}
-                  value={form.concurrency}
-                  onChange={(e) => set("concurrency", e.target.value)}
-                />
-              </Field>
+              <Input
+                id="pv-key"
+                type="password"
+                autoComplete="off"
+                value={form.apiKey}
+                onChange={(e) => set("apiKey", e.target.value)}
+                className="font-mono"
+              />
+            </Field>
+            <Field id="pv-kind" label={s.kind} hint={s.kindHint}>
+              <Select
+                value={form.kind}
+                onValueChange={(v) => set("kind", v as Provider["kind"])}
+              >
+                <SelectTrigger id="pv-kind" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(["openai_compatible", "openai"] as const).map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {s.kinds[k]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <div className="flex items-center justify-between gap-4">
+              <Label htmlFor="pv-search">{s.hostedSearch}</Label>
+              <Switch
+                id="pv-search"
+                checked={form.supportsHostedWebSearch}
+                onCheckedChange={(v) => set("supportsHostedWebSearch", v)}
+              />
             </div>
-          </details>
+            <details className="group">
+              <summary className="text-muted-foreground flex cursor-pointer list-none items-center gap-1 text-sm">
+                <ChevronDown className="size-4 transition-transform group-open:rotate-180" />{" "}
+                {s.advanced}
+              </summary>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Field id="pv-timeout" label={s.timeout}>
+                  <Input
+                    id="pv-timeout"
+                    type="number"
+                    min={1}
+                    value={form.timeoutS}
+                    onChange={(e) => set("timeoutS", e.target.value)}
+                  />
+                </Field>
+                <Field id="pv-conc" label={s.concurrency}>
+                  <Input
+                    id="pv-conc"
+                    type="number"
+                    min={1}
+                    placeholder={s.unlimited}
+                    value={form.concurrency}
+                    onChange={(e) => set("concurrency", e.target.value)}
+                  />
+                </Field>
+              </div>
+            </details>
+          </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               {t.cancel}
@@ -840,7 +853,11 @@ function ModelDialog({
       ? String(model.maxOutputTokens)
       : "",
     hostedWebSearch:
-      model?.hostedWebSearch === true ? "hosted" : model?.hostedWebSearch === false ? "longx" : "provider",
+      model?.hostedWebSearch === true
+        ? "hosted"
+        : model?.hostedWebSearch === false
+          ? "longx"
+          : "provider",
   });
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -860,7 +877,12 @@ function ModelDialog({
       maxOutputTokens: form.maxOutputTokens
         ? Number(form.maxOutputTokens)
         : null,
-      hostedWebSearch: form.hostedWebSearch === "hosted" ? true : form.hostedWebSearch === "longx" ? false : null,
+      hostedWebSearch:
+        form.hostedWebSearch === "hosted"
+          ? true
+          : form.hostedWebSearch === "longx"
+            ? false
+            : null,
       ...(form.slug.trim() ? { slug: form.slug.trim() } : {}),
     };
     const done = {
@@ -877,153 +899,170 @@ function ModelDialog({
   };
   return (
     <Dialog open onOpenChange={(o) => (o ? null : onClose())}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
-        <form onSubmit={submit} className="flex flex-col gap-4">
+      <DialogContent>
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col gap-4">
           <DialogHeader>
             <DialogTitle>
               {model ? s.editModel : s.addModel} · {provider.name}
             </DialogTitle>
           </DialogHeader>
-          <Field id="md-name" label={s.name}>
-            <Input
-              id="md-name"
-              value={form.name}
-              onChange={(e) => set("name", e.target.value)}
-              required
-            />
-          </Field>
-          <Field id="md-upstream" label={s.upstreamId} hint={s.upstreamIdHint}>
-            <Input
+          <DialogBody className="flex flex-col gap-4">
+            <Field id="md-name" label={s.name}>
+              <Input
+                id="md-name"
+                value={form.name}
+                onChange={(e) => set("name", e.target.value)}
+                required
+              />
+            </Field>
+            <Field
               id="md-upstream"
-              value={form.upstreamId}
-              onChange={(e) => set("upstreamId", e.target.value)}
-              required
-              className="font-mono"
-            />
-          </Field>
-          <Field id="md-slug" label={s.slug} hint={s.slugHint}>
-            <Input
-              id="md-slug"
-              value={form.slug}
-              placeholder={form.upstreamId}
-              onChange={(e) => set("slug", e.target.value)}
-              className="font-mono"
-            />
-          </Field>
-          <Field
-            id="md-window"
-            label={s.contextWindow}
-            hint={s.contextWindowHint}
-          >
-            <Input
+              label={s.upstreamId}
+              hint={s.upstreamIdHint}
+            >
+              <Input
+                id="md-upstream"
+                value={form.upstreamId}
+                onChange={(e) => set("upstreamId", e.target.value)}
+                required
+                className="font-mono"
+              />
+            </Field>
+            <Field id="md-slug" label={s.slug} hint={s.slugHint}>
+              <Input
+                id="md-slug"
+                value={form.slug}
+                placeholder={form.upstreamId}
+                onChange={(e) => set("slug", e.target.value)}
+                className="font-mono"
+              />
+            </Field>
+            <Field
               id="md-window"
-              type="number"
-              min={1000}
-              step={1000}
-              value={form.contextWindow}
-              onChange={(e) => set("contextWindow", e.target.value)}
-              required
+              label={s.contextWindow}
+              hint={s.contextWindowHint}
+            >
+              <Input
+                id="md-window"
+                type="number"
+                min={1000}
+                step={1000}
+                value={form.contextWindow}
+                onChange={(e) => set("contextWindow", e.target.value)}
+                required
+              />
+            </Field>
+            <LevelsEditor
+              levels={form.reasoningLevels}
+              custom={form.customLevel}
+              onCustom={(v) => set("customLevel", v)}
+              onChange={(levels) =>
+                setForm((f) => ({
+                  ...f,
+                  reasoningLevels: levels,
+                  reasoningEffort:
+                    levels.length === 0 || levels.includes(f.reasoningEffort)
+                      ? f.reasoningEffort
+                      : "",
+                }))
+              }
             />
-          </Field>
-          <LevelsEditor
-            levels={form.reasoningLevels}
-            custom={form.customLevel}
-            onCustom={(v) => set("customLevel", v)}
-            onChange={(levels) =>
-              setForm((f) => ({
-                ...f,
-                reasoningLevels: levels,
-                reasoningEffort:
-                  levels.length === 0 || levels.includes(f.reasoningEffort)
-                    ? f.reasoningEffort
-                    : "",
-              }))
-            }
-          />
-          <div className="grid grid-cols-2 gap-3">
-            {form.reasoningLevels.length > 0 ? (
-              <Field
-                id="md-effort"
-                label={s.reasoningEffort}
-                hint={s.reasoningEffortHint}
-              >
-                <Select
-                  value={form.reasoningEffort || "__none"}
-                  onValueChange={(v) =>
-                    set("reasoningEffort", v === "__none" ? "" : v)
-                  }
+            <div className="grid grid-cols-2 gap-3">
+              {form.reasoningLevels.length > 0 ? (
+                <Field
+                  id="md-effort"
+                  label={s.reasoningEffort}
+                  hint={s.reasoningEffortHint}
                 >
-                  <SelectTrigger id="md-effort" className="w-full">
+                  <Select
+                    value={form.reasoningEffort || "__none"}
+                    onValueChange={(v) =>
+                      set("reasoningEffort", v === "__none" ? "" : v)
+                    }
+                  >
+                    <SelectTrigger id="md-effort" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none">—</SelectItem>
+                      {form.reasoningLevels.map((level) => (
+                        <SelectItem key={level} value={level}>
+                          {effortLabel(level)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : (
+                <Field
+                  id="md-effort"
+                  label={s.reasoningEffortFree}
+                  hint={s.reasoningEffortFreeHint}
+                >
+                  <Input
+                    id="md-effort"
+                    value={form.reasoningEffort}
+                    onChange={(e) => set("reasoningEffort", e.target.value)}
+                    className="font-mono"
+                  />
+                </Field>
+              )}
+              <Field id="md-summary" label={s.reasoningSummary}>
+                <Select
+                  value={form.reasoningSummary}
+                  onValueChange={(v) => set("reasoningSummary", v)}
+                >
+                  <SelectTrigger id="md-summary" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none">—</SelectItem>
-                    {form.reasoningLevels.map((level) => (
-                      <SelectItem key={level} value={level}>
-                        {effortLabel(level)}
-                      </SelectItem>
-                    ))}
+                    {(["auto", "concise", "detailed", "none"] as const).map(
+                      (k) => (
+                        <SelectItem key={k} value={k}>
+                          {s.reasoningSummaries[k]}
+                        </SelectItem>
+                      ),
+                    )}
                   </SelectContent>
                 </Select>
               </Field>
-            ) : (
-              <Field
-                id="md-effort"
-                label={s.reasoningEffortFree}
-                hint={s.reasoningEffortFreeHint}
-              >
-                <Input
-                  id="md-effort"
-                  value={form.reasoningEffort}
-                  onChange={(e) => set("reasoningEffort", e.target.value)}
-                  className="font-mono"
-                />
-              </Field>
-            )}
-            <Field id="md-summary" label={s.reasoningSummary}>
+            </div>
+            <Field id="md-max" label={s.maxOutputTokens}>
+              <Input
+                id="md-max"
+                type="number"
+                min={1}
+                placeholder={s.unlimited}
+                value={form.maxOutputTokens}
+                onChange={(e) => set("maxOutputTokens", e.target.value)}
+              />
+            </Field>
+            <Field id="md-search" label={s.hostedWebSearch}>
               <Select
-                value={form.reasoningSummary}
-                onValueChange={(v) => set("reasoningSummary", v)}
+                value={form.hostedWebSearch}
+                onValueChange={(v) => set("hostedWebSearch", v)}
               >
-                <SelectTrigger id="md-summary" className="w-full">
+                <SelectTrigger id="md-search" aria-label={s.hostedWebSearch}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none">—</SelectItem>
-                  {(["auto", "concise", "detailed", "none"] as const).map(
-                    (k) => (
-                      <SelectItem key={k} value={k}>
-                        {s.reasoningSummaries[k]}
-                      </SelectItem>
-                    ),
-                  )}
+                  <SelectItem value="provider">
+                    {s.hostedWebSearchOptions.provider}
+                  </SelectItem>
+                  <SelectItem value="hosted">
+                    {s.hostedWebSearchOptions.hosted}
+                  </SelectItem>
+                  <SelectItem value="longx">
+                    {s.hostedWebSearchOptions.longx}
+                  </SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-muted-foreground text-xs">
+                {s.hostedWebSearchHint}
+              </p>
             </Field>
-          </div>
-          <Field id="md-max" label={s.maxOutputTokens}>
-            <Input
-              id="md-max"
-              type="number"
-              min={1}
-              placeholder={s.unlimited}
-              value={form.maxOutputTokens}
-              onChange={(e) => set("maxOutputTokens", e.target.value)}
-            />
-          </Field>
-          <Field id="md-search" label={s.hostedWebSearch}>
-            <Select value={form.hostedWebSearch} onValueChange={(v) => set("hostedWebSearch", v)}>
-              <SelectTrigger id="md-search" aria-label={s.hostedWebSearch}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="provider">{s.hostedWebSearchOptions.provider}</SelectItem>
-                <SelectItem value="hosted">{s.hostedWebSearchOptions.hosted}</SelectItem>
-                <SelectItem value="longx">{s.hostedWebSearchOptions.longx}</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-muted-foreground text-xs">{s.hostedWebSearchHint}</p>
-          </Field>
+          </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               {t.cancel}
@@ -1109,7 +1148,14 @@ function LevelsEditor({
             }}
             className="h-7 w-44 font-mono text-xs"
           />
-          <Button type="button" size="sm" variant="outline" className="h-7" onClick={addCustom} disabled={!custom.trim()}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7"
+            onClick={addCustom}
+            disabled={!custom.trim()}
+          >
             {s.addLevel}
           </Button>
         </div>
@@ -1131,7 +1177,10 @@ function ReviewModelCard({ models }: { models: ModelRow[] }) {
   const chosen = models.find((m) => m.slug === current.modelSlug) ?? null;
   const levels = chosen?.reasoningLevels ?? [];
   const save = (input: { modelSlug: string | null; effort: string | null }) =>
-    actions.setReviewModel.mutate(input, { onSuccess: () => toast.success(s.saved), onError: fail });
+    actions.setReviewModel.mutate(input, {
+      onSuccess: () => toast.success(s.saved),
+      onError: fail,
+    });
   return (
     <section className="flex flex-col gap-3" data-testid="review-model">
       <h2 className="text-base font-medium">{s.review}</h2>
@@ -1140,9 +1189,15 @@ function ReviewModelCard({ models }: { models: ModelRow[] }) {
         <Field id="review-model" label={s.reviewModel}>
           <Select
             value={current.modelSlug ?? "__same"}
-            onValueChange={(v) => save({ modelSlug: v === "__same" ? null : v, effort: null })}
+            onValueChange={(v) =>
+              save({ modelSlug: v === "__same" ? null : v, effort: null })
+            }
           >
-            <SelectTrigger id="review-model" className="w-full" aria-label={s.reviewModel}>
+            <SelectTrigger
+              id="review-model"
+              className="w-full"
+              aria-label={s.reviewModel}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1161,9 +1216,18 @@ function ReviewModelCard({ models }: { models: ModelRow[] }) {
           <Field id="review-effort" label={s.reviewEffort}>
             <Select
               value={current.effort ?? "__auto"}
-              onValueChange={(v) => save({ modelSlug: chosen.slug!, effort: v === "__auto" ? null : v })}
+              onValueChange={(v) =>
+                save({
+                  modelSlug: chosen.slug!,
+                  effort: v === "__auto" ? null : v,
+                })
+              }
             >
-              <SelectTrigger id="review-effort" className="w-full" aria-label={s.reviewEffort}>
+              <SelectTrigger
+                id="review-effort"
+                className="w-full"
+                aria-label={s.reviewEffort}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1188,24 +1252,47 @@ function ReviewModelCard({ models }: { models: ModelRow[] }) {
  * as a checklist — the registry's model-picker, like the preset dialog —
  * with a filter for long lists; picked ones become rows.
  */
-function DiscoverDialog({ provider, onClose }: { provider: Provider; onClose: () => void }) {
+function DiscoverDialog({
+  provider,
+  onClose,
+}: {
+  provider: Provider;
+  onClose: () => void;
+}) {
   const discovery = useDiscoverModels(provider.id);
   const actions = useAiActions();
   const [filter, setFilter] = useState("");
   const [chosen, setChosen] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const candidates = (discovery.data?.ok ? discovery.data.models : []).filter((m) => !m.installed);
+  const candidates = (discovery.data?.ok ? discovery.data.models : []).filter(
+    (m) => !m.installed,
+  );
   const q = filter.trim().toLowerCase();
-  const shown = q ? candidates.filter((m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q) || (m.ownedBy ?? "").toLowerCase().includes(q)) : candidates;
+  const shown = q
+    ? candidates.filter(
+        (m) =>
+          m.id.toLowerCase().includes(q) ||
+          m.name.toLowerCase().includes(q) ||
+          (m.ownedBy ?? "").toLowerCase().includes(q),
+      )
+    : candidates;
   const rows: PickableModel[] = shown.map((m) => ({
     id: m.id,
     name: m.name,
     family: m.ownedBy ?? provider.name,
     context: m.contextWindow ? formatWindow(m.contextWindow) : "",
     ...(m.name !== m.id ? { note: m.id } : {}),
-    capabilities: [...(m.imageInput ? [s.image] : []), ...(m.reasoningLevels.length > 0 ? [m.reasoningLevels.map(effortLabel).join(" / ")] : [])],
+    capabilities: [
+      ...(m.imageInput ? [s.image] : []),
+      ...(m.reasoningLevels.length > 0
+        ? [m.reasoningLevels.map(effortLabel).join(" / ")]
+        : []),
+    ],
   }));
-  const toggle = (id: string) => setChosen((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  const toggle = (id: string) =>
+    setChosen((ids) =>
+      ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
+    );
   const add = async () => {
     setBusy(true);
     try {
@@ -1217,7 +1304,9 @@ function DiscoverDialog({ provider, onClose }: { provider: Provider; onClose: ()
           upstreamId: m.id,
           name: m.name,
           ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
-          ...(m.reasoningLevels.length > 0 ? { reasoningLevels: m.reasoningLevels } : {}),
+          ...(m.reasoningLevels.length > 0
+            ? { reasoningLevels: m.reasoningLevels }
+            : {}),
           ...(m.reasoningEffort ? { reasoningEffort: m.reasoningEffort } : {}),
         });
       }
@@ -1231,30 +1320,48 @@ function DiscoverDialog({ provider, onClose }: { provider: Provider; onClose: ()
   };
   return (
     <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{s.discoverTitle(provider.name)}</DialogTitle>
           <DialogDescription>{s.discoverHint}</DialogDescription>
         </DialogHeader>
-        {discovery.isPending ? (
-          <p className="text-muted-foreground text-sm">{s.discoverLoading}</p>
-        ) : discovery.isError ? (
-          <p className="text-destructive text-sm">{discovery.error.message}</p>
-        ) : !discovery.data.ok ? (
-          <p className="text-destructive text-sm">{discovery.data.error}</p>
-        ) : candidates.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{s.discoverEmpty}</p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={s.discoverFilter} aria-label={s.discoverFilter} />
-            <ModelPicker models={rows} selectedIds={chosen} onToggle={toggle} className="max-w-none" />
-          </div>
-        )}
+        <DialogBody className="flex flex-col gap-4">
+          {discovery.isPending ? (
+            <p className="text-muted-foreground text-sm">{s.discoverLoading}</p>
+          ) : discovery.isError ? (
+            <p className="text-destructive text-sm">
+              {discovery.error.message}
+            </p>
+          ) : !discovery.data.ok ? (
+            <p className="text-destructive text-sm">{discovery.data.error}</p>
+          ) : candidates.length === 0 ? (
+            <p className="text-muted-foreground text-sm">{s.discoverEmpty}</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <Input
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder={s.discoverFilter}
+                aria-label={s.discoverFilter}
+              />
+              <ModelPicker
+                models={rows}
+                selectedIds={chosen}
+                onToggle={toggle}
+                className="max-w-none"
+              />
+            </div>
+          )}
+        </DialogBody>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
             {t.cancel}
           </Button>
-          <Button type="button" onClick={add} disabled={chosen.length === 0 || busy}>
+          <Button
+            type="button"
+            onClick={add}
+            disabled={chosen.length === 0 || busy}
+          >
             {s.discoverAdd(chosen.length)}
           </Button>
         </DialogFooter>

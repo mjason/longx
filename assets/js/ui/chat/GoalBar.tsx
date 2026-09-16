@@ -2,20 +2,40 @@
 // budget spent and the time; pause / resume / clear, and a dialog that sets
 // or edits the objective and the token budget (also opened by /goal).
 import { Pause, Play, Pencil, Target, X } from "lucide-react";
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 import type { ThreadGoal } from "@/core/chat/thread";
 import { formatElapsed, formatTokens } from "@/core/format";
 import { useGoalActions } from "@/core/projects";
 import { Badge } from "@/ui/components/ui/badge";
 import { Button } from "@/ui/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/ui/components/ui/dialog";
 import { Input } from "@/ui/components/ui/input";
 import { Label } from "@/ui/components/ui/label";
 import { Textarea } from "@/ui/components/ui/textarea";
 import { t } from "@/ui/strings";
 
-type GoalContext = { open: () => void; goal: ThreadGoal | null; threadId: string | undefined; actions: Actions };
+type GoalContext = {
+  open: () => void;
+  goal: ThreadGoal | null;
+  threadId: string | undefined;
+  actions: Actions;
+};
 const GoalDialogContext = createContext<GoalContext | null>(null);
 
 /** opens the goal dialog from anywhere under GoalProvider (the /goal command) */
@@ -31,7 +51,15 @@ function fail(error: unknown) {
  * Holds the goal dialog for the thread on screen; `GoalBar` (in the chat
  * area) shows the goal when the thread has one.
  */
-export function GoalProvider({ threadId, goal, children }: { threadId: string | undefined; goal: ThreadGoal | null; children: ReactNode }) {
+export function GoalProvider({
+  threadId,
+  goal,
+  children,
+}: {
+  threadId: string | undefined;
+  goal: ThreadGoal | null;
+  children: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const actions = useGoalActions(threadId);
   const show = useCallback(() => {
@@ -44,7 +72,12 @@ export function GoalProvider({ threadId, goal, children }: { threadId: string | 
   return (
     <GoalDialogContext.Provider value={{ open: show, goal, threadId, actions }}>
       {children}
-      <GoalDialog open={open} onOpenChange={setOpen} goal={goal} actions={actions} />
+      <GoalDialog
+        open={open}
+        onOpenChange={setOpen}
+        goal={goal}
+        actions={actions}
+      />
     </GoalDialogContext.Provider>
   );
 }
@@ -55,38 +88,88 @@ type Actions = ReturnType<typeof useGoalActions>;
 export function GoalBar() {
   const ctx = useGoalDialog();
   if (!ctx || !ctx.goal || !ctx.threadId) return null;
-  return <GoalBarView goal={ctx.goal} onEdit={ctx.open} actions={ctx.actions} />;
+  return (
+    <GoalBarView goal={ctx.goal} onEdit={ctx.open} actions={ctx.actions} />
+  );
 }
 
-function GoalBarView({ goal, onEdit, actions }: { goal: ThreadGoal; onEdit: () => void; actions: Actions }) {
+function GoalBarView({
+  goal,
+  onEdit,
+  actions,
+}: {
+  goal: ThreadGoal;
+  onEdit: () => void;
+  actions: Actions;
+}) {
   const active = goal.status === "active";
   const done = goal.status === "complete";
-  const set = (status: "active" | "paused") => actions.set.mutate({ status }, { onError: fail });
+  const set = (status: "active" | "paused") =>
+    actions.set.mutate({ status }, { onError: fail });
   return (
     <div className="border-b px-3 py-2" data-testid="goal-bar">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Target className={`size-4 shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`} aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate text-sm font-medium" title={goal.objective}>
+        <Target
+          className={`size-4 shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`}
+          aria-hidden="true"
+        />
+        <span
+          className="min-w-0 flex-1 truncate text-sm font-medium"
+          title={goal.objective}
+        >
           {goal.objective}
         </span>
-        <Badge variant={done ? "secondary" : active ? "default" : "outline"}>{t.goal.status[goal.status] ?? goal.status}</Badge>
+        <Badge variant={done ? "secondary" : active ? "default" : "outline"}>
+          {t.goal.status[goal.status] ?? goal.status}
+        </Badge>
         <span className="text-muted-foreground text-xs">
-          {t.goal.tokens(formatTokens(goal.tokensUsed), goal.tokenBudget ? formatTokens(goal.tokenBudget) : null)} · {formatElapsed(goal.timeUsedSeconds)}
+          {t.goal.tokens(
+            formatTokens(goal.tokensUsed),
+            goal.tokenBudget ? formatTokens(goal.tokenBudget) : null,
+          )}{" "}
+          · {formatElapsed(goal.timeUsedSeconds)}
         </span>
         <span className="flex items-center gap-1">
           {done ? null : active ? (
-            <Button size="sm" variant="ghost" onClick={() => set("paused")} disabled={actions.set.isPending} aria-label={t.goal.pause} title={t.goal.pause}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => set("paused")}
+              disabled={actions.set.isPending}
+              aria-label={t.goal.pause}
+              title={t.goal.pause}
+            >
               <Pause className="size-4" /> {t.goal.pause}
             </Button>
           ) : (
-            <Button size="sm" variant="ghost" onClick={() => set("active")} disabled={actions.set.isPending} aria-label={t.goal.resume} title={t.goal.resume}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => set("active")}
+              disabled={actions.set.isPending}
+              aria-label={t.goal.resume}
+              title={t.goal.resume}
+            >
               <Play className="size-4" /> {t.goal.resume}
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={onEdit} aria-label={t.goal.edit} title={t.goal.edit}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onEdit}
+            aria-label={t.goal.edit}
+            title={t.goal.edit}
+          >
             <Pencil className="size-4" />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => actions.clear.mutate(undefined, { onError: fail })} disabled={actions.clear.isPending} aria-label={t.goal.clear} title={t.goal.clear}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => actions.clear.mutate(undefined, { onError: fail })}
+            disabled={actions.clear.isPending}
+            aria-label={t.goal.clear}
+            title={t.goal.clear}
+          >
             <X className="size-4" />
           </Button>
         </span>
@@ -95,7 +178,17 @@ function GoalBarView({ goal, onEdit, actions }: { goal: ThreadGoal; onEdit: () =
   );
 }
 
-function GoalDialog({ open, onOpenChange, goal, actions }: { open: boolean; onOpenChange: (open: boolean) => void; goal: ThreadGoal | null; actions: Actions }) {
+function GoalDialog({
+  open,
+  onOpenChange,
+  goal,
+  actions,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  goal: ThreadGoal | null;
+  actions: Actions;
+}) {
   const [objective, setObjective] = useState("");
   const [budget, setBudget] = useState("");
   useEffect(() => {
@@ -105,7 +198,9 @@ function GoalDialog({ open, onOpenChange, goal, actions }: { open: boolean; onOp
     }
   }, [open, goal]);
   const parsed = budget.trim() === "" ? null : Number(budget);
-  const valid = objective.trim() !== "" && (parsed === null || (Number.isInteger(parsed) && parsed > 0));
+  const valid =
+    objective.trim() !== "" &&
+    (parsed === null || (Number.isInteger(parsed) && parsed > 0));
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="goal-dialog">
@@ -114,26 +209,49 @@ function GoalDialog({ open, onOpenChange, goal, actions }: { open: boolean; onOp
           <DialogDescription>{t.goal.objectiveHint}</DialogDescription>
         </DialogHeader>
         <form
-          className="flex flex-col gap-3"
+          className="flex min-h-0 flex-1 flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
             if (!valid) return;
             actions.set.mutate(
-              { objective: objective.trim(), tokenBudget: parsed, ...(goal && goal.status !== "active" && goal.status !== "paused" ? { status: "active" as const } : {}) },
+              {
+                objective: objective.trim(),
+                tokenBudget: parsed,
+                ...(goal && goal.status !== "active" && goal.status !== "paused"
+                  ? { status: "active" as const }
+                  : {}),
+              },
               { onSuccess: () => onOpenChange(false), onError: fail },
             );
           }}
         >
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="goal-objective">{t.goal.objective}</Label>
-            <Textarea id="goal-objective" value={objective} onChange={(e) => setObjective(e.target.value)} rows={3} autoFocus />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="goal-budget">{t.goal.budget}</Label>
-            <Input id="goal-budget" inputMode="numeric" value={budget} onChange={(e) => setBudget(e.target.value)} />
-          </div>
+          <DialogBody className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="goal-objective">{t.goal.objective}</Label>
+              <Textarea
+                id="goal-objective"
+                value={objective}
+                onChange={(e) => setObjective(e.target.value)}
+                rows={3}
+                autoFocus
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="goal-budget">{t.goal.budget}</Label>
+              <Input
+                id="goal-budget"
+                inputMode="numeric"
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+              />
+            </div>
+          </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+            >
               {t.cancel}
             </Button>
             <Button type="submit" disabled={!valid || actions.set.isPending}>

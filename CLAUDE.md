@@ -1007,7 +1007,10 @@ React Native client planned on the same core code.
     size**, a dialog footer: an action must never depend on the page scrolling to be reached;
     long lists scroll in their own box — banners), `components/ui/` (shadcn,
     added with `npx shadcn@latest add …` in `assets/`; `components.json` maps
-    `@/ui/components`, `@/lib/utils`), `strings.ts` (all UI copy, zh-CN). `core/theme.ts`
+    `@/ui/components`, `@/lib/utils`; **`DialogContent` is a flex column capped at the
+    viewport** with `DialogBody` as the scrolling middle — a tall form keeps its header and
+    buttons in view on a phone instead of scrolling them off; wrap what may grow in
+    `DialogBody`, a `<form>` between header and footer gets `flex min-h-0 flex-1 flex-col`), `strings.ts` (all UI copy, zh-CN). `core/theme.ts`
     (**follows the OS by default**, dark/light as explicit choices; `ThemeToggle` in the top
     bars cycles them; the CSS also honours `prefers-color-scheme` before JS runs),
     `core/viewport.ts` (phone < 768 ≤ tablet < 1024 ≤ desktop).
