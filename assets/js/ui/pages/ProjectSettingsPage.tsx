@@ -382,10 +382,13 @@ function SkillsSection({ projectId, rootPath }: { projectId: string; rootPath: s
   );
 }
 
-// a project skill is shown by its path under the root; codex's own samples
-// and the user's global ones by a word — their absolute paths say nothing
-function skillOrigin(path: string | null, rootPath: string): { kind: "project" | "builtin" | "global"; label: string } {
+// a project skill is shown by its path under the root; the others by where
+// codex found them — their absolute paths say nothing: codex's built-in set
+// (`<home>/skills/.system`), the user's global `~/.agents/skills`, or a skill
+// codex's skill-installer put into this project's home (`<home>/skills`)
+function skillOrigin(path: string | null, rootPath: string): { kind: "project" | "builtin" | "global" | "installed"; label: string } {
   if (path && path.startsWith(rootPath + "/")) return { kind: "project", label: path.slice(rootPath.length + 1) };
   if (path && path.includes("/skills/.system/")) return { kind: "builtin", label: t.skills.builtin };
-  return { kind: "global", label: t.skills.global };
+  if (path && path.includes("/.agents/skills/")) return { kind: "global", label: t.skills.global };
+  return { kind: "installed", label: t.skills.installed };
 }

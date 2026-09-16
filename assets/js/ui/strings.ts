@@ -492,10 +492,11 @@ export const t = {
   threadDefaults: "新会话的默认设置",
   skills: {
     title: "技能",
-    hint: "codex 找到的技能（项目里的 .agents/skills/<名字>/SKILL.md，以及全局的）。模型会按需读取；在输入框里用 $名字 可以点名。",
+    hint: "codex 找到的技能：项目里的 .agents/skills/<名字>/SKILL.md，全局的 ~/.agents/skills/，以及 codex 内置的。模型会按需读取；在输入框里用 $名字 可以点名。",
     none: "没有找到技能",
-    builtin: "codex 自带",
+    builtin: "codex 内置",
     global: "全局",
+    installed: "本项目安装",
   },
   threadDefaultsHint: "每个会话可以在输入框旁边临时改；这里是新会话的起点。",
   dirtyStart: "开始一轮时工作树有未提交改动",
