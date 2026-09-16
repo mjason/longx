@@ -33,6 +33,19 @@ defmodule Longx.System.Status do
   ]
 
   actions do
+    # Settings → 移动端: the code the phone pairs with (ten minutes, one at a time)
+    action :pairing_code, :map do
+      constraints fields: [
+                    code: [type: :string, allow_nil?: false],
+                    expires_at: [type: :string, allow_nil?: false]
+                  ]
+
+      run fn _input, _ ->
+        %{code: code, expires_at: expires_at} = Longx.System.pairing_code()
+        {:ok, %{code: code, expires_at: DateTime.to_iso8601(expires_at)}}
+      end
+    end
+
     # Settings → codex 进程: every codex process running right now, across
     # projects — what it costs (the tree's RSS, uptime, turns) and when it
     # was last used, which is what the idle reaper (Longx.Codex.Recycler)

@@ -1,3 +1,4 @@
+import { WebSpeechDictationAdapter } from "@assistant-ui/react";
 import { AssistantRuntimeProvider, useAui } from "@assistant-ui/react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
@@ -28,6 +29,8 @@ export function useChat(): CodexRuntime {
  * thread list tool and the chat in the centre share one runtime; the
  * dirty-tree question is the one piece of DOM this needs.
  */
+const DICTATION = false;
+
 export function ChatProvider({ projectId, slug, defaults, defaultModelId, children }: { projectId: string; slug: string; defaults: AccessMode; defaultModelId?: string | null; children: ReactNode }) {
   const { threadId } = useParams();
   const navigate = useNavigate();
@@ -62,7 +65,14 @@ export function ChatProvider({ projectId, slug, defaults, defaultModelId, childr
   const composerRef = useRef<((text: string) => void) | null>(null);
   const onRetract = useCallback((text: string) => composerRef.current?.(text), []);
 
-  const chat = useCodexRuntime({ projectId, defaults, defaultModelId, threadId, onOpenThread, onDirtyTree, onSignal, onRetract });
+  // voice input is wired (WebSpeechDictationAdapter, the mic in the composer
+  // rail) but off for now: flip DICTATION to show it again
+  const [dictation] = useState(() =>
+    DICTATION && WebSpeechDictationAdapter.isSupported()
+      ? new WebSpeechDictationAdapter({ language: navigator.language, interimResults: true })
+      : undefined,
+  );
+  const chat = useCodexRuntime({ projectId, defaults, defaultModelId, threadId, onOpenThread, onDirtyTree, onSignal, onRetract, dictation });
 
   return (
     <ChatContext.Provider value={chat}>

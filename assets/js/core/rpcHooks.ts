@@ -1,28 +1,30 @@
-// Lifecycle hooks wired into the generated client (config :ash_typescript).
-// The one cross-cutting concern today: Phoenix's CSRF token on every RPC
-// call from the browser. A native client will add its bearer token here.
+// Lifecycle hooks wired into the generated client (config :ash_typescript):
+// every call carries `transport.ts`'s headers — the page's CSRF token in the
+// browser, the device's bearer in the native app — and, when a server is
+// configured, goes to it instead of the page's origin.
 import type { ActionConfig, ValidationConfig } from "@/ash_rpc";
+import { authHeaders, transport, transportUrl } from "./transport";
 
 export type ActionHookContext = Record<string, never>;
 export type ValidationHookContext = Record<string, never>;
 
-export function csrfToken(doc: Document | undefined = globalThis.document): string | null {
-  return doc?.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ?? null;
-}
+export { csrfToken } from "./transport";
 
-function withCsrf<T extends { headers?: Record<string, string> }>(config: T): T {
-  const token = csrfToken();
-  if (!token) return config;
-  return { ...config, headers: { ...config.headers, "X-CSRF-Token": token } };
+function prepared<T extends { headers?: Record<string, string>; customFetch?: ActionConfig["customFetch"] }>(config: T): T {
+  const next = { ...config, headers: { ...authHeaders(), ...config.headers } };
+  if (transport().baseUrl && !config.customFetch) {
+    next.customFetch = (input, init) => fetch(typeof input === "string" ? transportUrl(input) : input, init);
+  }
+  return next;
 }
 
 export async function beforeRequest(_action: string, config: ActionConfig): Promise<ActionConfig> {
-  return withCsrf(config);
+  return prepared(config);
 }
 
 export async function beforeValidationRequest(
   _action: string,
   config: ValidationConfig,
 ): Promise<ValidationConfig> {
-  return withCsrf(config);
+  return prepared(config);
 }

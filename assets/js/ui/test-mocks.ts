@@ -227,6 +227,11 @@ export function rpcMock() {
     ),
     memorySetAutoExtract: vi.fn(async () => ok(null)),
     memoryRun: vi.fn(async () => ok(null)),
+    pairingCode: vi.fn(async () => ok({ code: "483920", expiresAt: "2026-09-14T08:10:00Z" })),
+    listDevices: vi.fn(async () =>
+      ok([{ id: "dev-1", name: "Pixel 9", platform: "android", lastSeenAt: "2026-09-14T08:00:00Z", insertedAt: "2026-09-13T08:00:00Z" }]),
+    ),
+    revokeDevice: vi.fn(async () => ok(null)),
     upgradeStatus: vi.fn(async () => ok(upgradeIdle)),
     upgradeCheck: vi.fn(async () =>
       ok({

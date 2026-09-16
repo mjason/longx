@@ -18,7 +18,7 @@ import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
   SimpleTextAttachmentAdapter,
-  WebSpeechDictationAdapter,
+  type DictationAdapter,
 } from "@assistant-ui/react";
 import {
   buildAdapter,
@@ -29,7 +29,6 @@ import {
 } from "./adapter";
 import { subagentsOf, type SubViews } from "./messages";
 import { runningTurnId, type ThreadView } from "./thread";
-import { csrfToken } from "@/core/rpcHooks";
 import { FileUploadAttachmentAdapter } from "./fileAttachments";
 import { buildThreadListAdapter, type ThreadRow } from "./threadList";
 import { useThreadView } from "./useThreadView";
@@ -50,6 +49,8 @@ export type CodexRuntimeOptions = {
   onSignal?: (method: string, params: Record<string, unknown>) => void;
   /** a stop before anything came back: the message's text, to be put back in the composer */
   onRetract?: (text: string) => void;
+  /** voice input, when the host has it (the web's WebSpeechDictationAdapter; off for now) — DOM-free core takes it as given */
+  dictation?: DictationAdapter | undefined;
 };
 
 export type TurnState = "idle" | "running" | "approval";
@@ -80,10 +81,6 @@ export type CodexRuntime = {
   setMode: (mode: AccessMode) => void;
 };
 
-// voice input is wired (WebSpeechDictationAdapter, the mic in the composer rail)
-// but off for now: flip this to show it again
-const DICTATION = false;
-
 // statuses that end a thread for good vs. a codex on its way back
 const CLOSED = new Set(["unrecoverable", "archived"]);
 
@@ -101,6 +98,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     onDirtyTree,
     onSignal,
     onRetract,
+    dictation,
   } = opts;
   const client = useQueryClient();
   const threads = useThreads(projectId);
@@ -238,16 +236,8 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
       new CompositeAttachmentAdapter([
         new SimpleImageAttachmentAdapter(),
         new SimpleTextAttachmentAdapter(),
-        new FileUploadAttachmentAdapter({ projectId, csrf: csrfToken }),
+        new FileUploadAttachmentAdapter({ projectId }),
       ]),
-  );
-  const [dictation] = useState(() =>
-    DICTATION && WebSpeechDictationAdapter.isSupported()
-      ? new WebSpeechDictationAdapter({
-          language: navigator.language,
-          interimResults: true,
-        })
-      : undefined,
   );
 
   const disabledReason =

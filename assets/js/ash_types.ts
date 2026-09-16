@@ -353,6 +353,32 @@ export type TurnAttributesOnlySchema = {
 };
 
 
+// Device Schema
+export type DeviceResourceSchema = {
+  __type: "Resource";
+  __primitiveFields: "id" | "insertedAt" | "lastSeenAt" | "name" | "platform" | "updatedAt";
+  id: UUIDv7;
+  insertedAt: UtcDateTimeUsec;
+  lastSeenAt: UtcDateTimeUsec | null;
+  name: string;
+  platform: "android" | "ios" | "other";
+  updatedAt: UtcDateTimeUsec;
+};
+
+
+
+export type DeviceAttributesOnlySchema = {
+  __type: "Resource";
+  __primitiveFields: "id" | "insertedAt" | "lastSeenAt" | "name" | "platform" | "updatedAt";
+  id: UUIDv7;
+  insertedAt: UtcDateTimeUsec;
+  lastSeenAt: UtcDateTimeUsec | null;
+  name: string;
+  platform: "android" | "ios" | "other";
+  updatedAt: UtcDateTimeUsec;
+};
+
+
 // SystemStatus Schema
 export type SystemStatusResourceSchema = {
   __type: "Resource";
@@ -1503,6 +1529,77 @@ export type TurnFilterInput = {
   thread?: ThreadFilterInput;
 
 };
+export type DeviceFilterInput = {
+  and?: Array<DeviceFilterInput>;
+  or?: Array<DeviceFilterInput>;
+  not?: Array<DeviceFilterInput>;
+
+  id?: {
+    eq?: UUIDv7;
+    notEq?: UUIDv7;
+    in?: Array<UUIDv7>;
+    lessThan?: UUIDv7;
+    greaterThan?: UUIDv7;
+    lessThanOrEqual?: UUIDv7;
+    greaterThanOrEqual?: UUIDv7;
+  };
+
+  insertedAt?: {
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  lastSeenAt?: {
+    isNil?: boolean;
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  name?: {
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  platform?: {
+    eq?: "android" | "ios" | "other";
+    notEq?: "android" | "ios" | "other";
+    in?: Array<"android" | "ios" | "other">;
+    lessThan?: "android" | "ios" | "other";
+    greaterThan?: "android" | "ios" | "other";
+    lessThanOrEqual?: "android" | "ios" | "other";
+    greaterThanOrEqual?: "android" | "ios" | "other";
+  };
+
+  updatedAt?: {
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+
+};
 export type SystemStatusFilterInput = {
   and?: Array<SystemStatusFilterInput>;
   or?: Array<SystemStatusFilterInput>;
@@ -1537,6 +1634,9 @@ export type ThreadFilterField = (typeof threadFilterFields)[number];
 export const turnFilterFields = ["codexTurnId", "commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "userText", "thread"] as const;
 export type TurnFilterField = (typeof turnFilterFields)[number];
 
+export const deviceFilterFields = ["id", "insertedAt", "lastSeenAt", "name", "platform", "updatedAt"] as const;
+export type DeviceFilterField = (typeof deviceFilterFields)[number];
+
 
 
 export const modelSortFields = ["contextWindow", "default", "hostedWebSearch", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId"] as const;
@@ -1562,6 +1662,9 @@ export type ThreadSortField = (typeof threadSortFields)[number];
 
 export const turnSortFields = ["codexTurnId", "commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "userText"] as const;
 export type TurnSortField = (typeof turnSortFields)[number];
+
+export const deviceSortFields = ["id", "insertedAt", "lastSeenAt", "name", "platform", "updatedAt"] as const;
+export type DeviceSortField = (typeof deviceSortFields)[number];
 
 
 

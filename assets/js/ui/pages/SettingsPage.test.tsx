@@ -9,6 +9,8 @@ vi.mock("@/core/socket", async () =>
   (await import("@/ui/test-mocks")).socketMock(),
 );
 import {
+  pairingCode,
+  revokeDevice,
   applyPreset,
   checkModel,
   createModel,
@@ -548,6 +550,27 @@ describe("SettingsPage", () => {
       screen.getByRole("link", { name: "模型与 Provider" }),
     ).toHaveAttribute("aria-current", "page");
     expect(screen.getByTestId("section-models")).toBeInTheDocument();
+  });
+
+  test("mobile: a pairing code for the phone, the paired devices, revoke", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/mobile");
+    const section = await screen.findByTestId("section-mobile");
+    // the paired phones
+    await within(section).findByText("Pixel 9");
+    expect(section).toHaveTextContent("Android");
+    // no code until asked (it is one-time and short-lived)
+    expect(within(section).queryByText("483920")).not.toBeInTheDocument();
+    await user.click(within(section).getByRole("button", { name: "生成配对码" }));
+    expect(await within(section).findByText("483920")).toBeInTheDocument();
+    expect(pairingCode).toHaveBeenCalled();
+    // the server address the phone should type: this page's origin
+    expect(section).toHaveTextContent(location.host);
+
+    await user.click(within(section).getByRole("button", { name: /解除/ }));
+    await user.click(await screen.findByRole("button", { name: "解除配对" }));
+    await waitFor(() => expect(revokeDevice).toHaveBeenCalledWith(expect.objectContaining({ identity: "dev-1" })));
   });
 
   test("update: the version, a check finds a release, the token, the upgrade with its stages until the new version answers", async () => {

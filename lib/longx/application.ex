@@ -58,6 +58,7 @@ defmodule Longx.Application do
       # new releases on GitHub, and the upgrade itself (Longx.Upgrade)
       {Task.Supervisor, name: Longx.Upgrade.TaskSupervisor},
       Longx.Upgrade,
+      Longx.System.Pairing,
       # is codex's command sandbox going to work here? (result cached, shown in the UI)
       Supervisor.child_spec({Task, &Longx.Codex.Sandbox.probe/0},
         id: :sandbox_probe,

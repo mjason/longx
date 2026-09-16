@@ -3,7 +3,7 @@
 
 import * as RpcHooks from "./core/rpcHooks";
 
-import type { AshRpcError, ConditionalPaginatedResultMixed, InferResult, ModelFilterInput, ModelResourceSchema, ModelSortField, ProjectFilterInput, ProjectResourceSchema, ProjectSortField, ProviderFilterInput, ProviderResourceSchema, ProviderSortField, SearchProviderFilterInput, SearchProviderResourceSchema, SearchProviderSortField, SortString, ThreadFilterInput, ThreadResourceSchema, ThreadSortField, ToolResourceSchema, TurnFilterInput, TurnResourceSchema, TurnSortField, UUID, UUIDv7, UnifiedFieldSelection, UtcDateTimeUsec, ValidationResult } from "./ash_types";
+import type { AshRpcError, ConditionalPaginatedResultMixed, DeviceFilterInput, DeviceResourceSchema, DeviceSortField, InferResult, ModelFilterInput, ModelResourceSchema, ModelSortField, ProjectFilterInput, ProjectResourceSchema, ProjectSortField, ProviderFilterInput, ProviderResourceSchema, ProviderSortField, SearchProviderFilterInput, SearchProviderResourceSchema, SearchProviderSortField, SortString, ThreadFilterInput, ThreadResourceSchema, ThreadSortField, ToolResourceSchema, TurnFilterInput, TurnResourceSchema, TurnSortField, UUID, UUIDv7, UnifiedFieldSelection, UtcDateTimeUsec, ValidationResult } from "./ash_types";
 export type * from "./ash_types";
 
 // RPC Action Hook Context Type
@@ -6344,6 +6344,137 @@ export async function validateRestoreProposal(
 }
 
 
+export type RevokeDeviceResult = | { success: true; data: {}; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Delete a Device
+ *
+ * @ashActionType :destroy
+ */
+export async function revokeDevice(
+  config: {
+  tenant?: string;
+  identity: UUIDv7;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<RevokeDeviceResult> {
+  const payload = {
+    action: "revoke_device",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    identity: config.identity
+  };
+
+  return executeActionRpcRequest<RevokeDeviceResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Delete a Device
+ *
+ * @ashActionType :destroy
+ * @validation true
+ */
+export async function validateRevokeDevice(
+  config: {
+  tenant?: string;
+  identity: UUIDv7 | string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "revoke_device",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    identity: config.identity
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ListDevicesFields = UnifiedFieldSelection<DeviceResourceSchema>[];
+export type InferListDevicesResult<
+  Fields extends ListDevicesFields,
+> = Array<InferResult<DeviceResourceSchema, Fields>>;
+
+export type ListDevicesResult<Fields extends ListDevicesFields> = | { success: true; data: InferListDevicesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Read Device records
+ *
+ * @ashActionType :read
+ */
+export async function listDevices<Fields extends ListDevicesFields>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  filter?: DeviceFilterInput;
+  sort?: SortString<DeviceSortField> | SortString<DeviceSortField>[];
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListDevicesResult<Fields>> {
+  const payload = {
+    action: "list_devices",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields }),
+    ...(config.filter && { filter: config.filter }),
+    ...(config.sort && { sort: Array.isArray(config.sort) ? config.sort.join(",") : config.sort })
+  };
+
+  return executeActionRpcRequest<ListDevicesResult<Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Read Device records
+ *
+ * @ashActionType :read
+ * @validation true
+ */
+export async function validateListDevices(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_devices",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type CreateDirectoryInput = {
   parent: string;
   name: string;
@@ -7087,6 +7218,72 @@ export async function validateMemoryWriteIndex(
     action: "memory_write_index",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type PairingCodeFields = UnifiedFieldSelection<{code: string, expiresAt: string, __type: "TypedMap", __primitiveFields: "code" | "expiresAt"}>[];
+
+export type InferPairingCodeResult<
+  Fields extends PairingCodeFields | undefined,
+> = InferResult<{code: string, expiresAt: string, __type: "TypedMap", __primitiveFields: "code" | "expiresAt"}, Fields>;
+
+export type PairingCodeResult<Fields extends PairingCodeFields | undefined = undefined> = | { success: true; data: InferPairingCodeResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function pairingCode<Fields extends PairingCodeFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<PairingCodeResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "pairing_code",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<PairingCodeResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validatePairingCode(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "pairing_code",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
   };
 
   return executeValidationRpcRequest<ValidationResult>(

@@ -6,6 +6,8 @@ defmodule LongxWeb.Router do
     plug :fetch_session
     plug :fetch_live_flash
     plug :put_root_layout, html: {LongxWeb.Layouts, :root}
+    # a paired phone's bearer waives CSRF (LongxWeb.Plugs.Bearer, before the check)
+    plug LongxWeb.Plugs.Bearer
     plug :protect_from_forgery
     plug :put_secure_browser_headers
   end
@@ -41,6 +43,13 @@ defmodule LongxWeb.Router do
     post "/rpc/validate", AshTypescriptRpcController, :validate
     # the composer's file attachments (multipart; CSRF like the RPC calls)
     post "/attachments/:project_id", AttachmentController, :create
+  end
+
+  # the phone's pairing call: no session, no CSRF — a code is all it has
+  scope "/", LongxWeb do
+    pipe_through :api
+
+    post "/pair", PairController, :create
   end
 
   scope "/ai/v1", LongxWeb.AI do

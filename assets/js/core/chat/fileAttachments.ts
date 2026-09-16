@@ -1,18 +1,17 @@
 // The composer's third attachment kind: a file that is neither an image
 // (a data url to the model) nor text (inlined) — a zip, a PDF, a dataset.
 // It is uploaded to the server as soon as it is picked (POST
-// /attachments/:project_id, the same CSRF token as the RPC calls) and the
+// /attachments/:project_id, the same headers as the RPC calls) and the
 // message names the path it landed on; the agent reads it from there (the
 // sandbox sees `/` read-only). DOM-free apart from fetch/FormData, so a
 // React Native client can reuse it with its own token.
 import type { AttachmentAdapter, CompleteAttachment, PendingAttachment } from "@assistant-ui/react";
 import { formatBytes } from "@/core/format";
+import { authHeaders, transportUrl } from "@/core/transport";
 
 export type FileUploadOptions = {
   projectId: string;
-  /** the CSRF token the server expects (null: none — a native client's bearer goes elsewhere) */
-  csrf: () => string | null;
-  /** where to post (default `/attachments/<projectId>`) */
+  /** where to post (default `/attachments/<projectId>` on the configured server) */
   url?: string;
 };
 
@@ -34,11 +33,11 @@ export class FileUploadAttachmentAdapter implements AttachmentAdapter {
     const id = `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const body = new FormData();
     body.append("file", file, file.name);
-    const token = this.opts.csrf();
-    const response = await fetch(this.opts.url ?? `/attachments/${this.opts.projectId}`, {
+    // the page's CSRF token or the app's bearer, like every RPC call
+    const response = await fetch(this.opts.url ?? transportUrl(`/attachments/${this.opts.projectId}`), {
       method: "POST",
       body,
-      headers: token ? { "X-CSRF-Token": token } : {},
+      headers: authHeaders(),
       credentials: "same-origin",
     });
     const json = (await response.json().catch(() => ({}))) as Partial<Stored> & { error?: string };

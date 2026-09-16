@@ -11,9 +11,10 @@ import { ModelsSection } from "./settings/ModelsSection";
 import { ProcessesSection } from "./settings/ProcessesSection";
 import { SandboxSection } from "./settings/SandboxSection";
 import { ToolsSection } from "./settings/ToolsSection";
+import { MobileSection } from "./settings/MobileSection";
 import { UpdateSection } from "./settings/UpdateSection";
 
-const SECTIONS = ["models", "memory", "tools", "processes", "sandbox", "update", "appearance"] as const;
+const SECTIONS = ["models", "memory", "tools", "processes", "sandbox", "update", "mobile", "appearance"] as const;
 type Section = (typeof SECTIONS)[number];
 
 /**
@@ -89,6 +90,8 @@ function SectionBody({ section }: { section: Section }) {
       return <SandboxSection />;
     case "update":
       return <UpdateSection />;
+    case "mobile":
+      return <MobileSection />;
     case "appearance":
       return <Appearance />;
   }

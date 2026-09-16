@@ -2,6 +2,7 @@
 // Status is what the connection banner shows; a phone coming back from the
 // background reconnects here and every channel re-joins on its own.
 import { Socket } from "phoenix";
+import { socketUrl, transport } from "./transport";
 
 export type SocketStatus = "connecting" | "open" | "closed";
 
@@ -19,7 +20,9 @@ function setStatus(next: SocketStatus) {
 
 export function getSocket(): Socket {
   if (socket) return socket;
-  socket = new Socket("/socket", { params: {} });
+  // a paired app joins with its device token; the browser with nothing
+  const token = transport().token;
+  socket = new Socket(socketUrl(), { params: token ? { token } : {} });
   socket.onOpen(() => setStatus("open"));
   socket.onClose(() => setStatus("closed"));
   socket.onError(() => setStatus("closed"));
