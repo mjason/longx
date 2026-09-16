@@ -67,6 +67,7 @@ export const upgradeIdle = {
   stage: "idle" as const,
   message: null as string | null,
   target: null as string | null,
+  progress: null as { received: number; total: number | null } | null,
   hasGithubToken: false,
 };
 

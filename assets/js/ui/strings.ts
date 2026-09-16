@@ -87,7 +87,7 @@ export const t = {
   sandboxAdvanced: "长期放开的目录和设备（高级）",
   sandboxAdvancedHint: "平时不用碰：agent 缺什么权限会在聊天里申请，批准只对本轮或本会话有效。这里写的是对这个项目长期有效的例外。",
   writableRoots: "沙箱额外可写目录",
-  writableRootsHint: "一行一个，默认为空。agent 需要写哪里时会自己来申请，你在聊天里按轮或按会话批准；写在这里的目录则是长期放开，只放确实需要的（比如数据集目录）。~ 是服务器上运行 Longx 的用户；不存在的目录会被跳过。",
+  writableRootsHint: "一行一个，默认为空。项目目录、/tmp 和这台机器上用户的工具缓存（Linux ~/.cache、macOS ~/Library/Caches、Windows %LOCALAPPDATA%）本来就可写，不用填。agent 需要写别的地方时会自己来申请，你在聊天里按轮或按会话批准；写在这里的目录则是长期放开，只放确实需要的（比如数据集目录）。~ 是服务器上运行 Longx 的用户；不存在的目录会被跳过。",
   sandboxOptions: {
     read_only: "只读",
     workspace_write: "可写工作区",

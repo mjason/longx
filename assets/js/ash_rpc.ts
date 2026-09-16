@@ -6582,11 +6582,11 @@ export type SetGithubTokenInput = {
   token?: string | null;
 };
 
-export type SetGithubTokenFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}>[];
+export type SetGithubTokenFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}>[];
 
 export type InferSetGithubTokenResult<
   Fields extends SetGithubTokenFields | undefined,
-> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}, Fields>;
+> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}, Fields>;
 
 export type SetGithubTokenResult<Fields extends SetGithubTokenFields | undefined = undefined> = | { success: true; data: InferSetGithubTokenResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -6652,11 +6652,11 @@ export async function validateSetGithubToken(
 }
 
 
-export type UpgradeApplyFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}>[];
+export type UpgradeApplyFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}>[];
 
 export type InferUpgradeApplyResult<
   Fields extends UpgradeApplyFields | undefined,
-> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}, Fields>;
+> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}, Fields>;
 
 export type UpgradeApplyResult<Fields extends UpgradeApplyFields | undefined = undefined> = | { success: true; data: InferUpgradeApplyResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -6718,11 +6718,11 @@ export async function validateUpgradeApply(
 }
 
 
-export type UpgradeCheckFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}>[];
+export type UpgradeCheckFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}>[];
 
 export type InferUpgradeCheckResult<
   Fields extends UpgradeCheckFields | undefined,
-> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}, Fields>;
+> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}, Fields>;
 
 export type UpgradeCheckResult<Fields extends UpgradeCheckFields | undefined = undefined> = | { success: true; data: InferUpgradeCheckResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -6784,11 +6784,11 @@ export async function validateUpgradeCheck(
 }
 
 
-export type UpgradeStatusFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}>[];
+export type UpgradeStatusFields = UnifiedFieldSelection<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}>[];
 
 export type InferUpgradeStatusResult<
   Fields extends UpgradeStatusFields | undefined,
-> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "hasGithubToken"}, Fields>;
+> = InferResult<{current: string, installed: boolean, latest: string | null, available: boolean, notesUrl: string | null, checkedAt: string | null, error: string | null, stage: "downloading" | "failed" | "idle" | "installed" | "installing" | "restarting" | "verifying", message: string | null, target: string | null, progress: Record<string, any> | null, hasGithubToken: boolean, __type: "TypedMap", __primitiveFields: "current" | "installed" | "latest" | "available" | "notesUrl" | "checkedAt" | "error" | "stage" | "message" | "target" | "progress" | "hasGithubToken"}, Fields>;
 
 export type UpgradeStatusResult<Fields extends UpgradeStatusFields | undefined = undefined> = | { success: true; data: InferUpgradeStatusResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }

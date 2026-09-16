@@ -388,14 +388,16 @@ defmodule Longx.Projects do
 
   @doc """
   What the workspace-write sandbox may write besides the project and /tmp:
-  the project's `writable_roots` (`~` = this user's home; only directories
-  that exist and are writable — codex seeds every root with protected
-  `.git` / `.codex` entries, so a root it cannot write into, or a device
-  node, makes bwrap fail to launch).
+  this user's tool cache (`Longx.Codex.Sandbox.cache_dir/0` — `~/.cache`,
+  `~/Library/Caches`, `%LOCALAPPDATA%`; uv / pip / npm fail on the first
+  run without it) and the project's `writable_roots` (`~` = this user's
+  home); only directories that exist (a device node as a root breaks the
+  launch — devices go through `passthrough_paths`).
   """
   @spec writable_roots(Project.t()) :: [Path.t()]
   def writable_roots(%Project{writable_roots: roots}) do
-    roots
+    ([Longx.Codex.Sandbox.cache_dir()] ++ roots)
+    |> Enum.reject(&is_nil/1)
     |> Enum.map(&Path.expand/1)
     |> Enum.filter(&File.dir?/1)
     |> Enum.uniq()

@@ -36,6 +36,8 @@ export type UpgradeStatus = {
   stage: UpgradeStage;
   message: string | null;
   target: string | null;
+  /** bytes of the tarball so far while downloading (total null without a content-length) */
+  progress: { received: number; total: number | null } | null;
   hasGithubToken: boolean;
 };
 
@@ -50,6 +52,7 @@ export const upgradeFields = [
   "stage",
   "message",
   "target",
+  "progress",
   "hasGithubToken",
 ] as const;
 

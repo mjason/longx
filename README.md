@@ -108,7 +108,7 @@ agent 的命令由 **Longx 自己**放进沙箱里跑：codex 0.154 把命令执
 | 模式 | 能做什么 |
 |---|---|
 | 只读 | 读整个文件系统，什么都不能写 |
-| 可写工作区（默认） | 写项目目录和 /tmp；其余只读；看不到设备；联网由开关决定 |
+| 可写工作区（默认） | 写项目目录、/tmp 和用户的工具缓存（Linux `~/.cache`、macOS `~/Library/Caches`、Windows `%LOCALAPPDATA%`——uv/pip/npm 都放那儿）；其余只读；看不到设备；联网由开关决定 |
 | 完全访问 | 不进沙箱，和你自己在终端里一样 |
 
 **权限按需申请，不预先放开。** 这是 codex 自己的机制（Longx 打开了它的 `exec_permission_approvals` /

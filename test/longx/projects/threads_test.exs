@@ -185,23 +185,26 @@ defmodule Longx.Projects.ThreadsTest do
       assert params["config"]["sandbox_workspace_write.network_access"] == true
     end
 
-    test "writable_roots: the project's extra directories reach the sandbox — ~ expanded, missing ones skipped",
+    test "writable_roots: this user's cache directory always (like /tmp), plus the project's own — ~ expanded, missing ones skipped",
          %{dir: dir, conn: conn} do
       cache = Path.join(dir, "cache")
       File.mkdir_p!(cache)
+      user_cache = Longx.Codex.Sandbox.cache_dir()
 
-      # nothing by default: the sandbox is exactly codex's (cwd + /tmp) until the person adds a path
+      # the project stores nothing by default; the sandbox still gets the user's
+      # tool cache (uv, pip, npm… would fail read-only otherwise), when it exists
       assert git_project!(dir).writable_roots == []
 
       assert Projects.writable_roots(
                git_project!(Path.join(dir, "plain") |> tap(&File.mkdir_p!/1))
-             ) == []
+             ) == Enum.filter([user_cache], &File.dir?/1)
 
       sub = Path.join(dir, "sub")
       File.mkdir_p!(sub)
       project = git_project!(sub, %{writable_roots: ["~", cache, Path.join(dir, "nope")]})
 
-      assert Projects.writable_roots(project) == [Path.expand("~"), cache]
+      assert Projects.writable_roots(project) ==
+               Enum.uniq(Enum.filter([user_cache], &File.dir?/1) ++ [Path.expand("~"), cache])
 
       {:ok, thread} = Projects.start_thread(project, conn: conn)
       %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
@@ -223,10 +226,11 @@ defmodule Longx.Projects.ThreadsTest do
       assert turn["sandboxPolicy"] == %{
                "type" => "workspaceWrite",
                "networkAccess" => false,
-               "writableRoots" => [cache]
+               "writableRoots" => Projects.writable_roots(project)
              }
 
-      assert Projects.writable_roots(project) == [cache]
+      assert Projects.writable_roots(project) ==
+               Enum.filter([user_cache], &File.dir?/1) ++ [cache]
     end
 
     test "passthrough_paths: this machine's GPU nodes always, plus the project's own patterns — globs expanded, only what exists",

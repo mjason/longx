@@ -5,7 +5,7 @@
 import { ArrowUpCircle, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { relativeTime } from "@/core/format";
+import { formatBytes, relativeTime } from "@/core/format";
 import { inProgress, useUpgradeActions, useUpgradeStatus } from "@/core/upgrade";
 import {
   AlertDialog,
@@ -80,9 +80,22 @@ function Version() {
       </div>
       {!st.installed ? <p className="text-muted-foreground text-xs">{s.notInstalled}</p> : null}
       {busy ? (
-        <p className="flex items-center gap-2 text-sm" role="status">
-          <Loader2 className="size-4 animate-spin" /> {s.stages[st.stage]}
-        </p>
+        <div className="flex flex-col gap-1.5" role="status">
+          <p className="flex items-center gap-2 text-sm">
+            <Loader2 className="size-4 animate-spin" /> {s.stages[st.stage]}
+            {st.stage === "downloading" && st.progress ? (
+              <span className="text-muted-foreground font-mono text-xs tabular-nums">
+                {formatBytes(st.progress.received)}
+                {st.progress.total ? ` / ${formatBytes(st.progress.total)}` : ""}
+              </span>
+            ) : null}
+          </p>
+          {st.stage === "downloading" && st.progress?.total ? (
+            <div className="bg-muted h-1.5 w-full max-w-md overflow-hidden rounded-full" role="progressbar" aria-valuemin={0} aria-valuemax={st.progress.total} aria-valuenow={st.progress.received}>
+              <div className="bg-primary h-full transition-[width]" style={{ width: `${Math.min(100, (st.progress.received / st.progress.total) * 100)}%` }} />
+            </div>
+          ) : null}
+        </div>
       ) : st.stage === "installed" ? (
         <p className="text-warning text-sm" role="status">
           {s.installedManual}

@@ -83,14 +83,18 @@ React Native client planned on the same core code.
     its threads: `approval_policy`, `sandbox`, `network_access` (the workspace-write sandbox
     has no network unless this is true → `sandbox_workspace_write.network_access`), `tools`
     (registered `"ns.name"`s), `model_id` (nil → global default), `dirty_start`
-    (`:commit` | `:ask` | `:off`), `writable_roots` (directories the workspace-write
-    sandbox may write besides cwd and /tmp — **default `[]`**: 0.1.7 defaulted it to
-    `["~/.cache"]` for every project, which silently widened every sandbox (a tool cache is
-    where planted code runs later, outside it) and was Linux-only; the 0.1.9 migration resets
-    rows still on that value. `Projects.writable_roots/1` expands `~` and keeps only existing
-    directories; they go on `thread/start` as
+    (`:commit` | `:ask` | `:off`), `writable_roots` (the project's own extra directories
+    the workspace-write sandbox may write — default `[]`). **The user's tool cache is
+    writable in every workspace sandbox, like /tmp**: `Projects.writable_roots/1` always
+    starts with `Longx.Codex.Sandbox.cache_dir/0` — per platform, never a hard-coded
+    `~/.cache` (0.1.7 stored that as a row default, Linux-only, and it was reverted):
+    Linux `$XDG_CACHE_HOME` (absolute) else `~/.cache`, macOS `~/Library/Caches`, Windows
+    `%LOCALAPPDATA%` else `~/AppData/Local` — uv / pip / npm / cargo / Hugging Face all
+    live there and fail on the first run without it. Then the project's roots (`~`
+    expanded), only existing directories; they go on `thread/start` as
     `sandbox_workspace_write.writable_roots`, on resume the same, and in
-    `turn/start.sandboxPolicy.writableRoots` when a turn changes the mode). **Devices and sockets go in through `passthrough_paths`, never as writable roots**:
+    `turn/start.sandboxPolicy.writableRoots` on every turn — one path for every platform,
+    including Windows where codex enforces the sandbox itself. **Devices and sockets go in through `passthrough_paths`, never as writable roots**:
     bwrap's `--dev /dev` is minimal and a device node as a writable root breaks the launch.
     `Project.passthrough_paths` (globs allowed; `Projects.passthrough_paths/1` resolves to
     what exists, sorted) is read by **the exec-server at every command start**
@@ -707,7 +711,9 @@ React Native client planned on the same core code.
     verify, `VACUUM INTO <home>/backups/longx-<current>-<stamp>.db`, unpack to `app.new`, swap
     `app` → `app.old` → `app`, then `restart_command` (default `systemctl --user restart
     --no-block $LONGX_SERVICE`, `longx`); no way to restart → stage `:installed` with a
-    "restart by hand" message; every stage is broadcast as `{:upgrade, status}` on
+    "restart by hand" message; the download streams through a Req `into:` sink that
+    reports `progress: %{received, total}` (total from `content-length`, at most every
+    200 ms) — the page draws a bar with the bytes; every stage is broadcast as `{:upgrade, status}` on
     `Upgrade.topic/0`. RPC: `upgrade_status` / `upgrade_check` / `upgrade_apply` /
     `set_github_token` on `Longx.System.Status`; the SPA (`core/upgrade.ts`,
     `pages/settings/UpdateSection`, a hint in the status strip) polls the status every second

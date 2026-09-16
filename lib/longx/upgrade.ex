@@ -267,7 +267,17 @@ defmodule Longx.Upgrade do
   @impl true
   def init(_opts) do
     if tick = config(:tick), do: Process.send_after(self(), :tick, min(tick, :timer.minutes(1)))
-    {:ok, %{check: nil, error: nil, stage: :idle, message: nil, target: nil, task: nil}}
+
+    {:ok,
+     %{
+       check: nil,
+       error: nil,
+       stage: :idle,
+       message: nil,
+       target: nil,
+       task: nil,
+       progress: nil
+     }}
   end
 
   @impl true
@@ -285,7 +295,16 @@ defmodule Longx.Upgrade do
     if state.task, do: Task.shutdown(state.task, :brutal_kill)
 
     {:reply, :ok,
-     %{state | check: nil, error: nil, stage: :idle, message: nil, target: nil, task: nil}}
+     %{
+       state
+       | check: nil,
+         error: nil,
+         stage: :idle,
+         message: nil,
+         target: nil,
+         task: nil,
+         progress: nil
+     }}
   end
 
   def handle_call({:apply, _install, _version, _urls}, _from, %{task: task} = state)
@@ -298,15 +317,28 @@ defmodule Longx.Upgrade do
 
     task =
       Task.Supervisor.async_nolink(Longx.Upgrade.TaskSupervisor, fn ->
-        run(install, version, urls, fn stage -> GenServer.cast(server, {:stage, stage}) end)
+        run(install, version, urls, fn
+          {:progress, received, total} -> GenServer.cast(server, {:progress, received, total})
+          stage -> GenServer.cast(server, {:stage, stage})
+        end)
       end)
 
-    state = %{state | task: task, target: version, message: nil} |> stage(:downloading)
+    state =
+      %{state | task: task, target: version, message: nil, progress: nil} |> stage(:downloading)
+
     {:reply, {:ok, public(state)}, state}
   end
 
   @impl true
-  def handle_cast({:stage, stage}, state), do: {:noreply, stage(state, stage)}
+  # a stage after the download has no bytes to count
+  def handle_cast({:stage, stage}, state), do: {:noreply, stage(%{state | progress: nil}, stage)}
+
+  # the tarball's bytes so far (total nil without a content-length); every
+  # notification carries it, so the page draws a bar from the polled status
+  def handle_cast({:progress, received, total}, %{stage: :downloading} = state),
+    do: {:noreply, stage(%{state | progress: %{received: received, total: total}}, :downloading)}
+
+  def handle_cast({:progress, _, _}, state), do: {:noreply, state}
 
   @impl true
   def handle_info({ref, result}, %{task: %{ref: ref}} = state) do
@@ -347,7 +379,8 @@ defmodule Longx.Upgrade do
     state
   end
 
-  defp public(state), do: Map.take(state, [:check, :error, :stage, :message, :target])
+  defp public(state),
+    do: Map.take(state, [:check, :error, :stage, :message, :target, :progress])
 
   # ---- the work, in a task ------------------------------------------------------------
 
@@ -356,7 +389,7 @@ defmodule Longx.Upgrade do
     tarball = Path.join(downloads, urls.name)
     File.mkdir_p!(downloads)
 
-    with :ok <- download(urls.tarball, tarball),
+    with :ok <- download(urls.tarball, tarball, notify),
          :ok <- download(urls.sha256, tarball <> ".sha256"),
          notify.(:verifying),
          :ok <- verify(tarball),
@@ -374,13 +407,56 @@ defmodule Longx.Upgrade do
     end
   end
 
-  defp download(url, to) do
+  defp download(url, to, notify \\ fn _ -> :ok end) do
     Logger.info("upgrade: downloading #{url}")
+    file = File.open!(to, [:write, :binary])
 
-    case Req.get(url, into: File.stream!(to), retry: false, receive_timeout: 600_000) do
-      {:ok, %{status: 200}} -> :ok
-      {:ok, %{status: status}} -> {:error, "下载失败（#{status}）：#{url}"}
-      {:error, reason} -> {:error, "下载失败：#{Exception.message(reason)}"}
+    # each chunk goes to the file and its running count to the server (at
+    # most a few times a second: a 500 MB tarball arrives in thousands of chunks)
+    sink = fn {:data, chunk}, {req, resp} ->
+      IO.binwrite(file, chunk)
+      received = (resp.private[:received] || 0) + byte_size(chunk)
+      last = resp.private[:reported_at] || 0
+      now = System.monotonic_time(:millisecond)
+
+      resp =
+        if now - last >= 200 do
+          notify.({:progress, received, content_length(resp)})
+          Req.Response.put_private(resp, :reported_at, now)
+        else
+          resp
+        end
+
+      {:cont, {req, Req.Response.put_private(resp, :received, received)}}
+    end
+
+    result =
+      case Req.get(url, into: sink, retry: false, receive_timeout: 600_000) do
+        {:ok, %{status: 200} = resp} ->
+          notify.({:progress, resp.private[:received] || 0, content_length(resp)})
+          :ok
+
+        {:ok, %{status: status}} ->
+          {:error, "下载失败（#{status}）：#{url}"}
+
+        {:error, reason} ->
+          {:error, "下载失败：#{Exception.message(reason)}"}
+      end
+
+    File.close(file)
+    result
+  end
+
+  defp content_length(resp) do
+    case Req.Response.get_header(resp, "content-length") do
+      [value | _] ->
+        case Integer.parse(value) do
+          {n, _} -> n
+          :error -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 

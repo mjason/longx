@@ -141,6 +141,38 @@ defmodule Longx.Codex.Sandbox do
   end
 
   @doc """
+  The user's tool cache — where uv, pip, npm, cargo, Hugging Face… keep
+  what they download — for the platform: Linux `$XDG_CACHE_HOME` (absolute)
+  else `~/.cache`; macOS `~/Library/Caches`; Windows `%LOCALAPPDATA%` else
+  `~/AppData/Local`. Nil without a home. Writable in every workspace-write
+  sandbox like `/tmp` (`Longx.Projects.writable_roots/1`): a tool that
+  cannot write its cache fails on the first `uv run`, and the cache is the
+  one directory outside the project every project needs.
+  """
+  @spec cache_dir(Longx.Platform.t(), %{optional(String.t()) => String.t()}) :: Path.t() | nil
+  def cache_dir(platform \\ Longx.Platform.current(), env \\ System.get_env())
+
+  def cache_dir({:linux, _}, env) do
+    case env["XDG_CACHE_HOME"] do
+      "/" <> _ = dir -> dir
+      _ -> home_join(env["HOME"], ".cache")
+    end
+  end
+
+  def cache_dir({:darwin, _}, env), do: home_join(env["HOME"], "Library/Caches")
+
+  def cache_dir({:windows, _}, env) do
+    case env["LOCALAPPDATA"] do
+      dir when is_binary(dir) and dir != "" -> dir
+      _ -> home_join(env["USERPROFILE"], "AppData\\Local", "\\")
+    end
+  end
+
+  defp home_join(home, rel, sep \\ "/")
+  defp home_join(home, _rel, _sep) when home in [nil, ""], do: nil
+  defp home_join(home, rel, sep), do: String.trim_trailing(home, sep) <> sep <> rel
+
+  @doc """
   Does this machine have a GPU (`/dev/nvidia*` nodes, or WSL2's `/dev/dxg`)? A sandboxed
   command cannot see it: bubblewrap's `--dev /dev` is a minimal device tree,
   and codex offers no device pass-through — its writable roots are

@@ -510,6 +510,9 @@ describe("SettingsPage", () => {
     const reload = vi.spyOn(page, "reload").mockImplementation(() => {});
     vi.mocked(upgradeStatus)
       .mockResolvedValueOnce(
+        ok({ ...upgradeIdle, latest: "0.2.0", available: true, stage: "downloading", target: "0.2.0", progress: { received: 150000000, total: 500000000 } }) as never,
+      )
+      .mockResolvedValueOnce(
         ok({ ...upgradeIdle, latest: "0.2.0", available: true, stage: "installing", target: "0.2.0" }) as never,
       )
       .mockResolvedValueOnce(
@@ -527,6 +530,9 @@ describe("SettingsPage", () => {
     );
     await waitFor(() => expect(upgradeApply).toHaveBeenCalled());
     await within(section).findByText(/正在下载/);
+    const bar = await within(section).findByRole("progressbar");
+    expect(bar).toHaveAttribute("aria-valuenow", "150000000");
+    expect(section).toHaveTextContent("143 MB / 477 MB");
     await within(section).findByText(/正在安装/, undefined, { timeout: 5000 });
     await within(section).findByText(/正在重启/, undefined, { timeout: 5000 });
     await waitFor(() => expect(reload).toHaveBeenCalled(), { timeout: 8000 });
