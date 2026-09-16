@@ -157,7 +157,10 @@ React Native client planned on the same core code.
     a read-only reviewer sub-session on the thread's model (its `low` effort when declared;
     codex's preferred reviewer model is not in our catalog, so it falls back to the active
     slug) — **or on a model of its own**: `Longx.AI.set_review_model/2` / `review_model/0`
-    (`Longx.System.Setting` keys `review_model` / `review_effort`; RPC `review_settings` /
+    (`Longx.System.Setting` keys `review_model` / `review_effort` — **`Setting`'s upsert names
+    `:encrypted_value`**, AshCloak's column: with `upsert_fields [:value]` a second put never
+    updated, so a review model, effort or GitHub token could be set once and never changed,
+    `setting_test`; RPC `review_settings` /
     `set_review_model` on `Longx.AI.Model`, the 自动审核 card of Settings → 模型) makes
     `Home.catalog_models/0` add a `longx-review` entry — that model's, its levels narrowed
     to the pinned one (codex takes `low` whenever an entry offers it) — that every other
@@ -228,7 +231,22 @@ React Native client planned on the same core code.
     the gateway passes `input_image` parts through untouched (`detail: high` from codex;
     verified end to end against DeepSeek Flash's Responses API, which reads screenshots —
     a solid-colour synthetic test image it answers about unreliably, so test with a
-    real one). **Slash commands of the composer**: `compact_thread/2` (`thread/compact/start`,
+    real one). **A message while a turn runs goes into that turn** (what the Codex app does):
+    `steer_message/3` → `Longx.Codex.Thread.steer/4` (`turn/steer` with `expectedTurnId`,
+    `images:` like a send) — codex shows it as a `userMessage` on the running turn and hands
+    it to the model at its next request; no new Turn row; `{:error, :not_running}` once the
+    turn is over (codex's "no active turn to steer"). RPC `steer_turn` (`threadId`, `text`,
+    `images`; `not_running` on `threadId`). Client: `core/chat/steerQueue.ts` is a
+    hold-nothing queue adapter — assistant-ui only lets the composer send while running when
+    a queue adapter exists, and its own would hold the message until the turn ends — every
+    message goes straight to `adapter.onNew`, which steers while `runningTurnId(view)` and
+    falls back to `send_message` on `not_running`; `thread.aui`'s send button stays next to
+    the stop while running. `messages.ts` splits the turn's assistant message at each steered
+    user message (`turn:<id>`, `turn:<id>:1`, …: with one id assistant-ui kept only the last
+    segment and the command before the steer vanished). Proven on the real binary
+    (`steer_integration_test`) and live with DeepSeek: a `sleep 12` running, a second
+    message typed, both answered in one turn. **Slash commands of the composer**:
+    `compact_thread/2` (`thread/compact/start`,
     refused while a turn runs; codex marks the fold with a `contextCompaction` item) and
     `review_thread/3` (`review/start` with `delivery: inline` — the review is a turn of the
     thread: a Turn row with `user_text` "/review …", bookmarked like any turn but **never
@@ -325,7 +343,12 @@ React Native client planned on the same core code.
   (`config :longx, Longx.Codex.Home, memories: false` turns it off), so codex runs its
   extraction / consolidation pipeline per project (at root-session start, on rollouts idle
   ≥ 6 h, through our gateway — it costs tokens) and injects its read path (memory summary
-  + "grep MEMORY.md"). Its **dedicated tools stay off** (`[memories] dedicated_tools =
+  + "grep MEMORY.md"). **Its requests name `[memories] extract_model = consolidation_model
+  = "longx"`** (the placeholder → the default model at the gateway): left unset codex asks
+  for its own preferred `gpt-5.6-luna`, which the gateway refused — every memory pass was a
+  400 (seen in the request log) until 0.1.22. Integration homes (`CodexHarness.prepare_home!`)
+  run with `memories: false` so the pipeline's requests do not interleave with the turn a
+  test watches. Its **dedicated tools stay off** (`[memories] dedicated_tools =
   false`): they would hand the model a second "remember this" (`memories.add_ad_hoc_note`,
   into the project's home) beside Longx's global `memory.note`, and asked to remember, a
   model picked codex's. Verified against the real binary in `gateway_e2e_test`: the
@@ -503,6 +526,19 @@ React Native client planned on the same core code.
     requests per provider → 429 + `retry-after: 1` (codex backs off and retries, like an
     upstream rate limit); an upstream that stays silent past `request_timeout_ms` → 504;
     401/403 → `record_provider_error`.
+  - **Every gateway request is remembered — `Longx.AI.Gateway.Log`** (in the tree; an ETS
+    ring of the last 1000, `config :longx, Longx.AI.Gateway.Log, keep:`): `begin(body,
+    target)` at the controller's door (thread / turn / `request_kind` from codex's
+    `client_metadata` + `x-codex-turn-metadata`, the model name and what it resolved to,
+    `reasoning.effort` / `summary`, the tools' names, input items and size, instructions
+    size, `max_output_tokens`), `finish(id, %{status, error})` after the relay — refused
+    requests included (unknown model → 400 with the message). RPC `gateway_requests(limit)`
+    on `Longx.System.Status`; Settings → 请求记录 (`settings/RequestsSection`, polled every
+    5 s, a row per request with the details behind a click). It is how to check what codex
+    actually asked for: verified on this box that the level picked in the composer is the
+    `effort` of the turn's request (`max` → `max`, `low` → `low`); a sub-agent's request can
+    carry a level the *model* chose in `spawn_agent` (or the model's default), a memory
+    request codex's own `low` / `medium` — `request_kind` tells them apart.
   - `LongxWeb.AI.ResponsesController` at `POST /ai/v1/responses` (pipeline `:ai_gateway`,
     bearer = per-boot `Longx.AI.Gateway.Token`; **no `:accepts` plug** — codex sends
     `Accept: text/event-stream`). `Longx.AI.Gateway.prepare/2` swaps the placeholder model
@@ -1111,9 +1147,10 @@ React Native client planned on the same core code.
     chat whose first message creates the thread — and `/p/:slug/t/:threadId`; Thread
     element; the composer rail is Codex's: `ComposerLeading` (`ModePicker` — the access
     mode for the next turn: sandbox / approval / network in a popover, from the thread row
-    or the project defaults, sent with every message; below `sm` the trigger is the shield
-    icon and badges alone, the sandbox's name is its `title` and lives in the popover — a
-    phone's rail had squeezed it to "可…" — and the turn's state) /
+    or the project defaults, sent with every message; **on a phone the form is a bottom
+    `Sheet` that scrolls** (`useViewport() === "phone"`; the popover ran off the top of the
+    screen) and the trigger shows the short name (`t.sandboxShort`: 只读 / 可写 / 完全访问)
+    — never the icon alone — the full name from `sm` up; and the turn's state) /
     `ComposerTrailing` (the `context-display` ring — codex's last-turn token usage
     against the `modelContextWindow` it reports, `contextUsage(view)`; **its breakdown is a
     click-to-open popover, not the registry's hover tooltip**: the composer sits in the

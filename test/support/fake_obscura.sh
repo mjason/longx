@@ -8,6 +8,7 @@
 # Anything else is served like /page. Flags are echoed to stderr as
 # "args: ..." so tests can assert what was passed.
 echo "args: $*" >&2
+echo "env: OBSCURA_ALLOW_PRIVATE_NETWORK=${OBSCURA_ALLOW_PRIVATE_NETWORK:-}" >&2
 url=""
 for a in "$@"; do
   case "$a" in

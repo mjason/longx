@@ -28,6 +28,7 @@ import {
   listThreads,
   respond,
   retractTurn,
+  steerTurn,
   searchFiles,
   sendMessage,
   setGoal,
@@ -398,10 +399,9 @@ describe("ThreadPage", () => {
     await user.keyboard("{Escape}");
     expect(screen.getByTestId("mode-picker")).toHaveTextContent("完全访问");
     expect(screen.getByTestId("mode-picker")).toHaveTextContent("全部放行");
-    // a phone's rail has no room for the words: the shield icon and the
-    // badges say it, the name is the accessible label and lives in the popover
-    expect(within(screen.getByTestId("mode-picker")).getByText(/完全访问/)).toHaveClass("hidden", "sm:inline");
-    expect(screen.getByTestId("mode-picker")).toHaveAttribute("title", expect.stringContaining("完全访问"));
+    // the full name where there is room, the short one on a phone's rail — never the icon alone
+    expect(within(screen.getByTestId("mode-picker")).getByText("完全访问（危险）")).toHaveClass("hidden", "sm:inline");
+    expect(within(screen.getByTestId("mode-picker")).getByText("完全访问")).toHaveClass("sm:hidden");
     await user.type(
       screen.getByRole("textbox", { name: "随心输入" }),
       "go wild{Enter}",
@@ -540,7 +540,8 @@ describe("ThreadPage", () => {
       });
     });
     await user.click(screen.getByRole("button", { name: "sqlite" }));
-    await user.click(screen.getByRole("button", { name: "发送" }));
+    // the form's own send (the composer keeps its send button while the turn runs)
+    await user.click(within(screen.getByTestId("tool-questions")).getByRole("button", { name: "发送" }));
     await waitFor(() =>
       expect(answerRequest).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -588,7 +589,7 @@ describe("ThreadPage", () => {
     );
   });
 
-  test("a message typed while a turn runs waits in the queue and goes out when it settles", async () => {
+  test("a message typed while a turn runs goes into that turn (steer), not a new one; once it is over a message is a new turn", async () => {
     const user = userEvent.setup();
     await open();
     act(() =>
@@ -598,9 +599,17 @@ describe("ThreadPage", () => {
         params: { turn: { id: "turn_2", status: "inProgress" } },
       }),
     );
+    // the send button is there while running, next to the stop
+    expect(screen.getByRole("button", { name: "发送" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /停止/ })).toBeInTheDocument();
     await user.type(
       screen.getByRole("textbox", { name: "随心输入" }),
       "and then this{Enter}",
+    );
+    await waitFor(() =>
+      expect(steerTurn).toHaveBeenCalledWith(
+        expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "and then this" }) }),
+      ),
     );
     expect(sendMessage).not.toHaveBeenCalled();
     act(() =>
@@ -610,14 +619,13 @@ describe("ThreadPage", () => {
         params: { turn: { id: "turn_2", status: "completed" } },
       }),
     );
+    await user.type(
+      screen.getByRole("textbox", { name: "随心输入" }),
+      "a new turn{Enter}",
+    );
     await waitFor(() =>
       expect(sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          input: expect.objectContaining({
-            threadId: "t1",
-            text: "and then this",
-          }),
-        }),
+        expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "a new turn" }) }),
       ),
     );
   });
@@ -1119,6 +1127,20 @@ describe("ThreadPage", () => {
     expect(
       within(screen.getByTestId("chat-area")).getByTestId("tool-command"),
     ).toBeInTheDocument();
+  });
+
+  test("phone: the access mode names itself in the rail and opens as a bottom sheet, not a popover", async () => {
+    setViewport(390);
+    const user = userEvent.setup();
+    await open();
+    const picker = screen.getByTestId("mode-picker");
+    // the short name (a phone has no room for the long one), never an icon alone
+    expect(picker).toHaveTextContent("可写");
+    await user.click(picker);
+    const sheet = await screen.findByTestId("mode-sheet");
+    expect(within(sheet).getByRole("radio", { name: "完全访问（危险）" })).toBeInTheDocument();
+    expect(within(sheet).getByRole("switch", { name: /自动审核/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("mode-popover")).not.toBeInTheDocument();
   });
 
   test("a thread that no longer exists (a stale link) says so and offers a new chat", async () => {

@@ -87,7 +87,12 @@ defmodule Longx.Codex.HomeTest do
     {:ok, home} = Home.prepare(dir: dir, gateway_url: "http://127.0.0.1:4242/ai/v1")
     config = File.read!(home.config_path)
     assert config =~ "[features]\nmemories = true\nstandalone_web_search = true\n"
-    assert config =~ "[memories]\ndedicated_tools = false\n"
+    # its extraction and consolidation run on our placeholder model (the default
+    # one at the gateway): left unset, codex asks for its own preferred
+    # "gpt-5.6-luna", which the gateway refuses — every memory pass was a 400
+    assert config =~
+             "[memories]\ndedicated_tools = false\nextract_model = \"longx\"\nconsolidation_model = \"longx\"\n"
+
     # one [features] table: TOML refuses a second
     assert length(String.split(config, "[features]")) == 2
 

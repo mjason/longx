@@ -76,16 +76,22 @@ export function toMessages(view: ThreadView, subviews: SubViews = {}): ThreadMes
   const agents = subagentsOf(view);
   const out: ThreadMessageLike[] = [];
   let current: { turnId: string | undefined; parts: Part[] } | null = null;
+  // a message steered into a running turn splits its assistant message: the
+  // segments after the first get an index, or they would share one id and
+  // assistant-ui would keep only the last (the command before the steer vanished)
+  const segments = new Map<string, number>();
 
   const flush = () => {
     if (current && current.parts.length) {
+      const n = current.turnId ? (segments.get(current.turnId) ?? 0) : 0;
+      if (current.turnId) segments.set(current.turnId, n + 1);
       // the turn's plan leads its message; codex keeps one plan per turn
       if (view.plan && current.turnId !== undefined && view.plan.turnId === current.turnId) {
         current.parts.unshift({ type: "data-plan", data: { explanation: view.plan.explanation, steps: view.plan.plan } } as Part);
       }
       const timing = timingFor(view, current.turnId, current.parts);
       out.push({
-        id: current.turnId ? `turn:${current.turnId}` : `turn:${out.length}`,
+        id: current.turnId ? (n === 0 ? `turn:${current.turnId}` : `turn:${current.turnId}:${n}`) : `turn:${out.length}`,
         role: "assistant",
         content: current.parts,
         status: awaitsApproval(current.parts) ? REQUIRES_ACTION : statusFor(view, current.turnId, running),

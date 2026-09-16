@@ -9,10 +9,9 @@ import type {
   DictationAdapter,
   ExternalStoreAdapter,
   ExternalStoreThreadListAdapter,
-  ExternalThreadQueueAdapter,
-  ThreadMessageLike,
+    ThreadMessageLike,
 } from "@assistant-ui/react";
-import { answerRequest, approveReview, interruptTurn, respond, retractTurn, sendMessage, setGoal } from "@/ash_rpc";
+import { answerRequest, approveReview, interruptTurn, respond, retractTurn, sendMessage, setGoal, steerTurn } from "@/ash_rpc";
 import { skillsIn, type SkillRef } from "./mentions";
 import { RpcFailure, unwrap } from "@/core/projects";
 import {
@@ -21,6 +20,7 @@ import {
   type ApprovalDecision,
   type SubViews,
 } from "./messages";
+import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
 import { runningTurnId, type ThreadView } from "./thread";
 
 export type ThreadTarget = { threadId: string; codexThreadId: string };
@@ -54,6 +54,8 @@ export type CodexExtras = {
 };
 
 export type AdapterOptions = {
+  /** what lets the composer send while a turn runs (`createSteerQueue`): holds nothing */
+  queue?: ExternalThreadQueueAdapter;
   /** null = no thread open yet: the first message creates one (`createThread`) */
   target: ThreadTarget | null;
   view: ThreadView;
@@ -78,7 +80,6 @@ export type AdapterOptions = {
   /** re-pull the snapshot in place (threads.reloadMainThread) */
   refetch?: () => Promise<void>;
   threadList?: ExternalStoreThreadListAdapter;
-  queue?: ExternalThreadQueueAdapter;
   /** files staged in the composer (images → codex image inputs, text files → text) */
   attachments?: AttachmentAdapter;
   /** voice input written into the composer (the browser's speech recognition) */
@@ -167,8 +168,8 @@ export function buildAdapter(
       ...(opts.attachments ? { attachments: opts.attachments } : {}),
       ...(opts.dictation ? { dictation: opts.dictation } : {}),
     },
-    ...(opts.queue ? { queue: opts.queue } : {}),
     ...(opts.refetch ? { onRefetchThread: opts.refetch } : {}),
+    ...(opts.queue ? { queue: opts.queue } : {}),
     onNew: async (message) => {
       const { text, images } = inputOf(message);
       if (!text && images.length === 0) return;
@@ -189,6 +190,21 @@ export function buildAdapter(
         );
         opts.onSent?.(target);
         return;
+      }
+      // a turn in flight: the message goes into it (turn/steer — codex hands
+      // it to the model at its next request), what the Codex app does; a
+      // turn that ended meanwhile is "not_running" and the message a new turn
+      const running = runningTurnId(view);
+      if (running && target.threadId === opts.target?.threadId) {
+        const steered = await steerTurn({
+          fields: ["codexTurnId"],
+          input: { threadId: target.threadId, text, ...(images.length > 0 ? { images } : {}) },
+        });
+        if (steered.success) {
+          opts.onSent?.(target);
+          return;
+        }
+        if (!steered.errors.some((e) => e.message === "not_running")) unwrap(steered);
       }
       const send = (dirty?: "commit" | "ignore") =>
         sendMessage({

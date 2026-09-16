@@ -421,3 +421,26 @@ describe("multi-agent", () => {
     expect(parts(older[0]!).map((p) => p["type"])).toEqual(["text"]);
   });
 });
+
+test("a message steered into a running turn splits the turn's assistant message in two, each with an id of its own", () => {
+  const view = {
+    ...emptyView("thr_1"),
+    turn: { id: "turn_1", status: "inProgress" },
+    items: [
+      { id: "u1", type: "userMessage", turnId: "turn_1", content: [{ type: "text", text: "run it" }] },
+      { id: "c1", type: "commandExecution", turnId: "turn_1", command: "sleep 12", status: "completed", exitCode: 0, aggregatedOutput: "" },
+      { id: "u2", type: "userMessage", turnId: "turn_1", content: [{ type: "text", text: "also this" }] },
+      { id: "m1", type: "agentMessage", turnId: "turn_1", text: "done both" },
+    ],
+  };
+  const messages = toMessages(view);
+  expect(messages.map((m) => [m.id, m.role])).toEqual([
+    ["u1", "user"],
+    ["turn:turn_1", "assistant"],
+    ["u2", "user"],
+    ["turn:turn_1:1", "assistant"],
+  ]);
+  // the command is on the first segment, the answer on the second — nothing lost
+  expect((messages[1]!.content as readonly { type: string }[]).map((p) => p.type)).toEqual(["tool-call"]);
+  expect((messages[3]!.content as readonly { type: string }[]).map((p) => p.type)).toEqual(["text"]);
+});

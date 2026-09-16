@@ -5960,6 +5960,82 @@ export async function validateStartThread(
 }
 
 
+export type SteerTurnInput = {
+  threadId: UUID;
+  text: string;
+  images?: Array<string> | null;
+};
+
+export type SteerTurnFields = UnifiedFieldSelection<{codexTurnId: string, __type: "TypedMap", __primitiveFields: "codexTurnId"}>[];
+
+export type InferSteerTurnResult<
+  Fields extends SteerTurnFields | undefined,
+> = InferResult<{codexTurnId: string, __type: "TypedMap", __primitiveFields: "codexTurnId"}, Fields>;
+
+export type SteerTurnResult<Fields extends SteerTurnFields | undefined = undefined> = | { success: true; data: InferSteerTurnResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function steerTurn<Fields extends SteerTurnFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SteerTurnInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SteerTurnResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "steer_turn",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SteerTurnResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSteerTurn(
+  config: {
+  tenant?: string;
+  input: SteerTurnInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "steer_turn",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ListSubagentsInput = {
   parentThreadId: UUID;
 };
@@ -6344,6 +6420,72 @@ export async function validateRestoreProposal(
 }
 
 
+export type BrowserSettingsFields = UnifiedFieldSelection<{allowPrivateNetwork: boolean, available: boolean, __type: "TypedMap", __primitiveFields: "allowPrivateNetwork" | "available"}>[];
+
+export type InferBrowserSettingsResult<
+  Fields extends BrowserSettingsFields | undefined,
+> = InferResult<{allowPrivateNetwork: boolean, available: boolean, __type: "TypedMap", __primitiveFields: "allowPrivateNetwork" | "available"}, Fields>;
+
+export type BrowserSettingsResult<Fields extends BrowserSettingsFields | undefined = undefined> = | { success: true; data: InferBrowserSettingsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function browserSettings<Fields extends BrowserSettingsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<BrowserSettingsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "browser_settings",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<BrowserSettingsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateBrowserSettings(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "browser_settings",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type CreateDirectoryInput = {
   parent: string;
   name: string;
@@ -6408,6 +6550,80 @@ export async function validateCreateDirectory(
 ): Promise<ValidationResult> {
   const payload = {
     action: "create_directory",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type GatewayRequestsInput = {
+  limit?: number | null;
+};
+
+export type GatewayRequestsFields = UnifiedFieldSelection<{requests: Array<Record<string, any>>, keep: number, __type: "TypedMap", __primitiveFields: "requests" | "keep"}>[];
+
+export type InferGatewayRequestsResult<
+  Fields extends GatewayRequestsFields | undefined,
+> = InferResult<{requests: Array<Record<string, any>>, keep: number, __type: "TypedMap", __primitiveFields: "requests" | "keep"}, Fields>;
+
+export type GatewayRequestsResult<Fields extends GatewayRequestsFields | undefined = undefined> = | { success: true; data: InferGatewayRequestsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function gatewayRequests<Fields extends GatewayRequestsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input?: GatewayRequestsInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GatewayRequestsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "gateway_requests",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<GatewayRequestsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateGatewayRequests(
+  config: {
+  tenant?: string;
+  input?: GatewayRequestsInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "gateway_requests",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };
@@ -7219,6 +7435,80 @@ export async function validateSandboxStatus(
   const payload = {
     action: "sandbox_status",
     ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetBrowserPrivateNetworkInput = {
+  enabled: boolean;
+};
+
+export type SetBrowserPrivateNetworkFields = UnifiedFieldSelection<{allowPrivateNetwork: boolean, available: boolean, __type: "TypedMap", __primitiveFields: "allowPrivateNetwork" | "available"}>[];
+
+export type InferSetBrowserPrivateNetworkResult<
+  Fields extends SetBrowserPrivateNetworkFields | undefined,
+> = InferResult<{allowPrivateNetwork: boolean, available: boolean, __type: "TypedMap", __primitiveFields: "allowPrivateNetwork" | "available"}, Fields>;
+
+export type SetBrowserPrivateNetworkResult<Fields extends SetBrowserPrivateNetworkFields | undefined = undefined> = | { success: true; data: InferSetBrowserPrivateNetworkResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function setBrowserPrivateNetwork<Fields extends SetBrowserPrivateNetworkFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SetBrowserPrivateNetworkInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetBrowserPrivateNetworkResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_browser_private_network",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetBrowserPrivateNetworkResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetBrowserPrivateNetwork(
+  config: {
+  tenant?: string;
+  input: SetBrowserPrivateNetworkInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_browser_private_network",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
   };
 
   return executeValidationRpcRequest<ValidationResult>(

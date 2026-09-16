@@ -32,7 +32,8 @@ defmodule Longx.System.Setting do
       primary? true
       accept [:key, :value]
       upsert? true
-      upsert_fields [:value]
+      # the column is the ciphertext (AshCloak); naming `:value` here updated nothing
+      upsert_fields [:encrypted_value]
     end
 
     read :by_key do

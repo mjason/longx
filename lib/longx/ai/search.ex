@@ -215,9 +215,25 @@ defmodule Longx.AI.Search do
 
       {:error, reason} ->
         Logger.warning("web open failed for #{url}: #{inspect(reason)}")
-        %{output: "## open: #{url}\nopen failed: #{describe_browser_error(reason)}", results: []}
+
+        %{
+          output:
+            "## open: #{url}\nopen failed: #{describe_browser_error(reason)}#{private_hint(reason)}",
+          results: []
+        }
     end
   end
+
+  # a navigation error while private addresses are refused: on a fake-ip
+  # network every site resolves to one — the switch in Settings → 工具
+  defp private_hint({:navigation, _}) do
+    if Longx.Browser.allow_private_network?(),
+      do: "",
+      else:
+        " (if this Longx sits behind a fake-ip DNS / VPN, the page's address is a private one and the browser refuses it: turn on “允许访问私网 / 局域网地址” under 设置 → 工具)"
+  end
+
+  defp private_hint(_), do: ""
 
   defp describe_browser_error(:unavailable),
     do: "the headless browser is not installed on this Longx"

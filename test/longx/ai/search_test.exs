@@ -252,6 +252,9 @@ defmodule Longx.AI.SearchTest do
         Search.run(%{"id" => "t", "commands" => %{"open" => [%{"ref_id" => url}]}}, nil)
 
       assert output2 =~ "connection refused"
+      # private addresses refused (the default): the likely fake-ip cause is named
+      assert output2 =~ "fake-ip"
+      assert output2 =~ "设置 → 工具"
     end
 
     test "search_query without a search provider says so instead of failing" do

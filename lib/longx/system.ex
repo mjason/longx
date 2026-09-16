@@ -22,6 +22,9 @@ defmodule Longx.System do
       rpc_action :upgrade_check, :upgrade_check
       rpc_action :upgrade_apply, :upgrade_apply
       rpc_action :set_github_token, :set_github_token
+      rpc_action :gateway_requests, :gateway_requests
+      rpc_action :browser_settings, :browser_settings
+      rpc_action :set_browser_private_network, :set_browser_private_network
     end
   end
 

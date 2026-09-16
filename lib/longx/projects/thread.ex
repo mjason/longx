@@ -174,6 +174,42 @@ defmodule Longx.Projects.Thread do
       end
     end
 
+    # a message while a turn runs: into that turn (turn/steer); not_running
+    # is an error on thread_id — send it as a turn then
+    action :steer_turn, :map do
+      constraints fields: [codex_turn_id: [type: :string, allow_nil?: false]]
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :text, :string, allow_nil?: false
+      argument :images, {:array, :string}
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             {:ok, result} <-
+               Longx.Projects.steer_message(thread, input.arguments.text,
+                 images: input.arguments[:images] || []
+               ) do
+          {:ok, result}
+        else
+          {:error, :not_running} ->
+            {:error,
+             Ash.Error.Invalid.exception(
+               errors: [
+                 %Ash.Error.Changes.InvalidArgument{field: :thread_id, message: "not_running"}
+               ]
+             )}
+
+          {:error, reason} when is_binary(reason) ->
+            {:error,
+             Ash.Error.Invalid.exception(
+               errors: [%Ash.Error.Changes.InvalidArgument{field: :text, message: reason}]
+             )}
+
+          other ->
+            other
+        end
+      end
+    end
+
     # a stop right after sending: the turn is taken back and its text returned
     # to the composer (has_output / not_running are errors on the argument)
     action :retract_turn, :map do

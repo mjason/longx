@@ -481,6 +481,12 @@ defmodule Longx.Codex.Home do
   # project's home) next to Longx's global memory.note — asked to remember, a
   # model picked codex's. One explicit memory: ours; codex's pipeline still
   # learns the project from the rollouts on its own.
-  defp memories_toml(true), do: "\n[memories]\ndedicated_tools = false\n"
+  # The pipeline's own requests name codex's preferred model ("gpt-5.6-luna",
+  # nothing of ours) unless told otherwise: the placeholder, which the gateway
+  # resolves to the default model — every memory pass was a 400 before.
+  defp memories_toml(true),
+    do:
+      "\n[memories]\ndedicated_tools = false\nextract_model = \"longx\"\nconsolidation_model = \"longx\"\n"
+
   defp memories_toml(false), do: []
 end

@@ -13,8 +13,12 @@ defmodule Longx.Browser do
     * `executable:` — overrides `Longx.Browser.Runtime` (tests: the fake)
     * `max_concurrent:` / `queue_timeout:` — see `Longx.Browser.Pool`
     * `timeout:` — navigation deadline per fetch, ms (default 30 s)
-    * `allow_private_network:` — off: obscura refuses private / loopback IPs
-      (SSRF protection; agents drive this)
+    * `allow_private_network:` — obscura refuses private / loopback IPs
+      (SSRF protection; agents drive this) unless allowed: by this config, by
+      the person's switch (`set_allow_private_network/1`, Settings → 工具 —
+      a fake-ip network resolves every site to a private address and obscura
+      has no per-range allowance, so the switch is all or nothing), or by the
+      call's own `allow_private_network:` (tests against a local Bypass)
     * `stealth:` — obscura's consistent-fingerprint mode
     * `memory_limit:` — bytes, `Longx.Shim` `memory_limit` (V8 reserves a lot
       of address space; leave nil unless you know the box)
@@ -64,9 +68,11 @@ defmodule Longx.Browser do
     max_bytes = Keyword.get(opts, :max_bytes, @default_max_bytes)
     start = System.monotonic_time(:millisecond)
 
+    private = Keyword.get_lazy(opts, :allow_private_network, &allow_private_network?/0)
+
     result =
-      Shim.run([exe | args(url, format, timeout, opts)],
-        env: env(timeout),
+      Shim.run([exe | args(url, format, timeout, opts, private)],
+        env: env(timeout, private),
         # obscura's own deadline first; ours is the backstop that kills the tree
         timeout: timeout + 2_000,
         oom_score_adj: @oom_score_adj,
@@ -94,7 +100,7 @@ defmodule Longx.Browser do
     end
   end
 
-  defp args(url, format, timeout, opts) do
+  defp args(url, format, timeout, opts, private) do
     dump = if format == :html, do: "html", else: Atom.to_string(format)
 
     [
@@ -110,17 +116,34 @@ defmodule Longx.Browser do
     |> put_flag("--selector", opts[:selector])
     |> put_flag("--wait", opts[:wait] && to_string(opts[:wait]))
     |> then(&if(config(:stealth, false), do: &1 ++ ["--stealth"], else: &1))
+    |> then(&if(private, do: &1 ++ ["--allow-private-network"], else: &1))
   end
 
   defp put_flag(args, _flag, nil), do: args
   defp put_flag(args, flag, value), do: args ++ [flag, value]
 
-  defp env(timeout) do
+  defp env(timeout, private) do
     [{"OBSCURA_SCRIPT_DEADLINE_MS", Integer.to_string(timeout)}] ++
-      if(config(:allow_private_network, false),
-        do: [{"OBSCURA_ALLOW_PRIVATE_NETWORK", "1"}],
-        else: []
-      )
+      if(private, do: [{"OBSCURA_ALLOW_PRIVATE_NETWORK", "1"}], else: [])
+  end
+
+  @private_key "browser_allow_private_network"
+
+  @doc """
+  Whether pages at private / loopback addresses may be fetched: the config
+  when it says so, else the person's switch (`Longx.System.Setting`).
+  """
+  @spec allow_private_network?() :: boolean
+  def allow_private_network? do
+    config(:allow_private_network, false) or
+      match?({:ok, %{value: "true"}}, Longx.System.get_setting(@private_key))
+  end
+
+  @doc "The person's switch (Settings → 工具): needed on a fake-ip network, where every site resolves to a private address."
+  @spec set_allow_private_network(boolean) :: :ok
+  def set_allow_private_network(flag) when is_boolean(flag) do
+    _ = Longx.System.put_setting!(@private_key, if(flag, do: "true", else: "false"))
+    :ok
   end
 
   defp page(url, format, stdout, stderr, max_bytes) do

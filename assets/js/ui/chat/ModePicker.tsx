@@ -1,8 +1,11 @@
 import { Globe, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
+import { useState } from "react";
 import type { AccessMode } from "@/core/chat/adapter";
+import { useViewport } from "@/core/viewport";
 import { Label } from "@/ui/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/components/ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/ui/components/ui/radio-group";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/ui/sheet";
 import { Switch } from "@/ui/components/ui/switch";
 import { t } from "@/ui/strings";
 
@@ -19,26 +22,68 @@ export function modeIcon(sandbox: AccessMode["sandbox"]) {
  * the turns after, and the thread row records it.
  */
 export function ModePicker({ mode, onChange, disabled = false, started = false }: { mode: AccessMode; onChange: (mode: AccessMode) => void; disabled?: boolean; started?: boolean }) {
+  const viewport = useViewport();
+  const [open, setOpen] = useState(false);
+  // a phone: a bottom sheet that scrolls (the popover ran off the top of the
+  // screen); wider: the popover by the rail
+  if (viewport === "phone") {
+    return (
+      <>
+        <ModeTrigger mode={mode} disabled={disabled} onClick={() => setOpen(true)} />
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetContent side="bottom" className="safe-bottom max-h-[85dvh] overflow-y-auto rounded-t-xl" data-testid="mode-sheet">
+            <SheetHeader className="px-4 pt-4">
+              <SheetTitle>{t.accessMode}</SheetTitle>
+            </SheetHeader>
+            <div className="px-4 pb-4">
+              <ModeForm mode={mode} onChange={onChange} started={started} />
+            </div>
+          </SheetContent>
+        </Sheet>
+      </>
+    );
+  }
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <ModeTrigger mode={mode} disabled={disabled} />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72" data-testid="mode-popover">
+        <ModeForm mode={mode} onChange={onChange} started={started} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ModeTrigger({ mode, disabled, onClick, ...rest }: { mode: AccessMode; disabled: boolean; onClick?: () => void } & Record<string, unknown>) {
   const Icon = modeIcon(mode.sandbox);
   const full = mode.sandbox === "danger_full_access";
   return (
-    <Popover>
-      <PopoverTrigger
-        disabled={disabled}
-        data-testid="mode-picker"
-        aria-label={t.accessMode}
-        title={t.sandboxOptions[mode.sandbox]}
-        className={`flex min-w-0 max-w-full shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs hover:bg-accent disabled:opacity-50 ${full ? "text-destructive" : "text-muted-foreground"}`}
-      >
-        <Icon className="size-3.5" />
-        {/* a phone's rail has no room for the words: the shield says it, the popover names it */}
-        <span className="hidden truncate sm:inline">{t.sandboxOptions[mode.sandbox]}</span>
-        {mode.networkAccess && mode.sandbox === "workspace_write" ? <Globe className="size-3" /> : null}
-        {!mode.webSearch ? <span className="text-[10px]">{t.noWebSearch}</span> : null}
-        {!mode.multiAgent ? <span className="text-[10px]">{t.noMultiAgent}</span> : null}
-        {mode.approvalPolicy === "auto_accept" ? <span className="text-[10px] text-destructive">{t.autoAcceptBadge}</span> : !mode.autoReview ? <span className="text-[10px]">{t.noAutoReview}</span> : null}
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 space-y-4" data-testid="mode-popover">
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      data-testid="mode-picker"
+      aria-label={t.accessMode}
+      title={t.sandboxOptions[mode.sandbox]}
+      className={`flex min-w-0 max-w-full shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs hover:bg-accent disabled:opacity-50 ${full ? "text-destructive" : "text-muted-foreground"}`}
+      {...rest}
+    >
+      <Icon className="size-3.5" />
+      {/* the short name on a phone's rail, the full one where there is room — never the icon alone */}
+      <span className="truncate sm:hidden">{t.sandboxShort[mode.sandbox]}</span>
+      <span className="hidden truncate sm:inline">{t.sandboxOptions[mode.sandbox]}</span>
+      {mode.networkAccess && mode.sandbox === "workspace_write" ? <Globe className="size-3" /> : null}
+      {!mode.webSearch ? <span className="text-[10px]">{t.noWebSearch}</span> : null}
+      {!mode.multiAgent ? <span className="text-[10px]">{t.noMultiAgent}</span> : null}
+      {mode.approvalPolicy === "auto_accept" ? <span className="text-[10px] text-destructive">{t.autoAcceptBadge}</span> : !mode.autoReview ? <span className="text-[10px]">{t.noAutoReview}</span> : null}
+    </button>
+  );
+}
+
+function ModeForm({ mode, onChange, started }: { mode: AccessMode; onChange: (mode: AccessMode) => void; started: boolean }) {
+  return (
+    <div className="space-y-4">
         <fieldset className="space-y-2">
           <legend className="text-xs font-medium">{t.sandbox}</legend>
           <RadioGroup value={mode.sandbox} onValueChange={(v) => onChange({ ...mode, sandbox: v as AccessMode["sandbox"] })}>
@@ -91,7 +136,6 @@ export function ModePicker({ mode, onChange, disabled = false, started = false }
           <Switch id="mode-auto-review" checked={mode.autoReview} disabled={started || mode.approvalPolicy === "auto_accept"} onCheckedChange={(v) => onChange({ ...mode, autoReview: v })} />
         </div>
         <p className="text-muted-foreground text-xs">{started ? t.modeHintStarted : t.modeHint}</p>
-      </PopoverContent>
-    </Popover>
+    </div>
   );
 }

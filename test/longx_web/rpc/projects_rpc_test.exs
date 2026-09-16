@@ -419,6 +419,10 @@ defmodule LongxWeb.ProjectsRpcTest do
         })
 
       assert_receive {:codex, _, "item/commandExecution/requestApproval", _}, 10_000
+      # the preview is the Tracker's (from the first user message), a moment later
+      assert_eventually(fn ->
+        Ash.get!(Longx.Projects.Thread, thread_id).preview == "approve make"
+      end)
 
       assert %{"success" => true, "data" => %{"threads" => [running]}} =
                rpc(conn, "list_running_threads", %{"fields" => ["threads"]})
@@ -478,6 +482,75 @@ defmodule LongxWeb.ProjectsRpcTest do
   end
 
   describe "retracting a turn" do
+    test "steer_turn: a message while a turn runs goes into it; nothing running is not_running on threadId",
+         %{conn: conn, dir: dir} do
+      project = create!(conn, dir)
+      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
+
+      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
+        rpc(conn, "start_thread", %{
+          "fields" => ["id", "codexThreadId"],
+          "input" => %{"projectId" => project["id"]}
+        })
+
+      :ok = Longx.Codex.Thread.subscribe(codex_id)
+
+      %{"success" => true} =
+        rpc(conn, "send_message", %{
+          "fields" => ["id"],
+          "input" => %{"threadId" => thread_id, "text" => "stall"}
+        })
+
+      assert_receive {:codex, _, "item/agentMessage/delta", _}, 5_000
+
+      assert %{"success" => true, "data" => %{"codexTurnId" => turn_id}} =
+               rpc(conn, "steer_turn", %{
+                 "fields" => ["codexTurnId"],
+                 "input" => %{"threadId" => thread_id, "text" => "还有这个"}
+               })
+
+      assert is_binary(turn_id)
+
+      assert_receive {:codex, _, "item/completed",
+                      %{
+                        "turnId" => ^turn_id,
+                        "item" => %{"type" => "userMessage", "content" => [%{"text" => "还有这个"}]}
+                      }},
+                     5_000
+
+      {:ok, codex} = Longx.Codex.Pool.connection_for_thread(codex_id)
+      Longx.Codex.Connection.notify(codex, "fake/continue", %{})
+      assert_receive {:codex, _, "turn/completed", %{"turn" => %{"id" => ^turn_id}}}, 5_000
+      # the row settles a moment after the event (the Tracker's git call)
+      assert_eventually(fn ->
+        hd(Longx.Projects.list_turns!(Ash.get!(Longx.Projects.Thread, thread_id))).status !=
+          :in_progress
+      end)
+
+      assert %{
+               "success" => false,
+               "errors" => [%{"fields" => ["threadId"], "message" => "not_running"}]
+             } =
+               rpc(conn, "steer_turn", %{
+                 "fields" => ["codexTurnId"],
+                 "input" => %{"threadId" => thread_id, "text" => "late"}
+               })
+    end
+
+    defp assert_eventually(fun, attempts \\ 200) do
+      cond do
+        fun.() ->
+          :ok
+
+        attempts == 0 ->
+          flunk("condition never held")
+
+        true ->
+          Process.sleep(25)
+          assert_eventually(fun, attempts - 1)
+      end
+    end
+
     test "retract_turn stops a turn nothing came back for and hands the text back; a turn with output says has_output",
          %{
            conn: conn,

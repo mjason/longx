@@ -10,6 +10,11 @@ defmodule Longx.System.Status do
     type_name "SystemStatus"
   end
 
+  @browser_fields [
+    allow_private_network: [type: :boolean, allow_nil?: false],
+    available: [type: :boolean, allow_nil?: false]
+  ]
+
   @upgrade_fields [
     current: [type: :string, allow_nil?: false],
     installed: [type: :boolean, allow_nil?: false],
@@ -294,6 +299,45 @@ defmodule Longx.System.Status do
     end
 
     # the GitHub token for the release check (blank removes it); never read back
+    # Settings → 工具: the built-in browser (obscura) — whether it may fetch
+    # private / loopback addresses. Off is the SSRF guard; on is needed on a
+    # fake-ip network (a VPN resolving every site to a private address),
+    # since obscura has no per-range allowance
+    action :browser_settings, :map do
+      constraints fields: @browser_fields
+      run fn _input, _ -> {:ok, browser_settings()} end
+    end
+
+    action :set_browser_private_network, :map do
+      constraints fields: @browser_fields
+      argument :enabled, :boolean, allow_nil?: false
+
+      run fn input, _ ->
+        :ok = Longx.Browser.set_allow_private_network(input.arguments.enabled)
+        {:ok, browser_settings()}
+      end
+    end
+
+    # Settings → 请求记录: the gateway's last requests (Longx.AI.Gateway.Log) —
+    # what codex asked the provider for, newest first; entries are untyped
+    # maps (arrays of typed maps are not selectable in ash_typescript 0.18)
+    action :gateway_requests, :map do
+      constraints fields: [
+                    requests: [type: {:array, :map}, allow_nil?: false],
+                    keep: [type: :integer, allow_nil?: false]
+                  ]
+
+      argument :limit, :integer, default: 100
+
+      run fn input, _ ->
+        {:ok,
+         %{
+           requests: Longx.AI.Gateway.Log.recent(input.arguments.limit) |> Enum.map(&camelize/1),
+           keep: Longx.AI.Gateway.Log.keep()
+         }}
+      end
+    end
+
     action :set_github_token, :map do
       constraints fields: @upgrade_fields
       argument :token, :string
@@ -305,6 +349,13 @@ defmodule Longx.System.Status do
         end
       end
     end
+  end
+
+  defp browser_settings do
+    %{
+      allow_private_network: Longx.Browser.allow_private_network?(),
+      available: Longx.Browser.available?()
+    }
   end
 
   defp upgrade_status do

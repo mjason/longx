@@ -8,6 +8,8 @@
 #   "ask <question>"   ask the client a question (item/tool/requestUserInput with one
 #                      question `q1`), then say the answer back
 #   "wait"             start the turn and produce nothing (until turn/interrupt)
+#   turn/steer         input for the turn in flight: a userMessage item on it,
+#                      remembered under thread/read's `steers`; refused when over
 #   "stall"            emit 3 deltas, wait for a `fake/continue` notification,
 #                      then finish
 #   "slow <ms>"        sleep <ms> before answering turn/start
@@ -288,6 +290,7 @@ defmodule FakeAppServer do
         "lastReview" => Map.get(entry, :last_review),
         "approvedGuardianEvents" => Map.get(entry, :approved_guardian, []),
         "settings" => Map.get(entry, :settings),
+        "steers" => Map.get(entry, :steers, %{}),
         "watches" => Map.get(state, :watches, %{}),
         "turnsListCalls" => Map.get(entry, :turns_list_calls, 0),
         "compacted" => Map.get(entry, :compacted, 0)
@@ -560,6 +563,46 @@ defmodule FakeAppServer do
     }
 
     update_in(state, [:threads, thread_id, :turns], &[recorded | &1 || []])
+  end
+
+  # turn/steer: input added to the turn in flight — codex checks the expected
+  # turn is the active one, emits the user message on that turn and the
+  # model sees it at its next request; a finished turn is refused
+  defp handle(
+         %{
+           "id" => id,
+           "method" => "turn/steer",
+           "params" => %{"threadId" => thread_id, "expectedTurnId" => turn_id, "input" => input}
+         },
+         state
+       ) do
+    entry = Map.get(state.threads, thread_id, %{})
+    started? = Map.has_key?(entry[:texts] || %{}, turn_id)
+    finished? = Enum.any?(entry[:turns] || [], &(&1["id"] == turn_id))
+
+    if started? and not finished? do
+      text = input |> Enum.map(& &1["text"]) |> Enum.join("")
+      n = length(get_in(entry, [:steers, turn_id]) || []) + 1
+
+      item = %{
+        "id" => "steer_#{turn_id}_#{n}",
+        "type" => "userMessage",
+        "content" => [%{"type" => "text", "text" => text}]
+      }
+
+      reply(id, %{"turnId" => turn_id})
+      notify("item/started", %{"threadId" => thread_id, "turnId" => turn_id, "item" => item})
+      notify("item/completed", %{"threadId" => thread_id, "turnId" => turn_id, "item" => item})
+
+      update_in(state, [:threads, thread_id], fn e ->
+        Map.update(e, :steers, %{turn_id => [text]}, fn m ->
+          Map.update(m, turn_id, [text], fn l -> l ++ [text] end)
+        end)
+      end)
+    else
+      error(id, -32600, "no active turn to steer")
+      state
+    end
   end
 
   # fuzzyFileSearch: the files under the roots whose relative path contains

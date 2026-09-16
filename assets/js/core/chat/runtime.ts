@@ -1,17 +1,17 @@
 // `useCodexRuntime`: one hook that turns a project + the thread in the
 // route into an assistant-ui runtime — the same shape as
 // @assistant-ui/react-opencode (ExternalStoreRuntime over a coding-agent
-// server): the thread list, the live view, the composer queue, the
+// server): the thread list, the live view, the
 // per-turn model and the extras renderers call back into. DOM-free; the
 // router comes in as `onOpenThread`, so a React Native app can reuse it.
 import {
-  createMessageQueue,
   useExternalStoreRuntime,
   type AppendMessage,
   type AssistantRuntime,
 } from "@assistant-ui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createSteerQueue } from "./steerQueue";
 import { archiveThread, deleteThread, renameThread } from "@/ash_rpc";
 import { queryKeys, unwrap, useSkills, useStartThread, useThreads } from "@/core/projects";
 import {
@@ -220,15 +220,11 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     [rows, threadId, threads.isPending, onOpenThread, invalidate],
   );
 
-  // messages sent while a turn runs wait in assistant-ui's queue and go out
-  // through the adapter's onNew once it settles; the driver reads the
-  // latest adapter through a ref because the adapter is rebuilt per view
-  const onNewRef = useRef<(message: AppendMessage) => Promise<void>>(
-    async () => {},
-  );
-  const [queue] = useState(() =>
-    createMessageQueue({ run: (message) => void onNewRef.current(message) }),
-  );
+  // a message while a turn runs goes into that turn (the adapter steers it):
+  // the "queue" is what lets the composer send while running and holds
+  // nothing; it reads the latest adapter through a ref (rebuilt per view)
+  const onNewRef = useRef<(message: AppendMessage) => Promise<void>>(async () => {});
+  const [queue] = useState(() => createSteerQueue((message) => onNewRef.current(message)));
   // what the composer can take: images (to the model as data urls), text
   // files (inlined) and any other file (uploaded to the server, its path in
   // the message), and the browser's speech recognition where it exists —
@@ -282,7 +278,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         onRetract,
         refetch,
         threadList,
-        queue: queue.adapter,
+        queue,
         attachments,
         dictation,
         ...(skills ? { skills } : {}),
@@ -314,14 +310,6 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   );
   onNewRef.current = adapter.onNew;
   const runtime = useExternalStoreRuntime(adapter);
-
-  const running = adapter.isRunning ?? false;
-  const wasRunning = useRef(running);
-  useEffect(() => {
-    if (!wasRunning.current && running) queue.notifyBusy();
-    if (wasRunning.current && !running) queue.notifyIdle();
-    wasRunning.current = running;
-  }, [running, queue]);
 
   const awaiting =
     view.requests.length > 0 ||

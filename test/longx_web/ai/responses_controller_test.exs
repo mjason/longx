@@ -121,6 +121,71 @@ defmodule LongxWeb.AI.ResponsesControllerTest do
              ]
     end
 
+    test "every request lands in the gateway log with its outcome — a refused one too", %{
+      conn: conn,
+      bypass: bypass,
+      provider: provider
+    } do
+      Longx.AI.Gateway.Log.clear()
+      configure_default!(provider)
+
+      Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
+        up =
+          up
+          |> Plug.Conn.put_resp_content_type("text/event-stream")
+          |> Plug.Conn.send_chunked(200)
+
+        {:ok, up} = Plug.Conn.chunk(up, hd(@sse))
+        up
+      end)
+
+      request =
+        @request
+        |> Map.put("reasoning", %{"effort" => "low"})
+        |> Map.put("client_metadata", %{
+          "thread_id" => "thr_9",
+          "turn_id" => "turn_9",
+          "x-codex-turn-metadata" => ~s({"request_kind":"agent"})
+        })
+
+      assert conn |> authed() |> post_json(request) |> Map.fetch!(:status) == 200
+
+      assert %{"success" => true, "data" => %{"requests" => [logged]}} =
+               build_conn()
+               |> put_req_header("content-type", "application/json")
+               |> post(
+                 "/rpc/run",
+                 Jason.encode!(%{
+                   "action" => "gateway_requests",
+                   "fields" => ["requests"],
+                   "input" => %{"limit" => 10}
+                 })
+               )
+               |> json_response(200)
+
+      assert %{
+               "model" => "longx",
+               "upstreamId" => "real-model",
+               "effort" => "low",
+               "threadId" => "thr_9",
+               "turnId" => "turn_9",
+               "requestKind" => "agent",
+               "status" => 200,
+               "tools" => ["exec_command", "web_search"]
+             } = logged
+
+      assert is_integer(logged["durationMs"])
+
+      # refused before any upstream: still logged, with why
+      assert build_conn()
+             |> authed()
+             |> post_json(Map.put(@request, "model", "nope"))
+             |> Map.fetch!(:status) == 400
+
+      assert [%{model: "nope", status: 400, error: "unknown model" <> _} | _] =
+               Longx.AI.Gateway.Log.recent(5)
+    end
+
     test "a provider with hosted web search gets the web_search tool", %{
       conn: conn,
       bypass: bypass,

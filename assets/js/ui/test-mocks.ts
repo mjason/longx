@@ -179,6 +179,17 @@ export function rpcMock() {
         },
       ]),
     ),
+    gatewayRequests: vi.fn(async () =>
+      ok({
+        keep: 1000,
+        requests: [
+          { id: 2, at: "2026-09-16T10:00:05Z", threadId: "thr_1", turnId: "turn_1", requestKind: "agent", model: "deepseek-flash", upstreamId: "deepseek-v4-flash", provider: "deepseek", effort: "low", summary: "auto", tools: ["exec_command", "memory"], inputItems: 12, inputChars: 4000, instructionsChars: 900, maxOutputTokens: 4096, status: 200, durationMs: 1234, error: null },
+          { id: 1, at: "2026-09-16T10:00:00Z", threadId: null, turnId: null, requestKind: null, model: "nope", upstreamId: null, provider: null, effort: null, summary: null, tools: [], inputItems: 0, inputChars: 2, instructionsChars: 0, maxOutputTokens: null, status: 400, durationMs: 1, error: "unknown model \"nope\"" },
+        ],
+      }),
+    ),
+    browserSettings: vi.fn(async () => ok({ allowPrivateNetwork: false, available: true })),
+    setBrowserPrivateNetwork: vi.fn(async ({ input }: { input: { enabled: boolean } }) => ok({ allowPrivateNetwork: input.enabled, available: true })),
     setToolEnabled: vi.fn(
       async ({
         input,
@@ -255,6 +266,7 @@ export function rpcMock() {
     reviewThread: vi.fn(async () => ok({ id: "turn-review" })),
     interruptTurn: vi.fn(async () => ok(null)),
     retractTurn: vi.fn(async () => ok({ text: "look at pandas" })),
+    steerTurn: vi.fn(async () => ok({ codexTurnId: "turn_2" })),
     respond: vi.fn(async () => ok(null)),
     answerRequest: vi.fn(async () => ok(null)),
     deleteThread: vi.fn(async () => ok(null)),

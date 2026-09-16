@@ -9,6 +9,7 @@ vi.mock("@/core/socket", async () =>
   (await import("@/ui/test-mocks")).socketMock(),
 );
 import {
+  setBrowserPrivateNetwork,
   applyPreset,
   checkModel,
   createModel,
@@ -360,6 +361,38 @@ describe("SettingsPage", () => {
     await user.click(await screen.findByRole("option", { name: "high" }));
     await waitFor(() => expect(setReviewModel).toHaveBeenLastCalledWith(expect.objectContaining({ input: { modelSlug: "glm-5", effort: "high" } })));
     vi.mocked(reviewSettings).mockResolvedValue(ok({ modelSlug: null, effort: null }) as never);
+  });
+
+  test("requests: the gateway's last requests — model, effort, tools, outcome — newest first", async () => {
+    setViewport(1280);
+    renderAt("/settings/requests");
+    // the skeleton carries the test id until the data is in: query the rows on the screen
+    const rows = await screen.findAllByTestId("request-row");
+    const section = screen.getByTestId("section-requests");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("deepseek-flash");
+    expect(rows[0]).toHaveTextContent("deepseek-v4-flash");
+    expect(rows[0]).toHaveTextContent("low");
+    expect(rows[0]).toHaveTextContent("200");
+    expect(rows[0]).toHaveTextContent("1 s");
+    expect(rows[1]).toHaveTextContent("400");
+    expect(rows[1]).toHaveTextContent("unknown model");
+    // the tools behind a click
+    const user = userEvent.setup();
+    await user.click(within(rows[0]!).getByRole("button", { name: /详情/ }));
+    expect(await within(section).findByText(/exec_command, memory/)).toBeInTheDocument();
+  });
+
+  test("tools: the built-in browser's private-network switch (a fake-ip network needs it)", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/tools");
+    const card = await screen.findByTestId("browser-settings");
+    const sw = within(card).getByRole("switch", { name: /私网|局域网/ });
+    expect(sw).not.toBeChecked();
+    await user.click(sw);
+    await waitFor(() => expect(setBrowserPrivateNetwork).toHaveBeenCalledWith(expect.objectContaining({ input: { enabled: true } })));
+    await waitFor(() => expect(within(card).getByRole("switch", { name: /私网|局域网/ })).toBeChecked());
   });
 
   test("tools: the catalogue with a switch per tool", async () => {

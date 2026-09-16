@@ -39,6 +39,7 @@ defmodule Longx.Projects do
       rpc_action :start_thread, :start_thread
       rpc_action :send_message, :send_message
       rpc_action :interrupt_turn, :interrupt_turn
+      rpc_action :steer_turn, :steer_turn
       rpc_action :retract_turn, :retract_turn
       rpc_action :compact_thread, :compact_thread
       rpc_action :review_thread, :review_thread
@@ -671,6 +672,51 @@ defmodule Longx.Projects do
     do: complete_turn!(turn, %{status: :interrupted, completed_at: DateTime.utc_now()})
 
   defp unretract!(turn, _reason), do: complete_turn!(turn, %{status: :in_progress})
+
+  @doc """
+  A message while a turn runs goes *into* that turn (`turn/steer`, what
+  the Codex app does): codex hands it to the model at its next request and
+  shows it as a user message on the running turn — no new Turn row.
+  `{:error, :not_running}` when nothing runs (send it as a turn instead).
+  """
+  @spec steer_message(Thread.t(), String.t(), keyword) ::
+          {:ok, %{codex_turn_id: String.t()}} | {:error, :not_running | term}
+  def steer_message(%Thread{} = thread, text, opts \\ []) when is_binary(text) do
+    thread = Ash.get!(Thread, thread.id, load: :project)
+
+    running =
+      thread
+      |> list_turns!(include_reverted: false)
+      |> Enum.find(&(&1.status == :in_progress))
+
+    with %Turn{codex_turn_id: turn_id} <- running || {:error, :not_running},
+         {:ok, conn} <- thread_connection(thread, opts),
+         :ok <-
+           steer_or_gone(
+             thread.codex_thread_id,
+             turn_id,
+             text,
+             conn,
+             Keyword.get(opts, :images, [])
+           ) do
+      touch_thread!(thread, %{last_activity_at: DateTime.utc_now()})
+      {:ok, %{codex_turn_id: turn_id}}
+    end
+  end
+
+  # codex refuses a steer once the turn is over (the row may lag a moment)
+  defp steer_or_gone(codex_id, turn_id, text, conn, images) do
+    case Longx.Codex.Thread.steer(codex_id, turn_id, text, conn: conn, images: images) do
+      :ok ->
+        :ok
+
+      {:error, %Longx.Codex.Error{message: message}} when is_binary(message) ->
+        if message =~ "no active turn", do: {:error, :not_running}, else: {:error, message}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
 
   # in a task of its own: the wait for turn/completed subscribes to the thread's
   # topic, and the caller's mailbox stays out of it

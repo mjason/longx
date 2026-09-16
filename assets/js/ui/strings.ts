@@ -96,6 +96,12 @@ export const t = {
     workspace_write: "可写工作区",
     danger_full_access: "完全访问（危险）",
   } as Record<string, string>,
+  /** the rail on a phone */
+  sandboxShort: {
+    read_only: "只读",
+    workspace_write: "可写",
+    danger_full_access: "完全访问",
+  } as Record<string, string>,
   approvalOptions: {
     on_request: "按需询问",
     auto_accept: "全部放行（申请一律通过，不审核不询问）",
@@ -544,6 +550,7 @@ export const t = {
     processes: "codex 进程",
     sandbox: "沙箱与权限",
     update: "版本与更新",
+    requests: "请求记录",
     appearance: "外观",
   } as Record<string, string>,
   processesPage: {
@@ -731,11 +738,30 @@ export const t = {
     saved: "已保存",
     deleted: "已删除",
   },
+  requestsPage: {
+    hint: (keep: number) => `网关最近 ${keep} 次发给模型的请求：codex 实际要了什么模型、思考档位、工具，结果如何。看这里能确认界面上的选择是否真的发出去了。只在内存里，重启即清。`,
+    empty: "还没有请求",
+    refresh: "刷新",
+    columns: { at: "时间", model: "模型", effort: "思考", kind: "类型", status: "结果", duration: "耗时", details: "详情" },
+    details: "详情",
+    thread: "会话",
+    turn: "轮次",
+    tools: "工具",
+    input: (items: number, chars: number) => `输入 ${items} 项 · ${chars} 字符`,
+    instructions: (chars: number) => `指令 ${chars} 字符`,
+    maxOutput: (n: number) => `max_output_tokens ${n}`,
+    noTools: "没有工具",
+  },
   toolsPage: {
     hint: "注册在 Longx 里的 Elixir 工具。打开的工具会提供给每个会话（项目可以再挑选）；新工具默认关闭。",
     enabled: "已开启",
     disabled: "已关闭",
     empty: "没有注册的工具",
+    browserTitle: "内置浏览器（obscura）",
+    browserHint: "网页搜索的 open 和 browser_fetch 工具用它渲染页面。",
+    browserUnavailable: "这台 Longx 没有装浏览器（mix obscura.fetch）。",
+    privateNetwork: "允许访问私网 / 局域网地址",
+    privateNetworkHint: "默认拒绝 127.0.0.1、192.168.x.x 这类地址（防 SSRF）。在 fake-ip 的网络环境里（VPN 把所有域名解析到私网地址），不打开这个开关所有页面都打不开；obscura 只有这一个全有全无的开关。",
   },
   sandboxPage: {
     hint: "codex 用 bubblewrap 把命令关在项目目录里跑。它需要内核允许非特权用户命名空间；不允许的话每条沙箱命令都会被 codex 拒绝，只能用“完全访问”模式。",

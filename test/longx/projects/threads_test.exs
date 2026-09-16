@@ -853,6 +853,38 @@ defmodule Longx.Projects.ThreadsTest do
       assert_receive {:notify, %{kind: "turn_completed", url: ^url}}, 5_000
     end
 
+    test "steer_message/3: a message while a turn runs goes into that turn (turn/steer), not a new one; with nothing running it is refused",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      :ok = Longx.Codex.Thread.subscribe(thread.codex_thread_id)
+      {:ok, turn} = Projects.send_message(thread, "stall", conn: conn)
+      assert_receive {:codex, _, "item/agentMessage/delta", _}, 5_000
+
+      assert {:ok, %{codex_turn_id: id}} =
+               Projects.steer_message(thread, "也看看 README", conn: conn)
+
+      assert id == turn.codex_turn_id
+      # the message shows in the transcript, on the same turn
+      assert_receive {:codex, _, "item/completed",
+                      %{
+                        "turnId" => ^id,
+                        "item" => %{
+                          "type" => "userMessage",
+                          "content" => [%{"text" => "也看看 README"}]
+                        }
+                      }},
+                     5_000
+
+      assert read_thread!(conn, thread.codex_thread_id)["steers"] == %{id => ["也看看 README"]}
+      # no second Turn row
+      assert length(Projects.list_turns!(thread)) == 1
+
+      Longx.Codex.Connection.notify(conn, "fake/continue", %{})
+      eventually(turn_done(turn.id))
+      assert {:error, :not_running} = Projects.steer_message(thread, "late", conn: conn)
+    end
+
     test "a turn reverted while it was still ending stays reverted when its turn/completed lands",
          %{dir: dir, conn: conn} do
       project = git_project!(dir)

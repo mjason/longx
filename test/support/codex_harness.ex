@@ -34,10 +34,19 @@ defmodule Longx.Test.CodexHarness do
   end
 
   @doc "A fresh CODEX_HOME under ./data (codex refuses tmp dirs), removed after the test."
+  # codex's memory pipeline is off in these homes unless a test asks for it:
+  # its own model requests (extraction, consolidation — through the same
+  # gateway, at the same Bypass) would interleave with the turn a test
+  # watches and be taken for the model's next request
   def prepare_home!(gateway_url, opts \\ []) do
     dir = Path.join(Path.expand("data"), "codex_home_test_#{System.unique_integer([:positive])}")
     on_exit(fn -> File.rm_rf!(dir) end)
-    {:ok, home} = Home.prepare([dir: dir, gateway_url: gateway_url] ++ opts)
+
+    {:ok, home} =
+      Home.prepare(
+        [dir: dir, gateway_url: gateway_url] ++ Keyword.put_new(opts, :memories, false)
+      )
+
     home
   end
 

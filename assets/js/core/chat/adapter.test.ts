@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import { createSteerQueue } from "./steerQueue";
 import { buildAdapter, textOf } from "./adapter";
 import { emptyView } from "./thread";
 
@@ -10,8 +11,9 @@ vi.mock("@/ash_rpc", () => ({
   approveReview: vi.fn(async () => ({ success: true, data: null })),
   setGoal: vi.fn(async () => ({ success: true, data: { objective: "x", status: "active" } })),
   retractTurn: vi.fn(async () => ({ success: true, data: { text: "look at it" } })),
+  steerTurn: vi.fn(async () => ({ success: true, data: { codexTurnId: "turn_9" } })),
 }));
-import { answerRequest, approveReview, interruptTurn, respond, retractTurn, sendMessage, setGoal } from "@/ash_rpc";
+import { answerRequest, approveReview, interruptTurn, respond, retractTurn, sendMessage, setGoal, steerTurn } from "@/ash_rpc";
 
 const target = { threadId: "row-1", codexThreadId: "thr_1" };
 const append = (text: string) =>
@@ -172,6 +174,23 @@ describe("chat adapter", () => {
         },
       }),
     );
+  });
+
+  test("onNew while a turn runs steers the message into it; a turn that ended meanwhile makes it a new turn", async () => {
+    vi.mocked(sendMessage).mockClear();
+    const running = buildAdapter({
+      target,
+      view: { ...emptyView("thr_1"), turn: { id: "turn_9", status: "inProgress" } },
+      model: null,
+    });
+    await running.onNew({ role: "user", content: [{ type: "text", text: "also this" }], parentId: null, sourceId: null, runConfig: {} } as never);
+    expect(steerTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", text: "also this" } }));
+    expect(sendMessage).not.toHaveBeenCalled();
+
+    // codex says the turn is over: the message becomes a turn of its own
+    vi.mocked(steerTurn).mockResolvedValueOnce({ success: false, errors: [{ type: "invalid", message: "not_running", shortMessage: "not_running", vars: {}, fields: ["threadId"], path: [], details: {} }] } as never);
+    await running.onNew({ role: "user", content: [{ type: "text", text: "late" }], parentId: null, sourceId: null, runConfig: {} } as never);
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ text: "late" }) }));
   });
 
   test("onCancel interrupts the turn in flight only", async () => {
@@ -385,13 +404,7 @@ describe("chat adapter", () => {
   test("loading, send-disabled, refetch, thread list, queue and extras pass through to the runtime", async () => {
     const refetch = vi.fn(async () => {});
     const threadList = { threadId: "row-1", threads: [] };
-    const queue = {
-      items: [],
-      steerItems: [],
-      enqueue: () => {},
-      steer: () => {},
-      move: () => {},
-    } as never;
+    const queue = createSteerQueue(async () => {});
     const adapter = buildAdapter({
       target,
       view: emptyView("thr_1"),
@@ -405,6 +418,7 @@ describe("chat adapter", () => {
     expect(adapter.isLoading).toBe(true);
     expect(adapter.isSendDisabled).toBe(true);
     expect(adapter.adapters?.threadList).toBe(threadList);
+    // the hold-nothing queue (steerQueue) is what lets the composer send while a turn runs
     expect(adapter.queue).toBe(queue);
     await adapter.onRefetchThread!();
     expect(refetch).toHaveBeenCalled();

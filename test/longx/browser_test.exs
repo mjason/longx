@@ -4,7 +4,7 @@ defmodule Longx.BrowserTest do
   short-lived process per fetch under `Longx.Shim`, permits from
   `Longx.Browser.Pool`. The binary is played by `test/support/fake_obscura.sh`.
   """
-  use ExUnit.Case, async: false
+  use Longx.DataCase, async: false
 
   alias Longx.Browser
   alias Longx.Browser.Pool
@@ -57,6 +57,29 @@ defmodule Longx.BrowserTest do
 
       assert {:ok, %{format: :text, content: "Rendered\nHello from JS\n"}} =
                Browser.fetch("https://example.test/page", format: :text)
+    end
+
+    test "private addresses: refused unless the setting (or the config, or the call) allows them" do
+      Longx.Browser.set_allow_private_network(false)
+      assert {:ok, %{stderr: stderr}} = Browser.fetch("https://example.test/page")
+      refute stderr =~ "--allow-private-network"
+      assert stderr =~ "OBSCURA_ALLOW_PRIVATE_NETWORK=\n"
+
+      # the person's switch (Settings → 工具): a fake-ip network resolves every
+      # site to a private address, and obscura has no per-range allowance
+      Longx.Browser.set_allow_private_network(true)
+      assert Longx.Browser.allow_private_network?()
+      assert {:ok, %{stderr: stderr}} = Browser.fetch("https://example.test/page")
+      assert stderr =~ "--allow-private-network"
+      assert stderr =~ "OBSCURA_ALLOW_PRIVATE_NETWORK=1"
+
+      # the call can say so itself (tests against a local Bypass do)
+      Longx.Browser.set_allow_private_network(false)
+
+      assert {:ok, %{stderr: stderr}} =
+               Browser.fetch("https://example.test/page", allow_private_network: true)
+
+      assert stderr =~ "--allow-private-network"
     end
 
     test "a navigation failure is an error with obscura's message" do

@@ -188,13 +188,15 @@ defmodule Longx.Codex.Thread do
          do: :ok
   end
 
-  @doc "Adds input to the in-flight turn without starting a new one."
+  @doc "Adds input to the in-flight turn without starting a new one (`images:` as on `send/3`)."
   @spec steer(String.t(), String.t(), String.t(), keyword) :: :ok | {:error, term}
   def steer(thread_id, turn_id, text, opts \\ []) do
+    images = for url <- Keyword.get(opts, :images, []), do: %{"type" => "image", "url" => url}
+
     params = %{
       "threadId" => thread_id,
       "expectedTurnId" => turn_id,
-      "input" => [%{"type" => "text", "text" => text}]
+      "input" => [%{"type" => "text", "text" => text} | images]
     }
 
     with {:ok, conn} <- conn(thread_id, opts),

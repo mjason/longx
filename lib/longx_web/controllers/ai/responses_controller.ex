@@ -8,29 +8,51 @@ defmodule LongxWeb.AI.ResponsesController do
 
   alias Longx.AI
   alias Longx.AI.Gateway
+  alias Longx.AI.Gateway.Log
 
+  # every request is remembered (Gateway.Log): what codex asked for and what
+  # came of it, refused ones included
   def create(conn, _params) do
-    with {:ok, target} <- AI.resolve_target(model_name(conn.body_params)),
-         {:ok, upstream} <- Gateway.prepare(conn.body_params, target) do
-      Gateway.stream(upstream, conn)
-    else
-      {:error, :invalid_request} ->
-        Gateway.error(conn, 400, "body is not a Responses API request")
+    body = conn.body_params
+    resolved = AI.resolve_target(model_name(body))
+    id = Log.begin(body, log_target(resolved))
 
-      {:error, {:unknown_model, name}} ->
-        Gateway.error(
-          conn,
-          400,
-          "unknown model #{inspect(name)} — not a model slug configured in Longx"
-        )
+    conn =
+      with {:ok, target} <- resolved,
+           {:ok, upstream} <- Gateway.prepare(body, target) do
+        Gateway.stream(upstream, conn)
+      else
+        {:error, :invalid_request} ->
+          refuse(conn, 400, "body is not a Responses API request")
 
-      {:error, :no_default_model} ->
-        Gateway.error(conn, 503, "no default model configured — pick one in Longx settings")
+        {:error, {:unknown_model, name}} ->
+          refuse(
+            conn,
+            400,
+            "unknown model #{inspect(name)} — not a model slug configured in Longx"
+          )
 
-      {:error, {:missing_api_key, slug}} ->
-        Gateway.error(conn, 503, "provider #{slug} has no API key configured")
-    end
+        {:error, :no_default_model} ->
+          refuse(conn, 503, "no default model configured — pick one in Longx settings")
+
+        {:error, {:missing_api_key, slug}} ->
+          refuse(conn, 503, "provider #{slug} has no API key configured")
+      end
+
+    Log.finish(id, %{status: conn.status, error: conn.private[:longx_gateway_error]})
+    conn
   end
+
+  defp refuse(conn, status, message) do
+    conn
+    |> Plug.Conn.put_private(:longx_gateway_error, message)
+    |> Gateway.error(status, message)
+  end
+
+  defp log_target({:ok, %AI.Target{model: upstream_id, provider_slug: slug}}),
+    do: %{upstream_id: upstream_id, provider: slug}
+
+  defp log_target(_), do: nil
 
   defp model_name(%{"model" => name}) when is_binary(name), do: name
   defp model_name(_), do: nil
