@@ -614,10 +614,12 @@ describe("SettingsPage", () => {
 
     // the upgrade: confirm, then the stages, then the new version comes up → reload
     const reload = vi.spyOn(page, "reload").mockImplementation(() => {});
+    // the downloading status answers two polls: under load one poll can go
+    // by between the text and the bar being looked at
+    const downloading = ok({ ...upgradeIdle, latest: "0.2.0", available: true, stage: "downloading", target: "0.2.0", progress: { received: 150000000, total: 500000000 } }) as never;
     vi.mocked(upgradeStatus)
-      .mockResolvedValueOnce(
-        ok({ ...upgradeIdle, latest: "0.2.0", available: true, stage: "downloading", target: "0.2.0", progress: { received: 150000000, total: 500000000 } }) as never,
-      )
+      .mockResolvedValueOnce(downloading)
+      .mockResolvedValueOnce(downloading)
       .mockResolvedValueOnce(
         ok({ ...upgradeIdle, latest: "0.2.0", available: true, stage: "installing", target: "0.2.0" }) as never,
       )

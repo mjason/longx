@@ -16,7 +16,11 @@ module.exports = function withReleaseSigning(config) {
           `\n        }\n        release {\n            storeFile file(System.getenv("LONGX_KEYSTORE"))\n            storePassword System.getenv("LONGX_KEYSTORE_PASSWORD")\n            keyAlias System.getenv("LONGX_KEY_ALIAS")\n            keyPassword System.getenv("LONGX_KEY_PASSWORD")\n        }\n    }`,
         ),
     );
-    gradle = gradle.replace(/(release \{[\s\S]*?signingConfig signingConfigs\.)debug/, "$1release");
+    // the release build type (the one under the "Caution!" comment), not the debug one
+    gradle = gradle.replace(
+      /(signed-apk-android\.\n\s*signingConfig signingConfigs\.)debug/,
+      "$1release",
+    );
     mod.modResults.contents = gradle;
     return mod;
   });
