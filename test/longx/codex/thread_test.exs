@@ -421,6 +421,7 @@ defmodule Longx.Codex.ThreadTest do
 
       # simulate a BEAM-side loss of the projection, then resume
       ThreadState.stop(thread_id)
+      Phoenix.PubSub.subscribe(Longx.PubSub, "codex:server")
       assert {:ok, ^thread_id} = Thread.resume(thread_id, conn: conn)
       snapshot = Thread.snapshot(thread_id)
 
@@ -430,6 +431,29 @@ defmodule Longx.Codex.ThreadTest do
              )
 
       assert snapshot.thread["id"] == thread_id
+      # the history came through the paginated list, not the deprecated whole read
+      refute_received {:codex_server, _, "deprecationNotice", _}
+      {:ok, read} = Connection.request(conn, "thread/read", %{"threadId" => thread_id})
+      assert read["thread"]["turnsListCalls"] >= 1
+    end
+
+    test "resume pages the history: a thread with more turns than one page comes back whole, in order",
+         %{conn: conn} do
+      {:ok, thread_id} = Thread.start(cwd: "/", conn: conn)
+      Thread.subscribe(thread_id)
+
+      for n <- 1..5 do
+        {:ok, turn_id} = Thread.send(thread_id, "say n#{n}", conn: conn)
+        assert_receive {:codex, _, "turn/completed", %{"turn" => %{"id" => ^turn_id}}}, 10_000
+      end
+
+      ThreadState.stop(thread_id)
+      assert {:ok, ^thread_id} = Thread.resume(thread_id, page_size: 2, conn: conn)
+
+      texts =
+        for %{"type" => "agentMessage", "text" => t} <- Thread.snapshot(thread_id).items, do: t
+
+      assert texts == ~w(n1 n2 n3 n4 n5)
     end
 
     test "resume carries the thread's access mode and developer instructions — codex would otherwise fall back to its defaults",

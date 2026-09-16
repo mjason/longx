@@ -82,7 +82,11 @@ defmodule Longx.Codex.Thread do
   end
 
   @doc """
-  Resumes a stored thread and rebuilds its `ThreadState` from `thread/read`.
+  Resumes a stored thread and rebuilds its `ThreadState` from codex's
+  history — `thread/read` for the thread itself, then `thread/turns/list`
+  oldest first, `page_size:` (default 100) turns with their items per page
+  (a whole-history `thread/read` is deprecated for paginated threads, which
+  every thread here is).
   Takes the same model / config options as `start/1` (`model_context_window:`,
   `reasoning_effort:`, `web_search:`, …): a resumed thread runs with what the
   model row says *now*, not what it was started with. **The access mode must
@@ -95,8 +99,9 @@ defmodule Longx.Codex.Thread do
   def resume(thread_id, opts \\ []) do
     conn = Keyword.fetch!(opts, :conn)
 
+    # the history comes through the paginated list below, not on the reply
     params =
-      %{"threadId" => thread_id}
+      %{"threadId" => thread_id, "excludeTurns" => true}
       |> put_if("cwd", Keyword.get(opts, :cwd))
       |> put_if(
         "sandbox",
@@ -111,15 +116,44 @@ defmodule Longx.Codex.Thread do
       |> put_config(opts)
 
     with {:ok, _} <- Connection.request(conn, "thread/resume", params),
-         {:ok, read} <-
-           Connection.request(conn, "thread/read", %{
-             "threadId" => thread_id,
-             "includeTurns" => true
-           }),
+         {:ok, %{"thread" => thread}} <-
+           Connection.request(conn, "thread/read", %{"threadId" => thread_id}),
+         {:ok, turns} <- list_turns(conn, thread_id, Keyword.get(opts, :page_size, 100)),
          {:ok, _} <- ThreadState.ensure(thread_id),
-         :ok <- ThreadState.backfill(thread_id, read) do
+         :ok <- ThreadState.backfill(thread_id, %{"thread" => Map.put(thread, "turns", turns)}) do
       note_auto_accept(thread_id, opts)
       {:ok, thread_id}
+    end
+  end
+
+  # every turn with its items, oldest first, following codex's cursor
+  defp list_turns(conn, thread_id, page_size, cursor \\ nil, acc \\ []) do
+    params =
+      %{
+        "threadId" => thread_id,
+        "limit" => page_size,
+        "sortDirection" => "asc",
+        "itemsView" => "full"
+      }
+      |> put_if("cursor", cursor)
+
+    case Connection.request(conn, "thread/turns/list", params) do
+      {:ok, %{"data" => page} = reply} when is_list(page) ->
+        acc = Enum.reverse(page, acc)
+
+        case reply["nextCursor"] do
+          next when is_binary(next) and page != [] ->
+            list_turns(conn, thread_id, page_size, next, acc)
+
+          _ ->
+            {:ok, Enum.reverse(acc)}
+        end
+
+      {:ok, other} ->
+        {:error, {:unexpected_reply, other}}
+
+      {:error, _} = error ->
+        error
     end
   end
 

@@ -581,8 +581,8 @@ React Native client planned on the same core code.
     params}` (tag = the project id under the pool). The Tracker asks each project's codex
     to watch its root once it is up (`fs/watch`, watch id = project id) and relays
     `fs/changed` as `Projects.broadcast_files_changed/2` → ProjectChannel `"files"` → the
-    client invalidates the tree and git status (`invalidateFiles`); `configWarning` /
-    `deprecationNotice` → `broadcast_notice/2` → `"notice"` → a toast; `model/rerouted`
+    client invalidates the tree and git status (`invalidateFiles`); `configWarning` →
+    `broadcast_notice/2` → `"notice"` → a toast (`deprecationNotice` is only logged); `model/rerouted`
     (thread-scoped) reaches the client as a signal (`useThreadView(_, onSignal)` →
     `ChatProvider` toast "模型已切换"). Dev aid: `config :longx, Longx.AI.Gateway, dump_requests_to:`
     writes what the model actually receives.
@@ -778,8 +778,12 @@ React Native client planned on the same core code.
     to ETS — no process hop, works even when the writer is stopped, and a restarted writer
     continues the sequence. Pending server requests are in the view with a `"requestId"`.
     **Page refresh / late join protocol: `subscribe` → `snapshot` (has `seq`) → render → apply
-    only events with `seq > snapshot.seq`.** `Thread.resume/2` rebuilds the view from
-    `thread/read`. Nothing is persisted to the DB yet; codex's own sqlite in CODEX_HOME is the
+    only events with `seq > snapshot.seq`.** `Thread.resume/2` rebuilds the view from codex's
+    **paginated history**: `thread/resume` with `excludeTurns: true`, `thread/read` for the
+    thread itself, then `thread/turns/list` oldest first (`itemsView: full`, `page_size:`
+    100 per page, following `nextCursor`) — a whole-history `thread/read` /
+    `thread/resume` is deprecated for paginated threads and codex says so with a
+    `deprecationNotice`, which the Tracker logs (never toasts: it is addressed to Longx). Nothing is persisted to the DB yet; codex's own sqlite in CODEX_HOME is the
     history. Single-user system: no thread ↔ user mapping; a thread ↔ project mapping is the
     likely future addition.
   - `Longx.Codex.Thread` is the API to use: `start/1` (`cwd:`, `approval_policy:

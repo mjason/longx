@@ -185,4 +185,29 @@ defmodule Longx.Codex.GoalsSkillsIntegrationTest do
 
     assert Enum.any?(paths, &String.ends_with?(&1, "changed.txt"))
   end
+
+  test "resume rebuilds the view through the paginated history — codex sends no deprecation notice for it",
+       %{bypass: bypass, gateway_url: gateway_url} do
+    Bypass.stub(bypass, "POST", "/v1/responses", fn conn ->
+      send_sse(conn, ResponsesFixture.assistant_message("ok"))
+    end)
+
+    home = prepare_home!(gateway_url)
+    conn = start_connection!(home)
+    Phoenix.PubSub.subscribe(Longx.PubSub, "codex:server")
+    thread_id = thread!(conn, home)
+
+    for n <- 1..3 do
+      {:ok, _} = Thread.send(thread_id, "message #{n}", conn: conn)
+      assert_receive {:codex, _, "turn/completed", _}, 60_000
+    end
+
+    ThreadState.stop(thread_id)
+    assert {:ok, ^thread_id} = Thread.resume(thread_id, cwd: home.dir, page_size: 2, conn: conn)
+    items = Thread.snapshot(thread_id).items
+    users = for %{"type" => "userMessage", "content" => [%{"text" => t} | _]} <- items, do: t
+    assert users == ["message 1", "message 2", "message 3"]
+    assert Enum.count(items, &(&1["type"] == "agentMessage")) == 3
+    refute_received {:codex_server, _, "deprecationNotice", _}
+  end
 end
