@@ -41,6 +41,7 @@ defmodule Longx.AI do
       rpc_action :create_provider, :create
       rpc_action :update_provider, :update
       rpc_action :delete_provider, :delete
+      rpc_action :discover_models, :discover_models
     end
 
     resource Model do
@@ -49,6 +50,8 @@ defmodule Longx.AI do
       rpc_action :update_model, :update
       rpc_action :make_default_model, :make_default
       rpc_action :check_model, :check_model
+      rpc_action :review_settings, :review_settings
+      rpc_action :set_review_model, :set_review_model
       rpc_action :delete_model, :delete
     end
 
@@ -191,6 +194,73 @@ defmodule Longx.AI do
   @spec placeholder_model() :: String.t()
   def placeholder_model, do: @placeholder_model
 
+  # codex's automatic approval review on a model of its own: the catalog
+  # entry every model names as its `auto_review_model_override` (built by
+  # Longx.Codex.Home from the row + level chosen here), resolved by the
+  # gateway to that model — or the default one while nothing is chosen
+  @review_model "longx-review"
+  @review_model_key "review_model"
+  @review_effort_key "review_effort"
+
+  @doc "The catalog slug codex's reviewer session asks the gateway for."
+  @spec review_model_slug() :: String.t()
+  def review_model_slug, do: @review_model
+
+  @doc """
+  The model (and the level, when pinned) codex's automatic approval review
+  runs on; nil = the thread's own model. Stored in `Longx.System.Setting`;
+  a model deleted since counts as none.
+  """
+  @spec review_model() :: %{model: Model.t(), effort: String.t() | nil} | nil
+  def review_model do
+    with {:ok, %{value: slug}} when is_binary(slug) <- Longx.System.get_setting(@review_model_key),
+         {:ok, %Model{} = model} <- get_model_by_slug(slug) do
+      effort =
+        case Longx.System.get_setting(@review_effort_key) do
+          {:ok, %{value: effort}} when is_binary(effort) and effort != "" -> effort
+          _ -> nil
+        end
+
+      %{model: Ash.load!(model, :provider), effort: effort}
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Chooses the reviewer model by slug (nil clears it) and, optionally, the
+  level it reviews at — one the model offers; nil leaves codex's rule (`low`
+  when offered, else the model's default). Takes effect on the next codex
+  start (the catalog is read at launch: `codex_info.stale`).
+  """
+  @spec set_review_model(String.t() | nil, String.t() | nil) ::
+          :ok | {:error, {:unknown_model, String.t()} | {:unknown_effort, String.t()}}
+  def set_review_model(nil, _effort) do
+    put_or_clear_setting(@review_model_key, nil)
+    put_or_clear_setting(@review_effort_key, nil)
+  end
+
+  def set_review_model(slug, effort) when is_binary(slug) do
+    with {:ok, _model, _} <- fetch_model(slug),
+         :ok <- check_effort(slug, effort),
+         {:ok, _} <- Longx.System.put_setting(@review_model_key, slug) do
+      put_or_clear_setting(@review_effort_key, effort)
+    end
+  end
+
+  defp put_or_clear_setting(key, nil) do
+    case Longx.System.get_setting(key) do
+      {:ok, setting} -> Longx.System.delete_setting!(setting)
+      _ -> :ok
+    end
+
+    :ok
+  end
+
+  defp put_or_clear_setting(key, value) do
+    with {:ok, _} <- Longx.System.put_setting(key, value), do: :ok
+  end
+
   @doc """
   The upstream to forward a request to, by the model name codex sent:
   `"longx"` (or nothing) is the global default model, anything else a
@@ -202,6 +272,13 @@ defmodule Longx.AI do
              :no_default_model | {:unknown_model, String.t()} | {:missing_api_key, String.t()}}
   def resolve_target(nil), do: resolve_target()
   def resolve_target(@placeholder_model), do: resolve_target()
+
+  def resolve_target(@review_model) do
+    case review_model() do
+      %{model: model} -> target_for(model)
+      nil -> resolve_target()
+    end
+  end
 
   def resolve_target(slug) when is_binary(slug) do
     case get_model_by_slug(slug) do
@@ -361,6 +438,99 @@ defmodule Longx.AI do
       {:ok, %Model{} = model} -> check_model(model)
       {:error, _} -> {:error, {:unknown_model, slug}}
     end
+  end
+
+  @typedoc "A model the provider's own list names (`GET /models`), normalised."
+  @type discovered_model :: %{
+          id: String.t(),
+          name: String.t(),
+          owned_by: String.t() | nil,
+          context_window: pos_integer | nil,
+          reasoning_levels: [String.t()],
+          reasoning_effort: String.t() | nil,
+          image_input: boolean,
+          installed: boolean
+        }
+
+  @doc """
+  The models the provider's endpoint lists (OpenAI's `GET /models`
+  standard: `data[].id`), each with what the entry says about it when it
+  says anything — OpenRouter adds `context_length`, `reasoning`
+  (efforts + default) and the input modalities; a plain gateway
+  (listenai) only `id` and `owned_by`. `installed` marks the ids this
+  provider already has a row for. The list is the settings page's "从接口
+  获取模型".
+  """
+  @spec discover_models(Provider.t()) ::
+          {:ok, [discovered_model]}
+          | {:error,
+             {:missing_api_key, String.t()}
+             | {:status, integer, term}
+             | {:unreachable, String.t()}}
+  def discover_models(%Provider{} = provider) do
+    provider = Ash.load!(provider, [:api_key, :models])
+
+    with {:ok, api_key} <- fetch_api_key(provider) do
+      request =
+        Req.new(
+          url: String.trim_trailing(provider.base_url, "/") <> "/models",
+          auth: {:bearer, api_key},
+          retry: false,
+          receive_timeout: @check_timeout
+        )
+
+      installed = MapSet.new(provider.models, & &1.upstream_id)
+
+      case Req.get(request) do
+        {:ok, %Req.Response{status: status, body: %{"data" => entries}}}
+        when status in 200..299 and is_list(entries) ->
+          {:ok,
+           for %{"id" => id} = entry <- entries, is_binary(id) do
+             discovered_model(entry, MapSet.member?(installed, id))
+           end}
+
+        {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
+          {:error, {:status, status, "not a model list: #{error_message(body)}"}}
+
+        {:ok, %Req.Response{status: status, body: body}} ->
+          {:error, {:status, status, error_message(body)}}
+
+        {:error, exception} ->
+          {:error, {:unreachable, Exception.message(exception)}}
+      end
+    end
+  end
+
+  # codex's order of efforts, for a list that names them in any order
+  @effort_order ~w(none minimal low medium high xhigh max ultra)
+
+  defp discovered_model(%{"id" => id} = entry, installed?) do
+    reasoning = entry["reasoning"] || %{}
+
+    levels =
+      case reasoning["supported_efforts"] do
+        list when is_list(list) ->
+          list
+          |> Enum.filter(&is_binary/1)
+          |> Enum.sort_by(&(Enum.find_index(@effort_order, fn e -> e == &1 end) || 99))
+
+        _ ->
+          []
+      end
+
+    modalities = get_in(entry, ["architecture", "input_modalities"]) || []
+
+    %{
+      id: id,
+      name: if(is_binary(entry["name"]) and entry["name"] != "", do: entry["name"], else: id),
+      owned_by: entry["owned_by"],
+      context_window: if(is_integer(entry["context_length"]), do: entry["context_length"]),
+      reasoning_levels: levels,
+      reasoning_effort:
+        if(is_binary(reasoning["default_effort"]), do: reasoning["default_effort"]),
+      image_input: is_list(modalities) and "image" in modalities,
+      installed: installed?
+    }
   end
 
   @doc """

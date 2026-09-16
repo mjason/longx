@@ -76,6 +76,7 @@ export const upgradeIdle = {
 export function rpcMock() {
   return {
     listProjects: vi.fn(async () => ok([project(1), project(2)])),
+    listRunningThreads: vi.fn(async () => ok({ threads: [] })),
     getProject: vi.fn(async () => ok(project(1))),
     createProject: vi.fn(),
     updateProject: vi.fn(async () => ok(project(1))),
@@ -108,9 +109,17 @@ export function rpcMock() {
     listModels: vi.fn(async () =>
       ok([
         model(1, { slug: "deepseek-flash", default: true }),
-        model(2, { slug: "glm-5" }),
+        model(2, { slug: "glm-5", reasoningLevels: ["low", "high"] }),
       ]),
     ),
+    reviewSettings: vi.fn(async () => ok({ modelSlug: null, effort: null })),
+    discoverModels: vi.fn(async () => ok({ ok: true, error: null, models: [] })),
+    setGoal: vi.fn(async ({ input }: { input: Record<string, unknown> }) =>
+      ok({ objective: input["objective"] ?? "", status: input["status"] ?? "active", tokenBudget: input["tokenBudget"] ?? null, tokensUsed: 0, timeUsedSeconds: 0 }),
+    ),
+    clearGoal: vi.fn(async () => ok({ cleared: true })),
+    listSkills: vi.fn(async () => ok([])),
+    setReviewModel: vi.fn(async () => ok(null)),
     listProviders: vi.fn(async () => ok([provider(1), provider(2)])),
     createProvider: vi.fn(
       async ({ input }: { input: Record<string, unknown> }) =>

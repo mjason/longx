@@ -14,6 +14,7 @@ import {
   createModel,
   createProvider,
   deleteModel,
+  discoverModels,
   listCodexProcesses,
   listModels,
   makeDefaultModel,
@@ -23,8 +24,10 @@ import {
   memorySetAutoExtract,
   memoryWriteIndex,
   probeSandbox,
+  reviewSettings,
   sandboxStatus,
   setGithubToken,
+  setReviewModel,
   setToolEnabled,
   stopCodex,
   updateSearchProvider,
@@ -66,7 +69,7 @@ describe("SettingsPage", () => {
     vi.mocked(listModels).mockResolvedValue(
       ok([
         model(1, { slug: "deepseek-flash", default: true }),
-        model(2, { slug: "glm-5" }),
+        model(2, { slug: "glm-5", reasoningLevels: ["low", "high"] }),
       ]) as never,
     );
   });
@@ -281,6 +284,80 @@ describe("SettingsPage", () => {
         }),
       ),
     );
+  });
+
+  test("models: a provider's own list (GET /models) is fetched into a checklist; picked ones become rows with what the list said", async () => {
+    setViewport(1280);
+    vi.mocked(discoverModels).mockResolvedValue(
+      ok({
+        ok: true,
+        error: null,
+        models: [
+          { id: "deepseek-flash", name: "deepseek-flash", ownedBy: "deepseek", contextWindow: null, reasoningLevels: [], reasoningEffort: null, imageInput: false, installed: true },
+          { id: "kimi-k3", name: "kimi-k3", ownedBy: "moonshot", contextWindow: null, reasoningLevels: [], reasoningEffort: null, imageInput: false, installed: false },
+          { id: "x/y", name: "X Y", ownedBy: null, contextWindow: 32000, reasoningLevels: ["low", "high"], reasoningEffort: "low", imageInput: true, installed: false },
+        ],
+      }) as never,
+    );
+    const user = userEvent.setup();
+    renderAt("/settings/models");
+    const card = await screen.findByTestId("provider-p1");
+    await user.click(within(card).getByRole("button", { name: "Prov 的操作" }));
+    await user.click(await screen.findByRole("menuitem", { name: "从接口获取模型" }));
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(discoverModels).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "p1" } })));
+    // the installed one is out; the rest pickable, with their facts
+    await waitFor(() => expect(within(dialog).getByText("kimi-k3")).toBeInTheDocument());
+    expect(within(dialog).queryByText("deepseek-flash")).not.toBeInTheDocument();
+    expect(within(dialog).getByText("X Y")).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("32k");
+    // filter, pick, add
+    await user.type(within(dialog).getByLabelText("筛选"), "kimi");
+    expect(within(dialog).queryByText("X Y")).not.toBeInTheDocument();
+    await user.clear(within(dialog).getByLabelText("筛选"));
+    await user.click(within(dialog).getByText("X Y"));
+    await user.click(within(dialog).getByRole("button", { name: /添加 1 个/ }));
+    await waitFor(() =>
+      expect(createModel).toHaveBeenCalledWith(
+        expect.objectContaining({ input: expect.objectContaining({ providerId: "p1", upstreamId: "x/y", name: "X Y", contextWindow: 32000, reasoningLevels: ["low", "high"], reasoningEffort: "low" }) }),
+      ),
+    );
+    vi.mocked(discoverModels).mockResolvedValue(ok({ ok: true, error: null, models: [] }) as never);
+  });
+
+  test("models: the endpoint refusing the list is said in the dialog", async () => {
+    setViewport(1280);
+    vi.mocked(discoverModels).mockResolvedValue(ok({ ok: false, error: "401 bad key", models: [] }) as never);
+    const user = userEvent.setup();
+    renderAt("/settings/models");
+    const card = await screen.findByTestId("provider-p1");
+    await user.click(within(card).getByRole("button", { name: "Prov 的操作" }));
+    await user.click(await screen.findByRole("menuitem", { name: "从接口获取模型" }));
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(dialog).toHaveTextContent("401 bad key"));
+    vi.mocked(discoverModels).mockResolvedValue(ok({ ok: true, error: null, models: [] }) as never);
+  });
+
+  test("models: the reviewer model — a model and one of its levels, or the thread's own", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/models");
+    const card = await screen.findByTestId("review-model");
+    // the thread's own model by default: no level to pick
+    expect(within(card).getByRole("combobox", { name: "自动审核用的模型" })).toHaveTextContent("和会话相同");
+    expect(within(card).queryByRole("combobox", { name: "思考档位" })).not.toBeInTheDocument();
+
+    await user.click(within(card).getByRole("combobox", { name: "自动审核用的模型" }));
+    // what the server answers once the pick is saved (the write refetches the settings)
+    vi.mocked(reviewSettings).mockResolvedValue(ok({ modelSlug: "glm-5", effort: null }) as never);
+    await user.click(await screen.findByRole("option", { name: "glm-5" }));
+    await waitFor(() => expect(setReviewModel).toHaveBeenCalledWith(expect.objectContaining({ input: { modelSlug: "glm-5", effort: null } })));
+
+    await waitFor(() => expect(within(card).getByRole("combobox", { name: "思考档位" })).toBeInTheDocument());
+    await user.click(within(card).getByRole("combobox", { name: "思考档位" }));
+    await user.click(await screen.findByRole("option", { name: "high" }));
+    await waitFor(() => expect(setReviewModel).toHaveBeenLastCalledWith(expect.objectContaining({ input: { modelSlug: "glm-5", effort: "high" } })));
+    vi.mocked(reviewSettings).mockResolvedValue(ok({ modelSlug: null, effort: null }) as never);
   });
 
   test("tools: the catalogue with a switch per tool", async () => {

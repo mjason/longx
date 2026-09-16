@@ -636,6 +636,120 @@ defmodule Longx.AITest do
     end
   end
 
+  describe "discover_models/1 (the provider's own model list: OpenAI's GET /models standard)" do
+    setup do
+      bypass = Bypass.open()
+
+      provider =
+        create_provider!(%{base_url: "http://localhost:#{bypass.port}/v1", api_key: "sk-ok"})
+
+      %{bypass: bypass, provider: provider}
+    end
+
+    test "a plain list (id + owned_by, listenai's shape) and OpenRouter's richer entries, normalised; installed rows flagged",
+         %{bypass: bypass, provider: provider} do
+      create_model!(provider, %{upstream_id: "deepseek-v4-flash"})
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "GET", "/v1/models", fn up ->
+        send(test_pid, {:upstream, up.req_headers})
+
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "object" => "list",
+            "data" => [
+              %{
+                "id" => "deepseek-v4-flash",
+                "object" => "model",
+                "owned_by" => "deepseek",
+                "supported_endpoint_types" => ["openai"]
+              },
+              %{"id" => "codex-auto-review", "object" => "model", "owned_by" => "openai"},
+              %{
+                "id" => "deepseek/deepseek-v4.1-flash",
+                "name" => "DeepSeek: DeepSeek V4.1 Flash",
+                "context_length" => 1_048_576,
+                "architecture" => %{"input_modalities" => ["text", "image"]},
+                "reasoning" => %{
+                  "supported_efforts" => ["max", "high", "low"],
+                  "default_effort" => "high"
+                }
+              },
+              %{"id" => "anthropic/claude", "supported_endpoint_types" => ["anthropic"]}
+            ]
+          })
+        )
+      end)
+
+      assert {:ok, models} = AI.discover_models(provider)
+      assert_receive {:upstream, headers}
+      assert {"authorization", "Bearer sk-ok"} in headers
+
+      assert models == [
+               %{
+                 id: "deepseek-v4-flash",
+                 name: "deepseek-v4-flash",
+                 owned_by: "deepseek",
+                 context_window: nil,
+                 reasoning_levels: [],
+                 reasoning_effort: nil,
+                 image_input: false,
+                 installed: true
+               },
+               %{
+                 id: "codex-auto-review",
+                 name: "codex-auto-review",
+                 owned_by: "openai",
+                 context_window: nil,
+                 reasoning_levels: [],
+                 reasoning_effort: nil,
+                 image_input: false,
+                 installed: false
+               },
+               %{
+                 id: "deepseek/deepseek-v4.1-flash",
+                 name: "DeepSeek: DeepSeek V4.1 Flash",
+                 owned_by: nil,
+                 context_window: 1_048_576,
+                 reasoning_levels: ["low", "high", "max"],
+                 reasoning_effort: "high",
+                 image_input: true,
+                 installed: false
+               },
+               %{
+                 id: "anthropic/claude",
+                 name: "anthropic/claude",
+                 owned_by: nil,
+                 context_window: nil,
+                 reasoning_levels: [],
+                 reasoning_effort: nil,
+                 image_input: false,
+                 installed: false
+               }
+             ]
+    end
+
+    test "an error answer or an unreachable host is an error, never a crash; a provider without a key is refused before the call",
+         %{bypass: bypass, provider: provider} do
+      Bypass.expect_once(bypass, "GET", "/v1/models", fn up ->
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(401, ~s({"error":{"message":"bad key"}}))
+      end)
+
+      assert {:error, {:status, 401, "bad key"}} = AI.discover_models(provider)
+
+      Bypass.down(bypass)
+      assert {:error, {:unreachable, _}} = AI.discover_models(provider)
+
+      keyless = create_provider!(%{base_url: "http://localhost:1/v1", api_key: nil})
+      assert {:error, {:missing_api_key, _}} = AI.discover_models(keyless)
+    end
+  end
+
   describe "complete/3 (one non-streaming answer from the default model — the memory pipeline's model call)" do
     setup do
       bypass = Bypass.open()
@@ -801,6 +915,53 @@ defmodule Longx.AITest do
 
       assert {:error, {:unknown_model, "nope"}} = AI.resolve_target("nope")
       assert {:ok, %AI.Target{model: "a-default"}} = AI.resolve_target(nil)
+    end
+  end
+
+  describe "the reviewer model (codex's automatic approval review on a model of its own)" do
+    test "set_review_model/2 names a model and a level it offers; review_model/0 reads it back; nil clears it" do
+      provider = create_provider!(%{api_key: "sk-a"})
+      main = create_model!(provider, %{upstream_id: "main", slug: "main"})
+      AI.make_default_model!(main)
+
+      cheap =
+        create_model!(provider, %{
+          upstream_id: "cheap",
+          slug: "cheap",
+          reasoning_levels: ["low", "high"],
+          reasoning_effort: "high"
+        })
+
+      assert AI.review_model() == nil
+
+      assert :ok = AI.set_review_model("cheap", "high")
+      assert %{model: %AI.Model{slug: "cheap"}, effort: "high"} = AI.review_model()
+
+      # no level: codex's own rule applies (low when offered, else the model's default)
+      assert :ok = AI.set_review_model("cheap", nil)
+      assert %{model: %AI.Model{slug: "cheap"}, effort: nil} = AI.review_model()
+
+      assert {:error, {:unknown_effort, "max"}} = AI.set_review_model("cheap", "max")
+      assert {:error, {:unknown_model, "nope"}} = AI.set_review_model("nope", nil)
+
+      assert :ok = AI.set_review_model(nil, nil)
+      assert AI.review_model() == nil
+
+      # a deleted model is no reviewer any more
+      assert :ok = AI.set_review_model("cheap", "low")
+      Ash.destroy!(cheap, action: :delete)
+      assert AI.review_model() == nil
+    end
+
+    test "resolve_target/1: `longx-review` is the reviewer model, the default model when none is set" do
+      provider = create_provider!(%{api_key: "sk-a"})
+      main = create_model!(provider, %{upstream_id: "main", slug: "main"})
+      AI.make_default_model!(main)
+      create_model!(provider, %{upstream_id: "cheap", slug: "cheap"})
+
+      assert {:ok, %AI.Target{model: "main"}} = AI.resolve_target("longx-review")
+      :ok = AI.set_review_model("cheap", nil)
+      assert {:ok, %AI.Target{model: "cheap"}} = AI.resolve_target("longx-review")
     end
   end
 

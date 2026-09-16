@@ -302,4 +302,43 @@ defmodule Longx.Codex.AutoReviewIntegrationTest do
     assert_receive {:codex, _, "turn/completed", _}, 60_000
     refute File.regular?(probe)
   end
+
+  test "a reviewer model of its own: the review runs on that model at the pinned level, the agent stays on the thread's",
+       %{bypass: bypass, gateway_url: gateway_url} do
+    {:ok, provider} = Longx.AI.get_provider_by_slug("fake")
+
+    {:ok, _} =
+      Longx.AI.create_model(%{
+        name: "Review",
+        upstream_id: "fake-review",
+        provider_id: provider.id,
+        context_window: 64_000,
+        reasoning_levels: ["low", "high"]
+      })
+
+    :ok = Longx.AI.set_review_model("fake-review", "high")
+
+    probe = probe_path()
+    on_exit(fn -> File.rm(probe) end)
+    script(bypass, self(), probe, "allow")
+
+    home = prepare_home!(gateway_url)
+    conn = start_connection!(home)
+    thread_id = reviewed_thread!(conn, home)
+    {:ok, _} = Thread.send(thread_id, "go", conn: conn)
+
+    assert_receive {:codex, _, "item/autoApprovalReview/completed",
+                    %{"review" => %{"status" => "approved"}}},
+                   30_000
+
+    assert_receive {:codex, _, "turn/completed", _}, 60_000
+    assert File.regular?(probe)
+
+    assert_receive {:request, %{"instructions" => "You are judging" <> _} = review}
+    assert review["model"] == "fake-review"
+    assert review["reasoning"]["effort"] == "high"
+
+    assert_receive {:request, %{"instructions" => "You are a coding agent" <> _} = agent}
+    assert agent["model"] == "fake-model"
+  end
 end

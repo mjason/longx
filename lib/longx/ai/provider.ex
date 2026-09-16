@@ -41,6 +41,36 @@ defmodule Longx.AI.Provider do
       change cascade_destroy(:models, return_notifications?: false, after_action?: false)
     end
 
+    # the provider's own model list (OpenAI's GET /models standard) for the
+    # settings page's "从接口获取模型"; entries are untyped maps (camelCased here)
+    action :discover_models, :map do
+      constraints fields: [
+                    ok: [type: :boolean, allow_nil?: false],
+                    error: [type: :string],
+                    models: [type: {:array, :map}, allow_nil?: false]
+                  ]
+
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, provider} <- Ash.get(__MODULE__, input.arguments.id) do
+          case Longx.AI.discover_models(provider) do
+            {:ok, models} ->
+              {:ok, %{ok: true, error: nil, models: Enum.map(models, &camelize/1)}}
+
+            {:error, {:status, status, message}} ->
+              {:ok, %{ok: false, error: "#{status} #{message}", models: []}}
+
+            {:error, {:unreachable, reason}} ->
+              {:ok, %{ok: false, error: "unreachable: #{reason}", models: []}}
+
+            {:error, {:missing_api_key, _}} ->
+              {:ok, %{ok: false, error: "no API key", models: []}}
+          end
+        end
+      end
+    end
+
     create :create do
       primary? true
 
@@ -179,4 +209,11 @@ defmodule Longx.AI.Provider do
   end
 
   def kind_for_base_url(_), do: :openai_compatible
+
+  defp camelize(map) do
+    Map.new(map, fn {key, value} ->
+      <<first, rest::binary>> = key |> Atom.to_string() |> Macro.camelize()
+      {<<String.downcase(<<first>>)::binary, rest::binary>>, value}
+    end)
+  end
 end

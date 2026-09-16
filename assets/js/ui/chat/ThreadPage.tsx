@@ -6,6 +6,8 @@ import { Button } from "@/ui/components/ui/button";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 import { FileMentions, FileMentionText } from "./FileMentions";
+import { SkillMentions } from "./SkillMentions";
+import { GoalBar } from "./GoalBar";
 import { ReasoningSteps } from "./ReasoningSteps";
 import { SlashCommands } from "./SlashCommands";
 import { ComposerLeading, ComposerTrailing } from "./TurnBar";
@@ -21,6 +23,7 @@ const Welcome = () => (
 const ComposerPopovers = () => (
   <>
     <FileMentions />
+    <SkillMentions />
     <SlashCommands />
   </>
 );
@@ -64,6 +67,7 @@ export function ThreadPage() {
           <AlertDescription>{disabled}</AlertDescription>
         </Alert>
       ) : null}
+      <GoalBar />
       <div className="min-h-0 flex-1">
         <Thread components={THREAD_COMPONENTS} autoFocus={false} />
       </div>

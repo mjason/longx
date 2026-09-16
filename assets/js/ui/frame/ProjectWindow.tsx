@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { TOOLS, toolForShortcut, useFrame, type Tool } from "@/core/frame";
 import { joinProjectChannel, type CodexSample } from "@/core/projectChannel";
 import { queryKeys, useProject } from "@/core/projects";
+import { invalidateFiles } from "@/core/workspace";
 import { getSocket } from "@/core/socket";
 import { useViewport } from "@/core/viewport";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/ui/sheet";
@@ -73,6 +74,8 @@ export function ProjectWindow() {
         else toast.success(t.codexReady);
       },
       onSample: setSample,
+      onFiles: () => invalidateFiles(client, id),
+      onNotice: (notice) => toast.warning(notice.summary, notice.details ? { description: notice.details } : undefined),
     });
   }, [client, id]);
 

@@ -16,13 +16,15 @@ function fakeSocket() {
 }
 
 describe("joinProjectChannel", () => {
-  test("joins project:<id> and dispatches the three events", () => {
+  test("joins project:<id> and dispatches the events", () => {
     const { socket, channel, handlers } = fakeSocket();
     const onChanged = vi.fn();
     const onCodex = vi.fn();
     const onSample = vi.fn();
+    const onFiles = vi.fn();
+    const onNotice = vi.fn();
 
-    const leave = joinProjectChannel(socket as never, "abc", { onChanged, onCodex, onSample });
+    const leave = joinProjectChannel(socket as never, "abc", { onChanged, onCodex, onSample, onFiles, onNotice });
 
     expect(socket.channel).toHaveBeenCalledWith("project:abc", {});
     expect(channel.join).toHaveBeenCalled();
@@ -34,6 +36,11 @@ describe("joinProjectChannel", () => {
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(onCodex).toHaveBeenCalledWith("down");
     expect(onSample).toHaveBeenCalledWith(expect.objectContaining({ rss_bytes: 1 }));
+    // codex's fs/changed under the root, and its config / deprecation notices
+    handlers["files"]!({ paths: ["/p/a.txt"] });
+    expect(onFiles).toHaveBeenCalledWith(["/p/a.txt"]);
+    handlers["notice"]!({ kind: "configWarning", summary: "bad key", details: null });
+    expect(onNotice).toHaveBeenCalledWith({ kind: "configWarning", summary: "bad key", details: null });
 
     leave();
     expect(channel.leave).toHaveBeenCalled();

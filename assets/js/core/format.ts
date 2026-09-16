@@ -43,3 +43,19 @@ export function formatDuration(ms: number): string {
   const h = Math.floor(m / 60);
   return `${h} h ${m % 60} min`;
 }
+
+/** 12500 → "12.5k", 1_200_000 → "1.2M" */
+export function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return `${tokens}`;
+}
+
+/** seconds → "45 秒" / "2 分钟" / "1 小时 5 分钟" */
+export function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds} 秒`;
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return `${m} 分钟`;
+  const h = Math.floor(m / 60);
+  return m % 60 ? `${h} 小时 ${m % 60} 分钟` : `${h} 小时`;
+}

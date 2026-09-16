@@ -270,6 +270,18 @@ defmodule Longx.Codex.ThreadTest do
       assert params["summary"] == "none"
     end
 
+    test "turn_params/3: skills the person named ($name) ride along as skill inputs after the text" do
+      params =
+        Thread.turn_params("t", "use $docs",
+          skills: [%{name: "docs", path: "/p/.agents/skills/docs/SKILL.md"}]
+        )
+
+      assert params["input"] == [
+               %{"type" => "text", "text" => "use $docs"},
+               %{"type" => "skill", "name" => "docs", "path" => "/p/.agents/skills/docs/SKILL.md"}
+             ]
+    end
+
     test "turn_params/3: images ride along as image inputs after the text" do
       params = Thread.turn_params("t", "look", images: ["data:image/png;base64,AAAA"])
 
@@ -600,6 +612,52 @@ defmodule Longx.Codex.ThreadTest do
                "threadId" => thread_id,
                "approvalsReviewer" => "user"
              }
+    end
+  end
+
+  describe "goals (codex's goal mode) and skills" do
+    setup do
+      %{conn: start_supervised!({Connection, name: nil, command: ["elixir", @fake], env: []})}
+    end
+
+    test "set_goal / get_goal / clear_goal: codex's thread/goal/*, the goal kept in the view", %{
+      conn: conn
+    } do
+      {:ok, thread_id} = Thread.start(cwd: "/", conn: conn)
+      Thread.subscribe(thread_id)
+      assert {:ok, nil} = Thread.get_goal(thread_id, conn: conn)
+
+      assert {:ok, %{"objective" => "ship it", "status" => "active", "tokenBudget" => 1000}} =
+               Thread.set_goal(thread_id, objective: "ship it", token_budget: 1000, conn: conn)
+
+      assert_receive {:codex, _, "thread/goal/updated", %{"goal" => %{"objective" => "ship it"}}},
+                     5_000
+
+      assert Thread.snapshot(thread_id).goal["objective"] == "ship it"
+
+      assert {:ok, %{"status" => "paused"}} =
+               Thread.set_goal(thread_id, status: :paused, conn: conn)
+
+      assert {:ok, %{"status" => "paused"}} = Thread.get_goal(thread_id, conn: conn)
+
+      assert {:ok, true} = Thread.clear_goal(thread_id, conn: conn)
+      assert_receive {:codex, _, "thread/goal/cleared", _}, 5_000
+      assert Thread.snapshot(thread_id).goal == nil
+      assert {:ok, false} = Thread.clear_goal(thread_id, conn: conn)
+    end
+
+    test "list_skills/2: the skills codex finds for a directory", %{conn: conn} do
+      assert {:ok,
+              [
+                %{
+                  name: "review-agent",
+                  description: "Review code changes",
+                  path: "/p/.agents/skills/review-agent/SKILL.md",
+                  enabled: true
+                },
+                %{name: "docs"}
+              ]} =
+               Thread.list_skills("/p", conn: conn)
     end
   end
 

@@ -102,7 +102,8 @@ defmodule Longx.Codex.Home do
     with :ok <- File.mkdir_p(dir),
          :ok <- File.write(catalog_path, catalog),
          :ok <- File.write(config_path, config),
-         :ok <- write_environments(dir, Keyword.get(opts, :exec_server_url)) do
+         :ok <- write_environments(dir, Keyword.get(opts, :exec_server_url)),
+         :ok <- link_tools() do
       {:ok,
        %__MODULE__{
          dir: dir,
@@ -119,6 +120,39 @@ defmodule Longx.Codex.Home do
   end
 
   @environments_file "environments.toml"
+
+  @doc """
+  The directory of Longx's own command-line tools for the agent, shared by
+  every home: `apply_patch`, a symlink to the bundled codex binary (codex
+  dispatches on its arg0 — its built-in executor makes the same alias in a
+  temp dir on its own PATH). The exec-server puts it first on every
+  command's PATH (`Longx.Exec.Env`).
+  """
+  @spec tool_bin() :: Path.t()
+  def tool_bin, do: Path.join(default_dir(), "bin")
+
+  # (re)points the alias at the codex binary; nothing to link while codex is
+  # not installed (unit tests run a fake)
+  defp link_tools do
+    case Longx.Codex.Runtime.executable() do
+      {:ok, exe} ->
+        link = Path.join(tool_bin(), "apply_patch")
+
+        with :ok <- File.mkdir_p(tool_bin()) do
+          case File.read_link(link) do
+            {:ok, ^exe} ->
+              :ok
+
+            _ ->
+              File.rm(link)
+              File.ln_s(exe, link)
+          end
+        end
+
+      {:error, _} ->
+        :ok
+    end
+  end
 
   # codex reads `<CODEX_HOME>/environments.toml` at start (exec-server's
   # `environment_toml.rs`): `default` names the environment every thread
@@ -279,21 +313,50 @@ defmodule Longx.Codex.Home do
           required(:slug) => String.t(),
           required(:context_window) => pos_integer | nil,
           optional(:reasoning_levels) => [String.t()],
-          optional(:reasoning_effort) => String.t() | nil
+          optional(:reasoning_effort) => String.t() | nil,
+          optional(:auto_review_model) => String.t()
         }
 
   @doc """
   The catalog entries for the AI domain's models: `longx` (the placeholder
   every thread starts on, sized and levelled as the default model) and one
-  per slug.
+  per slug — plus, when a reviewer model is chosen (`Longx.AI.review_model/0`),
+  `longx-review`: that model's entry, its levels narrowed to the chosen one
+  (codex takes `low` whenever an entry offers it, so pinning another level
+  means offering nothing else), which every other entry names as its
+  `auto_review_model` — codex's `auto_review_model_override`.
   """
   @spec catalog_models() :: [catalog_model]
   def catalog_models do
     models = Longx.AI.list_models!()
     default = Enum.find(models, & &1.default)
 
-    [catalog_model(@placeholder_model, default)] ++
-      for(%{slug: slug} = model <- models, is_binary(slug), do: catalog_model(slug, model))
+    entries =
+      [catalog_model(@placeholder_model, default)] ++
+        for(%{slug: slug} = model <- models, is_binary(slug), do: catalog_model(slug, model))
+
+    case Longx.AI.review_model() do
+      nil ->
+        entries
+
+      %{model: model, effort: effort} ->
+        review_slug = Longx.AI.review_model_slug()
+
+        review =
+          case effort do
+            nil ->
+              catalog_model(review_slug, model)
+
+            level ->
+              %{
+                catalog_model(review_slug, model)
+                | reasoning_levels: [level],
+                  reasoning_effort: level
+              }
+          end
+
+        Enum.map(entries, &Map.put(&1, :auto_review_model, review_slug)) ++ [review]
+    end
   end
 
   defp catalog_model(slug, nil), do: %{slug: slug, context_window: nil}
@@ -361,12 +424,16 @@ defmodule Longx.Codex.Home do
             "base_instructions" => instructions
           }
           |> put_default_level(Map.get(model, :reasoning_effort))
+          |> put_if("auto_review_model_override", Map.get(model, :auto_review_model))
         end
     }
   end
 
   defp put_default_level(entry, nil), do: entry
   defp put_default_level(entry, effort), do: Map.put(entry, "default_reasoning_level", effort)
+
+  defp put_if(entry, _key, nil), do: entry
+  defp put_if(entry, key, value), do: Map.put(entry, key, value)
 
   @base_instructions_path Path.join(:code.priv_dir(:longx), "codex_prompt.md")
   @external_resource @base_instructions_path

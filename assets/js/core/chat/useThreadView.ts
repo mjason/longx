@@ -33,7 +33,15 @@ function describe(reason: unknown): string {
  * re-pulls the snapshot in place; a `thread/reverted` does that on its own
  * (the server dropped items we may still show).
  */
-export function useThreadView(codexThreadId: string | undefined): ThreadViewState & { refetch: () => Promise<void> } {
+// events that are a signal for the person rather than state of the view
+const SIGNALS = new Set(["model/rerouted"]);
+
+export function useThreadView(
+  codexThreadId: string | undefined,
+  onSignal?: (method: string, params: Record<string, unknown>) => void,
+): ThreadViewState & { refetch: () => Promise<void> } {
+  const signal = useRef(onSignal);
+  signal.current = onSignal;
   const [state, dispatch] = useReducer(reduce, codexThreadId ?? "", (id) => ({ view: emptyView(id), ready: false, error: null }));
   const handle = useRef<ThreadChannelHandle | null>(null);
 
@@ -49,6 +57,7 @@ export function useThreadView(codexThreadId: string | undefined): ThreadViewStat
       onEvent: (event) => {
         events.push(event);
         if (event.method === "thread/reverted") void joined.snapshot().catch(() => {});
+        if (SIGNALS.has(event.method)) signal.current?.(event.method, event.params);
       },
       onError: (reason) => dispatch({ type: "error", reason }),
     });

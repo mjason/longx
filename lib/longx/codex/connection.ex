@@ -17,7 +17,7 @@ defmodule Longx.Codex.Connection do
 
   Topics:
     * `"codex:connection"` — `{:codex_connection, tag, :ready | :down}`
-    * `"codex:server"` — `{:codex, method, params}` for thread-less notifications
+    * `"codex:server"` — `{:codex_server, tag, method, params}` for thread-less notifications
     * `"codex:thread:<id>"` — see `Longx.Codex.ThreadState`
   """
 
@@ -442,11 +442,11 @@ defmodule Longx.Codex.Connection do
         resolve_in_thread(thread_id, id)
         %State{state | inbound: inbound}
     end
-    |> tap(fn _ -> route_notification("serverRequest/resolved", params) end)
+    |> tap(fn st -> route_notification("serverRequest/resolved", params, st.tag) end)
   end
 
   defp dispatch({:notification, method, params}, state) do
-    route_notification(method, params)
+    route_notification(method, params, state.tag)
 
     state
     |> own_thread(thread_id_of(method, params))
@@ -505,18 +505,22 @@ defmodule Longx.Codex.Connection do
   defp thread_id_of("thread/started", %{"thread" => %{"id" => id}}) when is_binary(id), do: id
   defp thread_id_of(_method, _params), do: nil
 
-  defp route_notification(method, %{"threadId" => thread_id} = params)
+  defp route_notification(method, %{"threadId" => thread_id} = params, _tag)
        when is_binary(thread_id),
        do: ingest(thread_id, method, params)
 
   defp route_notification(
          "thread/started" = method,
-         %{"thread" => %{"id" => thread_id}} = params
+         %{"thread" => %{"id" => thread_id}} = params,
+         _tag
        ),
        do: ingest(thread_id, method, params)
 
-  defp route_notification(method, params) do
-    PubSub.broadcast(@pubsub, "codex:server", {:codex, method, params})
+  # thread-less notifications (fs/changed, configWarning, model/rerouted…) carry
+  # the connection's tag — the project id under the pool — so a subscriber knows
+  # whose codex spoke
+  defp route_notification(method, params, tag) do
+    PubSub.broadcast(@pubsub, "codex:server", {:codex_server, tag, method, params})
   end
 
   # the thread's writer being unavailable (its supervisor restarting) loses

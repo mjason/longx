@@ -85,6 +85,8 @@ defmodule Longx.Projects.Thread do
         constraints: [one_of: [:never, :on_request, :untrusted, :auto_accept]]
 
       argument :network_access, :boolean
+      # the skills the person named with `$name` (name + SKILL.md path, from list_skills)
+      argument :skills, {:array, :map}
 
       run fn input, _ ->
         opts =
@@ -98,6 +100,7 @@ defmodule Longx.Projects.Thread do
             :approval_policy,
             :network_access
           ])
+          |> Map.put(:skills, skill_inputs(input.arguments[:skills]))
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
         with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
@@ -218,6 +221,54 @@ defmodule Longx.Projects.Thread do
       end
     end
 
+    # codex's goal mode: set / change the thread's goal, clear it
+    @goal_fields [
+      objective: [type: :string, allow_nil?: false],
+      status: [type: :string, allow_nil?: false],
+      token_budget: [type: :integer],
+      tokens_used: [type: :integer, allow_nil?: false],
+      time_used_seconds: [type: :integer, allow_nil?: false]
+    ]
+
+    action :set_goal, :map do
+      constraints fields: @goal_fields
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :objective, :string
+      argument :status, :atom, constraints: [one_of: [:active, :paused, :blocked, :complete]]
+      argument :token_budget, :integer
+
+      run fn input, _ ->
+        attrs =
+          input.arguments
+          |> Map.take([:objective, :status, :token_budget])
+          |> Enum.reject(fn {k, v} -> is_nil(v) and k != :token_budget end)
+          |> Map.new()
+
+        # a token budget given as null clears it; absent leaves it
+        attrs =
+          if Map.has_key?(input.arguments, :token_budget),
+            do: attrs,
+            else: Map.delete(attrs, :token_budget)
+
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             {:ok, goal} <- Longx.Projects.set_goal(thread, attrs) do
+          {:ok, goal_fields(goal)}
+        end
+      end
+    end
+
+    action :clear_goal, :map do
+      constraints fields: [cleared: [type: :boolean, allow_nil?: false]]
+      argument :thread_id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             {:ok, cleared} <- Longx.Projects.clear_goal(thread) do
+          {:ok, %{cleared: cleared}}
+        end
+      end
+    end
+
     # overrides a denial of codex's automatic approval review: the action is
     # handed back as approved by the person (the model may retry it next turn)
     action :approve_review do
@@ -324,6 +375,26 @@ defmodule Longx.Projects.Thread do
       argument :parent_thread_id, :uuid, allow_nil?: false
       filter expr(parent_thread_id == ^arg(:parent_thread_id))
       prepare build(sort: [inserted_at: :asc])
+    end
+
+    read :active_roots do
+      filter expr(status == :active and is_nil(parent_thread_id))
+      prepare build(sort: [last_activity_at: :desc_nils_last, inserted_at: :desc])
+    end
+
+    read :active do
+      filter expr(status == :active)
+    end
+
+    # the welcome page: what is running right now, with a way back to it
+    # (entries are untyped maps, camelCased here — arrays of typed maps are
+    # not selectable in ash_typescript 0.18)
+    action :list_running, :map do
+      constraints fields: [threads: [type: {:array, :map}, allow_nil?: false]]
+
+      run fn _input, _ ->
+        {:ok, %{threads: Enum.map(Longx.Projects.running_threads(), &camelize/1)}}
+      end
     end
 
     read :with_status do
@@ -438,6 +509,37 @@ defmodule Longx.Projects.Thread do
     do: {:ok, {kind, value}}
 
   defp review_target(_), do: argument_error(:value, "is required for this target")
+
+  # an untyped map crosses the wire as is: camelCase it here (dates as ISO strings)
+  defp camelize(map) do
+    Map.new(map, fn {key, value} ->
+      <<first, rest::binary>> = key |> Atom.to_string() |> Macro.camelize()
+      {<<String.downcase(<<first>>)::binary, rest::binary>>, wire_value(value)}
+    end)
+  end
+
+  defp wire_value(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp wire_value(value), do: value
+
+  defp goal_fields(goal) do
+    %{
+      objective: goal["objective"],
+      status: goal["status"],
+      token_budget: goal["tokenBudget"],
+      tokens_used: goal["tokensUsed"] || 0,
+      time_used_seconds: goal["timeUsedSeconds"] || 0
+    }
+  end
+
+  defp skill_inputs(nil), do: []
+
+  defp skill_inputs(skills) do
+    for %{} = skill <- skills,
+        name = skill["name"] || skill[:name],
+        path = skill["path"] || skill[:path],
+        is_binary(name) and is_binary(path),
+        do: %{name: name, path: path}
+  end
 
   defp invalid_review(message) do
     {:error,

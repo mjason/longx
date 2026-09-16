@@ -1,11 +1,15 @@
 "use client";
 
+// Longx: a popover opened by a click, not the registry's hover tooltip —
+// the composer sits inside the thread's scrolling viewport, and Radix's
+// tooltip closes itself whenever an ancestor of its trigger scrolls, which
+// the auto-scroll does on every streamed line; a popover stays until
+// dismissed and opens on a phone too.
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/ui/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/ui/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
   createContext,
@@ -183,9 +187,7 @@ function ContextDisplayRoot({
 
   return (
     <ContextDisplayContext.Provider value={contextValue}>
-      <TooltipProvider>
-        <Tooltip>{children}</Tooltip>
-      </TooltipProvider>
+      <Popover>{children}</Popover>
     </ContextDisplayContext.Provider>
   );
 }
@@ -195,7 +197,7 @@ function ContextDisplayTrigger({
   ...props
 }: React.ComponentProps<"button">) {
   return (
-    <TooltipTrigger asChild>
+    <PopoverTrigger asChild>
       <button
         type="button"
         data-slot="context-display-trigger"
@@ -207,7 +209,7 @@ function ContextDisplayTrigger({
       >
         {children}
       </button>
-    </TooltipTrigger>
+    </PopoverTrigger>
   );
 }
 
@@ -248,15 +250,11 @@ function ContextDisplayContent({
   const segments = getContextSegments(usage, labels);
 
   return (
-    <TooltipContent
+    <PopoverContent
       side={side}
       sideOffset={8}
-      arrow={false}
       data-slot="context-display-popover"
-      className={cn(
-        "bg-popover text-popover-foreground block w-56 border p-3 text-left",
-        className,
-      )}
+      className={cn("w-56 p-3 text-left", className)}
     >
       <div className="text-xs">
         <div className="flex items-baseline justify-between gap-6 whitespace-nowrap">
@@ -294,7 +292,7 @@ function ContextDisplayContent({
           </div>
         )}
       </div>
-    </TooltipContent>
+    </PopoverContent>
   );
 }
 

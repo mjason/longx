@@ -12,16 +12,24 @@ import { _resetFrameStoreForTests } from "@/core/frame";
 import { channel, model, ok, thread } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("sonner", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("sonner")>();
+  return { ...mod, toast: Object.assign(vi.fn(), mod.toast, { warning: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn() }) };
+});
+import { toast } from "sonner";
 vi.mock("@/core/socket", async () =>
   (await import("@/ui/test-mocks")).socketMock(),
 );
 import {
   answerRequest,
+  clearGoal,
   listModels,
+  listSkills,
   listThreads,
   respond,
   searchFiles,
   sendMessage,
+  setGoal,
   startThread,
 } from "@/ash_rpc";
 
@@ -348,6 +356,73 @@ describe("ThreadPage", () => {
         }),
       ),
     );
+  });
+
+  test("the goal (codex's goal mode) sits above the thread: objective, status, budget; pause / resume / clear; edited in a dialog; /goal opens it", async () => {
+    const user = userEvent.setup();
+    await open();
+    expect(screen.queryByTestId("goal-bar")).not.toBeInTheDocument();
+    act(() => {
+      channel.deliver("codex", {
+        seq: 4,
+        method: "thread/goal/updated",
+        params: { threadId: "thr_1", turnId: null, goal: { threadId: "thr_1", objective: "让测试全绿", status: "active", tokenBudget: 50000, tokensUsed: 12500, timeUsedSeconds: 125, createdAt: 1, updatedAt: 2 } },
+      });
+    });
+    const bar = await screen.findByTestId("goal-bar");
+    expect(bar).toHaveTextContent("让测试全绿");
+    expect(bar).toHaveTextContent("进行中");
+    expect(bar).toHaveTextContent("12.5k / 50k");
+    expect(bar).toHaveTextContent("2 分钟");
+
+    await user.click(within(bar).getByRole("button", { name: "暂停" }));
+    await waitFor(() => expect(setGoal).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", status: "paused" } })));
+
+    act(() => {
+      channel.deliver("codex", {
+        seq: 5,
+        method: "thread/goal/updated",
+        params: { threadId: "thr_1", turnId: null, goal: { threadId: "thr_1", objective: "让测试全绿", status: "paused", tokenBudget: 50000, tokensUsed: 12500, timeUsedSeconds: 125, createdAt: 1, updatedAt: 2 } },
+      });
+    });
+    await waitFor(() => expect(bar).toHaveTextContent("已暂停"));
+    await user.click(within(bar).getByRole("button", { name: "继续" }));
+    await waitFor(() => expect(setGoal).toHaveBeenLastCalledWith(expect.objectContaining({ input: { threadId: "t1", status: "active" } })));
+
+    // the dialog edits objective and budget
+    await user.click(within(bar).getByRole("button", { name: "编辑" }));
+    const dialog = await screen.findByRole("dialog");
+    const objective = within(dialog).getByLabelText("目标");
+    expect(objective).toHaveValue("让测试全绿");
+    await user.clear(objective);
+    await user.type(objective, "跑通回测");
+    await user.clear(within(dialog).getByLabelText(/token 预算/));
+    await user.type(within(dialog).getByLabelText(/token 预算/), "80000");
+    await user.click(within(dialog).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(setGoal).toHaveBeenLastCalledWith(expect.objectContaining({ input: { threadId: "t1", objective: "跑通回测", tokenBudget: 80000 } })));
+
+    await user.click(within(bar).getByRole("button", { name: "清除" }));
+    await waitFor(() => expect(clearGoal).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1" } })));
+    act(() => channel.deliver("codex", { seq: 6, method: "thread/goal/cleared", params: { threadId: "thr_1" } }));
+    await waitFor(() => expect(screen.queryByTestId("goal-bar")).not.toBeInTheDocument());
+
+    // /goal opens the dialog for a new goal
+    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "/goal");
+    await user.click(await screen.findByRole("option", { name: /goal/ }));
+    const fresh = await screen.findByRole("dialog");
+    expect(within(fresh).getByLabelText("目标")).toHaveValue("");
+  });
+
+  test("codex rerouting the model mid-turn is said in a toast", async () => {
+    await open();
+    act(() => {
+      channel.deliver("codex", {
+        seq: 4,
+        method: "model/rerouted",
+        params: { threadId: "thr_1", turnId: "turn_1", fromModel: "a", toModel: "b", reason: "highRiskCyberActivity" },
+      });
+    });
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(expect.stringMatching(/模型已切换.*a.*b/), expect.anything()));
   });
 
   test("a disconnected thread keeps the input usable but cannot send", async () => {
@@ -719,6 +794,44 @@ describe("ThreadPage", () => {
       ),
     );
     r.unmount();
+  });
+
+  test("$ in the composer offers codex's skills; the pick is $name in the text, a chip in the message, and the SKILL.md rides on the turn", async () => {
+    vi.mocked(listSkills).mockResolvedValue(
+      ok([
+        { name: "review-agent", description: "Review code changes", shortDescription: "review", path: "/srv/app-1/.agents/skills/review-agent/SKILL.md", enabled: true },
+        { name: "docs", description: "Write the docs", shortDescription: null, path: "/srv/app-1/.agents/skills/docs/SKILL.md", enabled: true },
+      ]) as never,
+    );
+    const user = userEvent.setup();
+    const r = renderAt("/p/app-1/t/t1");
+    await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
+    act(() =>
+      channel.reply("ok", {
+        ...snapshot,
+        items: [{ id: "u1", type: "userMessage", turnId: "turn_1", content: [{ type: "text", text: "use $docs here" }] }],
+      }),
+    );
+    const chip = await screen.findByText("docs");
+    expect(chip.closest("[data-slot=directive-text-chip]")).not.toBeNull();
+
+    const box = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(box, "please $rev");
+    await user.click(await screen.findByRole("option", { name: /review-agent/ }));
+    expect(box).toHaveValue("please $review-agent ");
+    await user.type(box, "{Enter}");
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            text: "please $review-agent",
+            skills: [{ name: "review-agent", path: "/srv/app-1/.agents/skills/review-agent/SKILL.md" }],
+          }),
+        }),
+      ),
+    );
+    r.unmount();
+    vi.mocked(listSkills).mockResolvedValue(ok([]) as never);
   });
 
   test("/ in the composer lists the commands: /review starts a review, /compact compacts, /init sends the prompt, /git opens the tool", async () => {

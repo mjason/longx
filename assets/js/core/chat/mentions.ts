@@ -32,3 +32,49 @@ export type FileMatch = { path: string; fileName: string; matchType: string };
 export function fileMentionItems(matches: readonly FileMatch[]): Unstable_TriggerItem[] {
   return matches.map((m) => ({ id: m.path, type: m.matchType, label: m.path, metadata: { icon: m.matchType } }));
 }
+
+// `$name` — a skill codex knows (letters, digits, `-`, `_`; never a price)
+const SKILL = /(^|[^\w$])\$([A-Za-z][\w-]*)/g;
+
+/** A skill as the popover and the adapter see it (`Skill` in core/projects). */
+export type SkillRef = { name: string; description: string; shortDescription: string | null; path: string | null; enabled: boolean };
+
+/** The enabled skills as the `$` popover's items; a pick is written as `$name`. */
+export function skillMentionItems(skills: readonly SkillRef[]): Unstable_TriggerItem[] {
+  return skills.filter((s) => s.enabled).map((s) => ({ id: s.name, type: "skill", label: s.name, description: s.shortDescription ?? s.description, metadata: { icon: "skill" } }));
+}
+
+/** The skills a message names, once each, known (and enabled) ones only — what rides on the turn as skill inputs. */
+export function skillsIn(text: string, skills: readonly SkillRef[]): { name: string; path: string }[] {
+  const out: { name: string; path: string }[] = [];
+  for (const m of text.matchAll(SKILL)) {
+    const name = m[2]!;
+    if (out.some((s) => s.name === name)) continue;
+    const skill = skills.find((s) => s.name === name && s.enabled && s.path);
+    if (skill) out.push({ name, path: skill.path! });
+  }
+  return out;
+}
+
+/** One formatter for the user text: `@file` and `$skill` chips. */
+export const mentionFormatter: Unstable_DirectiveFormatter = {
+  serialize(item) {
+    return item.type === "skill" ? `$${item.id}` : fileFormatter.serialize(item);
+  },
+  parse(text) {
+    // split on skills first, then let the file formatter handle each text run
+    const out: Unstable_DirectiveSegment[] = [];
+    let last = 0;
+    const flush = (upTo: number) => {
+      if (upTo > last) out.push(...fileFormatter.parse(text.slice(last, upTo)));
+    };
+    for (const m of text.matchAll(SKILL)) {
+      const start = m.index + m[1]!.length;
+      flush(start);
+      out.push({ kind: "mention", type: "skill", label: m[2]!, id: m[2]! });
+      last = m.index + m[0].length;
+    }
+    flush(text.length);
+    return out;
+  },
+};

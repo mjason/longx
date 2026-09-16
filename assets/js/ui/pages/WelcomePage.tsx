@@ -2,7 +2,7 @@ import { FolderGit2, FolderPlus, Search, Settings } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { relativeTime } from "@/core/format";
-import { useProjects } from "@/core/projects";
+import { useProjects, useRunningThreads, type RunningThread } from "@/core/projects";
 import { Button } from "@/ui/components/ui/button";
 import { Input } from "@/ui/components/ui/input";
 import { Skeleton } from "@/ui/components/ui/skeleton";
@@ -14,6 +14,7 @@ import { t } from "@/ui/strings";
 /** IDEA's welcome screen: recent projects, search, one door into a project. */
 export function WelcomePage() {
   const projects = useProjects();
+  const running = useRunningThreads();
   const [query, setQuery] = useState("");
 
   const shown = useMemo(() => {
@@ -40,6 +41,7 @@ export function WelcomePage() {
         }
       />
       <Page>
+        {running.data && running.data.length > 0 ? <RunningThreads threads={running.data} /> : null}
         {(projects.data?.length ?? 0) > 0 ? (
           <div className="relative mb-3">
             <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
@@ -91,6 +93,38 @@ export function WelcomePage() {
         </Button>
       </BottomBar>
     </>
+  );
+}
+
+/** The threads with a turn in flight right now — a way back into each, the ones waiting on the person first. */
+function RunningThreads({ threads }: { threads: RunningThread[] }) {
+  const ordered = [...threads].sort((a, b) => Number(b.waiting) - Number(a.waiting));
+  return (
+    <section className="mb-5" data-testid="running-threads" aria-label={t.runningNow}>
+      <h2 className="text-muted-foreground mb-2 text-xs font-medium">{t.runningNow}</h2>
+      <ul className="flex flex-col gap-2">
+        {ordered.map((r) => (
+          <li key={r.id}>
+            <Link
+              to={`/p/${r.projectSlug}/t/${r.id}`}
+              className={`bg-card hover:bg-accent/40 active:bg-accent/60 touch-target flex items-center gap-3 rounded-lg border p-3 transition-colors ${r.waiting ? "border-warning/60" : ""}`}
+            >
+              <span className={`size-2.5 shrink-0 rounded-full ${r.waiting ? "bg-warning" : "bg-primary animate-pulse"}`} aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline justify-between gap-3">
+                  <span className="truncate font-medium">{r.title || r.preview || r.projectName}</span>
+                  <span className={`shrink-0 text-xs ${r.waiting ? "text-warning" : "text-muted-foreground"}`}>{r.waiting ? t.waitingForYou : t.runningTurn}</span>
+                </span>
+                <span className="text-muted-foreground mt-0.5 flex items-baseline justify-between gap-3 text-xs">
+                  <span className="truncate">{r.projectName}</span>
+                  <span className="shrink-0">{relativeTime(r.lastActivityAt)}</span>
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

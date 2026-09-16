@@ -607,6 +607,141 @@ export async function validateListModels(
 }
 
 
+export type ReviewSettingsFields = UnifiedFieldSelection<{modelSlug: string | null, effort: string | null, __type: "TypedMap", __primitiveFields: "modelSlug" | "effort"}>[];
+
+export type InferReviewSettingsResult<
+  Fields extends ReviewSettingsFields | undefined,
+> = InferResult<{modelSlug: string | null, effort: string | null, __type: "TypedMap", __primitiveFields: "modelSlug" | "effort"}, Fields>;
+
+export type ReviewSettingsResult<Fields extends ReviewSettingsFields | undefined = undefined> = | { success: true; data: InferReviewSettingsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Model
+ *
+ * @ashActionType :action
+ */
+export async function reviewSettings<Fields extends ReviewSettingsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ReviewSettingsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "review_settings",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ReviewSettingsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Model
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateReviewSettings(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "review_settings",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetReviewModelInput = {
+  modelSlug?: string | null;
+  effort?: string | null;
+};
+
+export type InferSetReviewModelResult = {};
+
+export type SetReviewModelResult = | { success: true; data: InferSetReviewModelResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Model
+ *
+ * @ashActionType :action
+ */
+export async function setReviewModel(
+  config: {
+  tenant?: string;
+  input?: SetReviewModelInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetReviewModelResult> {
+  const payload = {
+    action: "set_review_model",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<SetReviewModelResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Model
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetReviewModel(
+  config: {
+  tenant?: string;
+  input?: SetReviewModelInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_review_model",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type UpdateModelInput = {
   name?: string;
   slug?: string | null;
@@ -970,6 +1105,80 @@ export async function validateDeleteProvider(
     action: "delete_provider",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     identity: config.identity
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type DiscoverModelsInput = {
+  id: UUID;
+};
+
+export type DiscoverModelsFields = UnifiedFieldSelection<{ok: boolean, error: string | null, models: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "ok" | "error" | "models"}>[];
+
+export type InferDiscoverModelsResult<
+  Fields extends DiscoverModelsFields | undefined,
+> = InferResult<{ok: boolean, error: string | null, models: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "ok" | "error" | "models"}, Fields>;
+
+export type DiscoverModelsResult<Fields extends DiscoverModelsFields | undefined = undefined> = | { success: true; data: InferDiscoverModelsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Provider
+ *
+ * @ashActionType :action
+ */
+export async function discoverModels<Fields extends DiscoverModelsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: DiscoverModelsInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DiscoverModelsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "discover_models",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<DiscoverModelsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Provider
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateDiscoverModels(
+  config: {
+  tenant?: string;
+  input: DiscoverModelsInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "discover_models",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
   };
 
   return executeValidationRpcRequest<ValidationResult>(
@@ -2653,6 +2862,80 @@ export async function validateInitGit(
 ): Promise<ValidationResult> {
   const payload = {
     action: "init_git",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ListSkillsInput = {
+  id: UUID;
+};
+
+export type ListSkillsFields = UnifiedFieldSelection<{name: string, description: string, shortDescription: string | null, path: string | null, enabled: boolean, __type: "TypedMap", __primitiveFields: "name" | "description" | "shortDescription" | "path" | "enabled"}>[];
+
+export type InferListSkillsResult<
+  Fields extends ListSkillsFields | undefined,
+> = Array<InferResult<{name: string, description: string, shortDescription: string | null, path: string | null, enabled: boolean, __type: "TypedMap", __primitiveFields: "name" | "description" | "shortDescription" | "path" | "enabled"}, Fields>>;
+
+export type ListSkillsResult<Fields extends ListSkillsFields | undefined = undefined> = | { success: true; data: InferListSkillsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Project
+ *
+ * @ashActionType :action
+ */
+export async function listSkills<Fields extends ListSkillsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: ListSkillsInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListSkillsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "list_skills",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ListSkillsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Project
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateListSkills(
+  config: {
+  tenant?: string;
+  input: ListSkillsInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_skills",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };
@@ -4713,6 +4996,80 @@ export async function validateArchiveThread(
 }
 
 
+export type ClearGoalInput = {
+  threadId: UUID;
+};
+
+export type ClearGoalFields = UnifiedFieldSelection<{cleared: boolean, __type: "TypedMap", __primitiveFields: "cleared"}>[];
+
+export type InferClearGoalResult<
+  Fields extends ClearGoalFields | undefined,
+> = InferResult<{cleared: boolean, __type: "TypedMap", __primitiveFields: "cleared"}, Fields>;
+
+export type ClearGoalResult<Fields extends ClearGoalFields | undefined = undefined> = | { success: true; data: InferClearGoalResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function clearGoal<Fields extends ClearGoalFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: ClearGoalInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ClearGoalResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "clear_goal",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ClearGoalResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateClearGoal(
+  config: {
+  tenant?: string;
+  input: ClearGoalInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "clear_goal",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type CompactThreadInput = {
   threadId: UUID;
 };
@@ -4995,6 +5352,72 @@ export async function validateInterruptTurn(
 }
 
 
+export type ListRunningThreadsFields = UnifiedFieldSelection<{threads: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "threads"}>[];
+
+export type InferListRunningThreadsResult<
+  Fields extends ListRunningThreadsFields | undefined,
+> = InferResult<{threads: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "threads"}, Fields>;
+
+export type ListRunningThreadsResult<Fields extends ListRunningThreadsFields | undefined = undefined> = | { success: true; data: InferListRunningThreadsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function listRunningThreads<Fields extends ListRunningThreadsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListRunningThreadsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "list_running_threads",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ListRunningThreadsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateListRunningThreads(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_running_threads",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type RenameThreadInput = {
   title?: string | null;
 };
@@ -5229,6 +5652,7 @@ export type SendMessageInput = {
   sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
   approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted" | null;
   networkAccess?: boolean | null;
+  skills?: Array<Record<string, any>> | null;
 };
 
 export type SendMessageFields = UnifiedFieldSelection<TurnResourceSchema>[];
@@ -5290,6 +5714,83 @@ export async function validateSendMessage(
 ): Promise<ValidationResult> {
   const payload = {
     action: "send_message",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetGoalInput = {
+  threadId: UUID;
+  objective?: string | null;
+  status?: "active" | "blocked" | "complete" | "paused" | null;
+  tokenBudget?: number | null;
+};
+
+export type SetGoalFields = UnifiedFieldSelection<{objective: string, status: string, tokenBudget: number | null, tokensUsed: number, timeUsedSeconds: number, __type: "TypedMap", __primitiveFields: "objective" | "status" | "tokenBudget" | "tokensUsed" | "timeUsedSeconds"}>[];
+
+export type InferSetGoalResult<
+  Fields extends SetGoalFields | undefined,
+> = InferResult<{objective: string, status: string, tokenBudget: number | null, tokensUsed: number, timeUsedSeconds: number, __type: "TypedMap", __primitiveFields: "objective" | "status" | "tokenBudget" | "tokensUsed" | "timeUsedSeconds"}, Fields>;
+
+export type SetGoalResult<Fields extends SetGoalFields | undefined = undefined> = | { success: true; data: InferSetGoalResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function setGoal<Fields extends SetGoalFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SetGoalInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetGoalResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_goal",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetGoalResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetGoal(
+  config: {
+  tenant?: string;
+  input: SetGoalInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_goal",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };

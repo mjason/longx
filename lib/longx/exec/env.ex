@@ -24,10 +24,16 @@ defmodule Longx.Exec.Env do
 
   @type policy :: %{optional(String.t()) => term} | nil
 
-  @doc "The command's environment from the host's, the policy and codex's overlay."
-  @spec build(%{String.t() => String.t()}, policy, %{String.t() => String.t()}) ::
+  @doc """
+  The command's environment from the host's, the policy and codex's overlay.
+  `tool_bin:` (Longx.Codex.Home.tool_bin/0 — codex's `apply_patch` alias)
+  leads `PATH` whatever the policy says: codex's built-in executor has that
+  directory on its own PATH, which the command inherits there; here the
+  command inherits Longx's.
+  """
+  @spec build(%{String.t() => String.t()}, policy, %{String.t() => String.t()}, keyword) ::
           %{String.t() => String.t()}
-  def build(host, policy, overlay) do
+  def build(host, policy, overlay, opts \\ []) do
     policy
     |> inherit(host)
     |> exclude(patterns(policy["exclude"]))
@@ -35,6 +41,16 @@ defmodule Longx.Exec.Env do
     |> include_only(patterns(policy["includeOnly"]))
     |> Map.merge(overlay || %{})
     |> exclude(patterns(@secret_patterns ++ @non_inheritable))
+    |> lead_path(Keyword.get(opts, :tool_bin))
+  end
+
+  defp lead_path(env, nil), do: env
+
+  defp lead_path(env, dir) do
+    case env["PATH"] do
+      path when is_binary(path) and path != "" -> Map.put(env, "PATH", dir <> ":" <> path)
+      _ -> Map.put(env, "PATH", dir)
+    end
   end
 
   defp inherit(nil, _host), do: %{}

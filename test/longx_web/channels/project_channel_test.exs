@@ -58,6 +58,26 @@ defmodule LongxWeb.ProjectChannelTest do
     assert_push "sample", %{rss_bytes: 42, processes: 1}
   end
 
+  test "files changed under the project (codex's fs/changed) and codex's notices are relayed", %{
+    project: project
+  } do
+    PubSub.broadcast(
+      Longx.PubSub,
+      "project:" <> project.id,
+      {:files_changed, project.id, ["/p/a.txt"]}
+    )
+
+    assert_push "files", %{paths: ["/p/a.txt"]}
+
+    PubSub.broadcast(
+      Longx.PubSub,
+      "project:" <> project.id,
+      {:codex_notice, project.id, %{kind: "configWarning", summary: "bad key", details: nil}}
+    )
+
+    assert_push "notice", %{kind: "configWarning", summary: "bad key"}
+  end
+
   test "joining an unknown project is refused" do
     assert {:error, %{reason: "unknown project"}} = join!(Ash.UUID.generate())
   end

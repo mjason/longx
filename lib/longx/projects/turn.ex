@@ -127,6 +127,10 @@ defmodule Longx.Projects.Turn do
       filter expr(status == :in_progress and thread.project_id == ^arg(:project_id))
     end
 
+    read :in_progress do
+      filter expr(status == :in_progress)
+    end
+
     update :mark_reverted do
       change set_attribute(:status, :reverted)
     end

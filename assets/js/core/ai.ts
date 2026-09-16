@@ -9,10 +9,13 @@ import {
   createProvider,
   deleteModel,
   deleteProvider,
+  discoverModels,
   listModels,
   listPresets,
   listProviders,
   listSearchProviders,
+  reviewSettings,
+  setReviewModel,
   listTools,
   makeDefaultModel,
   memoryDeleteNote,
@@ -42,7 +45,45 @@ export const aiKeys = {
   search: ["ai", "search"] as const,
   tools: ["ai", "tools"] as const,
   presets: ["ai", "presets"] as const,
+  review: ["ai", "review"] as const,
 };
+
+/** a model the provider's own list names (GET /models), normalised by the server */
+export type DiscoveredModel = {
+  id: string;
+  name: string;
+  ownedBy: string | null;
+  contextWindow: number | null;
+  reasoningLevels: string[];
+  reasoningEffort: string | null;
+  imageInput: boolean;
+  installed: boolean;
+};
+
+export type Discovery = { ok: boolean; error: string | null; models: DiscoveredModel[] };
+
+/** the provider's own model list, fetched when asked (never cached across openings) */
+export function useDiscoverModels(providerId: string | null) {
+  return useQuery({
+    queryKey: ["ai", "discover", providerId] as const,
+    queryFn: async () =>
+      unwrap(await discoverModels({ fields: ["ok", "error", "models"], input: { id: providerId! } })) as Discovery,
+    enabled: providerId !== null,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
+/** codex's automatic approval review: the model it runs on (null = the thread's own) and a pinned level */
+export type ReviewSettings = { modelSlug: string | null; effort: string | null };
+
+export function useReviewSettings() {
+  return useQuery({
+    queryKey: aiKeys.review,
+    queryFn: async () =>
+      unwrap(await reviewSettings({ fields: ["modelSlug", "effort"] })) as ReviewSettings,
+  });
+}
 
 export type Provider = {
   id: string;
@@ -293,6 +334,9 @@ export function useAiActions() {
             input: { id },
           }),
         ) as { ok: boolean; latencyMs: number | null; error: string | null },
+    ),
+    setReviewModel: useAiWrite(async (input: ReviewSettings) =>
+      unwrap(await setReviewModel({ input })),
     ),
     setSearchKey: useAiWrite(
       async ({ id, apiKey }: { id: string; apiKey: string }) =>

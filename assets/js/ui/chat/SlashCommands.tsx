@@ -3,7 +3,7 @@
 // (/review, /compact, /init) go to the backend; the rest open a tool or a
 // page. The text clears on pick — a command is not part of the message.
 import { unstable_useSlashCommandAdapter, useAui } from "@assistant-ui/react";
-import { FolderTree, GitBranch, History, MessageSquarePlus, Minimize2, ScrollText, Search, Settings } from "lucide-react";
+import { FolderTree, GitBranch, History, MessageSquarePlus, Minimize2, ScrollText, Search, Settings, Target } from "lucide-react";
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -13,12 +13,14 @@ import { unwrap } from "@/core/projects";
 import { ComposerTriggerPopover } from "@/ui/components/assistant-ui/elements/composer-trigger-popover.aui";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
+import { useGoalDialog } from "./GoalBar";
 
-const ICONS = { new: MessageSquarePlus, review: Search, compact: Minimize2, init: ScrollText, git: GitBranch, files: FolderTree, history: History, settings: Settings };
+const ICONS = { new: MessageSquarePlus, review: Search, compact: Minimize2, init: ScrollText, goal: Target, git: GitBranch, files: FolderTree, history: History, settings: Settings };
 
 export function SlashCommands() {
   const { thread } = useChat();
   const aui = useAui();
+  const goalDialog = useGoalDialog();
   const frame = useFrame();
   const navigate = useNavigate();
   const { slug } = useParams();
@@ -51,12 +53,13 @@ export function SlashCommands() {
         }),
       },
       { id: "init", description: t.commands.init, icon: "init", execute: () => aui.thread.append({ role: "user", content: [{ type: "text", text: t.initPrompt }] }) },
+      { id: "goal", description: t.commands.goal, icon: "goal", execute: () => goalDialog?.open() },
       { id: "git", description: t.commands.git, icon: "git", execute: () => frame.open("git") },
       { id: "files", description: t.commands.files, icon: "files", execute: () => frame.open("files") },
       { id: "history", description: t.commands.history, icon: "history", execute: () => frame.open("history") },
       { id: "settings", description: t.commands.settings, icon: "settings", execute: () => navigate(`/p/${slug}/settings`) },
     ];
-  }, [threadId, aui, frame, navigate, slug]);
+  }, [threadId, aui, frame, navigate, slug, goalDialog]);
 
   const slash = unstable_useSlashCommandAdapter({ commands, removeOnExecute: true, iconMap: ICONS });
   return (

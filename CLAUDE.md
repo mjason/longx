@@ -156,7 +156,16 @@ React Native client planned on the same core code.
     `with_additional_permissions`, a `request_permissions` call, an MCP/network one) goes to
     a read-only reviewer sub-session on the thread's model (its `low` effort when declared;
     codex's preferred reviewer model is not in our catalog, so it falls back to the active
-    slug) through our gateway — one extra model call per request — with
+    slug) — **or on a model of its own**: `Longx.AI.set_review_model/2` / `review_model/0`
+    (`Longx.System.Setting` keys `review_model` / `review_effort`; RPC `review_settings` /
+    `set_review_model` on `Longx.AI.Model`, the 自动审核 card of Settings → 模型) makes
+    `Home.catalog_models/0` add a `longx-review` entry — that model's, its levels narrowed
+    to the pinned one (codex takes `low` whenever an entry offers it) — that every other
+    entry names as `auto_review_model_override`; the gateway resolves the slug
+    `longx-review` (`AI.review_model_slug/0`) to that model, the default one when none is
+    set. A catalog change, so `stale: [:models]` and a codex restart. Proven in
+    `auto_review_integration_test`: the reviewer's request carries the review model and
+    its level, the agent's the thread's — through our gateway — one extra model call per request — with
     `core/assets/guardian/policy.md` as instructions and a strict-JSON verdict
     (`text.format` is sent; the parser also takes JSON inside prose, so third-party models
     work: live with DeepSeek Flash a whole-home write was denied, a single file allowed).
@@ -244,6 +253,12 @@ React Native client planned on the same core code.
     `:in_progress` turn of that project fails with "codex restarted…", its `:active` threads
     become `:disconnected`; `:ready` → those are `thread/resume`d on the new process (→
     `:idle`) or marked `:unrecoverable`. Idle threads are resumed lazily by `send_message/3`.
+    **The Tracker's list of followed threads is in memory**: a Longx restart forgets it, so
+    `resume_thread/2` and `send_message/3` both `Tracker.track/1` (idempotent) — without
+    that a turn after a restart never completed its row and the thread showed 进行中 for
+    ever; and `Projects.settle_after_restart/0` (a boot `Task` after the Tracker) fails every
+    `:in_progress` turn ("Longx restarted while this turn was running") and idles every
+    `:active` thread a previous boot left, since no codex survives the BEAM.
     **Stall watchdog**: a turn whose thread produced no event for `stall_after` (default
     10 min; `config :longx, Longx.Projects.Tracker, stall_after:, tick:`) gets
     `turn/interrupt` and ends `:interrupted` with error "no progress for N seconds".
@@ -394,7 +409,15 @@ React Native client planned on the same core code.
     keys; the team plan lists nine models more; Coding Plan is chat-only and out;
     pay-as-you-go needs a WorkspaceId in the URL → a custom provider), OpenAI's from the
     catalog embedded in the pinned codex binary (`strings` it for
-    `supported_reasoning_levels`). `apply/2` is
+    `supported_reasoning_levels`). **Any provider's own list**: `Longx.AI.discover_models/1`
+    asks `GET <base_url>/models` (OpenAI's standard: `data[].id`; OpenRouter adds `name`,
+    `context_length`, `reasoning.supported_efforts` / `default_effort` and the input
+    modalities, a plain gateway like listenai only `id` + `owned_by`) and normalises each
+    entry (window, levels in codex's order, default level, image input, `installed` for ids
+    the provider has a row for); RPC `discover_models` on `Provider` (`ok` / `error` /
+    untyped `models`, never a failure), the provider menu's 从接口获取模型 → `DiscoverDialog`
+    (the `model-picker` checklist with a filter, picked entries → `create_model` with what
+    the list said). `apply/2` is
     idempotent (provider by slug — facts refreshed, a key never dropped; models by
     `upstream_id` — a person's edits kept, a row without levels learns the preset's, a row
     on a smaller set of the preset's levels gains the ones added since (DeepSeek's are
@@ -526,7 +549,42 @@ React Native client planned on the same core code.
     started with an empty task). A child's approval is a request on the child's thread; the
     UI answers it through the parent (same connection, request id is what counts).
     `turn/plan/updated` (codex's `update_plan` tool — not offered to every model) is the
-    thread view's `plan`. Dev aid: `config :longx, Longx.AI.Gateway, dump_requests_to:`
+    thread view's `plan`.
+  - **Goal mode (codex's `goals` feature, on by default)**: the model has `create_goal` /
+    `update_goal` / `get_goal` (it only creates one when asked); with a goal `active`
+    codex starts the next turn *by itself* whenever the thread goes idle, with a
+    continuation prompt naming the objective, until the model marks it `complete`,
+    it is `blocked` (three no-progress turns) or the token budget is spent. Longx:
+    `Thread.set_goal/2` (`thread/goal/set`: `objective:`, `status:` `:active` | `:paused` |
+    `:complete` …, `token_budget:` nil = none), `get_goal/2`, `clear_goal/2`;
+    `thread/goal/updated` / `cleared` fold into the Store / `thread.ts` as the view's
+    `goal`; **a turn codex starts on its own gets a Turn row** (Tracker on `turn/started`
+    for an unknown id → `Projects.record_external_turn/2`: HEAD as `commit_before`, the
+    tree's dirtiness, `user_text` "（目标续跑）<objective>", the thread `:active`) so the
+    history, the restore points and the welcome page see it. RPC `set_goal` / `clear_goal`
+    on `Thread`; the UI is `ui/chat/GoalBar` (`GoalProvider` in `ChatProvider` holds the
+    dialog, `GoalBar` above the thread: objective, status, tokens / budget, elapsed;
+    pause / resume / edit / clear) and the `/goal` command opens the dialog; `/goal <目标>`
+    typed past the popover is caught in `adapter.ts`'s `onNew` and sets the goal instead of
+    going out as a message. Proven on
+    the real binary in `goals_skills_integration_test`.
+  - **Skills**: codex loads `SKILL.md` files (`<cwd>/.agents/skills/<name>/SKILL.md`, the
+    user's, the home's `skills/` incl. codex's own samples) and lists them in the prompt;
+    the model reads one when relevant. `Thread.list_skills/2` (`skills/list` per cwd) →
+    `Projects.list_skills/2` → RPC `list_skills` on `Project`; the composer's `$` popover
+    (`ui/chat/SkillMentions`, the same `composer-trigger-popover` as `@`) writes `$name`,
+    `core/chat/mentions.ts`'s `mentionFormatter` renders both `@file` and `$skill` chips and
+    `skillsIn/2` turns the names in a sent message into `send_message(skills: [%{name,
+    path}])` → `turn/start` `{type: "skill", name, path}` inputs (the SKILL.md text reaches
+    the model — proven). Project settings list the skills found (`useSkills`).
+  - **Thread-less notifications** ride `"codex:server"` as `{:codex_server, tag, method,
+    params}` (tag = the project id under the pool). The Tracker asks each project's codex
+    to watch its root once it is up (`fs/watch`, watch id = project id) and relays
+    `fs/changed` as `Projects.broadcast_files_changed/2` → ProjectChannel `"files"` → the
+    client invalidates the tree and git status (`invalidateFiles`); `configWarning` /
+    `deprecationNotice` → `broadcast_notice/2` → `"notice"` → a toast; `model/rerouted`
+    (thread-scoped) reaches the client as a signal (`useThreadView(_, onSignal)` →
+    `ChatProvider` toast "模型已切换"). Dev aid: `config :longx, Longx.AI.Gateway, dump_requests_to:`
     writes what the model actually receives.
     Standalone = codex's `ext/web-search`: with the feature on codex offers a `web.run`
     namespace tool and,
@@ -582,7 +640,12 @@ React Native client planned on the same core code.
   all/core/none, excludes, `set`, `includeOnly`, then codex's overlay; **`*KEY*`, `*SECRET*`,
   `*TOKEN*`, `LONGX_*` and codex's non-inheritable names never reach a command whatever
   the policy says** — codex-local strips the first three too; the shim runs commands with
-  `env_clear: true`, exactly that environment); `Longx.Exec.Policy` (the request's
+  `env_clear: true`, exactly that environment; **`Home.tool_bin/0` leads every command's
+  PATH** (`tool_bin:` option): `<data>/codex_home/bin/apply_patch`, a symlink to the bundled
+  codex binary that `Home.prepare/1` (re)points — codex dispatches on arg0, and its built-in
+  executor made the same alias in a temp dir on *its own* PATH, which a command inherited
+  there; under the exec-server a command inherits Longx's PATH, and `apply_patch` was
+  "command not found" until 0.1.17 — proven in `exec_server_integration_test`); `Longx.Exec.Policy` (the request's
   `FileSystemSandboxContext` — `managed` with `entries` of special paths `root` /
   `project_roots(+subpath)` / `slash_tmp` / `tmpdir`, plain paths and globs, `disabled`,
   `external` — into writable roots, read-only pockets (`.git`, `.codex`), denied paths,
@@ -861,7 +924,12 @@ React Native client planned on the same core code.
     the mode object is memoised, callbacks are `useCallback`.
   - `js/ui/` — React DOM, **shaped like an IDE with the chat where the editor would be**
     (IDEA's interactions, not its looks): `pages/WelcomePage` (recent projects, search, one
-    door to open/create), `pages/ProjectWizard` (two steps: `components/DirectoryPicker` on
+    door to open/create; on top, **what is running now** — `RunningThreads` over
+    `useRunningThreads` (RPC `list_running_threads` on `Longx.Projects.Thread` →
+    `Projects.running_threads/0`: every root thread with status `:active` across projects,
+    its project's slug/name, `waiting` when its ThreadState holds a request for the person;
+    polled every 3 s while the page shows), each a link into the thread, the ones waiting on
+    the person first and amber; nothing running, no section), `pages/ProjectWizard` (two steps: `components/DirectoryPicker` on
     the server's file system — `Longx.System.list_directory`, git repositories marked, hidden
     toggle, typed path — then name / "initialise git" / advanced sandbox+approval+network;
     a repository directory is an *open*, anything else may get `init_git: true`),
@@ -939,7 +1007,10 @@ React Native client planned on the same core code.
     size**, a dialog footer: an action must never depend on the page scrolling to be reached;
     long lists scroll in their own box — banners), `components/ui/` (shadcn,
     added with `npx shadcn@latest add …` in `assets/`; `components.json` maps
-    `@/ui/components`, `@/lib/utils`), `strings.ts` (all UI copy, zh-CN). `core/theme.ts`
+    `@/ui/components`, `@/lib/utils`; **`DialogContent` is a flex column capped at the
+    viewport** with `DialogBody` as the scrolling middle — a tall form keeps its header and
+    buttons in view on a phone instead of scrolling them off; wrap what may grow in
+    `DialogBody`, a `<form>` between header and footer gets `flex min-h-0 flex-1 flex-col`), `strings.ts` (all UI copy, zh-CN). `core/theme.ts`
     (**follows the OS by default**, dark/light as explicit choices; `ThemeToggle` in the top
     bars cycles them; the CSS also honours `prefers-color-scheme` before JS runs),
     `core/viewport.ts` (phone < 768 ≤ tablet < 1024 ≤ desktop).
@@ -979,7 +1050,11 @@ React Native client planned on the same core code.
     mode for the next turn: sandbox / approval / network in a popover, from the thread row
     or the project defaults, sent with every message — and the turn's state) /
     `ComposerTrailing` (the `context-display` ring — codex's last-turn token usage
-    against the `modelContextWindow` it reports, `contextUsage(view)` — and the per-turn
+    against the `modelContextWindow` it reports, `contextUsage(view)`; **its breakdown is a
+    click-to-open popover, not the registry's hover tooltip**: the composer sits in the
+    thread's scrolling viewport (`ViewportFooter`) and Radix's tooltip closes itself
+    whenever an ancestor of its trigger scrolls, which the auto-scroll did on every
+    streamed line — and the per-turn
     model with its reasoning level: the registry's **`model-selector`** element used
     standalone (`ModelSelectorRoot` with our `value` / `effort`; no model-context
     registration — our RPC carries the choice), models grouped by provider,

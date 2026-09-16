@@ -39,6 +39,7 @@ defmodule Longx.Codex.ThreadState do
           status: map | nil,
           token_usage: map | nil,
           plan: map | nil,
+          goal: map | nil,
           items: [map],
           pending_requests: [map]
         }

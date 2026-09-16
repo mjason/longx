@@ -308,6 +308,95 @@ defmodule Longx.Codex.Thread do
     end
   end
 
+  ## Goals (codex's goal mode)
+
+  @goal_statuses %{
+    active: "active",
+    paused: "paused",
+    blocked: "blocked",
+    usage_limited: "usageLimited",
+    budget_limited: "budgetLimited",
+    complete: "complete"
+  }
+
+  @doc """
+  Sets or changes the thread's goal (`thread/goal/set`): `objective:`,
+  `status:` (`:active` | `:paused` | `:blocked` | `:complete` …),
+  `token_budget:` (nil clears it). While a goal is active codex starts the
+  next turn by itself whenever the thread goes idle. Answers the goal as
+  codex reports it (also broadcast as `thread/goal/updated`).
+  """
+  @spec set_goal(String.t(), keyword) :: {:ok, map} | {:error, term}
+  def set_goal(thread_id, opts) do
+    params =
+      %{"threadId" => thread_id}
+      |> put_if("objective", Keyword.get(opts, :objective))
+      |> put_if(
+        "status",
+        opts |> Keyword.get(:status) |> then(&(&1 && Map.fetch!(@goal_statuses, &1)))
+      )
+      |> then(fn params ->
+        case Keyword.fetch(opts, :token_budget) do
+          {:ok, budget} -> Map.put(params, "tokenBudget", budget)
+          :error -> params
+        end
+      end)
+
+    with {:ok, conn} <- conn(thread_id, opts),
+         {:ok, %{"goal" => goal}} <- Connection.request(conn, "thread/goal/set", params),
+         do: {:ok, goal}
+  end
+
+  @doc "The thread's goal as codex has it, nil when none (`thread/goal/get`)."
+  @spec get_goal(String.t(), keyword) :: {:ok, map | nil} | {:error, term}
+  def get_goal(thread_id, opts \\ []) do
+    with {:ok, conn} <- conn(thread_id, opts),
+         {:ok, %{"goal" => goal}} <-
+           Connection.request(conn, "thread/goal/get", %{"threadId" => thread_id}),
+         do: {:ok, goal}
+  end
+
+  @doc "Drops the thread's goal (`thread/goal/clear`); whether there was one."
+  @spec clear_goal(String.t(), keyword) :: {:ok, boolean} | {:error, term}
+  def clear_goal(thread_id, opts \\ []) do
+    with {:ok, conn} <- conn(thread_id, opts),
+         {:ok, %{"cleared" => cleared}} <-
+           Connection.request(conn, "thread/goal/clear", %{"threadId" => thread_id}),
+         do: {:ok, cleared}
+  end
+
+  @typedoc "A skill codex found (`SKILL.md`): what the composer offers as `$name`."
+  @type skill :: %{
+          name: String.t(),
+          description: String.t(),
+          short_description: String.t() | nil,
+          path: String.t() | nil,
+          enabled: boolean
+        }
+
+  @doc """
+  The skills codex finds for a working directory (`skills/list`): the
+  project's `.agents/skills/*/SKILL.md`, the user's, and the home's
+  (codex's own samples included).
+  """
+  @spec list_skills(Path.t(), keyword) :: {:ok, [skill]} | {:error, term}
+  def list_skills(cwd, opts) do
+    with {:ok, conn} <- conn(nil, opts),
+         {:ok, %{"data" => entries}} <-
+           Connection.request(conn, "skills/list", %{"cwds" => [cwd], "forceReload" => false}) do
+      {:ok,
+       for %{"skills" => skills} <- entries, skill <- skills do
+         %{
+           name: skill["name"],
+           description: skill["description"] || "",
+           short_description: skill["shortDescription"],
+           path: skill["path"],
+           enabled: skill["enabled"] != false
+         }
+       end}
+    end
+  end
+
   @typedoc "What a review looks at."
   @type review_target ::
           :uncommitted
@@ -476,10 +565,19 @@ defmodule Longx.Codex.Thread do
   @doc false
   @spec turn_params(String.t(), String.t(), keyword) :: map
   def turn_params(thread_id, text, opts) do
-    # images (data: or http(s): urls) go as their own inputs after the text
+    # images (data: or http(s): urls) go as their own inputs after the text,
+    # then the skills the person named (`$name`: codex's skill input, which
+    # puts the SKILL.md in the turn's context)
     images = for url <- Keyword.get(opts, :images, []), do: %{"type" => "image", "url" => url}
 
-    %{"threadId" => thread_id, "input" => [%{"type" => "text", "text" => text} | images]}
+    skills =
+      for %{name: name, path: path} <- Keyword.get(opts, :skills, []),
+          do: %{"type" => "skill", "name" => name, "path" => path}
+
+    %{
+      "threadId" => thread_id,
+      "input" => [%{"type" => "text", "text" => text} | images ++ skills]
+    }
     |> put_model(Keyword.get(opts, :model))
     |> put_if("effort", Keyword.get(opts, :effort))
     |> put_if("summary", opts |> Keyword.get(:summary) |> wire_atom())

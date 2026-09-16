@@ -163,6 +163,25 @@ defmodule Longx.Projects.Project do
       end
     end
 
+    # the skills codex finds for the project: what the composer offers as `$name`
+    action :list_skills, {:array, :map} do
+      constraints items: [
+                    fields: [
+                      name: [type: :string, allow_nil?: false],
+                      description: [type: :string, allow_nil?: false],
+                      short_description: [type: :string],
+                      path: [type: :string],
+                      enabled: [type: :boolean, allow_nil?: false]
+                    ]
+                  ]
+
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input), do: Longx.Projects.list_skills(project)
+      end
+    end
+
     action :init_git, :map do
       constraints fields: @git_info
       argument :id, :uuid, allow_nil?: false

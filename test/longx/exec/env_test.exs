@@ -54,6 +54,20 @@ defmodule Longx.Exec.EnvTest do
     assert env["EDITOR"] == "vim"
   end
 
+  test "tool_bin: Longx's own tool directory (codex's apply_patch alias) leads PATH whatever the policy says" do
+    assert Env.build(@host, policy(), %{}, tool_bin: "/data/codex_home/bin")["PATH"] ==
+             "/data/codex_home/bin:" <> @host["PATH"]
+
+    assert Env.build(@host, %{"inherit" => "none"}, %{}, tool_bin: "/data/codex_home/bin")["PATH"] ==
+             "/data/codex_home/bin"
+
+    # codex's overlay PATH, when it sends one, still comes after it
+    assert Env.build(@host, policy(), %{"PATH" => "/codex/bin"}, tool_bin: "/t")["PATH"] ==
+             "/t:/codex/bin"
+
+    refute Env.build(@host, policy(), %{}, tool_bin: nil)["PATH"] =~ "codex_home"
+  end
+
   test "inherit core keeps only the core variables" do
     env = Env.build(@host, policy(%{"inherit" => "core"}), %{})
     assert Map.keys(env) |> Enum.sort() == ~w(HOME PATH USER)

@@ -23,6 +23,7 @@ defmodule Longx.Projects do
       rpc_action :delete_project, :delete
       rpc_action :git_info, :git_info
       rpc_action :search_files, :search_files
+      rpc_action :list_skills, :list_skills
       rpc_action :init_git, :init_git
       rpc_action :codex_info, :codex_info
       rpc_action :stop_codex, :stop_codex
@@ -43,6 +44,9 @@ defmodule Longx.Projects do
       rpc_action :respond, :respond
       rpc_action :answer_request, :answer_request
       rpc_action :approve_review, :approve_review
+      rpc_action :list_running_threads, :list_running
+      rpc_action :set_goal, :set_goal
+      rpc_action :clear_goal, :clear_goal
       rpc_action :rename_thread, :rename
       rpc_action :archive_thread, :archive
       rpc_action :delete_thread, :delete_thread
@@ -107,6 +111,8 @@ defmodule Longx.Projects do
       define :rehost_thread, action: :rehost
       define :list_threads_for_project, action: :for_project, args: [:project_id]
       define :list_threads_with_status, action: :with_status, args: [:project_id, :status]
+      define :list_active_threads, action: :active_roots
+      define :list_all_active_threads, action: :active
       define :list_subagents, action: :subagents_of, args: [:parent_thread_id]
     end
 
@@ -120,6 +126,7 @@ defmodule Longx.Projects do
       define :mark_turn_reverted, action: :mark_reverted
       define :get_turn_by_codex_id, action: :by_codex_id, args: [:codex_turn_id]
       define :list_turns_in_progress, action: :in_progress_for_project, args: [:project_id]
+      define :list_all_turns_in_progress, action: :in_progress
 
       define :list_turns_for_thread,
         action: :for_thread,
@@ -272,13 +279,20 @@ defmodule Longx.Projects do
          :ok <- Longx.AI.check_effort(model_slug, opts[:effort]),
          {turn_opts, effort} = effort_change(turn_opts, thread, opts[:effort]),
          {:ok, conn} <- thread_connection(thread, opts),
+         # a Longx restart forgets every thread the Tracker followed; the
+         # turn's completion must reach the row whatever happened before
+         :ok <- Tracker.track(thread.codex_thread_id),
          :ok <- sync_reviewer(thread, mode, conn),
          {:ok, bookmark} <- preflight(thread, text, opts),
          {:ok, codex_turn_id} <-
            Longx.Codex.Thread.send(
              thread.codex_thread_id,
              text,
-             [{:conn, conn}, {:images, Keyword.get(opts, :images, [])} | turn_opts] ++
+             [
+               {:conn, conn},
+               {:images, Keyword.get(opts, :images, [])},
+               {:skills, Keyword.get(opts, :skills, [])} | turn_opts
+             ] ++
                mode_turn_opts(mode, thread)
            ),
          {:ok, turn} <-
@@ -425,6 +439,161 @@ defmodule Longx.Projects do
     |> Enum.filter(&File.dir?/1)
     |> Enum.uniq()
   end
+
+  @doc """
+  Every root thread with a turn in flight, across projects, newest activity
+  first — the welcome page's way back into what is running. `waiting` is
+  whether the thread's codex is holding a question for the person (an
+  approval, a permissions request, a `requestUserInput`).
+  """
+  @spec running_threads() :: [map]
+  def running_threads do
+    list_active_threads!(load: :project)
+    |> Enum.map(fn %Thread{} = thread ->
+      %{
+        id: thread.id,
+        codex_thread_id: thread.codex_thread_id,
+        title: thread.title,
+        preview: thread.preview,
+        last_activity_at: thread.last_activity_at,
+        project_id: thread.project_id,
+        project_slug: thread.project.slug,
+        project_name: thread.project.name,
+        waiting: Longx.Codex.ThreadState.Store.requests(thread.codex_thread_id) != []
+      }
+    end)
+  end
+
+  ## Goals (codex's goal mode) and skills
+
+  @doc """
+  Sets or changes the thread's goal (`Longx.Codex.Thread.set_goal/2`):
+  `objective`, `status` (`:active` | `:paused` | `:complete` …),
+  `token_budget` (nil = none). While a goal is active codex starts the next
+  turn by itself whenever the thread goes idle — the Tracker records those
+  turns like any other (`record_external_turn/2`).
+  """
+  @spec set_goal(Thread.t(), map, keyword) :: {:ok, map} | {:error, term}
+  def set_goal(%Thread{} = thread, attrs, opts \\ []) do
+    thread = Ash.get!(Thread, thread.id, load: :project)
+
+    with :ok <- ensure_usable(thread),
+         {:ok, conn} <- thread_connection(thread, opts) do
+      Longx.Codex.Thread.set_goal(
+        thread.codex_thread_id,
+        attrs
+        |> Map.take([:objective, :status, :token_budget])
+        |> Map.to_list()
+        |> Keyword.put(:conn, conn)
+      )
+    end
+  end
+
+  @doc "Drops the thread's goal; whether there was one."
+  @spec clear_goal(Thread.t(), keyword) :: {:ok, boolean} | {:error, term}
+  def clear_goal(%Thread{} = thread, opts \\ []) do
+    thread = Ash.get!(Thread, thread.id, load: :project)
+
+    with {:ok, conn} <- thread_connection(thread, opts),
+         do: Longx.Codex.Thread.clear_goal(thread.codex_thread_id, conn: conn)
+  end
+
+  @doc """
+  The skills codex finds for the project (`.agents/skills/*/SKILL.md` in the
+  working directory, the user's, the home's) — what the composer offers as
+  `$name`.
+  """
+  @spec list_skills(Project.t(), keyword) :: {:ok, [Longx.Codex.Thread.skill()]} | {:error, term}
+  def list_skills(%Project{} = project, opts \\ []) do
+    with {:ok, conn} <- project_connection(project, opts),
+         do: Longx.Codex.Thread.list_skills(project.root_path, conn: conn)
+  end
+
+  @doc """
+  A turn codex started by itself (goal mode's continuation): a Turn row
+  bookmarked like one the person sent — HEAD at the start, whether the tree
+  was dirty (no commit is made for it: nobody chose) — so the history, the
+  restore points and the welcome page see it.
+  """
+  @spec record_external_turn(Thread.t(), String.t()) :: {:ok, Turn.t()} | {:error, term}
+  def record_external_turn(%Thread{} = thread, codex_turn_id) do
+    goal = Longx.Codex.ThreadState.Store.meta(thread.codex_thread_id).goal
+
+    text =
+      case goal do
+        %{"objective" => objective} when is_binary(objective) -> "（目标续跑）" <> objective
+        _ -> "（codex 自动续跑）"
+      end
+
+    bookmark =
+      if Git.repository?(thread.cwd) do
+        %{commit: head_or_nil(thread.cwd), dirty?: not Git.status(thread.cwd).clean?}
+      else
+        %{commit: nil, dirty?: false}
+      end
+
+    with {:ok, turn} <-
+           create_turn(%{
+             codex_turn_id: codex_turn_id,
+             thread_id: thread.id,
+             user_text: String.slice(text, 0, 200),
+             model_slug: thread.model_slug,
+             reasoning_effort: thread.reasoning_effort,
+             commit_before: bookmark.commit,
+             dirty_start: bookmark.dirty?,
+             started_at: DateTime.utc_now()
+           }) do
+      touch_thread!(thread, %{status: :active, last_activity_at: DateTime.utc_now()})
+      broadcast_changed(thread.project_id)
+      {:ok, turn}
+    end
+  end
+
+  @doc """
+  What a previous boot left running: no codex survives the BEAM, so every
+  `:in_progress` turn failed and every `:active` thread is idle. Run once at
+  start (`Longx.Application`), before anything can start a new turn.
+  """
+  @spec settle_after_restart() :: %{turns: non_neg_integer, threads: non_neg_integer}
+  def settle_after_restart do
+    turns = list_all_turns_in_progress!()
+
+    for turn <- turns do
+      complete_turn!(turn, %{
+        status: :failed,
+        completed_at: DateTime.utc_now(),
+        error: "Longx restarted while this turn was running"
+      })
+    end
+
+    threads = list_all_active_threads!()
+    for thread <- threads, do: touch_thread!(thread, %{status: :idle})
+
+    for project_id <- Enum.uniq(Enum.map(threads, & &1.project_id)),
+        do: broadcast_changed(project_id)
+
+    %{turns: length(turns), threads: length(threads)}
+  end
+
+  @doc "Files changed under the project (codex's `fs/changed`): the UI refetches the tree and git."
+  @spec broadcast_files_changed(String.t(), [String.t()]) :: :ok
+  def broadcast_files_changed(project_id, paths),
+    do:
+      Phoenix.PubSub.broadcast(
+        Longx.PubSub,
+        topic(project_id),
+        {:files_changed, project_id, paths}
+      )
+
+  @doc "A notice from the project's codex (a config warning, a deprecation): the UI toasts it."
+  @spec broadcast_notice(String.t(), map) :: :ok
+  def broadcast_notice(project_id, notice),
+    do:
+      Phoenix.PubSub.broadcast(
+        Longx.PubSub,
+        topic(project_id),
+        {:codex_notice, project_id, notice}
+      )
 
   @doc """
   Overrides a denial of codex's automatic approval review on the thread
@@ -644,7 +813,10 @@ defmodule Longx.Projects do
         |> without_web_search(thread.web_search)
         |> with_global_memory(project)
 
-      Longx.Codex.Thread.resume(codex_id, opts)
+      with {:ok, id} <- Longx.Codex.Thread.resume(codex_id, opts) do
+        :ok = Tracker.track(id)
+        {:ok, id}
+      end
     end
   end
 

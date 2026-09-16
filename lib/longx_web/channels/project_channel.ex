@@ -41,5 +41,17 @@ defmodule LongxWeb.ProjectChannel do
     {:noreply, socket}
   end
 
+  # codex's fs/changed for the project root: the tree and git status are stale
+  def handle_info({:files_changed, _id, paths}, socket) do
+    push(socket, "files", %{paths: paths})
+    {:noreply, socket}
+  end
+
+  # a config warning / deprecation notice from the project's codex
+  def handle_info({:codex_notice, _id, notice}, socket) do
+    push(socket, "notice", notice)
+    {:noreply, socket}
+  end
+
   def handle_info(_other, socket), do: {:noreply, socket}
 end

@@ -3,7 +3,10 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 import { useNavigate, useParams } from "react-router";
 import type { AccessMode, DirtyChange, DirtyDecision } from "@/core/chat/adapter";
 import { useCodexRuntime, type CodexRuntime } from "@/core/chat/runtime";
+import { toast } from "sonner";
+import { t } from "@/ui/strings";
 import { DirtyTreeDialog, type DirtyPrompt } from "./DirtyTreeDialog";
+import { GoalProvider } from "./GoalBar";
 import { chatConfig, CompactionUI, PlanUI } from "./toolkit";
 
 const ChatContext = createContext<CodexRuntime | null>(null);
@@ -46,14 +49,24 @@ export function ChatProvider({ projectId, slug, defaults, defaultModelId, childr
     [],
   );
 
-  const chat = useCodexRuntime({ projectId, defaults, defaultModelId, threadId, onOpenThread, onDirtyTree });
+  // codex switched the model under the turn (a high-risk cyber classification): say so
+  const onSignal = useCallback((method: string, params: Record<string, unknown>) => {
+    if (method === "model/rerouted") {
+      const reason = t.modelReroutedReason[String(params["reason"])] ?? String(params["reason"] ?? "");
+      toast.warning(t.modelRerouted(String(params["fromModel"]), String(params["toModel"])), { description: reason });
+    }
+  }, []);
+
+  const chat = useCodexRuntime({ projectId, defaults, defaultModelId, threadId, onOpenThread, onDirtyTree, onSignal });
 
   return (
     <ChatContext.Provider value={chat}>
       <AssistantRuntimeProvider runtime={chat.runtime} config={chatConfig}>
         <PlanUI />
         <CompactionUI />
-        {children}
+        <GoalProvider threadId={chat.thread?.id} goal={chat.view.goal}>
+          {children}
+        </GoalProvider>
         <DirtyTreeDialog prompt={dirty} />
       </AssistantRuntimeProvider>
     </ChatContext.Provider>

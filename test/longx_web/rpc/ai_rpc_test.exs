@@ -223,6 +223,55 @@ defmodule LongxWeb.AiRpcTest do
              })
   end
 
+  test "the reviewer model: read, set with a level the model offers (errors on the argument), cleared",
+       %{conn: conn} do
+    %{"success" => true, "data" => %{"id" => provider}} =
+      rpc(conn, "create_provider", %{
+        "fields" => ["id"],
+        "input" => %{
+          "name" => "DS",
+          "slug" => "ds",
+          "baseUrl" => "https://api.deepseek.com/v1",
+          "apiKey" => "k"
+        }
+      })
+
+    %{"success" => true} =
+      rpc(conn, "create_model", %{
+        "fields" => ["id"],
+        "input" => %{
+          "name" => "Cheap",
+          "upstreamId" => "cheap",
+          "providerId" => provider,
+          "reasoningLevels" => ["low", "high"]
+        }
+      })
+
+    assert %{"success" => true, "data" => %{"modelSlug" => nil, "effort" => nil}} =
+             rpc(conn, "review_settings", %{"fields" => ["modelSlug", "effort"]})
+
+    assert %{"success" => true} =
+             rpc(conn, "set_review_model", %{
+               "input" => %{"modelSlug" => "cheap", "effort" => "high"}
+             })
+
+    assert %{"success" => true, "data" => %{"modelSlug" => "cheap", "effort" => "high"}} =
+             rpc(conn, "review_settings", %{"fields" => ["modelSlug", "effort"]})
+
+    assert %{"success" => false, "errors" => [%{"fields" => ["effort"]}]} =
+             rpc(conn, "set_review_model", %{
+               "input" => %{"modelSlug" => "cheap", "effort" => "max"}
+             })
+
+    assert %{"success" => false, "errors" => [%{"fields" => ["modelSlug"]}]} =
+             rpc(conn, "set_review_model", %{"input" => %{"modelSlug" => "nope"}})
+
+    assert %{"success" => true} = rpc(conn, "set_review_model", %{"input" => %{}})
+
+    assert %{"success" => true, "data" => %{"modelSlug" => nil}} =
+             rpc(conn, "review_settings", %{"fields" => ["modelSlug"]})
+  end
+
   test "check_model answers with ok / latency or the error, never a failure", %{conn: conn} do
     %{"success" => true, "data" => %{"id" => provider}} =
       rpc(conn, "create_provider", %{
@@ -253,6 +302,63 @@ defmodule LongxWeb.AiRpcTest do
              rpc(conn, "list_providers", %{"fields" => ["lastError", "lastCheckedAt"]})
 
     assert is_binary(last) and is_binary(at)
+  end
+
+  test "discover_models: the provider's own list (GET /models), normalised, installed ones flagged; an error is said, not a failure",
+       %{conn: conn} do
+    bypass = Bypass.open()
+
+    %{"success" => true, "data" => %{"id" => provider}} =
+      rpc(conn, "create_provider", %{
+        "fields" => ["id"],
+        "input" => %{
+          "name" => "Router",
+          "slug" => "router",
+          "baseUrl" => "http://localhost:#{bypass.port}/v1",
+          "apiKey" => "k"
+        }
+      })
+
+    Bypass.expect_once(bypass, "GET", "/v1/models", fn up ->
+      up
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.send_resp(
+        200,
+        ~s({"data":[{"id":"kimi-k3","owned_by":"moonshot"},{"id":"x/y","name":"X Y","context_length":32000,"reasoning":{"supported_efforts":["low","high"],"default_effort":"low"}}]})
+      )
+    end)
+
+    assert %{"success" => true, "data" => %{"ok" => true, "error" => nil, "models" => [kimi, xy]}} =
+             rpc(conn, "discover_models", %{
+               "fields" => ["ok", "error", "models"],
+               "input" => %{"id" => provider}
+             })
+
+    assert %{
+             "id" => "kimi-k3",
+             "name" => "kimi-k3",
+             "ownedBy" => "moonshot",
+             "installed" => false,
+             "reasoningLevels" => []
+           } = kimi
+
+    assert %{
+             "id" => "x/y",
+             "name" => "X Y",
+             "contextWindow" => 32000,
+             "reasoningLevels" => ["low", "high"],
+             "reasoningEffort" => "low"
+           } = xy
+
+    Bypass.down(bypass)
+
+    assert %{"success" => true, "data" => %{"ok" => false, "error" => error, "models" => []}} =
+             rpc(conn, "discover_models", %{
+               "fields" => ["ok", "error", "models"],
+               "input" => %{"id" => provider}
+             })
+
+    assert error =~ "unreachable"
   end
 
   test "the search provider: listed with its key's presence, editable", %{conn: conn} do

@@ -7,7 +7,7 @@ import { channel, ok } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, resetCodexHome, sandboxStatus, updateProject } from "@/ash_rpc";
+import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, listSkills, resetCodexHome, sandboxStatus, updateProject } from "@/ash_rpc";
 
 describe("ProjectSettingsPage", () => {
   beforeEach(() => {
@@ -42,6 +42,31 @@ describe("ProjectSettingsPage", () => {
         expect.objectContaining({ identity: "id-1", input: expect.objectContaining({ sandbox: "read_only", approvalPolicy: "never", dirtyStart: "ask", multiAgent: false, autoReview: false, globalMemory: false, writableRoots: ["~/.cache", "/data/models"] }) }),
       ),
     );
+  });
+
+  test("the skills codex finds for the project are listed with their paths; none is said", async () => {
+    vi.mocked(listSkills).mockResolvedValue(
+      ok([
+        { name: "docs", description: "Write the docs", shortDescription: null, path: "/srv/app-1/.agents/skills/docs/SKILL.md", enabled: true },
+        { name: "review-agent", description: "Review", shortDescription: null, path: "/data/codex_home/id-1/skills/.system/review-agent/SKILL.md", enabled: true },
+        { name: "mine", description: "Mine", shortDescription: null, path: "/home/mj/.agents/skills/mine/SKILL.md", enabled: true },
+        { name: "installed", description: "Installed", shortDescription: null, path: "/data/codex_home/id-1/skills/installed/SKILL.md", enabled: true },
+      ]) as never,
+    );
+    renderAt("/p/app-1/settings");
+    const skills = await screen.findByTestId("project-skills");
+    await waitFor(() => expect(skills).toHaveTextContent("Write the docs"));
+    const rows = within(skills).getAllByRole("listitem");
+    // a project skill: its path relative to the root; codex's own and the user's are labelled, not pathed
+    expect(rows[0]).toHaveTextContent("$docs");
+    expect(rows[0]).toHaveTextContent(".agents/skills/docs/SKILL.md");
+    expect(rows[0]).not.toHaveTextContent("/srv/app-1/");
+    expect(rows[1]).toHaveTextContent("codex 内置");
+    expect(rows[1]).not.toHaveTextContent("codex_home");
+    expect(rows[2]).toHaveTextContent("全局");
+    // installed by codex's skill-installer into this project's home
+    expect(rows[3]).toHaveTextContent("本项目安装");
+    vi.mocked(listSkills).mockResolvedValue(ok([]) as never);
   });
 
   test("the long-lived exceptions sit under 高级: writable directories, and (Linux) host paths typed by hand — no presets", async () => {
