@@ -201,10 +201,20 @@ codex 自带的 goal 机制；模型也有 `create_goal` 工具，但只在你�
 - **容器和部分虚拟机**允许用户命名空间但建不了网络命名空间（`bwrap: loopback: Failed RTM_NEWADDR`）：codex 只在命令不能联网时
   才隔离网络，所以「联网与本机服务」打开时沙箱正常，关着时每条命令都会被拒绝。设置页会标成「可用，但断网隔离不可用」。
 
-## 手机：Android 壳
+## 手机
 
-局域网裸 HTTP 装不了 PWA，所以手机端是一个自己的 WebView 壳：[longx-android](https://github.com/mjason/longx-android)
-（首次启动填服务器地址，之后可改；返回键先关抽屉和弹窗；通知不依赖 FCM）。它靠 Longx 的两样东西，写别的壳（iOS）也是这两样：
+手机端是 `mobile/` 里的 Expo（React Native）应用，和 web 端共用一套核心代码（RPC、socket、codex 事件折叠、
+assistant-ui runtime），界面是原生的，代码编辑器和 diff 在 WebView 里借 web 端的页面。Release 里附
+`longx-android-v*.apk`（和服务器同一个版本号；同一把 key 签，app 里能自动更新）。
+
+**配对**：电脑上打开 Longx → 设置 → 移动端 →「生成配对码」，手机 app 里填服务器地址（局域网 `host:port`
+或 https 域名）和六位配对码。配对码十分钟内有效、用一次作废；手机拿到一枚设备令牌，之后所有请求都带它，
+不再需要浏览器那套 session/CSRF；设置页里能看到已配对的手机、解除配对。
+
+**通知**：Android 上一个前台服务常驻一条到 `notify` channel 的连接（不依赖 FCM，任何能连上服务器的手机都行），
+等待审批 / 完成 / 出错各发一条，点开直达会话。国产系统记得把 Longx 加进"允许自启动 / 不省电"。
+
+之前的 WebView 壳 [longx-android](https://github.com/mjason/longx-android) 由它取代。壳和 iOS 端会用到的两样约定：
 
 - **桥**：页面里有 `LongxAndroid.post(json)`（iOS 是 `webkit.messageHandlers.longx`）时，页面装上 `window.LongxShell`。
   页面 → 壳：`{"type":"ready","version":1,"theme":{…}}`、`{"type":"theme","theme":{"scheme":"dark","frame":"#15171c","ground":"#1c1e24"}}`

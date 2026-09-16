@@ -915,6 +915,58 @@ React Native client planned on the same core code.
     npm watcher leaves node on the port). `mix assets.build` = compile + `ash_typescript.codegen`
     + `npm run build` → `priv/static/assets/` (gitignored); no `phx.digest`. PWA bits are
     committed static files: `priv/static/manifest.webmanifest`, `icons/` (`static_paths/0`).
+- **`mobile/` — the phone app: Expo (React Native), sharing `assets/js/core` with the web.**
+  Metro (`mobile/metro.config.js`) watches `../assets/js`; inside the app `@/` is the app
+  root except `@/core/*`, `@/ash_rpc`, `@/ash_types`, which are the web client's; a package
+  imported by the core resolves from the app's node_modules (one React, one query client,
+  one assistant-ui store), and the core's `@assistant-ui/react` is
+  `@assistant-ui/react-native` there (a types shim in `mobile/types/` declares the few
+  types the native package does not re-export). So `core/chat/{adapter,runtime,messages,
+  threadList}`, `projects.ts`, `workspace.ts`, `transport.ts` run unchanged on the phone;
+  the core must stay DOM-free and free of `import.meta` (Hermes has none — `batch.ts`
+  reads `process.env.NODE_ENV`). **Pairing** (`Longx.System.Device`, `Pairing`; Settings →
+  移动端 `MobileSection`): a six-digit code (ten minutes, one at a time, spent on use) →
+  `POST /pair` (no session, no CSRF; `PairController`) → a device token shown once, its
+  sha256 kept; `LongxWeb.Plugs.Bearer` (in `:browser` before the CSRF check) accepts
+  `Authorization: Bearer` and waives CSRF, refuses a wrong one, ignores none; the socket
+  takes `token`; RPC `pairing_code` / `list_devices` / `revoke_device`. `core/transport.ts`
+  is where a client says which server and token (`configureTransport`): the browser keeps
+  relative URLs + the page's CSRF meta, the app absolute URLs + the bearer — rpcHooks
+  (`customFetch` prefixes the base URL), `socket.ts`, uploads follow. Dictation is an
+  injected adapter (`useCodexRuntime({dictation})`, the web's `ChatProvider` builds it).
+  The app (`mobile/app`, expo-router, zh-CN copy in `mobile/lib/strings.ts`): `/pair`,
+  `/` (running threads + projects), `/p/[slug]` (threads, doors to 文件 / Git / 历史),
+  `/p/[slug]/t/[threadId]` (`new` = a new chat; assistant-ui's **native elements**
+  `thread.aui` etc. installed from the native registry — source we own, trimmed like the
+  web copy: no reload / edit, zh labels, `ComposerLeading` / `ComposerTrailing` slots
+  added — with `components/chat/CodexTool` rendering codex's items as the web's
+  `toolkit.tsx` does: command rows with output, file changes, searches, dynamic tools,
+  `ApprovalCard` for a pending approval, questions, sub-agents via `AgentStatus`;
+  `ComposerRail` = the access mode and the model / level as bottom sheets
+  (`components/Sheet`)), `/p/[slug]/files` (a directory a screen), `/p/[slug]/file` (a
+  WebView on the server's **`/embed/editor/:projectId?path=`** — `ui/pages/EmbedPage`:
+  the CodeMirror `EditorTab` / `DiffTab` alone on a page, outside the Shell, `<html
+  data-embed>`; there is no React Native CodeMirror), `/p/[slug]/git`, `/p/[slug]/history`
+  (turns + restore), `/settings` (unpair, background notifications, the app's update).
+  `lib/session.ts` (secure store → transport), `lib/notify.ts` + `modules/longx-notify`
+  (a Kotlin Expo module: a foreground service on the `notify` channel raising
+  notifications with `longx://` deep links — the longx-android shell's service, moved in;
+  no FCM), `lib/updater.ts` (releases/latest of this repository, the `.apk` asset,
+  `expo-file-system` + the package installer). **Build**: `npm run check` (tsc + jest —
+  `jest.config.js` extends jest-expo with the same module mapping as Metro; RNTL 14's
+  `render` / `fireEvent` are async), `expo export --platform android` (the bundle: catches
+  what tsc cannot), `expo prebuild` (android/ and ios/ are generated, gitignored) +
+  gradle (`JAVA_HOME` = a JDK 17, e.g. the one Gradle provisions under `~/.gradle/jdks`;
+  `ANDROID_HOME`). `app.config.js` takes the version from `LONGX_VERSION` (the release
+  tag — server and app share one version) and derives `versionCode`;
+  `plugins/withReleaseSigning.js` signs a release with the key named by `LONGX_KEYSTORE`
+  & co (CI secrets `RELEASE_KEYSTORE_B64` …; locally `~/.longx-android/release.env`),
+  the debug key otherwise. CI's `mobile` job runs check + export; `release.yml`'s
+  `android` job attaches `longx-android-v*.apk` to the release. **Looking at it**: no
+  emulator here (no KVM) — `expo export --platform web` (react-native-web) runs the same
+  screens in Chromium (`--disable-web-security` for the cross-origin server), which is
+  how the pairing, the lists and a thread were checked against the dev server.
+  longx-android (the WebView shell) is superseded by this app.
 - `assets/` — Vite + TypeScript + React 19, tests with vitest/testing-library
   (`npm run check` = `tsc --noEmit` + `vitest run`, part of `mix precommit`). Layout:
   - `js/core/` — **DOM-free**, the part a React Native app will reuse: the generated client

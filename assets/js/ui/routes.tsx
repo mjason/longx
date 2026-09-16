@@ -6,6 +6,7 @@ import { ProjectSettingsPage } from "./pages/ProjectSettingsPage";
 import { ProjectWizard } from "./pages/ProjectWizard";
 import { SettingsPage } from "./pages/SettingsPage";
 import { WelcomePage } from "./pages/WelcomePage";
+import { EmbedPage } from "./pages/EmbedPage";
 import { Shell } from "./shell/Shell";
 
 // Phoenix serves the shell for every path (LongxWeb.PageController); the
@@ -13,6 +14,9 @@ import { Shell } from "./shell/Shell";
 // screen, one wizard to open/create, a project window with the chat in the
 // middle and tool windows around it, and settings.
 export const routes: RouteObject[] = [
+  // the phone app's WebView pieces: outside the shell, no frame
+  { path: "/embed/editor/:projectId", element: <EmbedPage kind="editor" /> },
+  { path: "/embed/diff/:projectId", element: <EmbedPage kind="diff" /> },
   {
     element: <Shell />,
     children: [

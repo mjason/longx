@@ -9,9 +9,13 @@ export type Batcher<T> = { push: (item: T) => void; cancel: () => void };
 
 export type Schedule = (flush: () => void) => void;
 
+// `process.env.NODE_ENV` rather than `import.meta.env`: the file is shared
+// with the React Native app, whose bundler has no `import.meta`
+const testBuild = typeof process !== "undefined" && process.env?.NODE_ENV === "test";
+
 /** Test builds fold at once; the browser folds once per frame. */
 export const frameSchedule: Schedule =
-  import.meta.env.MODE === "test" || typeof requestAnimationFrame !== "function" ? (cb) => cb() : (cb) => void requestAnimationFrame(cb);
+  testBuild || typeof requestAnimationFrame !== "function" ? (cb) => cb() : (cb) => void requestAnimationFrame(cb);
 
 export function createBatcher<T>(flush: (items: T[]) => void, schedule: Schedule = frameSchedule): Batcher<T> {
   let pending: T[] = [];

@@ -1,0 +1,63 @@
+@import "tailwindcss";
+@import "uniwind";
+
+/* Longx's palette (assets/css/app.css): the transcript on a white /
+   near-black ground, the frame one step off it, the LX azure as the one
+   accent — the assistant-ui elements read these tokens */
+@theme {
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+  --radius-3xl: 24px;
+  --font-mono: "monospace";
+}
+
+@layer theme {
+  :root {
+    @variant light {
+      --color-background: #ffffff;
+      --color-foreground: #1c1e24;
+      --color-card: #ffffff;
+      --color-card-foreground: #1c1e24;
+      --color-sidebar: #f3f4f7;
+      --color-primary: #1b5cf0;
+      --color-primary-foreground: #ffffff;
+      --color-secondary: #f3f4f7;
+      --color-secondary-foreground: #1c1e24;
+      --color-muted: #f3f4f7;
+      --color-muted-foreground: #6b7280;
+      --color-accent: #eef2f8;
+      --color-accent-foreground: #1c1e24;
+      --color-destructive: #d64545;
+      --color-success: #2f9e5b;
+      --color-warning: #d18b1a;
+      --color-border: #e5e7eb;
+      --color-input: #e5e7eb;
+      --color-ring: #1b5cf0;
+    }
+
+    @variant dark {
+      --color-background: #1c1e24;
+      --color-foreground: #e6e8ee;
+      --color-card: #1c1e24;
+      --color-card-foreground: #e6e8ee;
+      --color-sidebar: #15171c;
+      --color-primary: #2f7cf6;
+      --color-primary-foreground: #ffffff;
+      --color-secondary: #262932;
+      --color-secondary-foreground: #e6e8ee;
+      --color-muted: #262932;
+      --color-muted-foreground: #9aa0ad;
+      --color-accent: #262932;
+      --color-accent-foreground: #e6e8ee;
+      --color-destructive: #e06060;
+      --color-success: #4fbf7a;
+      --color-warning: #e0a03a;
+      --color-border: #2e323c;
+      --color-input: #2e323c;
+      --color-ring: #2f7cf6;
+    }
+  }
+}

@@ -70,3 +70,25 @@ jobs:
       - run: npm run check --prefix assets
       # the bwrap probe passes on a dev box, not inside a GitHub runner
       - run: mix test --exclude host_sandbox
+
+  mobile:
+    name: mobile (typecheck, jest, Android bundle)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+        working-directory: mobile
+      - run: npx uniwind generate-artifacts --css ./global.css --dts ./uniwind-types.d.ts
+        working-directory: mobile
+      - run: npm run typecheck
+        working-directory: mobile
+      - run: npm test
+        working-directory: mobile
+      # the Metro bundle catches a resolution the type checker cannot (the shared core)
+      - run: npx expo export --platform android --output-dir /tmp/expo-export
+        working-directory: mobile

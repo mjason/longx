@@ -102,3 +102,52 @@ jobs:
             ${{ steps.package.outputs.name }}.tar.gz
             ${{ steps.package.outputs.name }}.tar.gz.sha256
           generate_release_notes: true
+
+  # the Android app, versioned like the server (app.config.js reads the tag),
+  # signed with the repository's key (secrets; the debug key without them)
+  android:
+    name: android apk
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+        working-directory: mobile
+      - name: Signing key
+        if: ${{ env.RELEASE_KEYSTORE_B64 != '' }}
+        env:
+          RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+        run: |
+          echo "$RELEASE_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "LONGX_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      - name: Build
+        working-directory: mobile
+        env:
+          LONGX_VERSION: ${{ github.ref_name }}
+          LONGX_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          LONGX_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          LONGX_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          npx expo prebuild --platform android --no-install
+          cd android && ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "../../longx-android-${LONGX_VERSION}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: longx-android-${{ github.ref_name }}
+          path: longx-android-*.apk
+          if-no-files-found: error
+      - name: Attach to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: longx-android-*.apk
+          generate_release_notes: true
