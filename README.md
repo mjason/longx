@@ -98,6 +98,10 @@ sh install.sh --rollback        # 或 curl -fsSL …/install.sh | sh -s -- --rol
 发布由 `.github/workflows/release.yml` 完成：打 `v*` 标签就在 x86_64 和 arm64 的 runner 上各自原生构建并挂到
 GitHub Release。
 
+**任何兼容接口的模型列表**：Provider 菜单里「从接口获取模型」按 OpenAI 的 `GET /models` 标准向接口要列表（OpenRouter、
+listenai 这类网关都是这个形状），勾选要添加的。列表带了上下文窗口、思考档位、图片支持的（OpenRouter）会一并填好，只给
+id 的（listenai）用默认值，之后可以编辑。
+
 ## 沙箱
 
 agent 的命令由 **Longx 自己**放进沙箱里跑：codex 0.154 把命令执行和文件读写抽象成了 exec-server 协议，Longx 在每个项目的

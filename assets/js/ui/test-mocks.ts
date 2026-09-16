@@ -113,6 +113,7 @@ export function rpcMock() {
       ]),
     ),
     reviewSettings: vi.fn(async () => ok({ modelSlug: null, effort: null })),
+    discoverModels: vi.fn(async () => ok({ ok: true, error: null, models: [] })),
     setGoal: vi.fn(async ({ input }: { input: Record<string, unknown> }) =>
       ok({ objective: input["objective"] ?? "", status: input["status"] ?? "active", tokenBudget: input["tokenBudget"] ?? null, tokensUsed: 0, timeUsedSeconds: 0 }),
     ),

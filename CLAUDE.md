@@ -403,7 +403,15 @@ React Native client planned on the same core code.
     keys; the team plan lists nine models more; Coding Plan is chat-only and out;
     pay-as-you-go needs a WorkspaceId in the URL → a custom provider), OpenAI's from the
     catalog embedded in the pinned codex binary (`strings` it for
-    `supported_reasoning_levels`). `apply/2` is
+    `supported_reasoning_levels`). **Any provider's own list**: `Longx.AI.discover_models/1`
+    asks `GET <base_url>/models` (OpenAI's standard: `data[].id`; OpenRouter adds `name`,
+    `context_length`, `reasoning.supported_efforts` / `default_effort` and the input
+    modalities, a plain gateway like listenai only `id` + `owned_by`) and normalises each
+    entry (window, levels in codex's order, default level, image input, `installed` for ids
+    the provider has a row for); RPC `discover_models` on `Provider` (`ok` / `error` /
+    untyped `models`, never a failure), the provider menu's 从接口获取模型 → `DiscoverDialog`
+    (the `model-picker` checklist with a filter, picked entries → `create_model` with what
+    the list said). `apply/2` is
     idempotent (provider by slug — facts refreshed, a key never dropped; models by
     `upstream_id` — a person's edits kept, a row without levels learns the preset's, a row
     on a smaller set of the preset's levels gains the ones added since (DeepSeek's are

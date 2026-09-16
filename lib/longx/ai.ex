@@ -41,6 +41,7 @@ defmodule Longx.AI do
       rpc_action :create_provider, :create
       rpc_action :update_provider, :update
       rpc_action :delete_provider, :delete
+      rpc_action :discover_models, :discover_models
     end
 
     resource Model do
@@ -437,6 +438,99 @@ defmodule Longx.AI do
       {:ok, %Model{} = model} -> check_model(model)
       {:error, _} -> {:error, {:unknown_model, slug}}
     end
+  end
+
+  @typedoc "A model the provider's own list names (`GET /models`), normalised."
+  @type discovered_model :: %{
+          id: String.t(),
+          name: String.t(),
+          owned_by: String.t() | nil,
+          context_window: pos_integer | nil,
+          reasoning_levels: [String.t()],
+          reasoning_effort: String.t() | nil,
+          image_input: boolean,
+          installed: boolean
+        }
+
+  @doc """
+  The models the provider's endpoint lists (OpenAI's `GET /models`
+  standard: `data[].id`), each with what the entry says about it when it
+  says anything — OpenRouter adds `context_length`, `reasoning`
+  (efforts + default) and the input modalities; a plain gateway
+  (listenai) only `id` and `owned_by`. `installed` marks the ids this
+  provider already has a row for. The list is the settings page's "从接口
+  获取模型".
+  """
+  @spec discover_models(Provider.t()) ::
+          {:ok, [discovered_model]}
+          | {:error,
+             {:missing_api_key, String.t()}
+             | {:status, integer, term}
+             | {:unreachable, String.t()}}
+  def discover_models(%Provider{} = provider) do
+    provider = Ash.load!(provider, [:api_key, :models])
+
+    with {:ok, api_key} <- fetch_api_key(provider) do
+      request =
+        Req.new(
+          url: String.trim_trailing(provider.base_url, "/") <> "/models",
+          auth: {:bearer, api_key},
+          retry: false,
+          receive_timeout: @check_timeout
+        )
+
+      installed = MapSet.new(provider.models, & &1.upstream_id)
+
+      case Req.get(request) do
+        {:ok, %Req.Response{status: status, body: %{"data" => entries}}}
+        when status in 200..299 and is_list(entries) ->
+          {:ok,
+           for %{"id" => id} = entry <- entries, is_binary(id) do
+             discovered_model(entry, MapSet.member?(installed, id))
+           end}
+
+        {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
+          {:error, {:status, status, "not a model list: #{error_message(body)}"}}
+
+        {:ok, %Req.Response{status: status, body: body}} ->
+          {:error, {:status, status, error_message(body)}}
+
+        {:error, exception} ->
+          {:error, {:unreachable, Exception.message(exception)}}
+      end
+    end
+  end
+
+  # codex's order of efforts, for a list that names them in any order
+  @effort_order ~w(none minimal low medium high xhigh max ultra)
+
+  defp discovered_model(%{"id" => id} = entry, installed?) do
+    reasoning = entry["reasoning"] || %{}
+
+    levels =
+      case reasoning["supported_efforts"] do
+        list when is_list(list) ->
+          list
+          |> Enum.filter(&is_binary/1)
+          |> Enum.sort_by(&(Enum.find_index(@effort_order, fn e -> e == &1 end) || 99))
+
+        _ ->
+          []
+      end
+
+    modalities = get_in(entry, ["architecture", "input_modalities"]) || []
+
+    %{
+      id: id,
+      name: if(is_binary(entry["name"]) and entry["name"] != "", do: entry["name"], else: id),
+      owned_by: entry["owned_by"],
+      context_window: if(is_integer(entry["context_length"]), do: entry["context_length"]),
+      reasoning_levels: levels,
+      reasoning_effort:
+        if(is_binary(reasoning["default_effort"]), do: reasoning["default_effort"]),
+      image_input: is_list(modalities) and "image" in modalities,
+      installed: installed?
+    }
   end
 
   @doc """

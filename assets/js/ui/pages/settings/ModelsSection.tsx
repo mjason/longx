@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { relativeTime } from "@/core/format";
 import {
   useAiActions,
+  useDiscoverModels,
   useModelRows,
   usePresets,
   useProviders,
@@ -383,6 +384,7 @@ function ProviderCard({
 }) {
   const actions = useAiActions();
   const [adding, setAdding] = useState<ModelRow | "new" | null>(null);
+  const [discovering, setDiscovering] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   // the template this provider came from still has models to offer
   const missing = preset?.models.some((m) => !m.installed) ? preset : null;
@@ -430,6 +432,9 @@ function ProviderCard({
             <DropdownMenuItem onSelect={() => setAdding("new")}>
               {s.addModel}
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setDiscovering(true)}>
+              {s.discover}
+            </DropdownMenuItem>
             {missing ? (
               <DropdownMenuItem onSelect={() => onAddFromPreset(missing)}>
                 {s.addFromPreset}
@@ -465,6 +470,9 @@ function ProviderCard({
           model={adding === "new" ? null : adding}
           onClose={() => setAdding(null)}
         />
+      ) : null}
+      {discovering ? (
+        <DiscoverDialog provider={provider} onClose={() => setDiscovering(false)} />
       ) : null}
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
@@ -1171,6 +1179,87 @@ function ReviewModelCard({ models }: { models: ModelRow[] }) {
         ) : null}
       </div>
     </section>
+  );
+}
+
+/**
+ * The provider's own model list (OpenAI's GET /models standard; OpenRouter's
+ * entries carry window, levels and modalities, a plain gateway's only ids)
+ * as a checklist — the registry's model-picker, like the preset dialog —
+ * with a filter for long lists; picked ones become rows.
+ */
+function DiscoverDialog({ provider, onClose }: { provider: Provider; onClose: () => void }) {
+  const discovery = useDiscoverModels(provider.id);
+  const actions = useAiActions();
+  const [filter, setFilter] = useState("");
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const candidates = (discovery.data?.ok ? discovery.data.models : []).filter((m) => !m.installed);
+  const q = filter.trim().toLowerCase();
+  const shown = q ? candidates.filter((m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q) || (m.ownedBy ?? "").toLowerCase().includes(q)) : candidates;
+  const rows: PickableModel[] = shown.map((m) => ({
+    id: m.id,
+    name: m.name,
+    family: m.ownedBy ?? provider.name,
+    context: m.contextWindow ? formatWindow(m.contextWindow) : "",
+    ...(m.name !== m.id ? { note: m.id } : {}),
+    capabilities: [...(m.imageInput ? [s.image] : []), ...(m.reasoningLevels.length > 0 ? [m.reasoningLevels.map(effortLabel).join(" / ")] : [])],
+  }));
+  const toggle = (id: string) => setChosen((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  const add = async () => {
+    setBusy(true);
+    try {
+      for (const id of chosen) {
+        const m = candidates.find((c) => c.id === id);
+        if (!m) continue;
+        await actions.createModel.mutateAsync({
+          providerId: provider.id,
+          upstreamId: m.id,
+          name: m.name,
+          ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
+          ...(m.reasoningLevels.length > 0 ? { reasoningLevels: m.reasoningLevels } : {}),
+          ...(m.reasoningEffort ? { reasoningEffort: m.reasoningEffort } : {}),
+        });
+      }
+      toast.success(s.discoverAdded(chosen.length));
+      onClose();
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{s.discoverTitle(provider.name)}</DialogTitle>
+          <DialogDescription>{s.discoverHint}</DialogDescription>
+        </DialogHeader>
+        {discovery.isPending ? (
+          <p className="text-muted-foreground text-sm">{s.discoverLoading}</p>
+        ) : discovery.isError ? (
+          <p className="text-destructive text-sm">{discovery.error.message}</p>
+        ) : !discovery.data.ok ? (
+          <p className="text-destructive text-sm">{discovery.data.error}</p>
+        ) : candidates.length === 0 ? (
+          <p className="text-muted-foreground text-sm">{s.discoverEmpty}</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={s.discoverFilter} aria-label={s.discoverFilter} />
+            <ModelPicker models={rows} selectedIds={chosen} onToggle={toggle} className="max-w-none" />
+          </div>
+        )}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t.cancel}
+          </Button>
+          <Button type="button" onClick={add} disabled={chosen.length === 0 || busy}>
+            {s.discoverAdd(chosen.length)}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

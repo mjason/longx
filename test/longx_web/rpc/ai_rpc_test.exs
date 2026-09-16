@@ -304,6 +304,63 @@ defmodule LongxWeb.AiRpcTest do
     assert is_binary(last) and is_binary(at)
   end
 
+  test "discover_models: the provider's own list (GET /models), normalised, installed ones flagged; an error is said, not a failure",
+       %{conn: conn} do
+    bypass = Bypass.open()
+
+    %{"success" => true, "data" => %{"id" => provider}} =
+      rpc(conn, "create_provider", %{
+        "fields" => ["id"],
+        "input" => %{
+          "name" => "Router",
+          "slug" => "router",
+          "baseUrl" => "http://localhost:#{bypass.port}/v1",
+          "apiKey" => "k"
+        }
+      })
+
+    Bypass.expect_once(bypass, "GET", "/v1/models", fn up ->
+      up
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.send_resp(
+        200,
+        ~s({"data":[{"id":"kimi-k3","owned_by":"moonshot"},{"id":"x/y","name":"X Y","context_length":32000,"reasoning":{"supported_efforts":["low","high"],"default_effort":"low"}}]})
+      )
+    end)
+
+    assert %{"success" => true, "data" => %{"ok" => true, "error" => nil, "models" => [kimi, xy]}} =
+             rpc(conn, "discover_models", %{
+               "fields" => ["ok", "error", "models"],
+               "input" => %{"id" => provider}
+             })
+
+    assert %{
+             "id" => "kimi-k3",
+             "name" => "kimi-k3",
+             "ownedBy" => "moonshot",
+             "installed" => false,
+             "reasoningLevels" => []
+           } = kimi
+
+    assert %{
+             "id" => "x/y",
+             "name" => "X Y",
+             "contextWindow" => 32000,
+             "reasoningLevels" => ["low", "high"],
+             "reasoningEffort" => "low"
+           } = xy
+
+    Bypass.down(bypass)
+
+    assert %{"success" => true, "data" => %{"ok" => false, "error" => error, "models" => []}} =
+             rpc(conn, "discover_models", %{
+               "fields" => ["ok", "error", "models"],
+               "input" => %{"id" => provider}
+             })
+
+    assert error =~ "unreachable"
+  end
+
   test "the search provider: listed with its key's presence, editable", %{conn: conn} do
     assert %{"success" => true, "data" => [%{"slug" => "tavily", "id" => id} | _]} =
              rpc(conn, "list_search_providers", %{

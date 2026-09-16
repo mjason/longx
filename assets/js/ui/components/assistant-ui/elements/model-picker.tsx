@@ -95,7 +95,9 @@ export function ModelPicker({
                     </span>
                   </span>
 
-                  <span className="flex shrink-0 flex-col items-end gap-1">
+                  {/* Longx: the right column may carry a long id as the note — it
+                      truncates instead of widening the row past its dialog */}
+                  <span className="flex max-w-[45%] min-w-0 shrink-0 flex-col items-end gap-1">
                     <span
                       className={cn(mono, "text-foreground/35 tabular-nums")}
                     >
@@ -103,7 +105,8 @@ export function ModelPicker({
                     </span>
                     {model.price || model.note ? (
                       <span
-                        className={cn(mono, "text-foreground/25 tabular-nums")}
+                        className={cn(mono, "text-foreground/25 max-w-full truncate tabular-nums")}
+                        title={model.price ?? model.note}
                       >
                         {model.price ?? model.note}
                       </span>

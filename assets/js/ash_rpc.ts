@@ -1114,6 +1114,80 @@ export async function validateDeleteProvider(
 }
 
 
+export type DiscoverModelsInput = {
+  id: UUID;
+};
+
+export type DiscoverModelsFields = UnifiedFieldSelection<{ok: boolean, error: string | null, models: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "ok" | "error" | "models"}>[];
+
+export type InferDiscoverModelsResult<
+  Fields extends DiscoverModelsFields | undefined,
+> = InferResult<{ok: boolean, error: string | null, models: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "ok" | "error" | "models"}, Fields>;
+
+export type DiscoverModelsResult<Fields extends DiscoverModelsFields | undefined = undefined> = | { success: true; data: InferDiscoverModelsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Provider
+ *
+ * @ashActionType :action
+ */
+export async function discoverModels<Fields extends DiscoverModelsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: DiscoverModelsInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DiscoverModelsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "discover_models",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<DiscoverModelsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Provider
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateDiscoverModels(
+  config: {
+  tenant?: string;
+  input: DiscoverModelsInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "discover_models",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ListProvidersFields = UnifiedFieldSelection<ProviderResourceSchema>[];
 
 
