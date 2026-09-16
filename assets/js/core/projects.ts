@@ -10,6 +10,9 @@ import {
   listDirectory,
   listModels,
   listRunningThreads,
+  listSkills,
+  setGoal,
+  clearGoal,
   listTurns,
   redoTurn,
   restoreFiles,
@@ -129,6 +132,36 @@ export const queryKeys = {
   subagents: (threadId: string) => ["subagents", threadId] as const,
   running: ["running-threads"] as const,
 };
+
+/** codex's goal mode: set / change (objective, status, budget) or clear the thread's goal. */
+export function useGoalActions(threadId: string | undefined) {
+  const set = useMutation({
+    mutationFn: async (input: { objective?: string; status?: "active" | "paused" | "complete"; tokenBudget?: number | null }) => {
+      if (!threadId) throw new Error("no thread");
+      return unwrap(await setGoal({ fields: ["objective", "status", "tokenBudget", "tokensUsed", "timeUsedSeconds"], input: { threadId, ...input } }));
+    },
+  });
+  const clear = useMutation({
+    mutationFn: async () => {
+      if (!threadId) throw new Error("no thread");
+      return unwrap(await clearGoal({ fields: ["cleared"], input: { threadId } }));
+    },
+  });
+  return { set, clear };
+}
+
+/** A skill codex found for the project (`$name` in the composer puts its SKILL.md in the turn). */
+export type Skill = { name: string; description: string; shortDescription: string | null; path: string | null; enabled: boolean };
+
+export function useSkills(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["project", projectId, "skills"] as const,
+    queryFn: async () =>
+      unwrap(await listSkills({ fields: ["name", "description", "shortDescription", "path", "enabled"], input: { id: projectId! } })) as Skill[],
+    enabled: !!projectId,
+    staleTime: 60_000,
+  });
+}
 
 /** A thread with a turn in flight, anywhere (the welcome page's way back in). */
 export type RunningThread = {

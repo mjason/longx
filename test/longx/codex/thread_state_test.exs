@@ -207,6 +207,29 @@ defmodule Longx.Codex.ThreadStateTest do
       refute Store.auto_accept?(t)
     end
 
+    test "the thread's goal (codex's goal mode) is part of the view: updated replaces, cleared removes" do
+      t = new_thread()
+
+      goal = %{
+        "threadId" => t,
+        "objective" => "make it pass",
+        "status" => "active",
+        "tokenBudget" => 50_000,
+        "tokensUsed" => 12,
+        "timeUsedSeconds" => 3,
+        "createdAt" => 1,
+        "updatedAt" => 2
+      }
+
+      Store.fold(t, "thread/goal/updated", %{"threadId" => t, "turnId" => nil, "goal" => goal})
+      assert Store.snapshot(t).goal == goal
+      done = Map.put(goal, "status", "complete")
+      Store.fold(t, "thread/goal/updated", %{"threadId" => t, "turnId" => "u1", "goal" => done})
+      assert Store.snapshot(t).goal["status"] == "complete"
+      Store.fold(t, "thread/goal/cleared", %{"threadId" => t})
+      assert Store.snapshot(t).goal == nil
+    end
+
     test "unknown notifications change nothing" do
       t = new_thread()
       before = Store.snapshot(t)

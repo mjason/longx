@@ -535,7 +535,40 @@ React Native client planned on the same core code.
     started with an empty task). A child's approval is a request on the child's thread; the
     UI answers it through the parent (same connection, request id is what counts).
     `turn/plan/updated` (codex's `update_plan` tool — not offered to every model) is the
-    thread view's `plan`. Dev aid: `config :longx, Longx.AI.Gateway, dump_requests_to:`
+    thread view's `plan`.
+  - **Goal mode (codex's `goals` feature, on by default)**: the model has `create_goal` /
+    `update_goal` / `get_goal` (it only creates one when asked); with a goal `active`
+    codex starts the next turn *by itself* whenever the thread goes idle, with a
+    continuation prompt naming the objective, until the model marks it `complete`,
+    it is `blocked` (three no-progress turns) or the token budget is spent. Longx:
+    `Thread.set_goal/2` (`thread/goal/set`: `objective:`, `status:` `:active` | `:paused` |
+    `:complete` …, `token_budget:` nil = none), `get_goal/2`, `clear_goal/2`;
+    `thread/goal/updated` / `cleared` fold into the Store / `thread.ts` as the view's
+    `goal`; **a turn codex starts on its own gets a Turn row** (Tracker on `turn/started`
+    for an unknown id → `Projects.record_external_turn/2`: HEAD as `commit_before`, the
+    tree's dirtiness, `user_text` "（目标续跑）<objective>", the thread `:active`) so the
+    history, the restore points and the welcome page see it. RPC `set_goal` / `clear_goal`
+    on `Thread`; the UI is `ui/chat/GoalBar` (`GoalProvider` in `ChatProvider` holds the
+    dialog, `GoalBar` above the thread: objective, status, tokens / budget, elapsed;
+    pause / resume / edit / clear) and the `/goal` command opens the dialog. Proven on
+    the real binary in `goals_skills_integration_test`.
+  - **Skills**: codex loads `SKILL.md` files (`<cwd>/.agents/skills/<name>/SKILL.md`, the
+    user's, the home's `skills/` incl. codex's own samples) and lists them in the prompt;
+    the model reads one when relevant. `Thread.list_skills/2` (`skills/list` per cwd) →
+    `Projects.list_skills/2` → RPC `list_skills` on `Project`; the composer's `$` popover
+    (`ui/chat/SkillMentions`, the same `composer-trigger-popover` as `@`) writes `$name`,
+    `core/chat/mentions.ts`'s `mentionFormatter` renders both `@file` and `$skill` chips and
+    `skillsIn/2` turns the names in a sent message into `send_message(skills: [%{name,
+    path}])` → `turn/start` `{type: "skill", name, path}` inputs (the SKILL.md text reaches
+    the model — proven). Project settings list the skills found (`useSkills`).
+  - **Thread-less notifications** ride `"codex:server"` as `{:codex_server, tag, method,
+    params}` (tag = the project id under the pool). The Tracker asks each project's codex
+    to watch its root once it is up (`fs/watch`, watch id = project id) and relays
+    `fs/changed` as `Projects.broadcast_files_changed/2` → ProjectChannel `"files"` → the
+    client invalidates the tree and git status (`invalidateFiles`); `configWarning` /
+    `deprecationNotice` → `broadcast_notice/2` → `"notice"` → a toast; `model/rerouted`
+    (thread-scoped) reaches the client as a signal (`useThreadView(_, onSignal)` →
+    `ChatProvider` toast "模型已切换"). Dev aid: `config :longx, Longx.AI.Gateway, dump_requests_to:`
     writes what the model actually receives.
     Standalone = codex's `ext/web-search`: with the feature on codex offers a `web.run`
     namespace tool and,

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
 import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, resetCodexHome, updateProject, type UpdateProjectInput } from "@/ash_rpc";
-import { queryKeys, unwrap, useModels, useProject, useSandboxStatus } from "@/core/projects";
+import { queryKeys, unwrap, useModels, useProject, useSandboxStatus, useSkills } from "@/core/projects";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/ui/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/ui/components/ui/collapsible";
@@ -287,6 +287,8 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         </Button>
       </section>
 
+      <SkillsSection projectId={project.id} />
+
       <section className="space-y-3">
         <h2 className="text-destructive text-lg font-medium">{t.dangerZone}</h2>
         <p className="text-muted-foreground text-xs">{t.dangerHint}</p>
@@ -337,5 +339,33 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         ) : null}
       </Dialog>
     </div>
+  );
+}
+
+/** The skills codex finds for the project — read-only, the files are the source. */
+function SkillsSection({ projectId }: { projectId: string }) {
+  const skills = useSkills(projectId);
+  return (
+    <section className="space-y-3" data-testid="project-skills">
+      <h2 className="text-lg font-medium">{t.skills.title}</h2>
+      <p className="text-muted-foreground text-xs">{t.skills.hint}</p>
+      {skills.isPending ? (
+        <Skeleton className="h-10 w-full" />
+      ) : !skills.data || skills.data.length === 0 ? (
+        <p className="text-muted-foreground text-sm">{t.skills.none}</p>
+      ) : (
+        <ul className="divide-y rounded-lg border">
+          {skills.data.map((s) => (
+            <li key={s.path ?? s.name} className="flex flex-col gap-0.5 px-3 py-2">
+              <span className="flex items-baseline gap-2">
+                <span className="font-mono text-sm">${s.name}</span>
+                <span className="text-muted-foreground min-w-0 truncate text-sm">{s.shortDescription ?? s.description}</span>
+              </span>
+              {s.path ? <span className="text-muted-foreground truncate font-mono text-xs">{s.path}</span> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

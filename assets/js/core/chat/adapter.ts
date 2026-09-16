@@ -13,6 +13,7 @@ import type {
   ThreadMessageLike,
 } from "@assistant-ui/react";
 import { answerRequest, approveReview, interruptTurn, respond, sendMessage } from "@/ash_rpc";
+import { skillsIn, type SkillRef } from "./mentions";
 import { RpcFailure, unwrap } from "@/core/projects";
 import {
   requestIdFor,
@@ -82,6 +83,8 @@ export type AdapterOptions = {
   attachments?: AttachmentAdapter;
   /** voice input written into the composer (the browser's speech recognition) */
   dictation?: DictationAdapter;
+  /** the project's skills: a `$name` in the text rides on the turn as a skill input */
+  skills?: readonly SkillRef[];
 };
 
 export function textOf(message: AppendMessage): string {
@@ -152,6 +155,7 @@ export function buildAdapter(
     onNew: async (message) => {
       const { text, images } = inputOf(message);
       if (!text && images.length === 0) return;
+      const skills = skillsIn(text, opts.skills ?? []);
       let target = opts.target;
       if (!target) {
         if (!opts.createThread) throw new Error("no thread to send to");
@@ -164,6 +168,7 @@ export function buildAdapter(
             threadId: target.threadId,
             text,
             ...(images.length > 0 ? { images } : {}),
+            ...(skills.length > 0 ? { skills } : {}),
             ...(opts.model ? { model: opts.model } : {}),
             ...(opts.effort ? { effort: opts.effort } : {}),
             ...(opts.mode

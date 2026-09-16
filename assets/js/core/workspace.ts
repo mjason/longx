@@ -86,7 +86,8 @@ export function useFileContent(projectId: string, path: string | null) {
   });
 }
 
-function invalidateFiles(client: QueryClient, projectId: string) {
+/** the tree, open files and git status are stale (codex reported a change under the root) */
+export function invalidateFiles(client: QueryClient, projectId: string) {
   void client.invalidateQueries({ queryKey: wsKeys.filesOf(projectId) });
   void client.invalidateQueries({ queryKey: wsKeys.changes(projectId) });
 }

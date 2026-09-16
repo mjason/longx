@@ -300,6 +300,12 @@ export const t = {
     loading: "搜索中…",
     none: "输入文件名",
   },
+  mentionSkills: {
+    back: "返回",
+    empty: "没有匹配的技能",
+    loading: "读取中…",
+    none: "输入技能名（$名字 把它的 SKILL.md 带进这一轮）",
+  },
   addAttachment: "添加附件",
   removeAttachment: "移除附件",
   dictate: "语音输入",
@@ -315,6 +321,7 @@ export const t = {
     files: "打开文件树",
     history: "打开这个会话的轮次历史",
     settings: "打开项目设置",
+    goal: "设一个目标：codex 会一轮接一轮自己干下去，直到完成",
     reviewStarted: "代码审查开始了",
     compacted: "上下文已压缩",
     needsThread: "先发一条消息，会话才存在",
@@ -357,6 +364,30 @@ export const t = {
     items: "条目",
   },
   stalledFor: (s: number) => `${s} 秒没有新输出`,
+  // chat: goal mode
+  goal: {
+    title: "目标",
+    status: {
+      active: "进行中",
+      paused: "已暂停",
+      blocked: "卡住了",
+      usageLimited: "额度用尽",
+      budgetLimited: "预算用尽",
+      complete: "已完成",
+    } as Record<string, string>,
+    pause: "暂停",
+    resume: "继续",
+    edit: "编辑",
+    clear: "清除",
+    budget: "token 预算（留空不限）",
+    objective: "目标",
+    objectiveHint: "要达成的最终状态。codex 会在每轮结束后自己开下一轮，直到目标完成、卡住或预算用完。",
+    dialogTitle: "会话目标",
+    save: "保存",
+    tokens: (used: string, budget: string | null) => (budget ? `${used} / ${budget}` : used),
+  },
+  modelRerouted: (from: string, to: string) => `模型已切换：${from} → ${to}`,
+  modelReroutedReason: { highRiskCyberActivity: "codex 判定这一轮涉及高风险的网络安全操作" } as Record<string, string>,
   // chat: tools
   approvalNeeded: "需要审批",
   // codex's automatic approval review (Guardian)
@@ -459,6 +490,11 @@ export const t = {
   // project settings
   projectSettings: "项目",
   threadDefaults: "新会话的默认设置",
+  skills: {
+    title: "技能",
+    hint: "codex 找到的技能（项目里的 .agents/skills/<名字>/SKILL.md，以及全局的）。模型会按需读取；在输入框里用 $名字 可以点名。",
+    none: "没有找到技能",
+  },
   threadDefaultsHint: "每个会话可以在输入框旁边临时改；这里是新会话的起点。",
   dirtyStart: "开始一轮时工作树有未提交改动",
   dirtyStartHint: "每一轮从一个提交开始，之后才能回退到这一轮之前。",

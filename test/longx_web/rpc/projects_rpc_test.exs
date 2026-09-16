@@ -477,6 +477,90 @@ defmodule LongxWeb.ProjectsRpcTest do
     end
   end
 
+  describe "goals and skills" do
+    test "set_goal / clear_goal drive codex's goal mode; list_skills names the $-mentionable skills; send_message carries them",
+         %{
+           conn: conn,
+           dir: dir
+         } do
+      project = create!(conn, dir)
+      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
+
+      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
+        rpc(conn, "start_thread", %{
+          "fields" => ["id", "codexThreadId"],
+          "input" => %{"projectId" => project["id"]}
+        })
+
+      :ok = Longx.Codex.Thread.subscribe(codex_id)
+
+      assert %{
+               "success" => true,
+               "data" => %{"objective" => "ship", "status" => "active", "tokenBudget" => 2000}
+             } =
+               rpc(conn, "set_goal", %{
+                 "fields" => ["objective", "status", "tokenBudget", "tokensUsed"],
+                 "input" => %{
+                   "threadId" => thread_id,
+                   "objective" => "ship",
+                   "tokenBudget" => 2000
+                 }
+               })
+
+      # a change of status alone keeps the budget; a null budget clears it
+      assert %{"success" => true, "data" => %{"status" => "paused", "tokenBudget" => 2000}} =
+               rpc(conn, "set_goal", %{
+                 "fields" => ["status", "tokenBudget"],
+                 "input" => %{"threadId" => thread_id, "status" => "paused"}
+               })
+
+      assert %{"success" => true, "data" => %{"tokenBudget" => nil}} =
+               rpc(conn, "set_goal", %{
+                 "fields" => ["tokenBudget"],
+                 "input" => %{"threadId" => thread_id, "tokenBudget" => nil}
+               })
+
+      assert %{"success" => true, "data" => %{"cleared" => true}} =
+               rpc(conn, "clear_goal", %{
+                 "fields" => ["cleared"],
+                 "input" => %{"threadId" => thread_id}
+               })
+
+      assert %{
+               "success" => true,
+               "data" => [
+                 %{"name" => "review-agent", "path" => _},
+                 %{"name" => "docs", "path" => docs}
+               ]
+             } =
+               rpc(conn, "list_skills", %{
+                 "fields" => ["name", "description", "shortDescription", "path", "enabled"],
+                 "input" => %{"id" => project["id"]}
+               })
+
+      assert %{"success" => true} =
+               rpc(conn, "send_message", %{
+                 "fields" => ["id"],
+                 "input" => %{
+                   "threadId" => thread_id,
+                   "text" => "say hi $docs",
+                   "skills" => [%{"name" => "docs", "path" => docs}]
+                 }
+               })
+
+      assert_receive {:codex, _, "turn/completed", _}, 10_000
+      {:ok, pool_conn} = Longx.Codex.Pool.connection(project["id"])
+
+      assert {:ok,
+              %{
+                "thread" => %{
+                  "lastTurnParams" => %{"input" => [_, %{"type" => "skill", "name" => "docs"}]}
+                }
+              }} =
+               Longx.Codex.Connection.request(pool_conn, "thread/read", %{"threadId" => codex_id})
+    end
+  end
+
   describe "automatic approval review" do
     test "approve_review overrides a denied review; an unknown id is an error on review_id", %{
       conn: conn,

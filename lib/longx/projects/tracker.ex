@@ -46,6 +46,7 @@ defmodule Longx.Projects.Tracker do
   @impl true
   def init(_opts) do
     :ok = PubSub.subscribe(Longx.PubSub, "codex:connection")
+    :ok = PubSub.subscribe(Longx.PubSub, "codex:server")
     {:ok, schedule_tick(%State{})}
   end
 
@@ -78,6 +79,27 @@ defmodule Longx.Projects.Tracker do
       {:noreply, state}
   end
 
+  # thread-less notifications of a project's codex: files changed under the
+  # watched root, config warnings, deprecation notices
+  def handle_info({:codex_server, project_id, "fs/changed", params}, state)
+      when is_binary(project_id) do
+    Projects.broadcast_files_changed(project_id, List.wrap(params["changedPaths"]))
+    {:noreply, state}
+  end
+
+  def handle_info({:codex_server, project_id, method, params}, state)
+      when is_binary(project_id) and method in ["configWarning", "deprecationNotice"] do
+    Projects.broadcast_notice(project_id, %{
+      kind: method,
+      summary: params["summary"],
+      details: params["details"]
+    })
+
+    {:noreply, state}
+  end
+
+  def handle_info({:codex_server, _tag, _method, _params}, state), do: {:noreply, state}
+
   def handle_info({:codex_connection, project_id, :down}, state) when is_binary(project_id) do
     codex_down(project_id)
     {:noreply, state}
@@ -96,6 +118,18 @@ defmodule Longx.Projects.Tracker do
   def handle_info(_other, state), do: {:noreply, state}
 
   ## Thread events
+
+  # a turn nobody sent through Projects — codex's goal mode starting the next
+  # one on its own — gets a row like any other
+  defp handle_event("turn/started", %{
+         "threadId" => codex_thread_id,
+         "turn" => %{"id" => turn_id}
+       }) do
+    with {:error, _} <- Projects.get_turn_by_codex_id(turn_id),
+         {:ok, %Thread{} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id) do
+      Projects.record_external_turn(thread, turn_id)
+    end
+  end
 
   defp handle_event("turn/completed", %{
          "threadId" => codex_thread_id,
@@ -232,6 +266,8 @@ defmodule Longx.Projects.Tracker do
 
   defp codex_back(project_id) do
     with {:ok, conn} <- Pool.connection(project_id) do
+      watch_root(project_id, conn)
+
       for thread <- Projects.list_threads_with_status!(project_id, :disconnected) do
         case Projects.resume_thread(thread, conn) do
           {:ok, _} ->
@@ -322,6 +358,27 @@ defmodule Longx.Projects.Tracker do
   defp turn_status("completed"), do: :completed
   defp turn_status("interrupted"), do: :interrupted
   defp turn_status(_), do: :failed
+
+  # codex watches the project root for us (fs/watch → fs/changed): the file
+  # tree and git status refresh on a change instead of polling
+  defp watch_root(project_id, conn) do
+    case Ash.get(Longx.Projects.Project, project_id) do
+      {:ok, %{root_path: root}} ->
+        case Longx.Codex.Connection.request(conn, "fs/watch", %{
+               "watchId" => project_id,
+               "path" => root
+             }) do
+          {:ok, _} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.debug("projects tracker: fs/watch refused: #{inspect(reason)}")
+        end
+
+      _ ->
+        :ok
+    end
+  end
 
   defp user_text(%{"content" => content}) when is_list(content) do
     content |> Enum.filter(&(&1["type"] == "text")) |> Enum.map_join(" ", & &1["text"])

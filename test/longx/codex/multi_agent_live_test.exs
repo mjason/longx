@@ -168,7 +168,7 @@ defmodule Longx.Codex.MultiAgentLiveTest do
         if method == "thread/started", do: Longx.Codex.Thread.subscribe(params["thread"]["id"])
         collect(turn_id, [{method, params} | log], deadline)
 
-      {:codex, method, params} ->
+      {:codex_server, _tag, method, params} ->
         if method == "thread/started", do: Longx.Codex.Thread.subscribe(params["thread"]["id"])
         collect(turn_id, [{method, params} | log], deadline)
     after

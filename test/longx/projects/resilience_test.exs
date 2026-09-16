@@ -72,6 +72,32 @@ defmodule Longx.Projects.ResilienceTest do
     assert project_id in Pool.running()
   end
 
+  test "the project's codex watches the root for us once it is up: a change it reports reaches the project channel",
+       %{project: project} do
+    project_id = project.id
+    Phoenix.PubSub.subscribe(Longx.PubSub, "project:" <> project_id)
+    {:ok, thread} = Projects.start_thread(project)
+    assert_receive {:codex_connection, ^project_id, :ready}, 15_000
+    {:ok, conn} = Pool.connection(project_id)
+
+    watched =
+      eventually(fn ->
+        {:ok, %{"thread" => %{"watches" => watches}}} =
+          Longx.Codex.Connection.request(conn, "thread/read", %{
+            "threadId" => thread.codex_thread_id
+          })
+
+        if map_size(watches) > 0, do: {:ok, watches}, else: :pending
+      end)
+
+    assert watched == %{project_id => project.root_path}
+
+    changed = Path.join(project.root_path, "a.txt")
+    {:ok, turn} = Projects.send_message(thread, "touch " <> changed)
+    eventually(turn_status(turn.id, :completed))
+    assert_receive {:files_changed, ^project_id, [^changed]}, 5_000
+  end
+
   test "codex_info says when the running codex booted with settings that have since changed", %{
     project: project
   } do

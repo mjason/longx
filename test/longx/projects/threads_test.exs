@@ -738,6 +738,57 @@ defmodule Longx.Projects.ThreadsTest do
                "user"
     end
 
+    test "a goal (codex's goal mode): set / clear through the thread; a turn codex starts on its own gets a Turn row like any other, bookmarked",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      :ok = Longx.Codex.Thread.subscribe(thread.codex_thread_id)
+
+      assert {:ok, %{"objective" => "auto: keep going", "status" => "active"}} =
+               Projects.set_goal(thread, %{objective: "auto: keep going", token_budget: 5000},
+                 conn: conn
+               )
+
+      # the fake continues the goal with a turn nobody asked for
+      assert_receive {:codex, _, "turn/completed", %{"turn" => %{"id" => codex_turn_id}}}, 10_000
+      turn = eventually(fn -> Projects.get_turn_by_codex_id(codex_turn_id) end)
+      assert turn.status == :completed
+      assert turn.user_text == "（目标续跑）auto: keep going"
+      assert {:ok, turn.commit_before} == Git.head(dir)
+      assert Ash.get!(Thread, thread.id).status == :idle
+      assert [_] = Projects.list_turns!(thread)
+
+      assert {:ok, %{"status" => "paused"}} =
+               Projects.set_goal(thread, %{status: :paused}, conn: conn)
+
+      assert {:ok, true} = Projects.clear_goal(thread, conn: conn)
+      # the view follows the notification, not the reply
+      assert_receive {:codex, _, "thread/goal/cleared", _}, 5_000
+      assert Longx.Codex.Thread.snapshot(thread.codex_thread_id).goal == nil
+    end
+
+    test "send_message/3 with skills: the named SKILL.md files ride on the turn as skill inputs; list_skills/2 asks codex",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+
+      assert {:ok, [%{name: "review-agent"}, %{name: "docs", path: docs}]} =
+               Projects.list_skills(project, conn: conn)
+
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+
+      {:ok, turn} =
+        Projects.send_message(thread, "say use $docs",
+          conn: conn,
+          skills: [%{name: "docs", path: docs}]
+        )
+
+      eventually(turn_done(turn.id))
+      %{"lastTurnParams" => params} = read_thread!(conn, thread.codex_thread_id)
+
+      assert [%{"type" => "text"}, %{"type" => "skill", "name" => "docs", "path" => ^docs}] =
+               params["input"]
+    end
+
     test "turns are listed oldest first", %{dir: dir, conn: conn} do
       project = git_project!(dir)
       {:ok, thread} = Projects.start_thread(project, conn: conn)

@@ -85,6 +85,8 @@ defmodule Longx.Projects.Thread do
         constraints: [one_of: [:never, :on_request, :untrusted, :auto_accept]]
 
       argument :network_access, :boolean
+      # the skills the person named with `$name` (name + SKILL.md path, from list_skills)
+      argument :skills, {:array, :map}
 
       run fn input, _ ->
         opts =
@@ -98,6 +100,7 @@ defmodule Longx.Projects.Thread do
             :approval_policy,
             :network_access
           ])
+          |> Map.put(:skills, skill_inputs(input.arguments[:skills]))
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
         with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
@@ -214,6 +217,54 @@ defmodule Longx.Projects.Thread do
             %{"answers" => input.arguments.answers},
             thread_id: thread.codex_thread_id
           )
+        end
+      end
+    end
+
+    # codex's goal mode: set / change the thread's goal, clear it
+    @goal_fields [
+      objective: [type: :string, allow_nil?: false],
+      status: [type: :string, allow_nil?: false],
+      token_budget: [type: :integer],
+      tokens_used: [type: :integer, allow_nil?: false],
+      time_used_seconds: [type: :integer, allow_nil?: false]
+    ]
+
+    action :set_goal, :map do
+      constraints fields: @goal_fields
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :objective, :string
+      argument :status, :atom, constraints: [one_of: [:active, :paused, :blocked, :complete]]
+      argument :token_budget, :integer
+
+      run fn input, _ ->
+        attrs =
+          input.arguments
+          |> Map.take([:objective, :status, :token_budget])
+          |> Enum.reject(fn {k, v} -> is_nil(v) and k != :token_budget end)
+          |> Map.new()
+
+        # a token budget given as null clears it; absent leaves it
+        attrs =
+          if Map.has_key?(input.arguments, :token_budget),
+            do: attrs,
+            else: Map.delete(attrs, :token_budget)
+
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             {:ok, goal} <- Longx.Projects.set_goal(thread, attrs) do
+          {:ok, goal_fields(goal)}
+        end
+      end
+    end
+
+    action :clear_goal, :map do
+      constraints fields: [cleared: [type: :boolean, allow_nil?: false]]
+      argument :thread_id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             {:ok, cleared} <- Longx.Projects.clear_goal(thread) do
+          {:ok, %{cleared: cleared}}
         end
       end
     end
@@ -465,6 +516,26 @@ defmodule Longx.Projects.Thread do
 
   defp wire_value(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
   defp wire_value(value), do: value
+
+  defp goal_fields(goal) do
+    %{
+      objective: goal["objective"],
+      status: goal["status"],
+      token_budget: goal["tokenBudget"],
+      tokens_used: goal["tokensUsed"] || 0,
+      time_used_seconds: goal["timeUsedSeconds"] || 0
+    }
+  end
+
+  defp skill_inputs(nil), do: []
+
+  defp skill_inputs(skills) do
+    for %{} = skill <- skills,
+        name = skill["name"] || skill[:name],
+        path = skill["path"] || skill[:path],
+        is_binary(name) and is_binary(path),
+        do: %{name: name, path: path}
+  end
 
   defp invalid_review(message) do
     {:error,

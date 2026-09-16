@@ -7,7 +7,7 @@ import { channel, ok } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, resetCodexHome, sandboxStatus, updateProject } from "@/ash_rpc";
+import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, listSkills, resetCodexHome, sandboxStatus, updateProject } from "@/ash_rpc";
 
 describe("ProjectSettingsPage", () => {
   beforeEach(() => {
@@ -42,6 +42,18 @@ describe("ProjectSettingsPage", () => {
         expect.objectContaining({ identity: "id-1", input: expect.objectContaining({ sandbox: "read_only", approvalPolicy: "never", dirtyStart: "ask", multiAgent: false, autoReview: false, globalMemory: false, writableRoots: ["~/.cache", "/data/models"] }) }),
       ),
     );
+  });
+
+  test("the skills codex finds for the project are listed with their paths; none is said", async () => {
+    vi.mocked(listSkills).mockResolvedValue(
+      ok([{ name: "docs", description: "Write the docs", shortDescription: null, path: "/srv/app-1/.agents/skills/docs/SKILL.md", enabled: true }]) as never,
+    );
+    renderAt("/p/app-1/settings");
+    const skills = await screen.findByTestId("project-skills");
+    await waitFor(() => expect(skills).toHaveTextContent("Write the docs"));
+    expect(skills).toHaveTextContent("$docs");
+    expect(skills).toHaveTextContent(".agents/skills/docs/SKILL.md");
+    vi.mocked(listSkills).mockResolvedValue(ok([]) as never);
   });
 
   test("the long-lived exceptions sit under 高级: writable directories, and (Linux) host paths typed by hand — no presets", async () => {

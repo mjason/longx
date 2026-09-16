@@ -29,6 +29,8 @@ defmodule Longx.Codex.ThreadState.Store do
     status: nil,
     token_usage: nil,
     plan: nil,
+    # codex's goal mode: the thread's goal (objective, status, budget, usage) or nil
+    goal: nil,
     # 全部放行: Longx answers every approval of the thread itself (ServerRequest.Default)
     auto_accept: false
   }
@@ -206,6 +208,10 @@ defmodule Longx.Codex.ThreadState.Store do
         plan: Map.take(params, ["turnId", "explanation", "plan"]) |> Map.put("plan", plan)
       })
 
+  # codex's goal mode: one goal per thread, replaced whole on every update
+  def fold(t, "thread/goal/updated", %{"goal" => goal}), do: put_meta(t, %{goal: goal})
+  def fold(t, "thread/goal/cleared", _params), do: put_meta(t, %{goal: nil})
+
   def fold(t, "item/started", %{"item" => %{"id" => _} = item} = params),
     do: put_item(t, with_turn(item, params))
 
@@ -276,6 +282,7 @@ defmodule Longx.Codex.ThreadState.Store do
       status: meta.status,
       token_usage: meta.token_usage,
       plan: meta.plan,
+      goal: meta.goal,
       items: items(thread_id),
       pending_requests: requests(thread_id)
     }

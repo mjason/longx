@@ -353,6 +353,18 @@ describe("chat adapter", () => {
     );
   });
 
+  test("a message naming skills ($name) sends them as skill inputs next to the text", async () => {
+    const skills = [{ name: "docs", description: "d", shortDescription: null, path: "/p/.agents/skills/docs/SKILL.md", enabled: true }];
+    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null, skills });
+    await adapter.onNew!(append("write it with $docs please"));
+    expect(sendMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ input: expect.objectContaining({ text: "write it with $docs please", skills: [{ name: "docs", path: "/p/.agents/skills/docs/SKILL.md" }] }) }),
+    );
+    // none named: no skills field at all
+    await adapter.onNew!(append("plain"));
+    expect((vi.mocked(sendMessage).mock.calls.at(-1)![0] as { input: Record<string, unknown> }).input).not.toHaveProperty("skills");
+  });
+
   test("extras.approveDeniedReview overrides a denied automatic review on the thread row", async () => {
     const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null });
     const extras = adapter.extras as { approveDeniedReview: (id: string) => Promise<void> };

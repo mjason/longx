@@ -113,6 +113,11 @@ export function rpcMock() {
       ]),
     ),
     reviewSettings: vi.fn(async () => ok({ modelSlug: null, effort: null })),
+    setGoal: vi.fn(async ({ input }: { input: Record<string, unknown> }) =>
+      ok({ objective: input["objective"] ?? "", status: input["status"] ?? "active", tokenBudget: input["tokenBudget"] ?? null, tokensUsed: 0, timeUsedSeconds: 0 }),
+    ),
+    clearGoal: vi.fn(async () => ok({ cleared: true })),
+    listSkills: vi.fn(async () => ok([])),
     setReviewModel: vi.fn(async () => ok(null)),
     listProviders: vi.fn(async () => ok([provider(1), provider(2)])),
     createProvider: vi.fn(

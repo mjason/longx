@@ -9,6 +9,18 @@ export type PendingRequest = { id: unknown; method: string; params: Record<strin
 export type PlanStep = { step: string; status: "pending" | "inProgress" | "completed" };
 export type TurnPlan = { turnId?: string; explanation: string | null; plan: PlanStep[] };
 
+/** codex's goal mode: the thread's goal — while it is active codex starts the next turn by itself. */
+export type ThreadGoal = {
+  threadId: string;
+  objective: string;
+  status: "active" | "paused" | "blocked" | "usageLimited" | "budgetLimited" | "complete";
+  tokenBudget: number | null;
+  tokensUsed: number;
+  timeUsedSeconds: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
 /** What ThreadChannel's join reply / "snapshot" carries (server-side key spelling). */
 export type ThreadSnapshot = {
   seq: number;
@@ -20,6 +32,7 @@ export type ThreadSnapshot = {
   items: CodexItem[];
   pending_requests: PendingRequest[];
   plan?: TurnPlan | null;
+  goal?: ThreadGoal | null;
 };
 
 export type ThreadEvent = { seq: number; method: string; params: Record<string, unknown> };
@@ -34,6 +47,7 @@ export type ThreadView = {
   items: CodexItem[];
   requests: PendingRequest[];
   plan: TurnPlan | null;
+  goal: ThreadGoal | null;
 };
 
 export function fromSnapshot(s: ThreadSnapshot): ThreadView {
@@ -47,11 +61,12 @@ export function fromSnapshot(s: ThreadSnapshot): ThreadView {
     items: s.items,
     requests: s.pending_requests,
     plan: s.plan ?? null,
+    goal: s.goal ?? null,
   };
 }
 
 export function emptyView(threadId: string): ThreadView {
-  return { seq: 0, threadId, thread: null, turn: null, status: null, tokenUsage: null, items: [], requests: [], plan: null };
+  return { seq: 0, threadId, thread: null, turn: null, status: null, tokenUsage: null, items: [], requests: [], plan: null, goal: null };
 }
 
 // delta notifications → the item field they extend (mirrors Store.fold);
@@ -94,6 +109,10 @@ function fold(view: ThreadView, method: string, params: Record<string, unknown>,
         ...view,
         plan: { turnId: params["turnId"] as string | undefined, explanation: (params["explanation"] as string | null | undefined) ?? null, plan: (params["plan"] as PlanStep[] | undefined) ?? [] },
       };
+    case "thread/goal/updated":
+      return { ...view, goal: (params["goal"] as ThreadGoal | undefined) ?? null };
+    case "thread/goal/cleared":
+      return { ...view, goal: null };
     case "item/started":
     case "item/completed": {
       const item = params["item"] as CodexItem | undefined;

@@ -209,7 +209,8 @@ defmodule Longx.Codex.ConnectionTest do
         "input" => [%{"type" => "text", "text" => "server-notify"}]
       })
 
-    assert_receive {:codex, "account/rateLimits/updated", %{"rateLimits" => _}}, 5_000
+    # tagged with the connection's tag (the project id in the pool; nil here)
+    assert_receive {:codex_server, nil, "account/rateLimits/updated", %{"rateLimits" => _}}, 5_000
   end
 
   test "a request error is surfaced, not swallowed", %{conn: conn} do

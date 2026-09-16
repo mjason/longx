@@ -127,3 +127,17 @@ describe("automatic approval review", () => {
     expect(applyEvent(v, { seq: 14, method: "item/autoApprovalReview/userApproved", params: { reviewId: "rev-9" } }).items).toEqual(v.items);
   });
 });
+
+describe("goal", () => {
+  const goal = { threadId: "thr_1", objective: "make it pass", status: "active" as const, tokenBudget: 50000, tokensUsed: 12, timeUsedSeconds: 3, createdAt: 1, updatedAt: 2 };
+
+  test("the snapshot carries codex's goal; updated replaces it, cleared removes it", () => {
+    const v = fromSnapshot({ ...snapshot, goal });
+    expect(v.goal).toEqual(goal);
+    expect(fromSnapshot(snapshot).goal).toBeNull();
+    const v2 = applyEvent(v, { seq: 11, method: "thread/goal/updated", params: { threadId: "thr_1", turnId: null, goal: { ...goal, status: "complete", tokensUsed: 900 } } });
+    expect(v2.goal).toMatchObject({ status: "complete", tokensUsed: 900 });
+    const v3 = applyEvent(v2, { seq: 12, method: "thread/goal/cleared", params: { threadId: "thr_1" } });
+    expect(v3.goal).toBeNull();
+  });
+});

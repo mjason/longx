@@ -13,7 +13,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { archiveThread, deleteThread, renameThread } from "@/ash_rpc";
-import { queryKeys, unwrap, useStartThread, useThreads } from "@/core/projects";
+import { queryKeys, unwrap, useSkills, useStartThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
@@ -46,6 +46,8 @@ export type CodexRuntimeOptions = {
   /** navigate to a thread; null = the project's new chat (after the thread on screen is gone) */
   onOpenThread: (threadId: string | null) => void;
   onDirtyTree?: (changes: DirtyChange[]) => Promise<DirtyDecision>;
+  /** a thread event worth telling the person about as it happens (model/rerouted) */
+  onSignal?: (method: string, params: Record<string, unknown>) => void;
 };
 
 export type TurnState = "idle" | "running" | "approval";
@@ -95,15 +97,17 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     threadId,
     onOpenThread,
     onDirtyTree,
+    onSignal,
   } = opts;
   const client = useQueryClient();
   const threads = useThreads(projectId);
+  const skills = useSkills(projectId).data;
   const rows = useMemo(
     () => (threads.data ?? []) as ThreadRow[],
     [threads.data],
   );
   const thread = threadId ? rows.find((t) => t.id === threadId) : undefined;
-  const { view, ready, error, refetch } = useThreadView(thread?.codexThreadId);
+  const { view, ready, error, refetch } = useThreadView(thread?.codexThreadId, onSignal);
   // sub-agents work on their own codex threads; the parent's activities name
   // them, and a child's activities name its own children
   const subviews = useThreadViews(
@@ -277,6 +281,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         queue: queue.adapter,
         attachments,
         dictation,
+        ...(skills ? { skills } : {}),
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -299,6 +304,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
       queue,
       attachments,
       dictation,
+      skills,
     ],
   );
   onNewRef.current = adapter.onNew;

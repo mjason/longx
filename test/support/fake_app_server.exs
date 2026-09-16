@@ -13,6 +13,14 @@
 #   "error"            answer turn/start with a JSON-RPC error
 #   "die"              exit immediately (simulates a crash)
 #   "server-notify"    emit a notification without a threadId
+#   "goal-done"        the model finishes the goal: thread/goal/updated (complete)
+#
+# thread/goal/set|get|clear keep one goal per thread (thread/goal/updated /
+# cleared notifications like codex); a goal set with objective "auto: <words>"
+# makes the fake start a turn of its own once the current one is over
+# (codex's goal continuation), saying <words>. skills/list answers two
+# skills per cwd; fs/watch answers and the "touch <path>" turn emits
+# fs/changed for it.
 #   "name <title>"     codex names the thread: thread/name/updated, then a message
 #   "spawn <name>"     a sub-agent: turn/plan/updated, subAgentActivity started on
 #                      this thread, a child thread <name> (items on its own id: a
@@ -242,6 +250,7 @@ defmodule FakeAppServer do
         "lastReview" => Map.get(entry, :last_review),
         "approvedGuardianEvents" => Map.get(entry, :approved_guardian, []),
         "settings" => Map.get(entry, :settings),
+        "watches" => Map.get(state, :watches, %{}),
         "compacted" => Map.get(entry, :compacted, 0)
       }
     })
@@ -315,6 +324,124 @@ defmodule FakeAppServer do
       )
 
     %{state | threads: threads}
+  end
+
+  # goals: one per thread, codex's notifications
+  defp handle(
+         %{
+           "id" => id,
+           "method" => "thread/goal/set",
+           "params" => %{"threadId" => thread_id} = params
+         },
+         state
+       ) do
+    entry = Map.get(state.threads, thread_id, %{turns: []})
+    now = System.system_time(:second)
+
+    goal =
+      Map.merge(
+        Map.get(entry, :goal) ||
+          %{
+            "threadId" => thread_id,
+            "objective" => "",
+            "status" => "active",
+            "tokenBudget" => nil,
+            "tokensUsed" => 0,
+            "timeUsedSeconds" => 0,
+            "createdAt" => now
+          },
+        %{"updatedAt" => now}
+      )
+
+    goal = if params["objective"], do: Map.put(goal, "objective", params["objective"]), else: goal
+    goal = if params["status"], do: Map.put(goal, "status", params["status"]), else: goal
+
+    goal =
+      if Map.has_key?(params, "tokenBudget"),
+        do: Map.put(goal, "tokenBudget", params["tokenBudget"]),
+        else: goal
+
+    reply(id, %{"goal" => goal})
+    notify("thread/goal/updated", %{"threadId" => thread_id, "turnId" => nil, "goal" => goal})
+    threads = Map.put(state.threads, thread_id, Map.put(entry, :goal, goal))
+    state = %{state | threads: threads}
+
+    case goal do
+      %{"objective" => "auto: " <> words, "status" => "active"} ->
+        # codex's continuation: a turn nobody asked for, once idle
+        turn_id = "turn_#{state.prefix}_#{state.next}"
+        state = %{state | next: state.next + 1}
+        turn = %{"id" => turn_id, "status" => "inProgress", "items" => []}
+        notify("turn/started", %{"threadId" => thread_id, "turn" => turn})
+        stream_message(thread_id, turn_id, String.split(words))
+        finish_turn(thread_id, turn_id, "completed", state, "", words)
+
+      _ ->
+        state
+    end
+  end
+
+  defp handle(
+         %{"id" => id, "method" => "thread/goal/get", "params" => %{"threadId" => thread_id}},
+         state
+       ) do
+    reply(id, %{"goal" => get_in(state.threads, [thread_id, :goal])})
+    state
+  end
+
+  defp handle(
+         %{"id" => id, "method" => "thread/goal/clear", "params" => %{"threadId" => thread_id}},
+         state
+       ) do
+    had = get_in(state.threads, [thread_id, :goal]) != nil
+    reply(id, %{"cleared" => had})
+    if had, do: notify("thread/goal/cleared", %{"threadId" => thread_id})
+    %{state | threads: Map.update(state.threads, thread_id, %{turns: []}, &Map.delete(&1, :goal))}
+  end
+
+  # skills: two per cwd, like codex's skills/list
+  defp handle(%{"id" => id, "method" => "skills/list", "params" => %{"cwds" => cwds}}, state) do
+    reply(id, %{
+      "data" =>
+        for cwd <- cwds do
+          %{
+            "cwd" => cwd,
+            "skills" => [
+              %{
+                "name" => "review-agent",
+                "description" => "Review code changes",
+                "shortDescription" => "review",
+                "path" => "#{cwd}/.agents/skills/review-agent/SKILL.md",
+                "enabled" => true
+              },
+              %{
+                "name" => "docs",
+                "description" => "Write the docs",
+                "shortDescription" => nil,
+                "path" => "#{cwd}/.agents/skills/docs/SKILL.md",
+                "enabled" => true
+              }
+            ],
+            "errors" => []
+          }
+        end
+    })
+
+    state
+  end
+
+  # fs/watch: remembered; the "touch <path>" turn reports a change on it
+  defp handle(
+         %{"id" => id, "method" => "fs/watch", "params" => %{"watchId" => wid, "path" => path}},
+         state
+       ) do
+    reply(id, %{"path" => path})
+    Map.update(state, :watches, %{wid => path}, &Map.put(&1, wid, path))
+  end
+
+  defp handle(%{"id" => id, "method" => "fs/unwatch", "params" => %{"watchId" => wid}}, state) do
+    reply(id, %{})
+    Map.update(state, :watches, %{}, &Map.delete(&1, wid))
   end
 
   # a person overriding the Guardian's denial: recorded for thread/read
@@ -721,6 +848,37 @@ defmodule FakeAppServer do
     start_turn(id, thread_id, turn_id, "name " <> title)
     notify("thread/name/updated", %{"threadId" => thread_id, "threadName" => title})
     finish_turn(thread_id, turn_id, "completed", state, "name " <> title, "named")
+  end
+
+  defp run_turn("goal-done", id, thread_id, turn_id, state) do
+    start_turn(id, thread_id, turn_id, "goal-done")
+
+    case get_in(state.threads, [thread_id, :goal]) do
+      nil ->
+        finish_turn(thread_id, turn_id, "completed", state, "goal-done", "no goal")
+
+      goal ->
+        goal = Map.merge(goal, %{"status" => "complete", "tokensUsed" => 1234})
+
+        notify("thread/goal/updated", %{
+          "threadId" => thread_id,
+          "turnId" => turn_id,
+          "goal" => goal
+        })
+
+        state = put_in(state, [:threads, thread_id, :goal], goal)
+        finish_turn(thread_id, turn_id, "completed", state, "goal-done", "done")
+    end
+  end
+
+  defp run_turn("touch " <> path, id, thread_id, turn_id, state) do
+    start_turn(id, thread_id, turn_id, "touch " <> path)
+
+    for {wid, root} <- Map.get(state, :watches, %{}), String.starts_with?(path, root) do
+      notify("fs/changed", %{"watchId" => wid, "changedPaths" => [path]})
+    end
+
+    finish_turn(thread_id, turn_id, "completed", state, "touch " <> path, "touched")
   end
 
   defp run_turn("server-notify", id, thread_id, turn_id, state) do
