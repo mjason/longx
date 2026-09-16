@@ -20,6 +20,7 @@ assistant-ui 的 runtime 都是同一份代码（Metro 把 `@/core/*` 指到 web
     npm run check                # tsc + jest
     npx expo export --platform android --output-dir /tmp/x    # 只打 JS 包，查引用
     npx expo prebuild --platform android --no-install && cd android && ./gradlew assembleDebug
+    ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a   # 发布包只带 arm64，体积三分之一
 
 本机没有 JDK 时 `JAVA_HOME=~/.gradle/jdks/<gradle 下载的 17>`；`ANDROID_HOME` 指向 SDK（platform 35）。
 `android/`、`ios/` 是 prebuild 生成的，不入库。发布 key：环境里放 `LONGX_KEYSTORE` / `LONGX_KEYSTORE_PASSWORD` /
