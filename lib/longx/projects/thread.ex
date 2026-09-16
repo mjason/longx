@@ -41,6 +41,7 @@ defmodule Longx.Projects.Thread do
       argument :network_access, :boolean
       argument :web_search, :boolean
       argument :multi_agent, :boolean
+      argument :auto_review, :boolean
 
       run fn input, _ ->
         opts =
@@ -53,7 +54,8 @@ defmodule Longx.Projects.Thread do
             :sandbox,
             :network_access,
             :web_search,
-            :multi_agent
+            :multi_agent,
+            :auto_review
           ])
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
@@ -212,6 +214,33 @@ defmodule Longx.Projects.Thread do
       end
     end
 
+    # overrides a denial of codex's automatic approval review: the action is
+    # handed back as approved by the person (the model may retry it next turn)
+    action :approve_review do
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :review_id, :string, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             :ok <- Longx.Projects.approve_denied_review(thread, input.arguments.review_id) do
+          :ok
+        else
+          {:error, :not_found} ->
+            invalid_review("no denied review with this id")
+
+          {:error, :not_denied} ->
+            invalid_review("this review was not denied")
+
+          # codex refused the event (its shape is ours to get right) or is gone
+          {:error, %Longx.Codex.Error{message: message}} ->
+            invalid_review("codex refused the approval: #{message}")
+
+          {:error, reason} ->
+            invalid_review("could not approve: #{inspect(reason)}")
+        end
+      end
+    end
+
     create :create do
       primary? true
 
@@ -226,6 +255,7 @@ defmodule Longx.Projects.Thread do
         :network_access,
         :web_search,
         :multi_agent,
+        :auto_review,
         :tools,
         :forked_from_id,
         :parent_thread_id,
@@ -360,6 +390,9 @@ defmodule Longx.Projects.Thread do
     # codex's sub-agent tools offered to this thread (fixed at start)
     attribute :multi_agent, :boolean, allow_nil?: false, default: true, public?: true
 
+    # codex's automatic approval review on this thread (fixed at start)
+    attribute :auto_review, :boolean, allow_nil?: false, default: true, public?: true
+
     # a sub-agent spawned by codex inside `parent_thread_id`'s conversation:
     # codex's agent path ("/root/reader_a"); such threads never show in the
     # project's list, they belong to their parent's view
@@ -401,4 +434,11 @@ defmodule Longx.Projects.Thread do
     do: {:ok, {kind, value}}
 
   defp review_target(_), do: argument_error(:value, "is required for this target")
+
+  defp invalid_review(message) do
+    {:error,
+     Ash.Error.Invalid.exception(
+       errors: [%Ash.Error.Changes.InvalidArgument{field: :review_id, message: message}]
+     )}
+  end
 end

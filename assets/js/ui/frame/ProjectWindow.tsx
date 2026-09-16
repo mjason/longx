@@ -116,7 +116,7 @@ export function ProjectWindow() {
     <ChatProvider
       projectId={project.data.id}
       slug={slug}
-      defaults={{ sandbox: project.data.sandbox, approvalPolicy: project.data.approvalPolicy, networkAccess: project.data.networkAccess, webSearch: project.data.webSearch, multiAgent: project.data.multiAgent }}
+      defaults={{ sandbox: project.data.sandbox, approvalPolicy: project.data.approvalPolicy, networkAccess: project.data.networkAccess, webSearch: project.data.webSearch, multiAgent: project.data.multiAgent, autoReview: project.data.autoReview }}
       defaultModelId={project.data.modelId}
     >
     <div className="flex h-dvh flex-col">

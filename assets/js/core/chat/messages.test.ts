@@ -260,6 +260,54 @@ describe("toMessages", () => {
   });
 });
 
+describe("automatic approval review", () => {
+  const action = { type: "command", source: "unifiedExec", command: "/usr/bin/zsh -lc 'touch ~/x'", cwd: "/p" };
+
+  test("a review of a command rides on that command's part; the command follows the verdict", () => {
+    const msgs = toMessages(
+      view({
+        turn: { id: "t1", status: "inProgress" },
+        items: [
+          { id: "c1", type: "commandExecution", turnId: "t1", command: "touch ~/x", cwd: "/p", status: "inProgress" },
+          { id: "rev-1", type: "autoApprovalReview", turnId: "t1", targetItemId: "c1", action, review: { status: "inProgress", rationale: null }, startedAtMs: 1 },
+        ],
+      }),
+    );
+    const ps = parts(msgs[0]!);
+    expect(ps.map((p) => p["type"])).toEqual(["tool-call"]);
+    expect(ps[0]).toMatchObject({ toolName: "commandExecution", args: { review: { id: "rev-1", status: "inProgress", userApproved: false } } });
+
+    const done = toMessages(
+      view({
+        turn: { id: "t1", status: "completed" },
+        items: [
+          { id: "c1", type: "commandExecution", turnId: "t1", command: "touch ~/x", cwd: "/p", status: "declined", exitCode: null },
+          { id: "rev-1", type: "autoApprovalReview", turnId: "t1", targetItemId: "c1", action, review: { status: "denied", riskLevel: "high", rationale: "writes outside" }, userApproved: true },
+        ],
+      }),
+    );
+    expect(parts(done[0]!)[0]).toMatchObject({ toolName: "commandExecution", isError: true, args: { review: { id: "rev-1", status: "denied", riskLevel: "high", rationale: "writes outside", userApproved: true } } });
+    // no message waits on the person: the reviewer decided
+    expect(done[0]!.status).toEqual({ type: "complete", reason: "stop" });
+  });
+
+  test("a review with no item of its own (a permissions request) is a standalone autoReview part", () => {
+    const perms = { type: "requestPermissions", reason: "install", permissions: { fileSystem: { write: ["/home/mj"], entries: [{ access: "write", path: { type: "path", path: "/home/mj" } }] }, network: { enabled: true } } };
+    const msgs = toMessages(
+      view({
+        turn: { id: "t1", status: "completed" },
+        items: [
+          { id: "rev-2", type: "autoApprovalReview", turnId: "t1", action: perms, review: { status: "approved", riskLevel: "low", rationale: "fine" } },
+          { id: "a1", type: "agentMessage", turnId: "t1", text: "done" },
+        ],
+      }),
+    );
+    const ps = parts(msgs[0]!);
+    expect(ps.map((p) => p["type"])).toEqual(["tool-call", "text"]);
+    expect(ps[0]).toMatchObject({ toolName: "autoReview", toolCallId: "rev-2", args: { review: { id: "rev-2", status: "approved", riskLevel: "low" }, reason: "install", lines: ["写 /home/mj", "联网"] } });
+  });
+});
+
 describe("multi-agent", () => {
   const activity = (id: string, kind: string, name = "alpha") => ({ id, type: "subAgentActivity", turnId: "t20", agentPath: `/root/${name}`, agentThreadId: `child-${name}`, kind });
 

@@ -183,6 +183,7 @@ defmodule Longx.Projects.Tracker do
               network_access: parent.network_access,
               web_search: parent.web_search,
               multi_agent: parent.multi_agent,
+              auto_review: parent.auto_review,
               tools: parent.tools,
               status: :active
             })

@@ -100,12 +100,14 @@ export const t = {
   } as Record<string, string>,
   accessMode: "访问模式",
   modeHint:
-    "沙箱和审批从下一轮开始生效，之后的轮次沿用；网页搜索和子 agent 在会话开始时定下。",
+    "沙箱和审批从下一轮开始生效，之后的轮次沿用；网页搜索、子 agent 和自动审核在会话开始时定下。",
   modeHintStarted:
-    "沙箱和审批从下一轮开始生效；网页搜索和子 agent 只能在新会话时选择。",
+    "沙箱和审批从下一轮开始生效；网页搜索、子 agent 和自动审核只能在新会话时选择。",
   webSearch: "网页搜索（搜索 + 读网页，由 Longx 代为访问）",
   multiAgent: "子 agent（agent 可以派出并行的子 agent）",
   noMultiAgent: "无子 agent",
+  autoReviewSwitch: "自动审核（权限申请由模型按 codex 的风险策略判定，拒绝时可在对话里放行）",
+  noAutoReview: "人工审批",
   noWebSearch: "无搜索",
   next: "下一步",
   // frame
@@ -352,6 +354,19 @@ export const t = {
   stalledFor: (s: number) => `${s} 秒没有新输出`,
   // chat: tools
   approvalNeeded: "需要审批",
+  // codex's automatic approval review (Guardian)
+  autoReview: {
+    running: "自动审核中…",
+    approved: "自动审核通过",
+    denied: "自动审核拒绝",
+    timedOut: "自动审核超时",
+    aborted: "自动审核中止",
+    overridden: "你已允许，模型可以重试",
+    override: "仍然允许",
+    risk: (level: string) => `风险${({ low: "低", medium: "中", high: "高", critical: "极高" } as Record<string, string>)[level] ?? level}`,
+    reviewed: "审核了",
+    continueAfterOverride: "上一步被自动审核拒绝的操作我已允许，请继续。",
+  },
   permissionsRequest: "申请权限",
   permissionsAsked: "申请了权限",
   agentAsks: "agent 有问题要问",

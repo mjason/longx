@@ -150,7 +150,8 @@ defmodule Longx.Projects.ThreadsTest do
                "model_reasoning_summary" => "auto",
                "web_search" => "live",
                "features.standalone_web_search" => true,
-               "features.multi_agent_v2" => true
+               "features.multi_agent_v2" => true,
+               "approvals_reviewer" => "auto_review"
              }
     end
 
@@ -653,6 +654,53 @@ defmodule Longx.Projects.ThreadsTest do
       assert off.multi_agent == false
       %{"startParams" => params} = read_thread!(conn, off.codex_thread_id)
       assert params["config"]["features.multi_agent"] == false
+    end
+
+    test "auto_review: on by default — codex's Guardian reviews approvals instead of the person; off at start or as the project's default",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      assert project.auto_review == true
+
+      {:ok, on} = Projects.start_thread(project, conn: conn)
+      assert on.auto_review == true
+      %{"startParams" => params} = read_thread!(conn, on.codex_thread_id)
+      assert params["config"]["approvals_reviewer"] == "auto_review"
+
+      {:ok, off} = Projects.start_thread(project, conn: conn, auto_review: false)
+      assert off.auto_review == false
+      %{"startParams" => params} = read_thread!(conn, off.codex_thread_id)
+      assert params["config"]["approvals_reviewer"] == "user"
+
+      manual = Projects.update_project!(project, %{auto_review: false})
+      {:ok, inherited} = Projects.start_thread(manual, conn: conn)
+      assert inherited.auto_review == false
+    end
+
+    test "approve_denied_review/2 hands a denied review back to codex as approved by the person",
+         %{dir: dir, conn: conn} do
+      project = git_project!(dir)
+      {:ok, thread} = Projects.start_thread(project, conn: conn)
+      id = thread.codex_thread_id
+      :ok = Longx.Codex.Thread.subscribe(id)
+
+      Longx.Codex.ThreadState.ingest(id, "item/autoApprovalReview/completed", %{
+        "threadId" => id,
+        "turnId" => "t1",
+        "reviewId" => "rev-1",
+        "action" => %{
+          "type" => "command",
+          "source" => "unifiedExec",
+          "command" => "ls",
+          "cwd" => dir
+        },
+        "review" => %{"status" => "denied", "riskLevel" => "high", "rationale" => "no"}
+      })
+
+      assert_receive {:codex, _, "item/autoApprovalReview/completed", _}, 5_000
+      assert :ok = Projects.approve_denied_review(thread, "rev-1", conn: conn)
+      assert_receive {:codex, _, "item/autoApprovalReview/userApproved", _}, 5_000
+      assert %{"approvedGuardianEvents" => [%{"id" => "rev-1"}]} = read_thread!(conn, id)
+      assert {:error, :not_found} = Projects.approve_denied_review(thread, "rev-9", conn: conn)
     end
 
     test "turns are listed oldest first", %{dir: dir, conn: conn} do

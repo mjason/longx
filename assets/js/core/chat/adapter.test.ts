@@ -7,8 +7,9 @@ vi.mock("@/ash_rpc", () => ({
   interruptTurn: vi.fn(async () => ({ success: true, data: null })),
   respond: vi.fn(async () => ({ success: true, data: null })),
   answerRequest: vi.fn(async () => ({ success: true, data: null })),
+  approveReview: vi.fn(async () => ({ success: true, data: null })),
 }));
-import { answerRequest, interruptTurn, respond, sendMessage } from "@/ash_rpc";
+import { answerRequest, approveReview, interruptTurn, respond, sendMessage } from "@/ash_rpc";
 
 const target = { threadId: "row-1", codexThreadId: "thr_1" };
 const append = (text: string) =>
@@ -154,6 +155,7 @@ describe("chat adapter", () => {
         networkAccess: true,
         webSearch: true,
         multiAgent: true,
+        autoReview: true,
       },
     });
     await adapter.onNew(append("look"));
@@ -349,6 +351,13 @@ describe("chat adapter", () => {
         },
       }),
     );
+  });
+
+  test("extras.approveDeniedReview overrides a denied automatic review on the thread row", async () => {
+    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null });
+    const extras = adapter.extras as { approveDeniedReview: (id: string) => Promise<void> };
+    await extras.approveDeniedReview("rev-1");
+    expect(approveReview).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", reviewId: "rev-1" } }));
   });
 
   test("textOf joins text parts and trims", () => {

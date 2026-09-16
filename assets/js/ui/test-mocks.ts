@@ -30,6 +30,7 @@ export const project = (n: number) => ({
   passthroughPaths: [],
   webSearch: true,
   multiAgent: true,
+  autoReview: true,
   dirtyStart: "commit",
   tools: [],
   memoryLimitMb: null,
@@ -52,6 +53,7 @@ export const thread = (n: number) => ({
   networkAccess: false,
   webSearch: true,
   multiAgent: true,
+  autoReview: true,
   lastActivityAt: "2026-09-12T00:00:00Z",
   insertedAt: "2026-09-12T00:00:00Z",
 });

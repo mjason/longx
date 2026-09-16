@@ -2369,6 +2369,7 @@ export type CreateProjectInput = {
   passthroughPaths?: Array<string>;
   webSearch?: boolean;
   multiAgent?: boolean;
+  autoReview?: boolean;
   globalMemory?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
@@ -3059,6 +3060,7 @@ export type UpdateProjectInput = {
   passthroughPaths?: Array<string>;
   webSearch?: boolean;
   multiAgent?: boolean;
+  autoReview?: boolean;
   globalMemory?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
@@ -4572,6 +4574,75 @@ export async function validateAnswerRequest(
 }
 
 
+export type ApproveReviewInput = {
+  threadId: UUID;
+  reviewId: string;
+};
+
+export type InferApproveReviewResult = {};
+
+export type ApproveReviewResult = | { success: true; data: InferApproveReviewResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function approveReview(
+  config: {
+  tenant?: string;
+  input: ApproveReviewInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ApproveReviewResult> {
+  const payload = {
+    action: "approve_review",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<ApproveReviewResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateApproveReview(
+  config: {
+  tenant?: string;
+  input: ApproveReviewInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "approve_review",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ArchiveThreadFields = UnifiedFieldSelection<ThreadResourceSchema>[];
 
 export type InferArchiveThreadResult<
@@ -5240,6 +5311,7 @@ export type StartThreadInput = {
   networkAccess?: boolean | null;
   webSearch?: boolean | null;
   multiAgent?: boolean | null;
+  autoReview?: boolean | null;
 };
 
 export type StartThreadFields = UnifiedFieldSelection<ThreadResourceSchema>[];

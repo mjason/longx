@@ -42,6 +42,7 @@ defmodule Longx.Projects do
       rpc_action :review_thread, :review_thread
       rpc_action :respond, :respond
       rpc_action :answer_request, :answer_request
+      rpc_action :approve_review, :approve_review
       rpc_action :rename_thread, :rename
       rpc_action :archive_thread, :archive
       rpc_action :delete_thread, :delete_thread
@@ -159,6 +160,7 @@ defmodule Longx.Projects do
           | {:network_access, boolean}
           | {:web_search, boolean}
           | {:multi_agent, boolean}
+          | {:auto_review, boolean}
           | {:conn, GenServer.server()}
 
   @doc """
@@ -186,6 +188,7 @@ defmodule Longx.Projects do
     network_access = Keyword.get(opts, :network_access, project.network_access)
     web_search = Keyword.get(opts, :web_search, project.web_search)
     multi_agent = Keyword.get(opts, :multi_agent, project.multi_agent)
+    auto_review = Keyword.get(opts, :auto_review, project.auto_review)
 
     # the model's own settings (context window, reasoning, web search mode);
     # an unknown slug, a missing default or a level the model does not offer
@@ -203,6 +206,7 @@ defmodule Longx.Projects do
              network_access: network_access,
              writable_roots: writable_roots(project),
              multi_agent: multi_agent,
+             auto_review: auto_review,
              conn: conn
            ]
            |> Keyword.merge(model_opts)
@@ -221,6 +225,7 @@ defmodule Longx.Projects do
              network_access: network_access,
              web_search: web_search,
              multi_agent: multi_agent,
+             auto_review: auto_review,
              tools: tools
            }) do
       :ok = Tracker.track(codex_thread_id)
@@ -404,6 +409,16 @@ defmodule Longx.Projects do
   end
 
   @doc """
+  Overrides a denial of codex's automatic approval review on the thread
+  (`Longx.Codex.Thread.approve_denied_review/3`); the person then tells the
+  model to go on. `{:error, :not_found}` / `{:error, :not_denied}` when the
+  review is unknown or was not a denial.
+  """
+  @spec approve_denied_review(Thread.t(), String.t(), keyword) :: :ok | {:error, term}
+  def approve_denied_review(%Thread{codex_thread_id: id}, review_id, opts \\ []),
+    do: Longx.Codex.Thread.approve_denied_review(id, review_id, opts)
+
+  @doc """
   Deletes the thread row and its turns (never while a turn runs). Codex's
   own record of the conversation stays in the project's CODEX_HOME —
   `clear_codex_history/1` is the wipe for that.
@@ -481,6 +496,7 @@ defmodule Longx.Projects do
              network_access: thread.network_access,
              writable_roots: writable_roots(project),
              multi_agent: thread.multi_agent,
+             auto_review: thread.auto_review,
              conn: conn
            ]
            |> Keyword.merge(model_opts)
@@ -601,7 +617,8 @@ defmodule Longx.Projects do
           approval_policy: thread.approval_policy,
           network_access: thread.network_access,
           writable_roots: writable_roots(project),
-          multi_agent: thread.multi_agent
+          multi_agent: thread.multi_agent,
+          auto_review: thread.auto_review
         ]
         |> Keyword.merge(model_opts)
         # the level the thread was left on, not the row's default
@@ -765,6 +782,7 @@ defmodule Longx.Projects do
          fork_opts =
            model_opts
            |> put_if(:last_turn_id, previous && previous.codex_turn_id)
+           |> Keyword.put(:auto_review, thread.auto_review)
            |> put_if(:conn, conn),
          {:ok, codex_thread_id} <- Longx.Codex.Thread.fork(thread.codex_thread_id, fork_opts),
          {:ok, forked} <-
@@ -776,6 +794,7 @@ defmodule Longx.Projects do
              reasoning_effort: model_opts[:reasoning_effort],
              approval_policy: thread.approval_policy,
              sandbox: thread.sandbox,
+             auto_review: thread.auto_review,
              tools: thread.tools,
              forked_from_id: thread.id
            }) do

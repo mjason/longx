@@ -65,6 +65,8 @@ const DELTAS: Record<string, { field: string; index?: string }> = {
   "item/plan/delta": { field: "text" },
 };
 
+const REVIEW_FIELDS = ["turnId", "targetItemId", "action", "review", "decisionSource", "startedAtMs", "completedAtMs"] as const;
+
 /**
  * Applies one event; anything at or before the view's seq is already in it.
  * `now` (epoch ms) stamps items as `startedAtMs` / `completedAtMs` — codex
@@ -103,6 +105,25 @@ function fold(view: ThreadView, method: string, params: Record<string, unknown>,
           ? { startedAtMs: now }
           : { ...(previous?.["startedAtMs"] !== undefined ? { startedAtMs: previous["startedAtMs"] } : {}), completedAtMs: now };
       return { ...view, items: putItem(view.items, { ...item, ...(turnId ? { turnId } : {}), ...stamps }) };
+    }
+    // codex's automatic approval review (Guardian): no item of its own on the
+    // wire, one is made here keyed by the review id — started, then the
+    // verdict replaces it; `userApproved` is Longx's mark once the person
+    // overrode a denial (mirrors Store.fold)
+    case "item/autoApprovalReview/started":
+    case "item/autoApprovalReview/completed": {
+      const id = params["reviewId"] as string | undefined;
+      if (!id) return view;
+      const fields: Record<string, unknown> = {};
+      for (const key of REVIEW_FIELDS) if (params[key] !== undefined) fields[key] = params[key];
+      const turnId = typeof params["turnId"] === "string" ? params["turnId"] : undefined;
+      return { ...view, items: putItem(view.items, { ...fields, id, type: "autoApprovalReview", ...(turnId ? { turnId } : {}) }) };
+    }
+    case "item/autoApprovalReview/userApproved": {
+      const id = params["reviewId"] as string | undefined;
+      const current = view.items.find((i) => i.id === id && i.type === "autoApprovalReview");
+      if (!current) return view;
+      return { ...view, items: putItem(view.items, { ...current, userApproved: true }) };
     }
     case "thread/reverted": {
       const dropped = new Set((params["turnIds"] as string[] | undefined) ?? []);

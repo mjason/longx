@@ -30,6 +30,7 @@ defmodule Longx.Codex.Thread do
           | {:network_access, boolean}
           | {:writable_roots, [Path.t()]}
           | {:multi_agent, boolean}
+          | {:auto_review, boolean}
           | {:developer_instructions, String.t()}
           | {:tools, [module | String.t()]}
           | {:conn, GenServer.server()}
@@ -183,6 +184,93 @@ defmodule Longx.Codex.Thread do
     with {:ok, conn} <- conn(thread_id, opts),
          {:ok, _} <- Connection.request(conn, "thread/compact/start", %{"threadId" => thread_id}),
          do: :ok
+  end
+
+  @doc """
+  Overrides a denial of codex's automatic approval review
+  (`thread/approveGuardianDeniedAction`): the denied action goes back to
+  codex as approved by the person, which puts a developer note in the
+  thread's context — the model may retry the action on its next turn and
+  the reviewer sees the authorization. The review item is marked
+  `userApproved` in the ThreadState. Only a denied review can be approved.
+  """
+  @spec approve_denied_review(String.t(), String.t(), keyword) :: :ok | {:error, term}
+  def approve_denied_review(thread_id, review_id, opts \\ []) do
+    with {:ok, item} <- denied_review(thread_id, review_id),
+         {:ok, conn} <- conn(thread_id, opts),
+         {:ok, _} <-
+           Connection.request(conn, "thread/approveGuardianDeniedAction", %{
+             "threadId" => thread_id,
+             "event" => guardian_event(item)
+           }) do
+      ThreadState.ingest(thread_id, "item/autoApprovalReview/userApproved", %{
+        "threadId" => thread_id,
+        "reviewId" => review_id
+      })
+    end
+  end
+
+  defp denied_review(thread_id, review_id) do
+    case ThreadState.Store.get_item(thread_id, review_id) do
+      %{"type" => "autoApprovalReview", "review" => %{"status" => "denied"}} = item -> {:ok, item}
+      %{"type" => "autoApprovalReview"} -> {:error, :not_denied}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  The stored review item as codex's core `GuardianAssessmentEvent`: the
+  app-server reports reviews in its v2 shape (camelCase, `unifiedExec`) but
+  takes the approval in the core one (snake_case keys and enum values).
+  """
+  @spec guardian_event(map) :: map
+  def guardian_event(%{"id" => id} = item) do
+    review = Map.get(item, "review", %{})
+
+    %{
+      "id" => id,
+      "status" => review["status"],
+      "risk_level" => review["riskLevel"],
+      "user_authorization" => review["userAuthorization"],
+      "rationale" => review["rationale"],
+      "turn_id" => item["turnId"],
+      "target_item_id" => item["targetItemId"],
+      "decision_source" => item["decisionSource"],
+      "started_at_ms" => item["startedAtMs"],
+      "completed_at_ms" => item["completedAtMs"],
+      "action" => snake_action(item["action"])
+    }
+    |> Map.reject(fn {_, v} -> is_nil(v) end)
+  end
+
+  # keys snake_cased at every level; the tag values (`type`, `source`, a
+  # special path's `value`) are codex enums that change case with the shape,
+  # the rest stay as they are. A file-system profile is either the legacy
+  # read/write lists or entries in core — the v2 shape carries both when the
+  # lists suffice, and core refuses the mix.
+  defp snake_action(%{} = map) do
+    map
+    |> Map.reject(fn {_, v} -> is_nil(v) end)
+    |> Map.new(fn
+      {key, value} when key in ["type", "source", "value"] and is_binary(value) ->
+        {key, Macro.underscore(value)}
+
+      {"fileSystem", %{} = fs} ->
+        {"file_system", snake_file_system(fs)}
+
+      {key, value} ->
+        {Macro.underscore(key), snake_action(value)}
+    end)
+  end
+
+  defp snake_action(list) when is_list(list), do: Enum.map(list, &snake_action/1)
+  defp snake_action(other), do: other
+
+  defp snake_file_system(fs) do
+    case Map.take(fs, ["read", "write"]) |> Map.reject(fn {_, v} -> is_nil(v) end) do
+      legacy when map_size(legacy) > 0 -> legacy
+      _ -> fs |> Map.drop(["read", "write"]) |> snake_action()
+    end
   end
 
   @typedoc "What a review looks at."
@@ -460,6 +548,17 @@ defmodule Longx.Codex.Thread do
 
         _ ->
           config
+      end
+
+    # codex's Guardian: every approval request goes to a read-only reviewer
+    # sub-session (the thread's model) instead of the person — `user` is
+    # codex's default, written explicitly so a project that turned it off
+    # never inherits a home's setting
+    config =
+      case Keyword.fetch(opts, :auto_review) do
+        {:ok, true} -> Map.put(config, "approvals_reviewer", "auto_review")
+        {:ok, false} -> Map.put(config, "approvals_reviewer", "user")
+        :error -> config
       end
 
     if map_size(config) == 0, do: params, else: Map.put(params, "config", config)

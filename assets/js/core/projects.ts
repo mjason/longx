@@ -37,6 +37,7 @@ export const projectFields = [
   "passthroughPaths",
   "webSearch",
   "multiAgent",
+  "autoReview",
   "globalMemory",
   "dirtyStart",
   "tools",
@@ -59,6 +60,7 @@ export const threadFields = [
   "networkAccess",
   "webSearch",
   "multiAgent",
+  "autoReview",
   "lastActivityAt",
   "insertedAt",
 ] as const;
@@ -382,6 +384,7 @@ export type StartThreadMode = {
   networkAccess: boolean;
   webSearch: boolean;
   multiAgent: boolean;
+  autoReview: boolean;
 };
 /** what a new chat starts with: the mode, and the model / reasoning level when picked (a thread-start config, unlike a mid-thread switch) */
 export type StartThreadInput = Partial<StartThreadMode> & {

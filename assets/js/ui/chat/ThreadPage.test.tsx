@@ -278,6 +278,10 @@ describe("ThreadPage", () => {
     const multiAgent = screen.getByRole("switch", { name: /子 agent/ });
     expect(multiAgent).toBeChecked();
     await user.click(multiAgent);
+    // and codex's automatic approval review (on by default)
+    const autoReview = screen.getByRole("switch", { name: /自动审核/ });
+    expect(autoReview).toBeChecked();
+    await user.click(autoReview);
     await user.keyboard("{Escape}");
     await user.type(
       screen.getByRole("textbox", { name: "随心输入" }),
@@ -290,6 +294,7 @@ describe("ThreadPage", () => {
             projectId: "id-1",
             webSearch: false,
             multiAgent: false,
+            autoReview: false,
             sandbox: "workspace_write",
           }),
         }),

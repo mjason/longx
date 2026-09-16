@@ -99,6 +99,15 @@ defmodule Longx.Codex.ThreadState.Store do
     :ok
   end
 
+  @doc "One item of the thread, or nil."
+  @spec get_item(String.t(), String.t()) :: map | nil
+  def get_item(thread_id, item_id) do
+    case :ets.lookup(@items, {thread_id, item_id}) do
+      [{_, _, item}] -> item
+      [] -> nil
+    end
+  end
+
   # `index` = nil appends to a string field; an integer addresses one entry of
   # a list field (reasoning `summary`/`content` are `string[]`, and codex names
   # the entry with `summaryIndex`/`contentIndex`). A list field with no index
@@ -210,6 +219,23 @@ defmodule Longx.Codex.ThreadState.Store do
 
   def fold(t, "item/plan/delta", %{"itemId" => id, "delta" => d}), do: append(t, id, "text", d)
 
+  # codex's automatic approval review (Guardian): no item of its own on the
+  # wire, so one is made here, keyed by the review id — started, then
+  # completed (the verdict replaces it); `userApproved` is Longx's own mark
+  # once the person overrode a denial (Thread.approve_denied_review/3).
+  def fold(t, "item/autoApprovalReview/started", %{"reviewId" => id} = params),
+    do: put_item(t, review_item(id, params))
+
+  def fold(t, "item/autoApprovalReview/completed", %{"reviewId" => id} = params),
+    do: put_item(t, review_item(id, params))
+
+  def fold(t, "item/autoApprovalReview/userApproved", %{"reviewId" => id}) do
+    case get_item(t, id) do
+      nil -> :ok
+      item -> put_item(t, Map.put(item, "userApproved", true))
+    end
+  end
+
   def fold(_t, _method, _params), do: :ok
 
   @doc "Seeds the view from a `thread/read` (`includeTurns: true`) result."
@@ -255,4 +281,12 @@ defmodule Longx.Codex.ThreadState.Store do
 
   defp with_turn(item, %{"turnId" => turn_id}), do: Map.put_new(item, "turnId", turn_id)
   defp with_turn(item, _), do: item
+
+  @review_fields ~w(turnId targetItemId action review decisionSource startedAtMs completedAtMs)
+
+  defp review_item(id, params),
+    do:
+      params
+      |> Map.take(@review_fields)
+      |> Map.merge(%{"id" => id, "type" => "autoApprovalReview"})
 end

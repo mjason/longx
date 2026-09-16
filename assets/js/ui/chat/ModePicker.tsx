@@ -34,6 +34,7 @@ export function ModePicker({ mode, onChange, disabled = false, started = false }
         {mode.networkAccess && mode.sandbox === "workspace_write" ? <Globe className="size-3" /> : null}
         {!mode.webSearch ? <span className="text-[10px]">{t.noWebSearch}</span> : null}
         {!mode.multiAgent ? <span className="text-[10px]">{t.noMultiAgent}</span> : null}
+        {!mode.autoReview ? <span className="text-[10px]">{t.noAutoReview}</span> : null}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 space-y-4" data-testid="mode-popover">
         <fieldset className="space-y-2">
@@ -78,6 +79,12 @@ export function ModePicker({ mode, onChange, disabled = false, started = false }
             {t.multiAgent}
           </Label>
           <Switch id="mode-multi-agent" checked={mode.multiAgent} disabled={started} onCheckedChange={(v) => onChange({ ...mode, multiAgent: v })} />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="mode-auto-review" className="text-xs">
+            {t.autoReviewSwitch}
+          </Label>
+          <Switch id="mode-auto-review" checked={mode.autoReview} disabled={started} onCheckedChange={(v) => onChange({ ...mode, autoReview: v })} />
         </div>
         <p className="text-muted-foreground text-xs">{started ? t.modeHintStarted : t.modeHint}</p>
       </PopoverContent>

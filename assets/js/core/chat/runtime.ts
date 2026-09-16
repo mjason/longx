@@ -142,6 +142,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
             networkAccess: thread.networkAccess ?? false,
             webSearch: thread.webSearch ?? true,
             multiAgent: thread.multiAgent ?? true,
+            autoReview: thread.autoReview ?? true,
           }
         : null,
     [
@@ -150,6 +151,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
       thread?.networkAccess,
       thread?.webSearch,
       thread?.multiAgent,
+      thread?.autoReview,
       thread !== undefined,
     ],
   );

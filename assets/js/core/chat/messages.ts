@@ -20,6 +20,27 @@ type ToolPart = Extract<Part, { type: "tool-call" }>;
 /** The live views of a thread's sub-agents, by their codex thread id (for the nested conversations). */
 export type SubViews = Record<string, ThreadView>;
 
+/** codex's automatic approval review (Guardian) of one action, as the renderers see it. */
+export type AutoReview = {
+  id: string;
+  status: "inProgress" | "approved" | "denied" | "timedOut" | "aborted";
+  riskLevel: string | null;
+  rationale: string | null;
+  /** the person overrode a denial (thread/approveGuardianDeniedAction) */
+  userApproved: boolean;
+};
+
+export function autoReviewOf(item: CodexItem): AutoReview {
+  const review = (item["review"] as Record<string, unknown> | undefined) ?? {};
+  return {
+    id: item.id,
+    status: (review["status"] as AutoReview["status"] | undefined) ?? "inProgress",
+    riskLevel: (review["riskLevel"] as string | null | undefined) ?? null,
+    rationale: (review["rationale"] as string | null | undefined) ?? null,
+    userApproved: item["userApproved"] === true,
+  };
+}
+
 /** One sub-agent as codex's `subAgentActivity` items describe it: its path, thread and latest state. */
 export type SubAgent = { threadId: string; name: string; path: string; kind: string; firstItemId: string; startedAtMs?: number; completedAtMs?: number };
 
@@ -51,6 +72,7 @@ export function subagentsOf(view: ThreadView): Map<string, SubAgent> {
 export function toMessages(view: ThreadView, subviews: SubViews = {}): ThreadMessageLike[] {
   const running = runningTurnId(view);
   const approvals = approvalsByItem(view.requests);
+  const reviews = reviewsByItem(view.items);
   const agents = subagentsOf(view);
   const out: ThreadMessageLike[] = [];
   let current: { turnId: string | undefined; parts: Part[] } | null = null;
@@ -83,7 +105,14 @@ export function toMessages(view: ThreadView, subviews: SubViews = {}): ThreadMes
       flush();
       current = { turnId: item.turnId, parts: [] };
     }
-    const part = item.type === "subAgentActivity" ? subagentPart(item, agents, subviews) : item.type === "collabAgentToolCall" ? collabPart(item, agents) : toPart(item, approvals.get(item.id));
+    const part =
+      item.type === "subAgentActivity"
+        ? subagentPart(item, agents, subviews)
+        : item.type === "collabAgentToolCall"
+          ? collabPart(item, agents)
+          : item.type === "autoApprovalReview"
+            ? reviewPart(item, view.items)
+            : toPart(item, approvals.get(item.id), reviews.get(item.id));
     if (part) current.parts.push(part);
   }
   flush();
@@ -269,7 +298,32 @@ function userImages(item: CodexItem): Part[] {
   return content.flatMap((c: { type?: string; url?: string }) => (c.type === "image" && typeof c.url === "string" ? [{ type: "image", image: c.url } as Part] : []));
 }
 
-function toPart(item: CodexItem, approval: PendingRequest | undefined): Part | null {
+// a review that judged an item of the view rides on that item's part; one
+// with no item of its own (a permissions request) is a part by itself
+function reviewsByItem(items: CodexItem[]): Map<string, AutoReview> {
+  const map = new Map<string, AutoReview>();
+  for (const item of items) {
+    const target = item["targetItemId"];
+    if (item.type === "autoApprovalReview" && typeof target === "string") map.set(target, autoReviewOf(item));
+  }
+  return map;
+}
+
+function reviewPart(item: CodexItem, items: CodexItem[]): Part | null {
+  const target = item["targetItemId"];
+  if (typeof target === "string" && items.some((i) => i.id === target)) return null;
+  const action = (item["action"] as Record<string, unknown> | undefined) ?? {};
+  const review = autoReviewOf(item);
+  const args = {
+    review,
+    reason: (action["reason"] as string | null | undefined) ?? null,
+    lines: action["type"] === "requestPermissions" ? permissionLines(action["permissions"]) : [],
+    ...(typeof action["command"] === "string" ? { command: displayCommand(action["command"]), fullCommand: action["command"] } : {}),
+  };
+  return toolPart(item.id, "autoReview", args, review.status === "inProgress" ? undefined : { status: review.status }, undefined, review.status === "denied" && !review.userApproved, undefined, timingOf(item));
+}
+
+function toPart(item: CodexItem, approval: PendingRequest | undefined, review?: AutoReview): Part | null {
   switch (item.type) {
     case "agentMessage": {
       const text = (item["text"] as string | undefined) ?? "";
@@ -289,7 +343,7 @@ function toPart(item: CodexItem, approval: PendingRequest | undefined): Part | n
       return toolPart(
         item.id,
         "commandExecution",
-        { command: displayCommand(String(item["command"] ?? "")), fullCommand: item["command"], cwd: item["cwd"] },
+        { command: displayCommand(String(item["command"] ?? "")), fullCommand: item["command"], cwd: item["cwd"], ...(review ? { review } : {}) },
         done ? { status, exitCode: exit, output: item["aggregatedOutput"] ?? "", durationMs: item["durationMs"] } : undefined,
         approval,
         done && ((typeof exit === "number" && exit !== 0) || status === "failed" || status === "declined"),
@@ -303,7 +357,7 @@ function toPart(item: CodexItem, approval: PendingRequest | undefined): Part | n
       return toolPart(
         item.id,
         "fileChange",
-        { changes: item["changes"] ?? [] },
+        { changes: item["changes"] ?? [], ...(review ? { review } : {}) },
         done ? { status, output: item["output"] ?? "" } : undefined,
         approval,
         status === "failed" || status === "declined",

@@ -437,6 +437,53 @@ defmodule LongxWeb.ProjectsRpcTest do
     end
   end
 
+  describe "automatic approval review" do
+    test "approve_review overrides a denied review; an unknown id is an error on review_id", %{
+      conn: conn,
+      dir: dir
+    } do
+      project = create!(conn, dir)
+      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
+
+      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
+        rpc(conn, "start_thread", %{
+          "fields" => ["id", "codexThreadId", "autoReview"],
+          "input" => %{"projectId" => project["id"]}
+        })
+
+      :ok = Longx.Codex.Thread.subscribe(codex_id)
+
+      Longx.Codex.ThreadState.ingest(codex_id, "item/autoApprovalReview/completed", %{
+        "threadId" => codex_id,
+        "turnId" => "t1",
+        "reviewId" => "rev-1",
+        "action" => %{
+          "type" => "command",
+          "source" => "unifiedExec",
+          "command" => "ls",
+          "cwd" => dir
+        },
+        "review" => %{"status" => "denied", "riskLevel" => "high", "rationale" => "no"}
+      })
+
+      assert_receive {:codex, _, "item/autoApprovalReview/completed", _}, 5_000
+
+      assert %{"success" => true} =
+               rpc(conn, "approve_review", %{
+                 "input" => %{"threadId" => thread_id, "reviewId" => "rev-1"}
+               })
+
+      assert_receive {:codex, _, "item/autoApprovalReview/userApproved",
+                      %{"reviewId" => "rev-1"}},
+                     5_000
+
+      assert %{"success" => false, "errors" => [%{"fields" => ["reviewId"]}]} =
+               rpc(conn, "approve_review", %{
+                 "input" => %{"threadId" => thread_id, "reviewId" => "rev-9"}
+               })
+    end
+  end
+
   describe "history" do
     defp turn_status(conn, thread_id, wanted, attempts \\ 100) do
       %{"success" => true, "data" => turns} =

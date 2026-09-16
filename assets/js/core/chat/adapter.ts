@@ -12,7 +12,7 @@ import type {
   ExternalThreadQueueAdapter,
   ThreadMessageLike,
 } from "@assistant-ui/react";
-import { answerRequest, interruptTurn, respond, sendMessage } from "@/ash_rpc";
+import { answerRequest, approveReview, interruptTurn, respond, sendMessage } from "@/ash_rpc";
 import { RpcFailure, unwrap } from "@/core/projects";
 import {
   requestIdFor,
@@ -35,6 +35,8 @@ export type AccessMode = {
   webSearch: boolean;
   /** codex's sub-agent tools (spawn / wait / …); fixed at thread start */
   multiAgent: boolean;
+  /** codex's automatic approval review (Guardian) instead of a card; fixed at thread start */
+  autoReview: boolean;
 };
 /** what to do with uncommitted changes when the project's policy is "ask"; null = don't send */
 export type DirtyDecision = "commit" | "ignore" | null;
@@ -46,6 +48,8 @@ export type CodexExtras = {
     requestId: string,
     answers: Record<string, string[]>,
   ) => Promise<void>;
+  /** overrides a denial of codex's automatic approval review (the person allows the action) */
+  approveDeniedReview: (reviewId: string) => Promise<void>;
 };
 
 export type AdapterOptions = {
@@ -123,6 +127,11 @@ export function buildAdapter(
           input: { threadId: id, requestId, answers: shaped },
         }),
       );
+    },
+    approveDeniedReview: async (reviewId) => {
+      const id = threadId();
+      if (!id) return;
+      unwrap(await approveReview({ input: { threadId: id, reviewId } }));
     },
   };
   return {

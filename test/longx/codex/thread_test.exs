@@ -124,6 +124,118 @@ defmodule Longx.Codex.ThreadTest do
              ] == false
     end
 
+    test "start_params/1: auto_review puts codex's Guardian reviewer on the thread (approvals_reviewer)" do
+      assert Thread.start_params(cwd: "/p", tools: [], auto_review: true)["config"][
+               "approvals_reviewer"
+             ] == "auto_review"
+
+      assert Thread.start_params(cwd: "/p", tools: [], auto_review: false)["config"][
+               "approvals_reviewer"
+             ] == "user"
+
+      refute Map.has_key?(
+               Thread.start_params(cwd: "/p", tools: [])["config"] || %{},
+               "approvals_reviewer"
+             )
+    end
+
+    test "guardian_event/1: the stored review item back in codex's core shape (snake_case, its enums too)" do
+      item = %{
+        "id" => "rev-1",
+        "type" => "autoApprovalReview",
+        "turnId" => "turn-1",
+        "targetItemId" => "call_1",
+        "action" => %{
+          "type" => "command",
+          "source" => "unifiedExec",
+          "command" => "ls",
+          "cwd" => "/p"
+        },
+        "review" => %{
+          "status" => "denied",
+          "riskLevel" => "high",
+          "userAuthorization" => "unknown",
+          "rationale" => "why"
+        },
+        "decisionSource" => "agent",
+        "startedAtMs" => 10,
+        "completedAtMs" => 20
+      }
+
+      assert Thread.guardian_event(item) == %{
+               "id" => "rev-1",
+               "turn_id" => "turn-1",
+               "target_item_id" => "call_1",
+               "status" => "denied",
+               "risk_level" => "high",
+               "user_authorization" => "unknown",
+               "rationale" => "why",
+               "decision_source" => "agent",
+               "started_at_ms" => 10,
+               "completed_at_ms" => 20,
+               "action" => %{
+                 "type" => "command",
+                 "source" => "unified_exec",
+                 "command" => "ls",
+                 "cwd" => "/p"
+               }
+             }
+
+      # a permissions request: nested keys snake_cased; codex's core file_system
+      # is *either* the legacy read/write lists *or* entries (the v2 shape
+      # carries both when the lists suffice, and core refuses the mix)
+      event = fn fs ->
+        Thread.guardian_event(%{
+          "id" => "r",
+          "review" => %{"status" => "denied"},
+          "action" => %{
+            "type" => "requestPermissions",
+            "reason" => "r",
+            "permissions" => %{"fileSystem" => fs, "network" => %{"enabled" => true}}
+          }
+        })["action"]
+      end
+
+      assert %{
+               "type" => "request_permissions",
+               "reason" => "r",
+               "permissions" => %{
+                 "file_system" => %{"write" => ["/x"]},
+                 "network" => %{"enabled" => true}
+               }
+             } =
+               event.(%{
+                 "read" => nil,
+                 "write" => ["/x"],
+                 "entries" => [
+                   %{"access" => "write", "path" => %{"type" => "path", "path" => "/x"}}
+                 ]
+               })
+
+      assert %{"permissions" => %{"file_system" => fs}} =
+               event.(%{
+                 "read" => nil,
+                 "write" => nil,
+                 "globScanMaxDepth" => 2,
+                 "entries" => [
+                   %{
+                     "access" => "read",
+                     "path" => %{"type" => "special", "value" => "projectRoots"}
+                   }
+                 ]
+               })
+
+      assert fs == %{
+               "glob_scan_max_depth" => 2,
+               "entries" => [
+                 %{
+                   "access" => "read",
+                   "path" => %{"type" => "special", "value" => "project_roots"}
+                 }
+               ]
+             }
+    end
+
     test "start_params/1: developer instructions ride on thread/start when given" do
       assert Thread.start_params(cwd: "/p", tools: [], developer_instructions: "remember X")[
                "developerInstructions"
@@ -431,6 +543,57 @@ defmodule Longx.Codex.ThreadTest do
                      10_000
 
       assert Enum.any?(Thread.snapshot(thread_id).items, &(&1["type"] == "commandExecution"))
+    end
+  end
+
+  describe "approve_denied_review/2" do
+    setup do
+      %{conn: start_supervised!({Connection, name: nil, command: ["elixir", @fake], env: []})}
+    end
+
+    test "sends the denied review back as thread/approveGuardianDeniedAction and marks the item approved by the person",
+         %{conn: conn} do
+      {:ok, thread_id} = Thread.start(cwd: "/", conn: conn)
+      Thread.subscribe(thread_id)
+      # the review as codex reported it
+      ThreadState.ingest(thread_id, "item/autoApprovalReview/completed", %{
+        "threadId" => thread_id,
+        "turnId" => "t1",
+        "reviewId" => "rev-1",
+        "action" => %{
+          "type" => "command",
+          "source" => "unifiedExec",
+          "command" => "ls",
+          "cwd" => "/"
+        },
+        "review" => %{"status" => "denied", "riskLevel" => "high", "rationale" => "no"},
+        "startedAtMs" => 1
+      })
+
+      assert_receive {:codex, _, "item/autoApprovalReview/completed", _}, 5_000
+
+      assert :ok = Thread.approve_denied_review(thread_id, "rev-1", conn: conn)
+
+      assert_receive {:codex, _, "item/autoApprovalReview/userApproved",
+                      %{"reviewId" => "rev-1"}},
+                     5_000
+
+      assert [%{"id" => "rev-1", "userApproved" => true}] =
+               Enum.filter(
+                 Thread.snapshot(thread_id).items,
+                 &(&1["type"] == "autoApprovalReview")
+               )
+
+      # what the fake received
+      {:ok, read} = Connection.request(conn, "thread/read", %{"threadId" => thread_id})
+
+      assert [%{"id" => "rev-1", "status" => "denied", "action" => %{"source" => "unified_exec"}}] =
+               read["thread"]["approvedGuardianEvents"]
+    end
+
+    test "a review that is not denied, or unknown, is refused", %{conn: conn} do
+      {:ok, thread_id} = Thread.start(cwd: "/", conn: conn)
+      assert {:error, :not_found} = Thread.approve_denied_review(thread_id, "nope", conn: conn)
     end
   end
 

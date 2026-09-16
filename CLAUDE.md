@@ -149,6 +149,38 @@ React Native client planned on the same core code.
     A granular policy (`sandbox_approval: true`, which makes codex ask "retry without
     sandbox?" on a denial) was tried and dropped: codex refuses `with_additional_permissions`
     under anything but plain on-request.
+    **Automatic approval review — codex's Guardian, on by default** (`Project.auto_review` →
+    `Thread.auto_review`, fixed at start: `thread/start.config.approvals_reviewer =
+    "auto_review" | "user"`, on resume / fork / sub-agent rows too; the ModePicker switch is
+    new-chat only, like web search). Every approval request (a command with
+    `with_additional_permissions`, a `request_permissions` call, an MCP/network one) goes to
+    a read-only reviewer sub-session on the thread's model (its `low` effort when declared;
+    codex's preferred reviewer model is not in our catalog, so it falls back to the active
+    slug) through our gateway — one extra model call per request — with
+    `core/assets/guardian/policy.md` as instructions and a strict-JSON verdict
+    (`text.format` is sent; the parser also takes JSON inside prose, so third-party models
+    work: live with DeepSeek Flash a whole-home write was denied, a single file allowed).
+    No card: `item/autoApprovalReview/started` / `completed` (`reviewId`, `targetItemId`,
+    `action` in v2 camelCase, `review.status inProgress|approved|denied|timedOut|aborted`,
+    `riskLevel`, `rationale`) plus a `guardianWarning` text we ignore. The Store / `thread.ts`
+    fold them into one `autoApprovalReview` item per review id; `messages.ts` puts the
+    review on its target's part (`args.review`, an `AutoReview`) or, with no item of its
+    own (a permissions request), a standalone `autoReview` part; `AutoReviewVerdict` in the
+    toolkit is a line above the row (running / approved) or an `approval-card` in its
+    `denied` state. **A denial never falls back to asking the person**: the command item is
+    `declined`, the model is told to stop or ask; the card's 仍然允许 →
+    `extras.approveDeniedReview` → RPC `approve_review` → `Projects.approve_denied_review/3`
+    → `Longx.Codex.Thread.approve_denied_review/3`: the stored item back in codex's *core*
+    shape (`Thread.guardian_event/1`: snake_case keys, `unified_exec`, `request_permissions`)
+    on `thread/approveGuardianDeniedAction`, then Longx's own
+    `item/autoApprovalReview/userApproved` event marks the item; the renderer appends
+    "请继续" as a user message, and the next request carries codex's developer note
+    ("The user has manually approved…") the reviewer treats as authorization. Circuit
+    breaker: 3 consecutive denials (10 in 50) interrupt the turn. Full access is never
+    reviewed. `auto_review_integration_test` (`:integration`, Bypass plays agent and
+    reviewer) proves allow, deny and the override on the real binary. codex's "always
+    allow" (`rules/default.rules` in the project's home) only exists under `untrusted`, so
+    it stays empty here.
   - `Thread` = codex thread ↔ project (`codex_thread_id`, `cwd`, the settings it started with,
     `model_slug`, `preview`, `status`, `last_activity_at`). Statuses: `:idle`, `:active`,
     `:disconnected` (its codex died mid-turn; resumed → `:idle` when it is back),

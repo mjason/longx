@@ -240,6 +240,7 @@ defmodule FakeAppServer do
         "resumeParams" => Map.get(entry, :resume_params),
         "lastTurnParams" => Map.get(entry, :last_turn),
         "lastReview" => Map.get(entry, :last_review),
+        "approvedGuardianEvents" => Map.get(entry, :approved_guardian, []),
         "compacted" => Map.get(entry, :compacted, 0)
       }
     })
@@ -291,6 +292,28 @@ defmodule FakeAppServer do
 
     state = %{state | next: state.next + 1, threads: threads}
     run_turn("say review: looks fine", id, thread_id, turn_id, state)
+  end
+
+  # a person overriding the Guardian's denial: recorded for thread/read
+  defp handle(
+         %{
+           "id" => id,
+           "method" => "thread/approveGuardianDeniedAction",
+           "params" => %{"threadId" => thread_id, "event" => event}
+         },
+         state
+       ) do
+    reply(id, %{})
+
+    threads =
+      Map.update(
+        state.threads,
+        thread_id,
+        %{turns: [], approved_guardian: [event]},
+        &Map.update(&1, :approved_guardian, [event], fn l -> l ++ [event] end)
+      )
+
+    %{state | threads: threads}
   end
 
   defp handle(
