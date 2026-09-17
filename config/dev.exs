@@ -64,7 +64,7 @@ config :longx, LongxWeb.Vite,
 
 # Runtime data of the dev box: attachments and the agent's global knowledge
 config :longx, Longx.Projects.Attachments, dir: Path.expand("../data/attachments", __DIR__)
-config :longx, Longx.Agent.Loader, global_dir: Path.expand("../data/agent", __DIR__)
+config :longx, Longx.Agent.Knowledge, global_dir: Path.expand("../data/agent/knowledge", __DIR__)
 
 # Enable dev routes for dashboard and mailbox
 config :longx, dev_routes: true

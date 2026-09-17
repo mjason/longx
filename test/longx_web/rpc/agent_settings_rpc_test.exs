@@ -1,15 +1,15 @@
 defmodule LongxWeb.AgentSettingsRpcTest do
-  @moduledoc "The native kernel's settings and the person's global agent files on the wire."
+  @moduledoc "The native kernel's settings on the wire."
   use LongxWeb.ConnCase, async: false
 
   setup do
     Ash.bulk_destroy!(Longx.System.Setting, :destroy, %{}, authorize?: false)
     dir = Path.join(System.tmp_dir!(), "longx-agentrpc-#{System.unique_integer([:positive])}")
-    previous = Application.get_env(:longx, Longx.Agent.Loader, [])
-    Application.put_env(:longx, Longx.Agent.Loader, Keyword.put(previous, :global_dir, dir))
+    previous = Application.get_env(:longx, Longx.Agent.Knowledge, [])
+    Application.put_env(:longx, Longx.Agent.Knowledge, Keyword.put(previous, :global_dir, dir))
 
     on_exit(fn ->
-      Application.put_env(:longx, Longx.Agent.Loader, previous)
+      Application.put_env(:longx, Longx.Agent.Knowledge, previous)
       Longx.Test.TmpDirs.rm_rf!(dir)
     end)
 
@@ -48,38 +48,5 @@ defmodule LongxWeb.AgentSettingsRpcTest do
                "fields" => @fields,
                "input" => %{"maxChildren" => 0}
              })
-  end
-
-  test "the global agent files: list, write, read, delete", %{conn: conn, dir: dir} do
-    assert %{"success" => true, "data" => []} =
-             rpc(conn, "agent_files", %{"fields" => ["path", "size"]})
-
-    text = "import Longx.Agent.Config\nagent do\n  summary \"mine\"\nend\n"
-
-    assert %{"success" => true} =
-             rpc(conn, "agent_write_file", %{
-               "input" => %{"path" => "agents/mine/agent.exs", "content" => text}
-             })
-
-    assert File.read!(Path.join(dir, "agents/mine/agent.exs")) == text
-
-    assert %{"success" => true, "data" => [%{"path" => "agents/mine/agent.exs"}]} =
-             rpc(conn, "agent_files", %{"fields" => ["path", "size"]})
-
-    assert %{"success" => true, "data" => %{"text" => ^text}} =
-             rpc(conn, "agent_read_file", %{
-               "fields" => ["text"],
-               "input" => %{"path" => "agents/mine/agent.exs"}
-             })
-
-    assert %{"success" => false} =
-             rpc(conn, "agent_write_file", %{
-               "input" => %{"path" => "../out.exs", "content" => text}
-             })
-
-    assert %{"success" => true} =
-             rpc(conn, "agent_delete_file", %{"input" => %{"path" => "agents/mine/agent.exs"}})
-
-    refute File.exists?(Path.join(dir, "agents/mine/agent.exs"))
   end
 end

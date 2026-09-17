@@ -210,53 +210,6 @@ defmodule Longx.System.Status do
       end
     end
 
-    # the person's global agent files (agent.exs, agents/, plugs/), for the settings page
-    action :agent_files, {:array, :map} do
-      constraints items: [
-                    fields: [
-                      path: [type: :string, allow_nil?: false],
-                      size: [type: :integer, allow_nil?: false]
-                    ]
-                  ]
-
-      run fn _input, _ -> {:ok, Longx.Agent.GlobalFiles.list()} end
-    end
-
-    action :agent_read_file, :map do
-      constraints fields: [
-                    text: [
-                      type: :string,
-                      allow_nil?: false,
-                      constraints: [trim?: false, allow_empty?: true]
-                    ]
-                  ]
-
-      argument :path, :string, allow_nil?: false
-
-      run fn input, _ ->
-        with {:ok, text} <- file_result(Longx.Agent.GlobalFiles.read(input.arguments.path)),
-             do: {:ok, %{text: text}}
-      end
-    end
-
-    action :agent_write_file do
-      argument :path, :string, allow_nil?: false
-
-      argument :content, :string,
-        allow_nil?: false,
-        constraints: [trim?: false, allow_empty?: true]
-
-      run fn input, _ ->
-        file_result(Longx.Agent.GlobalFiles.write(input.arguments.path, input.arguments.content))
-      end
-    end
-
-    action :agent_delete_file do
-      argument :path, :string, allow_nil?: false
-
-      run fn input, _ -> file_result(Longx.Agent.GlobalFiles.delete(input.arguments.path)) end
-    end
-
     # the address a login sends the person back to (Longx.System.public_url/0)
     action :public_url, :map do
       constraints fields: [
@@ -411,10 +364,6 @@ defmodule Longx.System.Status do
        if(is_map(value), do: camelize(value), else: value)}
     end)
   end
-
-  defp file_result(:ok), do: :ok
-  defp file_result({:ok, value}), do: {:ok, value}
-  defp file_result({:error, message}), do: argument_error(:path, message)
 
   defp argument_error(field, message) do
     {:error,

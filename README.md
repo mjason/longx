@@ -376,8 +376,9 @@ end
 ```
 
 描述记录的是**相对出厂的差异**（`extends :default` + `plug` / `options` / `drop`），所以发新版本时
-出厂管道的变化会自动到达每个项目；写整张 `pipeline do … end` 才会把管道冻结住。三层同一格式：
-priv 里的出厂描述、`<data>/agent/` 你自己的、项目的 `.longx/`（shared 再 local），后一层覆盖前一层。每层的 `.exs`
+出厂管道的变化会自动到达每个项目；写整张 `pipeline do … end` 才会把管道冻结住。同一格式的层：
+priv 里的出厂描述、项目的 `.longx/`（shared 再 local）、设置页，后一层覆盖前一层——**全局层面没有代码**，
+没有全局的 agent、plug 或技能，跨项目共享的只有全局知识。每层的 `.exs`
 编译前会被改名到自己的命名空间，两个项目都叫 `Deploy` 也不冲突；每轮开始按 mtime 重载；
 加载失败退回下一层，错误以提示进 prompt——agent 改坏了自己下一轮能自己修。
 
@@ -402,7 +403,7 @@ priv 里的出厂描述、`<data>/agent/` 你自己的、项目的 `.longx/`（s
 这一轮真正会用的模型：项目描述指定了模型，就显示它，你另选一个才覆盖。
 
 **知识代替记忆**：`.longx/shared/knowledge/`（项目的，进 git）、`.longx/local/knowledge/`（本机的，agent
-默认写这里）、`<data>/agent/knowledge/`（你自己的，自己是个 git 仓库）、`priv/agent/knowledge/`（Longx 出厂的，
+默认写这里）、`<data>/agent/knowledge/`（你自己的，机器上有 git 时自己是个 git 仓库）、`priv/agent/knowledge/`（Longx 出厂的，
 只读：怎么写 plug、描述格式的版本变化）。**每篇必须属于一个主题**（`<根>/<主题>/<名字>.md`），索引按主题折成
 一行（主题里的 `README.md` 代表它），`knowledge_read("local/deploy")` 列出主题下的文档——AI 写得太快，
 一级目录会把 git 变成灾难。front matter 里 `always: true` 的每轮都进 prompt，`knowledge_read` /

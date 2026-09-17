@@ -2,11 +2,7 @@
 // database) and the person's global agent files — DOM-free hooks.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  agentDeleteFile,
-  agentFiles,
-  agentReadFile,
   agentSettings,
-  agentWriteFile,
   promoteLocal,
   publicUrl,
   setAgentSettings,
@@ -52,30 +48,6 @@ function useAgentWrite<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
 export function useAgentSettingsActions() {
   return {
     save: useAgentWrite(async (input: SetAgentSettingsInput) => unwrap(await setAgentSettings({ fields: [...agentSettingsFields], input })) as AgentSettings),
-  };
-}
-
-export type AgentFile = { path: string; size: number };
-
-export function useAgentFiles() {
-  return useQuery({
-    queryKey: agentKeys.files,
-    queryFn: async () => unwrap(await agentFiles({ fields: ["path", "size"] })) as AgentFile[],
-  });
-}
-
-export function useAgentFile(path: string | null) {
-  return useQuery({
-    queryKey: agentKeys.file(path ?? ""),
-    queryFn: async () => (unwrap(await agentReadFile({ fields: ["text"], input: { path: path! } })) as { text: string }).text,
-    enabled: path !== null,
-  });
-}
-
-export function useAgentFileActions() {
-  return {
-    write: useAgentWrite(async ({ path, content }: { path: string; content: string }) => unwrap(await agentWriteFile({ input: { path, content } }))),
-    remove: useAgentWrite(async (path: string) => unwrap(await agentDeleteFile({ input: { path } }))),
   };
 }
 

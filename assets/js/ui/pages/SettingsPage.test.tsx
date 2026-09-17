@@ -9,8 +9,6 @@ vi.mock("@/core/socket", async () =>
   (await import("@/ui/test-mocks")).socketMock(),
 );
 import {
-  agentDeleteFile,
-  agentWriteFile,
   setAgentSettings,
   setPublicUrl,
   knowledgeDelete,
@@ -445,7 +443,7 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(setPublicUrl).toHaveBeenCalledWith(expect.objectContaining({ input: { url: "https://longx.example" } })));
   });
 
-  test("agent kernel: the team parameters are saved as one call, the global agent files are listed, edited and created from a template", async () => {
+  test("agent kernel: the team parameters are saved as one call", async () => {
     setViewport(1280);
     const user = userEvent.setup();
     renderAt("/settings/agent");
@@ -458,29 +456,6 @@ describe("SettingsPage", () => {
     await user.click(within(settings).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(setAgentSettings).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ maxDepth: 3, maxChildren: 4, idleMinutes: 30, childModel: null }) })),
-    );
-
-    // a file opens in the editor; a change is saved whole; delete asks first
-    const files = within(section).getByTestId("agent-files");
-    await user.click(within(files).getByText("agents/writer/agent.exs"));
-    const editor = await within(section).findByTestId("code-editor");
-    await waitFor(() => expect(editor.querySelector(".cm-content")).toHaveTextContent("writes"));
-    await user.click(editor.querySelector(".cm-content")!);
-    await user.keyboard("!");
-    await user.click(within(within(section).getByTestId("agent-file-editor")).getByRole("button", { name: "保存" }));
-    await waitFor(() =>
-      expect(agentWriteFile).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ path: "agents/writer/agent.exs", content: expect.stringContaining("!") }) })),
-    );
-    await user.click(within(section).getByRole("button", { name: /删除/ }));
-    await user.click(await screen.findByRole("button", { name: "删除" }));
-    await waitFor(() => expect(agentDeleteFile).toHaveBeenCalledWith(expect.objectContaining({ input: { path: "agents/writer/agent.exs" } })));
-
-    // a new role file gets the declaration template
-    await user.click(within(section).getByRole("button", { name: /新建文件/ }));
-    await user.type(within(section).getByLabelText("路径"), "agents/poet/agent.exs");
-    await user.click(within(await screen.findByTestId("agent-file-new")).getByRole("button", { name: "新建" }));
-    await waitFor(() =>
-      expect(agentWriteFile).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ path: "agents/poet/agent.exs", content: expect.stringContaining("poet") }) })),
     );
   });
 

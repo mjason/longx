@@ -3,14 +3,17 @@ defmodule Longx.Agent.Loader do
   Loads the layered agent description for a working directory:
 
   1. the shipped default — `Longx.Agent.Pipelines.Default.config/0`;
-  2. the person's — `<data>/agent/` (`config :longx, Longx.Agent.Loader,
-     global_dir:`), every project;
-  3. the project's **shared** tree — `<root>/.longx/` (`agent.exs`,
+  2. the project's **shared** tree — `<root>/.longx/` (`agent.exs`,
      `shared/plugs/`, `shared/agents/`; the flat `plugs/` and `agents/`
      of before count as shared) — in git, reviewed;
-  4. the project's **local** tree — `<root>/.longx/local/` (its own
+  3. the project's **local** tree — `<root>/.longx/local/` (its own
      `agent.exs`, `plugs/`, `agents/`) — gitignored, this machine's and
-     the agent's drafts.
+     the agent's drafts;
+  4. the settings page (`settings:`), on top.
+
+  There is no global layer of code: the only thing shared across projects
+  is the global knowledge (`Longx.Agent.Knowledge`) — an agent, a plug, a
+  skill lives in a project or nowhere.
 
   The shared tree loads only when the project is trusted (its code came
   with the clone); the local tree always does — it is this machine's, what
@@ -55,14 +58,6 @@ defmodule Longx.Agent.Loader do
           agent: String.t() | nil
         }
 
-  @doc "The person's global layer directory."
-  @spec global_dir() :: Path.t()
-  def global_dir do
-    :longx
-    |> Application.get_env(__MODULE__, [])
-    |> Keyword.get_lazy(:global_dir, fn -> Path.expand("data/agent") end)
-  end
-
   @doc """
   The resolved description for `root`. Options: `tag:` (the project's
   namespace segment — its id; defaults to a hash of the root), `trusted:`
@@ -79,8 +74,6 @@ defmodule Longx.Agent.Loader do
     role = Keyword.get(opts, :agent)
     project_dir = Path.join(root, ".longx")
     local_dir = Path.join(project_dir, "local")
-
-    global = layer(:global, global_dir(), "Global")
 
     project =
       cond do
@@ -111,7 +104,7 @@ defmodule Longx.Agent.Loader do
         do: layer(:local, local_dir, tag, extra_defined: (project && project.defined) || []),
         else: nil
 
-    layers = Enum.reject([global, project, local], &is_nil/1)
+    layers = Enum.reject([project, local], &is_nil/1)
     {roles, role_file_errors} = roles(layers)
 
     # the main stack: every layer's description; then the role's, layer by layer
@@ -129,7 +122,7 @@ defmodule Longx.Agent.Loader do
                layer: :project,
                file: "agents/#{name}/agent.exs",
                message:
-                 "no agent named #{inspect(name)} is declared (shared/agents/#{name}/agent.exs or local/agents/#{name}/agent.exs in .longx, or the global directory)"
+                 "no agent named #{inspect(name)} is declared (shared/agents/#{name}/agent.exs or local/agents/#{name}/agent.exs in .longx)"
              }
            ]}
 

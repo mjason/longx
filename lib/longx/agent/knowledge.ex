@@ -4,8 +4,9 @@ defmodule Longx.Agent.Knowledge do
 
     * `longx` — shipped with Longx (`priv/agent/knowledge/`), read-only:
       how to write plugs, the description format and its versions;
-    * `global` — the person's, every project (`<data>/agent/knowledge/`),
-      a git repository of its own where every write is a commit;
+    * `global` — the person's, every project (`<data>/agent/knowledge/`) —
+      the one thing at the global level; a git repository of its own where
+      every write is a commit, when the machine has git;
     * `project` — the project's shared tree (`<root>/.longx/shared/knowledge/`;
       the flat `.longx/knowledge/` of before is read too), committed with
       the code by the turn's own bookmarks — what a person reviewed;
@@ -49,7 +50,7 @@ defmodule Longx.Agent.Knowledge do
   def roots(cwd) do
     %{
       longx: Path.join(:code.priv_dir(:longx), "agent/knowledge"),
-      global: Path.join(Longx.Agent.Loader.global_dir(), "knowledge"),
+      global: global_dir(),
       project: Longx.Agent.Layout.shared_dir(cwd, :knowledge),
       local: Longx.Agent.Layout.local_dir(cwd, :knowledge)
     }
@@ -290,13 +291,26 @@ defmodule Longx.Agent.Knowledge do
     end
   end
 
+  @doc """
+  The person's global knowledge directory — the only thing at the global
+  level (`config :longx, Longx.Agent.Knowledge, global_dir:`; dev
+  `data/agent/knowledge`, prod `$LONGX_DATA_DIR/agent/knowledge`). A git
+  repository when the machine has git, a plain directory otherwise.
+  """
+  @spec global_dir() :: Path.t()
+  def global_dir do
+    :longx
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get_lazy(:global_dir, fn -> Path.expand("data/agent/knowledge") end)
+  end
+
   @doc "The docs of the shipped and the person's roots — what the settings page manages."
   @spec global_docs() :: [doc]
   def global_docs, do: docs(global_cwd(), [:longx, :global])
 
   # a working directory with no project root under it: the global roots alone
   @doc false
-  def global_cwd, do: Longx.Agent.Loader.global_dir()
+  def global_cwd, do: global_dir()
 
   # a read finds the file in any of the root's directories; a write goes to the root's own
   defp locate(cwd, path, mode \\ :read) do
@@ -357,8 +371,15 @@ defmodule Longx.Agent.Knowledge do
     end
   end
 
-  # the global root is a repository: a commit per write, one at a time
+  # the global root is a repository when the machine has git — a commit per
+  # write, one at a time; without git it is a plain directory, and that is fine
   defp commit(:global, dir, path) do
+    if Git.available?(), do: commit_global(dir, path), else: :ok
+  end
+
+  defp commit(_root, _dir, _path), do: :ok
+
+  defp commit_global(dir, path) do
     :global.trans(
       {{__MODULE__, dir}, self()},
       fn ->
@@ -375,6 +396,4 @@ defmodule Longx.Agent.Knowledge do
       :aborted -> {:error, "cannot commit #{path}: the knowledge repository is busy"}
     end
   end
-
-  defp commit(_root, _dir, _path), do: :ok
 end

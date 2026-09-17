@@ -65,4 +65,5 @@ config :longx, Longx.Upgrade, tick: nil
 config :longx, Longx.Agent.Model, retry_ms: [10, 10]
 
 # no global agent layer in tests (a test that wants one points this at its own directory)
-config :longx, Longx.Agent.Loader, global_dir: Path.expand("../data/agent_test_none", __DIR__)
+config :longx, Longx.Agent.Knowledge,
+  global_dir: Path.expand("../data/agent_test_none/knowledge", __DIR__)

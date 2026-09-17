@@ -14,7 +14,7 @@ The project's agent definition lives in `.longx/`, in two trees:
     agents/  plugs/  knowledge/
 ```
 
-Write new things to `local/` by default; `shared/` is for what a person reviewed. A local declaration of the same name replaces the shared one; both apply after the person's global directory and the shipped defaults.
+Write new things to `local/` by default; `shared/` is for what a person reviewed. A local declaration of the same name replaces the shared one; both apply on top of the shipped defaults. There is nothing global but knowledge: an agent, a plug, a skill lives in a project.
 
 `.longx/agent.exs` (and `local/agent.exs`) must return a description:
 

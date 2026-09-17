@@ -4,11 +4,11 @@ defmodule LongxWeb.KnowledgeRpcTest do
 
   setup do
     dir = Path.join(System.tmp_dir!(), "longx-knowrpc-#{System.unique_integer([:positive])}")
-    previous = Application.get_env(:longx, Longx.Agent.Loader, [])
-    Application.put_env(:longx, Longx.Agent.Loader, Keyword.put(previous, :global_dir, dir))
+    previous = Application.get_env(:longx, Longx.Agent.Knowledge, [])
+    Application.put_env(:longx, Longx.Agent.Knowledge, Keyword.put(previous, :global_dir, dir))
 
     on_exit(fn ->
-      Application.put_env(:longx, Longx.Agent.Loader, previous)
+      Application.put_env(:longx, Longx.Agent.Knowledge, previous)
       Longx.Test.TmpDirs.rm_rf!(dir)
     end)
 

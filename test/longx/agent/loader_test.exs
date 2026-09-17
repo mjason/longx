@@ -225,7 +225,38 @@ defmodule Longx.Agent.LoaderTest do
       Enum.map(names(loaded.plugs), &(&1 |> Atom.to_string() |> String.split(".") |> List.last()))
 
     assert "Deploy" in labels and "Legacy" in labels and "Draft" in labels
-    assert Enum.map(loaded.layers, & &1.name) == [:global, :project, :local]
+    assert Enum.map(loaded.layers, & &1.name) == [:project, :local]
+  end
+
+  test "there is no global layer: an agent.exs, a plug or a role next to the global knowledge is never loaded",
+       %{root: root, tag: tag} do
+    # the global knowledge directory (test config) sits under <data>/agent; nothing there is code
+    global = Path.dirname(Longx.Agent.Knowledge.global_dir())
+    File.mkdir_p!(Path.join(global, "plugs"))
+    File.mkdir_p!(Path.join(global, "agents/ghost"))
+    on_exit(fn -> File.rm_rf!(global) end)
+
+    File.write!(
+      Path.join(global, "agent.exs"),
+      "import Longx.Agent.Config\nagent do\n  plug Ghost\n  model \"ghost-model\"\nend\n"
+    )
+
+    File.write!(
+      Path.join(global, "plugs/ghost.exs"),
+      "defmodule Ghost do\n  use Longx.Agent.Plug\n  instructions \"boo\"\nend\n"
+    )
+
+    File.write!(
+      Path.join(global, "agents/ghost/agent.exs"),
+      "import Longx.Agent.Config\nagent do\n  summary \"a ghost\"\nend\n"
+    )
+
+    loaded = Loader.load(root, tag: tag, trusted: true)
+    assert loaded.model == nil
+    refute Enum.any?(names(loaded.plugs), &String.ends_with?(Atom.to_string(&1), ".Ghost"))
+    assert loaded.agents == []
+    assert loaded.errors == []
+    refute Enum.any?(loaded.layers, &(&1.name == :global))
   end
 
   @researcher ~S'''

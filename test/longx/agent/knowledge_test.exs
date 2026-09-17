@@ -10,11 +10,11 @@ defmodule Longx.Agent.KnowledgeTest do
     root = Path.join(System.tmp_dir!(), "longx-know-#{n}")
     global = Path.join(System.tmp_dir!(), "longx-know-global-#{n}")
     File.mkdir_p!(Path.join(root, ".longx/knowledge/ops"))
-    previous = Application.get_env(:longx, Longx.Agent.Loader, [])
-    Application.put_env(:longx, Longx.Agent.Loader, Keyword.put(previous, :global_dir, global))
+    previous = Application.get_env(:longx, Longx.Agent.Knowledge, [])
+    Application.put_env(:longx, Longx.Agent.Knowledge, Keyword.put(previous, :global_dir, global))
 
     on_exit(fn ->
-      Application.put_env(:longx, Longx.Agent.Loader, previous)
+      Application.put_env(:longx, Longx.Agent.Knowledge, previous)
       File.rm_rf!(root)
       File.rm_rf!(global)
     end)
@@ -185,8 +185,8 @@ defmodule Longx.Agent.KnowledgeTest do
                ctx
              )
 
-    assert File.exists?(Path.join(global, "knowledge/me/profile.md"))
-    assert length(Longx.Git.log(Path.join(global, "knowledge"), limit: 10)) == 2
+    assert File.exists?(Path.join(global, "me/profile.md"))
+    assert length(Longx.Git.log(global, limit: 10)) == 2
     assert "global/me/profile.md" in Enum.map(Knowledge.docs(root), & &1.path)
   end
 
@@ -239,5 +239,33 @@ defmodule Longx.Agent.KnowledgeTest do
     assert File.exists?(Path.join(root, ".longx/shared/knowledge/deploy/steps.md"))
     refute File.exists?(Path.join(root, ".longx/local/knowledge/deploy/steps.md"))
     assert {:error, _} = Knowledge.promote(root, "project/deploy/steps.md")
+  end
+
+  test "without git on the machine the global knowledge still reads and writes, only without history",
+       %{global: global, ctx: ctx} do
+    was = System.get_env("LONGX_GIT")
+    System.put_env("LONGX_GIT", "/nonexistent/git")
+
+    on_exit(fn ->
+      if was, do: System.put_env("LONGX_GIT", was), else: System.delete_env("LONGX_GIT")
+    end)
+
+    refute Longx.Git.available?()
+
+    content = "---\ntitle: Me\nsummary: how I like things\n---\nTabs.\n"
+
+    assert {:ok, _} =
+             Tool.call(
+               tool!("knowledge_write"),
+               %{"path" => "global/me/profile.md", "content" => content},
+               ctx
+             )
+
+    assert {:ok, "Tabs.\n"} =
+             Tool.call(tool!("knowledge_read"), %{"path" => "global/me/profile.md"}, ctx)
+
+    assert {:ok, _} = Knowledge.write(ctx.cwd, "global/me/profile.md", content <> "more\n")
+    assert :ok = Knowledge.delete(ctx.cwd, "global/me/profile.md")
+    refute File.exists?(Path.join(global, ".git"))
   end
 end

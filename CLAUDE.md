@@ -538,8 +538,7 @@ React Native client planned on the same core code.
   - **Descriptions: `Longx.Agent.Config`**, data evaluated before anything runs, the
     same format in every layer (`Longx.Agent.Loader`): the shipped default
     (`Longx.Agent.Pipelines.Default.config/0` — Environment, Base, Shell, Patch,
-    ViewImage, Knowledge, WebSearch, Browser, Agents, Goal, Request), the person's
-    `<data>/agent/agent.exs` (`config :longx, Longx.Agent.Loader, global_dir:`), the
+    ViewImage, Knowledge, WebSearch, Browser, Agents, Goal, Request), the
     project's **shared** tree (`<root>/.longx/agent.exs` + `shared/{agents,plugs,knowledge}`;
     the flat `plugs/` / `knowledge/` of before count as shared) and its **local** tree
     (`.longx/local/` — `agent.exs`, `agents/`, `plugs/`, `knowledge/` — gitignored:
@@ -621,10 +620,11 @@ React Native client planned on the same core code.
     gateway knows, levels they offer; nil clears a key), `Project.agent_settings` (an
     untyped map column, `Validations.AgentSettings`) for a project's overrides,
     `for_project/1` the merge (`idle_ms/1` → the agent's `idle_ms:`). RPC
-    `agent_settings` / `set_agent_settings` and the person's global agent files
-    (`Longx.Agent.GlobalFiles`: `agent_files` / `agent_read_file` / `agent_write_file` /
-    `agent_delete_file`, `.exs` and `.md` under the global dir, knowledge excluded) on
-    `Longx.System.Status`; the page `settings/AgentKernelSection` (the
+    `agent_settings` / `set_agent_settings` on `Longx.System.Status` (**there is no
+    global layer of code** — no global `agent.exs`, plugs, roles or skills; the only
+    thing shared across projects is the global knowledge, `Longx.Agent.Knowledge.global_dir/0`,
+    `config :longx, Longx.Agent.Knowledge, global_dir:` — a git repository when the
+    machine has git, a plain directory otherwise); the page `settings/AgentKernelSection` (the
     `AgentSettingsFields` form shared with the project settings' overrides card, where an
     empty field inherits and the placeholder shows the value in force; a file editor
     like the knowledge page's with templates for a role and a plug). Hooks in
@@ -633,8 +633,9 @@ React Native client planned on the same core code.
     markdown files with front matter (`title`, `summary`, `tags`, `always: true`) in four
     roots — `longx/` shipped read-only (`priv/agent/knowledge/`: writing plugs, the
     description format and its versions — how a release guides the agent to update its
-    own pipeline), `global/` the person's (`<data>/agent/knowledge/`, a git repository, a
-    commit per write under a lock), `project/` the shared tree (`.longx/shared/knowledge/`,
+    own pipeline), `global/` the person's (`<data>/agent/knowledge/`, a git repository with a
+    commit per write under a lock when the machine has git, a plain directory otherwise),
+    `project/` the shared tree (`.longx/shared/knowledge/`,
     the flat `.longx/knowledge/` read too; committed with the code by the turn's
     bookmarks — what the person reviewed), `local/` (`.longx/local/knowledge/`, gitignored;
     **where the agent writes by default**). **Two levels**: a doc lives in a topic

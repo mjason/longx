@@ -13,10 +13,6 @@ defmodule Longx.System do
       rpc_action :knowledge_delete, :knowledge_delete
       rpc_action :agent_settings, :agent_settings
       rpc_action :set_agent_settings, :set_agent_settings
-      rpc_action :agent_files, :agent_files
-      rpc_action :agent_read_file, :agent_read_file
-      rpc_action :agent_write_file, :agent_write_file
-      rpc_action :agent_delete_file, :agent_delete_file
       rpc_action :public_url, :public_url
       rpc_action :set_public_url, :set_public_url
       rpc_action :upgrade_status, :upgrade_status

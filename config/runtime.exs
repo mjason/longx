@@ -98,7 +98,7 @@ if config_env() == :prod do
   config :longx, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :longx, Longx.Projects.Attachments, dir: Path.join(data_dir, "attachments")
-  config :longx, Longx.Agent.Loader, global_dir: Path.join(data_dir, "agent")
+  config :longx, Longx.Agent.Knowledge, global_dir: Path.join(data_dir, "agent/knowledge")
 
   # PORT only applies to prod; dev (7798) and test (4002) are fixed in their config files.
   port = String.to_integer(System.get_env("PORT") || "7788")
