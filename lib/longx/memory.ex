@@ -49,7 +49,11 @@ defmodule Longx.Memory do
 
   @doc "Makes sure the directory exists, is a repository and has a `MEMORY.md`."
   @spec ensure(Path.t()) :: :ok | {:error, term}
-  def ensure(dir \\ dir()) do
+  def ensure(dir \\ dir()), do: locked(dir, fn -> ensure_unlocked(dir) end)
+
+  # for callers already holding the lock: a nested `locked` would release it
+  # on the way out (`:global.trans` deletes the lock when the inner call ends)
+  defp ensure_unlocked(dir) do
     File.mkdir_p!(dir)
 
     with :ok <- if(own_repository?(dir), do: :ok, else: Git.init(dir)),
@@ -81,10 +85,12 @@ defmodule Longx.Memory do
   @doc "Replaces `MEMORY.md` (the person editing the curated part)."
   @spec write_index(Path.t(), String.t()) :: :ok | {:error, term}
   def write_index(dir, text) do
-    with :ok <- ensure(dir),
-         :ok <- File.write(Path.join(dir, "MEMORY.md"), text),
-         {:ok, _} <- Git.commit_all(dir, "memory: edit MEMORY.md"),
-         do: :ok
+    locked(dir, fn ->
+      with :ok <- ensure_unlocked(dir),
+           :ok <- File.write(Path.join(dir, "MEMORY.md"), text),
+           {:ok, _} <- Git.commit_all(dir, "memory: edit MEMORY.md"),
+           do: :ok
+    end)
   end
 
   @doc """
@@ -114,13 +120,26 @@ defmodule Longx.Memory do
         |> Enum.reject(fn {_, v} -> is_nil(v) end)
         |> Enum.map_join("", fn {k, v} -> "#{k}: #{v}\n" end)
 
-      with :ok <- ensure(dir),
-           :ok <- File.mkdir_p(Path.join(dir, "notes")),
-           :ok <- File.write(Path.join(dir, file), "---\n#{front}---\n\n#{text}\n"),
-           {:ok, _} <- Git.commit_all(dir, "memory: note #{slug}"),
-           do: {:ok, file}
+      locked(dir, fn ->
+        with :ok <- ensure_unlocked(dir),
+             :ok <- File.mkdir_p(Path.join(dir, "notes")),
+             :ok <- File.write(Path.join(dir, file), "---\n#{front}---\n\n#{text}\n"),
+             {:ok, _} <- Git.commit_all(dir, "memory: note #{slug}"),
+             do: {:ok, file}
+      end)
     end
   end
+
+  # Every write to the memory repository — a note, the index, a prune, the
+  # init — happens under one lock per directory: the pipeline's pass and a
+  # person's edit or delete used to run their `git commit`s at the same time
+  # (`index.lock`, or one commit sweeping the other's files and the second
+  # finding nothing to commit). The id is `{resource, requester}`: the
+  # directory is the resource and this process the requester (with the path
+  # as requester every process would count as the same one and nothing would
+  # be excluded). Never nest it: the inner `trans` drops the lock on its way out.
+  defp locked(dir, fun),
+    do: :global.trans({{__MODULE__, Path.expand(dir)}, self()}, fun, [node()], :infinity)
 
   # a file-name-safe slug from the note's first words (or the given one)
   defp slug(text) do
@@ -193,9 +212,11 @@ defmodule Longx.Memory do
         {:error, :not_found}
 
       true ->
-        with :ok <- File.rm(Path.join(dir, file)),
-             {:ok, _} <- Git.commit_all(dir, "memory: drop #{Path.basename(file)}"),
-             do: :ok
+        locked(dir, fn ->
+          with :ok <- File.rm(Path.join(dir, file)),
+               {:ok, _} <- Git.commit_all(dir, "memory: drop #{Path.basename(file)}"),
+               do: :ok
+        end)
     end
   end
 
@@ -278,40 +299,42 @@ defmodule Longx.Memory do
   """
   @spec prune(Path.t(), pos_integer | nil) :: {:ok, non_neg_integer} | {:error, term}
   def prune(dir, keep_days) do
-    folded = folded_notes(dir)
-    cutoff = if keep_days, do: DateTime.add(DateTime.utc_now(), -keep_days * 86_400, :second)
+    locked(dir, fn ->
+      folded = folded_notes(dir)
+      cutoff = if keep_days, do: DateTime.add(DateTime.utc_now(), -keep_days * 86_400, :second)
 
-    doomed =
-      if cutoff,
-        do: Enum.filter(folded, &(&1.at && DateTime.compare(&1.at, cutoff) == :lt)),
-        else: []
+      doomed =
+        if cutoff,
+          do: Enum.filter(folded, &(&1.at && DateTime.compare(&1.at, cutoff) == :lt)),
+          else: []
 
-    Enum.each(doomed, &File.rm!(Path.join(dir, &1.file)))
-    kept = MapSet.new(folded -- doomed, & &1.file)
+      Enum.each(doomed, &File.rm!(Path.join(dir, &1.file)))
+      kept = MapSet.new(folded -- doomed, & &1.file)
 
-    update_state(
-      dir,
-      &Map.put(
-        &1,
-        "consolidated",
-        Enum.filter(&1["consolidated"] || [], fn f -> MapSet.member?(kept, f) end)
-      )
-    )
-
-    case doomed do
-      [] ->
-        {:ok, 0}
-
-      _ ->
-        with(
-          {:ok, _} <-
-            Git.commit_all(
-              dir,
-              "memory: prune #{length(doomed)} folded note#{if length(doomed) == 1, do: "", else: "s"}"
-            ),
-          do: {:ok, length(doomed)}
+      update_state(
+        dir,
+        &Map.put(
+          &1,
+          "consolidated",
+          Enum.filter(&1["consolidated"] || [], fn f -> MapSet.member?(kept, f) end)
         )
-    end
+      )
+
+      case doomed do
+        [] ->
+          {:ok, 0}
+
+        _ ->
+          with(
+            {:ok, _} <-
+              Git.commit_all(
+                dir,
+                "memory: prune #{length(doomed)} folded note#{if length(doomed) == 1, do: "", else: "s"}"
+              ),
+            do: {:ok, length(doomed)}
+          )
+      end
+    end)
   end
 
   @doc "Records that these notes are in `MEMORY.md` now."

@@ -15,6 +15,22 @@ defmodule LongxWeb.MemoryRpcTest do
     :ok
   end
 
+  defp await_run(conn, tries \\ 100) do
+    %{"data" => %{"lastRunAt" => at}} = rpc(conn, "memory_status", %{"fields" => ["lastRunAt"]})
+
+    cond do
+      is_binary(at) ->
+        :ok
+
+      tries == 0 ->
+        flunk("the memory pass never finished")
+
+      true ->
+        Process.sleep(50)
+        await_run(conn, tries - 1)
+    end
+  end
+
   defp rpc(conn, action, params) do
     conn
     |> put_req_header("content-type", "application/json")
@@ -66,6 +82,8 @@ defmodule LongxWeb.MemoryRpcTest do
              rpc(conn, "memory_status", %{"fields" => ["autoExtract"]})
 
     assert %{"success" => true} = rpc(conn, "memory_run", %{})
+    # the pass runs in a task of its own: wait for it before the directory goes away
+    await_run(conn)
 
     assert %{"success" => true} = rpc(conn, "memory_delete_note", %{"input" => %{"file" => file}})
     assert %{"success" => true, "data" => []} = rpc(conn, "memory_notes", %{"fields" => ["file"]})
