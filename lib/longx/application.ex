@@ -31,8 +31,8 @@ defmodule Longx.Application do
       # the agent kernel: one Longx.Agent per thread, its tasks
       {Registry, keys: :unique, name: Longx.Agent.Registry},
       {Task.Supervisor, name: Longx.Agent.TaskSupervisor},
-      Longx.Agent.Loader.Cache,
-      Longx.Agent.Specs,
+      Longx.Agent.Definition.Loader.Cache,
+      Longx.Agent.Kernel.Specs,
       {DynamicSupervisor, name: Longx.Agent.Supervisor, strategy: :one_for_one},
       # keeps project thread/turn rows in step with the agents' events
       Longx.Projects.Tracker,

@@ -1,4 +1,4 @@
-defmodule Longx.Agent.ConfigTest do
+defmodule Longx.Agent.Definition.ConfigTest do
   use ExUnit.Case, async: true
 
   alias Longx.Agent.Config

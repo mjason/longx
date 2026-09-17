@@ -207,7 +207,7 @@ defmodule Longx.Agent.Kernel.UI do
   # what a file change will touch, known before it runs: the patch's headers
   # (apply_patch) or the one path a tool names
   def changes_from(%{"input" => patch}, cwd) when is_binary(patch) do
-    case Longx.Agent.Patch.parse(patch) do
+    case Longx.Agent.Tools.Patch.parse(patch) do
       {:ok, hunks} ->
         Enum.map(hunks, fn
           {:add, path, _} ->

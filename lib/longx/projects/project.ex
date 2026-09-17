@@ -237,7 +237,7 @@ defmodule Longx.Projects.Project do
     attribute :trust_local_agent, :boolean, allow_nil?: false, default: false, public?: true
 
     # the kernel's settings this project overrides (nil = the global
-    # value): Longx.Agent.Settings' fields, validated by Validations.AgentSettings;
+    # value): Longx.Agent.Definition.Settings' fields, validated by Validations.AgentSettings;
     # untyped on the wire so the client selects it by name (a typed map inside
     # the resource's field list broke ash_typescript 0.18's selection type)
     attribute :agent_settings, :map, public?: true

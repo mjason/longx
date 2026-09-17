@@ -1,4 +1,4 @@
-defmodule Longx.Agent.Loader do
+defmodule Longx.Agent.Definition.Loader do
   @moduledoc """
   Loads the layered agent description for a working directory:
 
@@ -63,7 +63,7 @@ defmodule Longx.Agent.Loader do
   namespace segment — its id; defaults to a hash of the root), `trusted:`
   (whether the project's own `.longx/` may be loaded), `agent:` (a role
   name: that agent's description on top of the project's), `settings:`
-  (a `Longx.Agent.Settings` map — the settings page's layer, applied last:
+  (a `Longx.Agent.Definition.Settings` map — the settings page's layer, applied last:
   the Agents plug's limits, the default child model, the reviewer model),
   `overrides:` (a `Longx.Agent.Config` applied after everything).
   """

@@ -1,4 +1,4 @@
-defmodule Longx.Agent.SSE do
+defmodule Longx.Agent.Model.SSE do
   @moduledoc """
   An incremental server-sent-events parser for the Responses API stream:
   `parse(buffer, chunk)` returns the complete events in the buffer so far

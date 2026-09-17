@@ -1,6 +1,6 @@
 defmodule Longx.Agent.Transcript do
   @moduledoc """
-  A thread's history as an append-only log of `Longx.Agent.Item`s: every
+  A thread's history as an append-only log of `Longx.Agent.Transcript.Item`s: every
   Responses input item the model saw or produced (`input`) with its
   codex-shaped UI item when it shows (`ui`). The model's context is the
   fold of the log (`input/1`), the UI replays the `ui` items, and a
@@ -10,7 +10,7 @@ defmodule Longx.Agent.Transcript do
 
   use Ash.Domain, otp_app: :longx
 
-  alias Longx.Agent.Item
+  alias Longx.Agent.Transcript.Item
 
   resources do
     resource Item

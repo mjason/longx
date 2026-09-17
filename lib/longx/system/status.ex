@@ -195,11 +195,11 @@ defmodule Longx.System.Status do
       end
     end
 
-    # the native kernel's settings (Longx.Agent.Settings): the global layer
+    # the native kernel's settings (Longx.Agent.Definition.Settings): the global layer
     action :agent_settings, :map do
       constraints fields: @agent_settings_fields
 
-      run fn _input, _ -> {:ok, Longx.Agent.Settings.global()} end
+      run fn _input, _ -> {:ok, Longx.Agent.Definition.Settings.global()} end
     end
 
     action :set_agent_settings, :map do
@@ -214,9 +214,9 @@ defmodule Longx.System.Status do
 
       run fn input, _ ->
         # an argument absent stays as it was; one given as null clears it
-        given = Map.take(input.arguments, Longx.Agent.Settings.fields())
+        given = Map.take(input.arguments, Longx.Agent.Definition.Settings.fields())
 
-        case Longx.Agent.Settings.put_global(given) do
+        case Longx.Agent.Definition.Settings.put_global(given) do
           {:ok, settings} ->
             {:ok, settings}
 

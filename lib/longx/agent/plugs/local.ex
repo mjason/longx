@@ -4,7 +4,7 @@ defmodule Longx.Agent.Plugs.Local do
   definition lives in `.longx/` (the description, the plugs), that it may
   change it when a workflow repeats or a tool would help, and the compact
   reference of the description and plug API (`priv/agent/reference.md`)
-  — so it can. Mounted by `Longx.Agent.Loader`, never by hand.
+  — so it can. Mounted by `Longx.Agent.Definition.Loader`, never by hand.
   """
 
   use Longx.Agent.Plug

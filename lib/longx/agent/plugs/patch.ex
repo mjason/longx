@@ -1,7 +1,7 @@
 defmodule Longx.Agent.Plugs.Patch do
   @moduledoc """
   codex's `apply_patch` tool: the one edit format the models tuned for
-  codex already know (`Longx.Agent.Patch`). A `function` tool taking the
+  codex already know (`Longx.Agent.Tools.Patch`). A `function` tool taking the
   patch as `input` for every provider; for a provider that runs
   grammar-constrained custom tools (OpenAI) the same tool goes out as a
   `custom` tool with codex's lark grammar, so the model writes the patch
@@ -11,7 +11,7 @@ defmodule Longx.Agent.Plugs.Patch do
 
   use Longx.Agent.Plug
 
-  alias Longx.Agent.Patch
+  alias Longx.Agent.Tools.Patch
 
   @instructions_path Path.join(:code.priv_dir(:longx), "agent/apply_patch.md")
   @grammar_path Path.join(:code.priv_dir(:longx), "agent/apply_patch.lark")

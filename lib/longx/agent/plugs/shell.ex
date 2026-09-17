@@ -2,7 +2,7 @@ defmodule Longx.Agent.Plugs.Shell do
   @moduledoc """
   codex's `exec_command`: a shell command run in the working directory
   through `Longx.Shim`, in the person's own shell with the environment
-  of their interactive login shell (`Longx.Agent.ShellEnv`) — output
+  of their interactive login shell (`Longx.Agent.Tools.ShellEnv`) — output
   streamed to the UI as it comes, the whole tree killed at the timeout. The parameters are codex's (`cmd`,
   `workdir`, `tty`, `yield_time_ms`, `max_output_tokens`, `shell`, `login`)
   so models tuned for codex call it the same way; the difference is that
@@ -19,7 +19,7 @@ defmodule Longx.Agent.Plugs.Shell do
 
   use Longx.Agent.Plug
 
-  alias Longx.Agent.ShellEnv
+  alias Longx.Agent.Tools.ShellEnv
   alias Longx.Shim
 
   @default_timeout 120_000

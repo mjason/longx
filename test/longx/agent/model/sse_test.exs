@@ -1,7 +1,7 @@
-defmodule Longx.Agent.SSETest do
+defmodule Longx.Agent.Model.SSETest do
   use ExUnit.Case, async: true
 
-  alias Longx.Agent.SSE
+  alias Longx.Agent.Model.SSE
 
   test "parses complete events and keeps a partial one" do
     chunk = "event: a\ndata: {\"x\":1}\n\nevent: b\ndata: {\"y\":2}\n\nevent: c\ndata: {\"z\""

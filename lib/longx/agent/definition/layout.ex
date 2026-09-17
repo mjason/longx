@@ -1,4 +1,4 @@
-defmodule Longx.Agent.Layout do
+defmodule Longx.Agent.Definition.Layout do
   @moduledoc """
   The project's `.longx/` tree: `agent.exs` and `shared/` (agents, plugs,
   knowledge — in git, reviewed) beside `local/` (the same three plus an

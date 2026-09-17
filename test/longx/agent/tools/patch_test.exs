@@ -1,7 +1,7 @@
-defmodule Longx.Agent.PatchTest do
+defmodule Longx.Agent.Tools.PatchTest do
   use ExUnit.Case, async: true
 
-  alias Longx.Agent.Patch
+  alias Longx.Agent.Tools.Patch
 
   setup do
     dir = Path.join(System.tmp_dir!(), "longx-patch-#{System.unique_integer([:positive])}")

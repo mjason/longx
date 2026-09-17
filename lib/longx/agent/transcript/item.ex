@@ -1,4 +1,4 @@
-defmodule Longx.Agent.Item do
+defmodule Longx.Agent.Transcript.Item do
   @moduledoc """
   One entry of a thread's transcript (`Longx.Agent.Transcript`): the
   Responses input item (`input`) — a user or assistant message, a

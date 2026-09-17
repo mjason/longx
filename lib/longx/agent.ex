@@ -54,7 +54,7 @@ defmodule Longx.Agent do
   """
   @spec ensure(keyword) :: {:ok, pid} | {:error, term}
   def ensure(opts) do
-    Longx.Agent.Specs.put(Keyword.fetch!(opts, :thread_id), opts)
+    Longx.Agent.Kernel.Specs.put(Keyword.fetch!(opts, :thread_id), opts)
 
     case DynamicSupervisor.start_child(@supervisor, {__MODULE__, opts}) do
       {:ok, pid} -> {:ok, pid}
@@ -66,7 +66,7 @@ defmodule Longx.Agent do
   @doc "The agent, started again from what it was started with if it left (idle, crashed)."
   @spec ensure_alive(String.t()) :: {:ok, pid} | {:error, :unknown}
   def ensure_alive(thread_id) do
-    case {whereis(thread_id), Longx.Agent.Specs.get(thread_id)} do
+    case {whereis(thread_id), Longx.Agent.Kernel.Specs.get(thread_id)} do
       {pid, _} when is_pid(pid) -> {:ok, pid}
       {nil, nil} -> {:error, :unknown}
       {nil, opts} -> ensure(opts)
@@ -621,7 +621,7 @@ defmodule Longx.Agent do
   defp load_definition(%Step{cwd: cwd, project_id: project_id, assigns: assigns}) do
     trusted? = (assigns[:trust] || fn -> false end).()
 
-    Longx.Agent.Loader.load(cwd,
+    Longx.Agent.Definition.Loader.load(cwd,
       tag: project_id || "adhoc",
       trusted: trusted?,
       agent: assigns[:role],

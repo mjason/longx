@@ -182,7 +182,10 @@ defmodule Longx.Projects do
              trust: trust_fun(project.id),
              settings: settings_fun(project.id),
              models: &Longx.AI.model_choices/0,
-             idle_ms: Longx.Agent.Settings.idle_ms(Longx.Agent.Settings.for_project(project)),
+             idle_ms:
+               Longx.Agent.Definition.Settings.idle_ms(
+                 Longx.Agent.Definition.Settings.for_project(project)
+               ),
              spawner: &__MODULE__.spawn_native_agent/4
            ),
          {:ok, thread} <-
@@ -213,7 +216,7 @@ defmodule Longx.Projects do
   @spec agent_definition(Project.t()) :: map
   def agent_definition(%Project{} = project) do
     loaded =
-      Longx.Agent.Loader.load(project.root_path,
+      Longx.Agent.Definition.Loader.load(project.root_path,
         tag: project.id,
         trusted: project.trust_local_agent
       )
@@ -232,7 +235,7 @@ defmodule Longx.Projects do
           loaded.agents,
           &%{name: &1.name, summary: &1.summary, layer: Atom.to_string(&1.layer)}
         ),
-      settings: Longx.Agent.Settings.for_project(project),
+      settings: Longx.Agent.Definition.Settings.for_project(project),
       overrides: project.agent_settings || %{},
       errors: Enum.map(loaded.errors, & &1.message)
     }
@@ -287,14 +290,17 @@ defmodule Longx.Projects do
         settings: settings_fun(thread.project_id),
         models: &Longx.AI.model_choices/0,
         idle_ms:
-          Longx.Agent.Settings.idle_ms(Longx.Agent.Settings.for_project_id(thread.project_id)),
+          Longx.Agent.Definition.Settings.idle_ms(
+            Longx.Agent.Definition.Settings.for_project_id(thread.project_id)
+          ),
         spawner: &__MODULE__.spawn_native_agent/4
       ] ++ team_opts(thread)
     )
   end
 
   # read at every turn, like the trust switch
-  defp settings_fun(project_id), do: fn -> Longx.Agent.Settings.for_project_id(project_id) end
+  defp settings_fun(project_id),
+    do: fn -> Longx.Agent.Definition.Settings.for_project_id(project_id) end
 
   # read at every turn: the switch in the settings applies without a restart
   defp trust_fun(project_id), do: fn -> trust_local_agent?(project_id) end
@@ -314,7 +320,7 @@ defmodule Longx.Projects do
   """
   @spec promote_local(Project.t(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
   def promote_local(%Project{root_path: root}, rel) do
-    with {:ok, _to} <- Longx.Agent.Layout.promote(root, rel) do
+    with {:ok, _to} <- Longx.Agent.Definition.Layout.promote(root, rel) do
       {:ok, Path.join("shared", rel)}
     end
   end

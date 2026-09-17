@@ -51,8 +51,8 @@ defmodule Longx.Agent.Knowledge do
     %{
       longx: Path.join(:code.priv_dir(:longx), "agent/knowledge"),
       global: global_dir(),
-      project: Longx.Agent.Layout.shared_dir(cwd, :knowledge),
-      local: Longx.Agent.Layout.local_dir(cwd, :knowledge)
+      project: Longx.Agent.Definition.Layout.shared_dir(cwd, :knowledge),
+      local: Longx.Agent.Definition.Layout.local_dir(cwd, :knowledge)
     }
   end
 
@@ -265,7 +265,7 @@ defmodule Longx.Agent.Knowledge do
   @doc "Moves a local doc into the project's shared tree (`{:ok, \"project/…\"}`)."
   @spec promote(Path.t(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
   def promote(cwd, "local/" <> rel) do
-    with {:ok, _to} <- Longx.Agent.Layout.promote(cwd, Path.join("knowledge", rel)) do
+    with {:ok, _to} <- Longx.Agent.Definition.Layout.promote(cwd, Path.join("knowledge", rel)) do
       {:ok, "project/" <> rel}
     end
   end
@@ -352,7 +352,7 @@ defmodule Longx.Agent.Knowledge do
   end
 
   defp ignored(:local, cwd) do
-    case Longx.Agent.Layout.ensure_ignored(cwd) do
+    case Longx.Agent.Definition.Layout.ensure_ignored(cwd) do
       :ok -> :ok
       {:error, reason} -> {:error, "cannot update .gitignore: #{:file.format_error(reason)}"}
     end

@@ -66,7 +66,7 @@ defmodule Longx.Agent.Kernel.State do
             turn_state: %{},
             # how this agent's children are made (Longx.Projects gives them rows)
             spawner: nil,
-            # the settings page's layer, read per turn (Longx.Agent.Settings map or nil)
+            # the settings page's layer, read per turn (Longx.Agent.Definition.Settings map or nil)
             settings: nil,
             # the models the agent may name (Longx.AI.model_choices/0), read per step; nil = unknown
             models: nil,

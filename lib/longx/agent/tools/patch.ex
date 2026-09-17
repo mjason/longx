@@ -1,4 +1,4 @@
-defmodule Longx.Agent.Patch do
+defmodule Longx.Agent.Tools.Patch do
   @moduledoc """
   codex's `apply_patch` format — the one edit format the models tuned for
   codex already speak — parsed and applied in Elixir:

@@ -1,4 +1,4 @@
-defmodule Longx.Agent.Specs do
+defmodule Longx.Agent.Kernel.Specs do
   @moduledoc """
   What every agent was started with, by thread id — so an agent that left
   (idle timeout, a crash) comes back the same on demand

@@ -1,5 +1,5 @@
 defmodule Longx.Projects.Project.Validations.AgentSettings do
-  @moduledoc "The project's kernel overrides follow `Longx.Agent.Settings`' rules (nil = inherit)."
+  @moduledoc "The project's kernel overrides follow `Longx.Agent.Definition.Settings`' rules (nil = inherit)."
   use Ash.Resource.Validation
 
   @impl true
@@ -9,7 +9,7 @@ defmodule Longx.Projects.Project.Validations.AgentSettings do
         :ok
 
       attrs when is_map(attrs) ->
-        case Longx.Agent.Settings.validate(attrs) do
+        case Longx.Agent.Definition.Settings.validate(attrs) do
           :ok ->
             :ok
 

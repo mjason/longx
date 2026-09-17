@@ -1,4 +1,4 @@
-defmodule Longx.Agent.Settings do
+defmodule Longx.Agent.Definition.Settings do
   @moduledoc """
   What the settings page decides about the native kernel — the topmost
   layer of every agent's description, in the same terms as `agent.exs`
@@ -11,7 +11,7 @@ defmodule Longx.Agent.Settings do
   The global values are one `Longx.System.Setting` (`agent_kernel`, JSON);
   a project's `agent_settings` map overrides what it sets. `for_project/1`
   is what the kernel is given (`Longx.Projects` hands it a function read
-  per turn, like the trust switch) and what `Longx.Agent.Loader` applies.
+  per turn, like the trust switch) and what `Longx.Agent.Definition.Loader` applies.
   """
 
   @key "agent_kernel"

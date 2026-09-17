@@ -1,7 +1,7 @@
-defmodule Longx.Agent.SettingsTest do
+defmodule Longx.Agent.Definition.SettingsTest do
   use Longx.DataCase, async: false
 
-  alias Longx.Agent.{Loader, Settings}
+  alias Longx.Agent.Definition.{Loader, Settings}
   alias Longx.Agent.Plugs.Agents
   alias Longx.Projects
 

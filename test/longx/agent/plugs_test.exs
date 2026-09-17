@@ -272,7 +272,7 @@ defmodule Longx.Agent.PlugsTest do
                )
 
       [path, home | _] = String.split(output, "\n")
-      assert path == Longx.Agent.ShellEnv.env()["PATH"]
+      assert path == Longx.Agent.Tools.ShellEnv.env()["PATH"]
       assert home == System.get_env("HOME")
     end
 

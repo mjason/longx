@@ -1,7 +1,7 @@
-defmodule Longx.Agent.ShellEnvTest do
+defmodule Longx.Agent.Tools.ShellEnvTest do
   use ExUnit.Case, async: true
 
-  alias Longx.Agent.ShellEnv
+  alias Longx.Agent.Tools.ShellEnv
 
   test "parses `env -0` output, tolerating the junk an interactive shell prints first" do
     out =

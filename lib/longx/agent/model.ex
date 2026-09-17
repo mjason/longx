@@ -22,7 +22,7 @@ defmodule Longx.Agent.Model do
 
   require Logger
 
-  alias Longx.Agent.SSE
+  alias Longx.Agent.Model.SSE
   alias Longx.AI
   alias Longx.AI.Gateway
   alias Longx.AI.Gateway.{Limiter, Log}

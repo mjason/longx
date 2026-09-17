@@ -1,4 +1,4 @@
-defmodule Longx.Agent.ShellEnv do
+defmodule Longx.Agent.Tools.ShellEnv do
   @moduledoc """
   The environment a command runs in: the person's own shell's, captured
   once per BEAM (codex's *shell snapshot*). A command started by Longx

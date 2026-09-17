@@ -1,7 +1,7 @@
-defmodule Longx.Agent.LoaderTest do
+defmodule Longx.Agent.Definition.LoaderTest do
   use ExUnit.Case, async: true
 
-  alias Longx.Agent.Loader
+  alias Longx.Agent.Definition.Loader
   alias Longx.Agent.Plugs.{Base, Environment, Patch, Request, Shell}
 
   setup do
