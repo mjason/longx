@@ -78,7 +78,7 @@ curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install.sh | sh
 
 它会：看当前版本 → 停服务（各项目的 codex 一并停掉，正在跑的一轮会被打断）→ 把 `data` 备份到
 `~/.longx/backups/data-<时间>.tar.gz` → 下载校验新版本 → 旧程序改名 `app.old`、新程序就位 → 重启服务 → 等端口响应。
-数据库迁移在启动时自动跑，`data` 目录原样保留：项目、会话、每个项目的 codex 状态和记忆、全局记忆、密钥都在。
+数据库迁移在启动时自动跑，`data` 目录原样保留：项目、会话、每个项目的 codex 状态、知识、密钥都在。
 `journalctl --user -u longx -f` 看日志。
 
 **回退**：

@@ -1,0 +1,292 @@
+{
+  "attributes": [
+    {
+      "default": "nil",
+      "size": null,
+      "type": "uuid",
+      "source": "id",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": true,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "name",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "slug",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "description",
+      "references": null,
+      "allow_nil?": true,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "root_path",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "approval_policy",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "sandbox",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "[]",
+      "size": null,
+      "type": [
+        "array",
+        "text"
+      ],
+      "source": "tools",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "dirty_start",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "boolean",
+      "source": "network_access",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": [
+        "array",
+        "text"
+      ],
+      "source": "writable_roots",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "[]",
+      "size": null,
+      "type": [
+        "array",
+        "text"
+      ],
+      "source": "passthrough_paths",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "boolean",
+      "source": "web_search",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "boolean",
+      "source": "multi_agent",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "boolean",
+      "source": "auto_review",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "boolean",
+      "source": "trust_local_agent",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "map",
+      "source": "agent_settings",
+      "references": null,
+      "allow_nil?": true,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "engine",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "bigint",
+      "source": "memory_limit_mb",
+      "references": null,
+      "allow_nil?": true,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "utc_datetime_usec",
+      "source": "archived_at",
+      "references": null,
+      "allow_nil?": true,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "utc_datetime_usec",
+      "source": "inserted_at",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "utc_datetime_usec",
+      "source": "updated_at",
+      "references": null,
+      "allow_nil?": false,
+      "primary_key?": false,
+      "generated?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "uuid",
+      "source": "model_id",
+      "references": {
+        "name": "projects_model_id_fkey",
+        "table": "ai_models",
+        "multitenancy": {
+          "global": null,
+          "strategy": null,
+          "attribute": null
+        },
+        "primary_key?": true,
+        "destination_attribute": "id",
+        "on_update": null,
+        "on_delete": null,
+        "deferrable": false,
+        "match_tenant?": false,
+        "destination_attribute_default": null,
+        "destination_attribute_generated": null
+      },
+      "allow_nil?": true,
+      "primary_key?": false,
+      "generated?": false
+    }
+  ],
+  "table": "projects",
+  "hash": "BE19C95B2E084509A7DB04AB85DC4A491EEC2ACAF360563D5A6456CE33E8DF0F",
+  "multitenancy": {
+    "global": null,
+    "strategy": null,
+    "attribute": null
+  },
+  "identities": [
+    {
+      "name": "unique_root_path",
+      "keys": [
+        "root_path"
+      ],
+      "nils_distinct?": true,
+      "base_filter": null,
+      "index_name": "projects_unique_root_path_index"
+    },
+    {
+      "name": "unique_slug",
+      "keys": [
+        "slug"
+      ],
+      "nils_distinct?": true,
+      "base_filter": null,
+      "index_name": "projects_unique_slug_index"
+    }
+  ],
+  "repo": "Elixir.Longx.Repo",
+  "strict?": false,
+  "custom_indexes": [],
+  "custom_statements": [],
+  "base_filter": null,
+  "has_create_action": true
+}

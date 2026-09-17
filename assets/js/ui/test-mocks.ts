@@ -64,7 +64,6 @@ export const project = (n: number) => ({
   tools: [],
   memoryLimitMb: null,
   modelId: null,
-  globalMemory: true,
   engine: "codex",
   trustLocalAgent: false,
   agentSettings: null,
@@ -260,45 +259,6 @@ export function rpcMock() {
     knowledgeRead: vi.fn(async () => ok({ text: "---\ntitle: About me\nsummary: how I like things\ntags: [me]\nalways: true\n---\nTabs, never spaces.\n" })),
     knowledgeWrite: vi.fn(async () => ok(null)),
     knowledgeDelete: vi.fn(async () => ok(null)),
-    memoryIndex: vi.fn(async () =>
-      ok({ text: "# MEMORY\n\n- Tabs over spaces\n" }),
-    ),
-    memoryWriteIndex: vi.fn(async () => ok(null)),
-    memoryNotes: vi.fn(async () =>
-      ok([
-        {
-          file: "notes/2026-09-14T04-48-17Z-tabs.md",
-          at: "2026-09-14T04:48:17Z",
-          project: "数学精灵",
-          thread: "thr_1",
-          source: null,
-          text: "用户所有项目的代码缩进一律使用 Tab。",
-        },
-        {
-          file: "notes/2026-09-14T05-00-00Z-pnpm.md",
-          at: "2026-09-14T05:00:00Z",
-          project: "longx",
-          thread: "thr_2",
-          source: "auto",
-          text: "用户用 pnpm。",
-        },
-      ]),
-    ),
-    memorySearch: vi.fn(async () =>
-      ok([{ file: "MEMORY.md", line: 3, text: "- Tabs over spaces" }]),
-    ),
-    memoryDeleteNote: vi.fn(async () => ok(null)),
-    memoryStatus: vi.fn(async () =>
-      ok({
-        autoExtract: true,
-        lastRunAt: "2026-09-14T05:10:00Z",
-        lastError: null,
-        pending: 2,
-        folded: 5,
-      }),
-    ),
-    memorySetAutoExtract: vi.fn(async () => ok(null)),
-    memoryRun: vi.fn(async () => ok(null)),
     upgradeStatus: vi.fn(async () => ok(upgradeIdle)),
     upgradeCheck: vi.fn(async () =>
       ok({

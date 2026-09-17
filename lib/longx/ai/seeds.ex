@@ -28,7 +28,7 @@ defmodule Longx.AI.Seeds do
     # Web search for codex's `web.run` tool: Tavily; the key is set in Settings.
     {:ok, _} = AI.ensure_search_provider()
 
-    # Mirror the registered agent tools into the DB (the memory tools on, the rest off).
+    # Mirror the registered agent tools into the DB (new tools off).
     AI.list_tools!()
     :ok
   end

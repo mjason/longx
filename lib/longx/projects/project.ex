@@ -99,7 +99,6 @@ defmodule Longx.Projects.Project do
         :web_search,
         :multi_agent,
         :auto_review,
-        :global_memory,
         :memory_limit_mb,
         :model_id,
         :engine,
@@ -132,7 +131,6 @@ defmodule Longx.Projects.Project do
         :web_search,
         :multi_agent,
         :auto_review,
-        :global_memory,
         :memory_limit_mb,
         :model_id,
         :engine,
@@ -398,10 +396,6 @@ defmodule Longx.Projects.Project do
     # a card for the person; a denial can still be overridden in the chat.
     # Decided at thread start (`approvals_reviewer`).
     attribute :auto_review, :boolean, allow_nil?: false, default: true, public?: true
-
-    # Longx's global memory (Longx.Memory) goes to every new thread as
-    # developer instructions — unless this project wants none of it
-    attribute :global_memory, :boolean, allow_nil?: false, default: true, public?: true
 
     # which kernel runs the project's threads: the bundled codex app-server
     # (`:codex`) or Longx's own agent kernel (`:native`, `Longx.Agent`) — an

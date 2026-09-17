@@ -61,10 +61,8 @@ defmodule Longx.Codex.ThreadTest do
       assert names == ["builtin", "test"]
     end
 
-    test "without tools: the globally enabled set from the DB is used (the memory tools by default)" do
-      [memory] = Thread.start_params(cwd: "/p")["dynamicTools"]
-      assert memory["name"] == "memory"
-      assert Enum.map(memory["tools"], & &1["name"]) |> Enum.sort() == ["note", "read", "search"]
+    test "without tools: the globally enabled set from the DB is used (nothing is on by default)" do
+      refute Thread.start_params(cwd: "/p")["dynamicTools"]
 
       {:ok, _} = Longx.AI.enable_tool("builtin.thread_status")
       namespaces = Thread.start_params(cwd: "/p")["dynamicTools"]

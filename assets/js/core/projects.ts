@@ -45,7 +45,6 @@ export const projectFields = [
   "webSearch",
   "multiAgent",
   "autoReview",
-  "globalMemory",
   "dirtyStart",
   "tools",
   "memoryLimitMb",

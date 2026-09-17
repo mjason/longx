@@ -6,7 +6,6 @@ import { Label } from "@/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { Page, TopBar } from "@/ui/shell/Shell";
 import { t } from "@/ui/strings";
-import { MemorySection } from "./settings/MemorySection";
 import { ModelsSection } from "./settings/ModelsSection";
 import { ProcessesSection } from "./settings/ProcessesSection";
 import { SandboxSection } from "./settings/SandboxSection";
@@ -16,7 +15,7 @@ import { AgentKernelSection } from "./settings/AgentKernelSection";
 import { RequestsSection } from "./settings/RequestsSection";
 import { UpdateSection } from "./settings/UpdateSection";
 
-const SECTIONS = ["models", "memory", "knowledge", "agent", "tools", "processes", "sandbox", "update", "requests", "appearance"] as const;
+const SECTIONS = ["models", "knowledge", "agent", "tools", "processes", "sandbox", "update", "requests", "appearance"] as const;
 type Section = (typeof SECTIONS)[number];
 
 /**
@@ -82,8 +81,6 @@ function SectionBody({ section }: { section: Section }) {
   switch (section) {
     case "models":
       return <ModelsSection />;
-    case "memory":
-      return <MemorySection />;
     case "knowledge":
       return <KnowledgeSection />;
     case "agent":

@@ -1,5 +1,5 @@
 defmodule Longx.System do
-  @moduledoc "Node-level facts the SPA asks for: sandbox availability, the global memory, the version and its upgrade; plus the encrypted settings store."
+  @moduledoc "Node-level facts the SPA asks for: sandbox availability, the version and its upgrade; plus the encrypted settings store."
 
   use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
 
@@ -22,14 +22,6 @@ defmodule Longx.System do
       rpc_action :agent_delete_file, :agent_delete_file
       rpc_action :public_url, :public_url
       rpc_action :set_public_url, :set_public_url
-      rpc_action :memory_index, :memory_index
-      rpc_action :memory_write_index, :memory_write_index
-      rpc_action :memory_notes, :memory_notes
-      rpc_action :memory_search, :memory_search
-      rpc_action :memory_delete_note, :memory_delete_note
-      rpc_action :memory_status, :memory_status
-      rpc_action :memory_set_auto_extract, :memory_set_auto_extract
-      rpc_action :memory_run, :memory_run
       rpc_action :upgrade_status, :upgrade_status
       rpc_action :upgrade_check, :upgrade_check
       rpc_action :upgrade_apply, :upgrade_apply

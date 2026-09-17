@@ -450,18 +450,15 @@ defmodule Longx.AITest do
       assert {"builtin", "echo"} in names
       assert {"builtin", "thread_status"} in names
       assert {"test", "echo"} in names
-      {on, off} = Enum.split_with(tools, & &1.enabled)
-      assert Enum.all?(off, &(&1.namespace != "memory"))
-      # the memory tools declare enabled_by_default?; nothing else does
-      assert Enum.map(on, &{&1.namespace, &1.name}) |> Enum.sort() ==
-               [{"memory", "note"}, {"memory", "read"}, {"memory", "search"}]
+      # no shipped tool declares enabled_by_default? any more
+      assert Enum.all?(tools, &(not &1.enabled))
 
       # description comes from the code, not the DB
       assert Enum.find(tools, &(&1.name == "thread_status")).description =~ "thread"
     end
 
-    test "only the memory tools are enabled by default, so only they are injected" do
-      assert AI.enabled_tool_names() == ["memory.note", "memory.read", "memory.search"]
+    test "nothing is enabled by default, so nothing is injected until a switch is on" do
+      assert AI.enabled_tool_names() == []
     end
 
     test "enable/disable by qualified name, kept across syncs" do

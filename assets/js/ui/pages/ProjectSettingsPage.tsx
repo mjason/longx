@@ -22,7 +22,7 @@ import { Textarea } from "@/ui/components/ui/textarea";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { t } from "@/ui/strings";
 
-type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "webSearch" | "multiAgent" | "autoReview" | "globalMemory" | "dirtyStart" | "engine" | "trustLocalAgent">> & {
+type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "webSearch" | "multiAgent" | "autoReview" | "dirtyStart" | "engine" | "trustLocalAgent">> & {
   description: string;
   memoryLimitMb: string;
   modelId: string;
@@ -61,7 +61,6 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
     webSearch: project.webSearch,
     multiAgent: project.multiAgent,
     autoReview: project.autoReview,
-    globalMemory: project.globalMemory,
     dirtyStart: project.dirtyStart,
     engine: project.engine,
     trustLocalAgent: project.trustLocalAgent,
@@ -90,7 +89,6 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
             webSearch: form.webSearch,
             multiAgent: form.multiAgent,
             autoReview: form.autoReview,
-            globalMemory: form.globalMemory,
             dirtyStart: form.dirtyStart,
             engine: form.engine,
             trustLocalAgent: form.trustLocalAgent,
@@ -260,13 +258,6 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         <div className="flex items-center justify-between gap-4">
           <Label htmlFor="ps-auto-review">{t.autoReviewSwitch}</Label>
           <Switch id="ps-auto-review" checked={form.autoReview} disabled={form.approvalPolicy === "auto_accept"} onCheckedChange={(v) => set("autoReview", v)} />
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <Label htmlFor="ps-global-memory">{t.globalMemory}</Label>
-            <p className="text-muted-foreground mt-0.5 text-xs">{t.globalMemoryHint}</p>
-          </div>
-          <Switch id="ps-global-memory" checked={form.globalMemory} onCheckedChange={(v) => set("globalMemory", v)} />
         </div>
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">{t.dirtyStart}</legend>

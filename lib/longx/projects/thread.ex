@@ -405,11 +405,6 @@ defmodule Longx.Projects.Thread do
       ]
     end
 
-    # the memory pipeline read this thread's rollout up to its last activity
-    update :mark_extracted do
-      change set_attribute(:memory_extracted_at, &DateTime.utc_now/0)
-    end
-
     # an empty thread codex could not resume was started again (new codex id)
     update :rehost do
       accept [:codex_thread_id]
@@ -563,8 +558,6 @@ defmodule Longx.Projects.Thread do
     end
 
     attribute :last_activity_at, :utc_datetime_usec, public?: true
-    # when Longx.Memory.Extract last distilled this thread (nil: never)
-    attribute :memory_extracted_at, :utc_datetime_usec, public?: true
 
     timestamps public?: true
   end

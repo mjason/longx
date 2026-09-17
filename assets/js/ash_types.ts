@@ -175,7 +175,7 @@ export type ProjectFilesAttributesOnlySchema = {
 // Project Schema
 export type ProjectResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "agentSettings" | "approvalPolicy" | "archivedAt" | "autoReview" | "description" | "dirtyStart" | "engine" | "globalMemory" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "passthroughPaths" | "rootPath" | "sandbox" | "slug" | "tools" | "trustLocalAgent" | "updatedAt" | "webSearch" | "writableRoots";
+  __primitiveFields: "agentSettings" | "approvalPolicy" | "archivedAt" | "autoReview" | "description" | "dirtyStart" | "engine" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "passthroughPaths" | "rootPath" | "sandbox" | "slug" | "tools" | "trustLocalAgent" | "updatedAt" | "webSearch" | "writableRoots";
   agentSettings: Record<string, any> | null;
   approvalPolicy: "auto_accept" | "never" | "on_request" | "untrusted";
   archivedAt: UtcDateTimeUsec | null;
@@ -183,7 +183,6 @@ export type ProjectResourceSchema = {
   description: string | null;
   dirtyStart: "ask" | "commit" | "off";
   engine: "codex" | "native";
-  globalMemory: boolean;
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   memoryLimitMb: number | null;
@@ -207,7 +206,7 @@ export type ProjectResourceSchema = {
 
 export type ProjectAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "agentSettings" | "approvalPolicy" | "archivedAt" | "autoReview" | "description" | "dirtyStart" | "engine" | "globalMemory" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "passthroughPaths" | "rootPath" | "sandbox" | "slug" | "tools" | "trustLocalAgent" | "updatedAt" | "webSearch" | "writableRoots";
+  __primitiveFields: "agentSettings" | "approvalPolicy" | "archivedAt" | "autoReview" | "description" | "dirtyStart" | "engine" | "id" | "insertedAt" | "memoryLimitMb" | "modelId" | "multiAgent" | "name" | "networkAccess" | "passthroughPaths" | "rootPath" | "sandbox" | "slug" | "tools" | "trustLocalAgent" | "updatedAt" | "webSearch" | "writableRoots";
   agentSettings: Record<string, any> | null;
   approvalPolicy: "auto_accept" | "never" | "on_request" | "untrusted";
   archivedAt: UtcDateTimeUsec | null;
@@ -215,7 +214,6 @@ export type ProjectAttributesOnlySchema = {
   description: string | null;
   dirtyStart: "ask" | "commit" | "off";
   engine: "codex" | "native";
-  globalMemory: boolean;
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   memoryLimitMb: number | null;
@@ -252,7 +250,7 @@ export type ProjectRepoAttributesOnlySchema = {
 // Thread Schema
 export type ThreadResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "agentPath" | "approvalPolicy" | "autoReview" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "memoryExtractedAt" | "modelSlug" | "multiAgent" | "networkAccess" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "sandbox" | "status" | "title" | "tools" | "updatedAt" | "webSearch";
+  __primitiveFields: "agentPath" | "approvalPolicy" | "autoReview" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "modelSlug" | "multiAgent" | "networkAccess" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "sandbox" | "status" | "title" | "tools" | "updatedAt" | "webSearch";
   agentPath: string | null;
   approvalPolicy: "auto_accept" | "never" | "on_request" | "untrusted";
   autoReview: boolean;
@@ -262,7 +260,6 @@ export type ThreadResourceSchema = {
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   lastActivityAt: UtcDateTimeUsec | null;
-  memoryExtractedAt: UtcDateTimeUsec | null;
   modelSlug: string | null;
   multiAgent: boolean;
   networkAccess: boolean;
@@ -285,7 +282,7 @@ export type ThreadResourceSchema = {
 
 export type ThreadAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "agentPath" | "approvalPolicy" | "autoReview" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "memoryExtractedAt" | "modelSlug" | "multiAgent" | "networkAccess" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "sandbox" | "status" | "title" | "tools" | "updatedAt" | "webSearch";
+  __primitiveFields: "agentPath" | "approvalPolicy" | "autoReview" | "codexThreadId" | "cwd" | "forkedFromId" | "id" | "insertedAt" | "lastActivityAt" | "modelSlug" | "multiAgent" | "networkAccess" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "sandbox" | "status" | "title" | "tools" | "updatedAt" | "webSearch";
   agentPath: string | null;
   approvalPolicy: "auto_accept" | "never" | "on_request" | "untrusted";
   autoReview: boolean;
@@ -295,7 +292,6 @@ export type ThreadAttributesOnlySchema = {
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   lastActivityAt: UtcDateTimeUsec | null;
-  memoryExtractedAt: UtcDateTimeUsec | null;
   modelSlug: string | null;
   multiAgent: boolean;
   networkAccess: boolean;
@@ -924,12 +920,6 @@ export type ProjectFilterInput = {
     greaterThanOrEqual?: "codex" | "native";
   };
 
-  globalMemory?: {
-    eq?: boolean;
-    notEq?: boolean;
-    in?: Array<boolean>;
-  };
-
   id?: {
     eq?: UUIDv7;
     notEq?: UUIDv7;
@@ -1180,17 +1170,6 @@ export type ThreadFilterInput = {
   };
 
   lastActivityAt?: {
-    isNil?: boolean;
-    eq?: UtcDateTimeUsec;
-    notEq?: UtcDateTimeUsec;
-    in?: Array<UtcDateTimeUsec>;
-    lessThan?: UtcDateTimeUsec;
-    greaterThan?: UtcDateTimeUsec;
-    lessThanOrEqual?: UtcDateTimeUsec;
-    greaterThanOrEqual?: UtcDateTimeUsec;
-  };
-
-  memoryExtractedAt?: {
     isNil?: boolean;
     eq?: UtcDateTimeUsec;
     notEq?: UtcDateTimeUsec;
@@ -1560,11 +1539,11 @@ export const toolFilterFields = ["enabled", "id", "insertedAt", "name", "namespa
 export type ToolFilterField = (typeof toolFilterFields)[number];
 
 
-export const projectFilterFields = ["agentSettings", "approvalPolicy", "archivedAt", "autoReview", "description", "dirtyStart", "engine", "globalMemory", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "passthroughPaths", "rootPath", "sandbox", "slug", "tools", "trustLocalAgent", "updatedAt", "webSearch", "writableRoots", "model"] as const;
+export const projectFilterFields = ["agentSettings", "approvalPolicy", "archivedAt", "autoReview", "description", "dirtyStart", "engine", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "passthroughPaths", "rootPath", "sandbox", "slug", "tools", "trustLocalAgent", "updatedAt", "webSearch", "writableRoots", "model"] as const;
 export type ProjectFilterField = (typeof projectFilterFields)[number];
 
 
-export const threadFilterFields = ["agentPath", "approvalPolicy", "autoReview", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "memoryExtractedAt", "modelSlug", "multiAgent", "networkAccess", "parentThreadId", "preview", "projectId", "reasoningEffort", "sandbox", "status", "title", "tools", "updatedAt", "webSearch", "forkedFrom", "parentThread", "project"] as const;
+export const threadFilterFields = ["agentPath", "approvalPolicy", "autoReview", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "modelSlug", "multiAgent", "networkAccess", "parentThreadId", "preview", "projectId", "reasoningEffort", "sandbox", "status", "title", "tools", "updatedAt", "webSearch", "forkedFrom", "parentThread", "project"] as const;
 export type ThreadFilterField = (typeof threadFilterFields)[number];
 
 export const turnFilterFields = ["codexTurnId", "commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "userText", "thread"] as const;
@@ -1586,11 +1565,11 @@ export const toolSortFields = ["enabled", "id", "insertedAt", "name", "namespace
 export type ToolSortField = (typeof toolSortFields)[number];
 
 
-export const projectSortFields = ["agentSettings", "approvalPolicy", "archivedAt", "autoReview", "description", "dirtyStart", "engine", "globalMemory", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "passthroughPaths", "rootPath", "sandbox", "slug", "tools", "trustLocalAgent", "updatedAt", "webSearch", "writableRoots"] as const;
+export const projectSortFields = ["agentSettings", "approvalPolicy", "archivedAt", "autoReview", "description", "dirtyStart", "engine", "id", "insertedAt", "memoryLimitMb", "modelId", "multiAgent", "name", "networkAccess", "passthroughPaths", "rootPath", "sandbox", "slug", "tools", "trustLocalAgent", "updatedAt", "webSearch", "writableRoots"] as const;
 export type ProjectSortField = (typeof projectSortFields)[number];
 
 
-export const threadSortFields = ["agentPath", "approvalPolicy", "autoReview", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "memoryExtractedAt", "modelSlug", "multiAgent", "networkAccess", "parentThreadId", "preview", "projectId", "reasoningEffort", "sandbox", "status", "title", "tools", "updatedAt", "webSearch"] as const;
+export const threadSortFields = ["agentPath", "approvalPolicy", "autoReview", "codexThreadId", "cwd", "forkedFromId", "id", "insertedAt", "lastActivityAt", "modelSlug", "multiAgent", "networkAccess", "parentThreadId", "preview", "projectId", "reasoningEffort", "sandbox", "status", "title", "tools", "updatedAt", "webSearch"] as const;
 export type ThreadSortField = (typeof threadSortFields)[number];
 
 export const turnSortFields = ["codexTurnId", "commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "userText"] as const;

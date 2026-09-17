@@ -125,8 +125,8 @@ defmodule Longx.Projects.ThreadsTest do
         )
 
       assert thread.sandbox == :danger_full_access
-      # nothing chosen = the globally enabled set (the memory tools by default)
-      assert thread.tools == ["memory.note", "memory.read", "memory.search"]
+      # nothing chosen = the globally enabled set (no tool is on by default)
+      assert thread.tools == []
       assert thread.model_slug == "deepseek-flash"
     end
 
@@ -538,7 +538,7 @@ defmodule Longx.Projects.ThreadsTest do
       assert turn5.reasoning_effort == "ultra"
     end
 
-    test "a thread resumes with its own access mode and the memory, not codex's defaults (a full-access thread fell back to workspace-write after every restart)",
+    test "a thread resumes with its own access mode, not codex's defaults (a full-access thread fell back to workspace-write after every restart)",
          %{dir: dir, conn: conn} do
       project = git_project!(dir)
 
@@ -554,7 +554,7 @@ defmodule Longx.Projects.ThreadsTest do
       assert params["sandbox"] == "danger-full-access"
       assert params["approvalPolicy"] == "never"
       assert params["cwd"] == project.root_path
-      assert params["developerInstructions"] =~ "Longx 全局记忆"
+      refute Map.has_key?(params, "developerInstructions")
     end
 
     test "a thread resumes with the level it was left on, not the model's default", %{
@@ -602,21 +602,6 @@ defmodule Longx.Projects.ThreadsTest do
       %{"lastTurnParams" => params2} = read_thread!(conn, thread.codex_thread_id)
       assert params2["sandboxPolicy"] == %{"type" => "dangerFullAccess"}
       assert Ash.get!(Thread, thread.id).sandbox == :danger_full_access
-    end
-
-    test "the global memory reaches a new thread as developer instructions and the memory tools, unless the project opts out",
-         %{dir: dir, conn: conn} do
-      project = git_project!(dir)
-      {:ok, thread} = Projects.start_thread(project, conn: conn)
-      %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
-      assert [%{"name" => "memory"}] = params["dynamicTools"]
-      assert params["developerInstructions"] =~ "Longx 全局记忆"
-      assert params["developerInstructions"] =~ "调用 `note`"
-
-      {:ok, quiet} = Projects.update_project(project, %{global_memory: false})
-      {:ok, thread} = Projects.start_thread(quiet, conn: conn)
-      %{"startParams" => params} = read_thread!(conn, thread.codex_thread_id)
-      refute Map.has_key?(params, "developerInstructions")
     end
 
     test "web_search: false at start turns codex's web.run off for the thread; the project's default applies otherwise",

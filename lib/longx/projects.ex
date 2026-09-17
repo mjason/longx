@@ -109,7 +109,6 @@ defmodule Longx.Projects do
     resource Longx.Projects.Thread do
       define :create_thread, action: :create
       define :touch_thread, action: :touch
-      define :mark_thread_extracted, action: :mark_extracted
       define :rename_thread, action: :rename
       define :archive_thread, action: :archive
       define :get_thread_by_codex_id, action: :by_codex_id, args: [:codex_thread_id]
@@ -442,7 +441,7 @@ defmodule Longx.Projects do
 
   defp start_codex_thread(%Project{} = project, opts) do
     model_slug = Keyword.get(opts, :model) || (project.model && project.model.slug)
-    # a project that chose nothing gets the globally enabled tools (the memory
+    # a project that chose nothing gets the globally enabled tools (none
     # tools by default) — the tools page is where "none" is decided
     tools =
       case Keyword.get(opts, :tools, project.tools) do
@@ -477,8 +476,7 @@ defmodule Longx.Projects do
              conn: conn
            ]
            |> Keyword.merge(model_opts)
-           |> without_web_search(web_search)
-           |> with_global_memory(project),
+           |> without_web_search(web_search),
          {:ok, codex_thread_id} <- Longx.Codex.Thread.start(codex_opts),
          {:ok, thread} <-
            create_thread(%{
@@ -500,12 +498,6 @@ defmodule Longx.Projects do
       {:ok, thread}
     end
   end
-
-  # what Longx remembers across projects, as the thread's developer instructions
-  defp with_global_memory(opts, %Project{global_memory: true}),
-    do: Keyword.put(opts, :developer_instructions, Longx.Memory.instructions())
-
-  defp with_global_memory(opts, _project), do: opts
 
   # the model's mode (thread_options) unless the thread wants no web.run at all
   defp without_web_search(opts, true), do: opts
@@ -1392,7 +1384,6 @@ defmodule Longx.Projects do
         # the level the thread was left on, not the row's default
         |> put_if(:reasoning_effort, thread.reasoning_effort)
         |> without_web_search(thread.web_search)
-        |> with_global_memory(project)
 
       with {:ok, id} <- Longx.Codex.Thread.resume(codex_id, opts) do
         :ok = Tracker.track(id)
@@ -1802,8 +1793,7 @@ defmodule Longx.Projects do
   @doc """
   Forgets what codex learned about this project — its memories (the
   `memories/` workspace and its state db) — and nothing else: sessions and
-  our threads stay. For a project memory that went wrong; the global one
-  (`Longx.Memory`) is untouched.
+  our threads stay. For a project memory that went wrong.
   """
   @spec clear_codex_memories(Project.t()) :: :ok
   def clear_codex_memories(%Project{id: project_id}) do

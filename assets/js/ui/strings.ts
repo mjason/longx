@@ -579,7 +579,6 @@ export const t = {
   // settings
   settingsSections: {
     models: "模型与 Provider",
-    memory: "记忆",
     knowledge: "知识",
     agent: "Agent 内核",
     tools: "工具",
@@ -602,9 +601,6 @@ export const t = {
     noTurnYet: "还没跑过轮次",
     stopped: (name: string) => `已停止 ${name} 的 codex`,
   },
-  globalMemory: "注入全局记忆",
-  globalMemoryHint:
-    "新会话开始时把跨项目的记忆（MEMORY.md 和未整理的笔记）告诉模型；这个项目的会话也会被提炼进去",
   updatePage: {
     version: (v: string) => `Longx ${v}`,
     hint: "从 GitHub Releases（mjason/longx）检查新版本，点一下就下载、校验、替换程序目录并重启服务。数据目录不动，升级前会先把数据库快照存到 backups。",
@@ -688,30 +684,6 @@ export const t = {
     removed: "已删除",
     close: "关闭",
     readOnly: "出厂知识只读",
-  },
-  memoryPage: {
-    hint: "跨项目的记忆：用户的偏好、习惯、决定。MEMORY.md 是整理好的长期部分，每个新会话都会读到；笔记是收件箱——模型（memory.note）、你、和自动提炼写进来的，会定期整理进 MEMORY.md。目录是一个 git 仓库，每次改动都有记录。",
-    pipeline: "自动整理",
-    autoExtract: "自动提炼：闲置一小时以上的会话 → 笔记",
-    pending: (n: number) => `${n} 条待整理`,
-    folded: (n: number) => `${n} 条已整理进 MEMORY.md，30 天后自动清理`,
-    lastRun: (at: string) => `上次运行 ${at}`,
-    neverRan: "还没运行过",
-    lastError: "上次出错：",
-    runNow: "现在整理",
-    runStarted: "已开始整理，稍后刷新看结果",
-    index: "MEMORY.md",
-    saveIndex: "保存 MEMORY.md",
-    saved: "已保存",
-    notes: "笔记",
-    noNotes: "还没有笔记",
-    auto: "自动提炼",
-    deleteNote: "删除笔记",
-    deleteNoteTitle: "删除这条笔记？",
-    deleteNoteHint: "已经整理进 MEMORY.md 的内容不受影响。",
-    search: "搜索记忆",
-    searchHint: "按关键词在 MEMORY.md 和笔记里查",
-    noHits: "没有匹配",
   },
   ai: {
     providers: "Provider",
