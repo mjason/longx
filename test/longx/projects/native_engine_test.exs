@@ -124,7 +124,7 @@ defmodule Longx.Projects.NativeEngineTest do
     assert thread.model_slug == nil
     assert thread.reasoning_effort == "high"
     assert Agent.whereis(thread.codex_thread_id)
-    assert Longx.Codex.Pool.running() == []
+    assert Longx.Codex.Pool.status(project.id) == :stopped
 
     assert {:error, _} = Projects.start_thread(project, model: "nope")
     assert {:error, _} = Projects.start_thread(project, model: model.slug, effort: "ultra")
@@ -231,7 +231,7 @@ defmodule Longx.Projects.NativeEngineTest do
 
     assert {:ok, [%{path: "a.txt"} | _]} = Projects.search_files(project, "a")
     assert {:ok, []} = Projects.search_files(project, "zzz")
-    assert Longx.Codex.Pool.running() == []
+    assert Longx.Codex.Pool.status(project.id) == :stopped
   end
 
   test "the project's own agent definition is loaded only once trusted; the settings page sees it",
