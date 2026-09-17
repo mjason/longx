@@ -1,12 +1,11 @@
 defmodule Longx.AI.Gateway do
   @moduledoc """
-  Forwards a Responses API request from codex to the configured upstream.
-
-  Codex is configured with a single provider (`longx`) and a placeholder model
-  (`longx`); every request lands here carrying the full conversation
-  (`store: false`), so the gateway is stateless: `prepare/2` rewrites the
-  request for the `Longx.AI.Target` and `stream/2` relays the upstream SSE
-  stream chunk by chunk into the Plug connection.
+  Prepares a Responses API request for the configured upstream — what the
+  kernel's `Longx.Agent.Model` runs before every call. A request names the
+  placeholder model (`longx`, the default) or a slug and carries the full
+  conversation (`store: false`), so this is stateless: `prepare/2` rewrites
+  the request for the `Longx.AI.Target` (model id, reasoning items sanitised
+  per provider, the output cap, provider-hosted tools kept or dropped).
   """
 
   alias Longx.AI.Gateway.Limiter
@@ -47,13 +46,11 @@ defmodule Longx.AI.Gateway do
   @hosted_search_tools ["web_search", "web_search_preview"]
 
   @doc """
-  Rewrites a codex Responses request for `target`: the placeholder model is
-  replaced and streaming is forced since `stream/2` only speaks SSE.
+  Rewrites a Responses request for `target`: the placeholder model is
+  replaced and streaming is forced since the kernel only reads SSE.
 
-  Function and `namespace` tools pass through untouched — which of those
-  codex offers is decided in its config (`Longx.Codex.Home` /
-  `Longx.Codex.Thread`), not here: DeepSeek/GLM accept `namespace` tools
-  (sub-agents, `web.run`). The one exception is the provider-hosted
+  Function tools pass through untouched — which tools the agent offers is
+  the pipeline's decision, not this module's. The one exception is the provider-hosted
   `web_search` tool: it only exists inside providers that run it, so it is
   dropped for any other target instead of failing the whole request.
   """

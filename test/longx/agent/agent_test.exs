@@ -13,7 +13,7 @@ defmodule Longx.AgentTest do
     on_exit(fn ->
       for {_, pid, _, _} <- DynamicSupervisor.which_children(Longx.Agent.Supervisor),
           is_pid(pid),
-          do: catch_exit(GenServer.stop(pid, :normal, 5_000))
+          do: safe_stop(pid)
 
       for pid <- Task.Supervisor.children(Longx.Agent.TaskSupervisor),
           do: Task.Supervisor.terminate_child(Longx.Agent.TaskSupervisor, pid)
@@ -190,7 +190,7 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "You are"
 
     assert Enum.map(body["tools"], & &1["name"]) |> Enum.sort() ==
-             ~w(apply_patch create_goal exec_command get_goal knowledge_read knowledge_search knowledge_write update_goal view_image web_fetch web_search)
+             ~w(apply_patch create_goal exec_command get_context_remaining get_goal knowledge_read knowledge_search knowledge_write new_context_window update_goal view_image web_fetch web_search)
 
     refute Map.has_key?(body, "x-longx-custom-tools")
 
@@ -1628,6 +1628,13 @@ defmodule Longx.AgentTest do
     after
       5_000 -> flunk("no #{method} on #{thread_id}")
     end
+  end
+
+  # a stop that tolerates a process already gone (catch_exit would fail when the stop succeeds)
+  defp safe_stop(pid) do
+    GenServer.stop(pid, :normal, 5_000)
+  catch
+    :exit, _ -> :ok
   end
 
   defp drain_activities do

@@ -2,7 +2,7 @@ defmodule Longx.Projects.Repo do
   @moduledoc """
   A resource without data: the git tool (GitHub Desktop's shape — changes,
   history, branches, the remote) as generic actions over `Longx.Git` for one
-  project. Everything runs the bundled git in the project root; a project
+  project. Everything runs the system git in the project root; a project
   that is no repository answers `repository: false` to `git_changes` and an
   error on `project_id` to everything else.
   """

@@ -1,9 +1,9 @@
 defmodule Longx.Agent.Plugs.Base do
   @moduledoc """
   The base prompt — `priv/agent/base_prompt.md`, read at compile time:
-  codex's own prompt (`priv/codex_prompt.md`, the pinned release's)
-  trimmed to what applies here — no sandbox, approvals, plans or
-  AGENTS.md; the tool names ours — so models tuned for codex read the
+  derived from codex's prompt (its 0.154 release) trimmed to what applies
+  here — no sandbox, approvals, plans or AGENTS.md; the tool names ours;
+  a "where you work" rule added — so models tuned for codex read the
   voice they know.
   """
 

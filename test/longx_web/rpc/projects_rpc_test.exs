@@ -91,12 +91,18 @@ defmodule LongxWeb.ProjectsRpcTest do
     end)
   end
 
-  # the model's replies in order; a function holds the reply until told :go
+  # the model's replies in order; a function holds the reply until told :go; a
+  # request past the script (a /compact summary the test does not care about)
+  # gets a 503 instead of crashing the handler
   defp script!(bypass, replies) do
     {:ok, queue} = Elixir.Agent.start_link(fn -> replies end)
 
     Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
-      case Elixir.Agent.get_and_update(queue, fn [h | t] -> {h, t} end) do
+      case Elixir.Agent.get_and_update(queue, fn
+             [h | t] -> {h, t}
+             [] -> {:exhausted, []}
+           end) do
+        :exhausted -> Plug.Conn.send_resp(conn, 503, "script exhausted")
         reply when is_function(reply, 1) -> reply.(conn)
         chunks when is_list(chunks) -> sse(conn, chunks)
       end

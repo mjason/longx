@@ -324,9 +324,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     execution): the kernel folds on its own when the person types `/compact`
     (`Agent.compact/1`: at once when idle, before the next step when running) and when the
     provider refused the request for its length (`assigns.context_overflow`, `:request`
-    re-run once); the plug — **not in the shipped pipeline, a project adds `plug
-    Compaction`** — asks (`Step.compact/2`) when the context passed `at:` (0.9) of the
-    window or the model called `new_context_window`, and offers `get_context_remaining`.
+    re-run once); the plug — in the shipped pipeline since 2026-09-18; a project may
+    `drop` it or set `options Compaction, at: …` — asks (`Step.compact/2`) when the
+    context passed `at:` (0.9) of the window or the model called `new_context_window`,
+    and offers `get_context_remaining`.
     The kernel streams a summary from a
     task (`priv/agent/compact/prompt.md`, no tools), appends a `:compaction` item
     (`summary_prefix.md` + the summary as a user message), emits the `contextCompaction`

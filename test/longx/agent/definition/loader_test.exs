@@ -72,6 +72,7 @@ defmodule Longx.Agent.Definition.LoaderTest do
              Longx.Agent.Plugs.Browser,
              Longx.Agent.Plugs.Agents,
              Longx.Agent.Plugs.Goal,
+             Longx.Agent.Plugs.Compaction,
              Longx.Agent.Plugs.Prompt,
              Longx.Agent.Plugs.Local,
              Request

@@ -2,7 +2,7 @@ defmodule Longx.Platform do
   @moduledoc """
   Runtime-safe detection of the OS/CPU the BEAM is running on, plus the
   naming conventions other toolchains use for it (Rust target triples for
-  the codex release assets, GOOS/GOARCH for the shim). Usable inside a
+  release assets like obscura's, GOOS/GOARCH for the shim). Usable inside a
   release — no Mix here.
   """
 
@@ -47,7 +47,7 @@ defmodule Longx.Platform do
   defp normalize_arch("arm64"), do: :aarch64
   defp normalize_arch(other), do: String.to_atom(other)
 
-  @doc "Rust target triple as used by `openai/codex` release asset names."
+  @doc "Rust target triple as used by Rust projects' release asset names."
   @spec rust_target(t) :: String.t()
   def rust_target({:linux, arch}), do: "#{arch}-unknown-linux-musl"
   def rust_target({:darwin, arch}), do: "#{arch}-apple-darwin"

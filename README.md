@@ -251,8 +251,8 @@ obscura（`h4ckf0r0day/obscura`，Rust + V8）**按需下载**：第一次 `web_
 
 ### 上下文压缩
 
-照 codex 的做法：你敲 `/compact`、或 provider 报上下文超长时内核自己压；`plug Compaction` 再加上「超过窗口 90% 自动压」
-和给模型的 `new_context_window` / `get_context_remaining`。内核在 task 里让模型写一份交接摘要，新的上下文 = 你说过的话原文 +
+照 codex 的做法：你敲 `/compact`、或 provider 报上下文超长时内核自己压；出厂管道里的 `Compaction` plug 再加上「超过窗口
+90% 自动压」和给模型的 `new_context_window` / `get_context_remaining`（项目可以 `drop` 它或改阈值）。内核在 task 里让模型写一份交接摘要，新的上下文 = 你说过的话原文 +
 摘要，UI 上一个压缩标记。
 
 一轮正在跑的时候再输入，消息先排在输入框上方：这一轮结束后自动作为新的一轮发出，也可以「插入」到正在跑的这一轮里，

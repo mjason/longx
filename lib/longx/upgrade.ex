@@ -14,8 +14,8 @@ defmodule Longx.Upgrade do
   its `.sha256` into `<home>/downloads`, verify, snapshot the database to
   `<home>/backups/longx-<current>-<stamp>.db` (`VACUUM INTO`, consistent
   while running), unpack into `app.new`, swap `app` → `app.old` → `app`
-  (the running VM keeps its open files; nothing else may start a codex
-  before the restart), then run `restart_command` — `systemctl --user
+  (the running VM keeps its open files; nothing else starts from the new
+  tree before the restart), then run `restart_command` — `systemctl --user
   restart --no-block <service>` by default, which stops this VM. When that
   fails (no systemd) the swap stays and the status asks for a manual
   restart. Every stage is broadcast on `topic/0` as `{:upgrade, status}`.
