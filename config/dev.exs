@@ -24,9 +24,9 @@ config :longx, Longx.Repo,
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
 config :longx, LongxWeb.Endpoint,
-  # Bind to all interfaces on port 7788 so the dev server is reachable over the LAN.
+  # Bind to all interfaces on port 7798 so the dev server is reachable over the LAN.
   # See CLAUDE.md "Dev server" — do not change these.
-  http: [ip: {0, 0, 0, 0}, port: 7788],
+  http: [ip: {0, 0, 0, 0}, port: 7798],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
@@ -37,7 +37,7 @@ config :longx, LongxWeb.Endpoint,
   watchers: [vite: {LongxWeb.Vite.Watcher, :run, [[cd: Path.expand("../assets", __DIR__)]]}]
 
 config :longx, LongxWeb.Vite,
-  dev_server: "http://#{System.get_env("LONGX_DEV_HOST", "localhost")}:7789"
+  dev_server: "http://#{System.get_env("LONGX_DEV_HOST", "localhost")}:7799"
 
 # ## SSL Support
 #

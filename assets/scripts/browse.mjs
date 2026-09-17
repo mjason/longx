@@ -1,9 +1,9 @@
 // Dev helper: load a page as a phone (or desktop), report console errors,
 // page errors, horizontal overflow, and save a screenshot.
-//   node scripts/browse.mjs http://127.0.0.1:7788/ [phone|desktop] [out.png]
+//   node scripts/browse.mjs http://127.0.0.1:7798/ [phone|desktop] [out.png]
 import { chromium, devices } from "playwright";
 
-const [url = "http://127.0.0.1:7788/", mode = "phone", out = "shot.png"] = process.argv.slice(2);
+const [url = "http://127.0.0.1:7798/", mode = "phone", out = "shot.png"] = process.argv.slice(2);
 const browser = await chromium.launch();
 const context = await browser.newContext(
   mode === "phone" ? { ...devices["iPhone 13"], colorScheme: "dark" } : { viewport: { width: 1280, height: 800 } },

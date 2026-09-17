@@ -1266,7 +1266,7 @@ React Native client planned on the same core code.
     phoenix_vite was evaluated and rejected as immature — reference only). `<LongxWeb.Vite.assets />`
     in the layouts renders, in dev, the HMR client + raw entry from the Vite dev server
     (`config :longx, LongxWeb.Vite, dev_server:`; `LONGX_DEV_HOST=<lan-ip>` for phone
-    testing — Vite listens on `0.0.0.0:7789` (7788 + 1, so it never collides with another
+    testing — Vite listens on `0.0.0.0:7799` (7798 + 1, so it never collides with another
     project's Vite on 5173; `strictPort`) and the phone loads scripts from it directly),
     — first `js/dev/react-refresh.ts` (the React Fast Refresh preamble a non-Vite page must
     load itself, else "@vitejs/plugin-react can't detect preamble"), then `@vite/client`,
@@ -1712,7 +1712,7 @@ Where tests live / what to use:
   <url> phone|desktop out.png` (playwright, in `assets/`) loads the page as an iPhone 13 or a
   1280px desktop, prints console/page errors and any element wider than the viewport, and
   saves a screenshot to read back. Point it at the running dev server (never start a second
-  one on 7788 if it is already up).
+  one on 7798 if it is already up).
 - TypeScript/React → also test-first: vitest + testing-library in `assets/` (`npm test`).
   Pure code in `js/core/` is unit-tested directly; pages render the real route tree with
   `renderAt(path)` from `ui/test-utils.tsx`, mocking `@/ash_rpc` (and `@/core/socket`) with
@@ -1726,15 +1726,16 @@ Where tests live / what to use:
 
 ## Dev server
 
-- **Port 7788, bound to 0.0.0.0** — the dev box is reached over the LAN. This is set in
-  `config/dev.exs` (`http: [ip: {0, 0, 0, 0}, port: 7788]`); the `PORT` env var only applies
+- **Port 7798 in dev, bound to 0.0.0.0** — the dev box is reached over the LAN; production
+  listens on 7788, so both run on one machine. This is set in
+  `config/dev.exs` (`http: [ip: {0, 0, 0, 0}, port: 7798]`); the `PORT` env var only applies
   to prod (`config/runtime.exs`). Never change it and never fall back to `localhost:4000`.
-  Reach it at `http://<lan-ip>:7788`.
+  Reach it at `http://<lan-ip>:7798`.
 - Start: `mix phx.server` (or `iex -S mix phx.server`). Run it in the background when you
-  need the terminal; check first that the port is free: `ss -ltnp | grep ':7788'`.
-- **Stop: only kill the process that owns port 7788.**
+  need the terminal; check first that the port is free: `ss -ltnp | grep ':7798'`.
+- **Stop: only kill the process that owns port 7798.**
 
-      fuser -k 7788/tcp            # or: kill $(lsof -ti tcp:7788)
+      fuser -k 7798/tcp            # or: kill $(lsof -ti tcp:7798)
 
   Other Elixir/BEAM apps run on this machine. **Never** use `pkill beam`, `pkill -f mix`,
   `pkill -f elixir`, `pkill -f phx.server`, `killall erl`/`beam.smp`, or anything else that

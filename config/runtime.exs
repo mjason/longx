@@ -100,7 +100,7 @@ if config_env() == :prod do
   config :longx, Longx.Codex.Home, dir: Path.join(data_dir, "codex_home")
   config :longx, Longx.Projects.Attachments, dir: Path.join(data_dir, "attachments")
 
-  # PORT only applies to prod; dev (7788) and test (4002) are fixed in their config files.
+  # PORT only applies to prod; dev (7798) and test (4002) are fixed in their config files.
   port = String.to_integer(System.get_env("PORT") || "7788")
   host = System.get_env("PHX_HOST") || "localhost"
 

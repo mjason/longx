@@ -13,10 +13,10 @@ sudo apt update && sudo apt install -y ripgrep fd-find fzf bat jq tree git gh gi
 
 ```sh
 mix setup            # deps、数据库、npm install + 前端构建、下载内置的 codex-app-server、git 和 obscura（无头浏览器）
-mix phx.server       # 0.0.0.0:7788；开发时前端资源由 Vite dev server（7789）热更新
+mix phx.server       # 0.0.0.0:7798（开发端口，和生产的 7788 错开）；前端资源由 Vite dev server（7799）热更新
 ```
 
-手机连 LAN 调试时页面从 `http://<lan-ip>:7788` 打开，脚本要能到达 Vite：
+手机连 LAN 调试时页面从 `http://<lan-ip>:7798` 打开，脚本要能到达 Vite：
 `LONGX_DEV_HOST=<lan-ip> mix phx.server`。
 
 模型 provider 和密钥在启动后的「设置 → 模型与 Provider」里配置（seeds 只建 DeepSeek / OpenAI 的空 provider 和 Tavily 一行，不读环境变量）；
