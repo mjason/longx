@@ -256,10 +256,21 @@ defmodule Longx.Projects do
       dir: Path.join(project.root_path, ".longx"),
       model: loaded.model,
       effort: loaded.effort,
-      plugs: Enum.map(loaded.plugs, fn {module, _opts} -> inspect(module) end),
+      plugs: Enum.map(loaded.plugs, fn {module, _opts} -> plug_label(module) end),
       files: project_files(loaded.layers, project.root_path),
       errors: Enum.map(loaded.errors, & &1.message)
     }
+  end
+
+  # a layer's own module reads as its name in the file, not the namespaced atom
+  defp plug_label(module) do
+    case module |> Atom.to_string() |> String.replace_prefix("Elixir.", "") do
+      "Longx.Agent.Local." <> rest ->
+        rest |> String.split(".", parts: 2) |> List.last() |> Kernel.<>(" (.longx)")
+
+      name ->
+        name
+    end
   end
 
   defp project_files(layers, root) do
@@ -492,8 +503,13 @@ defmodule Longx.Projects do
   def compact_thread(%Thread{id: id}, opts \\ []) do
     thread = Ash.get!(Thread, id, load: :project)
 
+    if native?(thread),
+      do: with({:ok, _} <- ensure_agent(thread), do: Longx.Agent.compact(thread.codex_thread_id)),
+      else: compact_codex(thread, opts)
+  end
+
+  defp compact_codex(thread, opts) do
     with :ok <- ensure_usable(thread),
-         :ok <- codex_only(thread),
          :ok <- refuse_while_running(thread),
          {:ok, conn} <- thread_connection(thread, opts),
          do: Longx.Codex.Thread.compact(thread.codex_thread_id, conn: conn)

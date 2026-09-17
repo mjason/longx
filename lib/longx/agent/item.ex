@@ -59,7 +59,8 @@ defmodule Longx.Agent.Item do
                     :agent_message,
                     :reasoning,
                     :function_call,
-                    :function_call_output
+                    :function_call_output,
+                    :compaction
                   ]
     end
 

@@ -231,8 +231,7 @@ defmodule Longx.Agent.Loader do
     e -> {:error, Exception.message(e)}
   end
 
-  defp line(meta) when is_list(meta), do: Keyword.get(meta, :line, "?")
-  defp line(line), do: line
+  defp line(meta), do: Keyword.get(meta, :line, "?")
 
   # the modules a file defines at its top level (or inside a block), as alias parts
   defp defined_modules(ast) do

@@ -13,7 +13,9 @@ defmodule Longx.Agent.Context do
           item_id: String.t() | nil,
           project_id: String.t() | nil,
           cwd: String.t() | nil,
-          emit: (String.t() -> :ok) | nil
+          emit: (String.t() -> :ok) | nil,
+          usage: %{last: map | nil, total: map},
+          context_window: pos_integer | nil
         }
 
   defstruct thread_id: nil,
@@ -22,7 +24,9 @@ defmodule Longx.Agent.Context do
             item_id: nil,
             project_id: nil,
             cwd: nil,
-            emit: nil
+            emit: nil,
+            usage: %{last: nil, total: %{}},
+            context_window: nil
 
   @doc "Sends output to the UI as it happens; a no-op without an emitter."
   @spec emit(t | map, String.t()) :: :ok

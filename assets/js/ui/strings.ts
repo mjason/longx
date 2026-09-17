@@ -110,6 +110,17 @@ export const t = {
   } as Record<string, string>,
   engineNativeHint: "原生内核直接在这台机器上以你的身份执行命令，没有沙箱、不会审批；隔离靠部署（把整个 Longx 放进容器）。改动只影响之后新建的会话。",
   engineNativeShort: "原生内核",
+  agentDefinition: {
+    title: "这个项目的 agent",
+    hint: "原生内核按 .longx/ 里的描述运行：agent.exs 记录和出厂管道的差异，plugs/*.exs 是它自己的 plug。agent 学到的流程会写进这里，和代码一起进 git。",
+    trust: "信任并加载 .longx/ 里的定义",
+    trustHint: "这些 .exs 会以你的身份在 Longx 里执行。clone 来的项目先看一眼再打开；打开后 agent 也能改自己的定义。",
+    none: "这个项目还没有 .longx/ 目录；agent 需要时会自己建。",
+    files: "文件",
+    plugs: "生效的管道",
+    errors: "加载失败（会以提示告诉模型）",
+    model: "描述指定的模型",
+  },
   approvalOptions: {
     on_request: "按需询问",
     auto_accept: "全部放行（申请一律通过，不审核不询问）",

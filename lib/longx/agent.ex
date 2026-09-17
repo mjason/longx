@@ -70,7 +70,13 @@ defmodule Longx.Agent do
               # continuations a turn-end plug asked for in this turn (capped)
               continues: 0,
               # model steps in this turn (capped)
-              steps: 0
+              steps: 0,
+              # a compaction in flight (phase :compacting): the summary text so far
+              compacting: nil,
+              # the provider refused the last request for its length: compact, retry once
+              context_overflow: false,
+              # a tool (new_context_window) or the person (/compact) asked for one
+              compact_requested: false
   end
 
   # a turn-end plug may continue a turn this many times before it ends anyway
@@ -123,6 +129,13 @@ defmodule Longx.Agent do
   @doc "Stops the running turn and drops it from the transcript and the view (`thread/reverted`)."
   @spec retract(String.t(), String.t()) :: :ok | {:error, :not_running}
   def retract(thread_id, turn_id), do: GenServer.call(via(thread_id), {:retract, turn_id}, 15_000)
+
+  @doc """
+  Folds the context (`/compact`): at once when the thread is idle, before
+  the next step when a turn runs. Nothing to fold is fine.
+  """
+  @spec compact(String.t()) :: :ok
+  def compact(thread_id), do: GenServer.call(via(thread_id), :compact)
 
   @spec status(String.t()) :: :idle | {:running, String.t()}
   def status(thread_id), do: GenServer.call(via(thread_id), :status)
@@ -240,6 +253,14 @@ defmodule Longx.Agent do
 
   def handle_call({:retract, _turn_id}, _from, state), do: {:reply, {:error, :not_running}, state}
 
+  def handle_call(:compact, _from, %State{phase: :idle, transcript: []} = state),
+    do: {:reply, :ok, state}
+
+  def handle_call(:compact, _from, %State{phase: :idle} = state),
+    do: {:reply, :ok, start_compaction(state, state.model)}
+
+  def handle_call(:compact, _from, state), do: {:reply, :ok, %{state | compact_requested: true}}
+
   def handle_call(:status, _from, %State{phase: :idle} = state), do: {:reply, :idle, state}
 
   def handle_call(:status, _from, %State{turn_id: id} = state),
@@ -261,34 +282,43 @@ defmodule Longx.Agent do
     do:
       :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:max_steps, @default_max_steps)
 
-  defp run_request_phase(%State{} = state) do
+  defp run_request_phase(%State{} = state, opts \\ []) do
     case run_pipeline(state.pipeline, build_step(state, :request)) do
       {:ok, %Step{halted: true, reason: reason}} ->
         {:noreply, end_turn(state, "failed", "pipeline halted: #{describe(reason)}")}
 
-      {:ok, %Step{request: nil}} ->
-        {:noreply, end_turn(state, "failed", "the pipeline built no request")}
+      {:ok, %Step{effects: effects, model: model} = step} ->
+        # a compact effect folds the context first (unless this is the retry after a failed fold)
+        wanted? = Enum.any?(effects, &match?({:compact, _}, &1))
 
-      {:ok, %Step{request: request, model: model, tools: tools}} ->
-        ref = make_ref()
-
-        task =
-          Task.Supervisor.async_nolink(@tasks, Longx.Agent.Model, :stream, [request, self(), ref])
-
-        {:noreply,
-         %{
-           state
-           | phase: :streaming,
-             step_model: model || "longx",
-             tools: tools,
-             model_task: %{task: task, ref: ref},
-             items: %{},
-             calls: []
-         }}
+        if wanted? and not Keyword.get(opts, :skip_compact, false) and state.transcript != [],
+          do: {:noreply, start_compaction(state, model)},
+          else: start_model(state, step)
 
       {:error, message} ->
         {:noreply, end_turn(state, "failed", message)}
     end
+  end
+
+  defp start_model(state, %Step{request: nil}),
+    do: {:noreply, end_turn(state, "failed", "the pipeline built no request")}
+
+  defp start_model(state, %Step{request: request, model: model, tools: tools}) do
+    ref = make_ref()
+
+    task =
+      Task.Supervisor.async_nolink(@tasks, Longx.Agent.Model, :stream, [request, self(), ref])
+
+    {:noreply,
+     %{
+       state
+       | phase: :streaming,
+         step_model: model || "longx",
+         tools: tools,
+         model_task: %{task: task, ref: ref},
+         items: %{},
+         calls: []
+     }}
   end
 
   defp build_step(%State{} = state, phase, extra \\ []) do
@@ -304,7 +334,11 @@ defmodule Longx.Agent do
         phase: phase,
         usage: %{last: state.usage_last, total: state.usage_total},
         context_window: state.context_window,
-        assigns: %{trust: state.trust}
+        assigns: %{
+          trust: state.trust,
+          context_overflow: state.context_overflow,
+          compact_requested: state.compact_requested
+        }
       ] ++ extra
     )
   end
@@ -407,6 +441,12 @@ defmodule Longx.Agent do
   @impl true
   def handle_info(
         {:model, ref, event},
+        %State{phase: :compacting, model_task: %{ref: ref}} = state
+      ),
+      do: compaction_event(event, state)
+
+  def handle_info(
+        {:model, ref, event},
         %State{phase: :streaming, model_task: %{ref: ref}} = state
       ),
       do: model_event(event, state)
@@ -431,8 +471,9 @@ defmodule Longx.Agent do
 
   def handle_info(
         {:DOWN, ref, :process, _pid, reason},
-        %State{phase: :streaming, model_task: %{task: %Task{ref: ref}}} = state
-      ) do
+        %State{phase: phase, model_task: %{task: %Task{ref: ref}}} = state
+      )
+      when phase in [:streaming, :compacting] do
     {:noreply, end_turn(state, "failed", "the model call crashed: #{describe(reason)}")}
   end
 
@@ -598,7 +639,145 @@ defmodule Longx.Agent do
   end
 
   defp model_event({:failed, message}, state) do
-    {:noreply, state |> close_open_items() |> end_turn("failed", message)}
+    # the provider refused the request for its length: fold and try once more
+    if overflow?(message) and not state.context_overflow do
+      Logger.info("agent #{state.thread_id}: context overflow, compacting: #{message}")
+
+      %{close_open_items(state) | context_overflow: true, model_task: nil, phase: :step}
+      |> run_request_phase()
+    else
+      {:noreply, state |> close_open_items() |> end_turn("failed", message)}
+    end
+  end
+
+  @overflow ~r/context length|context_length|maximum context|too many tokens|token limit|exceeds .*context|prompt is too long|context window/i
+  defp overflow?(message), do: is_binary(message) and Regex.match?(@overflow, message)
+
+  ## Compaction (the `compact` effect, `/compact`, an overflow): codex's shape
+
+  @compact_prompt File.read!(Path.join(:code.priv_dir(:longx), "agent/compact/prompt.md"))
+  @summary_prefix String.trim(
+                    File.read!(
+                      Path.join(:code.priv_dir(:longx), "agent/compact/summary_prefix.md")
+                    )
+                  )
+
+  # a summary of the context so far, streamed from a task like any model call
+  defp start_compaction(%State{} = state, model) do
+    ref = make_ref()
+
+    request = %{
+      "model" => model || "longx",
+      "instructions" => @compact_prompt,
+      "input" =>
+        state.transcript ++
+          [
+            %{
+              "type" => "message",
+              "role" => "user",
+              "content" => [%{"type" => "input_text", "text" => "Write the handoff summary now."}]
+            }
+          ],
+      "tools" => [],
+      "stream" => true,
+      "store" => false,
+      "client_metadata" => %{
+        "thread_id" => state.thread_id,
+        "turn_id" => state.turn_id,
+        "x-codex-turn-metadata" => Jason.encode!(%{"request_kind" => "compaction"})
+      }
+    }
+
+    task =
+      Task.Supervisor.async_nolink(@tasks, Longx.Agent.Model, :stream, [request, self(), ref])
+
+    %{
+      state
+      | phase: :compacting,
+        model_task: %{task: task, ref: ref},
+        compacting: %{text: "", model: model || "longx", was_running: state.turn_id != nil}
+    }
+  end
+
+  defp compaction_event({:text_delta, _id, delta}, %State{compacting: c} = state),
+    do: {:noreply, %{state | compacting: %{c | text: c.text <> delta}}}
+
+  defp compaction_event(
+         {:item_done, %{"type" => "message"} = item},
+         %State{compacting: c} = state
+       ) do
+    text = message_text(item)
+    {:noreply, %{state | compacting: %{c | text: if(text == "", do: c.text, else: text)}}}
+  end
+
+  defp compaction_event({:completed, _response, _meta}, %State{compacting: c} = state) do
+    turn_id = state.turn_id || last_turn_id(state)
+    summary = String.trim(c.text)
+
+    input = %{
+      "type" => "message",
+      "role" => "user",
+      "content" => [%{"type" => "input_text", "text" => @summary_prefix <> "\n" <> summary}]
+    }
+
+    ui = %{"id" => new_id("item"), "type" => "contextCompaction", "turnId" => turn_id}
+    seq = state.seq + 1
+
+    Transcript.append!(%{
+      thread_id: state.thread_id,
+      turn_id: turn_id,
+      seq: seq,
+      kind: :compaction,
+      input: input,
+      ui: ui,
+      model: c.model
+    })
+
+    emit(state, "item/completed", %{"item" => ui, "turnId" => turn_id})
+
+    state = %{
+      state
+      | seq: seq,
+        transcript: state.thread_id |> Transcript.items!() |> Transcript.input(),
+        compacting: nil,
+        model_task: nil,
+        usage_last: nil,
+        context_overflow: false,
+        compact_requested: false
+    }
+
+    if c.was_running,
+      do: run_request_phase(%{state | phase: :step}),
+      else: {:noreply, %{state | phase: :idle}}
+  end
+
+  defp compaction_event(
+         {:failed, message},
+         %State{compacting: c, context_overflow: overflow?} = state
+       ) do
+    Logger.warning("agent #{state.thread_id}: compaction failed: #{message}")
+    state = %{state | compacting: nil, model_task: nil, compact_requested: false}
+
+    cond do
+      not c.was_running ->
+        {:noreply, %{state | phase: :idle}}
+
+      overflow? ->
+        {:noreply,
+         end_turn(state, "failed", "context too long and the compaction failed: #{message}")}
+
+      true ->
+        run_request_phase(%{state | phase: :step}, skip_compact: true)
+    end
+  end
+
+  defp compaction_event(_event, state), do: {:noreply, state}
+
+  defp last_turn_id(%State{thread_id: id}) do
+    case id |> Transcript.items!() |> List.last() do
+      %{turn_id: turn_id} when is_binary(turn_id) -> turn_id
+      _ -> "compaction"
+    end
   end
 
   # a streamed item the model never closed (a failure, an interrupt) is
@@ -674,7 +853,9 @@ defmodule Longx.Agent do
       item_id: item_id,
       project_id: state.project_id,
       cwd: state.cwd,
-      emit: emitter(self(), item_id)
+      emit: emitter(self(), item_id),
+      usage: %{last: state.usage_last, total: state.usage_total},
+      context_window: state.context_window
     }
 
     task =
@@ -778,6 +959,8 @@ defmodule Longx.Agent do
     state = %{append(state, :function_call_output, input, ui) | tasks: tasks}
     # an image a tool attached (view_image) follows the result as a user message
     state = attach_image(state, extra["image"])
+    # a tool asked for a new context window (new_context_window)
+    state = if extra["compact"] == true, do: %{state | compact_requested: true}, else: state
 
     case {state.phase, map_size(tasks)} do
       {:dispatching, 0} -> continue_step(state)
@@ -821,7 +1004,10 @@ defmodule Longx.Agent do
         items: %{},
         calls: [],
         tasks: %{},
-        steers: []
+        steers: [],
+        compacting: nil,
+        context_overflow: false,
+        compact_requested: false
     }
   end
 
@@ -895,12 +1081,19 @@ defmodule Longx.Agent do
 
   ## UI items
 
-  defp started_ui(%Tool{show: :command}, _name, id, args, state) do
+  defp started_ui(%Tool{show: :command}, name, id, args, state) do
+    # codex's `cmd`; a plug's own command-like tool shows its name and arguments
+    command =
+      case arg(args, "cmd") do
+        "" -> name <> " " <> Jason.encode!(if(is_map(args), do: args, else: %{}))
+        cmd -> cmd
+      end
+
     %{
       "id" => id,
       "type" => "commandExecution",
       "turnId" => state.turn_id,
-      "command" => arg(args, "cmd"),
+      "command" => command,
       "cwd" => state.cwd,
       "status" => "inProgress",
       "aggregatedOutput" => ""

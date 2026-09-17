@@ -37,6 +37,7 @@ export const project = (n: number) => ({
   modelId: null,
   globalMemory: true,
   engine: "codex",
+  trustLocalAgent: false,
   archivedAt: null,
   updatedAt: "2026-09-12T00:00:00Z",
 });
@@ -120,6 +121,7 @@ export function rpcMock() {
     ),
     clearGoal: vi.fn(async () => ok({ cleared: true })),
     listSkills: vi.fn(async () => ok([])),
+    agentDefinition: vi.fn(async () => ok({ present: false, trusted: false, dir: "/srv/app-1/.longx", model: null, effort: null, plugs: [], files: [], errors: [] })),
     setReviewModel: vi.fn(async () => ok(null)),
     listProviders: vi.fn(async () => ok([provider(1), provider(2)])),
     createProvider: vi.fn(

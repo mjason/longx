@@ -179,7 +179,7 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "You are"
 
     assert Enum.map(body["tools"], & &1["name"]) |> Enum.sort() ==
-             ~w(apply_patch exec_command view_image)
+             ~w(apply_patch exec_command knowledge_read knowledge_search knowledge_write view_image)
 
     refute Map.has_key?(body, "x-longx-custom-tools")
 
@@ -596,6 +596,150 @@ defmodule Longx.AgentTest do
     refute "deploy" in Enum.map(body["tools"], & &1["name"])
   end
 
+  defmodule CompactingPipeline do
+    use Longx.Agent.Pipeline
+    plug Longx.Agent.Plugs.Shell
+    # at 0.0: compacts as soon as any usage is known (the second step on)
+    plug Longx.Agent.Plugs.Compaction, at: 0.0
+    plug Longx.Agent.Plugs.Request
+  end
+
+  defp compacting_agent(dir, pipeline) do
+    id = "compact-#{System.unique_integer([:positive])}"
+    :ok = ThreadState.subscribe(id)
+
+    on_exit(fn ->
+      Agent.stop(id)
+      ThreadState.stop(id)
+      ThreadState.Store.delete(id)
+    end)
+
+    {:ok, _} = Agent.ensure(thread_id: id, cwd: dir, pipeline: pipeline)
+    id
+  end
+
+  test "the compact effect: the context is folded into user messages + a summary before the next model call",
+       %{bypass: bypass, dir: dir} do
+    id = compacting_agent(dir, CompactingPipeline)
+
+    script!(bypass, [
+      exec_call("echo one"),
+      ResponsesFixture.assistant_message("HANDOFF: ran echo one"),
+      ResponsesFixture.assistant_message("done")
+    ])
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "run echo one, then say done")
+
+    assert %{"item" => %{"type" => "contextCompaction"}} =
+             await_item_completed_of_type("contextCompaction")
+
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+
+    [first, summary_request, third] = collect_requests([])
+    assert length(first["input"]) == 1
+    # the summary call: the whole context so far under the compaction instructions
+    assert summary_request["instructions"] =~ "CONTEXT CHECKPOINT COMPACTION"
+    assert Enum.any?(summary_request["input"], &(&1["type"] == "function_call"))
+    assert summary_request["tools"] == []
+    # the step after: the user's words verbatim, then the summary, nothing else
+    assert [
+             %{"role" => "user", "content" => [%{"text" => "run echo one, then say done"}]},
+             %{"role" => "user", "content" => [%{"text" => prefixed}]}
+           ] = third["input"]
+
+    assert prefixed =~ "Another language model started to solve this problem"
+    assert prefixed =~ "HANDOFF: ran echo one"
+
+    kinds = Transcript.items!(id) |> Enum.map(& &1.kind)
+    assert :compaction in kinds
+    # a restart folds the same way
+    assert [
+             %{"role" => "user"},
+             %{"role" => "user", "content" => [%{"text" => "Another" <> _}]},
+             %{"role" => "assistant"}
+           ] =
+             Transcript.input(Transcript.items!(id))
+  end
+
+  defmodule DefaultCompaction do
+    use Longx.Agent.Pipeline
+    plug Longx.Agent.Plugs.Shell
+    plug Longx.Agent.Plugs.Compaction
+    plug Longx.Agent.Plugs.Request
+  end
+
+  test "a context-length error from the provider compacts and retries once", %{
+    bypass: bypass,
+    dir: dir
+  } do
+    id = compacting_agent(dir, DefaultCompaction)
+
+    script!(bypass, [
+      fn _body, conn ->
+        Plug.Conn.send_resp(
+          conn,
+          400,
+          ~s({"error":{"message":"This model's maximum context length is 8 tokens; your messages resulted in 9"}})
+        )
+      end,
+      ResponsesFixture.assistant_message("HANDOFF"),
+      ResponsesFixture.assistant_message("after")
+    ])
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "hello")
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+    assert [_, summary_request, _] = collect_requests([])
+    assert summary_request["instructions"] =~ "CONTEXT CHECKPOINT"
+  end
+
+  test "a manual compact between turns folds the thread and the next turn starts from the summary",
+       %{bypass: bypass, dir: dir} do
+    id = compacting_agent(dir, DefaultCompaction)
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("first"),
+      ResponsesFixture.assistant_message("HANDOFF"),
+      ResponsesFixture.assistant_message("second")
+    ])
+
+    {:ok, _} = Agent.send(id, "one")
+    await_turn_end()
+    assert :ok = Agent.compact(id)
+
+    assert %{"item" => %{"type" => "contextCompaction"}} =
+             await_item_completed_of_type("contextCompaction")
+
+    assert Agent.status(id) == :idle
+
+    {:ok, _} = Agent.send(id, "two")
+    await_turn_end()
+    [_, _, third] = collect_requests([])
+
+    assert [
+             %{"role" => "user", "content" => [%{"text" => "one"}]},
+             %{"role" => "user", "content" => [%{"text" => "Another" <> _}]},
+             %{"role" => "user", "content" => [%{"text" => "two"}]}
+           ] = third["input"]
+  end
+
+  test "get_context_remaining answers from the step's usage; new_context_window asks for a compaction" do
+    [remaining, fresh] =
+      Enum.filter(
+        Longx.Agent.Plugs.Compaction.__agent_tools__(),
+        &(&1.name in ~w(get_context_remaining new_context_window))
+      )
+      |> Enum.sort_by(& &1.name)
+
+    ctx = %Longx.Agent.Context{
+      usage: %{last: %{"inputTokens" => 700, "outputTokens" => 100}, total: %{}},
+      context_window: 1000
+    }
+
+    assert {:ok, text} = Longx.Agent.Tool.call(remaining, %{}, ctx)
+    assert text =~ "200"
+    assert {:ok, _, %{"compact" => true}} = Longx.Agent.Tool.call(fresh, %{}, ctx)
+  end
+
   defmodule Budget do
     use Longx.Agent.Plug
     def call(step, _), do: Step.halt(step, "budget spent")
@@ -667,6 +811,14 @@ defmodule Longx.AgentTest do
         item
     after
       5_000 -> flunk("no user message #{text}")
+    end
+  end
+
+  defp await_item_completed_of_type(type) do
+    receive do
+      {:codex, _, "item/completed", %{"item" => %{"type" => ^type}} = params} -> params
+    after
+      5_000 -> flunk("no item/completed of type #{type}")
     end
   end
 

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
 import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, resetCodexHome, updateProject, type UpdateProjectInput } from "@/ash_rpc";
-import { queryKeys, unwrap, useModels, useProject, useSandboxStatus, useSkills } from "@/core/projects";
+import { queryKeys, unwrap, useAgentDefinition, useModels, useProject, useSandboxStatus, useSkills } from "@/core/projects";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/ui/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/ui/components/ui/collapsible";
@@ -19,7 +19,7 @@ import { Textarea } from "@/ui/components/ui/textarea";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { t } from "@/ui/strings";
 
-type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "webSearch" | "multiAgent" | "autoReview" | "globalMemory" | "dirtyStart" | "engine">> & {
+type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "webSearch" | "multiAgent" | "autoReview" | "globalMemory" | "dirtyStart" | "engine" | "trustLocalAgent">> & {
   description: string;
   memoryLimitMb: string;
   modelId: string;
@@ -59,6 +59,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
     globalMemory: project.globalMemory,
     dirtyStart: project.dirtyStart,
     engine: project.engine,
+    trustLocalAgent: project.trustLocalAgent,
     memoryLimitMb: project.memoryLimitMb ? String(project.memoryLimitMb) : "",
     modelId: "__default",
     writableRoots: project.writableRoots.join("\n"),
@@ -86,6 +87,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
             globalMemory: form.globalMemory,
             dirtyStart: form.dirtyStart,
             engine: form.engine,
+            trustLocalAgent: form.trustLocalAgent,
             memoryLimitMb: form.memoryLimitMb ? Number(form.memoryLimitMb) : null,
             modelId: form.modelId === "__default" ? null : form.modelId,
             writableRoots: form.writableRoots.split("\n").map((l) => l.trim()).filter(Boolean),
@@ -97,6 +99,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
       toast.success(t.saved);
       client.invalidateQueries({ queryKey: queryKeys.project(slug) });
       client.invalidateQueries({ queryKey: queryKeys.projects });
+      client.invalidateQueries({ queryKey: ["project", project.id, "agent-definition"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -302,7 +305,11 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         </Button>
       </section>
 
-      <SkillsSection projectId={project.id} rootPath={project.rootPath} />
+      {project.engine === "native" ? (
+        <AgentSection projectId={project.id} trusted={form.trustLocalAgent} onTrust={(v) => set("trustLocalAgent", v)} />
+      ) : (
+        <SkillsSection projectId={project.id} rootPath={project.rootPath} />
+      )}
 
       <section className="space-y-3">
         <h2 className="text-destructive text-lg font-medium">{t.dangerZone}</h2>
@@ -354,6 +361,51 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
         ) : null}
       </Dialog>
     </div>
+  );
+}
+
+/** The native kernel's layered agent definition: the trust switch (saved with the form), the files, the pipeline, load errors. */
+function AgentSection({ projectId, trusted, onTrust }: { projectId: string; trusted: boolean; onTrust: (v: boolean) => void }) {
+  const definition = useAgentDefinition(projectId);
+  const d = definition.data;
+  return (
+    <section className="space-y-3" data-testid="project-agent">
+      <h2 className="text-lg font-medium">{t.agentDefinition.title}</h2>
+      <p className="text-muted-foreground text-xs">{t.agentDefinition.hint}</p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <Label htmlFor="ps-trust-agent">{t.agentDefinition.trust}</Label>
+          <p className="text-muted-foreground text-xs">{t.agentDefinition.trustHint}</p>
+        </div>
+        <Switch id="ps-trust-agent" checked={trusted} onCheckedChange={onTrust} />
+      </div>
+      {definition.isPending || !d ? (
+        <Skeleton className="h-10 w-full" />
+      ) : (
+        <div className="space-y-3 text-sm">
+          {!d.present ? <p className="text-muted-foreground">{t.agentDefinition.none}</p> : null}
+          {d.files.length ? (
+            <div>
+              <p className="text-muted-foreground text-xs">{t.agentDefinition.files}</p>
+              <ul className="font-mono text-xs">{d.files.map((f) => <li key={f}>{f}</li>)}</ul>
+            </div>
+          ) : null}
+          {d.errors.length ? (
+            <div>
+              <p className="text-destructive text-xs">{t.agentDefinition.errors}</p>
+              <ul className="text-destructive font-mono text-xs">{d.errors.map((e) => <li key={e}>{e}</li>)}</ul>
+            </div>
+          ) : null}
+          {d.model ? (
+            <p className="text-muted-foreground text-xs">{t.agentDefinition.model}: <span className="font-mono">{d.model}{d.effort ? ` · ${d.effort}` : ""}</span></p>
+          ) : null}
+          <div>
+            <p className="text-muted-foreground text-xs">{t.agentDefinition.plugs}</p>
+            <ol className="font-mono text-xs">{d.plugs.map((p, i) => <li key={`${p}-${i}`}>{p}</li>)}</ol>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

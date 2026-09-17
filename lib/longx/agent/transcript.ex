@@ -17,6 +17,41 @@ defmodule Longx.Agent.Transcript do
   end
 
   @interrupted_output "[interrupted before the tool finished]"
+  # the user's words kept verbatim across a compaction (codex: 20k tokens, ~4 bytes each)
+  @keep_user_bytes 80_000
+
+  # a compaction boundary: before it only the user's own messages survive
+  # (newest first within the budget), then the summary, then what came after
+  defp fold(items, keep_user_bytes) do
+    case Enum.find_index(Enum.reverse(items), &(&1.kind == :compaction)) do
+      nil ->
+        items
+
+      from_end ->
+        at = length(items) - 1 - from_end
+        {before, [summary | rest]} = Enum.split(items, at)
+
+        kept =
+          before
+          |> Enum.filter(&(&1.kind == :user_message and user_words?(&1.input)))
+          |> Enum.reverse()
+          |> Enum.reduce_while({[], 0}, fn item, {acc, used} ->
+            size = byte_size(Jason.encode!(item.input))
+
+            if used + size > keep_user_bytes,
+              do: {:halt, {acc, used}},
+              else: {:cont, {[item | acc], used + size}}
+          end)
+          |> elem(0)
+
+        kept ++ [summary | rest]
+    end
+  end
+
+  defp user_words?(%{"role" => "user", "content" => content}) when is_list(content),
+    do: Enum.any?(content, &(&1["type"] == "input_text"))
+
+  defp user_words?(_), do: false
 
   @spec append!(map) :: Item.t()
   def append!(attrs), do: Ash.create!(Item, attrs, action: :append)
@@ -55,8 +90,10 @@ defmodule Longx.Agent.Transcript do
   arrived (a crash, a kill mid-tool) gets a synthetic output: the Responses
   API refuses a call without its result.
   """
-  @spec input([Item.t()]) :: [map]
-  def input(items) do
+  @spec input([Item.t()], keyword) :: [map]
+  def input(items, opts \\ []) do
+    items = fold(items, Keyword.get(opts, :keep_user_bytes, @keep_user_bytes))
+
     answered =
       for %Item{kind: :function_call_output, input: %{"call_id" => id}} <- items,
           into: MapSet.new(),

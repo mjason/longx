@@ -119,12 +119,23 @@ defmodule Longx.Agent.Model do
 
   # the event loop: chunks parsed as SSE, each event relayed; ends with the
   # stream, a completion, a failure, silence past the timeout or the owner's death
-  defp relay(resp, target, owner, ref, buffer, completed?, timeout) do
+  # only this response's messages (`{req_ref, …}`) and the owner's death: a
+  # catch-all would eat unrelated messages — the events we send to the owner
+  # itself when it is this very process (tests), for one
+  defp relay(
+         %Req.Response{body: %Req.Response.Async{ref: req_ref}} = resp,
+         target,
+         owner,
+         ref,
+         buffer,
+         completed?,
+         timeout
+       ) do
     receive do
       {:DOWN, _ref, :process, ^owner, _reason} ->
         exit(:normal)
 
-      message ->
+      {^req_ref, _} = message ->
         case Req.parse_message(resp, message) do
           {:ok, chunks} ->
             Enum.reduce_while(chunks, {:cont, buffer, completed?}, fn
@@ -148,6 +159,9 @@ defmodule Longx.Agent.Model do
               {:ended, false} -> {:failed, 200, "the stream ended without a response"}
               {:failed, why} -> {:failed, 200, why}
             end
+
+          {:error, reason} ->
+            {:failed, 200, "the stream broke: #{inspect(reason)}"}
 
           :unknown ->
             relay(resp, target, owner, ref, buffer, completed?, timeout)
@@ -203,16 +217,16 @@ defmodule Longx.Agent.Model do
   end
 
   # the body of a non-200 answer (also streamed by `into: :self`)
-  defp collect(resp, acc \\ "") do
+  defp collect(%Req.Response{body: %Req.Response.Async{ref: req_ref}} = resp, acc \\ "") do
     receive do
-      message ->
+      {^req_ref, _} = message ->
         case Req.parse_message(resp, message) do
           {:ok, chunks} ->
             data = for {:data, d} <- chunks, into: "", do: d
             if :done in chunks, do: acc <> data, else: collect(resp, acc <> data)
 
-          :unknown ->
-            collect(resp, acc)
+          _other ->
+            acc
         end
     after
       5_000 -> acc

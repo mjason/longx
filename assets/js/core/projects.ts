@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ThreadRow } from "@/core/chat/threadList";
 import {
+  agentDefinition,
   codexInfo,
   createProject,
   getProject,
@@ -48,6 +49,7 @@ export const projectFields = [
   "memoryLimitMb",
   "modelId",
   "engine",
+  "trustLocalAgent",
   "archivedAt",
   "updatedAt",
 ] as const;
@@ -161,6 +163,30 @@ export function useSkills(projectId: string | undefined) {
       unwrap(await listSkills({ fields: ["name", "description", "shortDescription", "path", "enabled"], input: { id: projectId! } })) as Skill[],
     enabled: !!projectId,
     staleTime: 60_000,
+  });
+}
+
+/** The native kernel's layered agent definition of a project (the settings page). */
+export type AgentDefinition = {
+  present: boolean;
+  trusted: boolean;
+  dir: string;
+  model: string | null;
+  effort: string | null;
+  plugs: string[];
+  files: string[];
+  errors: string[];
+};
+
+export function useAgentDefinition(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["project", projectId, "agent-definition"] as const,
+    queryFn: async () =>
+      unwrap(
+        await agentDefinition({ fields: ["present", "trusted", "dir", "model", "effort", "plugs", "files", "errors"], input: { id: projectId! } }),
+      ) as AgentDefinition,
+    enabled: !!projectId,
+    staleTime: 10_000,
   });
 }
 

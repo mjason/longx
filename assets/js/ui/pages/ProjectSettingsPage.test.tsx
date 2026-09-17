@@ -3,11 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
-import { channel, ok } from "@/ui/test-mocks";
+import { channel, ok, project } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, listSkills, resetCodexHome, sandboxStatus, updateProject } from "@/ash_rpc";
+import { agentDefinition, archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, getProject, listSkills, resetCodexHome, sandboxStatus, updateProject } from "@/ash_rpc";
 
 describe("ProjectSettingsPage", () => {
   beforeEach(() => {
@@ -55,6 +55,29 @@ describe("ProjectSettingsPage", () => {
     await waitFor(() =>
       expect(updateProject).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ engine: "native" }) })),
     );
+  });
+
+  test("a native project shows its .longx definition and the trust switch, saved with the form", async () => {
+    vi.mocked(getProject).mockResolvedValue(ok({ ...project(1), engine: "native" }) as never);
+    vi.mocked(agentDefinition).mockResolvedValue(
+      ok({ present: true, trusted: false, dir: "/srv/app-1/.longx", model: "deepseek-flash", effort: "low", plugs: ["Longx.Agent.Plugs.Environment", "Longx.Agent.Local.P1.Deploy"], files: [".longx/agent.exs", ".longx/plugs/deploy.exs"], errors: [".longx/plugs/bad.exs:3: syntax error"] }) as never,
+    );
+    try {
+      const user = userEvent.setup();
+      renderAt("/p/app-1/settings");
+      const section = await screen.findByTestId("project-agent");
+      expect(await within(section).findByText(".longx/plugs/deploy.exs")).toBeInTheDocument();
+      expect(within(section).getByText(/syntax error/)).toBeInTheDocument();
+      expect(within(section).getByText("Longx.Agent.Local.P1.Deploy")).toBeInTheDocument();
+      expect(screen.queryByTestId("project-skills")).not.toBeInTheDocument();
+      await user.click(within(section).getByRole("switch", { name: /信任并加载/ }));
+      await user.click(screen.getByRole("button", { name: "保存" }));
+      await waitFor(() =>
+        expect(updateProject).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ trustLocalAgent: true }) })),
+      );
+    } finally {
+      vi.mocked(getProject).mockResolvedValue(ok(project(1)) as never);
+    }
   });
 
   test("the skills codex finds for the project are listed with their paths; none is said", async () => {

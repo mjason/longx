@@ -427,102 +427,161 @@ React Native client planned on the same core code.
   - `builtin.browser_fetch` (`Longx.Tools.Builtin.BrowserFetch`, url / format / selector,
     60 s) is the agent's way to read rendered pages outside the sandbox.
 - **The native agent kernel — `lib/longx/agent/` (`Project.engine: :native`, experimental).**
-  Longx's own loop in place of codex, one concept — the plug — and OTP as the runtime.
-  Chosen per project (the wizard's 高级 / project settings, `engine` column, default
-  `:codex`); a native thread's id is `native_<uuid>`, which is how `Projects.native?/1`
-  tells the engines apart from then on. **No sandbox, no approvals, no policy**: commands
-  run on the machine as the person (isolation is the deployment's job — the whole of
-  Longx in a container — never the kernel's). The pieces:
+  Longx's own loop in place of codex: the kernel is four things — the process, the
+  transcript, the execution of model and tool calls, and an interpreter of *phases and
+  effects* — and everything else is a **plug**, the one concept. Chosen per project (the
+  wizard's 高级 / project settings, `engine` column, default `:codex`); a native thread's id
+  is `native_<uuid>` (`Projects.native?/1`). **No sandbox, no approvals, no policy**:
+  commands run on the machine as the person (isolation is the deployment's job — the whole
+  of Longx in a container — never the kernel's).
   - `Longx.Agent` — one GenServer per thread (`Longx.Agent.Registry`, under
-    `Longx.Agent.Supervisor`, `restart: :transient`), **the loop as OTP recursion**: a
-    step runs the pipeline (pure, builds the request), the model streams from a task
-    (`Longx.Agent.Model`) as `{:model, ref, event}` messages, tool calls run as tasks
-    under `Longx.Agent.TaskSupervisor` and answer as messages, `handle_continue(:step)`
-    recurses until the model answers without a tool call. **Never a blocking receive or
-    a synchronous model call in a callback**: the mailbox is how steer and interrupt get
-    in. `send/3` (`turn_id:`, `model:`, `effort:`, `images:`) starts a turn when idle
-    and is a *steer* while one runs (shown at once as a `userMessage`, folded into the
-    context at the next step after the tool outputs; a step is added when the model
-    stopped before seeing it); `interrupt/1` kills the tasks (a command's shim tree dies
-    with its task) and ends the turn `interrupted`; `retract/2` also truncates the turn
-    from the transcript and `ThreadState.drop_turns` (`thread/reverted`); `status/1`.
-    A crash restarts the process from the transcript; the turn in flight is not resumed.
+    `Longx.Agent.Supervisor`, `restart: :transient`), **the loop as OTP recursion**: a step
+    runs the pipeline at `:request` (pure: prompt, tools, the request), the model streams
+    from a task (`Longx.Agent.Model`) as `{:model, ref, event}` messages, the pipeline runs
+    at `:response` (the model's calls known, none run yet), tool calls run as tasks under
+    `Longx.Agent.TaskSupervisor` and answer as messages, `handle_continue(:step)` recurses
+    until the model answers without a call, then the pipeline runs at `:turn_end`. **Never a
+    blocking receive or a synchronous model call in a callback**: the mailbox is how steer,
+    interrupt and `/compact` get in. `send/3` (`turn_id:`, `model:`, `effort:`, `images:`)
+    starts a turn when idle and is a *steer* while one runs (shown at once as a
+    `userMessage`, folded into the context at the next step after the tool outputs; a step
+    is added when the model stopped before seeing it); `interrupt/1` kills the tasks (a
+    command's shim tree dies with its task) and ends the turn `interrupted`; `retract/2`
+    also truncates the turn from the transcript and `ThreadState.drop_turns`;
+    `compact/1`; `status/1`. Guards: `max_steps` per turn (500, `config :longx,
+    Longx.Agent, max_steps:`) and 20 continuations. A crash restarts the process from the
+    transcript; the turn in flight is not resumed.
+  - **Effects are what a plug asks the kernel to do**, data on the step the kernel
+    interprets after each phase: `Step.enqueue_call/3` (`:response`; a synthetic
+    `function_call` with a `longx_` call id, run with the model's), `Step.continue/2`
+    (`:turn_end`; another step with that text — a user message — instead of ending),
+    `Step.compact/2` (`:request`; fold the context first), `Step.halt/2` (end the turn,
+    `failed` with the reason). `step.usage` (`last` / `total`) and `step.context_window`
+    let a plug judge the context; `step.calls` are the model's calls at `:response`.
   - **Events are codex's vocabulary**, fed to `Longx.Codex.ThreadState.ingest/3` on the
     same topic (`turn/started`, `item/started`, `item/agentMessage/delta`,
     `item/reasoning/summaryTextDelta`, `item/commandExecution/outputDelta`,
-    `item/completed`, `thread/tokenUsage/updated`, `turn/completed`): the channel, the
-    store, `messages.ts`, the toolkit and the Tracker (turn rows, previews, the notify
-    feed, the stall watchdog) are shared with codex unchanged. A tool's `show` decides
-    the item: `:command` → `commandExecution`, `:file_change` → `fileChange`, `:tool` →
-    `dynamicToolCall` (`namespace.tool`).
+    `item/completed`, `thread/tokenUsage/updated`, `turn/completed`, a `contextCompaction`
+    marker): the channel, the store, `messages.ts`, the toolkit and the Tracker (turn rows,
+    previews, the notify feed, the stall watchdog) are shared with codex unchanged. A
+    tool's `show` decides the item: `:command` → `commandExecution`, `:file_change` →
+    `fileChange` (with a unified `diff` per change), `:tool` → `dynamicToolCall`.
+  - **The tool set is codex's, by name and parameters** — models tuned for codex call
+    them as they know them: `exec_command` (`Plugs.Shell`: `cmd`, `workdir`, `tty` (a pty
+    through the shim), `yield_time_ms` (accepted; the command runs to completion here —
+    `timeout_ms`, default 2 min, max 30 min — `write_stdin` sessions are not offered yet),
+    `max_output_tokens`, `shell`, `login`; stdout+stderr interleaved, head+tail kept, the
+    exit code reported), `apply_patch` (`Plugs.Patch` over `Longx.Agent.Patch`: codex's
+    patch grammar parsed and applied in Elixir — all hunks matched first, then written;
+    exact, then trailing-whitespace, then surrounding-whitespace matching; a `function`
+    tool with the patch as `input` everywhere, and for a provider of `kind: :openai` the
+    same tool as a grammar-constrained `custom` tool (`Tool.freeform`, the lark grammar
+    from `priv/agent/apply_patch.lark`; `Longx.Agent.Model` swaps it in, the kernel reads
+    `custom_tool_call` items and answers `custom_tool_call_output`) — codex's instructions
+    from `priv/agent/apply_patch.md`), `view_image` (an `input_image` user message after
+    the result). There is no `read_file` / `list_dir` / `grep_files` — codex 0.154 has
+    none either: reading is `exec_command` (`cat`, `sed -n`, `rg`).
+  - **The base prompt is codex's, trimmed** (`priv/agent/base_prompt.md`, from the
+    vendored `priv/codex_prompt.md`: sandbox / approvals / plans / AGENTS.md sections out,
+    our tool names in, "reply in the user's language" added).
   - `Longx.Agent.Transcript` (Ash domain) / `Longx.Agent.Item` (`agent_items`): the
     append-only log — every Responses input item (`input`: user / assistant message,
-    reasoning, `function_call`, `function_call_output`) with its UI item (`ui`) and
-    `seq` / `turn_id` / `model`. The model's context is `Transcript.input/1` (a
-    `function_call` left without an output — a crash mid-tool — gets a synthetic
-    "interrupted" output, the Responses API refuses a call without its result); a boot
-    replays the `ui` items through `ThreadState.backfill` (synchronous); a retract is a
-    truncation; `delete_thread` / a project delete (`Changes.DeleteThreads`) drop it.
-    Nothing else remembers a native conversation.
-  - `Longx.Agent.Step` — the struct a step flows through (`thread_id`, `turn_id`, `cwd`,
-    `model` / `effort` as **top-level fields a plug or a tool may change** — the person's
-    choice is the default, a `spawn`-like tool may pick another model for its child —,
-    `transcript`, `instructions`, `skills`, `tools`, `request`, `halted` / `reason`,
-    `assigns`), with `instructions/2`, `skill/4`, `tool/2`, `halt/2`, `assign/3`.
-  - `Longx.Agent.Plug` — **the one extension point**: `init/1` + `call/2` over a Step,
-    like Plug over a Conn. What a plug contributes is *data on the step* — tools and
-    skills are not behaviours of their own. `use Longx.Agent.Plug` gives the declarative
-    surface (macros, paren-free under the formatter: `instructions "…"`, `tool :name,
-    "description", show:, timeout: do param :x, :string, "doc", required: true end`); a
-    `tool` becomes a `Longx.Agent.Tool` (name, JSON schema from the params, `{module,
-    name}` as the function — arity 2: decoded arguments, a `Longx.Agent.Context` with
-    `cwd` and `emit/2` for live output — `show`, `timeout`) and `Tool.call/3` validates
-    the arguments against the schema first (`ex_json_schema`; the complaint is what the
-    model reads). The default `call/2` mounts the declared instructions and tools
-    (`Plug.mount/2`); override it to compute them.
-  - `Longx.Agent.Pipeline` — the builder: `use Longx.Agent.Pipeline` + `plug Mod, opts`
-    → `plugs/0` and `run/1`; `Pipeline.run/2` takes a list built at runtime; a halted
-    step stops the run and ends the turn (`failed`, "pipeline halted: …").
-    `Longx.Agent.Pipelines.Default` is `Environment` (cwd, OS, date), `Base`
-    (`priv/agent/base_prompt.md`, compile-time), `AgentsMd` (every AGENTS.md from the
-    root down to the cwd, nearest last, 32 KB each), `Shell` (`exec`: `bash -lc` over
-    `Longx.Shim`, stdout+stderr streamed, head+tail 128 KB kept, exit code reported,
-    `timeout_ms` default 120 s / max 30 min → an error with what was printed), `Files`
-    (`read_file` with `offset` / `limit`, `write_file`, `edit_file` — an exact string,
-    once unless `replace_all`; no apply_patch grammar), `Request` (the Responses body:
-    instructions joined, the skills listed, `input` = transcript, `function` tools,
-    `reasoning.effort` when a level is set, `client_metadata` for the request log).
-    `config :longx, Longx.Agent, pipeline:` swaps the default. Planned as plugs, not
-    built: `.exs` skills from `<data>/plugs/` (person-installed, trusted) and
-    `<project>/.longx/plugs/` (behind a per-project trust switch; an agent may only
-    write prompt-only `SKILL.md` skills), memory, sub-agents (`spawn` = another
-    `Longx.Agent` with a `parent:`, monitored; its completion a message), compaction,
-    `ask_user`, goals.
+    reasoning, `function_call`, `function_call_output`, `compaction`) with its UI item
+    (`ui`) and `seq` / `turn_id` / `model`. The model's context is `Transcript.input/1`:
+    from the last `:compaction` boundary, the user's own messages before it verbatim
+    (newest first within `keep_user_bytes`, 80 KB ≈ codex's 20k tokens), the summary, then
+    everything after; a `function_call` left without an output gets a synthetic
+    "interrupted" output. A boot replays the `ui` items through `ThreadState.backfill`
+    (synchronous); a retract is a truncation; `delete_thread` / a project delete drop it.
+  - **Descriptions: `Longx.Agent.Config`**, data evaluated before anything runs, the
+    same format in three layers (`Longx.Agent.Loader`): the shipped default
+    (`Longx.Agent.Pipelines.Default.config/0` — Environment, Base, Shell, Patch,
+    ViewImage, Knowledge, Request), the person's `<data>/agent/agent.exs` (`config
+    :longx, Longx.Agent.Loader, global_dir:`), the project's `<root>/.longx/agent.exs`.
+    `import Longx.Agent.Config; agent do version 1; extends :default; model "…", effort:
+    "…"; prompt "…"; plug Deploy, after: Shell; options Shell, timeout_ms: …; drop Base end`
+    — a description records the **difference** to the layer below (`Config.resolve/2`
+    applies the ops; a short name means the shipped plug, `Config.builtin/1`), so a
+    release that changes the shipped pipeline reaches every project; an explicit
+    `pipeline do … end` replaces the base and freezes it. `version` is the format version
+    (`current_version/0`, `outdated?/1` → a notice). The DSL words are paren-free in
+    `.formatter.exs`.
+  - **The loader**: a layer is `agent.exs` + `plugs/**/*.exs`; the `.exs` code is data
+    first — every `defmodule` of a layer and every reference to it is renamed under
+    `Longx.Agent.Local.<tag>` (the project id) before `Code.compile_quoted`, so two
+    projects may both define `Deploy`; cached per layer by the files' mtimes and sizes,
+    recompiled on change, modules no longer defined `soft_purge`d; a file that fails to
+    load leaves the layer below in force and becomes a **notice** the kernel puts in front
+    of the model (`⚠ … failed to load …`), as does an outdated version and a plug the
+    description names but nobody defines — an agent that broke its own definition fixes
+    it next turn. `Project.trust_local_agent` (default false; the settings page's switch,
+    `Projects.agent_definition/1` / RPC `agent_definition` list the files, the resolved
+    plugs and the errors) gates the project layer: the `.exs` run in Longx as the person,
+    so a cloned repo executes nothing until the person looked. Trusted, the loader mounts
+    `Plugs.Local`: what the agent is told about its own definition, with the compact API
+    reference `priv/agent/reference.md`. `Longx.Agent` loads per step when no `pipeline:`
+    module is given (tests give one); the description's `model` / `effort` stand where the
+    person chose none.
+  - **Knowledge instead of memory — `Plugs.Knowledge` over `Longx.Agent.Knowledge`**:
+    markdown files with front matter (`title`, `summary`, `tags`, `always: true`) in three
+    roots — `longx/` shipped read-only (`priv/agent/knowledge/`: writing plugs, the
+    description format and its versions — how a release guides the agent to update its
+    own pipeline), `global/` the person's (`<data>/agent/knowledge/`, a git repository, a
+    commit per write under a lock), `project/` (`.longx/knowledge/`, committed with the
+    code by the turn's bookmarks). Always-docs go into every prompt (`always_cap:` 16 KB,
+    the rest named for `knowledge_read`), the others as an index line each (`index_cap:`
+    200); tools `knowledge_read`, `knowledge_search` (every word, titles and summaries
+    included, 50 lines), `knowledge_write` (front matter required; `longx/` refused;
+    paths stay inside their root). The prompt tells the model to write what is durable
+    and where. AGENTS.md is **not** read here — `Plugs.AgentsMd` still exists but is out
+    of the shipped pipeline; a project that wants it adds `plug AgentsMd`. Skills are
+    docs (a how-to is a doc), no loader of their own.
+  - **Compaction, codex's shape** (`Plugs.Compaction`, policy; the kernel, execution):
+    the plug asks (`Step.compact/2`) when the context after the last step passed `at:`
+    (0.9, codex's 90 %) of the window, when the provider refused the request for its
+    length (the kernel sets `assigns.context_overflow` and re-runs `:request` once), or
+    when asked — the model through `new_context_window` (a tool result's `"compact" =>
+    true`), the person through `/compact` (`Agent.compact/1`: at once when idle, before
+    the next step when running; `Projects.compact_thread` on a native thread); it also
+    offers `get_context_remaining` (from `Context.usage` / `context_window`). The kernel
+    then streams a summary from a task (phase `:compacting`; codex's
+    `priv/agent/compact/prompt.md`, request kind `compaction` in the log, no tools),
+    appends a `:compaction` item whose input is codex's `summary_prefix.md` + the summary
+    as a user message, emits the `contextCompaction` marker, reloads the context from
+    the transcript (user words verbatim + summary), clears the usage and continues the
+    step. A failed summary: the step goes on without folding, or fails the turn when the
+    provider had refused the length.
   - `Longx.Agent.Model` — the streamed call, in a task: `Longx.AI.resolve_target/1`
     (`longx` = the default model), `Gateway.prepare/2` (reasoning items sanitised per
-    provider, the output cap — the same path codex's requests take), a `Limiter` slot,
-    a `Gateway.Log` entry (Settings → 请求记录 shows native requests too, `request_kind`
-    `agent`), `Longx.Agent.SSE` (incremental parser) → `{:item_added | :text_delta |
-    :reasoning_delta | :reasoning_text_delta | :item_done | :completed | :failed}`.
-    429 / 5xx / transport errors before anything streamed are retried (`config :longx,
-    Longx.Agent.Model, retry_ms:`, `[10, 10]` in tests); a 4xx is final; the task
-    monitors its owner and dies with it.
+    provider, the output cap — the same path codex's requests take), the `custom` tool
+    swap for `:openai`, a `Limiter` slot, a `Gateway.Log` entry (Settings → 请求记录 shows
+    native requests too, `request_kind` `agent` / `compaction`), `Longx.Agent.SSE` →
+    `{:item_added | :text_delta | :reasoning_delta | :reasoning_text_delta | :item_done |
+    :completed | :failed}`. 429 / 5xx / transport errors before anything streamed are
+    retried (`config :longx, Longx.Agent.Model, retry_ms:`, `[10, 10]` in tests); a 4xx
+    is final; the task monitors its owner and dies with it.
   - `Longx.Projects` dispatches on the engine: `start_thread` (`start_native_thread`:
-    `Longx.Agent.ensure` + the row + `Tracker.track`), `send_message` (`send_native`:
-    the Turn row **first**, with a generated `turn_<uuid>`, then `Agent.send` — the
-    Tracker must find the row when `turn/started` lands; `{:error, :turn_in_progress}`
-    while one runs), `steer_message`, `interrupt_turn/2` (new; the Thread action and the
-    stall watchdog go through it for both engines), `retract_turn`, `host_thread` (starts
-    the agent again after a restart — `ThreadChannel`'s join path), `delete_thread`;
-    `compact_thread` / `review_thread` / `redo_turn` answer `{:error, :not_supported}`
-    (an argument error on the wire). The client: `ProjectWindow` hands `engine` to
-    `ChatProvider` → `useCodexRuntime` → `useChat().engine`; the composer rail shows
-    "原生内核" instead of the `ModePicker` (nothing to pick).
-  - Tests: `test/longx/agent/` (`pipeline_test` the DSL, `sse_test`, `plugs_test` runs
-    real bash, `transcript_test`, `model_test` and `agent_test` with Bypass as the
-    model — a held reply for steer / interrupt / retract, `Bypass.pass/1` after a
-    reply the interrupt cut off, a restart rebuild), `test/longx/projects/native_engine_test`
-    (through `Projects`, the Tracker completing rows). No codex process anywhere in it.
+    `Longx.Agent.ensure` with `trust:` — a function read per turn — + the row +
+    `Tracker.track`), `send_message` (`send_native`: the Turn row **first**, with a
+    generated `turn_<uuid>`, then `Agent.send`; `{:error, :turn_in_progress}` while one
+    runs), `steer_message`, `interrupt_turn/2` (the Thread action and the stall watchdog
+    go through it for both engines), `retract_turn`, `compact_thread`, `host_thread`
+    (starts the agent again after a restart — `ThreadChannel`'s join path),
+    `delete_thread`, `list_skills` (`[]`) and `search_files` (a walk of the tree, the
+    query as a subsequence) without codex; `review_thread` / `redo_turn` answer
+    `{:error, :not_supported}`. The client: `ProjectWindow` hands `engine` to
+    `ChatProvider` → `useCodexRuntime` → `useChat().engine`; the composer rail and the
+    status strip say "原生内核" instead of the mode picker / codex state; the project
+    settings show the definition (`settings` `AgentSection`, `useAgentDefinition`) with
+    the trust switch, in place of codex's skills list.
+  - Tests: `test/longx/agent/` (`pipeline_test` the DSL and phases, `config_test`,
+    `loader_test` (namespaces, reload, notices, trust), `knowledge_test`, `patch_test`,
+    `sse_test`, `plugs_test` runs real bash, `transcript_test`, `model_test` and
+    `agent_test` with Bypass as the model — a held reply for steer / interrupt / retract,
+    `Bypass.pass/1` after a reply the interrupt cut off, a restart rebuild, effects, the
+    step limit, the loader mode, compaction by effect / overflow / hand),
+    `test/longx/projects/native_engine_test` (through `Projects`, the Tracker completing
+    rows, the trust switch). No codex process anywhere in it.
 - `lib/longx/platform.ex` — `Longx.Platform`: runtime-safe os/arch detection and the Rust
   triple / GOOS-GOARCH naming for it. Anything that resolves a binary path at runtime goes
   through this, never through `Mix.*` (Mix is absent in releases).

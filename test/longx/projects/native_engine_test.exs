@@ -276,7 +276,7 @@ defmodule Longx.Projects.NativeEngineTest do
 
     project = Projects.update_project!(project, %{trust_local_agent: true})
     assert %{trusted: true} = definition = Projects.agent_definition(project)
-    assert Enum.any?(definition.plugs, &(&1 =~ "Deploy"))
+    assert "Deploy (.longx)" in definition.plugs
 
     {:ok, turn} = Projects.send_message(thread, "again")
     assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
@@ -286,7 +286,8 @@ defmodule Longx.Projects.NativeEngineTest do
 
   test "what the kernel does not do yet is refused, not attempted", %{project: project} do
     {:ok, thread} = Projects.start_thread(project)
-    assert {:error, :not_supported} = Projects.compact_thread(thread)
+    # /compact is the kernel's own (nothing to fold on an empty thread is fine)
+    assert :ok = Projects.compact_thread(thread)
     assert {:error, :not_supported} = Projects.review_thread(thread, :uncommitted)
   end
 end
