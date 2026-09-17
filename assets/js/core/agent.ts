@@ -8,7 +8,9 @@ import {
   agentSettings,
   agentWriteFile,
   promoteLocal,
+  publicUrl,
   setAgentSettings,
+  setPublicUrl,
   type SetAgentSettingsInput,
 } from "@/ash_rpc";
 import { unwrap } from "@/core/projects";
@@ -84,4 +86,20 @@ export function usePromoteLocal(projectId: string) {
     mutationFn: async (path: string) => unwrap(await promoteLocal({ fields: ["path"], input: { id: projectId, path } })) as { path: string },
     onSuccess: () => void client.invalidateQueries({ queryKey: ["project", projectId, "agent-definition"] }),
   });
+}
+
+/** the address a login sends the person back to: the setting, else where the browser came from */
+export type PublicUrl = { url: string; setting: string | null };
+
+export function usePublicUrl() {
+  return useQuery({
+    queryKey: ["agent-kernel", "public-url"] as const,
+    queryFn: async () => unwrap(await publicUrl({ fields: ["url", "setting"] })) as PublicUrl,
+  });
+}
+
+export function usePublicUrlActions() {
+  return {
+    save: useAgentWrite(async (url: string) => unwrap(await setPublicUrl({ fields: ["url", "setting"], input: { url } })) as PublicUrl),
+  };
 }

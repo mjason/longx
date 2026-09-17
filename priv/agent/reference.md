@@ -73,6 +73,23 @@ end
 
 The tool function is ordinary Elixir run in a task under the tool's `timeout:` (60 s by default): `System.cmd`, `File`, `Req` (HTTP), `Jason` are all fine there — only the file's *top level* must stay pure. It gets the decoded arguments (string keys) and a `ctx` (`ctx.cwd` the working directory, `ctx.project_id`, `ctx.thread_id`, `Context.path(ctx, rel)` resolves a path against the cwd). It answers `{:ok, text}` (what the model reads), `{:ok, text, meta}` or `{:error, why}` (the model reads the error and retries or explains). `meta` keys the kernel understands: `"exitCode"` (shown on a `:command` row), `"image"` (a data URL the model then sees, like `view_image`), `"compact" => true` (fold the context before the next step). Parameter types: `:string`, `:integer`, `:number`, `:boolean`, `{:enum, [..]}`, `{:array, type}`; a `param` without `required: true` is optional. `show:` decides the row in the UI: `:command` (a terminal block — give it the output), `:file_change` (a diff, with `"changes"` in meta), `:tool` (a plain call). Mount a plug where it should read the pipeline: `plug Deploy` alone goes just before `Request`; `plug Guard, after: Longx.Agent.Plugs.Shell` places it.
 
+**When the person has to act** (log in somewhere, type a code, confirm out of band) the tool asks and waits — never prints a link and polls:
+
+```elixir
+case Context.ask(ctx,
+       title: "登录 COROS", text: "用存有训练数据的账号登录",
+       callback: true,
+       url: fn callback -> "https://…/authorize?client_id=…&redirect_uri=" <> URI.encode_www_form(callback) end
+     ) do
+  {:ok, %{"query" => %{"code" => code}}} -> exchange(code)      # the browser came back through Longx
+  {:ok, answer} -> …                                              # 已完成 pressed, or the fields typed (%{"code" => "…"})
+  {:error, :cancelled} -> {:error, "the person cancelled the login"}
+  {:error, :timeout} -> {:error, "no login within the time"}
+end
+```
+
+The person sees a card on the thread (title, text, a link button, the `fields:` to type — `[%{id: "code", label: "验证码"}]`), the rail says 等待你操作, the phone is notified. With `callback: true` Longx makes a URL for the third party to send the browser back to (`<outside address>/callback/<id>`) and hands you `%{"query" => params}` when it arrives. **Never listen on a local port for a browser redirect**: the person is often on another machine; Longx's own address is what reaches them (the settings' 外部访问地址, else where their browser connected from). `timeout:` in ms (10 minutes by default); the tool's own `timeout:` must be at least as long.
+
 **When to write one**: a workflow you repeat by hand every turn (the same three commands, a deploy, a data export), something a shell one-liner cannot do cleanly (an HTTP API with a token from the environment, a structured result), or a rule the pipeline should enforce (a `:response` plug that appends `mix test` after every `apply_patch`, a `:turn_end` strategy). Not for one-off commands — `exec_command` is there for those.
 
 The same pipeline runs at three phases; a plug may pattern-match on `step.phase`:

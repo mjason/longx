@@ -27,7 +27,7 @@ import { ModePicker } from "./ModePicker";
  * turn runs with, and what the turn is doing right now.
  */
 export function ComposerLeading() {
-  const { state, mode, setMode, disabledReason, thread, engine } = useChat();
+  const { state, mode, setMode, disabledReason, thread, engine, view } = useChat();
   return (
     <div
       className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs"
@@ -50,7 +50,8 @@ export function ComposerLeading() {
         </span>
       ) : state === "approval" ? (
         <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-          <ShieldAlert className="size-3.5" /> {t.awaitingApproval}
+          <ShieldAlert className="size-3.5" />{" "}
+          {view.requests.some((r) => r.method === "longx/action/request") ? t.awaitingAction : t.awaitingApproval}
         </span>
       ) : null}
     </div>

@@ -134,10 +134,23 @@ export function toMessages(view: ThreadView, subviews: SubViews = {}): ThreadMes
   // questions codex asks (requestUserInput) are standalone parts; the
   // renderer answers them through the runtime's extras (answerRequest)
   for (const request of view.requests) {
-    if (request.method !== "item/tool/requestUserInput") continue;
-    const itemId = String(request.params["itemId"] ?? request.id);
-    const args = { requestId: String(request.id), questions: (request.params["questions"] as unknown[]) ?? [] };
-    attachPending(out, itemId, toolPart(itemId, "requestUserInput", args, undefined, undefined));
+    if (request.method === "item/tool/requestUserInput") {
+      const itemId = String(request.params["itemId"] ?? request.id);
+      const args = { requestId: String(request.id), questions: (request.params["questions"] as unknown[]) ?? [] };
+      attachPending(out, itemId, toolPart(itemId, "requestUserInput", args, undefined, undefined));
+    }
+    // the native kernel: a tool asking the person to act (a login, a code) — Context.ask
+    if (request.method === "longx/action/request") {
+      const itemId = String(request.params["itemId"] ?? request.id);
+      const args = {
+        requestId: String(request.id),
+        title: String(request.params["title"] ?? ""),
+        text: String(request.params["text"] ?? ""),
+        url: typeof request.params["url"] === "string" ? request.params["url"] : null,
+        fields: (request.params["fields"] as { id: string; label: string }[] | undefined) ?? [],
+      };
+      attachPending(out, `${itemId}:ask`, toolPart(`${itemId}:ask`, "action", args, undefined, undefined));
+    }
   }
   return out;
 }

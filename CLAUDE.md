@@ -518,6 +518,33 @@ React Native client planned on the same core code.
     counts the rounds) until the model marks it complete, the budget is spent or
     `max_rounds:` (8) passed — then the `{:goal, attrs}` effect (`Step.goal/2`) marks it
     `blocked` instead of looping.
+  - **A tool may ask the person to act — `Longx.Agent.Context.ask/2`** (an agent's own
+    COROS login plug printed an OAuth link into a terminal block and listened on the
+    *server's* loopback port for the redirect: nothing told the person, and the browser
+    on another machine hit its own 127.0.0.1). `ask(ctx, title:, text:, url:, fields:,
+    callback:, timeout:)` blocks the tool's task on `Agent.ask/2` (`GenServer.call`,
+    `:infinity`); the kernel keeps `asks: %{id => %{from, timer, callback?}}`, puts a
+    `longx/action/request` request on the thread (`ThreadState.put_request`: `itemId`,
+    `title`, `text`, `url`, `fields`, `callbackUrl`) and replies when the person answers
+    (`Agent.respond/3` ← `Projects.answer_request/3` ← RPC `answer_request` — the same
+    action codex's `requestUserInput` answers use; `%{"cancelled" => true}` is
+    `{:error, :cancelled}`, `%{"done" => true}` or the typed fields `{:ok, map}`),
+    times out (`timeout:`, 10 min) or the turn ends (`cancel_asks/1` in `end_turn`).
+    **`callback: true`** registers the ask in `Longx.Agent.Registry` under `{:ask, id}`
+    (`Longx.Agent.Asks`) and hands the tool `<public url>/callback/<id>` (`url:` may be a
+    function of it); `LongxWeb.CallbackController` (`GET /callback/:id`, no CSRF) delivers
+    the query as `{:ok, %{"query" => params}}` and shows a "回到 Longx" page, 404 for a
+    stale id. **The public URL** — `Longx.System.public_url/0`: the `public_url` setting
+    (Settings → Agent 内核 → 外部访问地址; RPC `public_url` / `set_public_url`), else
+    `LongxWeb.Origins` (the scheme/host/port the last browser's socket connected with,
+    `connect_info: [:uri]` in the endpoint, remembered in `UserSocket.connect`), else
+    `Endpoint.url()`. The client: `messages.ts` makes the request a standalone `action`
+    part (`ActionTool` in the toolkit: a link button + the `elicitation-form` with
+    已完成 / 取消 or the fields, answered through `extras.answerAction` — raw, unlike
+    `answerRequest`'s codex shape), the rail says 等待你操作, the Tracker pushes it as
+    an `approval` notify event (title 等待你操作), and `terminal-block` makes URLs in
+    output clickable. The plug reference says: ask, never print a link and poll; never
+    listen on a local port for a redirect.
   - **Effects are what a plug asks the kernel to do**, data on the step the kernel
     interprets after each phase: `Step.enqueue_call/3` (`:response`; a synthetic
     `function_call` with a `longx_` call id, run with the model's), `Step.continue/2`

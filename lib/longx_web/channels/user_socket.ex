@@ -9,6 +9,9 @@ defmodule LongxWeb.UserSocket do
 
   @impl true
   def connect(params, socket, connect_info) do
+    # the address the person reached Longx at: what a login has to send them back to
+    LongxWeb.Origins.remember(connect_info[:uri])
+
     with {:ok, actor} <- LongxWeb.Actor.from_socket_params(params, connect_info) do
       {:ok, assign(socket, :actor, actor)}
     end

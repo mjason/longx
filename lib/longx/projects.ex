@@ -341,6 +341,22 @@ defmodule Longx.Projects do
   defp settings_fun(project_id), do: fn -> Longx.Agent.Settings.for_project_id(project_id) end
 
   @doc """
+  The person's answer to a request on the thread: codex's `requestUserInput`
+  (the answers map, wrapped for codex) or, on the native kernel, a tool's
+  ask (`Longx.Agent.Context.ask/2`).
+  """
+  @spec answer_request(Thread.t(), String.t(), map) :: :ok | {:error, term}
+  def answer_request(%Thread{} = thread, request_id, answers) when is_map(answers) do
+    if native?(thread) do
+      Longx.Agent.respond(thread.codex_thread_id, request_id, answers)
+    else
+      Longx.Codex.Thread.respond_raw(request_id, %{"answers" => answers},
+        thread_id: thread.codex_thread_id
+      )
+    end
+  end
+
+  @doc """
   Moves a file of the project's `.longx/local/` tree (`"plugs/x.exs"`,
   `"agents/helper/agent.exs"`, `"knowledge/deploy/steps.md"`) into
   `.longx/shared/` — reviewed, for the team. `{:ok, "shared/…"}`.

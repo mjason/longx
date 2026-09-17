@@ -111,7 +111,7 @@ export function TerminalBlock({
                     : "text-foreground/90"),
               )}
             >
-              {line}
+              {linkify(line)}
             </div>
           );
         })}
@@ -124,4 +124,24 @@ export function TerminalBlock({
       </div>
     </div>
   );
+}
+
+// a URL in the output is a link (a login page a tool printed, a report's source)
+const URL_RE = /https?:\/\/[^\s<>"'`）)]+/g;
+function linkify(line: string) {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of line.matchAll(URL_RE)) {
+    const at = m.index ?? 0;
+    if (at > last) parts.push(line.slice(last, at));
+    parts.push(
+      <a key={at} href={m[0]} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-2 hover:opacity-80">
+        {m[0]}
+      </a>,
+    );
+    last = at + m[0].length;
+  }
+  if (parts.length === 0) return line;
+  if (last < line.length) parts.push(line.slice(last));
+  return parts;
 }

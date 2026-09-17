@@ -12,6 +12,7 @@ import {
   agentDeleteFile,
   agentWriteFile,
   setAgentSettings,
+  setPublicUrl,
   knowledgeDelete,
   knowledgeWrite,
   setBrowserPrivateNetwork,
@@ -563,6 +564,19 @@ describe("SettingsPage", () => {
     await waitFor(() =>
       expect(knowledgeWrite).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ path: "global/tools/deploy.md", content: expect.stringContaining("title: deploy") }) })),
     );
+  });
+
+  test("agent kernel: the outside address a login returns to is shown with what is in force, and saved", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/agent");
+    const card = await screen.findByTestId("public-url");
+    expect(card).toHaveTextContent("http://192.168.2.129:7788");
+    const input = within(card).getByLabelText("外部访问地址") as HTMLInputElement;
+    expect(input.placeholder).toBe("http://192.168.2.129:7788");
+    await user.type(input, "https://longx.example");
+    await user.click(within(card).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(setPublicUrl).toHaveBeenCalledWith(expect.objectContaining({ input: { url: "https://longx.example" } })));
   });
 
   test("agent kernel: the team parameters are saved as one call, the global agent files are listed, edited and created from a template", async () => {

@@ -102,6 +102,8 @@ defmodule Longx.Agent do
               settings: nil,
               # the models the agent may name (Longx.AI.model_choices/0), read per step; nil = unknown
               models: nil,
+              # the asks tools have open (Context.ask): id → %{from, timer, callback?}
+              asks: %{},
               # the thread's goal (codex's shape: objective, status, tokenBudget,
               # tokensUsed, timeUsedSeconds), kept in the view across restarts
               goal: nil,
@@ -159,6 +161,19 @@ defmodule Longx.Agent do
   @doc "Notes that the parent spoke to a child (the child's row in the parent's view shows it)."
   @spec interacted(String.t(), String.t()) :: :ok
   def interacted(parent_id, child_id), do: GenServer.cast(via(parent_id), {:interacted, child_id})
+
+  @doc false
+  # a tool (in its task) asks the person; the reply comes when they answer
+  def ask(thread_id, request), do: GenServer.call(via(thread_id), {:ask, request}, :infinity)
+
+  @doc "The person's answer to an open ask (`Context.ask/2`); `{:error, :unknown}` when none waits."
+  @spec respond(String.t(), String.t(), map) :: :ok | {:error, :unknown}
+  def respond(thread_id, request_id, answer) when is_map(answer) do
+    case whereis(thread_id) do
+      nil -> {:error, :unknown}
+      _pid -> GenServer.call(via(thread_id), {:respond, request_id, answer})
+    end
+  end
 
   @doc "Who spawned the agent, its name, its phase and its children."
   @spec info(String.t()) :: map
@@ -367,6 +382,52 @@ defmodule Longx.Agent do
 
   def handle_call(:children, _from, state), do: {:reply, children_list(state), state}
 
+  def handle_call({:ask, request}, from, %State{} = state) do
+    id = "ask_" <> Ash.UUID.generate()
+
+    callback =
+      if request.callback? do
+        Longx.Agent.Asks.register(id, state.thread_id)
+        String.trim_trailing(Longx.System.public_url(), "/") <> "/callback/" <> id
+      end
+
+    url =
+      case request.url do
+        fun when is_function(fun, 1) -> fun.(callback)
+        other -> other
+      end
+
+    params =
+      %{
+        "itemId" => request.item_id,
+        "title" => request.title,
+        "text" => request.text,
+        "url" => url,
+        "fields" =>
+          Enum.map(request.fields, fn f ->
+            %{"id" => to_string(f[:id] || f["id"]), "label" => f[:label] || f["label"] || ""}
+          end),
+        "callbackUrl" => callback
+      }
+
+    ThreadState.put_request(state.thread_id, id, "longx/action/request", params)
+    timer = request.timeout && Process.send_after(self(), {:ask_timeout, id}, request.timeout)
+    ask = %{from: from, timer: timer, callback?: request.callback?}
+    {:noreply, %{state | asks: Map.put(state.asks, id, ask)}}
+  end
+
+  def handle_call({:respond, id, answer}, _from, %State{asks: asks} = state) do
+    case Map.pop(asks, id) do
+      {nil, _} ->
+        {:reply, {:error, :unknown}, state}
+
+      {ask, rest} ->
+        reply = if answer["cancelled"] == true, do: {:error, :cancelled}, else: {:ok, answer}
+        settle_ask(state, id, ask, reply)
+        {:reply, :ok, %{state | asks: rest}}
+    end
+  end
+
   def handle_call({:set_goal, attrs}, _from, state) do
     state = update_goal(touch(state), attrs)
     {:reply, {:ok, state.goal}, state}
@@ -490,6 +551,22 @@ defmodule Longx.Agent do
 
     emit(state, "item/started", %{"item" => ui, "turnId" => state.turn_id})
     append(state, :activity, %{"type" => "longx_activity"}, ui, context?: false)
+  end
+
+  ## Asks
+
+  # answers the waiting tool and takes the request off the thread
+  defp settle_ask(%State{thread_id: thread_id}, id, ask, reply) do
+    if ask.timer, do: Process.cancel_timer(ask.timer)
+    if ask.callback?, do: Longx.Agent.Asks.forget(id)
+    ThreadState.resolve_request(thread_id, id)
+    GenServer.reply(ask.from, reply)
+    true
+  end
+
+  defp cancel_asks(%State{asks: asks} = state) do
+    for {id, ask} <- asks, do: settle_ask(state, id, ask, {:error, :cancelled})
+    %{state | asks: %{}}
   end
 
   ## The goal
@@ -1007,6 +1084,16 @@ defmodule Longx.Agent do
         if state.parent && whereis(state.parent) in [nil, pid],
           do: {:stop, :normal, stop_turn(state)},
           else: {:noreply, state}
+    end
+  end
+
+  def handle_info({:ask_timeout, id}, %State{asks: asks} = state) do
+    case Map.pop(asks, id) do
+      {nil, _} ->
+        {:noreply, state}
+
+      {ask, rest} ->
+        settle_ask(state, id, ask, {:error, :timeout}) && {:noreply, %{state | asks: rest}}
     end
   end
 
@@ -1606,6 +1693,7 @@ defmodule Longx.Agent do
     turn = if error, do: Map.put(turn, "error", %{"message" => error}), else: turn
     emit(state, "turn/completed", %{"turn" => turn})
     report_to_parent(state, status, error)
+    state = cancel_asks(state)
 
     state = touch(schedule_idle(state))
 

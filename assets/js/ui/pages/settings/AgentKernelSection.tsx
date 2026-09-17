@@ -3,7 +3,7 @@
 import { Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useAgentFile, useAgentFileActions, useAgentFiles, useAgentSettings, useAgentSettingsActions } from "@/core/agent";
+import { useAgentFile, useAgentFileActions, useAgentFiles, useAgentSettings, useAgentSettingsActions, usePublicUrl, usePublicUrlActions } from "@/core/agent";
 import { useModelRows } from "@/core/ai";
 import {
   AlertDialog,
@@ -30,6 +30,7 @@ export function AgentKernelSection() {
     <div className="flex flex-col gap-8" data-testid="section-agent">
       <p className="text-muted-foreground text-sm">{s.hint}</p>
       <SettingsCard />
+      <PublicUrlCard />
       <FilesCard />
     </div>
   );
@@ -51,6 +52,26 @@ function SettingsForm({ initial, models }: { initial: AgentSettingsForm; models:
     <section className="space-y-4 rounded-lg border p-4" data-testid="agent-settings">
       <AgentSettingsFields idPrefix="ak" value={form} onChange={setForm} models={models} />
       <Button size="sm" onClick={save} disabled={actions.save.isPending}>{s.save}</Button>
+    </section>
+  );
+}
+
+function PublicUrlCard() {
+  const current = usePublicUrl();
+  const actions = usePublicUrlActions();
+  const [draft, setDraft] = useState<string | null>(null);
+  if (current.isPending) return <Skeleton className="h-16 w-full" />;
+  if (current.isError) return <p className="text-destructive text-sm">{current.error.message}</p>;
+  const value = draft ?? current.data.setting ?? "";
+  const save = () => actions.save.mutateAsync(value).then(() => { toast.success(s.publicUrlSaved); setDraft(null); }, fail);
+  return (
+    <section className="space-y-2 rounded-lg border p-4" data-testid="public-url">
+      <Label htmlFor="ak-public-url">{s.publicUrl}</Label>
+      <div className="flex flex-wrap gap-2">
+        <Input id="ak-public-url" value={value} placeholder={current.data.url} onChange={(e) => setDraft(e.target.value)} className="w-80 font-mono" />
+        <Button size="sm" onClick={save} disabled={draft === null || actions.save.isPending}>{s.save}</Button>
+      </div>
+      <p className="text-muted-foreground text-xs">{s.publicUrlHint(current.data.url)}</p>
     </section>
   );
 }

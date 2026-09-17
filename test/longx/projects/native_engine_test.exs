@@ -338,6 +338,52 @@ defmodule Longx.Projects.NativeEngineTest do
     assert %{parent: ^parent_id, name: "researcher"} = Agent.info(child_id)
   end
 
+  test "a plug of the project asks the person; the answer goes through Projects like codex's questions",
+       %{
+         bypass: bypass,
+         project: project,
+         dir: dir
+       } do
+    File.mkdir_p!(Path.join(dir, ".longx/local/plugs"))
+
+    File.write!(Path.join(dir, ".longx/local/plugs/login.exs"), """
+    defmodule Login do
+      use Longx.Agent.Plug
+
+      tool :login, "signs the person in" do
+      end
+
+      def login(_args, ctx) do
+        case Context.ask(ctx, title: "登录", text: "去登录") do
+          {:ok, answer} -> {:ok, "answered " <> Jason.encode!(answer)}
+          {:error, why} -> {:error, "no: \#{why}"}
+        end
+      end
+    end
+    """)
+
+    File.write!(
+      Path.join(dir, ".longx/local/agent.exs"),
+      "import Longx.Agent.Config\nagent do\n  plug Login\nend\n"
+    )
+
+    script!(bypass, [
+      ResponsesFixture.function_call("login", nil, %{}),
+      ResponsesFixture.assistant_message("done")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    :ok = ThreadState.subscribe(thread.codex_thread_id)
+    {:ok, turn} = Projects.send_message(thread, "log in")
+
+    assert_receive {:codex, _, "longx/action/request", %{"requestId" => rid}}, 5_000
+    assert :ok = Projects.answer_request(thread, rid, %{"done" => true})
+    assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
+    assert_receive {:request, _}
+    assert_receive {:request, body}
+    assert Enum.any?(body["input"], &(&1["output"] == ~s(answered {"done":true})))
+  end
+
   test "what the kernel does not do yet is refused, not attempted", %{project: project} do
     {:ok, thread} = Projects.start_thread(project)
     # /compact is the kernel's own (nothing to fold on an empty thread is fine)

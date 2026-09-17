@@ -47,8 +47,10 @@ export type CodexExtras = {
   /** answers a requestUserInput: question id → the chosen answers */
   answerRequest: (
     requestId: string,
-    answers: Record<string, string[]>,
+    answers: Record<string, unknown>,
   ) => Promise<void>;
+  /** answers the native kernel's ask (Context.ask) as it is: {done: true}, {cancelled: true}, or the fields typed */
+  answerAction: (requestId: string, answers: Record<string, unknown>) => Promise<void>;
   /** overrides a denial of codex's automatic approval review (the person allows the action) */
   approveDeniedReview: (reviewId: string) => Promise<void>;
 };
@@ -148,6 +150,11 @@ export function buildAdapter(
           input: { threadId: id, requestId, answers: shaped },
         }),
       );
+    },
+    answerAction: async (requestId, answers) => {
+      const id = threadId();
+      if (!id) return;
+      unwrap(await answerRequest({ input: { threadId: id, requestId, answers } }));
     },
     approveDeniedReview: async (reviewId) => {
       const id = threadId();

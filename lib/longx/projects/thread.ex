@@ -282,13 +282,13 @@ defmodule Longx.Projects.Thread do
       argument :answers, :map, allow_nil?: false
 
       run fn input, _ ->
-        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
-          Longx.Codex.Thread.respond_raw(
-            input.arguments.request_id,
-            %{"answers" => input.arguments.answers},
-            thread_id: thread.codex_thread_id
-          )
-        end
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             do:
+               Longx.Projects.answer_request(
+                 thread,
+                 input.arguments.request_id,
+                 input.arguments.answers
+               )
       end
     end
 

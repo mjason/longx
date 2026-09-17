@@ -317,6 +317,9 @@ export const t = {
   // status
   turnRunning: "进行中",
   awaitingApproval: "等待审批",
+  awaitingAction: "等待你操作",
+  openLink: "打开链接",
+  actionDone: "已完成",
   codexDown: "codex 已停止",
   codexStale: "codex 需要重启",
   codexStaleTitle: "正在运行的 codex 用的还是旧设置",
@@ -663,6 +666,9 @@ export const t = {
     confirmRemove: (path: string) => `删除 ${path}？`,
     removed: "已删除",
     close: "关闭",
+    publicUrl: "外部访问地址",
+    publicUrlHint: (effective: string) => `第三方登录跳回来时用的地址（回调是 <地址>/callback/…）。留空则用你浏览器连上来的地址；现在生效的是 ${effective}。`,
+    publicUrlSaved: "已保存",
   },
   knowledgePage: {
     hint: "原生内核的知识：markdown 文件，按主题分目录（<主题>/<名字>.md），front matter 里 always: true 的每轮都进 prompt，其余按主题折成一行索引，agent 按需读。这里是你自己的全局知识（对所有项目生效，每次保存一个 git 提交）；项目的知识在仓库的 .longx/shared/knowledge/（进 git）和 .longx/local/knowledge/（本机，agent 默认写这里）。Longx 出厂的那批只读。",

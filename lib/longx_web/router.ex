@@ -54,6 +54,11 @@ defmodule LongxWeb.Router do
   # codex's exec-server: its commands and file operations come in here (the
   # `url` in each home's environments.toml) — a bare route, the token is in
   # the URL and the controller upgrades to a WebSocket.
+  # a third party sending the browser back after a login a tool asked for
+  scope "/callback", LongxWeb do
+    get "/:id", CallbackController, :show
+  end
+
   scope "/exec", LongxWeb do
     get "/:project_id", ExecController, :connect
   end

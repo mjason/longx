@@ -771,6 +771,84 @@ defmodule Longx.AgentTest do
     assert %{"status" => "completed"} = await_turn_end()
   end
 
+  defmodule Login do
+    use Longx.Agent.Plug
+
+    tool :login, "signs the person in", timeout: 60_000 do
+    end
+
+    # what a plug does when the person has to act: a request on the thread, a
+    # callback URL for the browser to come back to, the answer as the result
+    def login(_args, ctx) do
+      case Context.ask(ctx,
+             title: "登录 COROS",
+             text: "用存有训练数据的账号登录",
+             callback: true,
+             url: fn callback ->
+               "https://auth.example/authorize?redirect_uri=" <> URI.encode_www_form(callback)
+             end
+           ) do
+        {:ok, %{"query" => %{"code" => code}}} -> {:ok, "code=" <> code}
+        {:ok, answer} -> {:ok, "answered: " <> Jason.encode!(answer)}
+        {:error, why} -> {:error, "no login: #{why}"}
+      end
+    end
+  end
+
+  defmodule AskingPipeline do
+    use Longx.Agent.Pipeline
+    plug Login
+    plug Longx.Agent.Plugs.Request
+  end
+
+  test "a tool asks the person: a request on the thread with a callback URL; the browser's return answers it; an interrupt cancels it",
+       %{bypass: bypass, dir: dir} do
+    id = agent!("ask-#{System.unique_integer([:positive])}", dir, pipeline: AskingPipeline)
+
+    route!(bypass, fn body ->
+      # a fresh message asks for a login; the login's output ends the turn
+      if List.last(body["input"])["type"] == "function_call_output",
+        do: ResponsesFixture.assistant_message("logged in"),
+        else: ResponsesFixture.function_call("login", nil, %{})
+    end)
+
+    {:ok, _} = Agent.send(id, "log me in")
+
+    assert %{"requestId" => rid, "title" => "登录 COROS", "url" => url, "callbackUrl" => callback} =
+             await("longx/action/request")
+
+    assert callback =~ "/callback/" <> rid
+    assert url =~ URI.encode_www_form(callback)
+
+    assert [%{id: ^rid, method: "longx/action/request"}] =
+             ThreadState.snapshot(id).pending_requests
+
+    assert {:running, _} = Agent.status(id)
+
+    # the browser came back through Longx: the query lands in the tool's hands
+    assert :ok = Longx.Agent.Asks.deliver(rid, %{"code" => "abc", "state" => "s"})
+    assert %{"status" => "completed"} = await_turn_end()
+    assert ThreadState.snapshot(id).pending_requests == []
+    requests = collect_requests([])
+    last = List.last(requests)
+
+    assert Enum.any?(
+             last["input"],
+             &(&1["type"] == "function_call_output" and &1["output"] == "code=abc")
+           )
+
+    assert {:error, :unknown} = Longx.Agent.Asks.deliver(rid, %{})
+
+    # a second ask, cancelled by an interrupt: the request leaves the view with the turn
+    {:ok, _} = Agent.send(id, "again")
+    assert %{"requestId" => rid2} = await("longx/action/request")
+    assert :ok = Agent.interrupt(id)
+    assert %{"status" => "interrupted"} = await_turn_end()
+    assert ThreadState.snapshot(id).pending_requests == []
+    assert {:error, :unknown} = Agent.respond(id, rid2, %{"done" => true})
+    Bypass.pass(bypass)
+  end
+
   defmodule CompactingPipeline do
     use Longx.Agent.Pipeline
     plug Longx.Agent.Plugs.Shell

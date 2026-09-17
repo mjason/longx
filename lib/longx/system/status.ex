@@ -348,6 +348,37 @@ defmodule Longx.System.Status do
       run fn input, _ -> file_result(Longx.Agent.GlobalFiles.delete(input.arguments.path)) end
     end
 
+    # the address a login sends the person back to (Longx.System.public_url/0)
+    action :public_url, :map do
+      constraints fields: [
+                    url: [type: :string, allow_nil?: false],
+                    setting: [type: :string]
+                  ]
+
+      run fn _input, _ ->
+        {:ok, %{url: Longx.System.public_url(), setting: Longx.System.public_url_setting()}}
+      end
+    end
+
+    action :set_public_url, :map do
+      constraints fields: [
+                    url: [type: :string, allow_nil?: false],
+                    setting: [type: :string]
+                  ]
+
+      argument :url, :string, allow_nil?: false, constraints: [allow_empty?: true]
+
+      run fn input, _ ->
+        case Longx.System.set_public_url(input.arguments.url) do
+          {:ok, _} ->
+            {:ok, %{url: Longx.System.public_url(), setting: Longx.System.public_url_setting()}}
+
+          {:error, message} ->
+            argument_error(:url, message)
+        end
+      end
+    end
+
     action :memory_status, :map do
       constraints fields: [
                     auto_extract: [type: :boolean, allow_nil?: false],

@@ -169,6 +169,8 @@ export function rpcMock() {
     agentReadFile: vi.fn(async () => ok({ text: "import Longx.Agent.Config\n\nagent do\n  summary \"writes\"\nend\n" })),
     agentWriteFile: vi.fn(async () => ok(null)),
     agentDeleteFile: vi.fn(async () => ok(null)),
+    publicUrl: vi.fn(async () => ok({ url: "http://192.168.2.129:7788", setting: null })),
+    setPublicUrl: vi.fn(async ({ input }: { input: { url: string } }) => ok({ url: input.url || "http://192.168.2.129:7788", setting: input.url || null })),
     setReviewModel: vi.fn(async () => ok(null)),
     listProviders: vi.fn(async () => ok([provider(1), provider(2)])),
     createProvider: vi.fn(

@@ -168,12 +168,17 @@ defmodule Longx.Projects.Tracker do
   # a request the person has to answer: an approval, a permission, a
   # question — the phone's reason to buzz
   defp handle_event(method, %{"threadId" => codex_thread_id, "requestId" => _} = params)
-       when method in ~w(item/commandExecution/requestApproval item/fileChange/requestApproval item/permissions/requestApproval item/tool/requestUserInput item/mcpServer/elicitation) do
+       when method in ~w(item/commandExecution/requestApproval item/fileChange/requestApproval item/permissions/requestApproval item/tool/requestUserInput item/mcpServer/elicitation longx/action/request) do
     with {:ok, %Thread{} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id) do
-      question? = method in ~w(item/tool/requestUserInput item/mcpServer/elicitation)
+      title =
+        cond do
+          method == "longx/action/request" -> "等待你操作"
+          method in ~w(item/tool/requestUserInput item/mcpServer/elicitation) -> "等待回答"
+          true -> "等待审批"
+        end
 
       Projects.notify(thread, "approval",
-        title: if(question?, do: "等待回答", else: "等待审批"),
+        title: title,
         body: request_summary(method, params, thread)
       )
     end
@@ -407,6 +412,9 @@ defmodule Longx.Projects.Tracker do
        do: cmd
 
   defp request_summary("item/fileChange/requestApproval", _params, _thread), do: "修改文件"
+
+  defp request_summary("longx/action/request", %{"title" => title}, _thread)
+       when is_binary(title), do: title
 
   defp request_summary("item/permissions/requestApproval", params, _thread),
     do: params["reason"] || "申请权限"

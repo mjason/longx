@@ -1143,6 +1143,28 @@ describe("ThreadPage", () => {
     ).toBeInTheDocument();
   });
 
+  test("a tool asking the person to act: a card with the link, 等待你操作 in the rail; 已完成 answers the request", async () => {
+    const user = userEvent.setup();
+    await open();
+    act(() => {
+      channel.deliver("codex", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("codex", {
+        seq: 5,
+        method: "longx/action/request",
+        params: { requestId: "ask_1", itemId: "call_7", threadId: "thr_1", title: "登录 COROS", text: "用存有训练数据的账号登录", url: "https://auth.example/authorize?x=1", fields: [], callbackUrl: "http://192.168.2.129:7788/callback/ask_1" },
+      });
+    });
+    const card = await screen.findByTestId("tool-action");
+    expect(card).toHaveTextContent("登录 COROS");
+    expect(card).toHaveTextContent("用存有训练数据的账号登录");
+    expect(within(card).getByRole("link", { name: "打开链接" })).toHaveAttribute("href", "https://auth.example/authorize?x=1");
+    expect(screen.getByTestId("turn-bar")).toHaveTextContent("等待你操作");
+    await user.click(within(card).getByRole("button", { name: "已完成" }));
+    await waitFor(() =>
+      expect(answerRequest).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", requestId: "ask_1", answers: { done: true } } })),
+    );
+  });
+
   test("a native-engine project has no access mode to pick: the rail says which kernel runs", async () => {
     vi.mocked(getProject).mockResolvedValue(ok({ ...project(1), engine: "native" }) as never);
     try {

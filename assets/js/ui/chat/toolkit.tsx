@@ -446,6 +446,53 @@ export const QuestionsTool: ToolCallMessagePartComponent<QuestionsArgs, unknown>
   );
 };
 
+type ActionArgs = { requestId?: string; title?: string; text?: string; url?: string | null; fields?: { id: string; label: string }[] };
+
+/**
+ * The native kernel's ask (Context.ask): the person has to act — open a
+ * link and log in, type a code — before the tool goes on. A link button,
+ * the fields as an elicitation form; 已完成 / 取消 answer the request.
+ */
+export const ActionTool: ToolCallMessagePartComponent<ActionArgs, unknown> = (p) => {
+  const extras = useAuiState((s) => s.thread.extras) as CodexExtras | undefined;
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [state, setState] = useState<"request" | "accepted" | "declined">("request");
+  const fields: ElicitationField[] = (p.args.fields ?? []).map((f) => ({ name: f.id, label: f.label, value: values[f.id] ?? "", kind: "text", required: true }));
+  const pending = p.status.type === "requires-action" && state === "request";
+  const answer = (answers: Record<string, unknown>, next: "accepted" | "declined") => {
+    if (!p.args.requestId || !extras) return;
+    setState(next);
+    void extras.answerAction(p.args.requestId, answers).catch((error: unknown) => {
+      setState("request");
+      toast.error(error instanceof Error ? error.message : String(error));
+    });
+  };
+  return (
+    <div className="flex flex-col gap-2 py-1" data-testid="tool-action">
+      {p.args.url ? (
+        <a
+          href={p.args.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex w-fit items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium"
+        >
+          {t.openLink}
+        </a>
+      ) : null}
+      <ElicitationForm
+        server={p.args.title || t.agentAsks}
+        message={p.args.text ?? ""}
+        fields={fields}
+        state={pending ? "request" : state === "declined" ? "declined" : "accepted"}
+        labels={{ needsInput: t.awaitingAction, send: fields.length ? t.send : t.actionDone, decline: t.cancel, sent: t.answered, declined: t.declined, other: t.otherAnswer }}
+        onChange={(name, value) => setValues((v) => ({ ...v, [name]: value }))}
+        onAccept={() => answer(fields.length ? Object.fromEntries(fields.map((f) => [f.name, values[f.name] ?? ""])) : { done: true }, "accepted")}
+        onDecline={() => answer({ cancelled: true }, "declined")}
+      />
+    </div>
+  );
+};
+
 // ---- agents: codex's sub-agents and its collaboration tools (multi-agent v2)
 
 type SubagentArgs = { name: string; path: string; threadId: string; kind: string; request?: { command?: string; paths?: string[] } | null };
@@ -584,6 +631,7 @@ export const codexToolkit = defineToolkit({
   fileChange: { type: "backend", render: FileChangeTool, display: "standalone" },
   webSearch: { type: "backend", render: WebSearchTool, display: "standalone" },
   requestUserInput: { type: "backend", render: QuestionsTool, display: "standalone" },
+  action: { type: "backend", render: ActionTool, display: "standalone" },
   permissions: { type: "backend", render: PermissionsTool, display: "standalone" },
   autoReview: { type: "backend", render: AutoReviewTool, display: "standalone" },
   subagent: { type: "backend", render: SubagentTool, display: "standalone" },

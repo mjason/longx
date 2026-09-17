@@ -8435,6 +8435,72 @@ export async function validateProbeSandbox(
 }
 
 
+export type PublicUrlFields = UnifiedFieldSelection<{url: string, setting: string | null, __type: "TypedMap", __primitiveFields: "url" | "setting"}>[];
+
+export type InferPublicUrlResult<
+  Fields extends PublicUrlFields | undefined,
+> = InferResult<{url: string, setting: string | null, __type: "TypedMap", __primitiveFields: "url" | "setting"}, Fields>;
+
+export type PublicUrlResult<Fields extends PublicUrlFields | undefined = undefined> = | { success: true; data: InferPublicUrlResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function publicUrl<Fields extends PublicUrlFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<PublicUrlResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "public_url",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<PublicUrlResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validatePublicUrl(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "public_url",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type SandboxStatusFields = UnifiedFieldSelection<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, presets: Array<Record<string, any>>, platform: "darwin" | "linux" | "windows", home: string | null, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "presets" | "platform" | "home" | "checkedAt"}>[];
 
 export type InferSandboxStatusResult<
@@ -8718,6 +8784,80 @@ export async function validateSetGithubToken(
 ): Promise<ValidationResult> {
   const payload = {
     action: "set_github_token",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetPublicUrlInput = {
+  url: string;
+};
+
+export type SetPublicUrlFields = UnifiedFieldSelection<{url: string, setting: string | null, __type: "TypedMap", __primitiveFields: "url" | "setting"}>[];
+
+export type InferSetPublicUrlResult<
+  Fields extends SetPublicUrlFields | undefined,
+> = InferResult<{url: string, setting: string | null, __type: "TypedMap", __primitiveFields: "url" | "setting"}, Fields>;
+
+export type SetPublicUrlResult<Fields extends SetPublicUrlFields | undefined = undefined> = | { success: true; data: InferSetPublicUrlResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function setPublicUrl<Fields extends SetPublicUrlFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SetPublicUrlInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetPublicUrlResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_public_url",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetPublicUrlResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetPublicUrl(
+  config: {
+  tenant?: string;
+  input: SetPublicUrlInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_public_url",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };
