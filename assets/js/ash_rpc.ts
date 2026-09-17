@@ -2582,6 +2582,7 @@ export type CreateProjectInput = {
   globalMemory?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
+  engine?: "codex" | "native";
   initGit?: boolean | null;
 };
 
@@ -3347,6 +3348,7 @@ export type UpdateProjectInput = {
   globalMemory?: boolean;
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
+  engine?: "codex" | "native";
 };
 
 export type UpdateProjectFields = UnifiedFieldSelection<ProjectResourceSchema>[];

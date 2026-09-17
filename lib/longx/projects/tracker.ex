@@ -347,7 +347,7 @@ defmodule Longx.Projects.Tracker do
           error: "no progress for #{div(stall_after, 1000)} seconds; interrupted"
         })
 
-        Longx.Codex.Thread.interrupt(thread.codex_thread_id, turn.codex_turn_id)
+        Projects.interrupt_turn(thread, turn.codex_turn_id)
         Projects.broadcast_changed(thread.project_id)
         MapSet.put(acc, thread.codex_thread_id)
       end)

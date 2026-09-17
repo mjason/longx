@@ -128,6 +128,9 @@ defmodule Longx.Projects.Thread do
             {:error, :turn_in_progress} ->
               argument_error(:thread_id, "a turn is running")
 
+            {:error, :not_supported} ->
+              argument_error(:thread_id, "not supported by the native engine")
+
             {:error, other} ->
               {:error, other}
           end
@@ -155,6 +158,9 @@ defmodule Longx.Projects.Thread do
             {:error, :turn_in_progress} ->
               argument_error(:thread_id, "a turn is running")
 
+            {:error, :not_supported} ->
+              argument_error(:thread_id, "not supported by the native engine")
+
             other ->
               other
           end
@@ -169,8 +175,7 @@ defmodule Longx.Projects.Thread do
 
       run fn input, _ ->
         with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
-             do:
-               Longx.Codex.Thread.interrupt(thread.codex_thread_id, input.arguments.codex_turn_id)
+             do: Longx.Projects.interrupt_turn(thread, input.arguments.codex_turn_id)
       end
     end
 

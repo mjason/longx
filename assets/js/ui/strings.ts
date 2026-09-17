@@ -102,6 +102,14 @@ export const t = {
     workspace_write: "可写",
     danger_full_access: "完全访问",
   } as Record<string, string>,
+  /** which kernel runs the project's threads */
+  engine: "内核",
+  engineOptions: {
+    codex: "codex（默认：沙箱 + 审批）",
+    native: "Longx 原生内核（实验）",
+  } as Record<string, string>,
+  engineNativeHint: "原生内核直接在这台机器上以你的身份执行命令，没有沙箱、不会审批；隔离靠部署（把整个 Longx 放进容器）。改动只影响之后新建的会话。",
+  engineNativeShort: "原生内核",
   approvalOptions: {
     on_request: "按需询问",
     auto_accept: "全部放行（申请一律通过，不审核不询问）",

@@ -91,7 +91,8 @@ defmodule Longx.Projects.Project do
         :auto_review,
         :global_memory,
         :memory_limit_mb,
-        :model_id
+        :model_id,
+        :engine
       ]
 
       change Changes.NormalizeRootPath
@@ -121,7 +122,8 @@ defmodule Longx.Projects.Project do
         :auto_review,
         :global_memory,
         :memory_limit_mb,
-        :model_id
+        :model_id,
+        :engine
       ]
 
       validate Validations.ToolsAreRegistered
@@ -337,6 +339,16 @@ defmodule Longx.Projects.Project do
     # Longx's global memory (Longx.Memory) goes to every new thread as
     # developer instructions — unless this project wants none of it
     attribute :global_memory, :boolean, allow_nil?: false, default: true, public?: true
+
+    # which kernel runs the project's threads: the bundled codex app-server
+    # (`:codex`) or Longx's own agent kernel (`:native`, `Longx.Agent`) — an
+    # experiment that runs unsandboxed on the person's machine
+    attribute :engine, :atom do
+      allow_nil? false
+      default :codex
+      public? true
+      constraints one_of: [:codex, :native]
+    end
 
     # Optional cap on the codex process tree (Linux RLIMIT_AS / Windows Job
     # memory). Off by default: a task that needs 30 GB gets 30 GB; the OOM

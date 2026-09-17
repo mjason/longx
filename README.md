@@ -319,6 +319,53 @@ codex 是 project 的资源，`Longx.Projects` 上可以管：
 | `reset_codex_home/1` | 整个目录删掉重建 |
 | 归档 project | 停 worker，目录留着；`delete_project/2` 要 `confirm: true`，删目录，**永远不碰工作目录** |
 
+## 原生内核（实验）
+
+除了 codex，project 可以选 **Longx 自己的 agent 内核**（新建项目的「高级」或项目设置里的
+「内核」，`Longx.Agent`）。它是一个极简的循环：一个线程一个 OTP 进程，模型调用和工具调用都是
+task、结果都是信箱里的消息，`handle_continue` 递归到模型不再调工具为止。**没有沙箱、没有审批**：
+命令以你的身份直接在这台机器上跑——需要隔离时把整个 Longx 放进容器，内核不管这件事。
+一轮正在跑的时候再发消息就是插话（steer），停止就是杀掉 task；对话历史是 Longx 自己的
+append-only 日志（`agent_items` 表），重启后照常续聊。
+
+只有一个概念：**plug**。一步（一次模型调用）是一个 `%Longx.Agent.Step{}` 流过一串 plug，
+每个 plug 往 step 上放指令、skill 或工具，或者 `halt`：
+
+```elixir
+defmodule MyPlugs.Deploy do
+  use Longx.Agent.Plug
+
+  instructions "部署用 deploy 工具，不要手写 kubectl。"
+
+  tool :deploy, "把当前分支发到 staging", show: :command, timeout: 300_000 do
+    param :env, {:enum, ["staging", "prod"]}, "目标环境", required: true
+  end
+
+  def deploy(%{"env" => env}, ctx) do
+    Longx.Agent.Context.emit(ctx, "deploying to #{env}…\n")
+    {:ok, "deployed to #{env}"}
+  end
+end
+
+defmodule MyPipeline do
+  use Longx.Agent.Pipeline
+
+  plug Longx.Agent.Plugs.Environment
+  plug Longx.Agent.Plugs.Base
+  plug Longx.Agent.Plugs.AgentsMd
+  plug Longx.Agent.Plugs.Shell
+  plug Longx.Agent.Plugs.Files
+  plug MyPlugs.Deploy
+  plug Longx.Agent.Plugs.Request
+end
+```
+
+`config :longx, Longx.Agent, pipeline: MyPipeline` 换掉默认管道。默认管道给模型的是
+`exec`（bash）、`read_file` / `write_file` / `edit_file`，加上环境、基础 prompt 和项目里
+每一层的 AGENTS.md。工具的参数先按 schema 校验，模型能读到校验错误自己改；`show:` 决定它在
+聊天里长什么样（命令行 / 文件改动 / 普通工具行）。`.exs` 形式的 skill 加载器、记忆、子 agent、
+压缩这些还没做——每一个都是之后的一个 plug。
+
 ### 内存：不设上限，但排好死的顺序
 
 大任务就是要吃内存，所以默认**没有硬上限**。Longx 做的是让系统缺内存时先死该死的：

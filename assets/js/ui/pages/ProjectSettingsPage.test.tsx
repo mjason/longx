@@ -44,6 +44,19 @@ describe("ProjectSettingsPage", () => {
     );
   });
 
+  test("the engine is a project setting: the native kernel is a radio with its warning", async () => {
+    const user = userEvent.setup();
+    renderAt("/p/app-1/settings");
+    const form = await screen.findByTestId("project-settings");
+    expect(within(form).getByRole("radio", { name: /codex/ })).toBeChecked();
+    await user.click(within(form).getByRole("radio", { name: /原生内核/ }));
+    expect(within(form).getByText(/没有沙箱/)).toBeInTheDocument();
+    await user.click(within(form).getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(updateProject).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ engine: "native" }) })),
+    );
+  });
+
   test("the skills codex finds for the project are listed with their paths; none is said", async () => {
     vi.mocked(listSkills).mockResolvedValue(
       ok([

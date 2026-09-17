@@ -14,11 +14,18 @@ defmodule Longx.Projects.Project.Changes.DeleteThreads do
     Ash.Changeset.before_action(changeset, fn changeset ->
       project_id = changeset.data.id
 
-      thread_ids =
+      threads =
         Longx.Projects.Thread
         |> Ash.Query.filter(project_id == ^project_id)
         |> Ash.read!(authorize?: false)
-        |> Enum.map(& &1.id)
+
+      thread_ids = Enum.map(threads, & &1.id)
+
+      # a native thread's history is Longx's own log; its agent goes too
+      for %{codex_thread_id: "native_" <> _ = id} <- threads do
+        Longx.Agent.stop(id)
+        Longx.Agent.Transcript.delete!(id)
+      end
 
       Longx.Projects.Turn
       |> Ash.Query.filter(thread_id in ^thread_ids)

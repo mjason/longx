@@ -41,6 +41,8 @@ export type ProjectContext = {
   rootPath: string;
   sandbox: string;
   approvalPolicy: string;
+  /** which kernel runs the project's threads */
+  engine: "codex" | "native";
   sample: CodexSample | null;
 };
 
@@ -111,6 +113,7 @@ export function ProjectWindow() {
     rootPath: project.data.rootPath,
     sandbox: project.data.sandbox,
     approvalPolicy: project.data.approvalPolicy,
+    engine: project.data.engine,
     sample,
   };
 
@@ -121,6 +124,7 @@ export function ProjectWindow() {
       slug={slug}
       defaults={{ sandbox: project.data.sandbox, approvalPolicy: project.data.approvalPolicy, networkAccess: project.data.networkAccess, webSearch: project.data.webSearch, multiAgent: project.data.multiAgent, autoReview: project.data.autoReview }}
       defaultModelId={project.data.modelId}
+      engine={project.data.engine}
     >
     <div className="flex h-dvh flex-col">
       <TopBar

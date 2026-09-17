@@ -36,6 +36,7 @@ export const project = (n: number) => ({
   memoryLimitMb: null,
   modelId: null,
   globalMemory: true,
+  engine: "codex",
   archivedAt: null,
   updatedAt: "2026-09-12T00:00:00Z",
 });

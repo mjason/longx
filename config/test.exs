@@ -71,3 +71,6 @@ config :longx, LongxWeb.Vite,
 
 # no background release checks in the suite; tests configure the rest
 config :longx, Longx.Upgrade, tick: nil
+
+# the agent kernel retries a failed model call at once in tests
+config :longx, Longx.Agent.Model, retry_ms: [10, 10]

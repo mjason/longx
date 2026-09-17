@@ -26,18 +26,23 @@ import { ModePicker } from "./ModePicker";
  * turn runs with, and what the turn is doing right now.
  */
 export function ComposerLeading() {
-  const { state, mode, setMode, disabledReason, thread } = useChat();
+  const { state, mode, setMode, disabledReason, thread, engine } = useChat();
   return (
     <div
       className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs"
       data-testid="turn-bar"
     >
-      <ModePicker
-        mode={mode}
-        onChange={setMode}
-        disabled={disabledReason !== null}
-        started={thread !== undefined}
-      />
+      {engine === "native" ? (
+        // no sandbox, no approvals: nothing to pick, only which kernel this is
+        <span className="shrink-0">{t.engineNativeShort}</span>
+      ) : (
+        <ModePicker
+          mode={mode}
+          onChange={setMode}
+          disabled={disabledReason !== null}
+          started={thread !== undefined}
+        />
+      )}
       {state === "running" ? (
         <span className="flex items-center gap-1">
           <Loader2 className="size-3.5 animate-spin" /> {t.turnRunning}

@@ -35,8 +35,13 @@ import { buildThreadListAdapter, type ThreadRow } from "./threadList";
 import { useThreadView } from "./useThreadView";
 import { useThreadViews } from "./useThreadViews";
 
+/** which kernel runs the project's threads: codex (sandbox, approvals) or Longx's own */
+export type Engine = "codex" | "native";
+
 export type CodexRuntimeOptions = {
   projectId: string;
+  /** the project's engine; the native kernel has no access mode to pick */
+  engine?: Engine;
   /** the project's defaults: what a new chat starts with */
   defaults: AccessMode;
   /** the project's own default model (a `Longx.AI.Model` id; null = the global default) */
@@ -57,6 +62,7 @@ export type TurnState = "idle" | "running" | "approval";
 export type CodexRuntime = {
   runtime: AssistantRuntime;
   projectId: string;
+  engine: Engine;
   thread: ThreadRow | undefined;
   /** the route names a thread the project does not have */
   missing: boolean;
@@ -94,6 +100,7 @@ const subagentIds = (view: ThreadView): string[] => [
 export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   const {
     projectId,
+    engine = "codex",
     defaults,
     defaultModelId = null,
     threadId,
@@ -324,6 +331,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   return {
     runtime,
     projectId,
+    engine,
     thread,
     missing:
       threadId !== undefined && !threads.isPending && thread === undefined,

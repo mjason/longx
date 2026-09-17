@@ -19,7 +19,7 @@ import { Textarea } from "@/ui/components/ui/textarea";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { t } from "@/ui/strings";
 
-type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "webSearch" | "multiAgent" | "autoReview" | "globalMemory" | "dirtyStart">> & {
+type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPolicy" | "networkAccess" | "webSearch" | "multiAgent" | "autoReview" | "globalMemory" | "dirtyStart" | "engine">> & {
   description: string;
   memoryLimitMb: string;
   modelId: string;
@@ -58,6 +58,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
     autoReview: project.autoReview,
     globalMemory: project.globalMemory,
     dirtyStart: project.dirtyStart,
+    engine: project.engine,
     memoryLimitMb: project.memoryLimitMb ? String(project.memoryLimitMb) : "",
     modelId: "__default",
     writableRoots: project.writableRoots.join("\n"),
@@ -84,6 +85,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
             autoReview: form.autoReview,
             globalMemory: form.globalMemory,
             dirtyStart: form.dirtyStart,
+            engine: form.engine,
             memoryLimitMb: form.memoryLimitMb ? Number(form.memoryLimitMb) : null,
             modelId: form.modelId === "__default" ? null : form.modelId,
             writableRoots: form.writableRoots.split("\n").map((l) => l.trim()).filter(Boolean),
@@ -174,6 +176,18 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
       <section className="space-y-4">
         <h2 className="text-lg font-medium">{t.threadDefaults}</h2>
         <p className="text-muted-foreground text-sm">{t.threadDefaultsHint}</p>
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">{t.engine}</legend>
+          <RadioGroup value={form.engine} onValueChange={(v) => set("engine", v as Form["engine"])}>
+            {(["codex", "native"] as const).map((e) => (
+              <div key={e} className="flex items-center gap-2">
+                <RadioGroupItem value={e} id={`ps-engine-${e}`} />
+                <Label htmlFor={`ps-engine-${e}`}>{t.engineOptions[e]}</Label>
+              </div>
+            ))}
+          </RadioGroup>
+          {form.engine === "native" ? <p className="text-destructive text-xs">{t.engineNativeHint}</p> : null}
+        </fieldset>
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">{t.sandbox}</legend>
           <RadioGroup value={form.sandbox} onValueChange={(v) => set("sandbox", v as Form["sandbox"])}>

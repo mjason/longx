@@ -9,7 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
-import { channel, model, ok, thread } from "@/ui/test-mocks";
+import { channel, model, ok, project, thread } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("sonner", async (importOriginal) => {
@@ -23,6 +23,7 @@ vi.mock("@/core/socket", async () =>
 import {
   answerRequest,
   clearGoal,
+  getProject,
   listModels,
   listSkills,
   listThreads,
@@ -1127,6 +1128,17 @@ describe("ThreadPage", () => {
     expect(
       within(screen.getByTestId("chat-area")).getByTestId("tool-command"),
     ).toBeInTheDocument();
+  });
+
+  test("a native-engine project has no access mode to pick: the rail says which kernel runs", async () => {
+    vi.mocked(getProject).mockResolvedValue(ok({ ...project(1), engine: "native" }) as never);
+    try {
+      await open();
+      await waitFor(() => expect(screen.getByTestId("turn-bar")).toHaveTextContent("原生内核"));
+      expect(screen.queryByTestId("mode-picker")).not.toBeInTheDocument();
+    } finally {
+      vi.mocked(getProject).mockResolvedValue(ok(project(1)) as never);
+    }
   });
 
   test("phone: the access mode names itself in the rail and opens as a bottom sheet, not a popover", async () => {

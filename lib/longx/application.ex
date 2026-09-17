@@ -33,6 +33,10 @@ defmodule Longx.Application do
       Longx.Codex.ThreadState.Store,
       {Registry, keys: :unique, name: Longx.Codex.ThreadRegistry},
       {DynamicSupervisor, name: Longx.Codex.ThreadState.Supervisor, strategy: :one_for_one},
+      # the native agent kernel: one Longx.Agent per thread, its tasks
+      {Registry, keys: :unique, name: Longx.Agent.Registry},
+      {Task.Supervisor, name: Longx.Agent.TaskSupervisor},
+      {DynamicSupervisor, name: Longx.Agent.Supervisor, strategy: :one_for_one},
       # dynamic tool calls and other async work for the codex connection
       {Task.Supervisor, name: Longx.Codex.TaskSupervisor},
       # the exec-server's slow requests (reads that wait, walks) run off the socket

@@ -28,10 +28,17 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
         <GitBranch className="size-3" /> {git.data ? (git.data.repository ? shortSha(git.data.head) : "no git") : "…"}
         {git.data?.repository && !git.data.clean ? <span className="text-warning">·{git.data.changes}</span> : null}
       </span>
-      <span className={item()} title="codex">
-        <span className={`size-2 rounded-full ${worker?.phase === "ready" ? "bg-success" : worker ? "bg-warning" : "bg-muted-foreground/50"}`} />
-        {codex.data ? (worker ? (worker.active_turns ? "turn 进行中" : "codex 就绪") : "codex 未启动") : "…"}
-      </span>
+      {ctx.engine === "native" ? (
+        // no codex process behind a native project: the strip names the kernel
+        <span className={item()} title={t.engine}>
+          <span className="bg-success size-2 rounded-full" /> {t.engineNativeShort}
+        </span>
+      ) : (
+        <span className={item()} title="codex">
+          <span className={`size-2 rounded-full ${worker?.phase === "ready" ? "bg-success" : worker ? "bg-warning" : "bg-muted-foreground/50"}`} />
+          {codex.data ? (worker ? (worker.active_turns ? "turn 进行中" : "codex 就绪") : "codex 未启动") : "…"}
+        </span>
+      )}
       {rss ? (
         <span className={item("font-mono")} title="内存">
           <MemoryStick className="size-3" /> {formatBytes(rss)}

@@ -426,6 +426,103 @@ React Native client planned on the same core code.
     `test/longx/browser_integration_test.exs` (`:integration`, a Bypass SPA).
   - `builtin.browser_fetch` (`Longx.Tools.Builtin.BrowserFetch`, url / format / selector,
     60 s) is the agent's way to read rendered pages outside the sandbox.
+- **The native agent kernel — `lib/longx/agent/` (`Project.engine: :native`, experimental).**
+  Longx's own loop in place of codex, one concept — the plug — and OTP as the runtime.
+  Chosen per project (the wizard's 高级 / project settings, `engine` column, default
+  `:codex`); a native thread's id is `native_<uuid>`, which is how `Projects.native?/1`
+  tells the engines apart from then on. **No sandbox, no approvals, no policy**: commands
+  run on the machine as the person (isolation is the deployment's job — the whole of
+  Longx in a container — never the kernel's). The pieces:
+  - `Longx.Agent` — one GenServer per thread (`Longx.Agent.Registry`, under
+    `Longx.Agent.Supervisor`, `restart: :transient`), **the loop as OTP recursion**: a
+    step runs the pipeline (pure, builds the request), the model streams from a task
+    (`Longx.Agent.Model`) as `{:model, ref, event}` messages, tool calls run as tasks
+    under `Longx.Agent.TaskSupervisor` and answer as messages, `handle_continue(:step)`
+    recurses until the model answers without a tool call. **Never a blocking receive or
+    a synchronous model call in a callback**: the mailbox is how steer and interrupt get
+    in. `send/3` (`turn_id:`, `model:`, `effort:`, `images:`) starts a turn when idle
+    and is a *steer* while one runs (shown at once as a `userMessage`, folded into the
+    context at the next step after the tool outputs; a step is added when the model
+    stopped before seeing it); `interrupt/1` kills the tasks (a command's shim tree dies
+    with its task) and ends the turn `interrupted`; `retract/2` also truncates the turn
+    from the transcript and `ThreadState.drop_turns` (`thread/reverted`); `status/1`.
+    A crash restarts the process from the transcript; the turn in flight is not resumed.
+  - **Events are codex's vocabulary**, fed to `Longx.Codex.ThreadState.ingest/3` on the
+    same topic (`turn/started`, `item/started`, `item/agentMessage/delta`,
+    `item/reasoning/summaryTextDelta`, `item/commandExecution/outputDelta`,
+    `item/completed`, `thread/tokenUsage/updated`, `turn/completed`): the channel, the
+    store, `messages.ts`, the toolkit and the Tracker (turn rows, previews, the notify
+    feed, the stall watchdog) are shared with codex unchanged. A tool's `show` decides
+    the item: `:command` → `commandExecution`, `:file_change` → `fileChange`, `:tool` →
+    `dynamicToolCall` (`namespace.tool`).
+  - `Longx.Agent.Transcript` (Ash domain) / `Longx.Agent.Item` (`agent_items`): the
+    append-only log — every Responses input item (`input`: user / assistant message,
+    reasoning, `function_call`, `function_call_output`) with its UI item (`ui`) and
+    `seq` / `turn_id` / `model`. The model's context is `Transcript.input/1` (a
+    `function_call` left without an output — a crash mid-tool — gets a synthetic
+    "interrupted" output, the Responses API refuses a call without its result); a boot
+    replays the `ui` items through `ThreadState.backfill` (synchronous); a retract is a
+    truncation; `delete_thread` / a project delete (`Changes.DeleteThreads`) drop it.
+    Nothing else remembers a native conversation.
+  - `Longx.Agent.Step` — the struct a step flows through (`thread_id`, `turn_id`, `cwd`,
+    `model` / `effort` as **top-level fields a plug or a tool may change** — the person's
+    choice is the default, a `spawn`-like tool may pick another model for its child —,
+    `transcript`, `instructions`, `skills`, `tools`, `request`, `halted` / `reason`,
+    `assigns`), with `instructions/2`, `skill/4`, `tool/2`, `halt/2`, `assign/3`.
+  - `Longx.Agent.Plug` — **the one extension point**: `init/1` + `call/2` over a Step,
+    like Plug over a Conn. What a plug contributes is *data on the step* — tools and
+    skills are not behaviours of their own. `use Longx.Agent.Plug` gives the declarative
+    surface (macros, paren-free under the formatter: `instructions "…"`, `tool :name,
+    "description", show:, timeout: do param :x, :string, "doc", required: true end`); a
+    `tool` becomes a `Longx.Agent.Tool` (name, JSON schema from the params, `{module,
+    name}` as the function — arity 2: decoded arguments, a `Longx.Agent.Context` with
+    `cwd` and `emit/2` for live output — `show`, `timeout`) and `Tool.call/3` validates
+    the arguments against the schema first (`ex_json_schema`; the complaint is what the
+    model reads). The default `call/2` mounts the declared instructions and tools
+    (`Plug.mount/2`); override it to compute them.
+  - `Longx.Agent.Pipeline` — the builder: `use Longx.Agent.Pipeline` + `plug Mod, opts`
+    → `plugs/0` and `run/1`; `Pipeline.run/2` takes a list built at runtime; a halted
+    step stops the run and ends the turn (`failed`, "pipeline halted: …").
+    `Longx.Agent.Pipelines.Default` is `Environment` (cwd, OS, date), `Base`
+    (`priv/agent/base_prompt.md`, compile-time), `AgentsMd` (every AGENTS.md from the
+    root down to the cwd, nearest last, 32 KB each), `Shell` (`exec`: `bash -lc` over
+    `Longx.Shim`, stdout+stderr streamed, head+tail 128 KB kept, exit code reported,
+    `timeout_ms` default 120 s / max 30 min → an error with what was printed), `Files`
+    (`read_file` with `offset` / `limit`, `write_file`, `edit_file` — an exact string,
+    once unless `replace_all`; no apply_patch grammar), `Request` (the Responses body:
+    instructions joined, the skills listed, `input` = transcript, `function` tools,
+    `reasoning.effort` when a level is set, `client_metadata` for the request log).
+    `config :longx, Longx.Agent, pipeline:` swaps the default. Planned as plugs, not
+    built: `.exs` skills from `<data>/plugs/` (person-installed, trusted) and
+    `<project>/.longx/plugs/` (behind a per-project trust switch; an agent may only
+    write prompt-only `SKILL.md` skills), memory, sub-agents (`spawn` = another
+    `Longx.Agent` with a `parent:`, monitored; its completion a message), compaction,
+    `ask_user`, goals.
+  - `Longx.Agent.Model` — the streamed call, in a task: `Longx.AI.resolve_target/1`
+    (`longx` = the default model), `Gateway.prepare/2` (reasoning items sanitised per
+    provider, the output cap — the same path codex's requests take), a `Limiter` slot,
+    a `Gateway.Log` entry (Settings → 请求记录 shows native requests too, `request_kind`
+    `agent`), `Longx.Agent.SSE` (incremental parser) → `{:item_added | :text_delta |
+    :reasoning_delta | :reasoning_text_delta | :item_done | :completed | :failed}`.
+    429 / 5xx / transport errors before anything streamed are retried (`config :longx,
+    Longx.Agent.Model, retry_ms:`, `[10, 10]` in tests); a 4xx is final; the task
+    monitors its owner and dies with it.
+  - `Longx.Projects` dispatches on the engine: `start_thread` (`start_native_thread`:
+    `Longx.Agent.ensure` + the row + `Tracker.track`), `send_message` (`send_native`:
+    the Turn row **first**, with a generated `turn_<uuid>`, then `Agent.send` — the
+    Tracker must find the row when `turn/started` lands; `{:error, :turn_in_progress}`
+    while one runs), `steer_message`, `interrupt_turn/2` (new; the Thread action and the
+    stall watchdog go through it for both engines), `retract_turn`, `host_thread` (starts
+    the agent again after a restart — `ThreadChannel`'s join path), `delete_thread`;
+    `compact_thread` / `review_thread` / `redo_turn` answer `{:error, :not_supported}`
+    (an argument error on the wire). The client: `ProjectWindow` hands `engine` to
+    `ChatProvider` → `useCodexRuntime` → `useChat().engine`; the composer rail shows
+    "原生内核" instead of the `ModePicker` (nothing to pick).
+  - Tests: `test/longx/agent/` (`pipeline_test` the DSL, `sse_test`, `plugs_test` runs
+    real bash, `transcript_test`, `model_test` and `agent_test` with Bypass as the
+    model — a held reply for steer / interrupt / retract, `Bypass.pass/1` after a
+    reply the interrupt cut off, a restart rebuild), `test/longx/projects/native_engine_test`
+    (through `Projects`, the Tracker completing rows). No codex process anywhere in it.
 - `lib/longx/platform.ex` — `Longx.Platform`: runtime-safe os/arch detection and the Rust
   triple / GOOS-GOARCH naming for it. Anything that resolves a binary path at runtime goes
   through this, never through `Mix.*` (Mix is absent in releases).

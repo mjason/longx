@@ -47,6 +47,7 @@ export const projectFields = [
   "tools",
   "memoryLimitMb",
   "modelId",
+  "engine",
   "archivedAt",
   "updatedAt",
 ] as const;
@@ -383,6 +384,7 @@ export type NewProjectInput = {
   sandbox?: "read_only" | "workspace_write" | "danger_full_access";
   approvalPolicy?: "never" | "on_request" | "untrusted";
   networkAccess?: boolean;
+  engine?: "codex" | "native";
 };
 
 export type DirectoryEntry = { name: string; path: string; git: boolean };

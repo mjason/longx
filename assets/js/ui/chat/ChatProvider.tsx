@@ -2,7 +2,7 @@ import { AssistantRuntimeProvider, useAui } from "@assistant-ui/react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 import type { AccessMode, DirtyChange, DirtyDecision } from "@/core/chat/adapter";
-import { useCodexRuntime, type CodexRuntime } from "@/core/chat/runtime";
+import { useCodexRuntime, type CodexRuntime, type Engine } from "@/core/chat/runtime";
 import { toast } from "sonner";
 import { t } from "@/ui/strings";
 import { DirtyTreeDialog, type DirtyPrompt } from "./DirtyTreeDialog";
@@ -28,7 +28,7 @@ export function useChat(): CodexRuntime {
  * thread list tool and the chat in the centre share one runtime; the
  * dirty-tree question is the one piece of DOM this needs.
  */
-export function ChatProvider({ projectId, slug, defaults, defaultModelId, children }: { projectId: string; slug: string; defaults: AccessMode; defaultModelId?: string | null; children: ReactNode }) {
+export function ChatProvider({ projectId, slug, defaults, defaultModelId, engine = "codex", children }: { projectId: string; slug: string; defaults: AccessMode; defaultModelId?: string | null; engine?: Engine; children: ReactNode }) {
   const { threadId } = useParams();
   const navigate = useNavigate();
   const [dirty, setDirty] = useState<DirtyPrompt | null>(null);
@@ -62,7 +62,7 @@ export function ChatProvider({ projectId, slug, defaults, defaultModelId, childr
   const composerRef = useRef<((text: string) => void) | null>(null);
   const onRetract = useCallback((text: string) => composerRef.current?.(text), []);
 
-  const chat = useCodexRuntime({ projectId, defaults, defaultModelId, threadId, onOpenThread, onDirtyTree, onSignal, onRetract });
+  const chat = useCodexRuntime({ projectId, defaults, defaultModelId, engine, threadId, onOpenThread, onDirtyTree, onSignal, onRetract });
 
   return (
     <ChatContext.Provider value={chat}>

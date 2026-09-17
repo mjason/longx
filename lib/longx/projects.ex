@@ -183,6 +183,70 @@ defmodule Longx.Projects do
   @spec start_thread(Project.t(), [start_option]) :: {:ok, Thread.t()} | {:error, term}
   def start_thread(%Project{} = project, opts \\ []) do
     project = Ash.load!(project, :model)
+
+    case project.engine do
+      :native -> start_native_thread(project, opts)
+      _codex -> start_codex_thread(project, opts)
+    end
+  end
+
+  # The native kernel (`Longx.Agent`): no codex, no sandbox — the agent
+  # process is started under its own id (`native_<uuid>`, which is how a
+  # thread's engine is told apart from then on) and the row records the
+  # project's settings like any thread. The Tracker follows the same topic.
+  defp start_native_thread(%Project{} = project, opts) do
+    model_slug = Keyword.get(opts, :model) || (project.model && project.model.slug)
+
+    with {:ok, model_opts} <- Longx.AI.thread_options(model_slug),
+         :ok <- Longx.AI.check_effort(model_slug, opts[:effort]),
+         effort = opts[:effort] || model_opts[:reasoning_effort],
+         id = "native_" <> Ash.UUID.generate(),
+         {:ok, _pid} <-
+           Longx.Agent.ensure(
+             thread_id: id,
+             project_id: project.id,
+             cwd: project.root_path,
+             model: model_slug,
+             effort: effort
+           ),
+         {:ok, thread} <-
+           create_thread(%{
+             codex_thread_id: id,
+             project_id: project.id,
+             cwd: project.root_path,
+             model_slug: model_slug,
+             reasoning_effort: effort,
+             approval_policy: project.approval_policy,
+             sandbox: project.sandbox,
+             network_access: project.network_access,
+             web_search: project.web_search,
+             multi_agent: project.multi_agent,
+             auto_review: project.auto_review,
+             tools: project.tools
+           }) do
+      :ok = Tracker.track(id)
+      broadcast_changed(project.id)
+      {:ok, thread}
+    end
+  end
+
+  @doc "Whether the thread runs on the native kernel (its id says so)."
+  @spec native?(Thread.t()) :: boolean
+  def native?(%Thread{codex_thread_id: "native_" <> _}), do: true
+  def native?(%Thread{}), do: false
+
+  # (re)starts the thread's agent with what the row knows
+  defp ensure_agent(%Thread{} = thread) do
+    Longx.Agent.ensure(
+      thread_id: thread.codex_thread_id,
+      project_id: thread.project_id,
+      cwd: thread.cwd,
+      model: thread.model_slug,
+      effort: thread.reasoning_effort
+    )
+  end
+
+  defp start_codex_thread(%Project{} = project, opts) do
     model_slug = Keyword.get(opts, :model) || (project.model && project.model.slug)
     # a project that chose nothing gets the globally enabled tools (the memory
     # tools by default) — the tools page is where "none" is decided
@@ -272,6 +336,61 @@ defmodule Longx.Projects do
   def send_message(%Thread{id: id}, text, opts \\ []) do
     # fresh row: the model may have been switched by an earlier turn
     thread = Ash.get!(Thread, id, load: :project)
+
+    if native?(thread),
+      do: send_native(thread, text, opts),
+      else: send_codex(thread, text, opts)
+  end
+
+  # the kernel's turn: the row first (so the Tracker finds it when the
+  # first event lands), then the message; the access mode is not a thing
+  defp send_native(%Thread{} = thread, text, opts) do
+    model_slug = Keyword.get(opts, :model, thread.model_slug)
+    effort = opts[:effort] || thread.reasoning_effort
+
+    with :ok <- ensure_usable(thread),
+         :ok <- refuse_while_running(thread),
+         {:ok, _} <- Longx.AI.thread_options(model_slug),
+         :ok <- Longx.AI.check_effort(model_slug, opts[:effort]),
+         {:ok, _pid} <- ensure_agent(thread),
+         :ok <- Tracker.track(thread.codex_thread_id),
+         {:ok, bookmark} <- preflight(thread, text, opts),
+         turn_id = "turn_" <> Ash.UUID.generate(),
+         {:ok, turn} <-
+           create_turn(%{
+             codex_turn_id: turn_id,
+             thread_id: thread.id,
+             user_text: text,
+             model_slug: model_slug,
+             reasoning_effort: effort,
+             commit_before: bookmark.commit,
+             dirty_start: bookmark.dirty?,
+             started_at: DateTime.utc_now()
+           }),
+         {:ok, %{steered: false}} <-
+           Longx.Agent.send(
+             thread.codex_thread_id,
+             text,
+             [turn_id: turn_id, images: Keyword.get(opts, :images, [])]
+             |> put_if(:model, model_slug)
+             |> put_if(:effort, effort)
+           ) do
+      touch_thread!(thread, %{
+        status: :active,
+        model_slug: model_slug,
+        reasoning_effort: effort,
+        last_activity_at: DateTime.utc_now()
+      })
+
+      broadcast_changed(thread.project_id)
+      {:ok, turn}
+    else
+      {:ok, %{steered: true}} -> {:error, :turn_in_progress}
+      other -> other
+    end
+  end
+
+  defp send_codex(%Thread{} = thread, text, opts) do
     model_slug = Keyword.get(opts, :model, thread.model_slug)
 
     mode = mode_change(thread, opts)
@@ -332,6 +451,7 @@ defmodule Longx.Projects do
     thread = Ash.get!(Thread, id, load: :project)
 
     with :ok <- ensure_usable(thread),
+         :ok <- codex_only(thread),
          :ok <- refuse_while_running(thread),
          {:ok, conn} <- thread_connection(thread, opts),
          do: Longx.Codex.Thread.compact(thread.codex_thread_id, conn: conn)
@@ -349,6 +469,7 @@ defmodule Longx.Projects do
     thread = Ash.get!(Thread, id, load: :project)
 
     with :ok <- ensure_usable(thread),
+         :ok <- codex_only(thread),
          :ok <- refuse_while_running(thread),
          {:ok, conn} <- thread_connection(thread, opts),
          # bookmarked before codex is asked: its first events follow the reply at once
@@ -538,7 +659,10 @@ defmodule Longx.Projects do
   `$name`.
   """
   @spec list_skills(Project.t(), keyword) :: {:ok, [Longx.Codex.Thread.skill()]} | {:error, term}
-  def list_skills(%Project{} = project, opts \\ []) do
+  def list_skills(project, opts \\ [])
+  def list_skills(%Project{engine: :native}, _opts), do: {:ok, []}
+
+  def list_skills(%Project{} = project, opts) do
     with {:ok, conn} <- project_connection(project, opts),
          do: Longx.Codex.Thread.list_skills(project.root_path, conn: conn)
   end
@@ -647,7 +771,8 @@ defmodule Longx.Projects do
     codex_id = thread.codex_thread_id
 
     with :ok <- retractable(turn, Longx.Codex.ThreadState.snapshot(codex_id)),
-         {:ok, conn} <- thread_connection(thread, opts) do
+         {:ok, conn} <-
+           if(native?(thread), do: {:ok, :native}, else: thread_connection(thread, opts)) do
       # marked before the interrupt: the Tracker's turn/completed (after a git
       # call) would otherwise land on the row after us and make it interrupted
       mark_turn_reverted!(turn)
@@ -684,6 +809,51 @@ defmodule Longx.Projects do
   def steer_message(%Thread{} = thread, text, opts \\ []) when is_binary(text) do
     thread = Ash.get!(Thread, thread.id, load: :project)
 
+    if native?(thread),
+      do: steer_native(thread, text, opts),
+      else: steer_codex(thread, text, opts)
+  end
+
+  defp steer_native(%Thread{codex_thread_id: id} = thread, text, opts) do
+    with {:running, _} <- agent_status(id),
+         {:ok, %{turn_id: turn_id, steered: true}} <-
+           Longx.Agent.send(id, text, images: Keyword.get(opts, :images, [])) do
+      touch_thread!(thread, %{last_activity_at: DateTime.utc_now()})
+      {:ok, %{codex_turn_id: turn_id}}
+    else
+      :idle -> {:error, :not_running}
+      {:ok, %{steered: false}} -> {:error, :not_running}
+    end
+  end
+
+  defp agent_status(id) do
+    case Longx.Agent.whereis(id) do
+      nil -> :idle
+      _pid -> Longx.Agent.status(id)
+    end
+  end
+
+  @doc """
+  Stops the turn in flight (the composer's stop button; the Tracker's
+  stall watchdog): the kernel's interrupt for a native thread, codex's
+  `turn/interrupt` otherwise.
+  """
+  @spec interrupt_turn(Thread.t(), String.t()) :: :ok | {:error, term}
+  def interrupt_turn(%Thread{} = thread, codex_turn_id) do
+    if native?(thread) do
+      case agent_status(thread.codex_thread_id) do
+        {:running, ^codex_turn_id} -> Longx.Agent.interrupt(thread.codex_thread_id)
+        _ -> {:error, :not_running}
+      end
+    else
+      Longx.Codex.Thread.interrupt(thread.codex_thread_id, codex_turn_id)
+    end
+  end
+
+  defp codex_only(%Thread{} = thread),
+    do: if(native?(thread), do: {:error, :not_supported}, else: :ok)
+
+  defp steer_codex(%Thread{} = thread, text, opts) do
     running =
       thread
       |> list_turns!(include_reverted: false)
@@ -720,6 +890,9 @@ defmodule Longx.Projects do
 
   # in a task of its own: the wait for turn/completed subscribes to the thread's
   # topic, and the caller's mailbox stays out of it
+  defp interrupt_and_revert(codex_id, codex_turn_id, :native),
+    do: Longx.Agent.retract(codex_id, codex_turn_id)
+
   defp interrupt_and_revert(codex_id, codex_turn_id, conn) do
     Task.Supervisor.async_nolink(Longx.Codex.TaskSupervisor, fn ->
       with :ok <- Longx.Codex.Thread.subscribe(codex_id),
@@ -790,6 +963,11 @@ defmodule Longx.Projects do
         authorize?: false
       )
 
+      if native?(thread) do
+        Longx.Agent.stop(thread.codex_thread_id)
+        Longx.Agent.Transcript.delete!(thread.codex_thread_id)
+      end
+
       Ash.destroy!(thread)
       broadcast_changed(thread.project_id)
       :ok
@@ -816,10 +994,14 @@ defmodule Longx.Projects do
       {:ok, %Thread{status: status}} when status in [:unrecoverable, :archived] ->
         {:ok, codex_thread_id}
 
-      {:ok, %Thread{} = thread} ->
-        case resume_or_restart(thread) do
-          {:ok, %Thread{codex_thread_id: id}} -> {:ok, id}
-          {:error, reason} -> {:error, reason}
+      {:ok, %Thread{codex_thread_id: id} = thread} ->
+        if native?(thread) do
+          with {:ok, _pid} <- ensure_agent(thread), :ok <- Tracker.track(id), do: {:ok, id}
+        else
+          case resume_or_restart(thread) do
+            {:ok, %Thread{codex_thread_id: id}} -> {:ok, id}
+            {:error, reason} -> {:error, reason}
+          end
         end
 
       {:error, _} ->
@@ -1092,6 +1274,7 @@ defmodule Longx.Projects do
     model = Keyword.get(opts, :model, thread.model_slug)
 
     with :ok <- ensure_usable(thread),
+         :ok <- codex_only(thread),
          {:ok, conn} <- thread_connection(thread, opts),
          :ok <- ensure_redoable(turn, later),
          :ok <- maybe_restore(turn, Keyword.get(opts, :restore_files, false)),
@@ -1472,6 +1655,34 @@ defmodule Longx.Projects do
 
   def search_files(%Project{}, "", _opts), do: {:ok, []}
 
+  @file_walk_cap 20_000
+
+  # the native engine has no codex index: a walk of the tree, the query's
+  # characters matched in order (a subsequence), shortest paths first
+  def search_files(%Project{engine: :native, root_path: root}, query, _opts)
+      when is_binary(query) do
+    needle = String.downcase(query)
+
+    matches =
+      root
+      |> walk_files(@file_walk_cap)
+      |> Enum.filter(&subsequence?(String.downcase(&1), needle))
+      |> Enum.sort_by(&{String.length(&1), &1})
+      |> Enum.take(@file_matches)
+      |> Enum.map(fn path ->
+        %{
+          path: path,
+          file_name: Path.basename(path),
+          root: root,
+          match_type: "fuzzy",
+          score: 0,
+          indices: nil
+        }
+      end)
+
+    {:ok, matches}
+  end
+
   def search_files(%Project{root_path: root} = project, query, opts) when is_binary(query) do
     with {:ok, conn} <- project_connection(project, opts),
          {:ok, %{"files" => files}} <-
@@ -1494,6 +1705,44 @@ defmodule Longx.Projects do
          }
        end)}
     end
+  end
+
+  @skipped_dirs [".git", "node_modules", "_build", "deps"]
+
+  # relative paths of the files under `root` (.git and build trees skipped), at most `cap`
+  defp walk_files(root, cap), do: root |> walk_dirs([""], [], cap) |> Enum.reverse()
+
+  defp walk_dirs(_root, [], acc, _cap), do: acc
+
+  defp walk_dirs(root, [dir | rest], acc, cap) when length(acc) < cap do
+    entries =
+      case File.ls(Path.join(root, dir)) do
+        {:ok, names} -> Enum.sort(names)
+        {:error, _} -> []
+      end
+
+    {dirs, files} =
+      entries
+      |> Enum.reject(&(&1 in @skipped_dirs))
+      |> Enum.map(&String.trim_leading(Path.join(dir, &1), "/"))
+      |> Enum.split_with(&File.dir?(Path.join(root, &1)))
+
+    walk_dirs(root, dirs ++ rest, Enum.reduce(files, acc, &[&1 | &2]), cap)
+  end
+
+  defp walk_dirs(_root, _dirs, acc, _cap), do: acc
+
+  defp subsequence?(_haystack, ""), do: true
+
+  defp subsequence?(haystack, needle) do
+    needle
+    |> String.graphemes()
+    |> Enum.reduce_while(haystack, fn ch, rest ->
+      case String.split(rest, ch, parts: 2) do
+        [_, after_match] -> {:cont, after_match}
+        [_] -> {:halt, nil}
+      end
+    end) != nil
   end
 
   # codex's index includes .git; nobody wants to mention those
