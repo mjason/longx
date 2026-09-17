@@ -91,11 +91,13 @@ defmodule Longx.Bundle do
     sink = fn {:data, chunk}, {req, resp} ->
       IO.binwrite(file, chunk)
       received = (resp.private[:received] || 0) + byte_size(chunk)
-      last = resp.private[:reported_at] || 0
+      last = resp.private[:reported_at]
+      # monotonic time starts negative on Linux: "0 = never reported" would
+      # have meant "never report" — the settings card sat at 0 B for a whole download
       now = System.monotonic_time(:millisecond)
 
       resp =
-        if now - last >= 200 do
+        if last == nil or now - last >= 200 do
           progress.({received, content_length(resp)})
           Req.Response.put_private(resp, :reported_at, now)
         else

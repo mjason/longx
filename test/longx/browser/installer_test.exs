@@ -41,13 +41,24 @@ defmodule Longx.Browser.InstallerTest do
     %{bypass: bypass, archive: archive, root: root}
   end
 
+  # the archive in two chunks with a pause between: a real download arrives in
+  # thousands, and the bar must move before the end (it sat at 0 B for a whole
+  # 80 MB download once — the throttle compared the monotonic clock against 0)
   defp serve!(bypass, archive) do
     bytes = File.read!(archive)
+    half = div(byte_size(bytes), 2)
+    <<first::binary-size(half), rest::binary>> = bytes
 
     Bypass.expect_once(bypass, "GET", "/obscura-x86_64-linux.tar.gz", fn conn ->
+      conn =
+        conn
+        |> Plug.Conn.put_resp_header("content-length", Integer.to_string(byte_size(bytes)))
+        |> Plug.Conn.send_chunked(200)
+
+      {:ok, conn} = Plug.Conn.chunk(conn, first)
+      Process.sleep(250)
+      {:ok, conn} = Plug.Conn.chunk(conn, rest)
       conn
-      |> Plug.Conn.put_resp_header("content-length", Integer.to_string(byte_size(bytes)))
-      |> Plug.Conn.send_resp(200, bytes)
     end)
   end
 
@@ -67,6 +78,11 @@ defmodule Longx.Browser.InstallerTest do
     assert :ok = Installer.install()
 
     assert_receive {:browser_install, %{stage: :downloading}}, 5_000
+    # a progress report from the middle of the download, not only the last one
+    assert_receive {:browser_install, %{stage: :downloading, received: mid, total: total_mid}},
+                   5_000
+
+    assert is_integer(total_mid) and mid > 0 and mid < total_mid
     assert_receive {:browser_install, %{stage: :installed, path: path}}, 10_000
     assert path == Path.join([root, "obscura", "0.2.2", "x86_64-linux", "obscura"])
     assert File.regular?(path)

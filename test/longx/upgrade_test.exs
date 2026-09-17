@@ -161,8 +161,11 @@ defmodule Longx.UpgradeTest do
           |> Plug.Conn.put_resp_header("content-length", Integer.to_string(byte_size(data)))
           |> Plug.Conn.send_chunked(200)
 
+        # a pause between chunks: the bar must move before the end (a throttle that
+        # compared the monotonic clock against 0 never reported a byte on Linux)
         for chunk <- chunks(data, 3) do
           {:ok, _} = Plug.Conn.chunk(conn, chunk)
+          Process.sleep(250)
         end
 
         conn
@@ -177,11 +180,11 @@ defmodule Longx.UpgradeTest do
       assert {:error, message} = Upgrade.apply()
       assert message =~ "正在"
 
-      # progress: bytes received against the total, the last one complete
+      # progress: bytes received against the total — first from the middle, then complete
       assert_receive {:upgrade, %{stage: :downloading, progress: %{received: r, total: total}}},
                      10_000
 
-      assert is_integer(r) and r > 0 and total == File.stat!(path).size
+      assert is_integer(r) and r > 0 and r < total and total == File.stat!(path).size
       assert_receive {:upgrade, %{stage: :restarting, progress: nil}}, 10_000
 
       assert File.read!(Path.join(app, "bin/longx")) =~ "longx " <> @version

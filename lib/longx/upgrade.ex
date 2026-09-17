@@ -416,11 +416,13 @@ defmodule Longx.Upgrade do
     sink = fn {:data, chunk}, {req, resp} ->
       IO.binwrite(file, chunk)
       received = (resp.private[:received] || 0) + byte_size(chunk)
-      last = resp.private[:reported_at] || 0
+      # nil, not 0: the monotonic clock starts negative on Linux, and "never
+      # reported" compared against 0 meant the bar never moved
+      last = resp.private[:reported_at]
       now = System.monotonic_time(:millisecond)
 
       resp =
-        if now - last >= 200 do
+        if last == nil or now - last >= 200 do
           notify.({:progress, received, content_length(resp)})
           Req.Response.put_private(resp, :reported_at, now)
         else
