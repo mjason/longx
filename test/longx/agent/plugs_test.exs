@@ -122,6 +122,24 @@ defmodule Longx.Agent.PlugsTest do
     end
   end
 
+  describe "Local" do
+    alias Longx.Agent.Plugs.Local
+
+    test "a trusted project's agent is told the two files of a custom tool and where the reference is",
+         %{dir: dir} do
+      step = Local.call(Step.new(phase: :request, cwd: dir), Local.init(root: dir))
+      text = Enum.join(step.instructions, "\n")
+      assert text =~ "local/plugs/<name>.exs"
+      assert text =~ "local/agent.exs"
+      assert text =~ "next step"
+      # the reference rides along: the plug API, the outcome shapes, when to write one
+      assert text =~ "use Longx.Agent.Plug"
+      assert text =~ "{:ok, text, meta}"
+      assert text =~ "When to write one"
+      assert text =~ "prompt_file"
+    end
+  end
+
   describe "Environment" do
     test "names the working directory, the OS and the date", %{dir: dir} do
       step = Environment.call(Step.new(cwd: dir), [])

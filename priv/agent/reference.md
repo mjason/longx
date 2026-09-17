@@ -51,7 +51,7 @@ end
 
 Longx ships no agents: a project grows its own. When a kind of task keeps being delegated, declare it in `local/agents/<name>/` (the declaration loads at your next step); a local declaration of a name replaces a shared one. `spawn_agent(agent, task)` starts one as a separate process; its final message comes back as a message `[agent <name>] …`. Prefer declaring a role over improvising one in a task.
 
-A plug (`.longx/shared/plugs/<name>.exs` or `local/plugs/<name>.exs`, one or more modules; names are private to this project):
+**A custom tool is a plug: two files, then it is there at your next step.** (1) The module in `local/plugs/<name>.exs`; (2) `plug <Module>` in `local/agent.exs` (create it if missing — `import Longx.Agent.Config` + `agent do … end`). Nothing else: no restart, no registration. A file that fails to compile, or a plug the description names but no file defines, comes back to you at the next step as a `⚠` notice with the error — fix it and go on. Look at your tool list at the next step to see the tool.
 
 ```elixir
 defmodule Deploy do
@@ -65,12 +65,15 @@ defmodule Deploy do
 
   def deploy(%{"env" => env}, ctx) do
     Context.emit(ctx, "deploying…\n")          # live output for the person
-    {:ok, "deployed to #{env}"}                # or {:ok, text, %{"exitCode" => 0}} / {:error, "why"}
+    {output, status} = System.cmd("./deploy.sh", [env], cd: ctx.cwd, stderr_to_stdout: true)
+    if status == 0, do: {:ok, output, %{"exitCode" => 0}}, else: {:error, "deploy failed (#{status}):\n" <> output}
   end
 end
 ```
 
-Parameter types: `:string`, `:integer`, `:number`, `:boolean`, `{:enum, [..]}`, `{:array, type}`. `show:` is `:command`, `:file_change` or `:tool`. `ctx.cwd` is the working directory.
+The tool function is ordinary Elixir run in a task under the tool's `timeout:` (60 s by default): `System.cmd`, `File`, `Req` (HTTP), `Jason` are all fine there — only the file's *top level* must stay pure. It gets the decoded arguments (string keys) and a `ctx` (`ctx.cwd` the working directory, `ctx.project_id`, `ctx.thread_id`, `Context.path(ctx, rel)` resolves a path against the cwd). It answers `{:ok, text}` (what the model reads), `{:ok, text, meta}` or `{:error, why}` (the model reads the error and retries or explains). `meta` keys the kernel understands: `"exitCode"` (shown on a `:command` row), `"image"` (a data URL the model then sees, like `view_image`), `"compact" => true` (fold the context before the next step). Parameter types: `:string`, `:integer`, `:number`, `:boolean`, `{:enum, [..]}`, `{:array, type}`; a `param` without `required: true` is optional. `show:` decides the row in the UI: `:command` (a terminal block — give it the output), `:file_change` (a diff, with `"changes"` in meta), `:tool` (a plain call). Mount a plug where it should read the pipeline: `plug Deploy` alone goes just before `Request`; `plug Guard, after: Longx.Agent.Plugs.Shell` places it.
+
+**When to write one**: a workflow you repeat by hand every turn (the same three commands, a deploy, a data export), something a shell one-liner cannot do cleanly (an HTTP API with a token from the environment, a structured result), or a rule the pipeline should enforce (a `:response` plug that appends `mix test` after every `apply_patch`, a `:turn_end` strategy). Not for one-off commands — `exec_command` is there for those.
 
 The same pipeline runs at three phases; a plug may pattern-match on `step.phase`:
 
