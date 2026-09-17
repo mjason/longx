@@ -684,7 +684,13 @@ defmodule Longx.Agent do
     if results == [] do
       state
     else
-      ui = Map.put(search, "results", results)
+      ui =
+        Map.put(
+          search,
+          "results",
+          Enum.uniq_by(List.wrap(search["results"]) ++ results, & &1["url"])
+        )
+
       emit(state, "item/completed", %{"item" => ui, "turnId" => state.turn_id})
       %{state | last_search: nil}
     end
@@ -700,18 +706,30 @@ defmodule Longx.Agent do
         other -> other || "search"
       end
 
+    # 百炼 sends several queries per call and the sources on the action
+    # (`{type: "url", url}`); OpenAI one query and the sources as the
+    # message's url_citation annotations (`cite/2`)
+    queries = action["queries"] |> List.wrap() |> Enum.reject(&(&1 in [nil, ""]))
+
     query =
-      action["query"] || action["url"] || action["pattern"] ||
-        action["queries"] |> List.wrap() |> Enum.join(" / ")
+      case queries do
+        [] -> action["query"] || action["url"] || action["pattern"] || ""
+        many -> Enum.join(many, " · ")
+      end
+
+    results =
+      for %{"url" => url} = source <- List.wrap(action["sources"]),
+          is_binary(url),
+          do: %{"title" => source["title"] || url, "url" => url}
 
     %{
       "id" => id,
       "type" => "webSearch",
       "turnId" => turn_id,
       "query" => query,
-      "action" => Map.put(action, "type", camel),
+      "action" => action |> Map.put("type", camel) |> Map.delete("sources"),
       "status" => item["status"] || status,
-      "results" => []
+      "results" => results
     }
   end
 

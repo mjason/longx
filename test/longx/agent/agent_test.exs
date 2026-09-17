@@ -829,11 +829,17 @@ defmodule Longx.AgentTest do
   defp hosted_search_stream(query, url) do
     resp = %{id: "resp_ws", object: "response", created_at: 1, model: "fake-model", output: []}
 
+    # 百炼's shape: several queries and the sources on the action; OpenAI adds url_citations
     ws = %{
       id: "ws_1",
       type: "web_search_call",
       status: "completed",
-      action: %{type: "search", query: query}
+      action: %{
+        type: "search",
+        query: query,
+        queries: [query, "second query"],
+        sources: [%{type: "url", url: "https://example.org/a"}]
+      }
     }
 
     msg_id = "msg_ws"
@@ -899,22 +905,26 @@ defmodule Longx.AgentTest do
              "item" => %{
                "type" => "webSearch",
                "id" => ws,
-               "query" => "elixir 1.19",
-               "action" => %{"type" => "search"}
+               "query" => "elixir 1.19 · second query",
+               "action" => action
              }
-           } =
-             await_item_started("webSearch")
+           } = await_item_started("webSearch")
 
-    assert %{"item" => %{"id" => ^ws, "status" => "completed"}} = await_item_completed(ws)
+    assert %{"type" => "search"} = action
+    refute Map.has_key?(action, "sources")
 
+    # the action's sources are the row's results at once; a citation in the message adds to them
     assert %{
              "item" => %{
                "id" => ^ws,
-               "results" => [%{"url" => "https://elixir-lang.org/blog", "title" => "The page"}]
+               "status" => "completed",
+               "results" => [%{"url" => "https://example.org/a"}]
              }
-           } =
-             await_item_completed(ws)
+           } = await_item_completed(ws)
 
+    assert %{"item" => %{"id" => ^ws, "results" => results}} = await_item_completed(ws)
+    assert %{"url" => "https://elixir-lang.org/blog", "title" => "The page"} in results
+    assert %{"url" => "https://example.org/a", "title" => "https://example.org/a"} in results
     assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
     assert_receive {:request, first}
 
