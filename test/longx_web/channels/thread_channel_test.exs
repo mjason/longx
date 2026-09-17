@@ -1,6 +1,6 @@
 defmodule LongxWeb.ThreadChannelTest do
   # The browser's live view of one thread: join → snapshot (with seq), then
-  # every ThreadState event as a "codex" push (the channel's vocabulary).
+  # every ThreadState event as an "event" push (the channel's vocabulary).
   # Joining hosts the thread: its agent is started from the row.
   use LongxWeb.ChannelCase, async: false
 
@@ -52,9 +52,9 @@ defmodule LongxWeb.ThreadChannelTest do
 
     :ok = ThreadState.ingest(thread_id, "turn/completed", event(thread_id, "turn_1"))
 
-    assert_push "codex", %{seq: s1, method: "turn/started", params: %{"threadId" => ^thread_id}}
-    assert_push "codex", %{seq: s2, method: "item/agentMessage/delta", params: %{"delta" => "hi"}}
-    assert_push "codex", %{seq: s3, method: "turn/completed", params: _}
+    assert_push "event", %{seq: s1, method: "turn/started", params: %{"threadId" => ^thread_id}}
+    assert_push "event", %{seq: s2, method: "item/agentMessage/delta", params: %{"delta" => "hi"}}
+    assert_push "event", %{seq: s3, method: "turn/completed", params: _}
     assert s1 < s2 and s2 < s3
   end
 
@@ -63,7 +63,7 @@ defmodule LongxWeb.ThreadChannelTest do
   } do
     {:ok, _, socket} = join!(thread_id)
     :ok = ThreadState.ingest(thread_id, "turn/started", event(thread_id, "turn_1"))
-    assert_push "codex", %{method: "turn/started"}
+    assert_push "event", %{method: "turn/started"}
     ref = push(socket, "snapshot", %{})
     assert_reply ref, :ok, %{seq: seq, turn: %{"id" => "turn_1"}}, 2_000
     assert seq >= 1

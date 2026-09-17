@@ -1,12 +1,12 @@
 defmodule Longx.Agent.ThreadState.Store do
   @moduledoc """
-  ETS-backed storage for the materialised state of codex threads.
+  ETS-backed storage for the materialised state of threads.
 
   Three public tables owned by this (long-lived) process, so the data
   outlives the per-thread `Longx.Agent.ThreadState` writer and readers never
   copy through a GenServer:
 
-    * `meta`     — `{thread_id, %{seq, order, thread, turn, status, token_usage, plan}}`
+    * `meta`     — `{thread_id, %{seq, order, thread, turn, status, token_usage, goal}}`
     * `items`    — `{{thread_id, item_id}, order, item}`; `order` gives arrival order
     * `requests` — `{{thread_id, request_id}, order, method, params}`
 
@@ -28,7 +28,6 @@ defmodule Longx.Agent.ThreadState.Store do
     turn: nil,
     status: nil,
     token_usage: nil,
-    plan: nil,
     # goal mode: the thread's goal (objective, status, budget, usage) or nil
     goal: nil,
     # an event's writes are in progress (see `event/2`)
@@ -206,7 +205,7 @@ defmodule Longx.Agent.ThreadState.Store do
 
   ## folding notifications
 
-  @doc "Applies one codex notification to the thread's stored view."
+  @doc "Applies one event (codex's vocabulary) to the thread's stored view."
   @spec fold(String.t(), String.t(), map) :: :ok
   def fold(t, "thread/started", %{"thread" => thread}), do: put_meta(t, %{thread: thread})
   def fold(t, "turn/started", %{"turn" => turn}), do: put_meta(t, %{turn: turn})
@@ -215,13 +214,6 @@ defmodule Longx.Agent.ThreadState.Store do
 
   def fold(t, "thread/tokenUsage/updated", %{"tokenUsage" => usage}),
     do: put_meta(t, %{token_usage: usage})
-
-  # the turn's plan (codex's update_plan tool): steps with pending / inProgress / completed
-  def fold(t, "turn/plan/updated", %{"plan" => plan} = params),
-    do:
-      put_meta(t, %{
-        plan: Map.take(params, ["turnId", "explanation", "plan"]) |> Map.put("plan", plan)
-      })
 
   # goal mode: one goal per thread, replaced whole on every update
   def fold(t, "thread/goal/updated", %{"goal" => goal}), do: put_meta(t, %{goal: goal})
@@ -247,8 +239,6 @@ defmodule Longx.Agent.ThreadState.Store do
 
   def fold(t, "item/fileChange/outputDelta", %{"itemId" => id, "delta" => d}),
     do: append(t, id, "output", d)
-
-  def fold(t, "item/plan/delta", %{"itemId" => id, "delta" => d}), do: append(t, id, "text", d)
 
   def fold(_t, _method, _params), do: :ok
 
@@ -289,7 +279,6 @@ defmodule Longx.Agent.ThreadState.Store do
         turn: meta.turn,
         status: meta.status,
         token_usage: meta.token_usage,
-        plan: meta.plan,
         goal: meta.goal,
         items: items,
         pending_requests: requests

@@ -37,7 +37,7 @@ defmodule Longx.Agent.ThreadStateTest do
       assert [%{"text" => "Hello!"}] = Store.items(t)
     end
 
-    test "reasoning, command output and plan deltas accumulate" do
+    test "reasoning and command output deltas accumulate" do
       t = new_thread()
       item_started(t, %{"id" => "r1", "type" => "reasoning"})
       Store.fold(t, "item/reasoning/summaryTextDelta", %{"itemId" => "r1", "delta" => "think"})
@@ -45,13 +45,10 @@ defmodule Longx.Agent.ThreadStateTest do
       item_started(t, %{"id" => "c1", "type" => "commandExecution", "command" => "ls"})
       Store.fold(t, "item/commandExecution/outputDelta", %{"itemId" => "c1", "delta" => "a\n"})
       Store.fold(t, "item/commandExecution/outputDelta", %{"itemId" => "c1", "delta" => "b\n"})
-      item_started(t, %{"id" => "p1", "type" => "plan"})
-      Store.fold(t, "item/plan/delta", %{"itemId" => "p1", "delta" => "1. x"})
 
       assert [
                %{"id" => "r1", "summary" => "think", "content" => "raw"},
-               %{"id" => "c1", "aggregatedOutput" => "a\nb\n"},
-               %{"id" => "p1", "text" => "1. x"}
+               %{"id" => "c1", "aggregatedOutput" => "a\nb\n"}
              ] = Store.items(t)
     end
 
@@ -119,25 +116,6 @@ defmodule Longx.Agent.ThreadStateTest do
 
       Store.delete_request(t, 9)
       assert Store.requests(t) == []
-    end
-
-    test "the turn's plan (turn/plan/updated) is part of the view" do
-      t = new_thread()
-
-      Store.fold(t, "turn/plan/updated", %{
-        "turnId" => "turn-1",
-        "explanation" => "first",
-        "plan" => [%{"step" => "a", "status" => "inProgress"}]
-      })
-
-      assert %{
-               plan: %{
-                 "turnId" => "turn-1",
-                 "explanation" => "first",
-                 "plan" => [%{"step" => "a"}]
-               }
-             } =
-               Store.snapshot(t)
     end
 
     test "token usage and thread status are kept" do
@@ -258,9 +236,9 @@ defmodule Longx.Agent.ThreadStateTest do
         "delta" => "hi"
       })
 
-      assert_receive {:codex, 1, "turn/started", _}
-      assert_receive {:codex, 2, "item/started", _}
-      assert_receive {:codex, 3, "item/agentMessage/delta", %{"delta" => "hi"}}
+      assert_receive {:thread, 1, "turn/started", _}
+      assert_receive {:thread, 2, "item/started", _}
+      assert_receive {:thread, 3, "item/agentMessage/delta", %{"delta" => "hi"}}
 
       snapshot = ThreadState.snapshot(thread_id)
       assert snapshot.seq == 3
@@ -289,12 +267,12 @@ defmodule Longx.Agent.ThreadStateTest do
             "delta" => "ok"
           })
 
-          assert_receive {:codex, 2, "item/agentMessage/delta", %{"itemId" => "m2"}}, 2_000
+          assert_receive {:thread, 2, "item/agentMessage/delta", %{"itemId" => "m2"}}, 2_000
         end)
 
       assert log =~ "could not fold item/agentMessage/delta"
       assert Process.alive?(pid)
-      refute_received {:codex, _, "item/agentMessage/delta", %{"itemId" => "m1"}}
+      refute_received {:thread, _, "item/agentMessage/delta", %{"itemId" => "m1"}}
 
       assert [%{"id" => "m1", "text" => 5}, %{"id" => "m2", "text" => "ok"}] =
                ThreadState.snapshot(thread_id).items
@@ -311,7 +289,7 @@ defmodule Longx.Agent.ThreadStateTest do
         "item" => %{"id" => "m1", "type" => "agentMessage", "text" => "kept"}
       })
 
-      assert_receive {:codex, 1, "item/started", _}
+      assert_receive {:thread, 1, "item/started", _}
 
       ThreadState.stop(thread_id)
       assert ThreadState.whereis(thread_id) == nil
@@ -323,7 +301,7 @@ defmodule Longx.Agent.ThreadStateTest do
 
       ThreadState.ingest(thread_id, "item/agentMessage/delta", %{"itemId" => "m1", "delta" => "!"})
 
-      assert_receive {:codex, 2, "item/agentMessage/delta", _}
+      assert_receive {:thread, 2, "item/agentMessage/delta", _}
     end
 
     test "subscribe-then-snapshot never loses or duplicates events", %{thread_id: thread_id} do
@@ -347,7 +325,7 @@ defmodule Longx.Agent.ThreadStateTest do
       live =
         Stream.repeatedly(fn ->
           receive do
-            {:codex, seq, _m, %{"delta" => d}} -> {seq, d}
+            {:thread, seq, _m, %{"delta" => d}} -> {seq, d}
           after
             200 -> nil
           end
@@ -371,13 +349,13 @@ defmodule Longx.Agent.ThreadStateTest do
         "command" => "ls"
       })
 
-      assert_receive {:codex, 1, "item/commandExecution/requestApproval",
+      assert_receive {:thread, 1, "item/commandExecution/requestApproval",
                       %{"requestId" => 42, "command" => "ls"}}
 
       assert [%{id: 42}] = ThreadState.snapshot(thread_id).pending_requests
 
       ThreadState.resolve_request(thread_id, 42)
-      assert_receive {:codex, 2, "serverRequest/resolved", %{"requestId" => 42}}
+      assert_receive {:thread, 2, "serverRequest/resolved", %{"requestId" => 42}}
       assert ThreadState.snapshot(thread_id).pending_requests == []
     end
 
@@ -403,7 +381,7 @@ defmodule Longx.Agent.ThreadStateTest do
 
       :ok = ThreadState.drop_turns(thread_id, ["t2", "t3"])
 
-      assert_receive {:codex, 4, "thread/reverted",
+      assert_receive {:thread, 4, "thread/reverted",
                       %{"threadId" => ^thread_id, "turnIds" => ["t2", "t3"]}}
 
       assert Enum.map(ThreadState.snapshot(thread_id).items, & &1["id"]) == ["a"]
@@ -430,11 +408,11 @@ defmodule Longx.Agent.ThreadStateTest do
          %{thread_id: thread_id} do
       ThreadState.subscribe(thread_id)
       ThreadState.put_request(thread_id, 7, "item/commandExecution/requestApproval", %{})
-      assert_receive {:codex, _, "item/commandExecution/requestApproval", _}
+      assert_receive {:thread, _, "item/commandExecution/requestApproval", _}
 
       ThreadState.backfill(thread_id, %{"thread" => %{"id" => thread_id, "turns" => []}})
 
-      assert_receive {:codex, _, "serverRequest/resolved", %{"requestId" => 7}}
+      assert_receive {:thread, _, "serverRequest/resolved", %{"requestId" => 7}}
       assert ThreadState.snapshot(thread_id).pending_requests == []
     end
   end

@@ -246,12 +246,12 @@ describe("ThreadPage", () => {
   test("live events stream in: a running command opens its row, the composer offers stop", async () => {
     await open();
     act(() => {
-      channel.deliver("codex", {
+      channel.deliver("event", {
         seq: 4,
         method: "turn/started",
         params: { turn: { id: "turn_2", status: "inProgress" } },
       });
-      channel.deliver("codex", {
+      channel.deliver("event", {
         seq: 5,
         method: "item/started",
         params: {
@@ -265,7 +265,7 @@ describe("ThreadPage", () => {
           },
         },
       });
-      channel.deliver("codex", { seq: 6, method: "item/commandExecution/outputDelta", params: { itemId: "c2", delta: "removing…\n" } });
+      channel.deliver("event", { seq: 6, method: "item/commandExecution/outputDelta", params: { itemId: "c2", delta: "removing…\n" } });
     });
     expect(screen.getByTestId("turn-bar")).toHaveTextContent("进行中");
     expect(screen.getByText("removing…")).toBeInTheDocument();
@@ -277,8 +277,8 @@ describe("ThreadPage", () => {
     const user = userEvent.setup();
     await open();
     act(() => {
-      channel.deliver("codex", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
-      channel.deliver("codex", {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", {
         seq: 5,
         method: "item/completed",
         params: { turnId: "turn_2", item: { id: "u2", type: "userMessage", turnId: "turn_2", content: [{ type: "text", text: "look at pandas" }] } },
@@ -351,7 +351,7 @@ describe("ThreadPage", () => {
     await open();
     expect(screen.queryByTestId("goal-bar")).not.toBeInTheDocument();
     act(() => {
-      channel.deliver("codex", {
+      channel.deliver("event", {
         seq: 4,
         method: "thread/goal/updated",
         params: { threadId: "thr_1", turnId: null, goal: { threadId: "thr_1", objective: "让测试全绿", status: "active", tokenBudget: 50000, tokensUsed: 12500, timeUsedSeconds: 125, createdAt: 1, updatedAt: 2 } },
@@ -367,7 +367,7 @@ describe("ThreadPage", () => {
     await waitFor(() => expect(setGoal).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", status: "paused" } })));
 
     act(() => {
-      channel.deliver("codex", {
+      channel.deliver("event", {
         seq: 5,
         method: "thread/goal/updated",
         params: { threadId: "thr_1", turnId: null, goal: { threadId: "thr_1", objective: "让测试全绿", status: "paused", tokenBudget: 50000, tokensUsed: 12500, timeUsedSeconds: 125, createdAt: 1, updatedAt: 2 } },
@@ -391,7 +391,7 @@ describe("ThreadPage", () => {
 
     await user.click(within(bar).getByRole("button", { name: "清除" }));
     await waitFor(() => expect(clearGoal).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1" } })));
-    act(() => channel.deliver("codex", { seq: 6, method: "thread/goal/cleared", params: { threadId: "thr_1" } }));
+    act(() => channel.deliver("event", { seq: 6, method: "thread/goal/cleared", params: { threadId: "thr_1" } }));
     await waitFor(() => expect(screen.queryByTestId("goal-bar")).not.toBeInTheDocument());
 
     // /goal opens the dialog for a new goal
@@ -404,7 +404,7 @@ describe("ThreadPage", () => {
   test("the kernel falling back to another model of the chain mid-turn is said in a toast", async () => {
     await open();
     act(() => {
-      channel.deliver("codex", {
+      channel.deliver("event", {
         seq: 4,
         method: "model/rerouted",
         params: { threadId: "thr_1", turnId: "turn_1", fromModel: "a", toModel: "b", reason: "quota" },
@@ -459,7 +459,7 @@ describe("ThreadPage", () => {
     ).toHaveTextContent("7");
 
     act(() =>
-      channel.deliver("codex", {
+      channel.deliver("event", {
         seq: 5,
         method: "thread/reverted",
         params: { threadId: "thr_1", turnIds: ["turn_1"] },
@@ -474,7 +474,7 @@ describe("ThreadPage", () => {
     const user = userEvent.setup();
     await open();
     act(() =>
-      channel.deliver("codex", {
+      channel.deliver("event", {
         seq: 4,
         method: "turn/started",
         params: { turn: { id: "turn_2", status: "inProgress" } },
@@ -507,7 +507,7 @@ describe("ThreadPage", () => {
     await user.type(input, "later{Enter}");
     expect(await screen.findByTestId("message-queue")).toHaveTextContent("later");
     act(() =>
-      channel.deliver("codex", {
+      channel.deliver("event", {
         seq: 5,
         method: "turn/completed",
         params: { turn: { id: "turn_2", status: "completed" } },
@@ -526,12 +526,12 @@ describe("ThreadPage", () => {
     await open();
     const child = "thr_1-alpha";
     act(() => {
-      channel.deliverTo("thread:thr_1", "codex", {
+      channel.deliverTo("thread:thr_1", "event", {
         seq: 4,
         method: "turn/started",
         params: { turn: { id: "turn_2", status: "inProgress" } },
       });
-      channel.deliverTo("thread:thr_1", "codex", {
+      channel.deliverTo("thread:thr_1", "event", {
         seq: 6,
         method: "item/completed",
         params: {
@@ -593,12 +593,12 @@ describe("ThreadPage", () => {
     );
 
     act(() => {
-      channel.deliverTo(`thread:${child}`, "codex", {
+      channel.deliverTo(`thread:${child}`, "event", {
         seq: 3,
         method: "serverRequest/resolved",
         params: { requestId: 9 },
       });
-      channel.deliverTo(`thread:${child}`, "codex", {
+      channel.deliverTo(`thread:${child}`, "event", {
         seq: 4,
         method: "item/completed",
         params: {
@@ -614,7 +614,7 @@ describe("ThreadPage", () => {
           },
         },
       });
-      channel.deliverTo(`thread:${child}`, "codex", {
+      channel.deliverTo(`thread:${child}`, "event", {
         seq: 5,
         method: "item/completed",
         params: {
@@ -626,12 +626,12 @@ describe("ThreadPage", () => {
           },
         },
       });
-      channel.deliverTo(`thread:${child}`, "codex", {
+      channel.deliverTo(`thread:${child}`, "event", {
         seq: 6,
         method: "turn/completed",
         params: { turn: { id: "turn_2-alpha", status: "completed" } },
       });
-      channel.deliverTo("thread:thr_1", "codex", {
+      channel.deliverTo("thread:thr_1", "event", {
         seq: 7,
         method: "item/completed",
         params: {
@@ -656,7 +656,7 @@ describe("ThreadPage", () => {
     await open();
     expect(screen.queryByLabelText("上下文用量")).not.toBeInTheDocument();
     act(() =>
-      channel.deliver("codex", {
+      channel.deliver("event", {
         seq: 4,
         method: "thread/tokenUsage/updated",
         params: {
@@ -805,7 +805,7 @@ describe("ThreadPage", () => {
     );
 
     act(() =>
-      channel.deliver("codex", {
+      channel.deliver("event", {
         seq: 4,
         method: "item/completed",
         params: {
@@ -905,7 +905,7 @@ describe("ThreadPage", () => {
       ),
     ).toBeInTheDocument();
     act(() => {
-      channel.deliver("codex", {
+      channel.deliver("event", {
         seq: 4,
         method: "item/completed",
         params: {
@@ -917,7 +917,7 @@ describe("ThreadPage", () => {
           },
         },
       });
-      channel.deliver("codex", {
+      channel.deliver("event", {
         seq: 5,
         method: "turn/completed",
         params: { turn: { id: "turn_1", status: "completed" } },
@@ -963,8 +963,8 @@ describe("ThreadPage", () => {
     const user = userEvent.setup();
     await open();
     act(() => {
-      channel.deliver("codex", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
-      channel.deliver("codex", {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", {
         seq: 5,
         method: "longx/action/request",
         params: { requestId: "ask_1", itemId: "call_7", threadId: "thr_1", title: "登录 COROS", text: "用存有训练数据的账号登录", url: "https://auth.example/authorize?x=1", fields: [], callbackUrl: "http://192.168.2.129:7788/callback/ask_1" },

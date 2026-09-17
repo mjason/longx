@@ -534,7 +534,7 @@ export const provider = (n: number, extra: Record<string, unknown> = {}) => ({
 /**
  * A channel double that remembers what was joined and lets a test deliver
  * the join reply (`channel.reply("ok", snapshot)`) and deliver server pushes
- * (`channel.deliver("codex", event)`) — for both the project and thread
+ * (`channel.deliver("event", event)`) — for both the project and thread
  * topics; the shared maps hold the most recent join, `replyTo` / `deliverTo`
  * address one topic when several threads are open (a thread and its
  * sub-agents). Client pushes (`push`) are recorded; `answer(status, payload)`

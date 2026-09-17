@@ -2,7 +2,7 @@ defmodule LongxWeb.ThreadChannel do
   @moduledoc """
   `thread:<kernel_thread_id>` — the live view of one thread, exactly the
   `Longx.Agent.ThreadState` protocol: join answers with the snapshot (its
-  `seq` included), then every event arrives as a `"codex"` push
+  `seq` included), then every event arrives as an `"event"` push
   `%{seq, method, params}` (the event name stayed when the engine changed).
   A client applies only `seq > snapshot.seq`, and after a reconnect simply
   re-joins (or asks for `"snapshot"` again).
@@ -35,8 +35,8 @@ defmodule LongxWeb.ThreadChannel do
   end
 
   @impl true
-  def handle_info({:codex, seq, method, params}, socket) do
-    push(socket, "codex", %{seq: seq, method: method, params: params})
+  def handle_info({:thread, seq, method, params}, socket) do
+    push(socket, "event", %{seq: seq, method: method, params: params})
     {:noreply, socket}
   end
 

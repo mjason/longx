@@ -110,7 +110,7 @@ defmodule Longx.AgentTest do
 
   defp await(method, timeout \\ 5_000) do
     receive do
-      {:codex, _seq, ^method, params} -> params
+      {:thread, _seq, ^method, params} -> params
     after
       timeout -> flunk("no #{method} event")
     end
@@ -384,7 +384,7 @@ defmodule Longx.AgentTest do
 
     assert {:ok, %{turn_id: ^turn_id, steered: true}} = Agent.send(id, "also this")
     # not in the transcript yet: it shows when the kernel folds it into the next step
-    refute_receive {:codex, _, "item/completed",
+    refute_receive {:thread, _, "item/completed",
                     %{
                       "item" => %{
                         "type" => "userMessage",
@@ -425,7 +425,7 @@ defmodule Longx.AgentTest do
     assert {:error, :not_running} = Agent.interrupt(id)
 
     send(handler, :go)
-    refute_receive {:codex, _, "item/agentMessage/delta", _}, 300
+    refute_receive {:thread, _, "item/agentMessage/delta", _}, 300
 
     {:ok, %{turn_id: t2}} = Agent.send(id, "next")
     assert %{"id" => ^t2, "status" => "completed"} = await_turn_end()
@@ -1587,7 +1587,7 @@ defmodule Longx.AgentTest do
 
   defp await_item_started(type) do
     receive do
-      {:codex, _, "item/started", %{"item" => %{"type" => ^type}} = params} -> params
+      {:thread, _, "item/started", %{"item" => %{"type" => ^type}} = params} -> params
     after
       5_000 -> flunk("no item/started #{type}")
     end
@@ -1603,7 +1603,7 @@ defmodule Longx.AgentTest do
 
   defp await_user_message(text) do
     receive do
-      {:codex, _, "item/completed",
+      {:thread, _, "item/completed",
        %{"item" => %{"type" => "userMessage", "content" => [%{"text" => ^text}]} = item}} ->
         item
     after
@@ -1613,7 +1613,7 @@ defmodule Longx.AgentTest do
 
   defp await_user_message_matching(regex) do
     receive do
-      {:codex, _, "item/completed",
+      {:thread, _, "item/completed",
        %{"item" => %{"type" => "userMessage", "content" => [%{"text" => text}]} = item}}
       when is_binary(text) ->
         if Regex.match?(regex, text), do: item, else: await_user_message_matching(regex)
@@ -1624,7 +1624,7 @@ defmodule Longx.AgentTest do
 
   defp await_on(thread_id, method) do
     receive do
-      {:codex, _seq, ^method, %{"threadId" => ^thread_id} = params} -> params
+      {:thread, _seq, ^method, %{"threadId" => ^thread_id} = params} -> params
     after
       5_000 -> flunk("no #{method} on #{thread_id}")
     end
@@ -1632,7 +1632,7 @@ defmodule Longx.AgentTest do
 
   defp drain_activities do
     receive do
-      {:codex, _, _, %{"item" => %{"type" => "subAgentActivity"}}} -> drain_activities()
+      {:thread, _, _, %{"item" => %{"type" => "subAgentActivity"}}} -> drain_activities()
     after
       0 -> :ok
     end
@@ -1640,7 +1640,7 @@ defmodule Longx.AgentTest do
 
   defp await_item_completed_of_type(type) do
     receive do
-      {:codex, _, "item/completed", %{"item" => %{"type" => ^type}} = params} -> params
+      {:thread, _, "item/completed", %{"item" => %{"type" => ^type}} = params} -> params
     after
       5_000 -> flunk("no item/completed of type #{type}")
     end
@@ -1648,7 +1648,7 @@ defmodule Longx.AgentTest do
 
   defp await_item_completed(item_id) do
     receive do
-      {:codex, _, "item/completed", %{"item" => %{"id" => ^item_id}} = params} -> params
+      {:thread, _, "item/completed", %{"item" => %{"id" => ^item_id}} = params} -> params
     after
       5_000 -> flunk("no item/completed #{item_id}")
     end

@@ -379,7 +379,7 @@ defmodule Longx.Projects.ThreadsTest do
     url = "/p/#{project.slug}/t/#{thread.id}"
     {:ok, turn} = Projects.send_message(thread, "log in")
 
-    assert_receive {:codex, _, "longx/action/request", %{"requestId" => rid}}, 5_000
+    assert_receive {:thread, _, "longx/action/request", %{"requestId" => rid}}, 5_000
     # the request = the turn waits on the person; the welcome page says so
     assert_receive {:notify, %{kind: "approval", title: "等待你操作", body: "登录", url: ^url}}, 5_000
     assert [%{id: id, waiting: true}] = Projects.running_threads()
@@ -433,7 +433,7 @@ defmodule Longx.Projects.ThreadsTest do
     assert {:ok, %{"objective" => "keep going", "status" => "active", "tokenBudget" => 5000}} =
              Projects.set_goal(thread, %{objective: "keep going", token_budget: 5000})
 
-    assert_receive {:codex, _, "thread/goal/updated",
+    assert_receive {:thread, _, "thread/goal/updated",
                     %{"goal" => %{"objective" => "keep going"}}},
                    5_000
 
@@ -443,7 +443,7 @@ defmodule Longx.Projects.ThreadsTest do
              Projects.set_goal(thread, %{status: :paused})
 
     assert {:ok, true} = Projects.clear_goal(thread)
-    assert_receive {:codex, _, "thread/goal/cleared", _}, 5_000
+    assert_receive {:thread, _, "thread/goal/cleared", _}, 5_000
     assert ThreadState.snapshot(thread.kernel_thread_id).goal == nil
     assert {:ok, false} = Projects.clear_goal(thread)
 

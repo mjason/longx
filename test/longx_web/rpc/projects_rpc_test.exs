@@ -400,7 +400,7 @@ defmodule LongxWeb.ProjectsRpcTest do
                })
 
       send(h, :go)
-      assert_receive {:codex, _, "turn/completed", %{"turn" => %{"id" => ^turn_id}}}, 5_000
+      assert_receive {:thread, _, "turn/completed", %{"turn" => %{"id" => ^turn_id}}}, 5_000
       thread_idle(conn, project["id"], thread_id)
 
       assert %{
@@ -497,7 +497,7 @@ defmodule LongxWeb.ProjectsRpcTest do
           "input" => %{"threadId" => thread_id, "text" => "log me in"}
         })
 
-      assert_receive {:codex, _, "longx/action/request", %{"requestId" => request_id}}, 5_000
+      assert_receive {:thread, _, "longx/action/request", %{"requestId" => request_id}}, 5_000
 
       assert_eventually(fn -> Ash.get!(Projects.Thread, thread_id).preview == "log me in" end)
 
@@ -520,7 +520,7 @@ defmodule LongxWeb.ProjectsRpcTest do
                  }
                })
 
-      assert_receive {:codex, _, "turn/completed", _}, 5_000
+      assert_receive {:thread, _, "turn/completed", _}, 5_000
       thread_idle(conn, project["id"], thread_id)
 
       assert %{"success" => true, "data" => %{"threads" => []}} =
@@ -545,7 +545,7 @@ defmodule LongxWeb.ProjectsRpcTest do
                  }
                })
 
-      assert_receive {:codex, _, "thread/goal/updated", _}, 5_000
+      assert_receive {:thread, _, "thread/goal/updated", _}, 5_000
 
       assert %{"success" => true, "data" => %{"status" => "paused"}} =
                rpc(conn, "set_goal", %{

@@ -410,7 +410,7 @@ React Native client planned on the same core code.
     `compact/1`; `status/1`. Guards: `max_steps` per turn (500, `config :longx,
     Longx.Agent, max_steps:`) and 20 continuations. **The process is light and leaves
     when idle** (`idle_ms:`, default 30 min, `config :longx, Longx.Agent, idle_ms:`;
-    `{:stop, :normal}`, nothing restarts it): `Longx.Agent.Specs` (ETS, in the tree)
+    `{:stop, :normal}`, nothing restarts it): `Longx.Agent.Kernel.Specs` (ETS, in the tree)
     keeps what every agent was `ensure`d with, `ensure_alive/1` starts it again from
     that and its transcript, and `send/3` does so by itself — a message brings an agent
     back in milliseconds; a crash likewise (the turn in flight is not resumed; a BEAM
@@ -524,7 +524,7 @@ React Native client planned on the same core code.
     through the shim), `yield_time_ms` (accepted; the command runs to completion here —
     `timeout_ms`, default 2 min, max 30 min — `write_stdin` sessions are not offered yet),
     `max_output_tokens`, `shell`, `login`; stdout+stderr interleaved, head+tail kept, the
-    exit code reported), `apply_patch` (`Plugs.Patch` over `Longx.Agent.Patch`: codex's
+    exit code reported), `apply_patch` (`Plugs.Patch` over `Longx.Agent.Tools.Patch`: codex's
     patch grammar parsed and applied in Elixir — all hunks matched first, then written;
     exact, then trailing-whitespace, then surrounding-whitespace matching; a `function`
     tool with the patch as `input` everywhere, and for a provider of `kind: :openai` the
@@ -540,7 +540,7 @@ React Native client planned on the same core code.
     section: the project is the working directory, do not explore the home directory,
     other projects or Longx's own source — a model asked to "start an agent" before the
     tool existed went hunting through `~` and Longx's repo for a way).
-  - `Longx.Agent.Transcript` (Ash domain) / `Longx.Agent.Item` (`agent_items`): the
+  - `Longx.Agent.Transcript` (Ash domain) / `Longx.Agent.Transcript.Item` (`agent_items`): the
     append-only log — every Responses input item (`input`: user / assistant message,
     reasoning, `function_call`, `function_call_output`, `compaction`) with its UI item
     (`ui`) and `seq` / `turn_id` / `model`. The model's context is `Transcript.input/1`:
@@ -550,13 +550,13 @@ React Native client planned on the same core code.
     "interrupted" output. A boot replays the `ui` items through `ThreadState.backfill`
     (synchronous); a retract is a truncation; `delete_thread` / a project delete drop it.
   - **Descriptions: `Longx.Agent.Config`**, data evaluated before anything runs, the
-    same format in every layer (`Longx.Agent.Loader`): the shipped default
+    same format in every layer (`Longx.Agent.Definition.Loader`): the shipped default
     (`Longx.Agent.Pipelines.Default.config/0` — Environment, Base, Shell, Patch,
     ViewImage, Knowledge, WebSearch, Browser, Agents, Goal, Request), the
     project's **shared** tree (`<root>/.longx/agent.exs` + `shared/{agents,plugs,knowledge}`;
     the flat `plugs/` / `knowledge/` of before count as shared) and its **local** tree
     (`.longx/local/` — `agent.exs`, `agents/`, `plugs/`, `knowledge/` — gitignored:
-    `Longx.Agent.Layout.ensure_ignored/1` on every local knowledge write, `Git.Ignore`'s
+    `Longx.Agent.Definition.Layout.ensure_ignored/1` on every local knowledge write, `Git.Ignore`'s
     default; `promote/2` moves a local file into shared — `Projects.promote_local/2`,
     RPC `promote_local`, the project settings' 提升到 shared). `import Longx.Agent.Config;
     agent do version 1; extends :default; model "…", effort: "…"; prompt "…"; prompt_file
@@ -583,7 +583,7 @@ React Native client planned on the same core code.
     the earlier (a local `researcher` stands in for the shared one); `agents` lists
     every declared role with its summary, `allowed` whom the loaded agent may spawn (nil =
     all), an unknown role is an error. The **settings layer** goes on last
-    (`settings:` — `Longx.Agent.Settings.for_project/1`, handed to the kernel as a
+    (`settings:` — `Longx.Agent.Definition.Settings.for_project/1`, handed to the kernel as a
     function read per turn like `trust:`): `options Agents, max_depth/max_children`, the
     default child model for a role that names none, the reviewer model for the `reviewer`
     role; `overrides:` takes one more `Config`. `Project.trust_local_agent` (default
@@ -627,7 +627,7 @@ React Native client planned on the same core code.
     `priv/agent/reference.md` (= the body of `priv/agent/knowledge/writing-plugs.md`).
     `Longx.Agent` loads per step when no `pipeline:` module is given (tests give one); the
     description's `model` / `effort` stand where the person chose none.
-  - **Settings → Agent 内核 (`Longx.Agent.Settings`)**: `max_depth` (2), `max_children`
+  - **Settings → Agent 内核 (`Longx.Agent.Definition.Settings`)**: `max_depth` (2), `max_children`
     (4), `idle_minutes` (30), `child_model` / `child_effort`, `reviewer_model` /
     `reviewer_effort` — one `Longx.System.Setting` (`agent_kernel`, JSON) for the global
     values (`global/0`, `put_global/1` validated per field — counts ≥ 1, models the
@@ -716,7 +716,7 @@ React Native client planned on the same core code.
     Preparation is reasoning items sanitised per
     provider, the output cap — the same path codex's requests take —, the `custom` tool
     swap for `:openai`; then a `Limiter` slot, a `Gateway.Log` entry (Settings → 请求记录 shows
-    native requests too, `request_kind` `agent` / `compaction`), `Longx.Agent.SSE` →
+    native requests too, `request_kind` `agent` / `compaction`), `Longx.Agent.Model.SSE` →
     `{:item_added | :text_delta | :reasoning_delta | :reasoning_text_delta | :item_done |
     :completed | :failed}`. 429 / 5xx / transport errors before anything streamed are
     retried (`config :longx, Longx.Agent.Model, retry_ms:`, `[10, 10]` in tests); a 4xx
@@ -1182,7 +1182,7 @@ React Native client planned on the same core code.
     **single writer**: it folds each notification into the Store (deltas append in place —
     reasoning `summary`/`content` are `string[]` and `summaryIndex`/`contentIndex` name the
     entry — `item/completed` replaces), allocates a strictly increasing `seq`, and broadcasts
-    `{:codex, seq, method, params}` on `"codex:thread:<id>"`; an event the Store cannot fold
+    `{:thread, seq, method, params}` on `"thread:<id>"`; an event the Store cannot fold
     is logged and dropped (one bad notification must never crash the writer for every delta
     of a stream and escalate up the tree). Reads (`snapshot/1`) go straight
     to ETS — no process hop, works even when the writer is stopped, and a restarted writer
@@ -1281,7 +1281,7 @@ React Native client planned on the same core code.
     via the lifecycle hook (`assets/js/core/rpcHooks.ts`, configured in `config.exs`).
   - **Channels** (`LongxWeb.UserSocket` at `/socket`): `LongxWeb.ThreadChannel`
     (`thread:<codex_thread_id>`) is the ThreadState protocol on the wire — join replies with
-    the snapshot (`seq`), then `"codex"` pushes `%{seq, method, params}`, `"snapshot"` on
+    the snapshot (`seq`), then `"event"` pushes `%{seq, method, params}`, `"snapshot"` on
     demand; joining a thread no running codex hosts is refused. `LongxWeb.ProjectChannel`
     (`project:<id>`) pushes `"changed"` (rows changed → refetch; from
     `Longx.Projects.broadcast_changed/1`, called by the Tracker and Projects after writes),

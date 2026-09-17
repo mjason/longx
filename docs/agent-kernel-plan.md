@@ -75,10 +75,10 @@ agent loop 就是 OTP 递归；agent 之间用 mailbox；配置在后台配。
    闲置自退与按需重启（`Longx.Agent.spawn/4`、`Step.spawn/4`、`send(from:)`、`Specs` + `ensure_alive`、
    `Projects.spawn_native_agent/4` 给孩子建行）。
 2. ✅ 加载器：`agents/<name>/`、`shared/` / `local/` 两棵树、`prompt_file`、`agents [...]`；Knowledge 的
-   主题规则和折叠索引；`.gitignore`（`Longx.Agent.Layout`）。
+   主题规则和折叠索引；`.gitignore`（`Longx.Agent.Definition.Layout`）。
 3. ✅ 出厂 `Plugs.Agents`（spawn_agent / send_message / close_agent + 上限）、`Plugs.Goal`；起步包做过又删了——
    角色不进内核。
-4. ✅ 设置页"Agent 内核"（`Longx.Agent.Settings`：全局一条 `system_settings`，项目 `agent_settings` 覆盖，
+4. ✅ 设置页"Agent 内核"（`Longx.Agent.Definition.Settings`：全局一条 `system_settings`，项目 `agent_settings` 覆盖，
    加载器当最上层描述）、全局 agent 文件编辑、项目设置里的角色列表和「提升到 shared」。
 
 落地时的取舍：角色声明按层**替换**（local 的顶掉 shared 的），不叠加；信任开关只管 shared

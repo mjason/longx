@@ -1,4 +1,4 @@
-// `thread:<kernel thread id>` on the wire: join → snapshot, then "codex"
+// `thread:<kernel thread id>` on the wire: join → snapshot, then "event"
 // events. A reconnect re-joins and delivers a fresh snapshot, which
 // replaces the view (its seq is authoritative); events older than the
 // snapshot are dropped by applyEvent. `snapshot()` asks for it again in
@@ -24,7 +24,7 @@ export function joinThreadChannel(
   handlers: ThreadChannelHandlers,
 ): ThreadChannelHandle {
   const channel: Channel = socket.channel(`thread:${kernelThreadId}`, {});
-  channel.on("codex", (payload: ThreadEvent) => handlers.onEvent(payload));
+  channel.on("event", (payload: ThreadEvent) => handlers.onEvent(payload));
   channel
     .join()
     .receive("ok", (snapshot: ThreadSnapshot) => handlers.onSnapshot(snapshot))

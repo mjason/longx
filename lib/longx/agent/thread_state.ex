@@ -1,11 +1,12 @@
 defmodule Longx.Agent.ThreadState do
   @moduledoc """
-  The single writer for one codex thread's materialised state.
+  The single writer for one thread's materialised state (the view the kernel's
+  events build, in codex's vocabulary).
 
   Every event for the thread passes through this process so it can (1) fold
   it into the ETS-backed `Longx.Agent.ThreadState.Store`, (2) stamp it with a
-  strictly increasing `seq`, and (3) broadcast `{:codex, seq, method, params}`
-  on `"codex:thread:<id>"`. Reads (`snapshot/1`) go straight to ETS and work
+  strictly increasing `seq`, and (3) broadcast `{:thread, seq, method, params}`
+  on `"thread:<id>"`. Reads (`snapshot/1`) go straight to ETS and work
   whether or not this process is alive; the sequence continues where it left
   off when the process is restarted.
 
@@ -38,7 +39,6 @@ defmodule Longx.Agent.ThreadState do
           turn: map | nil,
           status: map | nil,
           token_usage: map | nil,
-          plan: map | nil,
           goal: map | nil,
           items: [map],
           pending_requests: [map]
@@ -47,7 +47,7 @@ defmodule Longx.Agent.ThreadState do
   ## Client
 
   @spec topic(String.t()) :: String.t()
-  def topic(thread_id), do: "codex:thread:" <> thread_id
+  def topic(thread_id), do: "thread:" <> thread_id
 
   @doc "Starts the writer for `thread_id` unless it already runs."
   @spec ensure(String.t()) :: {:ok, pid} | {:error, term}
@@ -95,8 +95,7 @@ defmodule Longx.Agent.ThreadState do
 
   @doc """
   Forgets the given turns after a `thread/revert` and tells subscribers with
-  a `thread/reverted` event carrying `"turnIds"` (codex's own notification
-  only names the thread). Clients should re-snapshot.
+  a `thread/reverted` event carrying `"turnIds"`. Clients should re-snapshot.
   """
   @spec drop_turns(String.t(), [String.t()]) :: :ok
   def drop_turns(thread_id, turn_ids), do: GenServer.call(via(thread_id), {:drop_turns, turn_ids})
@@ -121,14 +120,14 @@ defmodule Longx.Agent.ThreadState do
   @impl true
   def init(thread_id), do: {:ok, thread_id}
 
-  # One event the store cannot fold (a shape codex changed under us) is
+  # One event the store cannot fold (a shape that changed under us) is
   # dropped with a log line: crashing here would restart this writer for
   # every delta of the stream and escalate up the tree — never let a single
-  # notification take the codex connection down.
+  # event take the thread's view down.
   @impl true
   def handle_cast({:ingest, method, params}, thread_id) do
     seq = Store.event(thread_id, fn -> Store.fold(thread_id, method, params) end)
-    PubSub.broadcast(@pubsub, topic(thread_id), {:codex, seq, method, params})
+    PubSub.broadcast(@pubsub, topic(thread_id), {:thread, seq, method, params})
     {:noreply, thread_id}
   rescue
     e ->
@@ -147,7 +146,7 @@ defmodule Longx.Agent.ThreadState do
     PubSub.broadcast(
       @pubsub,
       topic(thread_id),
-      {:codex, seq, method,
+      {:thread, seq, method,
        params |> Map.put("requestId", id) |> Map.put_new("threadId", thread_id)}
     )
 
@@ -160,14 +159,14 @@ defmodule Longx.Agent.ThreadState do
     PubSub.broadcast(
       @pubsub,
       topic(thread_id),
-      {:codex, seq, "serverRequest/resolved", %{"requestId" => id, "threadId" => thread_id}}
+      {:thread, seq, "serverRequest/resolved", %{"requestId" => id, "threadId" => thread_id}}
     )
 
     {:noreply, thread_id}
   end
 
   @impl true
-  # a backfill means a (new) codex process read the thread from disk: nothing
+  # a backfill means the agent was started again from its transcript: nothing
   # it was asked before can be answered any more
   def handle_call({:backfill, result}, _from, thread_id) do
     for %{id: id} <- Store.requests(thread_id) do
@@ -184,7 +183,7 @@ defmodule Longx.Agent.ThreadState do
     PubSub.broadcast(
       @pubsub,
       topic(thread_id),
-      {:codex, seq, "thread/reverted", %{"threadId" => thread_id, "turnIds" => turn_ids}}
+      {:thread, seq, "thread/reverted", %{"threadId" => thread_id, "turnIds" => turn_ids}}
     )
 
     {:reply, :ok, thread_id}
@@ -192,6 +191,6 @@ defmodule Longx.Agent.ThreadState do
 
   defp broadcast(thread_id, method, params) do
     seq = Store.next_seq(thread_id)
-    PubSub.broadcast(@pubsub, topic(thread_id), {:codex, seq, method, params})
+    PubSub.broadcast(@pubsub, topic(thread_id), {:thread, seq, method, params})
   end
 end

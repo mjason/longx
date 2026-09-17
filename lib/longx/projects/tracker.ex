@@ -58,7 +58,7 @@ defmodule Longx.Projects.Tracker do
   end
 
   @impl true
-  def handle_info({:codex, _seq, method, params}, state) do
+  def handle_info({:thread, _seq, method, params}, state) do
     state =
       case handle_event(method, params) do
         {:track, child_id} -> follow(state, child_id)

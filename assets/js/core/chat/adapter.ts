@@ -90,7 +90,7 @@ export function inputOf(message: AppendMessage): {
 }
 
 /** Words are no side effect: thinking and a half-said answer go with a retracted turn. */
-const HARMLESS_ITEMS = new Set(["userMessage", "agentMessage", "reasoning", "plan"]);
+const HARMLESS_ITEMS = new Set(["userMessage", "agentMessage", "reasoning"]);
 
 /**
  * Whether the turn ran anything — a command, a patch, a tool, a search, a
