@@ -87,11 +87,20 @@ defmodule Longx.Agent do
               # who it spawned (child thread id → %{name, pid, ref})
               parent: nil,
               name: nil,
+              # the declared role this agent runs as (its description on top of the project's)
+              role: nil,
+              # how many parents above (the Agents plug's depth limit)
+              depth: 0,
               children: %{},
               # `step.state`: kept across the phases and steps of one turn
               turn_state: %{},
               # how this agent's children are made (Longx.Projects gives them rows)
               spawner: nil,
+              # the settings page's layer, read per turn (Longx.Agent.Settings map or nil)
+              settings: nil,
+              # the thread's goal (codex's shape: objective, status, tokenBudget,
+              # tokensUsed, timeUsedSeconds), kept in the view across restarts
+              goal: nil,
               # leaves after this long idle (nil never); comes back on demand
               idle_ms: nil,
               last_active: nil
@@ -194,6 +203,28 @@ defmodule Longx.Agent do
   @spec status(String.t()) :: :idle | {:running, String.t()}
   def status(thread_id), do: GenServer.call(via(thread_id), :status)
 
+  @doc """
+  Sets or changes the thread's goal (`"objective"`, `"status"`,
+  `"tokenBudget"`; keys absent stay) and shows it (`thread/goal/updated`).
+  A goal `active` makes the Goal plug continue turns until it is complete.
+  """
+  @spec set_goal(String.t(), map) :: {:ok, map} | {:error, term}
+  def set_goal(thread_id, attrs) when is_map(attrs) do
+    with {:ok, _pid} <- ensure_alive(thread_id),
+         do: GenServer.call(via(thread_id), {:set_goal, attrs})
+  end
+
+  @spec get_goal(String.t()) :: {:ok, map | nil} | {:error, term}
+  def get_goal(thread_id) do
+    with {:ok, _pid} <- ensure_alive(thread_id), do: GenServer.call(via(thread_id), :get_goal)
+  end
+
+  @doc "Drops the goal (`thread/goal/cleared`); whether there was one."
+  @spec clear_goal(String.t()) :: {:ok, boolean} | {:error, term}
+  def clear_goal(thread_id) do
+    with {:ok, _pid} <- ensure_alive(thread_id), do: GenServer.call(via(thread_id), :clear_goal)
+  end
+
   def start_link(opts) do
     thread_id = Keyword.fetch!(opts, :thread_id)
     GenServer.start_link(__MODULE__, opts, name: via(thread_id))
@@ -225,13 +256,18 @@ defmodule Longx.Agent do
       pipeline: Keyword.get(opts, :pipeline) || configured_pipeline(),
       parent: Keyword.get(opts, :parent),
       name: Keyword.get(opts, :name),
+      role: Keyword.get(opts, :role),
+      depth: Keyword.get(opts, :depth, 0),
       spawner: Keyword.get(opts, :spawner),
+      settings: Keyword.get(opts, :settings, fn -> nil end),
       idle_ms: Keyword.get(opts, :idle_ms, configured_idle_ms()),
       last_active: System.monotonic_time(:millisecond),
       trust: Keyword.get(opts, :trust, fn -> false end),
       web_search: Keyword.get(opts, :web_search, true),
       seq: items |> Enum.map(& &1.seq) |> Enum.max(fn -> 0 end),
-      transcript: Transcript.input(items)
+      transcript: Transcript.input(items),
+      # the goal outlives the process in the view
+      goal: ThreadState.Store.meta(thread_id).goal
     }
 
     {:ok, _} = ThreadState.ensure(thread_id)
@@ -308,6 +344,18 @@ defmodule Longx.Agent do
   end
 
   def handle_call(:children, _from, state), do: {:reply, children_list(state), state}
+
+  def handle_call({:set_goal, attrs}, _from, state) do
+    state = update_goal(touch(state), attrs)
+    {:reply, {:ok, state.goal}, state}
+  end
+
+  def handle_call(:get_goal, _from, state), do: {:reply, {:ok, state.goal}, state}
+
+  def handle_call(:clear_goal, _from, %State{goal: goal} = state) do
+    if goal, do: emit(state, "thread/goal/cleared", %{})
+    {:reply, {:ok, goal != nil}, %{state | goal: nil}}
+  end
 
   def handle_call(:interrupt, _from, %State{phase: :idle} = state),
     do: {:reply, {:error, :not_running}, state}
@@ -392,6 +440,39 @@ defmodule Longx.Agent do
 
   defp deliver(state, text, from), do: {:noreply, queue_steer(state, text, from: from)}
 
+  ## The goal
+
+  @goal_defaults %{
+    "status" => "active",
+    "tokenBudget" => nil,
+    "tokensUsed" => 0,
+    "timeUsedSeconds" => 0
+  }
+
+  defp update_goal(%State{goal: goal} = state, attrs) do
+    base = goal || Map.put(@goal_defaults, "startedAt", System.system_time(:second))
+
+    goal =
+      base
+      |> Map.merge(Map.take(attrs, ["objective", "status", "tokenBudget"]))
+      |> Map.put_new("objective", "")
+      |> with_time()
+
+    emit(state, "thread/goal/updated", %{"goal" => Map.delete(goal, "startedAt")})
+    %{state | goal: goal}
+  end
+
+  defp with_time(%{"startedAt" => at} = goal) when is_integer(at),
+    do: Map.put(goal, "timeUsedSeconds", System.system_time(:second) - at)
+
+  defp with_time(goal), do: goal
+
+  # every model call while a goal is set counts against it
+  defp charge_goal(%State{goal: nil} = state, _tokens), do: state
+
+  defp charge_goal(%State{goal: goal} = state, tokens),
+    do: %{state | goal: Map.update(goal, "tokensUsed", tokens, &(&1 + tokens))}
+
   ## Children
 
   defp spawn_child(%State{} = state, name, task, opts) do
@@ -424,12 +505,16 @@ defmodule Longx.Agent do
              name: name,
              project_id: parent.project_id,
              cwd: Keyword.get(opts, :cwd, parent.cwd),
-             model: Keyword.get(opts, :model, parent.model),
-             effort: Keyword.get(opts, :effort, parent.effort),
+             # no model given: the role's own, else the default (not the parent's)
+             model: Keyword.get(opts, :model),
+             effort: Keyword.get(opts, :effort),
+             role: Keyword.get(opts, :role),
+             depth: parent.depth + 1,
              pipeline: Keyword.get(opts, :pipeline, parent.pipeline),
              trust: parent.trust,
              web_search: parent.web_search,
              spawner: parent.spawner,
+             settings: parent.settings,
              idle_ms: parent.idle_ms
            ),
          {:ok, _} <- __MODULE__.send(child_id, task) do
@@ -560,12 +645,16 @@ defmodule Longx.Agent do
         context_window: state.context_window,
         assigns: %{
           trust: state.trust,
+          settings: state.settings,
           web_search: state.web_search,
           context_overflow: state.context_overflow,
           compact_requested: state.compact_requested,
           parent: state.parent,
           name: state.name,
-          children: children_list(state)
+          role: state.role,
+          depth: state.depth,
+          children: children_list(state),
+          goal: state.goal
         },
         state: state.turn_state,
         instructions: team_instructions(state)
@@ -582,7 +671,8 @@ defmodule Longx.Agent do
       step
       | model: step.model || loaded.model,
         effort: step.effort || (step.model == nil && loaded.effort) || nil,
-        instructions: Enum.map(loaded.notices, &("⚠ " <> &1)) ++ step.instructions
+        instructions: Enum.map(loaded.notices, &("⚠ " <> &1)) ++ step.instructions,
+        assigns: Map.merge(step.assigns, %{agents: loaded.agents, allowed: loaded.allowed})
     }
 
     {:ok, Longx.Agent.Pipeline.run(step, loaded.plugs)}
@@ -598,7 +688,13 @@ defmodule Longx.Agent do
 
   defp load_definition(%Step{cwd: cwd, project_id: project_id, assigns: assigns}) do
     trusted? = (assigns[:trust] || fn -> false end).()
-    Longx.Agent.Loader.load(cwd, tag: project_id || "adhoc", trusted: trusted?)
+
+    Longx.Agent.Loader.load(cwd,
+      tag: project_id || "adhoc",
+      trusted: trusted?,
+      agent: assigns[:role],
+      settings: (assigns[:settings] || fn -> nil end).()
+    )
   end
 
   # the model answered: the response phase may add calls of its own or halt
@@ -659,6 +755,9 @@ defmodule Longx.Agent do
   # children the plugs asked for (a failure to start one is a message from it)
   defp take_effects(%State{} = state, %Step{state: st, effects: effects}) do
     Enum.reduce(effects, %{state | turn_state: st}, fn
+      {:goal, attrs}, acc ->
+        update_goal(acc, attrs)
+
       {:spawn, name, task, opts}, acc ->
         case spawn_child(acc, name, task, opts) do
           {:ok, _id, acc} ->
@@ -1196,6 +1295,7 @@ defmodule Longx.Agent do
     })
 
     %{state | usage_total: total, usage_last: last, context_window: window}
+    |> charge_goal(last["totalTokens"])
   end
 
   ## Tool calls

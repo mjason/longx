@@ -1,26 +1,33 @@
 defmodule Longx.Agent.Knowledge do
   @moduledoc """
-  Knowledge is markdown files with front matter, in three roots:
+  Knowledge is markdown files with front matter, in four roots:
 
     * `longx` — shipped with Longx (`priv/agent/knowledge/`), read-only:
       how to write plugs, the description format and its versions;
     * `global` — the person's, every project (`<data>/agent/knowledge/`),
       a git repository of its own where every write is a commit;
-    * `project` — the project's (`<root>/.longx/knowledge/`), committed
-      with the code by the turn's own bookmarks.
+    * `project` — the project's shared tree (`<root>/.longx/shared/knowledge/`;
+      the flat `.longx/knowledge/` of before is read too), committed with
+      the code by the turn's own bookmarks — what a person reviewed;
+    * `local` — `<root>/.longx/local/knowledge/`, gitignored: this
+      machine's and the agent's own notes, where it writes by default.
 
-  A doc names itself in its front matter (`title`, `summary`, `tags`,
-  `always: true` for what every turn must know); a file without one is
-  titled by its name and summarised by its first line. Paths are
-  `<root>/<relative>` (`project/ops/deploy.md`). `docs/1` lists, `read/2`
-  gives a body, `search/2` finds lines, `write/3` creates or replaces a
-  doc (front matter required; the shipped root refuses).
+  **Two levels**: a doc lives in a topic — `<root>/<topic>/<name>.md` — so
+  the index folds to one line per topic (a `README.md` in the topic speaks
+  for it) and a topic reads as the list of its docs (`read/2` with
+  `project/deploy`). A doc names itself in its front matter (`title`,
+  `summary`, `tags`, `always: true` for what every turn must know); a
+  file without one is titled by its name and summarised by its first
+  line. `docs/1` lists, `read/2` gives a body or a topic, `search/2`
+  finds lines, `write/3` creates or replaces a doc (front matter and a
+  topic required; the shipped root refuses; a local write keeps `local/`
+  gitignored), `promote/2` moves a local doc into the shared tree.
   """
 
   alias Longx.Git
 
   @type doc :: %{
-          root: :longx | :global | :project,
+          root: :longx | :global | :project | :local,
           path: String.t(),
           file: Path.t(),
           title: String.t(),
@@ -30,29 +37,66 @@ defmodule Longx.Agent.Knowledge do
           body: String.t()
         }
 
-  @roots [:longx, :global, :project]
+  @roots [:longx, :global, :project, :local]
 
-  @doc "The directories of the roots for a working directory."
-  @spec roots(Path.t()) :: %{longx: Path.t(), global: Path.t(), project: Path.t()}
+  @doc "The directory each root is written to, for a working directory."
+  @spec roots(Path.t()) :: %{
+          longx: Path.t(),
+          global: Path.t(),
+          project: Path.t(),
+          local: Path.t()
+        }
   def roots(cwd) do
     %{
       longx: Path.join(:code.priv_dir(:longx), "agent/knowledge"),
       global: Path.join(Longx.Agent.Loader.global_dir(), "knowledge"),
-      project: Path.join(cwd, ".longx/knowledge")
+      project: Longx.Agent.Layout.shared_dir(cwd, :knowledge),
+      local: Longx.Agent.Layout.local_dir(cwd, :knowledge)
     }
   end
 
-  @doc "Every doc of the given roots (all by default), shipped first, then global, then project."
+  # the directories each root is read from (the project's flat tree of before counts as shared)
+  defp read_dirs(cwd) do
+    roots(cwd)
+    |> Map.new(fn {root, dir} -> {root, [dir]} end)
+    |> Map.update!(:project, &(&1 ++ [Path.join(cwd, ".longx/knowledge")]))
+  end
+
+  @doc "Every doc of the given roots (all by default): shipped, global, project, local."
   @spec docs(Path.t(), [atom]) :: [doc]
   def docs(cwd, which \\ @roots) do
-    dirs = roots(cwd)
+    dirs = read_dirs(cwd)
 
     for root <- @roots,
         root in which,
-        dir = dirs[root],
+        dir <- dirs[root],
         File.dir?(dir),
         file <- dir |> Path.join("**/*.md") |> Path.wildcard() |> Enum.sort(),
         do: parse(root, Path.relative_to(file, dir), file)
+  end
+
+  @doc "The docs of one root grouped by topic: `{topic | nil, [doc]}` in path order."
+  @spec by_topic([doc]) :: [{String.t() | nil, [doc]}]
+  def by_topic(docs) do
+    docs
+    |> Enum.group_by(&topic_of/1)
+    |> Enum.sort_by(fn {topic, _} -> topic || "" end)
+  end
+
+  @doc "The topic of a doc: the first directory under its root, nil for a flat doc."
+  @spec topic_of(doc) :: String.t() | nil
+  def topic_of(%{path: path}) do
+    case String.split(path, "/") do
+      [_root, topic, _ | _] -> topic
+      _ -> nil
+    end
+  end
+
+  @doc "The one line that speaks for a topic: its README's title and summary, else its first doc's."
+  @spec topic_line([doc]) :: String.t()
+  def topic_line(docs) do
+    doc = Enum.find(docs, &String.ends_with?(&1.path, "/README.md")) || hd(docs)
+    "#{doc.title}: #{doc.summary}"
   end
 
   defp parse(root, rel, file) do
@@ -116,22 +160,41 @@ defmodule Longx.Agent.Knowledge do
     |> String.slice(0, 160)
   end
 
-  @doc "The body of one doc."
+  @doc "The body of one doc — or, for a topic (`project/deploy`), the list of its docs."
   @spec read(Path.t(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
   def read(cwd, path) do
-    with {:ok, _root, file} <- locate(cwd, path),
-         {:ok, text} <- File.read(file) do
-      {_front, body} = split_front_matter(text)
-      {:ok, body}
+    if Path.extname(path) == ".md" do
+      with {:ok, _root, file} <- locate(cwd, path),
+           {:ok, text} <- File.read(file) do
+        {_front, body} = split_front_matter(text)
+        {:ok, body}
+      else
+        {:error, :enoent} ->
+          {:error, "no knowledge at #{path}"}
+
+        {:error, reason} when is_atom(reason) ->
+          {:error, "cannot read #{path}: #{:file.format_error(reason)}"}
+
+        {:error, message} ->
+          {:error, message}
+      end
     else
-      {:error, :enoent} ->
-        {:error, "no knowledge at #{path}"}
+      read_topic(cwd, String.trim_trailing(path, "/"))
+    end
+  end
 
-      {:error, reason} when is_atom(reason) ->
-        {:error, "cannot read #{path}: #{:file.format_error(reason)}"}
-
-      {:error, message} ->
-        {:error, message}
+  defp read_topic(cwd, path) do
+    with [root, topic] when root in ~w(longx global project local) and topic != "" <-
+           String.split(path, "/", parts: 2),
+         docs when docs != [] <-
+           cwd |> docs([String.to_existing_atom(root)]) |> Enum.filter(&(topic_of(&1) == topic)) do
+      readme = Enum.find(docs, &String.ends_with?(&1.path, "/README.md"))
+      lines = Enum.map_join(docs, "\n", &"- #{&1.path} — #{&1.title}: #{&1.summary}")
+      head = if readme && readme.body != "", do: readme.body <> "\n\n", else: ""
+      {:ok, head <> "Docs in #{path}/ (read one with knowledge_read):\n" <> lines}
+    else
+      [] -> {:error, "no knowledge topic #{path}"}
+      _ -> {:error, "#{path}: a knowledge path is <root>/<topic>/<file>.md or <root>/<topic>"}
     end
   end
 
@@ -162,16 +225,19 @@ defmodule Longx.Agent.Knowledge do
 
   @doc """
   Creates or replaces a doc. The content must start with front matter
-  naming `title` and `summary`; `longx/…` is read-only; the global root
-  commits every write.
+  naming `title` and `summary`; the path needs a topic
+  (`<root>/<topic>/<name>.md`); `longx/…` is read-only; the global root
+  commits every write; a local write keeps `.longx/local/` gitignored.
   """
   @spec write(Path.t(), String.t(), String.t()) :: {:ok, Path.t()} | {:error, String.t()}
   def write(cwd, path, content) do
-    with {:ok, root, file} <- locate(cwd, path),
+    with {:ok, root, file} <- locate(cwd, path, :write),
          :ok <- writable(root),
+         :ok <- in_topic(path),
          :ok <- well_formed(content),
          :ok <- File.mkdir_p(Path.dirname(file)),
          :ok <- File.write(file, content),
+         :ok <- ignored(root, cwd),
          :ok <- commit(root, roots(cwd)[root], path) do
       {:ok, file}
     else
@@ -194,6 +260,16 @@ defmodule Longx.Agent.Knowledge do
       end
     end
   end
+
+  @doc "Moves a local doc into the project's shared tree (`{:ok, \"project/…\"}`)."
+  @spec promote(Path.t(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  def promote(cwd, "local/" <> rel) do
+    with {:ok, _to} <- Longx.Agent.Layout.promote(cwd, Path.join("knowledge", rel)) do
+      {:ok, "project/" <> rel}
+    end
+  end
+
+  def promote(_cwd, path), do: {:error, "only a local/… doc can be promoted, not #{path}"}
 
   @doc "Removes a doc (the global root commits the removal)."
   @spec delete(Path.t(), String.t()) :: :ok | {:error, String.t()}
@@ -222,25 +298,53 @@ defmodule Longx.Agent.Knowledge do
   @doc false
   def global_cwd, do: Longx.Agent.Loader.global_dir()
 
-  defp locate(cwd, path) do
+  # a read finds the file in any of the root's directories; a write goes to the root's own
+  defp locate(cwd, path, mode \\ :read) do
     case String.split(path, "/", parts: 2) do
-      [root, rel] when root in ["longx", "global", "project"] and rel != "" ->
+      [root, rel] when root in ["longx", "global", "project", "local"] and rel != "" ->
         root = String.to_existing_atom(root)
-        dir = roots(cwd)[root]
-        file = Path.expand(rel, dir)
+        dirs = if mode == :write, do: [roots(cwd)[root]], else: read_dirs(cwd)[root]
 
-        if String.starts_with?(file, dir <> "/") and Path.extname(file) == ".md",
-          do: {:ok, root, file},
-          else: {:error, "#{path} must be a .md file inside its root"}
+        candidates =
+          for dir <- dirs,
+              file = Path.expand(rel, dir),
+              String.starts_with?(file, dir <> "/") and Path.extname(file) == ".md",
+              do: file
+
+        case candidates do
+          [] -> {:error, "#{path} must be a .md file inside its root"}
+          files -> {:ok, root, Enum.find(files, hd(files), &File.regular?/1)}
+        end
 
       _ ->
         {:error,
-         "#{path}: a knowledge path is <root>/<file>.md with root longx, global or project"}
+         "#{path}: a knowledge path is <root>/<topic>/<file>.md with root longx, global, project or local"}
     end
   end
 
   defp writable(:longx), do: {:error, "the longx root is read-only (it ships with Longx)"}
   defp writable(_root), do: :ok
+
+  # two levels: every doc belongs to a topic
+  defp in_topic(path) do
+    case String.split(path, "/") do
+      [_root, topic, _file | _] when topic != "" ->
+        :ok
+
+      _ ->
+        {:error,
+         "#{path}: a doc needs a topic — write it as <root>/<topic>/<name>.md (a README.md in the topic may summarise it)"}
+    end
+  end
+
+  defp ignored(:local, cwd) do
+    case Longx.Agent.Layout.ensure_ignored(cwd) do
+      :ok -> :ok
+      {:error, reason} -> {:error, "cannot update .gitignore: #{:file.format_error(reason)}"}
+    end
+  end
+
+  defp ignored(_root, _cwd), do: :ok
 
   defp well_formed(content) do
     case split_front_matter(content) do

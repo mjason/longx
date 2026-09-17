@@ -13,6 +13,7 @@ defmodule Longx.Git.Ignore do
     .cache/ .idea/ .vscode/ .DS_Store Thumbs.db
     *.log *.tmp *.swp
     .env .env.* !.env.example
+    .longx/local/
   )
 
   @spec default() :: String.t()

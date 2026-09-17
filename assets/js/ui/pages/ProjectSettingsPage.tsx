@@ -3,7 +3,10 @@ import { useState } from "react";
 import { useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
 import { archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, resetCodexHome, updateProject, type UpdateProjectInput } from "@/ash_rpc";
+import { usePromoteLocal } from "@/core/agent";
+import { useModelRows } from "@/core/ai";
 import { queryKeys, unwrap, useAgentDefinition, useModels, useProject, useSandboxStatus, useSkills } from "@/core/projects";
+import { AgentSettingsFields, agentSettingsForm, agentSettingsInput, type AgentSettingsForm } from "@/ui/components/AgentSettingsFields";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/ui/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/ui/components/ui/collapsible";
@@ -25,6 +28,8 @@ type Form = Required<Pick<UpdateProjectInput, "name" | "sandbox" | "approvalPoli
   modelId: string;
   writableRoots: string;
   passthroughPaths: string;
+  /** the native kernel's parameters this project overrides ("" = inherit) */
+  agentOverrides: AgentSettingsForm;
 };
 
 /**
@@ -64,6 +69,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
     modelId: "__default",
     writableRoots: project.writableRoots.join("\n"),
     passthroughPaths: project.passthroughPaths.join("\n"),
+    agentOverrides: agentSettingsForm((project.agentSettings ?? {}) as Parameters<typeof agentSettingsForm>[0]),
   });
   const [confirming, setConfirming] = useState<"clear" | "memories" | "reset" | "archive" | "delete" | null>(null);
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
@@ -92,6 +98,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
             modelId: form.modelId === "__default" ? null : form.modelId,
             writableRoots: form.writableRoots.split("\n").map((l) => l.trim()).filter(Boolean),
             passthroughPaths: form.passthroughPaths.split("\n").map((l) => l.trim()).filter(Boolean),
+            agentSettings: agentSettingsInput(form.agentOverrides),
           },
         }),
       ),
@@ -306,7 +313,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
       </section>
 
       {project.engine === "native" ? (
-        <AgentSection projectId={project.id} trusted={form.trustLocalAgent} onTrust={(v) => set("trustLocalAgent", v)} />
+        <AgentSection projectId={project.id} trusted={form.trustLocalAgent} onTrust={(v) => set("trustLocalAgent", v)} overrides={form.agentOverrides} onOverrides={(v) => set("agentOverrides", v)} />
       ) : (
         <SkillsSection projectId={project.id} rootPath={project.rootPath} />
       )}
@@ -364,10 +371,30 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
   );
 }
 
-/** The native kernel's layered agent definition: the trust switch (saved with the form), the files, the pipeline, load errors. */
-function AgentSection({ projectId, trusted, onTrust }: { projectId: string; trusted: boolean; onTrust: (v: boolean) => void }) {
+/**
+ * The native kernel's layered agent definition: the trust switch and the
+ * kernel overrides (saved with the form), the declared agents, the files,
+ * the local files to promote, the pipeline, load errors.
+ */
+function AgentSection({
+  projectId,
+  trusted,
+  onTrust,
+  overrides,
+  onOverrides,
+}: {
+  projectId: string;
+  trusted: boolean;
+  onTrust: (v: boolean) => void;
+  overrides: AgentSettingsForm;
+  onOverrides: (v: AgentSettingsForm) => void;
+}) {
   const definition = useAgentDefinition(projectId);
+  const models = useModelRows();
+  const promote = usePromoteLocal(projectId);
   const d = definition.data;
+  const promoteFile = (path: string) =>
+    promote.mutate(path, { onSuccess: (r) => toast.success(t.agentDefinition.promoted(r.path)), onError: (e: Error) => toast.error(e.message) });
   return (
     <section className="space-y-3" data-testid="project-agent">
       <h2 className="text-lg font-medium">{t.agentDefinition.title}</h2>
@@ -384,6 +411,31 @@ function AgentSection({ projectId, trusted, onTrust }: { projectId: string; trus
       ) : (
         <div className="space-y-3 text-sm">
           {!d.present ? <p className="text-muted-foreground">{t.agentDefinition.none}</p> : null}
+          <div>
+            <p className="text-muted-foreground text-xs">{t.agentDefinition.agents}</p>
+            <ul className="text-xs" data-testid="project-agents">
+              {d.agents.map((a) => (
+                <li key={a.name} className="flex flex-wrap items-baseline gap-2">
+                  <span className="font-mono">{a.name}</span>
+                  <Badge variant="outline">{t.agentDefinition.agentLayer[a.layer] ?? a.layer}</Badge>
+                  <span className="text-muted-foreground">{a.summary}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {d.localFiles.length ? (
+            <div>
+              <p className="text-muted-foreground text-xs">{t.agentDefinition.localFiles}</p>
+              <ul className="font-mono text-xs" data-testid="project-local-files">
+                {d.localFiles.map((f) => (
+                  <li key={f} className="flex items-center justify-between gap-2 py-0.5">
+                    <span>{f}</span>
+                    <Button size="sm" variant="outline" onClick={() => promoteFile(f)} disabled={promote.isPending}>{t.agentDefinition.promote}</Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {d.files.length ? (
             <div>
               <p className="text-muted-foreground text-xs">{t.agentDefinition.files}</p>
@@ -402,6 +454,11 @@ function AgentSection({ projectId, trusted, onTrust }: { projectId: string; trus
           <div>
             <p className="text-muted-foreground text-xs">{t.agentDefinition.plugs}</p>
             <ol className="font-mono text-xs">{d.plugs.map((p, i) => <li key={`${p}-${i}`}>{p}</li>)}</ol>
+          </div>
+          <div className="space-y-2 rounded-lg border p-3" data-testid="project-agent-overrides">
+            <p className="text-sm font-medium">{t.agentDefinition.overrides}</p>
+            <p className="text-muted-foreground text-xs">{t.agentDefinition.overridesHint}</p>
+            <AgentSettingsFields idPrefix="ps-ak" value={overrides} onChange={onOverrides} models={models.data ?? []} inherited={d.settings} />
           </div>
         </div>
       )}

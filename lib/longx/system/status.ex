@@ -37,6 +37,16 @@ defmodule Longx.System.Status do
     has_github_token: [type: :boolean, allow_nil?: false]
   ]
 
+  @agent_settings_fields [
+    max_depth: [type: :integer, allow_nil?: false],
+    max_children: [type: :integer, allow_nil?: false],
+    idle_minutes: [type: :integer, allow_nil?: false],
+    child_model: [type: :string],
+    child_effort: [type: :string],
+    reviewer_model: [type: :string],
+    reviewer_effort: [type: :string]
+  ]
+
   actions do
     # Settings → codex 进程: every codex process running right now, across
     # projects — what it costs (the tree's RSS, uptime, turns) and when it
@@ -257,6 +267,87 @@ defmodule Longx.System.Status do
     end
 
     # the pipeline's switch and last run
+    # the native kernel's settings (Longx.Agent.Settings): the global layer
+    action :agent_settings, :map do
+      constraints fields: @agent_settings_fields
+
+      run fn _input, _ -> {:ok, Longx.Agent.Settings.global()} end
+    end
+
+    action :set_agent_settings, :map do
+      constraints fields: @agent_settings_fields
+      argument :max_depth, :integer
+      argument :max_children, :integer
+      argument :idle_minutes, :integer
+      argument :child_model, :string
+      argument :child_effort, :string
+      argument :reviewer_model, :string
+      argument :reviewer_effort, :string
+
+      run fn input, _ ->
+        # an argument absent stays as it was; one given as null clears it
+        given = Map.take(input.arguments, Longx.Agent.Settings.fields())
+
+        case Longx.Agent.Settings.put_global(given) do
+          {:ok, settings} ->
+            {:ok, settings}
+
+          {:error, %{field: field, message: message}} ->
+            {:error,
+             Ash.Error.Invalid.exception(
+               errors: [%Ash.Error.Changes.InvalidArgument{field: field, message: message}]
+             )}
+        end
+      end
+    end
+
+    # the person's global agent files (agent.exs, agents/, plugs/), for the settings page
+    action :agent_files, {:array, :map} do
+      constraints items: [
+                    fields: [
+                      path: [type: :string, allow_nil?: false],
+                      size: [type: :integer, allow_nil?: false]
+                    ]
+                  ]
+
+      run fn _input, _ -> {:ok, Longx.Agent.GlobalFiles.list()} end
+    end
+
+    action :agent_read_file, :map do
+      constraints fields: [
+                    text: [
+                      type: :string,
+                      allow_nil?: false,
+                      constraints: [trim?: false, allow_empty?: true]
+                    ]
+                  ]
+
+      argument :path, :string, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, text} <- file_result(Longx.Agent.GlobalFiles.read(input.arguments.path)),
+             do: {:ok, %{text: text}}
+      end
+    end
+
+    action :agent_write_file do
+      argument :path, :string, allow_nil?: false
+
+      argument :content, :string,
+        allow_nil?: false,
+        constraints: [trim?: false, allow_empty?: true]
+
+      run fn input, _ ->
+        file_result(Longx.Agent.GlobalFiles.write(input.arguments.path, input.arguments.content))
+      end
+    end
+
+    action :agent_delete_file do
+      argument :path, :string, allow_nil?: false
+
+      run fn input, _ -> file_result(Longx.Agent.GlobalFiles.delete(input.arguments.path)) end
+    end
+
     action :memory_status, :map do
       constraints fields: [
                     auto_extract: [type: :boolean, allow_nil?: false],
@@ -489,6 +580,10 @@ defmodule Longx.System.Status do
        if(is_map(value), do: camelize(value), else: value)}
     end)
   end
+
+  defp file_result(:ok), do: :ok
+  defp file_result({:ok, value}), do: {:ok, value}
+  defp file_result({:error, message}), do: argument_error(:path, message)
 
   defp argument_error(field, message) do
     {:error,

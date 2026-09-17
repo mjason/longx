@@ -2,24 +2,35 @@ defmodule Longx.Agent.Loader do
   @moduledoc """
   Loads the layered agent description for a working directory:
 
-  1. the shipped default — `Longx.Agent.Pipelines.Default.config/0`;
+  1. the shipped default — `Longx.Agent.Pipelines.Default.config/0` — and
+     the shipped starter roles (`priv/agent/agents/<name>/`);
   2. the person's — `<data>/agent/` (`config :longx, Longx.Agent.Loader,
      global_dir:`), every project;
-  3. the project's — `<root>/.longx/`, only when the project is trusted.
+  3. the project's **shared** tree — `<root>/.longx/` (`agent.exs`,
+     `shared/plugs/`, `shared/agents/`; the flat `plugs/` and `agents/`
+     of before count as shared) — in git, reviewed;
+  4. the project's **local** tree — `<root>/.longx/local/` (its own
+     `agent.exs`, `plugs/`, `agents/`) — gitignored, this machine's and
+     the agent's drafts.
 
-  A layer is `agent.exs` (evaluated; must return a `Longx.Agent.Config`)
-  plus `plugs/**/*.exs` (modules using `Longx.Agent.Plug`). The `.exs`
-  code is data first: every `defmodule` in a layer, and every reference
-  to it, is renamed under `Longx.Agent.Local.<tag>` before it is compiled
-  — two projects may both define `Deploy`. Each layer is cached by the
-  mtimes of its files and recompiled when one changes (old modules are
-  purged when no longer defined); a file that fails to load leaves the
-  layer below in force and becomes a *notice* the kernel puts in front of
-  the model, so an agent that broke its own definition can fix it. An
-  outdated `version` is a notice too. `load/2` answers the plugs, the
-  description's model / effort, the errors, the notices and whether the
-  project has a `.longx/` at all (`present?`) — what the kernel and the
-  settings page want.
+  The project trees load only when the project is trusted. A layer is a
+  description (`agent.exs`; must return a `Longx.Agent.Config`), its plugs
+  (`plugs/**/*.exs`, modules using `Longx.Agent.Plug`) and its **roles**:
+  `agents/<name>/agent.exs`, each a description of its own with a
+  `prompt.md` (`prompt_file`) and, optionally, its own `plugs/` and
+  `knowledge/`. `load(root, agent: name)` gives the role's pipeline — the
+  main stack with the role's descriptions (every layer's, in order) on top
+  — and `agents` lists every declared role with its summary, `allowed`
+  the names the loaded agent may spawn (`agents [...]`; nil = all).
+
+  The `.exs` code is data first: every `defmodule` in a layer, and every
+  reference to it, is renamed under `Longx.Agent.Local.<tag>` before it
+  is compiled — two projects may both define `Deploy`. Each layer is
+  cached by the mtimes of its files and recompiled when one changes (old
+  modules are purged when no longer defined); a file that fails to load
+  leaves the layer below in force and becomes a *notice* the kernel puts
+  in front of the model, so an agent that broke its own definition can
+  fix it. An outdated `version` is a notice too.
   """
 
   alias Longx.Agent.Config
@@ -34,7 +45,10 @@ defmodule Longx.Agent.Loader do
           errors: [%{layer: atom, file: String.t(), message: String.t()}],
           notices: [String.t()],
           present?: boolean,
-          layers: [map]
+          layers: [map],
+          agents: [%{name: String.t(), summary: String.t(), layer: atom}],
+          allowed: [String.t()] | nil,
+          agent: String.t() | nil
         }
 
   @doc "The person's global layer directory."
@@ -47,41 +61,92 @@ defmodule Longx.Agent.Loader do
     end)
   end
 
+  @doc "Where the shipped starter roles live."
+  @spec shipped_dir() :: Path.t()
+  def shipped_dir, do: Path.join(:code.priv_dir(:longx), "agent")
+
   @doc """
   The resolved description for `root`. Options: `tag:` (the project's
   namespace segment — its id; defaults to a hash of the root), `trusted:`
-  (whether the project's own `.longx/` may be loaded).
+  (whether the project's own `.longx/` may be loaded), `agent:` (a role
+  name: that agent's description on top of the project's), `settings:`
+  (a `Longx.Agent.Settings` map — the settings page's layer, applied last:
+  the Agents plug's limits, the default child model, the reviewer model),
+  `overrides:` (a `Longx.Agent.Config` applied after everything).
   """
   @spec load(Path.t(), keyword) :: loaded
   def load(root, opts \\ []) do
     tag = Keyword.get(opts, :tag) || tag_for(root)
     trusted? = Keyword.get(opts, :trusted, false)
+    role = Keyword.get(opts, :agent)
     project_dir = Path.join(root, ".longx")
+    local_dir = Path.join(project_dir, "local")
 
+    shipped = layer(:longx, shipped_dir(), "Longx")
     global = layer(:global, global_dir(), "Global")
 
-    project =
+    {project, local} =
       cond do
         not File.dir?(project_dir) ->
-          nil
+          {nil, nil}
 
         not trusted? ->
           # listed for the settings page, loaded for nobody
-          %{
-            name: :project,
-            dir: project_dir,
-            skipped: :untrusted,
-            errors: [],
-            config: nil,
-            files: files(project_dir)
-          }
+          {%{
+             name: :project,
+             dir: project_dir,
+             skipped: :untrusted,
+             errors: [],
+             config: nil,
+             roles: %{},
+             files: files(:project, project_dir) ++ files(:local, local_dir)
+           }, nil}
 
         true ->
-          layer(:project, project_dir, tag)
+          # the local tree shares the project's namespace: its description may
+          # name the shared plugs, and a module of the same name overrides
+          shared = layer(:project, project_dir, tag)
+
+          {shared,
+           if(File.dir?(local_dir),
+             do: layer(:local, local_dir, tag, extra_defined: shared.defined),
+             else: nil
+           )}
       end
 
-    layers = Enum.reject([global, project], &is_nil/1)
-    configs = for %{config: %Config{} = c} <- layers, do: c
+    layers = Enum.reject([shipped, global, project, local], &is_nil/1)
+    {roles, role_file_errors} = roles(layers)
+
+    # the main stack: every layer's description; then the role's, layer by layer
+    main =
+      for %{name: name, dir: dir, config: %Config{} = c} <- layers, name != :longx, do: {c, dir}
+
+    {role_configs, role_errors} =
+      case {role, Map.get(roles, role)} do
+        {nil, _} ->
+          {[], []}
+
+        {name, nil} ->
+          {[],
+           [
+             %{
+               layer: :project,
+               file: "agents/#{name}/agent.exs",
+               message:
+                 "no agent named #{inspect(name)} is declared (agents/#{name}/agent.exs in .longx, its local/ or the global directory)"
+             }
+           ]}
+
+        {_name, %{config: config, dir: dir}} ->
+          {[{config, dir}], []}
+      end
+
+    {configs, prompt_errors} = with_prompt_files(main ++ role_configs)
+
+    configs =
+      configs ++
+        settings_layer(Keyword.get(opts, :settings), role, last(configs, & &1.model)) ++
+        List.wrap(Keyword.get(opts, :overrides))
 
     {plugs, missing} =
       configs
@@ -91,6 +156,9 @@ defmodule Longx.Agent.Loader do
 
     errors =
       Enum.flat_map(layers, & &1.errors) ++
+        role_file_errors ++
+        role_errors ++
+        prompt_errors ++
         Enum.map(missing, fn {module, _} ->
           %{
             layer: :project,
@@ -107,13 +175,108 @@ defmodule Longx.Agent.Loader do
       errors: errors,
       notices: notices(errors, configs),
       present?: File.dir?(project_dir),
-      layers: layers
+      layers: layers,
+      agents: roles |> Map.values() |> Enum.sort_by(& &1.name),
+      allowed: last(configs, & &1.agents),
+      agent: role
     }
   end
 
   defp plug?(module), do: Code.ensure_loaded?(module) and function_exported?(module, :call, 2)
 
+  # the settings page as a description: limits on the Agents plug; a child
+  # with no model of its own runs on the default child model; the reviewer
+  # role always on the reviewer model
+  defp settings_layer(nil, _role, _model), do: []
+
+  defp settings_layer(settings, role, declared_model) do
+    limits =
+      {:options, Longx.Agent.Plugs.Agents,
+       [max_depth: settings.max_depth, max_children: settings.max_children]}
+
+    {model, effort} =
+      cond do
+        role == "reviewer" and settings.reviewer_model ->
+          {settings.reviewer_model, settings.reviewer_effort}
+
+        role != nil and declared_model == nil and settings.child_model ->
+          {settings.child_model, settings.child_effort}
+
+        true ->
+          {nil, nil}
+      end
+
+    [%Config{ops: [limits], model: model, effort: effort}]
+  end
+
   defp last(configs, fun), do: configs |> Enum.map(fun) |> Enum.reject(&is_nil/1) |> List.last()
+
+  # every declared role, the later layer's declaration replacing the
+  # earlier (a project's researcher stands in for the shipped one); a
+  # prompt file that is missing is reported now, not when the role is spawned
+  defp roles(layers) do
+    Enum.reduce(layers, {%{}, []}, fn %{name: layer, roles: roles}, {acc, errors} ->
+      Enum.reduce(roles, {acc, errors}, fn {name, %{config: config, dir: dir}}, {acc, errors} ->
+        entry = %{
+          name: name,
+          summary: config.summary || first_prompt_line(config, dir),
+          layer: layer,
+          config: config,
+          dir: dir
+        }
+
+        {Map.put(acc, name, entry), errors ++ missing_prompt_files(config, dir, layer)}
+      end)
+    end)
+  end
+
+  defp missing_prompt_files(%Config{prompt_files: files}, dir, layer) do
+    for path <- files, full = Path.expand(path, dir), not File.regular?(full) do
+      %{layer: layer, file: full, message: "prompt file #{full}: no such file"}
+    end
+  end
+
+  defp first_prompt_line(%Config{prompts: [text | _]}, _dir), do: first_line(text)
+
+  defp first_prompt_line(%Config{prompt_files: [path | _]}, dir) do
+    case File.read(Path.expand(path, dir)) do
+      {:ok, text} -> first_line(text)
+      _ -> ""
+    end
+  end
+
+  defp first_prompt_line(_config, _dir), do: ""
+
+  defp first_line(text),
+    do: text |> String.split("\n") |> Enum.find("", &(String.trim(&1) != "")) |> String.trim()
+
+  # a `prompt_file` is prompt text read at load time (relative to the description)
+  defp with_prompt_files(configs) do
+    Enum.map_reduce(configs, [], fn {%Config{prompt_files: files} = config, dir}, errors ->
+      {texts, errors} =
+        Enum.map_reduce(files, errors, fn path, errs ->
+          full = Path.expand(path, dir)
+
+          case File.read(full) do
+            {:ok, text} ->
+              {text, errs}
+
+            {:error, reason} ->
+              {nil,
+               errs ++
+                 [
+                   %{
+                     layer: :project,
+                     file: full,
+                     message: "prompt file #{full}: #{:file.format_error(reason)}"
+                   }
+                 ]}
+          end
+        end)
+
+      {%{config | prompts: config.prompts ++ Enum.reject(texts, &is_nil/1)}, errors}
+    end)
+  end
 
   # the growth plug: only a trusted project that has a .longx (or wants one)
   defp with_local(plugs, %{skipped: :untrusted}, _root), do: plugs
@@ -141,25 +304,49 @@ defmodule Longx.Agent.Loader do
 
   ## One layer, cached by the mtimes of its files
 
-  defp layer(name, dir, tag) do
-    files = files(dir)
+  defp layer(name, dir, tag, opts \\ []) do
+    files = files(name, dir)
+    extra = Keyword.get(opts, :extra_defined, [])
     key = {name, dir}
 
     case __MODULE__.Cache.get(key) do
-      %{files: ^files} = cached ->
+      %{files: ^files, extra_defined: ^extra} = cached ->
         cached
 
       previous ->
-        loaded = build(name, dir, tag, files, previous)
+        loaded = build(name, dir, tag, files, previous, extra)
         __MODULE__.Cache.put(key, loaded)
         loaded
     end
   end
 
-  # every file of the layer with its mtime (the cache key)
-  defp files(dir) do
+  # where a layer keeps its plugs and its roles
+  defp plug_dirs(:project, dir), do: [Path.join(dir, "plugs"), Path.join(dir, "shared/plugs")]
+  defp plug_dirs(:longx, _dir), do: []
+  defp plug_dirs(_name, dir), do: [Path.join(dir, "plugs")]
+
+  @doc false
+  def agent_dirs(:project, dir), do: [Path.join(dir, "agents"), Path.join(dir, "shared/agents")]
+  def agent_dirs(_name, dir), do: [Path.join(dir, "agents")]
+
+  # every code file of the layer with its mtime (the cache key)
+  defp files(name, dir) do
     if File.dir?(dir) do
-      [Path.join(dir, "agent.exs") | Path.wildcard(Path.join(dir, "plugs/**/*.exs"))]
+      descriptions =
+        if name == :longx,
+          do: [],
+          else: [Path.join(dir, "agent.exs")]
+
+      plugs =
+        Enum.flat_map(plug_dirs(name, dir), &Path.wildcard(Path.join(&1, "**/*.exs")))
+
+      roles =
+        Enum.flat_map(agent_dirs(name, dir), fn agents ->
+          Path.wildcard(Path.join(agents, "*/agent.exs")) ++
+            Path.wildcard(Path.join(agents, "*/plugs/**/*.exs"))
+        end)
+
+      (descriptions ++ plugs ++ roles)
       |> Enum.filter(&File.regular?/1)
       |> Enum.sort()
       # mtime and size: a rewrite within the same second still counts when the size moved
@@ -172,9 +359,11 @@ defmodule Longx.Agent.Loader do
     end
   end
 
-  defp build(name, dir, tag, files, previous) do
+  defp description?(path), do: Path.basename(path) == "agent.exs"
+
+  defp build(name, dir, tag, files, previous, extra_defined) do
     prefix = @namespace ++ [String.to_atom(tag)]
-    plug_files = for {path, _} <- files, Path.basename(path) != "agent.exs", do: path
+    plug_files = for {path, _} <- files, not description?(path), do: path
 
     {sources, errors} =
       Enum.reduce(plug_files, {[], []}, fn path, {ok, errs} ->
@@ -189,11 +378,14 @@ defmodule Longx.Agent.Loader do
     # names of the modules this layer defines — the ones from files that fail
     # to parse today keep their mapping from the last good build, so the
     # description's references stay stable (the plug is then reported missing)
-    defined =
+    own =
       Enum.uniq(
         Enum.flat_map(sources, fn {_path, ast} -> defined_modules(ast) end) ++
-          ((is_map(previous) && previous[:defined]) || [])
+          ((is_map(previous) && previous[:own]) || [])
       )
+
+    # references resolve against this layer's modules and the ones it may see (the shared tree's)
+    defined = Enum.uniq(own ++ extra_defined)
 
     {modules, errors} =
       Enum.reduce(sources, {[], errors}, fn {path, ast}, {mods, errs} ->
@@ -206,18 +398,37 @@ defmodule Longx.Agent.Loader do
     purge(previous, modules)
 
     {config, errors} =
-      case Enum.find(files, fn {path, _} -> Path.basename(path) == "agent.exs" end) do
+      case Enum.find(files, fn {path, _} -> path == Path.join(dir, "agent.exs") end) do
         nil -> {nil, errors}
         {path, _} -> evaluate(path, defined, prefix, name, errors)
       end
+
+    # the roles: agents/<name>/agent.exs, each its own description
+    {roles, errors} =
+      files
+      |> Enum.filter(fn {path, _} ->
+        description?(path) and path != Path.join(dir, "agent.exs")
+      end)
+      |> Enum.reduce({%{}, errors}, fn {path, _}, {roles, errs} ->
+        role_dir = Path.dirname(path)
+        role_name = Path.basename(role_dir)
+
+        case evaluate(path, defined, prefix, name, errs) do
+          {%Config{} = c, errs} -> {Map.put(roles, role_name, %{config: c, dir: role_dir}), errs}
+          {nil, errs} -> {roles, errs}
+        end
+      end)
 
     %{
       name: name,
       dir: dir,
       files: files,
       modules: modules,
+      own: own,
       defined: defined,
+      extra_defined: extra_defined,
       config: config,
+      roles: roles,
       errors: Enum.reverse(errors)
     }
   end

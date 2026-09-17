@@ -476,9 +476,29 @@ React Native client planned on the same core code.
     its first Turn row; a bare agent otherwise). `step.assigns` carries `parent`, `name`
     and `children` so a strategy can see its team; **`step.state`** (`Step.put_state/3`)
     is a map the kernel keeps across the phases and steps of one turn (fresh per turn)
-    for a strategy that counts rounds. The rest of the design — declared agents in
-    `.longx/agents/<name>/`, `Plugs.Agents` / `Plugs.Goal`, limits in the settings —
-    is `docs/agent-kernel-plan.md`.
+    for a strategy that counts rounds. The design is `docs/agent-kernel-plan.md` (all
+    four slices built 2026-09-17).
+  - **Roles are declarations, the model picks a role** — `Plugs.Agents` (in the default
+    pipeline) offers `spawn_agent(agent, task)` with the declared roles as the enum
+    (`step.assigns.agents` from the loader, narrowed by the description's
+    `agents [...]` → `assigns.allowed`), `send_message(agent, message)` and
+    `close_agent(agent)` for the live children (`assigns.children`), and the prompt says
+    the report comes back as a message — *do not wait*. Limits `max_depth:` (2) /
+    `max_children:` (4): at the limit `spawn_agent` is not offered and the prompt says
+    why. A second child of one role is `researcher-2` (`role_of/1` strips the suffix on
+    a revived row). The kernel runs a child with `role:` + `depth:` (assigns too) and
+    the loader mounts the role's description on top of the project's. Shipped starters
+    in `priv/agent/agents/{researcher,reviewer,coder}/` (`agent.exs` + `prompt.md`; the
+    researcher and reviewer `drop Patch`, spawn nobody). **Goal mode is `Plugs.Goal`**
+    (default pipeline): `create_goal` / `update_goal` / `get_goal`; the goal lives in
+    the kernel (`Agent.set_goal/2`, `get_goal/1`, `clear_goal/1`, restored from the
+    ThreadState meta on a restart; `thread/goal/updated` / `cleared` so `GoalBar` and
+    `/goal` work — `Projects.set_goal` / `clear_goal` dispatch to it on native threads),
+    every model call is charged to `tokensUsed`, and at `:turn_end` an `active` goal
+    continues the turn with a continuation step naming the objective (`step.state`
+    counts the rounds) until the model marks it complete, the budget is spent or
+    `max_rounds:` (8) passed — then the `{:goal, attrs}` effect (`Step.goal/2`) marks it
+    `blocked` instead of looping.
   - **Effects are what a plug asks the kernel to do**, data on the step the kernel
     interprets after each phase: `Step.enqueue_call/3` (`:response`; a synthetic
     `function_call` with a `longx_` call id, run with the model's), `Step.continue/2`
@@ -511,7 +531,10 @@ React Native client planned on the same core code.
     none either: reading is `exec_command` (`cat`, `sed -n`, `rg`).
   - **The base prompt is codex's, trimmed** (`priv/agent/base_prompt.md`, from the
     vendored `priv/codex_prompt.md`: sandbox / approvals / plans / AGENTS.md sections out,
-    our tool names in, "reply in the user's language" added).
+    our tool names in, "reply in the user's language" added, a **"Where you work"**
+    section: the project is the working directory, do not explore the home directory,
+    other projects or Longx's own source — a model asked to "start an agent" before the
+    tool existed went hunting through `~` and Longx's repo for a way).
   - `Longx.Agent.Transcript` (Ash domain) / `Longx.Agent.Item` (`agent_items`): the
     append-only log — every Responses input item (`input`: user / assistant message,
     reasoning, `function_call`, `function_call_output`, `compaction`) with its UI item
@@ -522,46 +545,88 @@ React Native client planned on the same core code.
     "interrupted" output. A boot replays the `ui` items through `ThreadState.backfill`
     (synchronous); a retract is a truncation; `delete_thread` / a project delete drop it.
   - **Descriptions: `Longx.Agent.Config`**, data evaluated before anything runs, the
-    same format in three layers (`Longx.Agent.Loader`): the shipped default
+    same format in every layer (`Longx.Agent.Loader`): the shipped default
     (`Longx.Agent.Pipelines.Default.config/0` — Environment, Base, Shell, Patch,
-    ViewImage, Knowledge, WebSearch, Browser, Request), the person's `<data>/agent/agent.exs` (`config
-    :longx, Longx.Agent.Loader, global_dir:`), the project's `<root>/.longx/agent.exs`.
-    `import Longx.Agent.Config; agent do version 1; extends :default; model "…", effort:
-    "…"; prompt "…"; plug Deploy, after: Shell; options Shell, timeout_ms: …; drop Base end`
-    — a description records the **difference** to the layer below (`Config.resolve/2`
-    applies the ops; a short name means the shipped plug, `Config.builtin/1`), so a
-    release that changes the shipped pipeline reaches every project; an explicit
-    `pipeline do … end` replaces the base and freezes it. `version` is the format version
-    (`current_version/0`, `outdated?/1` → a notice). The DSL words are paren-free in
-    `.formatter.exs`.
-  - **The loader**: a layer is `agent.exs` + `plugs/**/*.exs`; the `.exs` code is data
-    first — every `defmodule` of a layer and every reference to it is renamed under
-    `Longx.Agent.Local.<tag>` (the project id) before `Code.compile_quoted`, so two
-    projects may both define `Deploy`; cached per layer by the files' mtimes and sizes,
-    recompiled on change, modules no longer defined `soft_purge`d; a file that fails to
-    load leaves the layer below in force and becomes a **notice** the kernel puts in front
-    of the model (`⚠ … failed to load …`), as does an outdated version and a plug the
-    description names but nobody defines — an agent that broke its own definition fixes
-    it next turn. `Project.trust_local_agent` (default false; the settings page's switch,
-    `Projects.agent_definition/1` / RPC `agent_definition` list the files, the resolved
-    plugs and the errors) gates the project layer: the `.exs` run in Longx as the person,
-    so a cloned repo executes nothing until the person looked. Trusted, the loader mounts
-    `Plugs.Local`: what the agent is told about its own definition, with the compact API
-    reference `priv/agent/reference.md`. `Longx.Agent` loads per step when no `pipeline:`
-    module is given (tests give one); the description's `model` / `effort` stand where the
-    person chose none.
+    ViewImage, Knowledge, WebSearch, Browser, Agents, Goal, Request), the person's
+    `<data>/agent/agent.exs` (`config :longx, Longx.Agent.Loader, global_dir:`), the
+    project's **shared** tree (`<root>/.longx/agent.exs` + `shared/{agents,plugs,knowledge}`;
+    the flat `plugs/` / `knowledge/` of before count as shared) and its **local** tree
+    (`.longx/local/` — `agent.exs`, `agents/`, `plugs/`, `knowledge/` — gitignored:
+    `Longx.Agent.Layout.ensure_ignored/1` on every local knowledge write, `Git.Ignore`'s
+    default; `promote/2` moves a local file into shared — `Projects.promote_local/2`,
+    RPC `promote_local`, the project settings' 提升到 shared). `import Longx.Agent.Config;
+    agent do version 1; extends :default; model "…", effort: "…"; prompt "…"; prompt_file
+    "prompt.md"; summary "…"; agents ["researcher"]; plug Deploy, after: Shell; options
+    Shell, timeout_ms: …; drop Base end` — a description records the **difference** to the
+    layer below (`Config.resolve/2` applies the ops; a short name means the shipped plug,
+    `Config.builtin/1`), so a release that changes the shipped pipeline reaches every
+    project; an explicit `pipeline do … end` replaces the base and freezes it. `version`
+    is the format version (`current_version/0`, `outdated?/1` → a notice). The DSL words
+    are paren-free in `.formatter.exs`.
+  - **The loader**: a layer is `agent.exs` + `plugs/**/*.exs` + its **roles**
+    `agents/<name>/agent.exs` (each a description with its `prompt.md`, its own
+    `plugs/`); the `.exs` code is data first — every `defmodule` of a layer and every
+    reference to it is renamed under `Longx.Agent.Local.<tag>` (the project id; the local
+    tree shares the project's namespace and sees its modules) before
+    `Code.compile_quoted`, so two projects may both define `Deploy`; cached per layer by
+    the files' mtimes and sizes, recompiled on change, modules no longer defined
+    `soft_purge`d; a file that fails to load leaves the layer below in force and becomes a
+    **notice** the kernel puts in front of the model (`⚠ … failed to load …`), as does an
+    outdated version, a missing prompt file and a plug the description names but nobody
+    defines — an agent that broke its own definition fixes it next turn. `load(root,
+    agent: "researcher")` is the role's pipeline: the main stack (global → shared →
+    local) with the role's declaration on top — the **last layer's declaration replaces**
+    the earlier (a project's `researcher` stands in for the shipped one); `agents` lists
+    every declared role with its summary, `allowed` whom the loaded agent may spawn (nil =
+    all), an unknown role is an error. The **settings layer** goes on last
+    (`settings:` — `Longx.Agent.Settings.for_project/1`, handed to the kernel as a
+    function read per turn like `trust:`): `options Agents, max_depth/max_children`, the
+    default child model for a role that names none, the reviewer model for the `reviewer`
+    role; `overrides:` takes one more `Config`. `Project.trust_local_agent` (default
+    false; the settings page's switch, `Projects.agent_definition/1` / RPC
+    `agent_definition` list the files, the local files, the roles, the resolved plugs,
+    the effective settings and the errors) gates **both** project trees: the `.exs` run in
+    Longx as the person, so a cloned repo executes nothing until the person looked.
+    Trusted, the loader mounts `Plugs.Local`: what the agent is told about its own
+    definition (write to `local/`, the person promotes), with the compact API reference
+    `priv/agent/reference.md` (= the body of `priv/agent/knowledge/writing-plugs.md`).
+    `Longx.Agent` loads per step when no `pipeline:` module is given (tests give one); the
+    description's `model` / `effort` stand where the person chose none.
+  - **Settings → Agent 内核 (`Longx.Agent.Settings`)**: `max_depth` (2), `max_children`
+    (4), `idle_minutes` (30), `child_model` / `child_effort`, `reviewer_model` /
+    `reviewer_effort` — one `Longx.System.Setting` (`agent_kernel`, JSON) for the global
+    values (`global/0`, `put_global/1` validated per field — counts ≥ 1, models the
+    gateway knows, levels they offer; nil clears a key), `Project.agent_settings` (an
+    untyped map column, `Validations.AgentSettings`) for a project's overrides,
+    `for_project/1` the merge (`idle_ms/1` → the agent's `idle_ms:`). RPC
+    `agent_settings` / `set_agent_settings` and the person's global agent files
+    (`Longx.Agent.GlobalFiles`: `agent_files` / `agent_read_file` / `agent_write_file` /
+    `agent_delete_file`, `.exs` and `.md` under the global dir, knowledge excluded) on
+    `Longx.System.Status`; the page `settings/AgentKernelSection` (the
+    `AgentSettingsFields` form shared with the project settings' overrides card, where an
+    empty field inherits and the placeholder shows the value in force; a file editor
+    like the knowledge page's with templates for a role and a plug). Hooks in
+    `core/agent.ts`.
   - **Knowledge instead of memory — `Plugs.Knowledge` over `Longx.Agent.Knowledge`**:
-    markdown files with front matter (`title`, `summary`, `tags`, `always: true`) in three
+    markdown files with front matter (`title`, `summary`, `tags`, `always: true`) in four
     roots — `longx/` shipped read-only (`priv/agent/knowledge/`: writing plugs, the
     description format and its versions — how a release guides the agent to update its
     own pipeline), `global/` the person's (`<data>/agent/knowledge/`, a git repository, a
-    commit per write under a lock), `project/` (`.longx/knowledge/`, committed with the
-    code by the turn's bookmarks). Always-docs go into every prompt (`always_cap:` 16 KB,
-    the rest named for `knowledge_read`), the others as an index line each (`index_cap:`
-    200); tools `knowledge_read`, `knowledge_search` (every word, titles and summaries
-    included, 50 lines), `knowledge_write` (front matter required; `longx/` refused;
-    paths stay inside their root). The prompt tells the model to write what is durable
-    and where. AGENTS.md is **not** read here — `Plugs.AgentsMd` still exists but is out
+    commit per write under a lock), `project/` the shared tree (`.longx/shared/knowledge/`,
+    the flat `.longx/knowledge/` read too; committed with the code by the turn's
+    bookmarks — what the person reviewed), `local/` (`.longx/local/knowledge/`, gitignored;
+    **where the agent writes by default**). **Two levels**: a doc lives in a topic
+    (`<root>/<topic>/<name>.md`; a top-level write is refused with the rule), the index
+    folds to one line per topic (`root/topic/ (N docs) — README's or first doc's title:
+    summary`; flat docs of before listed one by one), and a topic path reads as its
+    docs (`knowledge_read("local/deploy")`). Always-docs go into every prompt
+    (`always_cap:` 16 KB, the rest named for `knowledge_read`), the index capped
+    (`index_cap:` 200 entries); tools `knowledge_read`, `knowledge_search` (every word,
+    titles and summaries included, 50 lines), `knowledge_write` (front matter and a
+    topic required; `longx/` refused; paths stay inside their root; a local write keeps
+    `.longx/local/` in `.gitignore`); `promote/2` moves a local doc into shared. The
+    prompt tells the model to write what is durable, into `local/` unless the person
+    asked to share, and to prefer improving a doc over adding one. AGENTS.md is **not** read here — `Plugs.AgentsMd` still exists but is out
     of the shipped pipeline; a project that wants it adds `plug AgentsMd`. Skills are
     docs (a how-to is a doc), no loader of their own.
   - **Web search and reading pages** are two plugs. `Plugs.WebSearch` (`mode:` `:auto` /
@@ -646,9 +711,11 @@ React Native client planned on the same core code.
     `sse_test`, `plugs_test` runs real bash, `transcript_test`, `model_test` and
     `agent_test` with Bypass as the model — a held reply for steer / interrupt / retract,
     `Bypass.pass/1` after a reply the interrupt cut off, a restart rebuild, effects, the
-    step limit, the loader mode, compaction by effect / overflow / hand),
-    `test/longx/projects/native_engine_test` (through `Projects`, the Tracker completing
-    rows, the trust switch). No codex process anywhere in it.
+    step limit, the loader mode, compaction by effect / overflow / hand, the team:
+    spawn / report / crash / idle exit / `spawn_agent` through the shipped plug / goal
+    mode), `settings_test` (the settings layer, promotion), `test/longx/projects/native_engine_test`
+    (through `Projects`, the Tracker completing rows, the trust switch, a child's row),
+    `test/longx_web/rpc/agent_settings_rpc_test`. No codex process anywhere in it.
 - `lib/longx/platform.ex` — `Longx.Platform`: runtime-safe os/arch detection and the Rust
   triple / GOOS-GOARCH naming for it. Anything that resolves a binary path at runtime goes
   through this, never through `Mix.*` (Mix is absent in releases).

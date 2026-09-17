@@ -179,7 +179,7 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "You are"
 
     assert Enum.map(body["tools"], & &1["name"]) |> Enum.sort() ==
-             ~w(apply_patch exec_command knowledge_read knowledge_search knowledge_write view_image web_fetch web_search)
+             ~w(apply_patch create_goal exec_command get_goal knowledge_read knowledge_search knowledge_write spawn_agent update_goal view_image web_fetch web_search)
 
     refute Map.has_key?(body, "x-longx-custom-tools")
 
@@ -978,6 +978,8 @@ defmodule Longx.AgentTest do
     :ok = ThreadState.subscribe(id)
 
     on_exit(fn ->
+      # the children first: one still streaming would write after the sandbox is gone
+      if Agent.whereis(id), do: Enum.each(Agent.children(id), &Agent.stop(&1.id))
       Agent.stop(id)
       ThreadState.stop(id)
       ThreadState.Store.delete(id)
@@ -1162,6 +1164,129 @@ defmodule Longx.AgentTest do
     assert %{"id" => ^woke, "status" => "completed"} = await_turn_end()
     # the second turn saw its child and sent nobody else
     assert [%{name: "worker"}] = Agent.children(parent)
+  end
+
+  test "the shipped Agents plug: spawn_agent starts a declared role on its own description, the report comes back",
+       %{bypass: bypass, dir: dir} do
+    File.mkdir_p!(Path.join(dir, ".longx"))
+
+    File.write!(
+      Path.join(dir, ".longx/agent.exs"),
+      "import Longx.Agent.Config\nagent do\n  prompt \"Project Q.\"\nend\n"
+    )
+
+    parent = agent!("team-#{System.unique_integer([:positive])}", dir, trust: fn -> true end)
+
+    route!(bypass, fn body ->
+      case {first_text(body), List.last(body["input"])["type"]} do
+        {"go", "message"} ->
+          ResponsesFixture.function_call("spawn_agent", nil, %{
+            "agent" => "researcher",
+            "task" => "find X"
+          })
+
+        {"go", _} ->
+          ResponsesFixture.assistant_message("delegated")
+
+        _ ->
+          ResponsesFixture.assistant_message("REPORT X")
+      end
+    end)
+
+    {:ok, _} = Agent.send(parent, "go")
+    await("turn/started")
+    assert %{"status" => "completed"} = await_turn_end()
+    assert [%{name: "researcher"}] = Agent.children(parent)
+
+    assert %{"turn" => %{"id" => woke}} = await("turn/started")
+
+    assert %{"turnId" => ^woke, "from" => "researcher"} =
+             await_user_message("[agent researcher] REPORT X")
+
+    await_turn_end()
+
+    requests = collect_requests([])
+    first = Enum.find(requests, &(first_text(&1) == "go"))
+    spawn_tool = Enum.find(first["tools"], &(&1["name"] == "spawn_agent"))
+    assert "researcher" in spawn_tool["parameters"]["properties"]["agent"]["enum"]
+    assert "coder" in spawn_tool["parameters"]["properties"]["agent"]["enum"]
+
+    child = Enum.find(requests, &(first_text(&1) == "find X"))
+
+    # the role's prompt on top of the project's; the role has no apply_patch, no spawning of its own
+    assert child["instructions"] =~ "Role: researcher"
+    assert child["instructions"] =~ "Project Q."
+    assert child["instructions"] =~ "sub-agent"
+    names = Enum.map(child["tools"], & &1["name"])
+    refute "apply_patch" in names
+    refute "spawn_agent" in names
+    assert "exec_command" in names
+
+    # the model was told the spawn worked and that the report arrives on its own
+    second = Enum.find(requests, &(first_text(&1) == "go" and length(&1["input"]) > 1))
+
+    output =
+      second["input"] |> Enum.find(&(&1["type"] == "function_call_output")) |> Map.get("output")
+
+    assert output =~ "researcher"
+    assert output =~ "report"
+  end
+
+  test "goal mode: create_goal keeps the turn going with continuation steps until the model marks it complete; the goal is shown and survives a restart",
+       %{bypass: bypass, dir: dir} do
+    id = agent!("goal-#{System.unique_integer([:positive])}", dir, [])
+
+    route!(bypass, fn body ->
+      last = List.last(body["input"])
+
+      cond do
+        length(body["input"]) == 1 ->
+          ResponsesFixture.function_call("create_goal", nil, %{"objective" => "make it green"})
+
+        last["type"] == "function_call_output" and last["output"] =~ "goal set" ->
+          ResponsesFixture.assistant_message("started")
+
+        last["type"] == "message" and hd(last["content"])["text"] =~ "目标续跑" ->
+          ResponsesFixture.function_call("update_goal", nil, %{"status" => "complete"})
+
+        true ->
+          ResponsesFixture.assistant_message("done")
+      end
+    end)
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "go")
+
+    assert %{"goal" => %{"objective" => "make it green", "status" => "active"}} =
+             await("thread/goal/updated")
+
+    assert %{"goal" => %{"status" => "complete"}} = await("thread/goal/updated")
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+
+    requests = collect_requests([])
+    # one continuation step carried the objective; nothing more once complete
+    continuations =
+      Enum.filter(requests, fn r ->
+        Enum.any?(
+          r["input"],
+          &(&1["type"] == "message" and &1["role"] == "user" and
+              hd(&1["content"])["text"] =~ "make it green")
+        )
+      end)
+
+    assert length(continuations) >= 1
+
+    assert %{"objective" => "make it green", "status" => "complete"} =
+             ThreadState.snapshot(id).goal
+
+    assert {:ok, %{"status" => "complete"}} = Agent.get_goal(id)
+
+    # a new process reads the goal back from the view
+    Agent.stop(id)
+    {:ok, _} = Agent.ensure_alive(id)
+    assert {:ok, %{"objective" => "make it green"}} = Agent.get_goal(id)
+    assert {:ok, true} = Agent.clear_goal(id)
+    assert %{} = await("thread/goal/cleared")
+    assert ThreadState.snapshot(id).goal == nil
   end
 
   defmodule Budget do

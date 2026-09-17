@@ -41,6 +41,9 @@ defmodule Longx.Agent.Config do
           model: String.t() | nil,
           effort: String.t() | nil,
           prompts: [String.t()],
+          prompt_files: [Path.t()],
+          summary: String.t() | nil,
+          agents: [String.t()] | nil,
           pipeline: [{module, keyword}] | nil,
           ops: [op]
         }
@@ -50,6 +53,12 @@ defmodule Longx.Agent.Config do
             model: nil,
             effort: nil,
             prompts: [],
+            # files next to the description whose text is prompt (the loader reads them)
+            prompt_files: [],
+            # one line about this agent, for whoever may spawn it
+            summary: nil,
+            # the roles this agent may spawn; nil = every declared one, [] = none
+            agents: nil,
             pipeline: nil,
             ops: []
 
@@ -91,6 +100,9 @@ defmodule Longx.Agent.Config do
       {:extends, base}, c -> %{c | extends: base}
       {:model, slug, effort}, c -> %{c | model: slug, effort: effort || c.effort}
       {:prompt, text}, c -> %{c | prompts: c.prompts ++ [text]}
+      {:prompt_file, path}, c -> %{c | prompt_files: c.prompt_files ++ [path]}
+      {:summary, text}, c -> %{c | summary: text}
+      {:agents, names}, c -> %{c | agents: names}
       {:pipeline, plugs}, c -> %{c | pipeline: plugs}
       {:op, op}, c -> %{c | ops: c.ops ++ [op]}
     end)
@@ -121,6 +133,15 @@ defmodule Longx.Agent.Config do
     do: push({:model, slug, Keyword.get(opts, :effort)})
 
   def prompt(text) when is_binary(text), do: push({:prompt, text})
+
+  @doc "A file next to the description whose text is prompt (long prompts live in `prompt.md`)."
+  def prompt_file(path) when is_binary(path), do: push({:prompt_file, path})
+
+  @doc "One line about this agent — what a parent reads when choosing whom to spawn."
+  def summary(text) when is_binary(text), do: push({:summary, text})
+
+  @doc "The declared agents this one may spawn (`[]` none; unset: every declared one)."
+  def agents(names) when is_list(names), do: push({:agents, Enum.map(names, &to_string/1)})
 
   @doc "Mounts a plug; `before:` / `after:` place it, else it goes before `Request`."
   def plug(module, opts \\ []) when is_atom(module) and is_list(opts) do

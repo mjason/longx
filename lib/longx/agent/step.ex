@@ -166,6 +166,10 @@ defmodule Longx.Agent.Step do
       when is_binary(name) and is_binary(task) and is_list(opts),
       do: effect(step, {:spawn, name, task, opts})
 
+  @doc "Asks the kernel to change the thread's goal (status, objective, budget) — any phase."
+  @spec goal(t, map) :: t
+  def goal(%__MODULE__{} = step, attrs) when is_map(attrs), do: effect(step, {:goal, attrs})
+
   defp effect(%__MODULE__{effects: effects} = step, effect),
     do: %{step | effects: effects ++ [effect]}
 end

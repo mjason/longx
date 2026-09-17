@@ -80,7 +80,7 @@ defmodule Longx.Agent.KnowledgeTest do
     text = Enum.join(step.instructions, "\n")
 
     assert text =~ "Run mix test after every change."
-    assert text =~ "project/ops/deploy.md"
+    assert text =~ "project/ops/ (1 doc) — Deploying to staging"
     assert text =~ "deploy.sh, never kubectl by hand"
     refute text =~ "Use ./deploy.sh staging"
     assert text =~ "longx/writing-plugs.md"
@@ -139,8 +139,8 @@ defmodule Longx.Agent.KnowledgeTest do
                ctx
              )
 
-    assert written =~ ".longx/knowledge/testing/data.md"
-    assert File.read!(Path.join(root, ".longx/knowledge/testing/data.md")) == content
+    assert written =~ ".longx/shared/knowledge/testing/data.md"
+    assert File.read!(Path.join(root, ".longx/shared/knowledge/testing/data.md")) == content
 
     assert {:ok, "Fixtures are under test/fixtures.\n"} =
              Tool.call(tool!("knowledge_read"), %{"path" => "project/testing/data.md"}, ctx)
@@ -148,7 +148,7 @@ defmodule Longx.Agent.KnowledgeTest do
     assert {:error, msg} =
              Tool.call(
                tool!("knowledge_write"),
-               %{"path" => "project/x.md", "content" => "no front matter"},
+               %{"path" => "project/ops/x.md", "content" => "no front matter"},
                ctx
              )
 
@@ -174,19 +174,70 @@ defmodule Longx.Agent.KnowledgeTest do
     assert {:ok, _} =
              Tool.call(
                tool!("knowledge_write"),
-               %{"path" => "global/me.md", "content" => content},
+               %{"path" => "global/me/profile.md", "content" => content},
                ctx
              )
 
     assert {:ok, _} =
              Tool.call(
                tool!("knowledge_write"),
-               %{"path" => "global/me.md", "content" => content <> "more\n"},
+               %{"path" => "global/me/profile.md", "content" => content <> "more\n"},
                ctx
              )
 
-    assert File.exists?(Path.join(global, "knowledge/me.md"))
+    assert File.exists?(Path.join(global, "knowledge/me/profile.md"))
     assert length(Longx.Git.log(Path.join(global, "knowledge"), limit: 10)) == 2
-    assert "global/me.md" in Enum.map(Knowledge.docs(root), & &1.path)
+    assert "global/me/profile.md" in Enum.map(Knowledge.docs(root), & &1.path)
+  end
+
+  @doc_a "---\ntitle: Deploy steps\nsummary: how to deploy\n---\nStep one.\n"
+  @doc_b "---\ntitle: Rollback\nsummary: how to roll back\n---\nStep back.\n"
+
+  test "two levels: a doc needs a topic, a topic reads as its list, the index folds topics, local is a root of its own",
+       %{root: root, ctx: ctx} do
+    # a top-level file is refused with the rule
+    assert {:error, msg} = Knowledge.write(root, "local/notes.md", @doc_a)
+    assert msg =~ "topic"
+    assert {:error, msg} = Knowledge.write(root, "project/notes.md", @doc_a)
+    assert msg =~ "topic"
+
+    assert {:ok, _} = Knowledge.write(root, "local/deploy/steps.md", @doc_a)
+    assert {:ok, _} = Knowledge.write(root, "local/deploy/rollback.md", @doc_b)
+    assert File.exists?(Path.join(root, ".longx/local/knowledge/deploy/steps.md"))
+
+    # a write into local/ keeps it out of git
+    assert File.read!(Path.join(root, ".gitignore")) =~ ".longx/local/"
+    assert {:ok, _} = Knowledge.write(root, "local/deploy/steps.md", @doc_a <> "again\n")
+    assert length(String.split(File.read!(Path.join(root, ".gitignore")), ".longx/local/")) == 2
+
+    # a topic reads as its docs, one line each; a README speaks for the topic in the index
+    assert {:ok, listing} = Knowledge.read(root, "local/deploy")
+    assert listing =~ "local/deploy/steps.md — Deploy steps: how to deploy"
+    assert listing =~ "local/deploy/rollback.md — Rollback: how to roll back"
+
+    File.write!(
+      Path.join(root, ".longx/local/knowledge/deploy/README.md"),
+      "---\ntitle: Deploy\nsummary: everything about shipping\n---\n"
+    )
+
+    step = Plug.call(Step.new(phase: :request, cwd: root), Plug.init([]))
+    index = Enum.join(step.instructions, "\n")
+    assert index =~ "local/deploy/ (2 docs) — Deploy: everything about shipping"
+    refute index =~ "local/deploy/steps.md"
+    # the flat docs of before are still listed one by one; a topic of the shared tree folds too
+    assert index =~ "project/plain.md"
+    assert index =~ "project/ops/ (1 doc)"
+    assert step.instructions |> Enum.join("\n") =~ "local/<topic>/<name>.md"
+
+    # search finds inside a topic; the tool reads a topic too
+    assert [%{path: "local/deploy/rollback.md"} | _] = Knowledge.search(root, "roll back")
+    assert {:ok, text} = Tool.call(tool!("knowledge_read"), %{"path" => "local/deploy"}, ctx)
+    assert text =~ "rollback.md"
+
+    # promotion moves a local doc into the shared tree
+    assert {:ok, "project/deploy/steps.md"} = Knowledge.promote(root, "local/deploy/steps.md")
+    assert File.exists?(Path.join(root, ".longx/shared/knowledge/deploy/steps.md"))
+    refute File.exists?(Path.join(root, ".longx/local/knowledge/deploy/steps.md"))
+    assert {:error, _} = Knowledge.promote(root, "project/deploy/steps.md")
   end
 end

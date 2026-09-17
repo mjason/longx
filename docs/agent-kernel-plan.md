@@ -1,4 +1,4 @@
-# 原生内核：下一步的设计（已定，切片 1 已做）
+# 原生内核：下一步的设计（已定，四个切片 2026-09-17 全部做完）
 
 2026-09-17 讨论定下来的形状。原则不变：内核只有原子能力，策略全是 `.longx` 里动态加载的代码；
 agent loop 就是 OTP 递归；agent 之间用 mailbox；配置在后台配。
@@ -73,7 +73,13 @@ agent loop 就是 OTP 递归；agent 之间用 mailbox；配置在后台配。
 1. ✅ 内核原子能力：`spawn` effect、`from` 消息、报告 / 崩溃进 mailbox、空闲父被叫醒、`step.state`、
    闲置自退与按需重启（`Longx.Agent.spawn/4`、`Step.spawn/4`、`send(from:)`、`Specs` + `ensure_alive`、
    `Projects.spawn_native_agent/4` 给孩子建行）。
-2. 加载器：`agents/<name>/`、`shared/` / `local/` 两棵树、`prompt_file`、`agents [...]`；Knowledge 的
-   主题规则和折叠索引；`.gitignore`。
-3. 出厂 `Plugs.Agents`、`Plugs.Goal`、起步包声明。
-4. 设置页"Agent 内核"（全局 + 项目覆盖）、提升动作。
+2. ✅ 加载器：`agents/<name>/`、`shared/` / `local/` 两棵树、`prompt_file`、`agents [...]`；Knowledge 的
+   主题规则和折叠索引；`.gitignore`（`Longx.Agent.Layout`）。
+3. ✅ 出厂 `Plugs.Agents`（spawn_agent / send_message / close_agent + 上限）、`Plugs.Goal`、起步包
+   `priv/agent/agents/{researcher,reviewer,coder}`。
+4. ✅ 设置页"Agent 内核"（`Longx.Agent.Settings`：全局一条 `system_settings`，项目 `agent_settings` 覆盖，
+   加载器当最上层描述）、全局 agent 文件编辑、项目设置里的角色列表和「提升到 shared」。
+
+落地时的取舍：角色声明按层**替换**（项目的 `researcher` 顶掉出厂的），不叠加；信任开关同时管 shared 和
+local（都是仓库目录里要执行的代码）；goal 存在线程视图（ThreadState meta）里，进程退出不丢、BEAM 重启丢；
+一个 agent 同角色派第二个叫 `researcher-2`。

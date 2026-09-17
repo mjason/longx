@@ -36,24 +36,24 @@ defmodule LongxWeb.KnowledgeRpcTest do
 
     assert %{"success" => true} =
              rpc(conn, "knowledge_write", %{
-               "input" => %{"path" => "global/me.md", "content" => content}
+               "input" => %{"path" => "global/me/profile.md", "content" => content}
              })
 
     assert %{"success" => true, "data" => docs} =
              rpc(conn, "knowledge_docs", %{"fields" => @fields})
 
     assert %{"title" => "Me", "always" => true, "tags" => ["me"], "writable" => true} =
-             Enum.find(docs, &(&1["path"] == "global/me.md"))
+             Enum.find(docs, &(&1["path"] == "global/me/profile.md"))
 
     assert %{"success" => true, "data" => %{"text" => ^content}} =
              rpc(conn, "knowledge_read", %{
                "fields" => ["text"],
-               "input" => %{"path" => "global/me.md"}
+               "input" => %{"path" => "global/me/profile.md"}
              })
 
     assert %{"success" => false, "errors" => [%{"fields" => ["content"]}]} =
              rpc(conn, "knowledge_write", %{
-               "input" => %{"path" => "global/bad.md", "content" => "no front matter"}
+               "input" => %{"path" => "global/me/bad.md", "content" => "no front matter"}
              })
 
     assert %{"success" => false, "errors" => [%{"fields" => ["content"]}]} =
@@ -62,17 +62,17 @@ defmodule LongxWeb.KnowledgeRpcTest do
              })
 
     assert %{"success" => true} =
-             rpc(conn, "knowledge_delete", %{"input" => %{"path" => "global/me.md"}})
+             rpc(conn, "knowledge_delete", %{"input" => %{"path" => "global/me/profile.md"}})
 
     assert %{"success" => true, "data" => docs} =
              rpc(conn, "knowledge_docs", %{"fields" => @fields})
 
-    refute Enum.any?(docs, &(&1["path"] == "global/me.md"))
+    refute Enum.any?(docs, &(&1["path"] == "global/me/profile.md"))
 
     assert %{"success" => false} =
              rpc(conn, "knowledge_read", %{
                "fields" => ["text"],
-               "input" => %{"path" => "global/me.md"}
+               "input" => %{"path" => "global/me/profile.md"}
              })
   end
 end

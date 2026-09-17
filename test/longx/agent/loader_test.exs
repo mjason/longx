@@ -70,6 +70,8 @@ defmodule Longx.Agent.LoaderTest do
              Longx.Agent.Plugs.Knowledge,
              Longx.Agent.Plugs.WebSearch,
              Longx.Agent.Plugs.Browser,
+             Longx.Agent.Plugs.Agents,
+             Longx.Agent.Plugs.Goal,
              Longx.Agent.Plugs.Prompt,
              Longx.Agent.Plugs.Local,
              Request
@@ -163,6 +165,139 @@ defmodule Longx.Agent.LoaderTest do
     empty = Loader.load(root <> "-none", tag: tag <> "n", trusted: true)
     assert names(empty.plugs) == names(Longx.Agent.Pipelines.Default.plugs())
     assert empty.present? == false
+  end
+
+  test "shared and local are two layers; local wins; the old flat plugs/ still counts as shared",
+       %{root: root, tag: tag} do
+    write!(root, ".longx/agent.exs", @agent)
+    write!(root, ".longx/shared/plugs/deploy.exs", @deploy)
+    write!(root, ".longx/plugs/legacy.exs", String.replace(@deploy, "Deploy", "Legacy"))
+
+    write!(
+      root,
+      ".longx/local/agent.exs",
+      "import Longx.Agent.Config\nagent do\n  model \"my-model\"\n  plug Legacy\n  plug Draft\nend\n"
+    )
+
+    write!(
+      root,
+      ".longx/local/plugs/draft.exs",
+      "defmodule Draft do\n  use Longx.Agent.Plug\n  instructions \"draft\"\nend\n"
+    )
+
+    loaded = Loader.load(root, tag: tag, trusted: true)
+    assert loaded.errors == []
+    # the local description applies after the shared one
+    assert loaded.model == "my-model"
+
+    labels =
+      Enum.map(names(loaded.plugs), &(&1 |> Atom.to_string() |> String.split(".") |> List.last()))
+
+    assert "Deploy" in labels and "Legacy" in labels and "Draft" in labels
+    assert Enum.map(loaded.layers, & &1.name) == [:longx, :global, :project, :local]
+  end
+
+  @researcher ~S'''
+  import Longx.Agent.Config
+
+  agent do
+    summary "finds things out on the web and reports"
+    model "cheap-model", effort: "low"
+    prompt_file "prompt.md"
+    drop Longx.Agent.Plugs.Patch
+    plug Notes
+  end
+  '''
+
+  test "a declared agent is a role: its own directory, prompt file and plugs, on top of the project's description",
+       %{root: root, tag: tag} do
+    write!(
+      root,
+      ".longx/agent.exs",
+      "import Longx.Agent.Config\nagent do\n  prompt \"Project P.\"\nend\n"
+    )
+
+    write!(root, ".longx/shared/agents/researcher/agent.exs", @researcher)
+    write!(root, ".longx/shared/agents/researcher/prompt.md", "You research.\n")
+
+    write!(
+      root,
+      ".longx/shared/agents/researcher/plugs/notes.exs",
+      "defmodule Notes do\n  use Longx.Agent.Plug\n  instructions \"take notes\"\nend\n"
+    )
+
+    main = Loader.load(root, tag: tag, trusted: true)
+    assert main.errors == []
+    # the roles are known to the main agent (the shipped starters too), each with a summary
+    assert %{
+             name: "researcher",
+             summary: "finds things out on the web and reports",
+             layer: :project
+           } =
+             Enum.find(main.agents, &(&1.name == "researcher"))
+
+    assert Enum.map(main.agents, & &1.name) |> Enum.sort() |> Enum.take(3) == [
+             "coder",
+             "researcher",
+             "reviewer"
+           ]
+
+    assert Patch in names(main.plugs)
+    assert main.model == nil
+
+    role = Loader.load(root, tag: tag, trusted: true, agent: "researcher")
+    assert role.errors == []
+    assert role.model == "cheap-model"
+    assert role.effort == "low"
+    refute Patch in names(role.plugs)
+    assert Enum.any?(names(role.plugs), &String.ends_with?(Atom.to_string(&1), ".Notes"))
+    # the project's prompt, then the role's: the prompt file becomes prompt text
+    prompts = for {Longx.Agent.Plugs.Prompt, [text: t]} <- role.plugs, do: t
+    assert prompts == ["Project P.", "You research.\n"]
+
+    # a shipped starter is a role too
+    shipped = Loader.load(root, tag: tag, trusted: true, agent: "reviewer")
+    assert shipped.errors == []
+    refute Patch in names(shipped.plugs)
+
+    # an unknown role is an error, not a silent main agent
+    assert {:error, message} =
+             Loader.load(root, tag: tag, trusted: true, agent: "nobody")
+             |> then(&{:error, hd(&1.errors).message})
+
+    assert message =~ "nobody"
+  end
+
+  test "a local role overrides a shared one of the same name; agents [...] limits who may be spawned; a missing prompt file is an error",
+       %{root: root, tag: tag} do
+    write!(
+      root,
+      ".longx/shared/agents/helper/agent.exs",
+      "import Longx.Agent.Config\nagent do\n  summary \"shared helper\"\nend\n"
+    )
+
+    write!(
+      root,
+      ".longx/local/agents/helper/agent.exs",
+      "import Longx.Agent.Config\nagent do\n  summary \"local helper\"\n  prompt_file \"missing.md\"\nend\n"
+    )
+
+    write!(
+      root,
+      ".longx/agent.exs",
+      "import Longx.Agent.Config\nagent do\n  agents [\"helper\", \"reviewer\"]\nend\n"
+    )
+
+    loaded = Loader.load(root, tag: tag, trusted: true)
+
+    assert %{summary: "local helper", layer: :local} =
+             Enum.find(loaded.agents, &(&1.name == "helper"))
+
+    assert loaded.allowed == ["helper", "reviewer"]
+    assert Enum.any?(loaded.errors, &(&1.message =~ "missing.md"))
+
+    plain = Loader.load(root <> "-plain", tag: tag <> "p", trusted: true)
+    assert plain.allowed == nil
   end
 
   test "an older description version is flagged to the model", %{root: root, tag: tag} do

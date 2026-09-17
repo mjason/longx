@@ -336,7 +336,9 @@ codex 是 project 的资源，`Longx.Projects` 上可以管：
 包括让内核做什么的 **effect**：`Step.enqueue_call/3`（追加一条自己的工具调用，比如改了文件就跑
 `mix test`）、`Step.continue/2`（不结束这一轮，再来一步）、`Step.compact/2`（先压缩上下文）、`Step.halt/2`。
 
-**项目可以完全定制自己的 agent**——`.longx/agent.exs` 是描述，`.longx/plugs/*.exs` 是行为：
+**项目可以完全定制自己的 agent**——`.longx/agent.exs` 是描述，plug 是行为。`.longx/` 分两棵树：
+`shared/`（agents、plugs、knowledge，进 git，审过的）和 `local/`（同样三样加一份可选的 `agent.exs`，
+`.gitignore` 掉——这台机器、你自己、agent 的草稿；agent 默认写这里，你在项目设置里把审过的「提升到 shared」）：
 
 ```elixir
 # .longx/agent.exs
@@ -354,7 +356,7 @@ end
 ```
 
 ```elixir
-# .longx/plugs/tests_after_edit.exs
+# .longx/shared/plugs/tests_after_edit.exs
 defmodule TestsAfterEdit do
   use Longx.Agent.Plug
 
@@ -370,7 +372,7 @@ end
 
 描述记录的是**相对出厂的差异**（`extends :default` + `plug` / `options` / `drop`），所以发新版本时
 出厂管道的变化会自动到达每个项目；写整张 `pipeline do … end` 才会把管道冻结住。三层同一格式：
-priv 里的出厂描述、`<data>/agent/` 你自己的、项目的 `.longx/`，后一层覆盖前一层。每层的 `.exs`
+priv 里的出厂描述、`<data>/agent/` 你自己的、项目的 `.longx/`（shared 再 local），后一层覆盖前一层。每层的 `.exs`
 编译前会被改名到自己的命名空间，两个项目都叫 `Deploy` 也不冲突；每轮开始按 mtime 重载；
 加载失败退回下一层，错误以提示进 prompt——agent 改坏了自己下一轮能自己修。
 
@@ -378,11 +380,24 @@ priv 里的出厂描述、`<data>/agent/` 你自己的、项目的 `.longx/`，�
 .longx/ 里的定义」，默认关）。开了之后 agent 也被告知自己的定义在哪、怎么写（`priv/agent/reference.md`），
 重复出现的流程它会写成 plug，和代码一起进 git。
 
-**知识代替记忆**：`.longx/knowledge/*.md`（项目的，进 git）、`<data>/agent/knowledge/`（你自己的，
-自己是个 git 仓库）、`priv/agent/knowledge/`（Longx 出厂的，只读：怎么写 plug、描述格式的版本变化）。
-front matter 里 `always: true` 的每轮都进 prompt，其余只进一行索引，`knowledge_read` /
+**知识代替记忆**：`.longx/shared/knowledge/`（项目的，进 git）、`.longx/local/knowledge/`（本机的，agent
+默认写这里）、`<data>/agent/knowledge/`（你自己的，自己是个 git 仓库）、`priv/agent/knowledge/`（Longx 出厂的，
+只读：怎么写 plug、描述格式的版本变化）。**每篇必须属于一个主题**（`<根>/<主题>/<名字>.md`），索引按主题折成
+一行（主题里的 `README.md` 代表它），`knowledge_read("local/deploy")` 列出主题下的文档——AI 写得太快，
+一级目录会把 git 变成灾难。front matter 里 `always: true` 的每轮都进 prompt，`knowledge_read` /
 `knowledge_search` / `knowledge_write` 三个工具读写。skill 就是一篇"怎么做 X"的知识，AGENTS.md
 不在出厂管道里（要兼容的项目自己 `plug AgentsMd`）。
+
+**子 agent = 同一套循环的另一个进程，交流 = mailbox。** 没有 wait：`spawn_agent(agent, task)` 按声明起一个
+`Longx.Agent`（`Agent.spawn/4`，或 plug 里的 `Step.spawn/4` effect）立刻返回；孩子的最终回答是父 mailbox 里的
+一条消息（`[agent researcher] …`）——父在跑就下一步折进上下文，父空闲就被叫醒开新的一轮（Turn 行照记）。
+父 monitor 子（崩了是一条消息进上下文），子 monitor 父（父没了自己退出）。进程很轻，闲 30 分钟自退，
+下一条消息从对话日志毫秒级拉起来。能派谁是**声明**：`.longx/shared/agents/<名字>/agent.exs`（同一格式：
+`summary`、`prompt_file "prompt.md"`、模型、`drop Patch`、`agents [...]` 它自己能派谁），出厂带
+`researcher` / `reviewer` / `coder` 起步包，项目同名声明覆盖出厂。模型选角色，不再临时拼模型和参数。
+上限（深度、同时几个、闲置多久、孩子默认模型、reviewer 模型）在设置 → Agent 内核里配，项目设置可覆盖——
+这些是每个 agent 描述最上面的一层。递归的结束由主模型判断：`Goal` plug 的 `create_goal` 让一轮在
+`:turn_end` 继续下去，直到模型 `update_goal(status: complete)`（或 blocked、预算用完、单轮 8 次续跑）。
 
 **联网**是两个 plug：`WebSearch` 看模型——provider 自己会搜的（OpenAI、百炼上的 Qwen 3.5+ 等）就发
 codex 那个 `web_search` 工具、由 provider 侧搜和读，回来的 `web_search_call` 和引用在聊天里显示成搜索行；
@@ -395,7 +410,7 @@ codex 那个 `web_search` 工具、由 provider 侧搜和读，回来的 `web_se
 
 一轮正在跑的时候再输入，消息像 Codex app 那样先排在输入框上方：这一轮结束后自动作为新的一轮发出，也可以「插入」到正在跑的这一轮里，或者「取消」。你的全局知识在设置 → 知识里管理（编辑、新建、删除，每次保存一个 git 提交）。
 
-还没做的：`write_stdin` 会话、子 agent（`spawn` effect）、`/review`。
+还没做的：`write_stdin` 会话、`/review`。
 
 ### 内存：不设上限，但排好死的顺序
 

@@ -4,20 +4,26 @@ defmodule Longx.Agent.Plugs.Knowledge do
   the docs marked `always` go into every prompt (capped, `always_cap:`
   bytes), the rest as an index of one line each (capped, `index_cap:`
   docs), and three tools read, search and write them. This is the memory:
-  not remembered, written down — the project's under `.longx/knowledge/`
-  with the code, the person's in the global root, Longx's own shipped
-  read-only. `roots:` picks which of `[:longx, :global, :project]`.
+  not remembered, written down — the project's shared tree under
+  `.longx/shared/knowledge/` with the code, its local tree
+  (`.longx/local/knowledge/`, gitignored — where the agent writes by
+  default), the person's in the global root, Longx's own shipped
+  read-only. Docs live in topics; the index shows one line per topic.
+  `roots:` picks which of `[:longx, :global, :project, :local]`.
   """
 
   use Longx.Agent.Plug
 
   alias Longx.Agent.Knowledge
 
-  @defaults [roots: [:longx, :global, :project], always_cap: 16 * 1024, index_cap: 200]
+  @defaults [roots: [:longx, :global, :project, :local], always_cap: 16 * 1024, index_cap: 200]
 
   tool :knowledge_read,
-       "Reads one knowledge doc by its path from the index (e.g. project/ops/deploy.md)." do
-    param :path, :string, "<root>/<file>.md — root is longx, global or project", required: true
+       "Reads one knowledge doc by its path (e.g. local/deploy/steps.md), or lists a topic (e.g. local/deploy)." do
+    param :path,
+          :string,
+          "<root>/<topic>/<file>.md or <root>/<topic> — root is longx, global, project or local",
+          required: true
   end
 
   tool :knowledge_search,
@@ -26,15 +32,19 @@ defmodule Longx.Agent.Plugs.Knowledge do
   end
 
   tool :knowledge_write,
-       "Creates or replaces a knowledge doc. Content starts with front matter: --- title: … summary: … tags: [a, b] always: false --- then markdown. project/… for this project (committed with the code), global/… for things about the person or their machine; longx/… is read-only." do
-    param :path, :string, "project/<name>.md or global/<name>.md", required: true
+       "Creates or replaces a knowledge doc. Content starts with front matter: --- title: … summary: … tags: [a, b] always: false --- then markdown. Every doc lives in a topic: local/<topic>/<name>.md by default (this machine, not in git); project/<topic>/<name>.md only for what the person asked to share with the team (in git); global/<topic>/<name>.md for things about the person or their machine; longx/… is read-only." do
+    param :path,
+          :string,
+          "local/<topic>/<name>.md (default), project/<topic>/<name>.md, or global/<topic>/<name>.md",
+          required: true
+
     param :content, :string, "The whole doc, front matter first", required: true
   end
 
   @growth """
   # Knowledge
 
-  What is worth keeping is written down, never just remembered. Before guessing about this project, search the knowledge (knowledge_search) and read what applies (knowledge_read). When you learn something durable — a fact about the code, a decision and its reason, a procedure that worked, a pitfall — write it with knowledge_write: `project/<name>.md` for this project, `global/<name>.md` for things about the person or their machine. Mark `always: true` only for what every turn must know; keep those short. Fix a doc that turned out wrong.
+  What is worth keeping is written down, never just remembered. Before guessing about this project, search the knowledge (knowledge_search) and read what applies (knowledge_read — a topic path lists its docs). When you learn something durable — a fact about the code, a decision and its reason, a procedure that worked, a pitfall — write it with knowledge_write as `local/<topic>/<name>.md` (yours, on this machine, not in git); `project/<topic>/<name>.md` is the shared tree the team reads, only for what the person asked to share; `global/<topic>/<name>.md` for things about the person or their machine. Pick an existing topic before opening a new one, and prefer improving a doc over adding one. Mark `always: true` only for what every turn must know; keep those short. Fix a doc that turned out wrong.
   """
 
   @impl true
@@ -81,17 +91,44 @@ defmodule Longx.Agent.Plugs.Knowledge do
 
   defp index_section([], _cap), do: nil
 
+  # one line per topic (a flat doc is its own line), capped
   defp index_section(docs, cap) do
-    {shown, rest} = Enum.split(docs, cap)
-    lines = Enum.map_join(shown, "\n", &"- #{&1.path} — #{&1.title}: #{&1.summary}")
+    entries =
+      docs
+      |> Enum.group_by(& &1.root)
+      |> Enum.sort_by(fn {root, _} ->
+        Enum.find_index([:longx, :global, :project, :local], &(&1 == root))
+      end)
+      |> Enum.flat_map(fn {root, docs} ->
+        docs
+        |> Knowledge.by_topic()
+        |> Enum.flat_map(fn
+          {nil, flat} ->
+            Enum.map(flat, &"- #{&1.path} — #{&1.title}: #{&1.summary}")
+
+          {topic, in_topic} ->
+            ["- #{root}/#{topic}/ (#{count(in_topic)}) — #{Knowledge.topic_line(in_topic)}"]
+        end)
+      end)
+
+    {shown, rest} = Enum.split(entries, cap)
 
     note =
       case rest do
         [] -> ""
-        more -> "\n\n(#{length(more)} more docs omitted — find them with knowledge_search)"
+        more -> "\n\n(#{length(more)} more entries omitted — find them with knowledge_search)"
       end
 
-    "# Knowledge index\n\nRead a doc with knowledge_read(path).\n\n" <> lines <> note
+    "# Knowledge index\n\nRead a doc with knowledge_read(path); a topic path (root/topic) lists its docs.\n\n" <>
+      Enum.join(shown, "\n") <> note
+  end
+
+  # the README speaks for the topic, it is not one of its docs
+  defp count(docs) do
+    case Enum.count(docs, &(not String.ends_with?(&1.path, "/README.md"))) do
+      1 -> "1 doc"
+      n -> "#{n} docs"
+    end
   end
 
   def knowledge_read(%{"path" => path}, ctx), do: Knowledge.read(ctx.cwd || File.cwd!(), path)

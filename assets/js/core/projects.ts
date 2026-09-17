@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ThreadRow } from "@/core/chat/threadList";
 import {
   agentDefinition,
+  type AgentDefinitionFields,
   codexInfo,
   createProject,
   getProject,
@@ -50,6 +51,7 @@ export const projectFields = [
   "modelId",
   "engine",
   "trustLocalAgent",
+  "agentSettings",
   "archivedAt",
   "updatedAt",
 ] as const;
@@ -175,15 +177,42 @@ export type AgentDefinition = {
   effort: string | null;
   plugs: string[];
   files: string[];
+  /** what .longx/local/ holds, relative to it — the candidates for promotion */
+  localFiles: string[];
+  /** the declared roles (shipped, global, the project's), each with its summary and layer */
+  agents: { name: string; summary: string; layer: string }[];
+  /** the kernel settings in force for the project (global + overrides) */
+  settings: AgentSettingsView;
+  /** the project's own overrides (null = inherit) */
+  overrides: Partial<AgentSettingsView>;
   errors: string[];
 };
+
+export type AgentSettingsView = {
+  maxDepth: number | null;
+  maxChildren: number | null;
+  idleMinutes: number | null;
+  childModel: string | null;
+  childEffort: string | null;
+  reviewerModel: string | null;
+  reviewerEffort: string | null;
+};
+
+const agentSettingsViewFields = ["maxDepth", "maxChildren", "idleMinutes", "childModel", "childEffort", "reviewerModel", "reviewerEffort"] as const;
+
+// `agents` is an untyped array on the wire (ash_typescript 0.18 selects nothing inside one)
+const agentDefinitionFields = [
+  "present", "trusted", "dir", "model", "effort", "plugs", "files", "localFiles", "agents", "errors",
+  { settings: [...agentSettingsViewFields] },
+  { overrides: [...agentSettingsViewFields] },
+] as const satisfies AgentDefinitionFields;
 
 export function useAgentDefinition(projectId: string | undefined) {
   return useQuery({
     queryKey: ["project", projectId, "agent-definition"] as const,
     queryFn: async () =>
       unwrap(
-        await agentDefinition({ fields: ["present", "trusted", "dir", "model", "effort", "plugs", "files", "errors"], input: { id: projectId! } }),
+        await agentDefinition({ fields: [...agentDefinitionFields], input: { id: projectId! } }),
       ) as AgentDefinition,
     enabled: !!projectId,
     staleTime: 10_000,

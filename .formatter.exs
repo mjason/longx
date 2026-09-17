@@ -26,6 +26,9 @@
     model: 1,
     model: 2,
     prompt: 1,
+    prompt_file: 1,
+    summary: 1,
+    agents: 1,
     pipeline: 1,
     options: 2,
     drop: 1

@@ -25,6 +25,7 @@ defmodule Longx.Projects do
       rpc_action :search_files, :search_files
       rpc_action :list_skills, :list_skills
       rpc_action :agent_definition, :agent_definition
+      rpc_action :promote_local, :promote_local
       rpc_action :init_git, :init_git
       rpc_action :codex_info, :codex_info
       rpc_action :stop_codex, :stop_codex
@@ -211,6 +212,8 @@ defmodule Longx.Projects do
              effort: effort,
              web_search: Keyword.get(opts, :web_search, project.web_search),
              trust: trust_fun(project.id),
+             settings: settings_fun(project.id),
+             idle_ms: Longx.Agent.Settings.idle_ms(Longx.Agent.Settings.for_project(project)),
              spawner: &__MODULE__.spawn_native_agent/4
            ),
          {:ok, thread} <-
@@ -260,8 +263,32 @@ defmodule Longx.Projects do
       effort: loaded.effort,
       plugs: Enum.map(loaded.plugs, fn {module, _opts} -> plug_label(module) end),
       files: project_files(loaded.layers, project.root_path),
+      local_files: local_files(project.root_path),
+      agents:
+        Enum.map(
+          loaded.agents,
+          &%{name: &1.name, summary: &1.summary, layer: Atom.to_string(&1.layer)}
+        ),
+      settings: Longx.Agent.Settings.for_project(project),
+      overrides: project.agent_settings || %{},
       errors: Enum.map(loaded.errors, & &1.message)
     }
+  end
+
+  # what the local tree holds, relative to it (the candidates for promotion)
+  defp local_files(root) do
+    local = Path.join(root, ".longx/local")
+
+    if File.dir?(local) do
+      local
+      |> Path.join("**")
+      |> Path.wildcard(match_dot: false)
+      |> Enum.filter(&File.regular?/1)
+      |> Enum.map(&Path.relative_to(&1, local))
+      |> Enum.sort()
+    else
+      []
+    end
   end
 
   # a layer's own module reads as its name in the file, not the namespaced atom
@@ -276,7 +303,8 @@ defmodule Longx.Projects do
   end
 
   defp project_files(layers, root) do
-    for %{name: :project, files: files} <- layers,
+    for %{name: name, files: files} <- layers,
+        name in [:project, :local],
         {path, _} <- files,
         do: Path.relative_to(path, root)
   end
@@ -298,9 +326,27 @@ defmodule Longx.Projects do
         effort: thread.reasoning_effort,
         web_search: thread.web_search,
         trust: trust_fun(thread.project_id),
+        settings: settings_fun(thread.project_id),
+        idle_ms:
+          Longx.Agent.Settings.idle_ms(Longx.Agent.Settings.for_project_id(thread.project_id)),
         spawner: &__MODULE__.spawn_native_agent/4
       ] ++ team_opts(thread)
     )
+  end
+
+  # read at every turn, like the trust switch
+  defp settings_fun(project_id), do: fn -> Longx.Agent.Settings.for_project_id(project_id) end
+
+  @doc """
+  Moves a file of the project's `.longx/local/` tree (`"plugs/x.exs"`,
+  `"agents/helper/agent.exs"`, `"knowledge/deploy/steps.md"`) into
+  `.longx/shared/` — reviewed, for the team. `{:ok, "shared/…"}`.
+  """
+  @spec promote_local(Project.t(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  def promote_local(%Project{root_path: root}, rel) do
+    with {:ok, _to} <- Longx.Agent.Layout.promote(root, rel) do
+      {:ok, Path.join("shared", rel)}
+    end
   end
 
   defp team_opts(%Thread{parent_thread_id: nil}), do: []
@@ -308,12 +354,17 @@ defmodule Longx.Projects do
   defp team_opts(%Thread{parent_thread_id: parent_id, agent_path: path}) do
     case Ash.get(Thread, parent_id) do
       {:ok, %Thread{codex_thread_id: parent}} ->
-        [parent: parent, name: (path || "") |> String.split("/") |> List.last()]
+        name = (path || "") |> String.split("/") |> List.last()
+        [parent: parent, name: name, role: role_of(name), depth: depth_of(path)]
 
       _ ->
         []
     end
   end
+
+  # "researcher-2" runs the researcher role; the depth is the path's
+  defp role_of(name), do: Regex.replace(~r/-\d+$/, name, "")
+  defp depth_of(path), do: Kernel.max(length(String.split(path || "", "/", trim: true)) - 1, 0)
 
   # how the kernel starts a child on a native thread: a row under the parent
   # (like the rows codex's sub-agents get), its agent, and the task as its
@@ -326,8 +377,9 @@ defmodule Longx.Projects do
     turn_id = "turn_" <> Ash.UUID.generate()
 
     with {:ok, %Thread{} = parent} <- get_thread_by_codex_id(parent_state.thread_id),
-         model_slug = Keyword.get(opts, :model, parent.model_slug),
-         effort = Keyword.get(opts, :effort, parent.reasoning_effort),
+         # no model given: the role's own, else the default — not the parent's
+         model_slug = Keyword.get(opts, :model),
+         effort = Keyword.get(opts, :effort),
          {:ok, child} <-
            create_thread(%{
              codex_thread_id: child_id,
@@ -760,6 +812,30 @@ defmodule Longx.Projects do
   def set_goal(%Thread{} = thread, attrs, opts \\ []) do
     thread = Ash.get!(Thread, thread.id, load: :project)
 
+    if native?(thread) do
+      with :ok <- ensure_usable(thread),
+           {:ok, _pid} <- ensure_agent(thread),
+           :ok <- Tracker.track(thread.codex_thread_id) do
+        Longx.Agent.set_goal(thread.codex_thread_id, native_goal_attrs(attrs))
+      end
+    else
+      set_codex_goal(thread, attrs, opts)
+    end
+  end
+
+  # the kernel keeps codex's wire shape (camelCase, status as a string)
+  defp native_goal_attrs(attrs) do
+    attrs
+    |> Enum.flat_map(fn
+      {:objective, v} -> [{"objective", v}]
+      {:status, v} when not is_nil(v) -> [{"status", to_string(v)}]
+      {:token_budget, v} -> [{"tokenBudget", v}]
+      _ -> []
+    end)
+    |> Map.new()
+  end
+
+  defp set_codex_goal(%Thread{} = thread, attrs, opts) do
     with :ok <- ensure_usable(thread),
          {:ok, conn} <- thread_connection(thread, opts) do
       Longx.Codex.Thread.set_goal(
@@ -777,8 +853,13 @@ defmodule Longx.Projects do
   def clear_goal(%Thread{} = thread, opts \\ []) do
     thread = Ash.get!(Thread, thread.id, load: :project)
 
-    with {:ok, conn} <- thread_connection(thread, opts),
-         do: Longx.Codex.Thread.clear_goal(thread.codex_thread_id, conn: conn)
+    if native?(thread) do
+      with {:ok, _pid} <- ensure_agent(thread),
+           do: Longx.Agent.clear_goal(thread.codex_thread_id)
+    else
+      with {:ok, conn} <- thread_connection(thread, opts),
+           do: Longx.Codex.Thread.clear_goal(thread.codex_thread_id, conn: conn)
+    end
   end
 
   @doc """

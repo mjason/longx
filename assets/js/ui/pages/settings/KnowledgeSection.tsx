@@ -126,6 +126,7 @@ function NewDoc({ onClose, onCreated }: { onClose: () => void; onCreated: (path:
   const actions = useKnowledgeActions();
   const [name, setName] = useState("");
   const clean = name.trim().replace(/\.md$/, "");
+  const inTopic = clean.split("/").filter(Boolean).length >= 2;
   const create = () => {
     const path = `global/${clean}.md`;
     actions.write.mutateAsync({ path, content: s.template(clean.split("/").pop() ?? clean) }).then(() => onCreated(path), fail);
@@ -135,9 +136,9 @@ function NewDoc({ onClose, onCreated }: { onClose: () => void; onCreated: (path:
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="knowledge-new-path">{s.newPath}</Label>
         <Input id="knowledge-new-path" value={name} onChange={(e) => setName(e.target.value)} placeholder="tools/deploy" className="w-64 font-mono" autoFocus />
-        <span className="text-muted-foreground text-xs">{s.newPathHint}</span>
+        <span className="text-muted-foreground text-xs">{clean && !inTopic ? s.needsTopic : s.newPathHint}</span>
       </div>
-      <Button size="sm" onClick={create} disabled={!clean || actions.write.isPending}>{s.create}</Button>
+      <Button size="sm" onClick={create} disabled={!clean || !inTopic || actions.write.isPending}>{s.create}</Button>
       <Button size="sm" variant="ghost" onClick={onClose}>{t.cancel}</Button>
     </section>
   );

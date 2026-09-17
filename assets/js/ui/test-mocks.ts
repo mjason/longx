@@ -17,6 +17,35 @@ export const failed = (message: string, fields: string[] = []) => ({
   ],
 });
 
+export const agentSettingsData = () => ({
+  maxDepth: 2,
+  maxChildren: 4,
+  idleMinutes: 30,
+  childModel: null,
+  childEffort: null,
+  reviewerModel: null,
+  reviewerEffort: null,
+});
+
+export const agentDefinitionData = (extra: Record<string, unknown> = {}) => ({
+  present: false,
+  trusted: false,
+  dir: "/srv/app-1/.longx",
+  model: null,
+  effort: null,
+  plugs: [],
+  files: [],
+  localFiles: [],
+  agents: [
+    { name: "coder", summary: "implements a bounded task", layer: "longx" },
+    { name: "researcher", summary: "searches the web", layer: "longx" },
+  ],
+  settings: agentSettingsData(),
+  overrides: {},
+  errors: [],
+  ...extra,
+});
+
 export const project = (n: number) => ({
   id: `id-${n}`,
   slug: `app-${n}`,
@@ -38,6 +67,7 @@ export const project = (n: number) => ({
   globalMemory: true,
   engine: "codex",
   trustLocalAgent: false,
+  agentSettings: null,
   archivedAt: null,
   updatedAt: "2026-09-12T00:00:00Z",
 });
@@ -121,7 +151,14 @@ export function rpcMock() {
     ),
     clearGoal: vi.fn(async () => ok({ cleared: true })),
     listSkills: vi.fn(async () => ok([])),
-    agentDefinition: vi.fn(async () => ok({ present: false, trusted: false, dir: "/srv/app-1/.longx", model: null, effort: null, plugs: [], files: [], errors: [] })),
+    agentDefinition: vi.fn(async () => ok(agentDefinitionData())),
+    promoteLocal: vi.fn(async ({ input }: { input: { path: string } }) => ok({ path: `shared/${input.path}` })),
+    agentSettings: vi.fn(async () => ok(agentSettingsData())),
+    setAgentSettings: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok({ ...agentSettingsData(), ...input })),
+    agentFiles: vi.fn(async () => ok([{ path: "agents/writer/agent.exs", size: 120 }])),
+    agentReadFile: vi.fn(async () => ok({ text: "import Longx.Agent.Config\n\nagent do\n  summary \"writes\"\nend\n" })),
+    agentWriteFile: vi.fn(async () => ok(null)),
+    agentDeleteFile: vi.fn(async () => ok(null)),
     setReviewModel: vi.fn(async () => ok(null)),
     listProviders: vi.fn(async () => ok([provider(1), provider(2)])),
     createProvider: vi.fn(

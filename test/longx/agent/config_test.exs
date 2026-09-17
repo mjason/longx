@@ -34,6 +34,20 @@ defmodule Longx.Agent.ConfigTest do
     assert config.pipeline == nil
   end
 
+  test "a role describes itself: summary, prompt_file, and who it may spawn" do
+    config =
+      agent do
+        summary "reviews diffs"
+        prompt_file "prompt.md"
+        agents ["researcher"]
+      end
+
+    assert %Config{summary: "reviews diffs", prompt_files: ["prompt.md"], agents: ["researcher"]} =
+             config
+
+    assert %Config{agents: nil} = agent(do: version(1))
+  end
+
   test "an explicit pipeline replaces the base wholesale" do
     config =
       agent do

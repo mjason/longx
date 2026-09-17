@@ -2216,11 +2216,11 @@ export type AgentDefinitionInput = {
   id: UUID;
 };
 
-export type AgentDefinitionFields = UnifiedFieldSelection<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, errors: Array<string>, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "errors"}>[];
+export type AgentDefinitionFields = UnifiedFieldSelection<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, localFiles: Array<string>, agents: Array<Record<string, any>>, settings: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}, overrides: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}, errors: Array<string>, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "localFiles" | "agents" | "errors"}>[];
 
 export type InferAgentDefinitionResult<
   Fields extends AgentDefinitionFields | undefined,
-> = InferResult<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, errors: Array<string>, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "errors"}, Fields>;
+> = InferResult<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, localFiles: Array<string>, agents: Array<Record<string, any>>, settings: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}, overrides: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}, errors: Array<string>, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "localFiles" | "agents" | "errors"}, Fields>;
 
 export type AgentDefinitionResult<Fields extends AgentDefinitionFields | undefined = undefined> = | { success: true; data: InferAgentDefinitionResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -2658,6 +2658,7 @@ export type CreateProjectInput = {
   modelId?: UUID | null;
   engine?: "codex" | "native";
   trustLocalAgent?: boolean;
+  agentSettings?: Record<string, any> | null;
   initGit?: boolean | null;
 };
 
@@ -3012,6 +3013,81 @@ export async function validateListSkills(
 ): Promise<ValidationResult> {
   const payload = {
     action: "list_skills",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type PromoteLocalInput = {
+  id: UUID;
+  path: string;
+};
+
+export type PromoteLocalFields = UnifiedFieldSelection<{path: string, __type: "TypedMap", __primitiveFields: "path"}>[];
+
+export type InferPromoteLocalResult<
+  Fields extends PromoteLocalFields | undefined,
+> = InferResult<{path: string, __type: "TypedMap", __primitiveFields: "path"}, Fields>;
+
+export type PromoteLocalResult<Fields extends PromoteLocalFields | undefined = undefined> = | { success: true; data: InferPromoteLocalResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Project
+ *
+ * @ashActionType :action
+ */
+export async function promoteLocal<Fields extends PromoteLocalFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: PromoteLocalInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<PromoteLocalResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "promote_local",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<PromoteLocalResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Project
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validatePromoteLocal(
+  config: {
+  tenant?: string;
+  input: PromoteLocalInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "promote_local",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };
@@ -3425,6 +3501,7 @@ export type UpdateProjectInput = {
   modelId?: UUID | null;
   engine?: "codex" | "native";
   trustLocalAgent?: boolean;
+  agentSettings?: Record<string, any> | null;
 };
 
 export type UpdateProjectFields = UnifiedFieldSelection<ProjectResourceSchema>[];
@@ -6498,6 +6575,349 @@ export async function validateRestoreProposal(
 }
 
 
+export type AgentDeleteFileInput = {
+  path: string;
+};
+
+export type InferAgentDeleteFileResult = {};
+
+export type AgentDeleteFileResult = | { success: true; data: InferAgentDeleteFileResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function agentDeleteFile(
+  config: {
+  tenant?: string;
+  input: AgentDeleteFileInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<AgentDeleteFileResult> {
+  const payload = {
+    action: "agent_delete_file",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<AgentDeleteFileResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateAgentDeleteFile(
+  config: {
+  tenant?: string;
+  input: AgentDeleteFileInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "agent_delete_file",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type AgentFilesFields = UnifiedFieldSelection<{path: string, size: number, __type: "TypedMap", __primitiveFields: "path" | "size"}>[];
+
+export type InferAgentFilesResult<
+  Fields extends AgentFilesFields | undefined,
+> = Array<InferResult<{path: string, size: number, __type: "TypedMap", __primitiveFields: "path" | "size"}, Fields>>;
+
+export type AgentFilesResult<Fields extends AgentFilesFields | undefined = undefined> = | { success: true; data: InferAgentFilesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function agentFiles<Fields extends AgentFilesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<AgentFilesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "agent_files",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<AgentFilesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateAgentFiles(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "agent_files",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type AgentReadFileInput = {
+  path: string;
+};
+
+export type AgentReadFileFields = UnifiedFieldSelection<{text: string, __type: "TypedMap", __primitiveFields: "text"}>[];
+
+export type InferAgentReadFileResult<
+  Fields extends AgentReadFileFields | undefined,
+> = InferResult<{text: string, __type: "TypedMap", __primitiveFields: "text"}, Fields>;
+
+export type AgentReadFileResult<Fields extends AgentReadFileFields | undefined = undefined> = | { success: true; data: InferAgentReadFileResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function agentReadFile<Fields extends AgentReadFileFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: AgentReadFileInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<AgentReadFileResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "agent_read_file",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<AgentReadFileResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateAgentReadFile(
+  config: {
+  tenant?: string;
+  input: AgentReadFileInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "agent_read_file",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type AgentSettingsFields = UnifiedFieldSelection<{maxDepth: number, maxChildren: number, idleMinutes: number, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}>[];
+
+export type InferAgentSettingsResult<
+  Fields extends AgentSettingsFields | undefined,
+> = InferResult<{maxDepth: number, maxChildren: number, idleMinutes: number, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}, Fields>;
+
+export type AgentSettingsResult<Fields extends AgentSettingsFields | undefined = undefined> = | { success: true; data: InferAgentSettingsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function agentSettings<Fields extends AgentSettingsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<AgentSettingsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "agent_settings",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<AgentSettingsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateAgentSettings(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "agent_settings",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type AgentWriteFileInput = {
+  path: string;
+  content: string;
+};
+
+export type InferAgentWriteFileResult = {};
+
+export type AgentWriteFileResult = | { success: true; data: InferAgentWriteFileResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function agentWriteFile(
+  config: {
+  tenant?: string;
+  input: AgentWriteFileInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<AgentWriteFileResult> {
+  const payload = {
+    action: "agent_write_file",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<AgentWriteFileResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateAgentWriteFile(
+  config: {
+  tenant?: string;
+  input: AgentWriteFileInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "agent_write_file",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type BrowserSettingsFields = UnifiedFieldSelection<{allowPrivateNetwork: boolean, available: boolean, __type: "TypedMap", __primitiveFields: "allowPrivateNetwork" | "available"}>[];
 
 export type InferBrowserSettingsResult<
@@ -7790,6 +8210,86 @@ export async function validateSandboxStatus(
   const payload = {
     action: "sandbox_status",
     ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetAgentSettingsInput = {
+  maxDepth?: number | null;
+  maxChildren?: number | null;
+  idleMinutes?: number | null;
+  childModel?: string | null;
+  childEffort?: string | null;
+  reviewerModel?: string | null;
+  reviewerEffort?: string | null;
+};
+
+export type SetAgentSettingsFields = UnifiedFieldSelection<{maxDepth: number, maxChildren: number, idleMinutes: number, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}>[];
+
+export type InferSetAgentSettingsResult<
+  Fields extends SetAgentSettingsFields | undefined,
+> = InferResult<{maxDepth: number, maxChildren: number, idleMinutes: number, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}, Fields>;
+
+export type SetAgentSettingsResult<Fields extends SetAgentSettingsFields | undefined = undefined> = | { success: true; data: InferSetAgentSettingsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function setAgentSettings<Fields extends SetAgentSettingsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input?: SetAgentSettingsInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetAgentSettingsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_agent_settings",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetAgentSettingsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetAgentSettings(
+  config: {
+  tenant?: string;
+  input?: SetAgentSettingsInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_agent_settings",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
   };
 
   return executeValidationRpcRequest<ValidationResult>(

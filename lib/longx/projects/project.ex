@@ -51,6 +51,16 @@ defmodule Longx.Projects.Project do
     stale: [type: {:array, :string}, allow_nil?: false]
   ]
 
+  @agent_settings_fields [
+    max_depth: [type: :integer],
+    max_children: [type: :integer],
+    idle_minutes: [type: :integer],
+    child_model: [type: :string],
+    child_effort: [type: :string],
+    reviewer_model: [type: :string],
+    reviewer_effort: [type: :string]
+  ]
+
   actions do
     defaults [:read, :destroy]
 
@@ -93,7 +103,8 @@ defmodule Longx.Projects.Project do
         :memory_limit_mb,
         :model_id,
         :engine,
-        :trust_local_agent
+        :trust_local_agent,
+        :agent_settings
       ]
 
       change Changes.NormalizeRootPath
@@ -125,10 +136,12 @@ defmodule Longx.Projects.Project do
         :memory_limit_mb,
         :model_id,
         :engine,
-        :trust_local_agent
+        :trust_local_agent,
+        :agent_settings
       ]
 
       validate Validations.ToolsAreRegistered
+      validate Validations.AgentSettings
     end
 
     update :archive do
@@ -179,6 +192,19 @@ defmodule Longx.Projects.Project do
                     effort: [type: :string],
                     plugs: [type: {:array, :string}, allow_nil?: false],
                     files: [type: {:array, :string}, allow_nil?: false],
+                    local_files: [type: {:array, :string}, allow_nil?: false],
+                    # untyped: ash_typescript 0.18 cannot select inside an array of typed maps
+                    agents: [type: {:array, :map}, allow_nil?: false],
+                    settings: [
+                      type: :map,
+                      allow_nil?: false,
+                      constraints: [fields: @agent_settings_fields]
+                    ],
+                    overrides: [
+                      type: :map,
+                      allow_nil?: false,
+                      constraints: [fields: @agent_settings_fields]
+                    ],
                     errors: [type: {:array, :string}, allow_nil?: false]
                   ]
 
@@ -186,6 +212,20 @@ defmodule Longx.Projects.Project do
 
       run fn input, _ ->
         with {:ok, project} <- fetch(input), do: {:ok, Longx.Projects.agent_definition(project)}
+      end
+    end
+
+    # a file of .longx/local/ moved into .longx/shared/ (reviewed, for the team)
+    action :promote_local, :map do
+      constraints fields: [path: [type: :string, allow_nil?: false]]
+      argument :id, :uuid, allow_nil?: false
+      argument :path, :string, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input),
+             {:ok, path} <- promote(project, input.arguments.path) do
+          {:ok, %{path: path}}
+        end
       end
     end
 
@@ -371,6 +411,13 @@ defmodule Longx.Projects.Project do
     # the person; off until the person looked at it)
     attribute :trust_local_agent, :boolean, allow_nil?: false, default: false, public?: true
 
+    # the native kernel's settings this project overrides (nil = the global
+    # value): Longx.Agent.Settings' fields
+    # value: Longx.Agent.Settings' fields, validated by Validations.AgentSettings;
+    # untyped on the wire so the client selects it by name (a typed map inside
+    # the resource's field list broke ash_typescript 0.18's selection type)
+    attribute :agent_settings, :map, public?: true
+
     attribute :engine, :atom do
       allow_nil? false
       default :codex
@@ -398,6 +445,19 @@ defmodule Longx.Projects.Project do
 
   # generic actions above resolve the project themselves (no record context)
   defp fetch(input), do: Ash.get(__MODULE__, input.arguments.id)
+
+  defp promote(project, path) do
+    case Longx.Projects.promote_local(project, path) do
+      {:ok, shared} ->
+        {:ok, shared}
+
+      {:error, message} ->
+        {:error,
+         Ash.Error.Invalid.exception(
+           errors: [%Ash.Error.Changes.InvalidArgument{field: :path, message: message}]
+         )}
+    end
+  end
 
   defp git_info_map(project) do
     %{repository?: repo, head: head, clean?: clean, changes: changes, lfs?: lfs} =

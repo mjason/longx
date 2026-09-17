@@ -3,11 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
-import { channel, ok, project } from "@/ui/test-mocks";
+import { agentDefinitionData, agentSettingsData, channel, ok, project } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { agentDefinition, archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, getProject, listSkills, resetCodexHome, sandboxStatus, updateProject } from "@/ash_rpc";
+import { agentDefinition, archiveProject, clearCodexHistory, clearCodexMemories, deleteProject, getProject, listSkills, promoteLocal, resetCodexHome, sandboxStatus, updateProject } from "@/ash_rpc";
 
 describe("ProjectSettingsPage", () => {
   beforeEach(() => {
@@ -60,7 +60,7 @@ describe("ProjectSettingsPage", () => {
   test("a native project shows its .longx definition and the trust switch, saved with the form", async () => {
     vi.mocked(getProject).mockResolvedValue(ok({ ...project(1), engine: "native" }) as never);
     vi.mocked(agentDefinition).mockResolvedValue(
-      ok({ present: true, trusted: false, dir: "/srv/app-1/.longx", model: "deepseek-flash", effort: "low", plugs: ["Longx.Agent.Plugs.Environment", "Longx.Agent.Local.P1.Deploy"], files: [".longx/agent.exs", ".longx/plugs/deploy.exs"], errors: [".longx/plugs/bad.exs:3: syntax error"] }) as never,
+      ok(agentDefinitionData({ present: true, model: "deepseek-flash", effort: "low", plugs: ["Longx.Agent.Plugs.Environment", "Longx.Agent.Local.P1.Deploy"], files: [".longx/agent.exs", ".longx/plugs/deploy.exs"], errors: [".longx/plugs/bad.exs:3: syntax error"] })) as never,
     );
     try {
       const user = userEvent.setup();
@@ -77,6 +77,52 @@ describe("ProjectSettingsPage", () => {
       );
     } finally {
       vi.mocked(getProject).mockResolvedValue(ok(project(1)) as never);
+    }
+  });
+
+  test("a native project lists the agents it may spawn, promotes a local file to shared, and saves kernel overrides with the form", async () => {
+    vi.mocked(getProject).mockResolvedValue(ok({ ...project(1), engine: "native" }) as never);
+    vi.mocked(agentDefinition).mockResolvedValue(
+      ok(agentDefinitionData({
+        present: true,
+        agents: [
+          { name: "researcher", summary: "searches the web", layer: "longx" },
+          { name: "helper", summary: "helps here", layer: "local" },
+        ],
+        localFiles: ["agents/helper/agent.exs", "plugs/x.exs"],
+        settings: { ...agentSettingsData(), maxDepth: 3 },
+      })) as never,
+    );
+    try {
+      const user = userEvent.setup();
+      renderAt("/p/app-1/settings");
+      const section = await screen.findByTestId("project-agent");
+      const agents = await within(section).findByTestId("project-agents");
+      expect(agents).toHaveTextContent("researcher");
+      expect(agents).toHaveTextContent("出厂");
+      expect(agents).toHaveTextContent("helps here");
+      expect(agents).toHaveTextContent("local");
+
+      // a local file has a promote button; the RPC gets its relative path
+      const local = within(section).getByTestId("project-local-files");
+      const rows = within(local).getAllByRole("listitem");
+      expect(rows[1]).toHaveTextContent("plugs/x.exs");
+      await user.click(within(rows[1]!).getByRole("button", { name: "提升到 shared" }));
+      await waitFor(() => expect(promoteLocal).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "id-1", path: "plugs/x.exs" } })));
+
+      // the inherited value shows as the placeholder; a typed override is saved with the form, empties as null
+      const depth = within(section).getByLabelText("派出深度上限") as HTMLInputElement;
+      expect(depth.placeholder).toBe("沿用 3");
+      await user.type(depth, "1");
+      await user.click(screen.getByRole("button", { name: "保存" }));
+      await waitFor(() =>
+        expect(updateProject).toHaveBeenCalledWith(
+          expect.objectContaining({ input: expect.objectContaining({ agentSettings: expect.objectContaining({ maxDepth: 1, maxChildren: null, childModel: null }) }) }),
+        ),
+      );
+    } finally {
+      vi.mocked(getProject).mockResolvedValue(ok(project(1)) as never);
+      vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData()) as never);
     }
   });
 
