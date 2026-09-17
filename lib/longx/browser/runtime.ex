@@ -1,17 +1,17 @@
 defmodule Longx.Browser.Runtime do
   @moduledoc """
-  The bundled **obscura** — a headless browser (Rust + embedded V8, Chrome
-  DevTools Protocol) that renders JavaScript pages without Chromium. Longx
-  runs it for `web.run`'s `open` on SPAs and for the agent's browser tools.
+  **obscura** — a headless browser (Rust + embedded V8, Chrome DevTools
+  Protocol) that renders JavaScript pages without Chromium — is what the
+  agent's `web_fetch` runs. It is not bundled: `Longx.Browser.Installer`
+  downloads it on first need into the data directory,
+  `<dir>/<version>/<target>/` (`config :longx, Longx.Browser, dir:` — dev
+  `data/obscura`, prod `$LONGX_DATA_DIR/obscura`).
 
   Pinned to one upstream release with a per-target sha256 (upstream publishes
   no checksums, so they were computed once when pinning and are verified on
-  every fetch), downloaded by `mix obscura.fetch` into `priv/obscura/<target>/`
-  Archives
-  hold `obscura` and `obscura-worker` at the root (both needed, same
-  directory); Linux builds want glibc ≥ 2.35. The default variant (with
-  rendering, no stealth) is the one bundled: screenshots need rendering, the
-  stealth build is a configuration for later.
+  every download). Archives hold `obscura` and `obscura-worker` at the root
+  (both needed, same directory); Linux builds want glibc ≥ 2.35. The default
+  variant (with rendering, no stealth) is the one installed.
 
   `LONGX_OBSCURA=/path/to/obscura` overrides the resolved binary.
   """
@@ -67,8 +67,17 @@ defmodule Longx.Browser.Runtime do
   @spec current_target() :: target | nil
   def current_target, do: target(Platform.current())
 
-  @spec default_dir() :: Path.t()
-  def default_dir, do: Application.app_dir(:longx, ["priv", "obscura"])
+  @doc "Where releases are installed (`config :longx, Longx.Browser, dir:`)."
+  @spec dir() :: Path.t()
+  def dir do
+    :longx
+    |> Application.get_env(Longx.Browser, [])
+    |> Keyword.get(:dir) || Path.expand("data/obscura")
+  end
+
+  @doc "The directory one target's release lives in under `dir`."
+  @spec root(Path.t(), target) :: Path.t()
+  def root(dir, target), do: Path.join([dir, @version, target])
 
   @spec executable_path(Path.t(), Platform.t()) :: Path.t()
   def executable_path(root, {:windows, _}), do: Path.join(root, "obscura.exe")
@@ -76,7 +85,7 @@ defmodule Longx.Browser.Runtime do
 
   ## Resolution
 
-  @doc "Path to the bundled obscura for `target`, honouring `LONGX_OBSCURA`."
+  @doc "Path to the installed obscura for `target`, honouring `LONGX_OBSCURA`."
   @spec executable(target | nil, keyword) :: {:ok, Path.t()} | {:error, :not_installed}
   def executable(target \\ current_target(), opts \\ []) do
     case System.get_env(@env_override) do
@@ -87,7 +96,7 @@ defmodule Longx.Browser.Runtime do
         {:error, :not_installed}
 
       _ ->
-        path = executable_path(Path.join(dir(opts), target), platform_of(target))
+        path = executable_path(root(dir(opts), target), platform_of(target))
         if File.regular?(path), do: {:ok, path}, else: {:error, :not_installed}
     end
   end
@@ -97,12 +106,17 @@ defmodule Longx.Browser.Runtime do
   def installed?(nil, _opts), do: false
 
   def installed?(target, opts),
-    do: File.regular?(executable_path(Path.join(dir(opts), target), platform_of(target)))
+    do: File.regular?(executable_path(root(dir(opts), target), platform_of(target)))
 
-  @doc "Downloads (or copies), verifies and unpacks the archive for `target`; see `Longx.Bundle.install/1`."
+  @doc """
+  Downloads (or copies), verifies and unpacks the archive for `target`; see
+  `Longx.Bundle.install/1`. Options: `source:`, `sha256:`, `dir:`,
+  `progress:` (`fn {received, total} -> … end` while downloading),
+  `on_stage:` (`fn :verifying | :extracting -> … end`).
+  """
   @spec install(target, keyword) :: {:ok, Path.t()} | {:error, term}
   def install(target, opts \\ []) do
-    root = Path.join(dir(opts), target)
+    root = root(dir(opts), target)
     platform = platform_of(target)
 
     with {:ok, expected} <- expected_sha(target, opts),
@@ -112,7 +126,9 @@ defmodule Longx.Browser.Runtime do
              sha256: expected,
              dest: root,
              archive_name: asset_name(target),
-             verify: &verify_layout(&1, platform)
+             verify: &verify_layout(&1, platform),
+             progress: Keyword.get(opts, :progress),
+             on_stage: Keyword.get(opts, :on_stage)
            ) do
       {:ok, executable_path(root, platform)}
     end
@@ -136,5 +152,5 @@ defmodule Longx.Browser.Runtime do
   defp platform_of("aarch64-macos"), do: {:darwin, :aarch64}
   defp platform_of("x86_64-windows"), do: {:windows, :x86_64}
 
-  defp dir(opts), do: Keyword.get(opts, :dir) || default_dir()
+  defp dir(opts), do: Keyword.get(opts, :dir) || dir()
 end

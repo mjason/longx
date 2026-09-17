@@ -1,8 +1,9 @@
 defmodule Longx.Browser.RuntimeTest do
   @moduledoc """
-  The bundled obscura (headless browser): pinned release, per-target
-  archives (tar.gz, zip on Windows), install from a local archive with the
-  same verify/extract/replace path the real download takes.
+  The obscura (headless browser) release pin: per-target archives (tar.gz,
+  zip on Windows), installed into the data directory under
+  `<dir>/<version>/<target>/` from a local archive with the same
+  verify/extract/replace path the real download takes.
   """
   use ExUnit.Case, async: true
 
@@ -66,9 +67,9 @@ defmodule Longx.Browser.RuntimeTest do
                  dir: ctx.dir
                )
 
-      assert exe == Path.join([ctx.dir, "x86_64-linux", "obscura"])
+      assert exe == Path.join([ctx.dir, "0.2.2", "x86_64-linux", "obscura"])
       assert File.exists?(exe)
-      assert File.exists?(Path.join([ctx.dir, "x86_64-linux", "obscura-worker"]))
+      assert File.exists?(Path.join([ctx.dir, "0.2.2", "x86_64-linux", "obscura-worker"]))
       assert Runtime.installed?("x86_64-linux", dir: ctx.dir)
       assert {:ok, ^exe} = Runtime.executable("x86_64-linux", dir: ctx.dir)
     end
@@ -84,7 +85,7 @@ defmodule Longx.Browser.RuntimeTest do
                  dir: ctx.dir
                )
 
-      assert exe == Path.join([ctx.dir, "x86_64-windows", "obscura.exe"])
+      assert exe == Path.join([ctx.dir, "0.2.2", "x86_64-windows", "obscura.exe"])
       assert File.exists?(exe)
     end
 
@@ -100,6 +101,30 @@ defmodule Longx.Browser.RuntimeTest do
                )
 
       refute Runtime.installed?("x86_64-linux", dir: ctx.dir)
+    end
+
+    test "the progress callback sees the bytes; the stage callback the steps", ctx do
+      archive = Path.join(ctx.root, "obscura.tar.gz")
+      build_fake_tarball(archive)
+      test = self()
+
+      assert {:ok, _} =
+               Runtime.install("x86_64-linux",
+                 source: {:file, archive},
+                 sha256: sha(archive),
+                 dir: ctx.dir,
+                 on_stage: fn stage -> send(test, {:stage, stage}) end
+               )
+
+      assert_receive {:stage, :verifying}
+      assert_receive {:stage, :extracting}
+    end
+
+    test "the directory comes from the configuration", _ctx do
+      previous = Application.get_env(:longx, Longx.Browser, [])
+      Application.put_env(:longx, Longx.Browser, Keyword.put(previous, :dir, "/srv/x/obscura"))
+      on_exit(fn -> Application.put_env(:longx, Longx.Browser, previous) end)
+      assert Runtime.dir() == "/srv/x/obscura"
     end
 
     test "LONGX_OBSCURA overrides the resolved executable", ctx do

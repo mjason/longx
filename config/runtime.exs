@@ -98,6 +98,8 @@ if config_env() == :prod do
   config :longx, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :longx, Longx.Projects.Attachments, dir: Path.join(data_dir, "attachments")
+  # the headless browser, downloaded on first use (Longx.Browser.Installer)
+  config :longx, Longx.Browser, dir: Path.join(data_dir, "obscura")
   config :longx, Longx.Agent.Knowledge, global_dir: Path.join(data_dir, "agent/knowledge")
 
   # PORT only applies to prod; dev (7798) and test (4002) are fixed in their config files.

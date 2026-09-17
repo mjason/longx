@@ -21,6 +21,9 @@ defmodule Longx.Bundle do
     * `:dest` — directory that will hold the unpacked tree (replaced if present)
     * `:archive_name` — file name to give the archive while staging
     * `:verify` — `fn staging_dir -> :ok | {:error, term} end`, optional
+    * `:progress` — `fn {received, total | nil} -> … end`, called while a URL
+      downloads (at most a few times a second), optional
+    * `:on_stage` — `fn :verifying | :extracting -> … end`, optional
   """
   @spec install(keyword) :: :ok | {:error, error}
   def install(opts) do
@@ -33,14 +36,19 @@ defmodule Longx.Bundle do
       )
 
     verify = Keyword.get(opts, :verify, fn _ -> :ok end)
+    progress = Keyword.get(opts, :progress) || fn _ -> :ok end
+    on_stage = Keyword.get(opts, :on_stage) || fn _ -> :ok end
 
     with {:ok, archive} <-
            fetch(
              Keyword.fetch!(opts, :source),
              staging,
-             Keyword.get(opts, :archive_name, "bundle.tar.gz")
+             Keyword.get(opts, :archive_name, "bundle.tar.gz"),
+             progress
            ),
+         :ok <- stage(on_stage, :verifying),
          :ok <- verify_checksum(archive, Keyword.fetch!(opts, :sha256)),
+         :ok <- stage(on_stage, :extracting),
          :ok <- extract(archive, staging),
          :ok <- verify.(staging),
          :ok <- replace(staging, dest) do
@@ -48,11 +56,18 @@ defmodule Longx.Bundle do
     else
       {:error, _} = error ->
         File.rm_rf(staging)
+        # a parent this attempt created and nothing else uses goes with it
+        File.rmdir(Path.dirname(dest))
         error
     end
   end
 
-  defp fetch(source, staging, archive_name) do
+  defp stage(on_stage, name) do
+    on_stage.(name)
+    :ok
+  end
+
+  defp fetch(source, staging, archive_name, progress) do
     File.mkdir_p!(staging)
     archive = Path.join(staging, archive_name)
 
@@ -64,15 +79,59 @@ defmodule Longx.Bundle do
         end
 
       {:url, url} ->
-        download(url, archive)
+        download(url, archive, progress)
     end
   end
 
-  defp download(url, archive) do
-    case Req.get(url, into: File.stream!(archive), redirect: true, receive_timeout: 600_000) do
-      {:ok, %Req.Response{status: 200}} -> {:ok, archive}
-      {:ok, %Req.Response{status: status}} -> {:error, {:download_failed, {:status, status}}}
-      {:error, reason} -> {:error, {:download_failed, reason}}
+  # streamed to the file chunk by chunk, the running count reported at most
+  # every 200 ms (a 60 MB archive arrives in thousands of chunks)
+  defp download(url, archive, progress) do
+    file = File.open!(archive, [:write, :binary])
+
+    sink = fn {:data, chunk}, {req, resp} ->
+      IO.binwrite(file, chunk)
+      received = (resp.private[:received] || 0) + byte_size(chunk)
+      last = resp.private[:reported_at] || 0
+      now = System.monotonic_time(:millisecond)
+
+      resp =
+        if now - last >= 200 do
+          progress.({received, content_length(resp)})
+          Req.Response.put_private(resp, :reported_at, now)
+        else
+          resp
+        end
+
+      {:cont, {req, Req.Response.put_private(resp, :received, received)}}
+    end
+
+    result =
+      case Req.get(url, into: sink, redirect: true, retry: false, receive_timeout: 600_000) do
+        {:ok, %Req.Response{status: 200} = resp} ->
+          progress.({resp.private[:received] || 0, content_length(resp)})
+          {:ok, archive}
+
+        {:ok, %Req.Response{status: status}} ->
+          {:error, {:download_failed, {:status, status}}}
+
+        {:error, reason} ->
+          {:error, {:download_failed, reason}}
+      end
+
+    File.close(file)
+    result
+  end
+
+  defp content_length(resp) do
+    case Req.Response.get_header(resp, "content-length") do
+      [value | _] ->
+        case Integer.parse(value) do
+          {n, _} -> n
+          :error -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 

@@ -43,8 +43,10 @@ defmodule Longx.Application do
       ),
       # Start to serve requests, typically the last entry
       LongxWeb.Endpoint,
-      # permits for the headless browser (Longx.Browser)
+      # permits for the headless browser (Longx.Browser), and its on-demand download
       Longx.Browser.Pool,
+      {Task.Supervisor, name: Longx.Browser.TaskSupervisor},
+      Longx.Browser.Installer,
       # new releases on GitHub, and the upgrade itself (Longx.Upgrade)
       {Task.Supervisor, name: Longx.Upgrade.TaskSupervisor},
       Longx.Upgrade

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useAgentSettings, useAgentSettingsActions, usePublicUrl, usePublicUrlActions } from "@/core/agent";
 import { useModelRows } from "@/core/ai";
+import { browserBusy, useBrowserInstall, useBrowserStatus } from "@/core/browser";
+import { DownloadBar } from "@/ui/components/DownloadBar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,7 +42,11 @@ export function AgentKernelSection() {
 
 const browserKey = ["browser-settings"] as const;
 
-/** the built-in browser (web_fetch, a search's page reads): whether it may fetch private / loopback addresses */
+/**
+ * The built-in browser (web_fetch): downloaded on demand — its state with a
+ * download / retry button and the bar while it runs — and whether it may
+ * fetch private / loopback addresses.
+ */
 function BrowserCard() {
   const client = useQueryClient();
   const settings = useQuery({
@@ -52,10 +58,34 @@ function BrowserCard() {
     onSuccess: (data) => client.setQueryData(browserKey, data),
     onError: fail,
   });
+  const status = useBrowserStatus();
+  const install = useBrowserInstall();
+  const st = status.data;
+  const installed = st?.stage === "installed" || (st?.stage === "idle" && !!st.path);
   return (
     <div className="rounded-lg border p-3" data-testid="browser-settings">
       <p className="text-sm font-medium">{s.browserTitle}</p>
-      <p className="text-muted-foreground mt-0.5 text-xs">{settings.data?.available === false ? s.browserUnavailable : s.browserHint}</p>
+      <p className="text-muted-foreground mt-0.5 text-xs">{s.browserHint}</p>
+      {st ? (
+        <div className="mt-3 flex flex-col gap-2" data-testid="browser-install">
+          {st.target === null ? (
+            <p className="text-warning text-xs">{s.browserUnavailable}</p>
+          ) : browserBusy(st.stage) ? (
+            <DownloadBar label={s.browserStages[st.stage] ?? st.stage} received={st.received} total={st.total} />
+          ) : installed ? (
+            <p className="text-muted-foreground font-mono text-xs break-all">{s.browserInstalled(st.path ?? "")}</p>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className={`text-xs ${st.stage === "failed" ? "text-destructive" : "text-muted-foreground"}`} role={st.stage === "failed" ? "alert" : undefined}>
+                {st.stage === "failed" ? s.browserFailed(st.error ?? "") : s.browserNotInstalled(st.version)}
+              </p>
+              <Button size="sm" variant="outline" disabled={install.isPending} onClick={() => install.mutate(undefined, { onError: fail })}>
+                {st.stage === "failed" ? s.browserRetry : s.browserDownload}
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : null}
       <div className="mt-3 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <label htmlFor="browser-private-network" className="text-sm">

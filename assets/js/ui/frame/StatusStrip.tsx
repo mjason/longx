@@ -1,5 +1,6 @@
-import { AlertTriangle, ArrowUpCircle, GitBranch } from "lucide-react";
+import { AlertTriangle, ArrowUpCircle, Download, GitBranch } from "lucide-react";
 import { Link } from "react-router";
+import { browserBusy, browserPercent, useBrowserStatus } from "@/core/browser";
 import { shortSha } from "@/core/format";
 import { useDependencies } from "@/core/dependencies";
 import { useGitInfo } from "@/core/projects";
@@ -14,6 +15,7 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
   const git = useGitInfo(ctx.id);
   const upgrade = useUpgradeStatus({ poll: false });
   const deps = useDependencies();
+  const browser = useBrowserStatus();
 
   return (
     // every item stays on one line: a narrow phone scrolls the strip sideways
@@ -25,6 +27,11 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
       {deps.data && deps.data.missing > 0 ? (
         <Link to="/settings/dependencies" className={item("text-warning hover:underline")} title={t.dependenciesPage.hint}>
           <AlertTriangle className="size-3" /> {t.dependenciesPage.missing(deps.data.missing)}
+        </Link>
+      ) : null}
+      {browser.data && browserBusy(browser.data.stage) ? (
+        <Link to="/settings/agent" className={item("text-warning hover:underline")} title={t.agentKernel.browserTitle}>
+          <Download className="size-3" /> {t.agentKernel.browserStrip(browserPercent(browser.data))}
         </Link>
       ) : null}
       {upgrade.data?.available && upgrade.data.latest ? (

@@ -12,7 +12,7 @@ sudo apt update && sudo apt install -y ripgrep fd-find fzf bat jq tree git gh gi
 ## 启动
 
 ```sh
-mix setup            # deps、数据库、npm install + 前端构建、下载内置的 codex-app-server、git 和 obscura（无头浏览器）
+mix setup            # deps、数据库、npm install + 前端构建（不下载任何二进制；无头浏览器 obscura 第一次用到时自动下载到 data/obscura）
 mix phx.server       # 0.0.0.0:7798（开发端口，和生产的 7788 错开）；前端资源由 Vite dev server（7799）热更新
 ```
 
@@ -25,8 +25,9 @@ mix phx.server       # 0.0.0.0:7798（开发端口，和生产的 7788 错开）
 ## 在 Linux 上安装（x86_64 / arm64）
 
 [Releases](https://github.com/mjason/longx/releases) 里的 `longx-<版本>-linux-<架构>.tar.gz` 是完整包：
-Erlang 运行时、Go 中间件、codex-app-server、git、obscura（无头浏览器）和构建好的前端都在里面，
-**不需要**装 Erlang / Elixir / Node / Go / git / codex。
+Erlang 运行时、Go 中间件和构建好的前端都在里面，**不需要**装 Erlang / Elixir / Node / Go。
+无头浏览器（obscura）不在包里：agent 第一次调用 `web_fetch` 时自动下载到 `$LONGX_DATA_DIR/obscura`
+（设置 → Agent 内核 里有进度条，也可以先手动下载）。
 
 **要求**：Linux x86_64 或 arm64，glibc ≥ 2.39（Ubuntu 24.04、Debian 13 及更新的发行版；包在
 `ubuntu-24.04` runner 上构建）；codex 的沙箱需要内核允许非特权用户命名空间（大多数发行版默认允许，
@@ -99,7 +100,7 @@ sh install.sh --rollback        # 或 curl -fsSL …/install.sh | sh -s -- --rol
 ### 自己构建
 
 `MIX_ENV=prod mix assets.build && MIX_ENV=prod mix release`（需要 Elixir 1.19 / OTP 28、Node 22、Go 1.24，
-`mix setup` 会下载内置的 codex / git / obscura）得到 `_build/prod/rel/longx`，和 Release 里的一样。
+不下载任何二进制）得到 `_build/prod/rel/longx`，和 Release 里的一样。
 发布由 `.github/workflows/release.yml` 完成：打 `v*` 标签就在 x86_64 和 arm64 的 runner 上各自原生构建并挂到
 GitHub Release。
 
@@ -230,7 +231,7 @@ codex 自带的 goal 机制；模型也有 `create_goal` 工具，但只在你�
 lib/longx/shim*            Go 中间件：带背压、可干净终止的外部进程（codex 通过它启动）
 lib/longx/codex/runtime.ex 内置 codex-app-server 的下载/校验/定位（mix codex.fetch）
 lib/longx/codex/home.ex    我们自己的 CODEX_HOME 和 config.toml（codex 只认识 Longx 网关）
-lib/longx/browser*         内置 obscura 无头浏览器（mix obscura.fetch）：一次一进程、许可池限并发；web.run 的 open 和 builtin.browser_fetch 用它
+lib/longx/browser*         obscura 无头浏览器：按需下载到数据目录（Installer，带进度）、一次一进程、许可池限并发；web_fetch 用它
 lib/longx/ai/              模型 provider / 搜索 provider（密钥加密存库）、网关、Tavily 搜索
 lib/longx/codex/           app-server 客户端：Connection、ThreadState（ETS 视图）、Thread API、Tool 体系
 lib/longx/tools/           给 codex 的 Elixir 工具 —— 见下文
@@ -424,7 +425,7 @@ priv 里的出厂描述、项目的 `.longx/`（shared 再 local）、设置页�
 
 **联网**是两个 plug：`WebSearch` 看模型——provider 自己会搜的（OpenAI、百炼上的 Qwen 3.5+ 等）就发
 codex 那个 `web_search` 工具、由 provider 侧搜和读，回来的 `web_search_call` 和引用在聊天里显示成搜索行；
-其他模型给一个 `web_search` 函数走 Tavily。`Browser` 给所有模型一个 `web_fetch`，用内置的 obscura 渲染网页
+其他模型给一个 `web_search` 函数走 Tavily。`Browser` 给所有模型一个 `web_fetch`，用按需下载的 obscura 渲染网页
 转 markdown——provider 自己会搜也读不了你指定的 URL。会话的联网开关只管搜索。
 
 **上下文压缩照 codex 的做法**：`Compaction` plug 决定什么时候压（超过窗口 90%、provider 报上下文

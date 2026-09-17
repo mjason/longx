@@ -15,6 +15,8 @@ import {
   setPublicUrl,
   knowledgeDelete,
   knowledgeWrite,
+  browserInstall,
+  browserStatus,
   setBrowserPrivateNetwork,
   setModelAlias,
   applyPreset,
@@ -31,7 +33,7 @@ import {
   upgradeCheck,
   upgradeStatus,
 } from "@/ash_rpc";
-import { dependencyReport, dependencyTool, model, upgradeIdle } from "@/ui/test-mocks";
+import { browserIdle, dependencyReport, dependencyTool, model, upgradeIdle } from "@/ui/test-mocks";
 import { page } from "@/core/upgrade";
 import { within } from "@testing-library/react";
 
@@ -391,6 +393,37 @@ describe("SettingsPage", () => {
     await user.click(sw);
     await waitFor(() => expect(setBrowserPrivateNetwork).toHaveBeenCalledWith(expect.objectContaining({ input: { enabled: true } })));
     await waitFor(() => expect(within(card).getByRole("switch", { name: /私网|局域网/ })).toBeChecked());
+  });
+
+  test("agent kernel: the browser is downloaded from its card, with a progress bar, and a failure offers a retry", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    vi.mocked(browserStatus).mockResolvedValue(ok({ ...browserIdle }) as never);
+    try {
+      renderAt("/settings/agent");
+      const card = await screen.findByTestId("browser-settings");
+      expect(await within(card).findByText(/尚未下载/)).toBeInTheDocument();
+      // the download runs: the status answers with bytes, the card draws the bar
+      const downloading = ok({ ...browserIdle, stage: "downloading", received: 15_000_000, total: 60_000_000 });
+      vi.mocked(browserStatus).mockResolvedValue(downloading as never);
+      vi.mocked(browserInstall).mockResolvedValueOnce(downloading as never);
+      await user.click(within(card).getByRole("button", { name: /下载/ }));
+      await waitFor(() => expect(browserInstall).toHaveBeenCalled());
+      const bar = await within(card).findByRole("progressbar");
+      expect(bar).toHaveAttribute("aria-valuenow", "15000000");
+      expect(card).toHaveTextContent("14 MB / 57 MB");
+      // a failure says why and offers a retry
+      vi.mocked(browserStatus).mockResolvedValue(ok({ ...browserIdle, stage: "failed", error: "download failed (HTTP 500)" }) as never);
+      expect(await within(card).findByText(/HTTP 500/)).toBeInTheDocument();
+      expect(within(card).getByRole("button", { name: /重试/ })).toBeInTheDocument();
+      // installed: the path, no button
+      vi.mocked(browserStatus).mockResolvedValue(ok({ ...browserIdle, stage: "installed", path: "/data/obscura/0.2.2/x86_64-linux/obscura" }) as never);
+      await user.click(within(card).getByRole("button", { name: /重试/ }));
+      expect(await within(card).findByText(/已安装/)).toBeInTheDocument();
+      expect(within(card).queryByRole("button", { name: /下载|重试/ })).not.toBeInTheDocument();
+    } finally {
+      vi.mocked(browserStatus).mockResolvedValue(ok({ ...browserIdle, stage: "installed", path: "/data/obscura/0.2.2/x86_64-linux/obscura" }) as never);
+    }
   });
 
   test("knowledge: the global docs are listed and edited, a shipped doc opens read-only, a new doc gets a template", async () => {

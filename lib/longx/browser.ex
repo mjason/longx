@@ -24,7 +24,7 @@ defmodule Longx.Browser do
       of address space; leave nil unless you know the box)
   """
 
-  alias Longx.Browser.{Html, Pool, Runtime}
+  alias Longx.Browser.{Html, Installer, Pool, Runtime}
   alias Longx.Shim
 
   require Logger
@@ -43,7 +43,7 @@ defmodule Longx.Browser do
   @default_max_bytes 512_000
   @oom_score_adj 600
 
-  @doc "The bundled browser can run here (binary present)."
+  @doc "The browser can run here (installed, or pointed at by the configuration)."
   @spec available?() :: boolean
   def available?, do: match?({:ok, _}, executable())
 
@@ -59,6 +59,17 @@ defmodule Longx.Browser do
     with :ok <- check_url(url),
          {:ok, exe} <- executable() do
       Pool.run(fn -> run(exe, url, opts) end, Keyword.take(opts, [:queue_timeout]))
+    else
+      # not installed and nothing configured in its place: the first need starts
+      # the download; the caller (the agent's web_fetch) hears how far it is
+      {:error, :not_installed} ->
+        case Installer.install() do
+          :ok -> {:error, {:installing, Installer.status()}}
+          {:error, :unsupported_platform} -> {:error, :unavailable}
+        end
+
+      other ->
+        other
     end
   end
 
@@ -201,14 +212,8 @@ defmodule Longx.Browser do
 
   defp executable do
     case config(:executable, nil) do
-      nil ->
-        case Runtime.executable() do
-          {:ok, exe} -> {:ok, exe}
-          {:error, :not_installed} -> {:error, :unavailable}
-        end
-
-      exe ->
-        if File.regular?(exe), do: {:ok, exe}, else: {:error, :unavailable}
+      nil -> Runtime.executable()
+      exe -> if File.regular?(exe), do: {:ok, exe}, else: {:error, :unavailable}
     end
   end
 

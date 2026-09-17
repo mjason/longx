@@ -43,8 +43,5 @@ npm-debug.log
 # Go shim binaries built by `mix compile` (Mix.Tasks.Compile.Shim)
 /priv/bin/
 
-# bundled obscura (headless browser), fetched by `mix obscura.fetch`
-/priv/obscura/
-
 # dialyzer PLT
 /priv/plts/

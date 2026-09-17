@@ -37,7 +37,10 @@ config :longx, Longx.Projects.Attachments, dir: Path.expand("../data/attachments
 
 # The headless browser is never the real one in the unit suite: unavailable
 # unless a test points `executable:` at test/support/fake_obscura.sh
-config :longx, Longx.Browser, executable: "/nonexistent/obscura", queue_timeout: 1_000
+config :longx, Longx.Browser,
+  executable: "/nonexistent/obscura",
+  dir: Path.join(System.tmp_dir!(), "longx-obscura-test"),
+  queue_timeout: 1_000
 
 # Print only warnings and errors during test
 config :logger, level: :warning

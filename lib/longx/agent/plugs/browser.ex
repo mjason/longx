@@ -51,7 +51,21 @@ defmodule Longx.Agent.Plugs.Browser do
         {:error, "only http(s) URLs can be opened"}
 
       {:error, :unavailable} ->
-        {:error, "the headless browser is not installed on this Longx"}
+        {:error,
+         "the headless browser is not available on this Longx (no build for this platform)"}
+
+      {:error, {:installing, %{stage: :installed}}} ->
+        {:error, "the headless browser has just been installed; call web_fetch again"}
+
+      {:error, {:installing, %{stage: :failed, error: error}}} ->
+        {:error,
+         "the headless browser could not be downloaded (#{error}); the person can retry from the settings"}
+
+      {:error, {:installing, %{received: received, total: total}}} ->
+        percent =
+          if is_integer(total) and total > 0, do: " (#{div(received * 100, total)}%)", else: ""
+
+        {:error, "the headless browser is being downloaded#{percent}; try again in a moment"}
 
       {:error, :busy} ->
         {:error, "the browser is busy with other pages; try again in a moment"}

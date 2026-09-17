@@ -24,6 +24,16 @@ defmodule Longx.System.Status do
     available: [type: :boolean, allow_nil?: false]
   ]
 
+  @browser_status_fields [
+    stage: [type: :string, allow_nil?: false],
+    received: [type: :integer, allow_nil?: false],
+    total: [type: :integer],
+    error: [type: :string],
+    version: [type: :string, allow_nil?: false],
+    target: [type: :string],
+    path: [type: :string]
+  ]
+
   @upgrade_fields [
     current: [type: :string, allow_nil?: false],
     installed: [type: :boolean, allow_nil?: false],
@@ -309,6 +319,26 @@ defmodule Longx.System.Status do
       run fn _input, _ -> {:ok, browser_settings()} end
     end
 
+    # the headless browser's download (Longx.Browser.Installer): installed, downloading (bytes), failed
+    action :browser_status, :map do
+      constraints fields: @browser_status_fields
+      run fn _input, _ -> {:ok, browser_status()} end
+    end
+
+    action :browser_install, :map do
+      constraints fields: @browser_status_fields
+
+      run fn _input, _ ->
+        case Longx.Browser.Installer.install() do
+          :ok ->
+            {:ok, browser_status()}
+
+          {:error, :unsupported_platform} ->
+            argument_error(:platform, "obscura has no build for this platform")
+        end
+      end
+    end
+
     action :set_browser_private_network, :map do
       constraints fields: @browser_fields
       argument :enabled, :boolean, allow_nil?: false
@@ -350,6 +380,11 @@ defmodule Longx.System.Status do
         end
       end
     end
+  end
+
+  defp browser_status do
+    st = Longx.Browser.Installer.status()
+    %{st | stage: Atom.to_string(st.stage)}
   end
 
   defp browser_settings do

@@ -5829,6 +5829,72 @@ export async function validateAgentSettings(
 }
 
 
+export type BrowserInstallFields = UnifiedFieldSelection<{stage: string, received: number, total: number | null, error: string | null, version: string, target: string | null, path: string | null, __type: "TypedMap", __primitiveFields: "stage" | "received" | "total" | "error" | "version" | "target" | "path"}>[];
+
+export type InferBrowserInstallResult<
+  Fields extends BrowserInstallFields | undefined,
+> = InferResult<{stage: string, received: number, total: number | null, error: string | null, version: string, target: string | null, path: string | null, __type: "TypedMap", __primitiveFields: "stage" | "received" | "total" | "error" | "version" | "target" | "path"}, Fields>;
+
+export type BrowserInstallResult<Fields extends BrowserInstallFields | undefined = undefined> = | { success: true; data: InferBrowserInstallResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function browserInstall<Fields extends BrowserInstallFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<BrowserInstallResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "browser_install",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<BrowserInstallResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateBrowserInstall(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "browser_install",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type BrowserSettingsFields = UnifiedFieldSelection<{allowPrivateNetwork: boolean, available: boolean, __type: "TypedMap", __primitiveFields: "allowPrivateNetwork" | "available"}>[];
 
 export type InferBrowserSettingsResult<
@@ -5885,6 +5951,72 @@ export async function validateBrowserSettings(
 ): Promise<ValidationResult> {
   const payload = {
     action: "browser_settings",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type BrowserStatusFields = UnifiedFieldSelection<{stage: string, received: number, total: number | null, error: string | null, version: string, target: string | null, path: string | null, __type: "TypedMap", __primitiveFields: "stage" | "received" | "total" | "error" | "version" | "target" | "path"}>[];
+
+export type InferBrowserStatusResult<
+  Fields extends BrowserStatusFields | undefined,
+> = InferResult<{stage: string, received: number, total: number | null, error: string | null, version: string, target: string | null, path: string | null, __type: "TypedMap", __primitiveFields: "stage" | "received" | "total" | "error" | "version" | "target" | "path"}, Fields>;
+
+export type BrowserStatusResult<Fields extends BrowserStatusFields | undefined = undefined> = | { success: true; data: InferBrowserStatusResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function browserStatus<Fields extends BrowserStatusFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<BrowserStatusResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "browser_status",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<BrowserStatusResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateBrowserStatus(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "browser_status",
     ...(config.tenant !== undefined && { tenant: config.tenant })
   };
 

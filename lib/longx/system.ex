@@ -23,6 +23,8 @@ defmodule Longx.System do
       rpc_action :set_github_token, :set_github_token
       rpc_action :gateway_requests, :gateway_requests
       rpc_action :browser_settings, :browser_settings
+      rpc_action :browser_status, :browser_status
+      rpc_action :browser_install, :browser_install
       rpc_action :set_browser_private_network, :set_browser_private_network
     end
   end

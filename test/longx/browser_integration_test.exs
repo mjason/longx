@@ -1,7 +1,8 @@
 defmodule Longx.BrowserIntegrationTest do
   @moduledoc """
-  The real bundled obscura against a JavaScript-rendered page served by a
-  Bypass: what `web.run`'s `open` gets on an SPA. `mix obscura.fetch` first.
+  The real obscura against a JavaScript-rendered page served by a Bypass:
+  what `web_fetch` gets on an SPA. Installs the pinned release into a tmp
+  directory when nothing is installed there (network).
   """
   use ExUnit.Case, async: false
 
@@ -19,12 +20,20 @@ defmodule Longx.BrowserIntegrationTest do
 
   setup do
     previous = Application.get_env(:longx, Longx.Browser, [])
+    dir = Path.join(System.tmp_dir!(), "longx-obscura-integration")
+    target = Longx.Browser.Runtime.current_target()
+
+    unless Longx.Browser.Runtime.installed?(target, dir: dir),
+      do: {:ok, _} = Longx.Browser.Runtime.install(target, dir: dir)
 
     Application.put_env(
       :longx,
       Longx.Browser,
-      # the unit suite's config hides the real binary; this test wants it (mix obscura.fetch)
-      previous |> Keyword.delete(:executable) |> Keyword.put(:allow_private_network, true)
+      # the unit suite's config hides the real binary; this test wants it
+      previous
+      |> Keyword.delete(:executable)
+      |> Keyword.put(:dir, dir)
+      |> Keyword.put(:allow_private_network, true)
     )
 
     on_exit(fn -> Application.put_env(:longx, Longx.Browser, previous) end)

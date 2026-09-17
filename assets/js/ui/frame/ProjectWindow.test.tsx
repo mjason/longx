@@ -7,8 +7,8 @@ import { channel, ok } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { dependencies, startThread, upgradeStatus } from "@/ash_rpc";
-import { dependencyReport, upgradeIdle } from "@/ui/test-mocks";
+import { browserStatus, dependencies, startThread, upgradeStatus } from "@/ash_rpc";
+import { browserIdle, dependencyReport, upgradeIdle } from "@/ui/test-mocks";
 
 describe("ProjectWindow", () => {
   beforeEach(() => {
@@ -71,6 +71,20 @@ describe("ProjectWindow", () => {
       await waitFor(() => expect(router.state.location.pathname).toBe("/settings/dependencies"));
     } finally {
       vi.mocked(dependencies).mockResolvedValue(ok(dependencyReport()) as never);
+    }
+  });
+
+  test("a browser download in progress is a percentage in the status bar, linking to the kernel page", async () => {
+    setViewport(1280);
+    vi.mocked(browserStatus).mockResolvedValue(ok({ ...browserIdle, stage: "downloading", received: 7_200_000, total: 60_000_000 }) as never);
+    try {
+      const user = userEvent.setup();
+      const { router } = renderAt("/p/app-1/t/t1");
+      const strip = await screen.findByTestId("status-strip");
+      await user.click(await within(strip).findByRole("link", { name: /浏览器下载中 12%/ }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/settings/agent"));
+    } finally {
+      vi.mocked(browserStatus).mockResolvedValue(ok({ ...browserIdle, stage: "installed", path: "/x/obscura" }) as never);
     }
   });
 

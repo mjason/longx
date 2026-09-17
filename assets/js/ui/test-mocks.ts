@@ -94,6 +94,16 @@ export const thread = (n: number) => ({
   insertedAt: "2026-09-12T00:00:00Z",
 });
 
+export const browserIdle = {
+  stage: "idle",
+  received: 0,
+  total: null as number | null,
+  error: null as string | null,
+  version: "0.2.2",
+  target: "x86_64-linux",
+  path: null as string | null,
+};
+
 export const upgradeIdle = {
   current: "0.1.0",
   installed: true,
@@ -205,6 +215,8 @@ export function rpcMock() {
       }),
     ),
     browserSettings: vi.fn(async () => ok({ allowPrivateNetwork: false, available: true })),
+    browserStatus: vi.fn(async () => ok({ ...browserIdle, stage: "installed", path: "/data/obscura/0.2.2/x86_64-linux/obscura" })),
+    browserInstall: vi.fn(async () => ok({ ...browserIdle, stage: "downloading", received: 0, total: 60_000_000 })),
     setBrowserPrivateNetwork: vi.fn(async ({ input }: { input: { enabled: boolean } }) => ok({ allowPrivateNetwork: input.enabled, available: true })),
     knowledgeDocs: vi.fn(async () =>
       ok([

@@ -338,15 +338,29 @@ React Native client planned on the same core code.
     `repository: false` to `git_changes` and an error on `project_id` to the rest. Commit
     times are ISO strings (a typed map's `utc_datetime` has no client type in
     ash_typescript 0.18).
-- **A headless browser is bundled too: obscura** (`h4ckf0r0day/obscura`, Rust + embedded V8,
-  Apache-2.0). `Longx.Browser.Runtime` pins `v0.2.2` (five targets: `{x86_64,aarch64}-linux`,
+- **The headless browser — obscura — is downloaded on demand, never bundled**
+  (`h4ckf0r0day/obscura`, Rust + embedded V8, Apache-2.0; nothing binary lives in `priv/`
+  any more). `Longx.Browser.Runtime` pins `v0.2.2` (five targets: `{x86_64,aarch64}-linux`,
   `{x86_64,aarch64}-macos` as tar.gz, `x86_64-windows` as zip — `Longx.Bundle` unpacks
   both; upstream publishes no checksums, so the sha256s were computed once when pinning and
-  are verified on every fetch), fetched by `mix obscura.fetch` into `priv/obscura/<target>/`
-  (gitignored; in `mix setup`; `priv` ships in `mix release`, so CI runs `mix obscura.fetch`
-  before `mix release` — it is part of every release, like codex and git; only windows
-  arm64 has no upstream build). `LONGX_OBSCURA` overrides. The default (rendering,
-  no stealth) variant is bundled; `stealth:` is a config flag.
+  are verified on every download; only windows arm64 has no upstream build) and installs
+  into `<dir>/<version>/<target>/` (`config :longx, Longx.Browser, dir:` — dev
+  `data/obscura`, prod `$LONGX_DATA_DIR/obscura`). **`Longx.Browser.Installer`** (in the
+  tree, with `Longx.Browser.TaskSupervisor`) runs the download: `install/0` (a second call
+  joins the one in flight), `status/0` (`stage` idle / downloading with `received` /
+  `total` bytes / verifying / extracting / installed / failed with `error`, `version`,
+  `target`, `path`), `{:browser_install, status}` on `topic/0`; `Longx.Bundle.install`
+  streams the archive through a Req sink (`progress:` at most every 200 ms, `on_stage:`)
+  and unpacks into a staging directory, so a failure leaves nothing behind. **The first
+  `Longx.Browser.fetch/2` with no browser starts it** and answers `{:error, {:installing,
+  status}}`; `Plugs.Browser` tells the model "being downloaded (N%); try again in a
+  moment". RPC `browser_status` / `browser_install` on `Longx.System.Status`; the
+  Settings → Agent 内核 「内置浏览器」 card (`core/browser.ts`, polled every second while
+  a stage runs) has 下载 / the bar / 重试, and the status strip says "浏览器下载中 N%"
+  meanwhile (`ui/components/DownloadBar` is the one bar, the upgrade's too).
+  `LONGX_OBSCURA` overrides; `executable:` in the config too (tests point it at a
+  nonexistent path, so nothing auto-installs in the unit suite). The default (rendering,
+  no stealth) variant is installed; `stealth:` is a config flag.
   - `Longx.Browser.fetch(url, format: :html | :markdown | :text, timeout:, wait_until:,
     selector:, wait:, max_bytes:)` — **one short-lived `obscura fetch` process per page**
     under `Longx.Shim.run/2` (killed with its tree at the deadline, `oom_score_adj` 600,
@@ -1636,9 +1650,8 @@ Key patterns:
 ## Releases
 
 `MIX_ENV=prod mix assets.build && MIX_ENV=prod mix release` builds a self-contained
-release; `mix.exs`'s release step `bundles/1` recopies `priv/{codex,git,obscura}` with
-their symlinks (a plain copy turns git's 145 builtin links into 700 MB) and drops
-`priv/plts`. `config/runtime.exs` (prod) needs only `LONGX_DATA_DIR`: the database, codex's
+release; `mix.exs`'s release step `trim_priv/1` drops `priv/plts` (nothing is bundled:
+the browser is downloaded on first use into the data directory). `config/runtime.exs` (prod) needs only `LONGX_DATA_DIR`: the database, codex's
 home and the two secrets live there — `secret_key_base` and `cloak_key` are generated on
 first boot into 0600 files unless given as env vars; `PORT` (7788), `PHX_HOST`; the
 release serves plain http itself (`server: true`, no `force_ssl` — TLS is a proxy's job).

@@ -1,7 +1,7 @@
 name: Release
 
 # A tag `vX.Y.Z` builds the self-contained release (ERTS, the Go shim, the
-# bundled obscura browser, the built SPA) for linux x86_64
+# built SPA; the headless browser is downloaded on first use) for linux x86_64
 # and arm64 — each on a runner of its own architecture, no cross-compiling —
 # and attaches the tarballs to the GitHub release for that tag.
 on:
@@ -14,8 +14,8 @@ permissions:
 
 env:
   MIX_ENV: prod
-  # config/runtime.exs (prod) insists on a data dir even for the mix tasks that
-  # only fetch bundles — a scratch one for the build
+  # config/runtime.exs (prod) insists on a data dir even for the build's mix
+  # tasks — a scratch one
   LONGX_DATA_DIR: /tmp/longx-build-data
 
 jobs:
@@ -57,18 +57,8 @@ jobs:
           key: mix-prod-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('mix.lock') }}
           restore-keys: mix-prod-${{ runner.os }}-${{ matrix.arch }}-
 
-      - name: Cache bundled binaries
-        uses: actions/cache@v4
-        with:
-          path: |
-            priv/obscura
-          key: bundles-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('lib/longx/browser/runtime.ex') }}
-
       - run: mix deps.get --only prod
       - run: npm ci --prefix assets
-
-      # the browser bundle for the platform this runner is (the release runs on the same)
-      - run: mix obscura.fetch
 
       - run: mix assets.build
       - run: mix release --overwrite
