@@ -490,7 +490,7 @@ React Native client planned on the same core code.
     `{:error, :cancelled}`, `%{"done" => true}` or the typed fields `{:ok, map}`),
     times out (`timeout:`, 10 min) or the turn ends (`cancel_asks/1` in `end_turn`).
     **`callback: true`** registers the ask in `Longx.Agent.Registry` under `{:ask, id}`
-    (`Longx.Agent.Asks`) and hands the tool `<public url>/callback/<id>` (`url:` may be a
+    (`Longx.Agent.Kernel.Asks`) and hands the tool `<public url>/callback/<id>` (`url:` may be a
     function of it); `LongxWeb.CallbackController` (`GET /callback/:id`, no CSRF) delivers
     the query as `{:ok, %{"query" => params}}` and shows a "回到 Longx" page, 404 for a
     stale id. **The public URL** — `Longx.System.public_url/0`: the `public_url` setting

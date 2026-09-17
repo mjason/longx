@@ -11,7 +11,7 @@ defmodule LongxWeb.CallbackController do
   def show(conn, %{"id" => id} = params) do
     query = Map.delete(params, "id")
 
-    case Longx.Agent.Asks.deliver(id, query) do
+    case Longx.Agent.Kernel.Asks.deliver(id, query) do
       :ok -> page(conn, 200, "完成了", "可以回到 Longx 了，这个页面可以关掉。")
       {:error, :unknown} -> page(conn, 404, "这个链接已失效", "没有工具在等它了——回到 Longx 重新发起一次。")
     end

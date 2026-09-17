@@ -826,7 +826,7 @@ defmodule Longx.AgentTest do
     assert {:running, _} = Agent.status(id)
 
     # the browser came back through Longx: the query lands in the tool's hands
-    assert :ok = Longx.Agent.Asks.deliver(rid, %{"code" => "abc", "state" => "s"})
+    assert :ok = Longx.Agent.Kernel.Asks.deliver(rid, %{"code" => "abc", "state" => "s"})
     assert %{"status" => "completed"} = await_turn_end()
     assert ThreadState.snapshot(id).pending_requests == []
     requests = collect_requests([])
@@ -837,7 +837,7 @@ defmodule Longx.AgentTest do
              &(&1["type"] == "function_call_output" and &1["output"] == "code=abc")
            )
 
-    assert {:error, :unknown} = Longx.Agent.Asks.deliver(rid, %{})
+    assert {:error, :unknown} = Longx.Agent.Kernel.Asks.deliver(rid, %{})
 
     # a second ask, cancelled by an interrupt: the request leaves the view with the turn
     {:ok, _} = Agent.send(id, "again")
