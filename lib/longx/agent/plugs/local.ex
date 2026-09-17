@@ -13,19 +13,25 @@ defmodule Longx.Agent.Plugs.Local do
   @external_resource @reference_path
   @reference File.read!(@reference_path)
 
-  @impl true
-  def init(opts), do: Keyword.fetch!(opts, :root)
+  @untrusted """
+  **This project is not trusted yet**: `agent.exs` and `shared/` are not loaded (their code came with the clone) until the person turns on 信任并加载 .longx 里的定义 in the project settings. `local/` loads regardless — declare agents and plugs there; say so if something you need sits in `shared/`.
+  """
 
   @impl true
-  def call(%Step{phase: :request} = step, root) do
+  def init(opts), do: {Keyword.fetch!(opts, :root), Keyword.get(opts, :trusted, true)}
+
+  @impl true
+  def call(%Step{phase: :request} = step, {root, trusted?}) do
     Step.instructions(step, """
     # Your own definition
 
     This project's agent — the pipeline you run through, your prompt, your tools, the agents you may spawn — is defined in `#{Path.join(root, ".longx")}`: `agent.exs` (the shared description), `shared/` (agents, plugs, knowledge — in git, reviewed by the person) and `local/` (the same, gitignored — this machine's and yours). Write your own additions to `local/` (`local/agent.exs`, `local/plugs/*.exs`, `local/agents/<name>/`); the person promotes what they reviewed into `shared/`. Changes load at your next step — no restart; a file that fails to load comes back to you as a notice, so fix it. **A custom tool is two files**: the plug module in `local/plugs/<name>.exs` and a `plug <Module>` line in `local/agent.exs`; at the next step the tool is in your list (or a notice says what broke). When a workflow keeps repeating, write it as a plug with a tool; when an instruction should always hold, add it to the description's `prompt`; when a kind of task keeps being delegated, declare it as an agent. Record the difference to the default (`extends :default` + `plug` / `options` / `drop`), not a copy of the whole pipeline.
 
+    #{if trusted?, do: "", else: @untrusted}
+
     #{@reference}
     """)
   end
 
-  def call(step, _root), do: step
+  def call(step, _opts), do: step
 end

@@ -81,6 +81,6 @@ agent loop 就是 OTP 递归；agent 之间用 mailbox；配置在后台配。
 4. ✅ 设置页"Agent 内核"（`Longx.Agent.Settings`：全局一条 `system_settings`，项目 `agent_settings` 覆盖，
    加载器当最上层描述）、全局 agent 文件编辑、项目设置里的角色列表和「提升到 shared」。
 
-落地时的取舍：角色声明按层**替换**（local 的顶掉 shared 的），不叠加；信任开关同时管 shared 和
-local（都是仓库目录里要执行的代码）；goal 存在线程视图（ThreadState meta）里，进程退出不丢、BEAM 重启丢；
+落地时的取舍：角色声明按层**替换**（local 的顶掉 shared 的），不叠加；信任开关只管 shared
+（local 不进 git、是 agent 自己写的，一直加载——先前把 local 也挡在开关后面，声明好的 researcher 三轮都不可见）；goal 存在线程视图（ThreadState meta）里，进程退出不丢、BEAM 重启丢；
 一个 agent 同角色派第二个叫 `researcher-2`。

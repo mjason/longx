@@ -604,10 +604,17 @@ React Native client planned on the same core code.
     role; `overrides:` takes one more `Config`. `Project.trust_local_agent` (default
     false; the settings page's switch, `Projects.agent_definition/1` / RPC
     `agent_definition` list the files, the local files, the roles, the resolved plugs,
-    the effective settings and the errors) gates **both** project trees: the `.exs` run in
-    Longx as the person, so a cloned repo executes nothing until the person looked.
-    Trusted, the loader mounts `Plugs.Local`: what the agent is told about its own
-    definition (write to `local/`, the person promotes), with the compact API reference
+    the effective settings and the errors) gates the **shared** tree only (`agent.exs`,
+    `shared/`): that code came with the clone, so a cloned repo executes nothing until
+    the person looked. **`local/` always loads** — it is gitignored, this machine's, what
+    the agent itself wrote (an agent that already runs commands as the person gains no
+    new power from it); gating it too left a declared researcher invisible on an
+    untrusted project, the model saying "no spawn_agent here" for three turns.
+    `Plugs.Local` is mounted for every project with a `.longx` (`trusted:` option:
+    untrusted, it says the shared tree waits for the switch): what the agent is told
+    about its own definition (write to `local/`, the person promotes; a custom tool is
+    two files — `local/plugs/<name>.exs` + `plug <Module>` in `local/agent.exs`, live at
+    the next step, a broken file back as a notice), with the compact API reference
     `priv/agent/reference.md` (= the body of `priv/agent/knowledge/writing-plugs.md`).
     `Longx.Agent` loads per step when no `pipeline:` module is given (tests give one); the
     description's `model` / `effort` stand where the person chose none.

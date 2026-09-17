@@ -12,7 +12,9 @@ defmodule Longx.Agent.Loader do
      `agent.exs`, `plugs/`, `agents/`) — gitignored, this machine's and
      the agent's drafts.
 
-  The project trees load only when the project is trusted. A layer is a
+  The shared tree loads only when the project is trusted (its code came
+  with the clone); the local tree always does — it is this machine's, what
+  the agent itself wrote, and it never came from anywhere. A layer is a
   description (`agent.exs`; must return a `Longx.Agent.Config`), its plugs
   (`plugs/**/*.exs`, modules using `Longx.Agent.Plug`) and its **roles**:
   `agents/<name>/agent.exs`, each a description of its own with a
@@ -47,6 +49,7 @@ defmodule Longx.Agent.Loader do
           notices: [String.t()],
           present?: boolean,
           layers: [map],
+          trusted?: boolean,
           agents: [%{name: String.t(), summary: String.t(), layer: atom}],
           allowed: [String.t()] | nil,
           agent: String.t() | nil
@@ -81,34 +84,34 @@ defmodule Longx.Agent.Loader do
 
     global = layer(:global, global_dir(), "Global")
 
-    {project, local} =
+    project =
       cond do
         not File.dir?(project_dir) ->
-          {nil, nil}
+          nil
 
         not trusted? ->
           # listed for the settings page, loaded for nobody
-          {%{
-             name: :project,
-             dir: project_dir,
-             skipped: :untrusted,
-             errors: [],
-             config: nil,
-             roles: %{},
-             files: files(:project, project_dir) ++ files(:local, local_dir)
-           }, nil}
+          %{
+            name: :project,
+            dir: project_dir,
+            skipped: :untrusted,
+            errors: [],
+            config: nil,
+            roles: %{},
+            defined: [],
+            files: files(:project, project_dir)
+          }
 
         true ->
-          # the local tree shares the project's namespace: its description may
-          # name the shared plugs, and a module of the same name overrides
-          shared = layer(:project, project_dir, tag)
-
-          {shared,
-           if(File.dir?(local_dir),
-             do: layer(:local, local_dir, tag, extra_defined: shared.defined),
-             else: nil
-           )}
+          layer(:project, project_dir, tag)
       end
+
+    # the local tree shares the project's namespace: its description may name
+    # the shared plugs, and a module of the same name overrides
+    local =
+      if File.dir?(local_dir),
+        do: layer(:local, local_dir, tag, extra_defined: (project && project.defined) || []),
+        else: nil
 
     layers = Enum.reject([global, project, local], &is_nil/1)
     {roles, role_file_errors} = roles(layers)
@@ -146,7 +149,7 @@ defmodule Longx.Agent.Loader do
     {plugs, missing} =
       configs
       |> Enum.reduce(Longx.Agent.Pipelines.Default.plugs(), &Config.resolve(&2, &1))
-      |> with_local(project, root)
+      |> with_local(project_dir, root, trusted?)
       |> Enum.split_with(fn {module, _} -> plug?(module) end)
 
     errors =
@@ -170,6 +173,7 @@ defmodule Longx.Agent.Loader do
       errors: errors,
       notices: notices(errors, configs),
       present?: File.dir?(project_dir),
+      trusted?: trusted?,
       layers: layers,
       agents: roles |> Map.values() |> Enum.sort_by(& &1.name),
       allowed: last(configs, & &1.agents),
@@ -273,12 +277,13 @@ defmodule Longx.Agent.Loader do
     end)
   end
 
-  # the growth plug: only a trusted project that has a .longx (or wants one)
-  defp with_local(plugs, %{skipped: :untrusted}, _root), do: plugs
-  defp with_local(plugs, nil, _root), do: plugs
+  # the growth plug: every project with a .longx — untrusted, it says the shared tree waits
+  defp with_local(plugs, project_dir, root, trusted?) do
+    if File.dir?(project_dir), do: mount_local(plugs, root, trusted?), else: plugs
+  end
 
-  defp with_local(plugs, _layer, root) do
-    entry = {Local, [root: root]}
+  defp mount_local(plugs, root, trusted?) do
+    entry = {Local, [root: root, trusted: trusted?]}
 
     case Enum.find_index(plugs, &match?({Request, _}, &1)) do
       nil -> plugs ++ [entry]

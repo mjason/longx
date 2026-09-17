@@ -137,6 +137,12 @@ defmodule Longx.Agent.PlugsTest do
       assert text =~ "{:ok, text, meta}"
       assert text =~ "When to write one"
       assert text =~ "prompt_file"
+      refute text =~ "not trusted"
+
+      untrusted =
+        Local.call(Step.new(phase: :request, cwd: dir), Local.init(root: dir, trusted: false))
+
+      assert Enum.join(untrusted.instructions, "\n") =~ "not trusted"
     end
   end
 

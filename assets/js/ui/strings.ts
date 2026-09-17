@@ -126,7 +126,7 @@ export const t = {
     overrides: "内核参数（本项目覆盖）",
     overridesHint: "留空即沿用全局设置。",
     trust: "信任并加载 .longx/ 里的定义",
-    trustHint: "这些 .exs 会以你的身份在 Longx 里执行。clone 来的项目先看一眼再打开；打开后 agent 也能改自己的定义。",
+    trustHint: "管 agent.exs 和 shared/ 里的 .exs（它们会以你的身份在 Longx 里执行）。clone 来的项目先看一眼再打开。local/ 是本机 agent 自己写的，不用开关，一直加载。",
     none: "这个项目还没有 .longx/ 目录；agent 需要时会自己建。",
     files: "文件",
     plugs: "生效的管道",

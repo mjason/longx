@@ -153,12 +153,39 @@ defmodule Longx.Agent.LoaderTest do
     assert Base in names(loaded.plugs)
   end
 
-  test "an untrusted project is not loaded; a missing .longx is nothing", %{root: root, tag: tag} do
+  test "an untrusted project's shared tree is not loaded, its local tree always is; a missing .longx is nothing",
+       %{root: root, tag: tag} do
     write!(root, ".longx/plugs/deploy.exs", @deploy)
     write!(root, ".longx/agent.exs", "import Longx.Agent.Config\nagent do\n  plug Deploy\nend\n")
+    # what the agent grows on this machine (gitignored) needs no switch: nothing came from a clone
+    write!(
+      root,
+      ".longx/local/agent.exs",
+      "import Longx.Agent.Config\nagent do\n  plug Draft\nend\n"
+    )
+
+    write!(
+      root,
+      ".longx/local/plugs/draft.exs",
+      "defmodule Draft do\n  use Longx.Agent.Plug\n  instructions \"draft\"\nend\n"
+    )
+
+    write!(
+      root,
+      ".longx/local/agents/helper/agent.exs",
+      "import Longx.Agent.Config\nagent do\n  summary \"helps\"\nend\n"
+    )
+
     loaded = Loader.load(root, tag: tag, trusted: false)
     refute Enum.any?(names(loaded.plugs), &String.ends_with?(Atom.to_string(&1), ".Deploy"))
-    refute Longx.Agent.Plugs.Local in names(loaded.plugs)
+    assert Enum.any?(names(loaded.plugs), &String.ends_with?(Atom.to_string(&1), ".Draft"))
+    assert [%{name: "helper", layer: :local}] = loaded.agents
+    # the agent is still told about its definition, with the shared tree marked as not loaded
+    assert {Longx.Agent.Plugs.Local, opts} =
+             Enum.find(loaded.plugs, &match?({Longx.Agent.Plugs.Local, _}, &1))
+
+    assert opts[:trusted] == false
+    assert loaded.trusted? == false
     assert loaded.errors == []
     assert loaded.present? == true
 

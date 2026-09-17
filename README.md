@@ -4,6 +4,11 @@ Ash + Phoenix 上的 agent 应用：内置 OpenAI 的 `codex-app-server` 作为 
 模型请求全部经过 Longx 自己的 AI 网关（`/ai/v1/*`）转发到你配置的上游（DeepSeek、GLM、阿里云百炼 Token Plan、OpenAI……），
 codex 的工具能力可以用 Elixir 直接扩展。
 
+## Agent cli
+
+sudo apt update && sudo apt install -y ripgrep fd-find fzf bat jq tree git gh git-delta ast-grep
+
+
 ## 启动
 
 ```sh
