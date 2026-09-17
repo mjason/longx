@@ -51,6 +51,16 @@ defmodule Longx.Agent.SettingsTest do
 
   test "the loader turns the settings into the topmost layer: limits on the Agents plug, default child and reviewer models",
        %{dir: dir, tag: tag} do
+    # the project declares the roles; Longx ships none
+    for role <- ["coder", "reviewer"] do
+      File.mkdir_p!(Path.join(dir, ".longx/shared/agents/#{role}"))
+
+      File.write!(
+        Path.join(dir, ".longx/shared/agents/#{role}/agent.exs"),
+        "import Longx.Agent.Config\nagent do\n  summary \"#{role}\"\nend\n"
+      )
+    end
+
     settings = %{
       Settings.defaults()
       | max_depth: 3,
@@ -60,18 +70,18 @@ defmodule Longx.Agent.SettingsTest do
         reviewer_effort: "high"
     }
 
-    main = Loader.load(dir, tag: tag, settings: settings)
+    main = Loader.load(dir, tag: tag, trusted: true, settings: settings)
     assert {Agents, opts} = Enum.find(main.plugs, &match?({Agents, _}, &1))
     assert opts[:max_depth] == 3 and opts[:max_children] == 1
     # the main agent keeps whatever the person chose: no model from the settings
     assert main.model == nil
 
     # a child without a model of its own gets the default child model
-    coder = Loader.load(dir, tag: tag, settings: settings, agent: "coder")
+    coder = Loader.load(dir, tag: tag, trusted: true, settings: settings, agent: "coder")
     assert coder.model == "kid"
 
     # the reviewer role runs on the reviewer model, level included
-    reviewer = Loader.load(dir, tag: tag, settings: settings, agent: "reviewer")
+    reviewer = Loader.load(dir, tag: tag, trusted: true, settings: settings, agent: "reviewer")
     assert reviewer.model == "judge" and reviewer.effort == "high"
 
     # a role that declares its model keeps it
@@ -114,7 +124,6 @@ defmodule Longx.Agent.SettingsTest do
     assert %{name: "helper", summary: "helps", layer: "local"} =
              Enum.find(definition.agents, &(&1.name == "helper"))
 
-    assert Enum.any?(definition.agents, &(&1.name == "researcher" and &1.layer == "longx"))
     assert "plugs/x.exs" in definition.local_files
     assert "agents/helper/agent.exs" in definition.local_files
     assert definition.settings.max_depth == 2

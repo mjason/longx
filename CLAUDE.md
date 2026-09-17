@@ -503,9 +503,12 @@ React Native client planned on the same core code.
     `max_children:` (4): at the limit `spawn_agent` is not offered and the prompt says
     why. A second child of one role is `researcher-2` (`role_of/1` strips the suffix on
     a revived row). The kernel runs a child with `role:` + `depth:` (assigns too) and
-    the loader mounts the role's description on top of the project's. Shipped starters
-    in `priv/agent/agents/{researcher,reviewer,coder}/` (`agent.exs` + `prompt.md`; the
-    researcher and reviewer `drop Patch`, spawn nobody). **Goal mode is `Plugs.Goal`**
+    the loader mounts the role's description on top of the project's. **Longx ships no
+    roles** (a starter set was built and removed — the user's rule: roles grow in the
+    project, never come from the kernel): with nothing declared `spawn_agent` is not
+    offered and the plug's prompt says how to declare one — `local/agents/<name>/agent.exs`
+    + `prompt.md`, loaded at the next step — and the person promotes a proven one to
+    `shared/`. **Goal mode is `Plugs.Goal`**
     (default pipeline): `create_goal` / `update_goal` / `get_goal`; the goal lives in
     the kernel (`Agent.set_goal/2`, `get_goal/1`, `clear_goal/1`, restored from the
     ThreadState meta on a restart; `thread/goal/updated` / `cleared` so `GoalBar` and
@@ -581,7 +584,7 @@ React Native client planned on the same core code.
     are paren-free in `.formatter.exs`.
   - **The loader**: a layer is `agent.exs` + `plugs/**/*.exs` + its **roles**
     `agents/<name>/agent.exs` (each a description with its `prompt.md`, its own
-    `plugs/`); the `.exs` code is data first — every `defmodule` of a layer and every
+    `plugs/`; no shipped layer of roles); the `.exs` code is data first — every `defmodule` of a layer and every
     reference to it is renamed under `Longx.Agent.Local.<tag>` (the project id; the local
     tree shares the project's namespace and sees its modules) before
     `Code.compile_quoted`, so two projects may both define `Deploy`; cached per layer by
@@ -592,7 +595,7 @@ React Native client planned on the same core code.
     defines — an agent that broke its own definition fixes it next turn. `load(root,
     agent: "researcher")` is the role's pipeline: the main stack (global → shared →
     local) with the role's declaration on top — the **last layer's declaration replaces**
-    the earlier (a project's `researcher` stands in for the shipped one); `agents` lists
+    the earlier (a local `researcher` stands in for the shared one); `agents` lists
     every declared role with its summary, `allowed` whom the loaded agent may spawn (nil =
     all), an unknown role is an error. The **settings layer** goes on last
     (`settings:` — `Longx.Agent.Settings.for_project/1`, handed to the kernel as a

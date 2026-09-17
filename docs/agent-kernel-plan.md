@@ -9,7 +9,8 @@ agent loop 就是 OTP 递归；agent 之间用 mailbox；配置在后台配。
   （长的放 `prompt.md`，声明里 `prompt_file`）、管道、以及 `agents [...]`——它**能派谁**。
 - 主 agent 是 `.longx/agent.exs`；其余在 `agents/<name>/agent.exs`，一个 agent 一个目录，目录里
   可以有只属于它的 `plugs/` 和 `knowledge/`（always / 索引只对它生效）。
-- 出厂带几份通用声明当起步包（`researcher`、`reviewer`、`coder`），项目照着改。
+- ~~出厂带几份通用声明当起步包~~ → 改为：出厂不带任何角色。没有声明时 `spawn_agent` 不出现，prompt 教模型在
+  `local/agents/<name>/` 里声明一个（下一步生效）；用顺了人提升进 `shared/`。角色是项目里长出来的。
 - 模型选"派哪个角色"，不再临时拼模型和参数；审核模型就是 `reviewer` 这份声明。
 
 ## 2. 子 agent = 另一个 `Longx.Agent` 进程，交流 = `send`
@@ -75,11 +76,11 @@ agent loop 就是 OTP 递归；agent 之间用 mailbox；配置在后台配。
    `Projects.spawn_native_agent/4` 给孩子建行）。
 2. ✅ 加载器：`agents/<name>/`、`shared/` / `local/` 两棵树、`prompt_file`、`agents [...]`；Knowledge 的
    主题规则和折叠索引；`.gitignore`（`Longx.Agent.Layout`）。
-3. ✅ 出厂 `Plugs.Agents`（spawn_agent / send_message / close_agent + 上限）、`Plugs.Goal`、起步包
-   `priv/agent/agents/{researcher,reviewer,coder}`。
+3. ✅ 出厂 `Plugs.Agents`（spawn_agent / send_message / close_agent + 上限）、`Plugs.Goal`；起步包做过又删了——
+   角色不进内核。
 4. ✅ 设置页"Agent 内核"（`Longx.Agent.Settings`：全局一条 `system_settings`，项目 `agent_settings` 覆盖，
    加载器当最上层描述）、全局 agent 文件编辑、项目设置里的角色列表和「提升到 shared」。
 
-落地时的取舍：角色声明按层**替换**（项目的 `researcher` 顶掉出厂的），不叠加；信任开关同时管 shared 和
+落地时的取舍：角色声明按层**替换**（local 的顶掉 shared 的），不叠加；信任开关同时管 shared 和
 local（都是仓库目录里要执行的代码）；goal 存在线程视图（ThreadState meta）里，进程退出不丢、BEAM 重启丢；
 一个 agent 同角色派第二个叫 `researcher-2`。

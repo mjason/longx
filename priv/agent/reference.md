@@ -49,7 +49,7 @@ agent do
 end
 ```
 
-Longx ships `researcher`, `reviewer` and `coder`; a project's declaration of the same name replaces the shipped one. `spawn_agent(agent, task)` starts one as a separate process; its final message comes back as a message `[agent <name>] …`. Prefer declaring a role over improvising one in a task.
+Longx ships no agents: a project grows its own. When a kind of task keeps being delegated, declare it in `local/agents/<name>/` (the declaration loads at your next step); a local declaration of a name replaces a shared one. `spawn_agent(agent, task)` starts one as a separate process; its final message comes back as a message `[agent <name>] …`. Prefer declaring a role over improvising one in a task.
 
 A plug (`.longx/shared/plugs/<name>.exs` or `local/plugs/<name>.exs`, one or more modules; names are private to this project):
 

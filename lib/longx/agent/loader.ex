@@ -2,8 +2,7 @@ defmodule Longx.Agent.Loader do
   @moduledoc """
   Loads the layered agent description for a working directory:
 
-  1. the shipped default — `Longx.Agent.Pipelines.Default.config/0` — and
-     the shipped starter roles (`priv/agent/agents/<name>/`);
+  1. the shipped default — `Longx.Agent.Pipelines.Default.config/0`;
   2. the person's — `<data>/agent/` (`config :longx, Longx.Agent.Loader,
      global_dir:`), every project;
   3. the project's **shared** tree — `<root>/.longx/` (`agent.exs`,
@@ -18,7 +17,9 @@ defmodule Longx.Agent.Loader do
   (`plugs/**/*.exs`, modules using `Longx.Agent.Plug`) and its **roles**:
   `agents/<name>/agent.exs`, each a description of its own with a
   `prompt.md` (`prompt_file`) and, optionally, its own `plugs/` and
-  `knowledge/`. `load(root, agent: name)` gives the role's pipeline — the
+  `knowledge/`. Longx ships no roles: a project grows its own — the agent
+  declares one in `local/` when a kind of task keeps being delegated, the
+  person promotes it to `shared/`. `load(root, agent: name)` gives the role's pipeline — the
   main stack with the role's descriptions (every layer's, in order) on top
   — and `agents` lists every declared role with its summary, `allowed`
   the names the loaded agent may spawn (`agents [...]`; nil = all).
@@ -61,10 +62,6 @@ defmodule Longx.Agent.Loader do
     end)
   end
 
-  @doc "Where the shipped starter roles live."
-  @spec shipped_dir() :: Path.t()
-  def shipped_dir, do: Path.join(:code.priv_dir(:longx), "agent")
-
   @doc """
   The resolved description for `root`. Options: `tag:` (the project's
   namespace segment — its id; defaults to a hash of the root), `trusted:`
@@ -82,7 +79,6 @@ defmodule Longx.Agent.Loader do
     project_dir = Path.join(root, ".longx")
     local_dir = Path.join(project_dir, "local")
 
-    shipped = layer(:longx, shipped_dir(), "Longx")
     global = layer(:global, global_dir(), "Global")
 
     {project, local} =
@@ -114,12 +110,11 @@ defmodule Longx.Agent.Loader do
            )}
       end
 
-    layers = Enum.reject([shipped, global, project, local], &is_nil/1)
+    layers = Enum.reject([global, project, local], &is_nil/1)
     {roles, role_file_errors} = roles(layers)
 
     # the main stack: every layer's description; then the role's, layer by layer
-    main =
-      for %{name: name, dir: dir, config: %Config{} = c} <- layers, name != :longx, do: {c, dir}
+    main = for %{dir: dir, config: %Config{} = c} <- layers, do: {c, dir}
 
     {role_configs, role_errors} =
       case {role, Map.get(roles, role)} do
@@ -133,7 +128,7 @@ defmodule Longx.Agent.Loader do
                layer: :project,
                file: "agents/#{name}/agent.exs",
                message:
-                 "no agent named #{inspect(name)} is declared (agents/#{name}/agent.exs in .longx, its local/ or the global directory)"
+                 "no agent named #{inspect(name)} is declared (shared/agents/#{name}/agent.exs or local/agents/#{name}/agent.exs in .longx, or the global directory)"
              }
            ]}
 
@@ -212,7 +207,7 @@ defmodule Longx.Agent.Loader do
   defp last(configs, fun), do: configs |> Enum.map(fun) |> Enum.reject(&is_nil/1) |> List.last()
 
   # every declared role, the later layer's declaration replacing the
-  # earlier (a project's researcher stands in for the shipped one); a
+  # earlier (a local declaration stands in for the shared one); a
   # prompt file that is missing is reported now, not when the role is spawned
   defp roles(layers) do
     Enum.reduce(layers, {%{}, []}, fn %{name: layer, roles: roles}, {acc, errors} ->
@@ -322,7 +317,6 @@ defmodule Longx.Agent.Loader do
 
   # where a layer keeps its plugs and its roles
   defp plug_dirs(:project, dir), do: [Path.join(dir, "plugs"), Path.join(dir, "shared/plugs")]
-  defp plug_dirs(:longx, _dir), do: []
   defp plug_dirs(_name, dir), do: [Path.join(dir, "plugs")]
 
   @doc false
@@ -332,10 +326,7 @@ defmodule Longx.Agent.Loader do
   # every code file of the layer with its mtime (the cache key)
   defp files(name, dir) do
     if File.dir?(dir) do
-      descriptions =
-        if name == :longx,
-          do: [],
-          else: [Path.join(dir, "agent.exs")]
+      descriptions = [Path.join(dir, "agent.exs")]
 
       plugs =
         Enum.flat_map(plug_dirs(name, dir), &Path.wildcard(Path.join(&1, "**/*.exs")))

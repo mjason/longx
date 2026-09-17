@@ -179,7 +179,7 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "You are"
 
     assert Enum.map(body["tools"], & &1["name"]) |> Enum.sort() ==
-             ~w(apply_patch create_goal exec_command get_goal knowledge_read knowledge_search knowledge_write spawn_agent update_goal view_image web_fetch web_search)
+             ~w(apply_patch create_goal exec_command get_goal knowledge_read knowledge_search knowledge_write update_goal view_image web_fetch web_search)
 
     refute Map.has_key?(body, "x-longx-custom-tools")
 
@@ -1231,11 +1231,22 @@ defmodule Longx.AgentTest do
   test "the shipped Agents plug: spawn_agent starts a declared role on its own description, the report comes back",
        %{bypass: bypass, dir: dir} do
     test = self()
-    File.mkdir_p!(Path.join(dir, ".longx"))
+    File.mkdir_p!(Path.join(dir, ".longx/local/agents/researcher"))
 
     File.write!(
       Path.join(dir, ".longx/agent.exs"),
       "import Longx.Agent.Config\nagent do\n  prompt \"Project Q.\"\nend\n"
+    )
+
+    # the project's own role (Longx ships none): a local declaration with its prompt
+    File.write!(
+      Path.join(dir, ".longx/local/agents/researcher/agent.exs"),
+      "import Longx.Agent.Config\nagent do\n  summary \"looks things up\"\n  prompt_file \"prompt.md\"\n  drop Longx.Agent.Plugs.Patch\n  agents []\nend\n"
+    )
+
+    File.write!(
+      Path.join(dir, ".longx/local/agents/researcher/prompt.md"),
+      "# Role: researcher\n"
     )
 
     parent = agent!("team-#{System.unique_integer([:positive])}", dir, trust: fn -> true end)
@@ -1278,8 +1289,7 @@ defmodule Longx.AgentTest do
     requests = collect_requests([])
     first = Enum.find(requests, &(first_text(&1) == "go"))
     spawn_tool = Enum.find(first["tools"], &(&1["name"] == "spawn_agent"))
-    assert "researcher" in spawn_tool["parameters"]["properties"]["agent"]["enum"]
-    assert "coder" in spawn_tool["parameters"]["properties"]["agent"]["enum"]
+    assert ["researcher"] == spawn_tool["parameters"]["properties"]["agent"]["enum"]
 
     child = Enum.find(requests, &(first_text(&1) == "find X"))
 

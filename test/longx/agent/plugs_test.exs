@@ -68,6 +68,17 @@ defmodule Longx.Agent.PlugsTest do
       assert Map.has_key?(full.tools, "close_agent")
     end
 
+    test "with nothing declared there is nothing to spawn, and the prompt says how to declare an agent" do
+      step = Agents.call(team_step(%{agents: []}), Agents.init([]))
+      refute Map.has_key?(step.tools, "spawn_agent")
+      text = Enum.join(step.instructions, "\n")
+      assert text =~ "No agent is declared yet"
+      assert text =~ ".longx/local/agents/<name>/agent.exs"
+      assert text =~ "prompt_file"
+      # a child at the depth limit is not told to declare anyone
+      assert Agents.call(team_step(%{agents: [], depth: 2}), Agents.init([])).instructions == []
+    end
+
     test "with no children there is nobody to message or close" do
       step = Agents.call(team_step(%{}), Agents.init([]))
       refute Map.has_key?(step.tools, "send_message")

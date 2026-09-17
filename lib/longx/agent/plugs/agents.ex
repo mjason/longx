@@ -52,10 +52,41 @@ defmodule Longx.Agent.Plugs.Agents do
     end
   end
 
+  @declare """
+  To delegate a kind of task nobody is declared for, declare an agent first — two files under `.longx/local/agents/<name>/` (a short lowercase name, e.g. researcher, reviewer):
+
+  ```elixir
+  # .longx/local/agents/<name>/agent.exs
+  import Longx.Agent.Config
+
+  agent do
+    version 1
+    summary "one line: what this agent does and what it never does"
+    prompt_file "prompt.md"
+    drop Longx.Agent.Plugs.Patch   # for a role that reads but never edits; leave it out otherwise
+    agents []                      # whom it may spawn in turn ([] nobody)
+  end
+  ```
+
+  `prompt.md` is its role prompt: what it is for, how it works, what its final message (the report to you) must contain. It runs the project's pipeline with this on top. The declaration loads at your next step, so write it, then call `spawn_agent`. Keep to `local/`; the person promotes a role that proved itself into `shared/`.
+  """
+
+  defp instructions([], [], depth, _spawn?, opts) when depth < 2 do
+    if depth >= opts[:max_depth],
+      do: nil,
+      else:
+        "# Agents\n\nNo agent is declared yet in this project, so there is nobody to delegate to. " <>
+          @declare
+  end
+
   defp instructions([], [], _depth, _spawn?, _opts), do: nil
 
   defp instructions(roles, children, depth, spawn?, opts) do
-    listing = Enum.map_join(roles, "\n", &"- #{&1.name} — #{&1.summary}")
+    listing =
+      case roles do
+        [] -> "(none declared)"
+        _ -> Enum.map_join(roles, "\n", &"- #{&1.name} — #{&1.summary}")
+      end
 
     live =
       case children do
@@ -69,7 +100,7 @@ defmodule Longx.Agent.Plugs.Agents do
           ""
 
         roles == [] ->
-          "\n\nYou cannot spawn agents: this agent declares none."
+          "\n\n" <> @declare
 
         depth >= opts[:max_depth] ->
           "\n\nYou cannot spawn agents at this depth (#{depth}); do the work yourself."
@@ -85,7 +116,7 @@ defmodule Longx.Agent.Plugs.Agents do
 
     #{listing}
 
-    `spawn_agent(agent, task)` starts one on a task and returns at once. **Its report arrives later as a message from it** — a user message beginning `[agent <name>]` — in a later step of this turn if you are still working, or as a new turn if you had finished. So do not wait or poll for it: continue with what does not depend on it, or end your turn with a short note that the agent is working and you will pick up its report. `send_message(agent, message)` redirects a live agent; `close_agent(agent)` stops one you no longer need. Give a task everything the agent needs to know, since it sees nothing of this conversation.#{live}#{why}
+    `spawn_agent(agent, task)` starts one on a task and returns at once. **Its report arrives later as a message from it** — a user message beginning `[agent <name>]` — in a later step of this turn if you are still working, or as a new turn if you had finished. So do not wait or poll for it: continue with what does not depend on it, or end your turn with a short note that the agent is working and you will pick up its report. `send_message(agent, message)` redirects a live agent; `close_agent(agent)` stops one you no longer need. Give a task everything the agent needs to know, since it sees nothing of this conversation. When no declared agent fits a kind of task you keep delegating, declare a new one (`.longx/local/agents/<name>/agent.exs` + `prompt.md`, see the knowledge on plugs and agents) rather than bending one.#{live}#{why}
     """
   end
 

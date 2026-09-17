@@ -37,8 +37,8 @@ export const agentDefinitionData = (extra: Record<string, unknown> = {}) => ({
   files: [],
   localFiles: [],
   agents: [
-    { name: "coder", summary: "implements a bounded task", layer: "longx" },
-    { name: "researcher", summary: "searches the web", layer: "longx" },
+    { name: "coder", summary: "implements a bounded task", layer: "project" },
+    { name: "researcher", summary: "searches the web", layer: "local" },
   ],
   settings: agentSettingsData(),
   overrides: {},

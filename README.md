@@ -393,8 +393,9 @@ priv 里的出厂描述、`<data>/agent/` 你自己的、项目的 `.longx/`（s
 一条消息（`[agent researcher] …`）——父在跑就下一步折进上下文，父空闲就被叫醒开新的一轮（Turn 行照记）。
 父 monitor 子（崩了是一条消息进上下文），子 monitor 父（父没了自己退出）。进程很轻，闲 30 分钟自退，
 下一条消息从对话日志毫秒级拉起来。能派谁是**声明**：`.longx/shared/agents/<名字>/agent.exs`（同一格式：
-`summary`、`prompt_file "prompt.md"`、模型、`drop Patch`、`agents [...]` 它自己能派谁），出厂带
-`researcher` / `reviewer` / `coder` 起步包，项目同名声明覆盖出厂。模型选角色，不再临时拼模型和参数。
+`summary`、`prompt_file "prompt.md"`、模型、`drop Patch`、`agents [...]` 它自己能派谁）。**Longx 不带任何角色**：
+没有声明时 `spawn_agent` 不出现，prompt 告诉模型怎么在 `local/agents/<名字>/` 里声明一个（下一步就能派）；
+用顺了人在项目设置里提升进 `shared/`——角色是项目里长出来的，不是内核发的。模型选角色，不再临时拼模型和参数。
 上限（深度、同时几个、闲置多久、孩子默认模型、reviewer 模型）在设置 → Agent 内核里配，项目设置可覆盖——
 这些是每个 agent 描述最上面的一层。递归的结束由主模型判断：`Goal` plug 的 `create_goal` 让一轮在
 `:turn_end` 继续下去，直到模型 `update_goal(status: complete)`（或 blocked、预算用完、单轮 8 次续跑）。

@@ -86,7 +86,7 @@ describe("ProjectSettingsPage", () => {
       ok(agentDefinitionData({
         present: true,
         agents: [
-          { name: "researcher", summary: "searches the web", layer: "longx" },
+          { name: "researcher", summary: "searches the web", layer: "project" },
           { name: "helper", summary: "helps here", layer: "local" },
         ],
         localFiles: ["agents/helper/agent.exs", "plugs/x.exs"],
@@ -99,7 +99,7 @@ describe("ProjectSettingsPage", () => {
       const section = await screen.findByTestId("project-agent");
       const agents = await within(section).findByTestId("project-agents");
       expect(agents).toHaveTextContent("researcher");
-      expect(agents).toHaveTextContent("出厂");
+      expect(agents).toHaveTextContent("shared");
       expect(agents).toHaveTextContent("helps here");
       expect(agents).toHaveTextContent("local");
 

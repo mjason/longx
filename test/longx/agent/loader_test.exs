@@ -194,7 +194,7 @@ defmodule Longx.Agent.LoaderTest do
       Enum.map(names(loaded.plugs), &(&1 |> Atom.to_string() |> String.split(".") |> List.last()))
 
     assert "Deploy" in labels and "Legacy" in labels and "Draft" in labels
-    assert Enum.map(loaded.layers, & &1.name) == [:longx, :global, :project, :local]
+    assert Enum.map(loaded.layers, & &1.name) == [:global, :project, :local]
   end
 
   @researcher ~S'''
@@ -228,19 +228,15 @@ defmodule Longx.Agent.LoaderTest do
 
     main = Loader.load(root, tag: tag, trusted: true)
     assert main.errors == []
-    # the roles are known to the main agent (the shipped starters too), each with a summary
-    assert %{
-             name: "researcher",
-             summary: "finds things out on the web and reports",
-             layer: :project
-           } =
-             Enum.find(main.agents, &(&1.name == "researcher"))
-
-    assert Enum.map(main.agents, & &1.name) |> Enum.sort() |> Enum.take(3) == [
-             "coder",
-             "researcher",
-             "reviewer"
-           ]
+    # the roles are known to the main agent, each with a summary; Longx ships none
+    assert [
+             %{
+               name: "researcher",
+               summary: "finds things out on the web and reports",
+               layer: :project
+             }
+           ] =
+             main.agents
 
     assert Patch in names(main.plugs)
     assert main.model == nil
@@ -254,11 +250,6 @@ defmodule Longx.Agent.LoaderTest do
     # the project's prompt, then the role's: the prompt file becomes prompt text
     prompts = for {Longx.Agent.Plugs.Prompt, [text: t]} <- role.plugs, do: t
     assert prompts == ["Project P.", "You research.\n"]
-
-    # a shipped starter is a role too
-    shipped = Loader.load(root, tag: tag, trusted: true, agent: "reviewer")
-    assert shipped.errors == []
-    refute Patch in names(shipped.plugs)
 
     # an unknown role is an error, not a silent main agent
     assert {:error, message} =

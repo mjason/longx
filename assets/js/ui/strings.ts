@@ -117,9 +117,9 @@ export const t = {
   queueRemove: "取消",
   agentDefinition: {
     title: "这个项目的 agent",
-    hint: "原生内核按 .longx/ 里的描述运行：agent.exs 记录和出厂管道的差异；shared/ 里的 agents、plugs、knowledge 进 git，是审过的；local/ 是本机和 agent 自己的草稿，不进 git。审过的 local 文件可以在这里提升到 shared。",
+    hint: "原生内核按 .longx/ 里的描述运行：agent.exs 记录和出厂管道的差异；shared/ 里的 agents、plugs、knowledge 进 git，是审过的；local/ 是本机和 agent 自己的草稿，不进 git。Longx 不带任何角色：需要派人时 agent 自己在 local/agents/ 里声明一个，用顺了你在这里提升到 shared。",
     agents: "可派出的 agent",
-    agentLayer: { longx: "出厂", global: "全局", project: "shared", local: "local" } as Record<string, string>,
+    agentLayer: { global: "全局", project: "shared", local: "local" } as Record<string, string>,
     localFiles: "local/ 里的文件（未进 git）",
     promote: "提升到 shared",
     promoted: (path: string) => `已移到 ${path}`,
