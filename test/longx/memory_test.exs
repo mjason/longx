@@ -19,6 +19,29 @@ defmodule Longx.MemoryTest do
     assert Memory.index(dir) == "# mine\n"
   end
 
+  test "concurrent writes queue up instead of colliding on git", %{dir: dir} do
+    assert :ok = Memory.ensure(dir)
+
+    results =
+      1..8
+      |> Task.async_stream(
+        fn i ->
+          case rem(i, 2) do
+            0 -> Memory.add_note(dir, "note #{i}", slug: "n#{i}")
+            1 -> Memory.write_index(dir, "# MEMORY\n\n- v#{i}\n")
+          end
+        end,
+        max_concurrency: 8,
+        timeout: 30_000
+      )
+      |> Enum.map(fn {:ok, r} -> r end)
+
+    assert Enum.all?(results, &(match?({:ok, _}, &1) or &1 == :ok)), inspect(results)
+    assert length(Memory.notes(dir)) == 4
+    # init + 8 writes, one commit each
+    assert length(Longx.Git.log(dir, limit: 20)) == 9
+  end
+
   test "a memory directory inside another repository gets its own, never commits into the parent",
        %{
          dir: parent
