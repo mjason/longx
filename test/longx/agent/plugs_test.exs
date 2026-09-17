@@ -2,7 +2,7 @@ defmodule Longx.Agent.PlugsTest do
   use ExUnit.Case, async: true
 
   alias Longx.Agent.{Context, Step, Tool}
-  alias Longx.Agent.Plugs.{AgentsMd, Base, Environment, Files, Request, Shell}
+  alias Longx.Agent.Plugs.{AgentsMd, Base, Environment, Patch, Request, Shell, ViewImage}
 
   setup do
     dir = Path.join(System.tmp_dir!(), "longx-agent-#{System.unique_integer([:positive])}")
@@ -59,16 +59,16 @@ defmodule Longx.Agent.PlugsTest do
     end
   end
 
-  describe "Shell.exec" do
+  describe "Shell.exec_command" do
     test "runs the command in the cwd and streams its output", %{dir: dir} do
       me = self()
       ctx = %Context{cwd: dir, emit: &send(me, {:out, &1})}
-      tool = tool!(Shell, "exec")
+      tool = tool!(Shell, "exec_command")
 
       assert tool.show == :command
 
       assert {:ok, output, %{"exitCode" => 0}} =
-               Tool.call(tool, %{"command" => "pwd; echo hi >&2"}, ctx)
+               Tool.call(tool, %{"cmd" => "pwd; echo hi >&2"}, ctx)
 
       assert output =~ dir
       assert output =~ "hi"
@@ -78,7 +78,7 @@ defmodule Longx.Agent.PlugsTest do
 
     test "a non-zero exit is reported, not an error", %{ctx: ctx} do
       assert {:ok, output, %{"exitCode" => 3}} =
-               Tool.call(tool!(Shell, "exec"), %{"command" => "echo boom; exit 3"}, ctx)
+               Tool.call(tool!(Shell, "exec_command"), %{"cmd" => "echo boom; exit 3"}, ctx)
 
       assert output =~ "boom"
       assert output =~ "exit code 3"
@@ -87,8 +87,8 @@ defmodule Longx.Agent.PlugsTest do
     test "a command past its timeout is killed", %{ctx: ctx} do
       assert {:error, message} =
                Tool.call(
-                 tool!(Shell, "exec"),
-                 %{"command" => "echo start; sleep 10", "timeout_ms" => 300},
+                 tool!(Shell, "exec_command"),
+                 %{"cmd" => "echo start; sleep 10", "timeout_ms" => 300},
                  ctx
                )
 
@@ -97,77 +97,56 @@ defmodule Longx.Agent.PlugsTest do
     end
   end
 
-  describe "Files" do
-    test "read, write and edit", %{dir: dir, ctx: ctx} do
-      write = tool!(Files, "write_file")
-      assert write.show == :file_change
+  describe "Patch.apply_patch" do
+    test "applies a patch under the cwd and reports the changes for the UI", %{dir: dir, ctx: ctx} do
+      File.write!(Path.join(dir, "a.txt"), "one\ntwo\n")
+      tool = tool!(Patch, "apply_patch")
+      assert tool.show == :file_change
+      assert %{syntax: "lark", param: "input"} = tool.freeform
 
-      assert {:ok, _, %{"changes" => [%{"path" => path, "kind" => "add"}]}} =
-               Tool.call(write, %{"path" => "a/b.txt", "content" => "one\ntwo\n"}, ctx)
+      patch =
+        "*** Begin Patch\n*** Add File: b.txt\n+b\n*** Update File: a.txt\n@@\n-two\n+2\n*** End Patch\n"
 
-      assert path == Path.join(dir, "a/b.txt")
-      assert File.read!(path) == "one\ntwo\n"
+      assert {:ok, "Done!\n" <> summary, %{"changes" => [add, update]}} =
+               Tool.call(tool, %{"input" => patch}, ctx)
 
-      assert {:ok, "one\ntwo\n"} =
-               Tool.call(tool!(Files, "read_file"), %{"path" => "a/b.txt"}, ctx)
+      assert summary =~ "A " <> Path.join(dir, "b.txt")
+      assert %{"kind" => "add", "diff" => "--- /dev/null" <> _} = add
+      assert %{"kind" => "update", "path" => a} = update
+      assert a == Path.join(dir, "a.txt")
+      assert File.read!(a) == "one\n2\n"
 
-      assert {:ok, "two\n"} =
+      assert {:error, message} =
                Tool.call(
-                 tool!(Files, "read_file"),
-                 %{"path" => "a/b.txt", "offset" => 2, "limit" => 1},
-                 ctx
-               )
-
-      assert {:ok, _, %{"changes" => [%{"kind" => "update"}]}} =
-               Tool.call(
-                 tool!(Files, "edit_file"),
-                 %{"path" => "a/b.txt", "old_string" => "two", "new_string" => "2"},
-                 ctx
-               )
-
-      assert File.read!(path) == "one\n2\n"
-    end
-
-    test "an edit must match exactly once", %{dir: dir, ctx: ctx} do
-      File.write!(Path.join(dir, "x.txt"), "a a\n")
-      edit = tool!(Files, "edit_file")
-
-      assert {:error, msg} =
-               Tool.call(
-                 edit,
-                 %{"path" => "x.txt", "old_string" => "a", "new_string" => "b"},
-                 ctx
-               )
-
-      assert msg =~ "2 times"
-
-      assert {:error, msg} =
-               Tool.call(
-                 edit,
-                 %{"path" => "x.txt", "old_string" => "z", "new_string" => "b"},
-                 ctx
-               )
-
-      assert msg =~ "not found"
-
-      assert {:ok, _, _} =
-               Tool.call(
-                 edit,
+                 tool,
                  %{
-                   "path" => "x.txt",
-                   "old_string" => "a",
-                   "new_string" => "b",
-                   "replace_all" => true
+                   "input" =>
+                     "*** Begin Patch\n*** Update File: a.txt\n@@\n-nope\n+x\n*** End Patch\n"
                  },
                  ctx
                )
 
-      assert File.read!(Path.join(dir, "x.txt")) == "b b\n"
+      assert message =~ "nope"
     end
+  end
 
-    test "reading a missing file is an error the model can act on", %{ctx: ctx} do
-      assert {:error, msg} = Tool.call(tool!(Files, "read_file"), %{"path" => "nope.txt"}, ctx)
-      assert msg =~ "nope.txt"
+  describe "ViewImage" do
+    test "a png becomes a data url the kernel attaches; other files are refused", %{
+      dir: dir,
+      ctx: ctx
+    } do
+      png = <<0x89, ?P, ?N, ?G, 13, 10, 26, 10, 0, 0, 0, 0>>
+      File.write!(Path.join(dir, "shot.png"), png)
+      tool = tool!(ViewImage, "view_image")
+
+      assert {:ok, "attached shot.png", %{"image" => "data:image/png;base64," <> b64}} =
+               Tool.call(tool, %{"path" => "shot.png"}, ctx)
+
+      assert Elixir.Base.decode64!(b64) == png
+      assert {:error, msg} = Tool.call(tool, %{"path" => "a.txt"}, ctx)
+      assert msg =~ "image type"
+      assert {:error, msg} = Tool.call(tool, %{"path" => "missing.png"}, ctx)
+      assert msg =~ "no such file"
     end
   end
 

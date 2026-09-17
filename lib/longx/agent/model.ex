@@ -32,7 +32,7 @@ defmodule Longx.Agent.Model do
   @spec stream(map, pid, reference) :: :ok
   def stream(request, owner, ref) when is_map(request) and is_pid(owner) do
     with {:ok, target} <- AI.resolve_target(request["model"]),
-         {:ok, up} <- Gateway.prepare(request, target) do
+         {:ok, up} <- request |> custom_tools(target) |> Gateway.prepare(target) do
       log = Log.begin(request, %{upstream_id: target.model, provider: target.provider_slug})
       Process.monitor(owner)
       attempt(up, target, owner, ref, log, retry_ms())
@@ -42,6 +42,19 @@ defmodule Longx.Agent.Model do
         failed(owner, ref, describe(reason))
     end
   end
+
+  # a tool with a grammar goes out as a `custom` tool where the provider runs
+  # them (OpenAI's Responses API); everyone else keeps the function form
+  defp custom_tools(request, %{kind: :openai}) do
+    {customs, request} = Map.pop(request, "x-longx-custom-tools", [])
+    names = MapSet.new(customs, & &1["name"])
+
+    Map.update(request, "tools", [], fn tools ->
+      Enum.reject(tools, &MapSet.member?(names, &1["name"])) ++ customs
+    end)
+  end
+
+  defp custom_tools(request, _target), do: Map.delete(request, "x-longx-custom-tools")
 
   defp retry_ms,
     do: :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:retry_ms, @default_retry_ms)

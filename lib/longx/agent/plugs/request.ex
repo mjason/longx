@@ -10,14 +10,20 @@ defmodule Longx.Agent.Plugs.Request do
   use Longx.Agent.Plug
 
   @impl true
+  def call(%Step{phase: phase} = step, _opts) when phase != :request, do: step
+
   def call(%Step{} = step, _opts) do
+    tools = step.tools |> Map.values() |> Enum.sort_by(& &1.name)
+
     request =
       %{
         "model" => step.model || "longx",
         "instructions" => prompt(step),
         "input" => step.transcript,
-        "tools" =>
-          step.tools |> Map.values() |> Enum.sort_by(& &1.name) |> Enum.map(&Tool.to_responses/1),
+        "tools" => Enum.map(tools, &Tool.to_responses/1),
+        # the grammar-constrained forms, for a provider that runs them
+        # (Longx.Agent.Model swaps them in for OpenAI, drops them otherwise)
+        "x-longx-custom-tools" => tools |> Enum.map(&Tool.to_custom/1) |> Enum.reject(&is_nil/1),
         "parallel_tool_calls" => true,
         "stream" => true,
         "store" => false,

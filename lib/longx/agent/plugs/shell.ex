@@ -1,14 +1,19 @@
 defmodule Longx.Agent.Plugs.Shell do
   @moduledoc """
-  The `exec` tool: a shell command run with `bash -lc` in the working
-  directory through `Longx.Shim` — output streamed to the UI as it comes,
-  the whole tree killed at the timeout. No sandbox: the kernel runs on
-  the person's machine as the person (isolation, when wanted, is the
-  deployment's job — the whole of Longx in a container).
+  codex's `exec_command`: a shell command run in the working directory
+  through `Longx.Shim` — output streamed to the UI as it comes, the whole
+  tree killed at the timeout. The parameters are codex's (`cmd`,
+  `workdir`, `tty`, `yield_time_ms`, `max_output_tokens`, `shell`, `login`)
+  so models tuned for codex call it the same way; the difference is that
+  a command runs to completion here (up to `timeout_ms`, default 2 min,
+  max 30 min) — `yield_time_ms` / `write_stdin` sessions are not offered
+  yet. No sandbox: the kernel runs on the person's machine as the person
+  (isolation, when wanted, is the deployment's job).
 
-  The model gets stdout and stderr interleaved as they arrived, capped to
-  the head and tail (`max_output:` bytes, 128 KB) and the exit code when it
-  is not zero. A timeout is an error carrying what was printed so far.
+  The model gets stdout and stderr interleaved as they arrived, capped
+  by `max_output_tokens` (10 000 by default, ~4 bytes a token: head and
+  tail kept) and the exit code when it is not zero. A timeout is an
+  error carrying what was printed so far.
   """
 
   use Longx.Agent.Plug
@@ -17,27 +22,51 @@ defmodule Longx.Agent.Plugs.Shell do
 
   @default_timeout 120_000
   @max_timeout 30 * 60_000
-  @max_output 128 * 1024
+  @default_output_tokens 10_000
+  @bytes_per_token 4
   @emit_cap 256 * 1024
 
-  tool :exec,
-       "Runs a shell command with bash in the working directory and returns its output (stdout and stderr) and exit code. Long-running commands are killed at timeout_ms (default 120000, max 1800000).",
+  tool :exec_command,
+       "Runs a shell command in the working directory and returns its output (stdout and stderr interleaved) and exit code. The command runs to completion; it is killed after timeout_ms (default 120000, max 1800000). Long-running servers should be started in the background (nohup … &).",
        show: :command,
        timeout: @max_timeout + 5_000 do
-    param :command, :string, "The command line, run with `bash -lc`", required: true
-    param :timeout_ms, :integer, "Kill the command after this many milliseconds"
+    param :cmd, :string, "Shell command to execute.", required: true
+    param :workdir, :string, "Working directory for the command. Defaults to the turn cwd."
+
+    param :tty,
+          :boolean,
+          "True allocates a PTY for the command; false or omitted uses plain pipes."
+
+    param :yield_time_ms,
+          :number,
+          "Accepted for compatibility; the command runs to completion here."
+
+    param :max_output_tokens, :number, "Output token budget. Defaults to 10000 tokens."
+
+    param :timeout_ms,
+          :integer,
+          "Kill the command after this many milliseconds (default 120000, max 1800000)."
+
+    param :shell, :string, "Shell binary to launch. Defaults to bash."
+
+    param :login,
+          :boolean,
+          "True runs the shell with -l semantics; false disables them. Defaults to true."
   end
 
-  def exec(%{"command" => command} = args, ctx) do
+  def exec_command(%{"cmd" => command} = args, ctx) do
     timeout = args["timeout_ms"] |> timeout()
-    cwd = ctx.cwd || File.cwd!()
+    cwd = workdir(args["workdir"], ctx)
+    shell = if is_binary(args["shell"]) and args["shell"] != "", do: args["shell"], else: "bash"
+    flag = if args["login"] == false, do: "-c", else: "-lc"
+    tty? = args["tty"] == true
+    max_bytes = output_cap(args["max_output_tokens"])
     started = System.monotonic_time(:millisecond)
 
-    case Shim.start_link(["bash", "-lc", command],
-           cd: cwd,
-           env: [{"TERM", "dumb"}],
-           stderr: :stream
-         ) do
+    opts =
+      [cd: cwd, env: [{"TERM", "dumb"}]] ++ if(tty?, do: [pty: true], else: [stderr: :stream])
+
+    case Shim.start_link([shell, flag, command], opts) do
       {:ok, shim} ->
         :ok = Shim.close_stdin(shim)
         me = self()
@@ -52,12 +81,12 @@ defmodule Longx.Agent.Plugs.Shell do
 
         case collect(%{output: [], size: 0, emitted: 0, eofs: 0, exit: nil}, ctx, deadline) do
           {:ok, %{exit: code} = acc} ->
-            {:ok, report(text(acc), code),
+            {:ok, report(text(acc, max_bytes), code),
              %{"exitCode" => code, "durationMs" => elapsed(started)}}
 
           {:timeout, acc} ->
             Shim.kill(shim)
-            {:error, "timed out after #{timeout} ms\n" <> text(acc)}
+            {:error, "timed out after #{timeout} ms\n" <> text(acc, max_bytes)}
         end
 
       {:error, reason} ->
@@ -65,9 +94,17 @@ defmodule Longx.Agent.Plugs.Shell do
     end
   end
 
+  defp workdir(dir, ctx) when is_binary(dir) and dir != "", do: Context.path(ctx, dir)
+  defp workdir(_dir, ctx), do: ctx.cwd || File.cwd!()
+
   defp timeout(nil), do: @default_timeout
   defp timeout(ms) when is_integer(ms) and ms > 0, do: min(ms, @max_timeout)
   defp timeout(_), do: @default_timeout
+
+  defp output_cap(tokens) when is_number(tokens) and tokens > 0,
+    do: trunc(tokens) * @bytes_per_token
+
+  defp output_cap(_), do: @default_output_tokens * @bytes_per_token
 
   defp pump(shim, read, owner) do
     case read.(shim, 65_536, :infinity) do
@@ -104,7 +141,6 @@ defmodule Longx.Agent.Plugs.Shell do
     end
   end
 
-  # the head and the tail are kept whole; the middle is dropped once past the cap
   defp keep(%{output: out, size: size} = acc, data),
     do: %{acc | output: [out, data], size: size + byte_size(data)}
 
@@ -120,14 +156,15 @@ defmodule Longx.Agent.Plugs.Shell do
 
   defp show(acc, _ctx, _data), do: acc
 
-  defp text(%{output: out, size: size}) do
+  # the head and the tail are kept whole; the middle is dropped once past the cap
+  defp text(%{output: out, size: size}, max_bytes) do
     whole = IO.iodata_to_binary(out)
 
-    if size > @max_output do
-      half = div(@max_output, 2)
+    if size > max_bytes do
+      half = div(max_bytes, 2)
 
       binary_part(whole, 0, half) <>
-        "\n\n[... #{size - @max_output} bytes omitted ...]\n\n" <>
+        "\n\n[... #{size - max_bytes} bytes omitted ...]\n\n" <>
         binary_part(whole, size - half, half)
     else
       whole

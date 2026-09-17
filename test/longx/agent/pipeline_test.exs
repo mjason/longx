@@ -113,6 +113,48 @@ defmodule Longx.Agent.PipelineTest do
     assert step.assigns.tag == "rt"
   end
 
+  defmodule Phased do
+    use Longx.Agent.Plug
+
+    tool :noop, "nothing" do
+      param :x, :string, "x"
+    end
+
+    def noop(_args, _ctx), do: {:ok, ""}
+
+    def call(%Step{phase: :response} = step, _opts) do
+      if step.calls == [],
+        do: Step.enqueue_call(step, "exec_command", %{"cmd" => "mix test"}),
+        else: step
+    end
+
+    def call(%Step{phase: :turn_end} = step, _opts), do: Step.continue(step, "keep going")
+    def call(step, _opts), do: Longx.Agent.Plug.mount(step, __MODULE__)
+  end
+
+  test "a plug sees the phase: tools mount at request, effects describe what the kernel does next" do
+    request = Phased.call(Step.new(phase: :request), [])
+    assert Map.keys(request.tools) == ["noop"]
+    assert request.effects == []
+
+    response = Phased.call(Step.new(phase: :response, calls: []), [])
+    assert response.tools == %{}
+    assert response.effects == [{:call, "exec_command", %{"cmd" => "mix test"}}]
+
+    busy = Phased.call(Step.new(phase: :response, calls: [%{name: "x"}]), [])
+    assert busy.effects == []
+
+    turn_end = Phased.call(Step.new(phase: :turn_end), [])
+    assert turn_end.effects == [{:continue, "keep going"}]
+
+    assert Step.compact(Step.new(), keep: 3).effects == [{:compact, [keep: 3]}]
+  end
+
+  test "the default call mounts nothing outside the request phase" do
+    assert Greeter.call(Step.new(phase: :response), []).tools == %{}
+    assert Greeter.call(Step.new(phase: :turn_end), []).instructions == []
+  end
+
   test "a tool's schema refuses arguments it does not declare" do
     [tool] = Greeter.__agent_tools__()
 

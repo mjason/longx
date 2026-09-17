@@ -14,6 +14,7 @@ defmodule Longx.Agent.Plugs.AgentsMd do
   def init(opts), do: Keyword.get(opts, :max_bytes, 32 * 1024)
 
   @impl true
+  def call(%Step{phase: phase} = step, _max) when phase != :request, do: step
   def call(%Step{cwd: nil} = step, _max), do: step
 
   def call(%Step{cwd: cwd} = step, max) do

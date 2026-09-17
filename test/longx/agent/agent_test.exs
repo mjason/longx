@@ -108,7 +108,46 @@ defmodule Longx.AgentTest do
   defp await_turn_end(timeout \\ 5_000), do: await("turn/completed", timeout)["turn"]
 
   defp exec_call(command),
-    do: ResponsesFixture.function_call("exec", nil, %{"command" => command})
+    do: ResponsesFixture.function_call("exec_command", nil, %{"cmd" => command})
+
+  # a grammar-constrained (custom) tool call, as OpenAI's Responses API streams it
+  defp custom_call(name, input) do
+    call_id = "call_" <> Integer.to_string(System.unique_integer([:positive]))
+    item_id = "ctc_" <> Integer.to_string(System.unique_integer([:positive]))
+    resp = %{id: "resp_x", object: "response", created_at: 1, model: "fake-model", output: []}
+
+    done = %{
+      id: item_id,
+      type: "custom_tool_call",
+      call_id: call_id,
+      name: name,
+      input: input,
+      status: "completed"
+    }
+
+    [
+      %{type: "response.created", response: Map.put(resp, :status, "in_progress")},
+      %{
+        type: "response.output_item.added",
+        output_index: 0,
+        item: %{done | input: "", status: "in_progress"}
+      },
+      %{type: "response.output_item.done", output_index: 0, item: done},
+      %{
+        type: "response.completed",
+        response:
+          Map.merge(resp, %{
+            status: "completed",
+            output: [done],
+            usage: %{input_tokens: 3, output_tokens: 2, total_tokens: 5}
+          })
+      }
+    ]
+    |> Enum.with_index()
+    |> Enum.map(fn {event, seq} ->
+      "event: #{event.type}\ndata: #{Jason.encode!(Map.put(event, :sequence_number, seq))}\n\n"
+    end)
+  end
 
   ## tests
 
@@ -140,7 +179,9 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "You are"
 
     assert Enum.map(body["tools"], & &1["name"]) |> Enum.sort() ==
-             ~w(edit_file exec read_file write_file)
+             ~w(apply_patch exec_command view_image)
+
+    refute Map.has_key?(body, "x-longx-custom-tools")
 
     assert [%{"role" => "user", "content" => [%{"type" => "input_text", "text" => "hi"}]}] =
              body["input"]
@@ -194,7 +235,7 @@ defmodule Longx.AgentTest do
 
     assert [
              %{"role" => "user"},
-             %{"type" => "function_call", "name" => "exec", "call_id" => call_id},
+             %{"type" => "function_call", "name" => "exec_command", "call_id" => call_id},
              %{"type" => "function_call_output", "call_id" => call_id, "output" => output}
            ] = second["input"]
 
@@ -202,6 +243,44 @@ defmodule Longx.AgentTest do
 
     kinds = Transcript.items!(id) |> Enum.map(& &1.kind)
     assert kinds == [:user_message, :function_call, :function_call_output, :agent_message]
+  end
+
+  test "a custom tool call (OpenAI's freeform apply_patch) is applied and answered in kind", %{
+    bypass: bypass,
+    thread_id: id,
+    dir: dir
+  } do
+    File.write!(Path.join(dir, "n.txt"), "old\n")
+    patch = "*** Begin Patch\n*** Update File: n.txt\n@@\n-old\n+new\n*** End Patch\n"
+
+    script!(bypass, [
+      custom_call("apply_patch", patch),
+      ResponsesFixture.assistant_message("patched")
+    ])
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "patch it")
+
+    assert %{
+             "item" => %{"type" => "fileChange", "id" => fc, "changes" => [%{"kind" => "update"}]}
+           } =
+             await_item_started("fileChange")
+
+    assert %{"item" => %{"id" => ^fc, "status" => "completed", "changes" => [%{"diff" => diff}]}} =
+             await_item_completed(fc)
+
+    assert diff =~ "-old\n+new"
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+    assert File.read!(Path.join(dir, "n.txt")) == "new\n"
+
+    assert_receive {:request, _first}
+    assert_receive {:request, second}
+
+    assert [
+             _,
+             %{"type" => "custom_tool_call", "name" => "apply_patch"},
+             %{"type" => "custom_tool_call_output", "output" => "Done!" <> _}
+           ] =
+             second["input"]
   end
 
   test "a message during a turn steers it: the model sees it at the next step", %{
@@ -328,6 +407,138 @@ defmodule Longx.AgentTest do
     assert message =~ "nope"
   end
 
+  defmodule TestsAfterEdit do
+    use Longx.Agent.Plug
+
+    # a step that called nothing gets a command of the plug's own, once per turn
+    def call(%Step{phase: :response, calls: []} = step, _) do
+      checked? =
+        Enum.any?(
+          step.transcript,
+          &(&1["type"] == "function_call_output" and &1["output"] == "checked\n")
+        )
+
+      if checked?,
+        do: step,
+        else: Step.enqueue_call(step, "exec_command", %{"cmd" => "echo checked"})
+    end
+
+    def call(step, _), do: step
+  end
+
+  defmodule OneMoreStep do
+    use Longx.Agent.Plug
+
+    # continues the turn once: the second time the marker is in the context
+    def call(%Step{phase: :turn_end} = step, _) do
+      if Enum.any?(step.transcript, &(&1["role"] == "user" and text_of(&1) == "one more")),
+        do: step,
+        else: Step.continue(step, "one more")
+    end
+
+    def call(step, _), do: step
+
+    defp text_of(%{"content" => [%{"text" => t} | _]}), do: t
+    defp text_of(_), do: nil
+  end
+
+  defmodule EffectsPipeline do
+    use Longx.Agent.Pipeline
+    plug Longx.Agent.Plugs.Shell
+    plug TestsAfterEdit
+    plug OneMoreStep
+    plug Longx.Agent.Plugs.Request
+  end
+
+  test "response and turn-end plugs steer the loop: a synthetic call, then a continuation", %{
+    bypass: bypass,
+    dir: dir
+  } do
+    id = "effects-#{System.unique_integer([:positive])}"
+    :ok = ThreadState.subscribe(id)
+
+    on_exit(fn ->
+      Agent.stop(id)
+      ThreadState.stop(id)
+      ThreadState.Store.delete(id)
+    end)
+
+    {:ok, _} = Agent.ensure(thread_id: id, cwd: dir, pipeline: EffectsPipeline)
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("first answer"),
+      ResponsesFixture.assistant_message("after the check"),
+      ResponsesFixture.assistant_message("after one more"),
+      ResponsesFixture.assistant_message("after the second check")
+    ])
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "go")
+
+    # step 1: the model called nothing → the response plug's command runs
+    assert %{"item" => %{"type" => "commandExecution", "command" => "echo checked", "id" => cmd}} =
+             await_item_started("commandExecution")
+
+    assert %{"item" => %{"id" => ^cmd, "status" => "completed"}} = await_item_completed(cmd)
+    # the turn would end → the turn-end plug continues it with its own message
+    assert %{"turnId" => ^turn_id} = await_user_message("one more")
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+
+    requests = collect_requests([])
+    assert length(requests) == 3
+    third = Enum.at(requests, 2)
+
+    assert [
+             %{"role" => "user"},
+             %{"role" => "assistant"},
+             %{"type" => "function_call", "name" => "exec_command", "call_id" => "longx_" <> _},
+             %{"type" => "function_call_output", "output" => "checked\n"},
+             %{"role" => "assistant"},
+             %{"role" => "user", "content" => [%{"text" => "one more"}]}
+           ] = third["input"]
+  end
+
+  defmodule Forever do
+    use Longx.Agent.Plug
+
+    def call(%Step{phase: :response} = step, _),
+      do: Step.enqueue_call(step, "exec_command", %{"cmd" => "true"})
+
+    def call(step, _), do: step
+  end
+
+  defmodule ForeverPipeline do
+    use Longx.Agent.Pipeline
+    plug Longx.Agent.Plugs.Shell
+    plug Forever
+    plug Longx.Agent.Plugs.Request
+  end
+
+  test "a loop that never ends is cut at the step limit", %{bypass: bypass, dir: dir} do
+    previous = Application.get_env(:longx, Longx.Agent, [])
+    Application.put_env(:longx, Longx.Agent, Keyword.put(previous, :max_steps, 3))
+    on_exit(fn -> Application.put_env(:longx, Longx.Agent, previous) end)
+
+    id = "forever-#{System.unique_integer([:positive])}"
+    :ok = ThreadState.subscribe(id)
+
+    on_exit(fn ->
+      Agent.stop(id)
+      ThreadState.stop(id)
+      ThreadState.Store.delete(id)
+    end)
+
+    {:ok, _} = Agent.ensure(thread_id: id, cwd: dir, pipeline: ForeverPipeline)
+    script!(bypass, List.duplicate(ResponsesFixture.assistant_message("again"), 10))
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "go")
+
+    assert %{"id" => ^turn_id, "status" => "failed", "error" => %{"message" => message}} =
+             await_turn_end(15_000)
+
+    assert message =~ "3 steps"
+    assert length(collect_requests([])) == 3
+  end
+
   defmodule Budget do
     use Longx.Agent.Plug
     def call(step, _), do: Step.halt(step, "budget spent")
@@ -381,6 +592,14 @@ defmodule Longx.AgentTest do
       {:codex, _, "item/started", %{"item" => %{"type" => ^type}} = params} -> params
     after
       5_000 -> flunk("no item/started #{type}")
+    end
+  end
+
+  defp collect_requests(acc) do
+    receive do
+      {:request, body} -> collect_requests([body | acc])
+    after
+      0 -> Enum.reverse(acc)
     end
   end
 

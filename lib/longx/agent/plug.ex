@@ -23,8 +23,10 @@ defmodule Longx.Agent.Plug do
   Every `tool` becomes a `Longx.Agent.Tool` whose function is the module
   function of the same name (arity 2: decoded arguments, a
   `Longx.Agent.Context`). The default `call/2` mounts the declared
-  instructions and tools; override it to compute them (and call `mount/2`
-  for the declared ones). `init/1` defaults to the options themselves.
+  instructions and tools at the `:request` phase and leaves the other
+  phases alone; override it to compute them (and call `mount/2` for the
+  declared ones) or to act at `:response` / `:turn_end` — pattern-match on
+  `step.phase`. `init/1` defaults to the options themselves.
   """
 
   alias Longx.Agent.Step
@@ -47,7 +49,10 @@ defmodule Longx.Agent.Plug do
       def init(opts), do: opts
 
       @impl Longx.Agent.Plug
-      def call(step, _opts), do: Longx.Agent.Plug.mount(step, __MODULE__)
+      def call(%Longx.Agent.Step{phase: :request} = step, _opts),
+        do: Longx.Agent.Plug.mount(step, __MODULE__)
+
+      def call(step, _opts), do: step
 
       defoverridable init: 1, call: 2
     end

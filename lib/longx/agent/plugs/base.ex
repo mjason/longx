@@ -15,5 +15,6 @@ defmodule Longx.Agent.Plugs.Base do
   def prompt, do: @prompt
 
   @impl true
-  def call(%Step{} = step, _opts), do: Step.instructions(step, @prompt)
+  def call(%Step{phase: :request} = step, _opts), do: Step.instructions(step, @prompt)
+  def call(step, _opts), do: step
 end

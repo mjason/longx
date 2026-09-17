@@ -23,7 +23,8 @@ defmodule Longx.Agent.Tool do
           schema: map,
           fun: {module, atom} | (map, Context.t() -> outcome),
           show: show,
-          timeout: pos_integer
+          timeout: pos_integer,
+          freeform: %{syntax: String.t(), definition: String.t(), param: String.t()} | nil
         }
 
   @enforce_keys [:name, :description, :fun]
@@ -33,7 +34,10 @@ defmodule Longx.Agent.Tool do
             schema: %{"type" => "object", "properties" => %{}, "additionalProperties" => false},
             fun: nil,
             show: :tool,
-            timeout: 60_000
+            timeout: 60_000,
+            # a grammar-constrained *custom* tool for providers that run them
+            # (OpenAI): the model sends raw text, which lands in `param`
+            freeform: nil
 
   @type param :: {atom, param_type, String.t() | nil, keyword}
   @type param_type ::
@@ -49,7 +53,8 @@ defmodule Longx.Agent.Tool do
       schema: schema(params),
       fun: {module, name},
       show: Keyword.get(opts, :show, :tool),
-      timeout: Keyword.get(opts, :timeout, 60_000)
+      timeout: Keyword.get(opts, :timeout, 60_000),
+      freeform: Keyword.get(opts, :freeform)
     }
   end
 
@@ -117,7 +122,11 @@ defmodule Longx.Agent.Tool do
     end
   end
 
-  @doc "The tool as a Responses API `function` tool."
+  @doc """
+  The tool as a Responses API tool: a `function` (every provider), or —
+  for a provider that runs grammar-constrained custom tools and a tool that
+  declares a `freeform` grammar — a `custom` tool (`to_custom/1`).
+  """
   @spec to_responses(t) :: map
   def to_responses(%__MODULE__{} = tool) do
     %{
@@ -126,6 +135,18 @@ defmodule Longx.Agent.Tool do
       "description" => tool.description,
       "parameters" => tool.schema,
       "strict" => false
+    }
+  end
+
+  @spec to_custom(t) :: map | nil
+  def to_custom(%__MODULE__{freeform: nil}), do: nil
+
+  def to_custom(%__MODULE__{freeform: %{syntax: syntax, definition: definition}} = tool) do
+    %{
+      "type" => "custom",
+      "name" => tool.name,
+      "description" => tool.description,
+      "format" => %{"type" => "grammar", "syntax" => syntax, "definition" => definition}
     }
   end
 end

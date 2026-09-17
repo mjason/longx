@@ -7,6 +7,8 @@ defmodule Longx.Agent.Plugs.Environment do
   use Longx.Agent.Plug
 
   @impl true
+  def call(%Step{phase: phase} = step, _opts) when phase != :request, do: step
+
   def call(%Step{cwd: cwd} = step, _opts) do
     {family, name} = :os.type()
 

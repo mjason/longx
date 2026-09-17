@@ -111,6 +111,51 @@ defmodule Longx.Agent.ModelTest do
     assert message =~ "400"
   end
 
+  test "a grammar tool goes out as a custom tool to OpenAI and as a function elsewhere", %{
+    bypass: bypass,
+    model: model
+  } do
+    custom = %{
+      "type" => "custom",
+      "name" => "apply_patch",
+      "description" => "d",
+      "format" => %{"type" => "grammar", "syntax" => "lark", "definition" => "start: x"}
+    }
+
+    function = %{
+      "type" => "function",
+      "name" => "apply_patch",
+      "description" => "d",
+      "parameters" => %{"type" => "object"}
+    }
+
+    request = Map.merge(@request, %{"tools" => [function], "x-longx-custom-tools" => [custom]})
+
+    Bypass.expect_once(bypass, "POST", "/v1/responses", fn conn ->
+      body = body!(conn)
+      assert [%{"type" => "function"}] = body["tools"]
+      refute Map.has_key?(body, "x-longx-custom-tools")
+      sse(conn, ResponsesFixture.assistant_message("ok"))
+    end)
+
+    assert :ok = Model.stream(request, self(), make_ref())
+
+    provider = Ash.load!(model, :provider).provider
+    AI.update_provider!(provider, %{kind: :openai})
+
+    Bypass.expect_once(bypass, "POST", "/v1/responses", fn conn ->
+      body = body!(conn)
+
+      assert [%{"type" => "custom", "name" => "apply_patch", "format" => %{"syntax" => "lark"}}] =
+               body["tools"]
+
+      refute Map.has_key?(body, "x-longx-custom-tools")
+      sse(conn, ResponsesFixture.assistant_message("ok"))
+    end)
+
+    assert :ok = Model.stream(request, self(), make_ref())
+  end
+
   test "an unknown model fails without a request" do
     ref = make_ref()
     assert :ok = Model.stream(%{@request | "model" => "nope"}, self(), ref)

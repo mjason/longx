@@ -61,8 +61,20 @@ defmodule Longx.Agent do
               # task ref → %{call, item_id, tool, started, output, timer}
               tasks: %{},
               steers: [],
-              usage_total: %{}
+              usage_total: %{},
+              usage_last: nil,
+              context_window: nil,
+              # continuations a turn-end plug asked for in this turn (capped)
+              continues: 0,
+              # model steps in this turn (capped)
+              steps: 0
   end
+
+  # a turn-end plug may continue a turn this many times before it ends anyway
+  @max_continues 20
+  # and no turn runs more model steps than this (`config :longx, Longx.Agent,
+  # max_steps:`): a response plug re-adding a call for ever, a model looping
+  @default_max_steps 500
 
   ## API
 
@@ -182,7 +194,9 @@ defmodule Longx.Agent do
           phase: :step,
           model: Keyword.get(opts, :model, state.model),
           effort: Keyword.get(opts, :effort, state.effort),
-          usage_total: %{}
+          usage_total: %{},
+          continues: 0,
+          steps: 0
       }
       |> tap(&emit(&1, "turn/started", %{"turn" => %{"id" => turn_id, "status" => "inProgress"}}))
       |> append_user(text, Keyword.get(opts, :images, []))
@@ -229,21 +243,21 @@ defmodule Longx.Agent do
   ## The loop
 
   @impl true
-  def handle_continue(:step, %State{} = state) do
-    state = fold_steers(state)
+  def handle_continue(:step, %State{steps: steps} = state) do
+    if steps >= max_steps() do
+      {:noreply, end_turn(state, "failed", "the turn ran #{steps} steps; stopped (max_steps)")}
+    else
+      state = fold_steers(%{state | steps: steps + 1})
+      run_request_phase(state)
+    end
+  end
 
-    step =
-      Step.new(
-        thread_id: state.thread_id,
-        turn_id: state.turn_id,
-        project_id: state.project_id,
-        cwd: state.cwd,
-        model: state.model,
-        effort: state.effort,
-        transcript: state.transcript
-      )
+  defp max_steps,
+    do:
+      :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:max_steps, @default_max_steps)
 
-    case run_pipeline(state.pipeline, step) do
+  defp run_request_phase(%State{} = state) do
+    case run_pipeline(state.pipeline, build_step(state, :request)) do
       {:ok, %Step{halted: true, reason: reason}} ->
         {:noreply, end_turn(state, "failed", "pipeline halted: #{describe(reason)}")}
 
@@ -272,10 +286,83 @@ defmodule Longx.Agent do
     end
   end
 
+  defp build_step(%State{} = state, phase, extra \\ []) do
+    Step.new(
+      [
+        thread_id: state.thread_id,
+        turn_id: state.turn_id,
+        project_id: state.project_id,
+        cwd: state.cwd,
+        model: state.model,
+        effort: state.effort,
+        transcript: state.transcript,
+        phase: phase,
+        usage: %{last: state.usage_last, total: state.usage_total},
+        context_window: state.context_window
+      ] ++ extra
+    )
+  end
+
   defp run_pipeline(pipeline, step) do
     {:ok, pipeline.run(step)}
   rescue
     e -> {:error, "pipeline failed: " <> Exception.message(e)}
+  end
+
+  # the model answered: the response phase may add calls of its own or halt
+  defp response_phase(%State{} = state, calls) do
+    step = build_step(state, :response, calls: Enum.map(calls, &call_summary/1))
+
+    case run_pipeline(state.pipeline, step) do
+      {:ok, %Step{halted: true, reason: reason}} ->
+        {:halt, "pipeline halted: #{describe(reason)}"}
+
+      {:ok, %Step{effects: effects}} ->
+        extra =
+          for {:call, name, args} <- effects do
+            %{
+              "type" => "function_call",
+              "call_id" => new_id("longx"),
+              "name" => name,
+              "arguments" => Jason.encode!(args)
+            }
+          end
+
+        {:ok, calls ++ extra}
+
+      {:error, message} ->
+        {:halt, message}
+    end
+  end
+
+  # nothing left to do: the turn-end phase may continue instead
+  defp turn_end_phase(%State{continues: continues} = state) when continues >= @max_continues,
+    do: end_turn(state, "completed", nil)
+
+  defp turn_end_phase(%State{} = state) do
+    case run_pipeline(state.pipeline, build_step(state, :turn_end)) do
+      {:ok, %Step{halted: true, reason: reason}} ->
+        end_turn(state, "failed", "pipeline halted: #{describe(reason)}")
+
+      {:ok, %Step{effects: effects}} ->
+        case Enum.find(effects, &match?({:continue, _}, &1)) do
+          {:continue, text} ->
+            state = %{state | continues: state.continues + 1, phase: :step, model_task: nil}
+            state = append_user(state, text, [])
+            Kernel.send(self(), :next_step)
+            state
+
+          nil ->
+            end_turn(state, "completed", nil)
+        end
+
+      {:error, message} ->
+        end_turn(state, "failed", message)
+    end
+  end
+
+  defp call_summary(%{"call_id" => call_id, "name" => name} = call) do
+    %{id: call["id"], call_id: call_id, name: name, arguments: arguments_of(call, nil)}
   end
 
   # the steers become user messages in the context, after the tool outputs
@@ -457,23 +544,27 @@ defmodule Longx.Agent do
     {:noreply, state |> append(:reasoning, item, ui) |> drop_item(id)}
   end
 
-  defp model_event({:item_done, %{"type" => "function_call"} = item}, state),
-    do: {:noreply, %{state | calls: state.calls ++ [item]}}
+  defp model_event({:item_done, %{"type" => type} = item}, state)
+       when type in ["function_call", "custom_tool_call"],
+       do: {:noreply, %{state | calls: state.calls ++ [item]}}
 
   defp model_event({:item_done, _item}, state), do: {:noreply, state}
 
   defp model_event({:completed, response, %{context_window: window}}, state) do
     state = state |> close_open_items() |> record_usage(response["usage"], window)
 
-    case state.calls do
-      [] when state.steers == [] ->
-        {:noreply, end_turn(state, "completed", nil)}
+    case response_phase(state, state.calls) do
+      {:halt, message} ->
+        {:noreply, end_turn(state, "failed", message)}
 
-      [] ->
+      {:ok, []} when state.steers == [] ->
+        {:noreply, turn_end_phase(%{state | model_task: nil})}
+
+      {:ok, []} ->
         # the model stopped before the steer reached it: one more step
         {:noreply, %{state | phase: :step, model_task: nil}, {:continue, :step}}
 
-      calls ->
+      {:ok, calls} ->
         {:noreply, dispatch(%{state | phase: :dispatching, model_task: nil, calls: []}, calls)}
     end
   end
@@ -531,7 +622,7 @@ defmodule Longx.Agent do
       "tokenUsage" => %{"modelContextWindow" => window, "last" => last, "total" => total}
     })
 
-    %{state | usage_total: total}
+    %{state | usage_total: total, usage_last: last, context_window: window}
   end
 
   ## Tool calls
@@ -542,7 +633,7 @@ defmodule Longx.Agent do
   defp start_call(state, %{"call_id" => call_id, "name" => name} = call, tools) do
     tool = Map.get(tools, name)
     item_id = new_id("item")
-    arguments = decode_arguments(call["arguments"])
+    arguments = arguments_of(call, tool)
     ui = started_ui(tool, name, item_id, arguments, state)
 
     emit(state, "item/started", %{"item" => ui, "turnId" => state.turn_id})
@@ -594,6 +685,17 @@ defmodule Longx.Agent do
     e -> {:error, "the tool failed: " <> Exception.message(e)}
   end
 
+  # a custom (freeform) tool call carries raw text: it becomes the one parameter
+  defp arguments_of(%{"type" => "custom_tool_call", "input" => input}, %Tool{
+         freeform: %{param: param}
+       }),
+       do: %{param => input}
+
+  defp arguments_of(%{"type" => "custom_tool_call", "input" => input}, _tool),
+    do: %{"input" => input}
+
+  defp arguments_of(call, _tool), do: decode_arguments(call["arguments"])
+
   defp decode_arguments(nil), do: %{}
   defp decode_arguments(map) when is_map(map), do: map
 
@@ -644,14 +746,31 @@ defmodule Longx.Agent do
         )
       )
 
-    input = %{"type" => "function_call_output", "call_id" => call["call_id"], "output" => text}
+    input = %{"type" => output_type(call), "call_id" => call["call_id"], "output" => text}
     state = %{append(state, :function_call_output, input, ui) | tasks: tasks}
+    # an image a tool attached (view_image) follows the result as a user message
+    state = attach_image(state, extra["image"])
 
     case {state.phase, map_size(tasks)} do
       {:dispatching, 0} -> continue_step(state)
       _ -> state
     end
   end
+
+  defp output_type(%{"type" => "custom_tool_call"}), do: "custom_tool_call_output"
+  defp output_type(_call), do: "function_call_output"
+
+  defp attach_image(state, url) when is_binary(url) do
+    input = %{
+      "type" => "message",
+      "role" => "user",
+      "content" => [%{"type" => "input_image", "image_url" => url, "detail" => "auto"}]
+    }
+
+    append(state, :user_message, input, nil)
+  end
+
+  defp attach_image(state, _none), do: state
 
   # every tool answered: the next step (GenServer.call has no continue from here)
   defp continue_step(state) do
@@ -753,7 +872,7 @@ defmodule Longx.Agent do
       "id" => id,
       "type" => "commandExecution",
       "turnId" => state.turn_id,
-      "command" => arg(args, "command"),
+      "command" => arg(args, "cmd"),
       "cwd" => state.cwd,
       "status" => "inProgress",
       "aggregatedOutput" => ""
@@ -835,6 +954,27 @@ defmodule Longx.Agent do
   defp delta_method(:command), do: "item/commandExecution/outputDelta"
   defp delta_method(:file_change), do: "item/fileChange/outputDelta"
   defp delta_method(_), do: "item/dynamicToolCall/outputDelta"
+
+  # what a file change will touch, known before it runs: the patch's headers
+  # (apply_patch) or the one path a tool names
+  defp changes_from(%{"input" => patch}, cwd) when is_binary(patch) do
+    case Longx.Agent.Patch.parse(patch) do
+      {:ok, hunks} ->
+        Enum.map(hunks, fn
+          {:add, path, _} ->
+            %{"path" => Path.expand(path, cwd), "kind" => "add"}
+
+          {:delete, path} ->
+            %{"path" => Path.expand(path, cwd), "kind" => "delete"}
+
+          {:update, path, move, _} ->
+            %{"path" => Path.expand(move || path, cwd), "kind" => "update"}
+        end)
+
+      {:error, _} ->
+        []
+    end
+  end
 
   defp changes_from(%{"path" => path}, cwd) when is_binary(path),
     do: [%{"path" => Path.expand(path, cwd), "kind" => "update"}]

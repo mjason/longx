@@ -11,11 +11,26 @@ defmodule Longx.Agent.Step do
   `transcript` is the conversation so far as Responses API input items;
   `model` / `effort` are what this step calls (the person's choice unless a
   plug or a tool changed them); `request` is what the last plug built.
+
+  The same pipeline runs at three **phases** of the loop, `phase` says
+  which: `:request` (before the model — prompt, tools, the request),
+  `:response` (the model answered; `calls` are the tool calls it made,
+  none yet run) and `:turn_end` (nothing left to do; the turn is about to
+  end). What a plug wants the kernel to do is an **effect** on the step,
+  data the kernel interprets: `enqueue_call/3` (run a tool call of the
+  plug's own, at `:response`), `continue/2` (another step with this text
+  instead of ending, at `:turn_end`), `compact/2` (fold the context, at
+  `:request`), and `halt/2` (end the turn). `usage` (`last` / `total`
+  token counts so far) and `context_window` let a plug judge the context.
   """
 
   alias Longx.Agent.Tool
 
   @type skill :: %{name: String.t(), description: String.t(), body: String.t() | nil}
+  @type phase :: :request | :response | :turn_end
+  @type call :: %{id: String.t() | nil, call_id: String.t(), name: String.t(), arguments: map}
+  @type effect ::
+          {:call, String.t(), map} | {:continue, String.t()} | {:compact, keyword}
 
   @type t :: %__MODULE__{
           thread_id: String.t() | nil,
@@ -29,6 +44,11 @@ defmodule Longx.Agent.Step do
           skills: %{String.t() => skill},
           tools: %{String.t() => Tool.t()},
           request: map | nil,
+          phase: phase,
+          calls: [call],
+          effects: [effect],
+          usage: %{last: map | nil, total: map},
+          context_window: pos_integer | nil,
           halted: boolean,
           reason: term,
           assigns: map
@@ -45,6 +65,11 @@ defmodule Longx.Agent.Step do
             skills: %{},
             tools: %{},
             request: nil,
+            phase: :request,
+            calls: [],
+            effects: [],
+            usage: %{last: nil, total: %{}},
+            context_window: nil,
             halted: false,
             reason: nil,
             assigns: %{}
@@ -97,4 +122,25 @@ defmodule Longx.Agent.Step do
   @spec assign(t, atom, term) :: t
   def assign(%__MODULE__{assigns: assigns} = step, key, value) when is_atom(key),
     do: %{step | assigns: Map.put(assigns, key, value)}
+
+  ## Effects
+
+  @doc "Asks the kernel to run a tool call of the plug's own (with the model's, at `:response`)."
+  @spec enqueue_call(t, String.t(), map) :: t
+  def enqueue_call(%__MODULE__{} = step, name, arguments)
+      when is_binary(name) and is_map(arguments),
+      do: effect(step, {:call, name, arguments})
+
+  @doc "Asks the kernel for another step with this text instead of ending the turn (at `:turn_end`)."
+  @spec continue(t, String.t()) :: t
+  def continue(%__MODULE__{} = step, text) when is_binary(text),
+    do: effect(step, {:continue, text})
+
+  @doc "Asks the kernel to fold the context before the model is called (at `:request`)."
+  @spec compact(t, keyword) :: t
+  def compact(%__MODULE__{} = step, opts \\ []) when is_list(opts),
+    do: effect(step, {:compact, opts})
+
+  defp effect(%__MODULE__{effects: effects} = step, effect),
+    do: %{step | effects: effects ++ [effect]}
 end
