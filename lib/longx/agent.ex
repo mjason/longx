@@ -1093,7 +1093,8 @@ defmodule Longx.Agent do
         {:noreply, state}
 
       {ask, rest} ->
-        settle_ask(state, id, ask, {:error, :timeout}) && {:noreply, %{state | asks: rest}}
+        settle_ask(state, id, ask, {:error, :timeout})
+        {:noreply, %{state | asks: rest}}
     end
   end
 

@@ -10,9 +10,11 @@ defmodule LongxWeb.Origins do
   @key {__MODULE__, :last}
 
   @spec remember(URI.t() | nil) :: :ok
-  def remember(%URI{scheme: scheme, host: host} = uri)
+  def remember(%URI{scheme: scheme, host: host, port: port})
       when is_binary(scheme) and is_binary(host) do
-    :persistent_term.put(@key, URI.to_string(%URI{scheme: scheme, host: host, port: uri.port}))
+    default = if scheme == "https", do: 443, else: 80
+    suffix = if is_integer(port) and port != default, do: ":#{port}", else: ""
+    :persistent_term.put(@key, "#{scheme}://#{host}#{suffix}")
   end
 
   def remember(_uri), do: :ok
