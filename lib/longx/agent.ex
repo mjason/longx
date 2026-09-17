@@ -82,7 +82,19 @@ defmodule Longx.Agent do
               # a tool (new_context_window) or the person (/compact) asked for one
               compact_requested: false,
               # images tools attached in this step (view_image), added after its outputs
-              pending_images: []
+              pending_images: [],
+              # this agent's place in a team: who spawned it, what it is called,
+              # who it spawned (child thread id → %{name, pid, ref})
+              parent: nil,
+              name: nil,
+              children: %{},
+              # `step.state`: kept across the phases and steps of one turn
+              turn_state: %{},
+              # how this agent's children are made (Longx.Projects gives them rows)
+              spawner: nil,
+              # leaves after this long idle (nil never); comes back on demand
+              idle_ms: nil,
+              last_active: nil
   end
 
   # a turn-end plug may continue a turn this many times before it ends anyway
@@ -101,12 +113,43 @@ defmodule Longx.Agent do
   """
   @spec ensure(keyword) :: {:ok, pid} | {:error, term}
   def ensure(opts) do
+    Longx.Agent.Specs.put(Keyword.fetch!(opts, :thread_id), opts)
+
     case DynamicSupervisor.start_child(@supervisor, {__MODULE__, opts}) do
       {:ok, pid} -> {:ok, pid}
       {:error, {:already_started, pid}} -> {:ok, pid}
       other -> other
     end
   end
+
+  @doc "The agent, started again from what it was started with if it left (idle, crashed)."
+  @spec ensure_alive(String.t()) :: {:ok, pid} | {:error, :unknown}
+  def ensure_alive(thread_id) do
+    case {whereis(thread_id), Longx.Agent.Specs.get(thread_id)} do
+      {pid, _} when is_pid(pid) -> {:ok, pid}
+      {nil, nil} -> {:error, :unknown}
+      {nil, opts} -> ensure(opts)
+    end
+  end
+
+  @doc """
+  Starts a child agent named `name` on `task` — another process, the same
+  loop — and remembers it under the parent; the child's final answer comes
+  back into the parent's mailbox (`send/3` with `from:`) when its turn
+  ends. Options: `model:`, `effort:`, `cwd:`, `pipeline:` (the parent's by
+  default). `{:ok, child_thread_id}`.
+  """
+  @spec spawn(String.t(), String.t(), String.t(), keyword) :: {:ok, String.t()} | {:error, term}
+  def spawn(parent_id, name, task, opts \\ []),
+    do: GenServer.call(via(parent_id), {:spawn, name, task, opts})
+
+  @doc "Who spawned the agent, its name, its phase and its children."
+  @spec info(String.t()) :: map
+  def info(thread_id), do: GenServer.call(via(thread_id), :info)
+
+  @doc "The agent's live children."
+  @spec children(String.t()) :: [%{id: String.t(), name: String.t()}]
+  def children(thread_id), do: GenServer.call(via(thread_id), :children)
 
   @spec whereis(String.t()) :: pid | nil
   def whereis(thread_id), do: GenServer.whereis(via(thread_id))
@@ -126,7 +169,12 @@ defmodule Longx.Agent do
   urls. Answers `{:ok, %{turn_id, steered}}`.
   """
   @spec send(String.t(), String.t(), keyword) :: {:ok, %{turn_id: String.t(), steered: boolean}}
-  def send(thread_id, text, opts \\ []), do: GenServer.call(via(thread_id), {:send, text, opts})
+  def send(thread_id, text, opts \\ []) do
+    # an agent that left comes back for a message (from the person or another agent)
+    with {:ok, _pid} <- ensure_alive(thread_id) do
+      GenServer.call(via(thread_id), {:send, text, opts})
+    end
+  end
 
   @doc "Stops the running turn (its items end as they are)."
   @spec interrupt(String.t()) :: :ok | {:error, :not_running}
@@ -155,7 +203,7 @@ defmodule Longx.Agent do
     %{
       id: {__MODULE__, Keyword.fetch!(opts, :thread_id)},
       start: {__MODULE__, :start_link, [opts]},
-      restart: :transient
+      restart: :temporary
     }
   end
 
@@ -175,6 +223,11 @@ defmodule Longx.Agent do
       model: Keyword.get(opts, :model),
       effort: Keyword.get(opts, :effort),
       pipeline: Keyword.get(opts, :pipeline) || configured_pipeline(),
+      parent: Keyword.get(opts, :parent),
+      name: Keyword.get(opts, :name),
+      spawner: Keyword.get(opts, :spawner),
+      idle_ms: Keyword.get(opts, :idle_ms, configured_idle_ms()),
+      last_active: System.monotonic_time(:millisecond),
       trust: Keyword.get(opts, :trust, fn -> false end),
       web_search: Keyword.get(opts, :web_search, true),
       seq: items |> Enum.map(& &1.seq) |> Enum.max(fn -> 0 end),
@@ -183,8 +236,27 @@ defmodule Longx.Agent do
 
     {:ok, _} = ThreadState.ensure(thread_id)
     replay(state, items)
-    {:ok, state}
+    # a child goes when its parent goes
+    with parent when is_binary(parent) <- state.parent, pid when is_pid(pid) <- whereis(parent) do
+      Process.monitor(pid)
+    end
+
+    {:ok, schedule_idle(state)}
   end
+
+  @default_idle_ms 30 * 60_000
+
+  defp configured_idle_ms,
+    do: :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:idle_ms, @default_idle_ms)
+
+  defp schedule_idle(%State{idle_ms: nil} = state), do: state
+
+  defp schedule_idle(%State{idle_ms: ms} = state) do
+    Process.send_after(self(), :idle_check, ms)
+    state
+  end
+
+  defp touch(state), do: %{state | last_active: System.monotonic_time(:millisecond)}
 
   # nil = the loader (the shipped, the person's and the project's descriptions)
   defp configured_pipeline,
@@ -210,33 +282,32 @@ defmodule Longx.Agent do
 
   @impl true
   def handle_call({:send, text, opts}, _from, %State{phase: :idle} = state) do
-    turn_id = Keyword.get(opts, :turn_id) || new_id("turn")
-
-    state =
-      %State{
-        state
-        | turn_id: turn_id,
-          phase: :step,
-          model: Keyword.get(opts, :model, state.model),
-          effort: Keyword.get(opts, :effort, state.effort),
-          usage_total: %{},
-          continues: 0,
-          steps: 0
-      }
-      |> tap(&emit(&1, "turn/started", %{"turn" => %{"id" => turn_id, "status" => "inProgress"}}))
-      |> append_user(text, Keyword.get(opts, :images, []))
-
+    {turn_id, state} = start_turn(state, text, opts)
     {:reply, {:ok, %{turn_id: turn_id, steered: false}}, state, {:continue, :step}}
   end
 
   def handle_call({:send, text, opts}, _from, %State{turn_id: turn_id} = state) do
-    # into the model's context at the next step, and shown then (until
-    # then it is the client's queue, where it can still be taken back)
-    images = Keyword.get(opts, :images, [])
-    ui = user_ui(new_id("item"), turn_id, text, images)
-    state = %{state | steers: state.steers ++ [{user_input(text, images), ui}]}
-    {:reply, {:ok, %{turn_id: turn_id, steered: true}}, state}
+    {:reply, {:ok, %{turn_id: turn_id, steered: true}}, queue_steer(state, text, opts)}
   end
+
+  def handle_call({:spawn, name, task, opts}, _from, state) do
+    case spawn_child(state, name, task, opts) do
+      {:ok, child_id, state} -> {:reply, {:ok, child_id}, state}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call(:info, _from, state) do
+    {:reply,
+     %{
+       parent: state.parent,
+       name: state.name,
+       phase: state.phase,
+       children: children_list(state)
+     }, state}
+  end
+
+  def handle_call(:children, _from, state), do: {:reply, children_list(state), state}
 
   def handle_call(:interrupt, _from, %State{phase: :idle} = state),
     do: {:reply, {:error, :not_running}, state}
@@ -271,6 +342,143 @@ defmodule Longx.Agent do
   def handle_call(:status, _from, %State{turn_id: id} = state),
     do: {:reply, {:running, id}, state}
 
+  # a new turn on an idle agent: from the person, or from another agent (`from:`)
+  defp start_turn(%State{} = state, text, opts) do
+    turn_id = Keyword.get(opts, :turn_id) || new_id("turn")
+    {text, from} = attributed(text, opts)
+
+    state =
+      %{
+        touch(state)
+        | turn_id: turn_id,
+          phase: :step,
+          model: Keyword.get(opts, :model, state.model),
+          effort: Keyword.get(opts, :effort, state.effort),
+          usage_total: %{},
+          continues: 0,
+          steps: 0,
+          turn_state: %{}
+      }
+      |> tap(&emit(&1, "turn/started", %{"turn" => %{"id" => turn_id, "status" => "inProgress"}}))
+      |> append_user(text, Keyword.get(opts, :images, []), from)
+
+    {turn_id, state}
+  end
+
+  # into the model's context at the next step, and shown then (until then
+  # it is the client's queue, where it can still be taken back)
+  defp queue_steer(%State{turn_id: turn_id} = state, text, opts) do
+    images = Keyword.get(opts, :images, [])
+    {text, from} = attributed(text, opts)
+    ui = user_ui(new_id("item"), turn_id, text, images, from)
+    %{touch(state) | steers: state.steers ++ [{user_input(text, images), ui}]}
+  end
+
+  # a message from another agent is a user message that says who: the
+  # Responses API has no agent role every provider reads
+  defp attributed(text, opts) do
+    case Keyword.get(opts, :from) do
+      nil -> {text, nil}
+      from -> {"[agent #{from}] " <> text, from}
+    end
+  end
+
+  # a message arriving on its own (a child's report, its crash): a steer
+  # while a turn runs, a turn of its own when idle
+  defp deliver(%State{phase: :idle} = state, text, from) do
+    {_turn_id, state} = start_turn(state, text, from: from)
+    {:noreply, state, {:continue, :step}}
+  end
+
+  defp deliver(state, text, from), do: {:noreply, queue_steer(state, text, from: from)}
+
+  ## Children
+
+  defp spawn_child(%State{} = state, name, task, opts) do
+    spawner = Keyword.get(opts, :spawner) || state.spawner || configured_spawner()
+
+    with {:ok, child_id} <- spawner.(state, name, task, opts),
+         pid when is_pid(pid) <- whereis(child_id) || {:error, :not_started} do
+      ref = Process.monitor(pid)
+      child = %{name: name, pid: pid, ref: ref}
+      {:ok, child_id, %{state | children: Map.put(state.children, child_id, child)}}
+    end
+  end
+
+  # how a child is made when the agent was given no `spawner:`:
+  # `config :longx, Longx.Agent, spawner:`, else a bare agent
+  defp configured_spawner,
+    do:
+      :longx
+      |> Application.get_env(__MODULE__, [])
+      |> Keyword.get(:spawner, &__MODULE__.bare_spawner/4)
+
+  @doc false
+  def bare_spawner(%State{} = parent, name, task, opts) do
+    child_id = "native_" <> Ash.UUID.generate()
+
+    with {:ok, _pid} <-
+           ensure(
+             thread_id: child_id,
+             parent: parent.thread_id,
+             name: name,
+             project_id: parent.project_id,
+             cwd: Keyword.get(opts, :cwd, parent.cwd),
+             model: Keyword.get(opts, :model, parent.model),
+             effort: Keyword.get(opts, :effort, parent.effort),
+             pipeline: Keyword.get(opts, :pipeline, parent.pipeline),
+             trust: parent.trust,
+             web_search: parent.web_search,
+             spawner: parent.spawner,
+             idle_ms: parent.idle_ms
+           ),
+         {:ok, _} <- __MODULE__.send(child_id, task) do
+      {:ok, child_id}
+    end
+  end
+
+  defp children_list(%State{children: children}),
+    do: Enum.map(children, fn {id, %{name: name}} -> %{id: id, name: name} end)
+
+  # what this agent is told about being someone's child
+  defp team_instructions(%State{parent: nil}), do: []
+
+  defp team_instructions(%State{name: name}) do
+    [
+      "You are the sub-agent \"#{name}\" of another agent, working on the task it gave you. " <>
+        "Do the task; your final message is your report back to it — make it complete and " <>
+        "self-contained (facts, sources, what you changed, what is open), since it is all " <>
+        "the other agent sees."
+    ]
+  end
+
+  # the child's turn ended: its final message (or its failure) goes to the parent
+  defp report_to_parent(%State{parent: nil}, _status, _error), do: :ok
+
+  defp report_to_parent(%State{parent: parent, name: name} = state, status, error) do
+    report =
+      case status do
+        "completed" -> last_answer(state) || "(no answer)"
+        other -> "#{other}: #{error || "no details"}"
+      end
+
+    case whereis(parent) do
+      nil -> :ok
+      pid -> Kernel.send(pid, {:agent_message, name, report})
+    end
+
+    :ok
+  end
+
+  defp last_answer(%State{transcript: transcript}) do
+    transcript
+    |> Enum.reverse()
+    |> Enum.find_value(fn
+      %{"type" => "message", "role" => "assistant"} = m -> message_text(m)
+      _ -> nil
+    end)
+  end
+
   ## The loop
 
   @impl true
@@ -289,6 +497,16 @@ defmodule Longx.Agent do
 
   defp run_request_phase(%State{} = state, opts \\ []) do
     case run_pipeline(state.pipeline, build_step(state, :request)) do
+      {:ok, %Step{} = step} ->
+        run_request_phase_with(take_effects(state, step), {:ok, step}, opts)
+
+      result ->
+        run_request_phase_with(state, result, opts)
+    end
+  end
+
+  defp run_request_phase_with(%State{} = state, result, opts) do
+    case result do
       {:ok, %Step{halted: true, reason: reason}} ->
         {:noreply, end_turn(state, "failed", "pipeline halted: #{describe(reason)}")}
 
@@ -344,8 +562,13 @@ defmodule Longx.Agent do
           trust: state.trust,
           web_search: state.web_search,
           context_overflow: state.context_overflow,
-          compact_requested: state.compact_requested
-        }
+          compact_requested: state.compact_requested,
+          parent: state.parent,
+          name: state.name,
+          children: children_list(state)
+        },
+        state: state.turn_state,
+        instructions: team_instructions(state)
       ] ++ extra
     )
   end
@@ -386,7 +609,7 @@ defmodule Longx.Agent do
       {:ok, %Step{halted: true, reason: reason}} ->
         {:halt, "pipeline halted: #{describe(reason)}"}
 
-      {:ok, %Step{effects: effects}} ->
+      {:ok, %Step{effects: effects} = step} ->
         extra =
           for {:call, name, args} <- effects do
             %{
@@ -397,7 +620,7 @@ defmodule Longx.Agent do
             }
           end
 
-        {:ok, calls ++ extra}
+        {:ok, calls ++ extra, take_effects(state, step)}
 
       {:error, message} ->
         {:halt, message}
@@ -413,7 +636,9 @@ defmodule Longx.Agent do
       {:ok, %Step{halted: true, reason: reason}} ->
         end_turn(state, "failed", "pipeline halted: #{describe(reason)}")
 
-      {:ok, %Step{effects: effects}} ->
+      {:ok, %Step{effects: effects} = step} ->
+        state = take_effects(state, step)
+
         case Enum.find(effects, &match?({:continue, _}, &1)) do
           {:continue, text} ->
             state = %{state | continues: state.continues + 1, phase: :step, model_task: nil}
@@ -428,6 +653,24 @@ defmodule Longx.Agent do
       {:error, message} ->
         end_turn(state, "failed", message)
     end
+  end
+
+  # what every phase takes from the step it ran: `step.state`, and the
+  # children the plugs asked for (a failure to start one is a message from it)
+  defp take_effects(%State{} = state, %Step{state: st, effects: effects}) do
+    Enum.reduce(effects, %{state | turn_state: st}, fn
+      {:spawn, name, task, opts}, acc ->
+        case spawn_child(acc, name, task, opts) do
+          {:ok, _id, acc} ->
+            acc
+
+          {:error, reason} ->
+            queue_steer(acc, "could not be started: #{describe(reason)}", from: name)
+        end
+
+      _other, acc ->
+        acc
+    end)
   end
 
   defp call_summary(%{"call_id" => call_id, "name" => name} = call) do
@@ -514,7 +757,44 @@ defmodule Longx.Agent do
   def handle_info(:next_step, %State{phase: :step} = state),
     do: {:noreply, state, {:continue, :step}}
 
+  # another agent (a child reporting back) speaks: into the mailbox, like the person
+  def handle_info({:agent_message, from, text}, state), do: deliver(state, text, from)
+
+  # a child left: `:normal` is nothing to say, a crash is news for the model;
+  # the parent gone takes this agent along
+  def handle_info({:DOWN, ref, :process, pid, reason}, state) do
+    case Enum.find(state.children, fn {_id, c} -> c.ref == ref end) do
+      {id, %{name: name}} ->
+        state = %{state | children: Map.delete(state.children, id)}
+
+        if reason in [:normal, :shutdown] or match?({:shutdown, _}, reason),
+          do: {:noreply, state},
+          else: deliver(state, "exited: #{exit_text(reason)}", name)
+
+      nil ->
+        if state.parent && whereis(state.parent) in [nil, pid],
+          do: {:stop, :normal, stop_turn(state)},
+          else: {:noreply, state}
+    end
+  end
+
+  # idle for long enough: leave; a message brings the agent back (Specs)
+  def handle_info(:idle_check, %State{phase: :idle, idle_ms: ms, last_active: at} = state)
+      when is_integer(ms) do
+    if System.monotonic_time(:millisecond) - at >= ms,
+      do: {:stop, :normal, state},
+      else: {:noreply, schedule_idle(state)}
+  end
+
+  def handle_info(:idle_check, state), do: {:noreply, schedule_idle(state)}
+
   def handle_info(_other, state), do: {:noreply, state}
+
+  defp exit_text(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp exit_text(reason), do: describe(reason)
+
+  defp stop_turn(%State{phase: :idle} = state), do: state
+  defp stop_turn(state), do: state |> stop_work() |> end_turn("interrupted", nil)
 
   defp model_event({:item_added, %{"id" => id, "type" => type}}, state)
        when type in ["message", "reasoning"] do
@@ -647,14 +927,14 @@ defmodule Longx.Agent do
       {:halt, message} ->
         {:noreply, end_turn(state, "failed", message)}
 
-      {:ok, []} when state.steers == [] ->
+      {:ok, [], state} when state.steers == [] ->
         {:noreply, turn_end_phase(%{state | model_task: nil})}
 
-      {:ok, []} ->
+      {:ok, [], state} ->
         # the model stopped before the steer reached it: one more step
         {:noreply, %{state | phase: :step, model_task: nil}, {:continue, :step}}
 
-      {:ok, calls} ->
+      {:ok, calls, state} ->
         {:noreply, dispatch(%{state | phase: :dispatching, model_task: nil, calls: []}, calls)}
     end
   end
@@ -1088,8 +1368,11 @@ defmodule Longx.Agent do
     turn = %{"id" => state.turn_id, "status" => status}
     turn = if error, do: Map.put(turn, "error", %{"message" => error}), else: turn
     emit(state, "turn/completed", %{"turn" => turn})
+    report_to_parent(state, status, error)
 
-    %State{
+    state = touch(schedule_idle(state))
+
+    %{
       state
       | phase: :idle,
         turn_id: nil,
@@ -1131,8 +1414,8 @@ defmodule Longx.Agent do
 
   ## Transcript
 
-  defp append_user(state, text, images) do
-    ui = user_ui(new_id("item"), state.turn_id, text, images)
+  defp append_user(state, text, images, from \\ nil) do
+    ui = user_ui(new_id("item"), state.turn_id, text, images, from)
     emit(state, "item/started", %{"item" => ui, "turnId" => state.turn_id})
     append(state, :user_message, user_input(text, images), ui)
   end
@@ -1145,12 +1428,13 @@ defmodule Longx.Agent do
     %{"type" => "message", "role" => "user", "content" => content}
   end
 
-  defp user_ui(id, turn_id, text, images) do
+  defp user_ui(id, turn_id, text, images, from) do
     content =
       [%{"type" => "text", "text" => text}] ++
         Enum.map(images, &%{"type" => "image", "url" => &1})
 
-    %{"id" => id, "type" => "userMessage", "turnId" => turn_id, "content" => content}
+    ui = %{"id" => id, "type" => "userMessage", "turnId" => turn_id, "content" => content}
+    if from, do: Map.put(ui, "from", from), else: ui
   end
 
   # records an item (the log and the context) and shows its UI item, if any

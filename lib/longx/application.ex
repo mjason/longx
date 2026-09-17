@@ -37,6 +37,7 @@ defmodule Longx.Application do
       {Registry, keys: :unique, name: Longx.Agent.Registry},
       {Task.Supervisor, name: Longx.Agent.TaskSupervisor},
       Longx.Agent.Loader.Cache,
+      Longx.Agent.Specs,
       {DynamicSupervisor, name: Longx.Agent.Supervisor, strategy: :one_for_one},
       # dynamic tool calls and other async work for the codex connection
       {Task.Supervisor, name: Longx.Codex.TaskSupervisor},

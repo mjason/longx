@@ -1,4 +1,4 @@
-# 原生内核：下一步的设计（已定，未动手）
+# 原生内核：下一步的设计（已定，切片 1 已做）
 
 2026-09-17 讨论定下来的形状。原则不变：内核只有原子能力，策略全是 `.longx` 里动态加载的代码；
 agent loop 就是 OTP 递归；agent 之间用 mailbox；配置在后台配。
@@ -70,8 +70,9 @@ agent loop 就是 OTP 递归；agent 之间用 mailbox；配置在后台配。
 
 ## 切片顺序
 
-1. 内核原子能力：`spawn` effect、`from` 消息、报告 / 崩溃进 mailbox、空闲父被叫醒、`step.state`、
-   闲置自退与按需重启。
+1. ✅ 内核原子能力：`spawn` effect、`from` 消息、报告 / 崩溃进 mailbox、空闲父被叫醒、`step.state`、
+   闲置自退与按需重启（`Longx.Agent.spawn/4`、`Step.spawn/4`、`send(from:)`、`Specs` + `ensure_alive`、
+   `Projects.spawn_native_agent/4` 给孩子建行）。
 2. 加载器：`agents/<name>/`、`shared/` / `local/` 两棵树、`prompt_file`、`agents [...]`；Knowledge 的
    主题规则和折叠索引；`.gitignore`。
 3. 出厂 `Plugs.Agents`、`Plugs.Goal`、起步包声明。

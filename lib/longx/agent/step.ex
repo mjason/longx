@@ -52,7 +52,8 @@ defmodule Longx.Agent.Step do
           context_window: pos_integer | nil,
           halted: boolean,
           reason: term,
-          assigns: map
+          assigns: map,
+          state: map
         }
 
   defstruct thread_id: nil,
@@ -74,7 +75,10 @@ defmodule Longx.Agent.Step do
             context_window: nil,
             halted: false,
             reason: nil,
-            assigns: %{}
+            assigns: %{},
+            # kept by the kernel across the phases and steps of a turn (a
+            # strategy counts its rounds here); fresh at every turn
+            state: %{}
 
   @spec new(keyword) :: t
   def new(fields \\ []), do: struct!(__MODULE__, fields)
@@ -130,6 +134,11 @@ defmodule Longx.Agent.Step do
   def assign(%__MODULE__{assigns: assigns} = step, key, value) when is_atom(key),
     do: %{step | assigns: Map.put(assigns, key, value)}
 
+  @doc "Remembers something for the rest of the turn (`step.state`)."
+  @spec put_state(t, atom, term) :: t
+  def put_state(%__MODULE__{state: st} = step, key, value) when is_atom(key),
+    do: %{step | state: Map.put(st, key, value)}
+
   ## Effects
 
   @doc "Asks the kernel to run a tool call of the plug's own (with the model's, at `:response`)."
@@ -147,6 +156,15 @@ defmodule Longx.Agent.Step do
   @spec compact(t, keyword) :: t
   def compact(%__MODULE__{} = step, opts \\ []) when is_list(opts),
     do: effect(step, {:compact, opts})
+
+  @doc """
+  Asks the kernel to start a child agent `name` on `task` (any phase). Its
+  report comes back as a message from `name`. Options as `Longx.Agent.spawn/4`.
+  """
+  @spec spawn(t, String.t(), String.t(), keyword) :: t
+  def spawn(%__MODULE__{} = step, name, task, opts \\ [])
+      when is_binary(name) and is_binary(task) and is_list(opts),
+      do: effect(step, {:spawn, name, task, opts})
 
   defp effect(%__MODULE__{effects: effects} = step, effect),
     do: %{step | effects: effects ++ [effect]}

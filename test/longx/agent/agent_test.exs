@@ -959,6 +959,211 @@ defmodule Longx.AgentTest do
     assert "web_fetch" in Enum.map(body["tools"], & &1["name"])
   end
 
+  # replies chosen per request body (a parent and its child share one Bypass)
+  defp route!(bypass, fun) do
+    test = self()
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      {body, conn} = body!(conn)
+      send(test, {:request, body})
+      sse(conn, fun.(body))
+    end)
+  end
+
+  # the gateway strips the client metadata, so a thread is known by its first words
+  defp first_text(%{"input" => [%{"content" => [%{"text" => text} | _]} | _]}), do: text
+  defp first_text(_body), do: nil
+
+  defp agent!(id, dir, opts) do
+    :ok = ThreadState.subscribe(id)
+
+    on_exit(fn ->
+      Agent.stop(id)
+      ThreadState.stop(id)
+      ThreadState.Store.delete(id)
+    end)
+
+    {:ok, _} = Agent.ensure([thread_id: id, cwd: dir] ++ opts)
+    id
+  end
+
+  defmodule Counting do
+    use Longx.Agent.Plug
+
+    # step.state lives for the turn: the plug counts its steps and stops at three
+    def call(%Step{phase: :turn_end} = step, _) do
+      rounds = Map.get(step.state, :rounds, 0) + 1
+      step = Step.put_state(step, :rounds, rounds)
+      if rounds < 3, do: Step.continue(step, "round #{rounds + 1}"), else: step
+    end
+
+    def call(step, _), do: step
+  end
+
+  defmodule CountingPipeline do
+    use Longx.Agent.Pipeline
+    plug Counting
+    plug Longx.Agent.Plugs.Request
+  end
+
+  test "step.state survives across the phases and steps of a turn", %{bypass: bypass, dir: dir} do
+    id = agent!("state-#{System.unique_integer([:positive])}", dir, pipeline: CountingPipeline)
+    script!(bypass, List.duplicate(ResponsesFixture.assistant_message("ok"), 5))
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "go")
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+    assert length(collect_requests([])) == 3
+  end
+
+  test "a child agent is another process: its answer lands in the parent's mailbox and wakes it",
+       %{bypass: bypass, dir: dir} do
+    parent = agent!("parent-#{System.unique_integer([:positive])}", dir, name: "main")
+
+    route!(bypass, fn body ->
+      case {first_text(body), body["input"]} do
+        {"start", [_]} -> ResponsesFixture.assistant_message("delegated")
+        {"start", _} -> ResponsesFixture.assistant_message("thanks, child")
+        _ -> ResponsesFixture.assistant_message("CHILD REPORT: 42")
+      end
+    end)
+
+    {:ok, _} = Agent.send(parent, "start")
+    await("turn/started")
+    assert %{"status" => "completed"} = await_turn_end()
+
+    # spawn from outside a turn (a tool or a strategy would do this from inside one)
+    assert {:ok, child} = Agent.spawn(parent, "researcher", "find the answer", model: nil)
+    assert Agent.whereis(child)
+    assert %{parent: ^parent, name: "researcher"} = Agent.info(child)
+    assert [%{id: ^child, name: "researcher"}] = Agent.children(parent)
+
+    # the child's final message wakes the idle parent: a new turn whose input is the report, attributed
+    assert %{"turn" => %{"id" => woke}} = await("turn/started")
+
+    assert %{"turnId" => ^woke, "from" => "researcher"} =
+             await_user_message("[agent researcher] CHILD REPORT: 42")
+
+    assert %{"id" => ^woke, "status" => "completed"} = await_turn_end()
+
+    requests = collect_requests([])
+    child_request = Enum.find(requests, &(first_text(&1) == "find the answer"))
+
+    assert [%{"role" => "user", "content" => [%{"text" => "find the answer"}]}] =
+             child_request["input"]
+
+    assert child_request["instructions"] =~ "sub-agent"
+    parent_last = requests |> Enum.filter(&(first_text(&1) == "start")) |> List.last()
+
+    assert List.last(parent_last["input"])["content"] |> hd() |> Map.get("text") =~
+             "[agent researcher] CHILD REPORT: 42"
+  end
+
+  test "a parent can talk to its child; a crashed child is a message; a stopped parent takes its children along",
+       %{bypass: bypass, dir: dir} do
+    parent = agent!("parent-#{System.unique_integer([:positive])}", dir, name: "main")
+    route!(bypass, fn _body -> ResponsesFixture.assistant_message("fine") end)
+
+    {:ok, child} = Agent.spawn(parent, "helper", "hold on", model: nil)
+    # the child's report wakes the parent once
+    await("turn/started")
+    await_turn_end()
+
+    :ok = ThreadState.subscribe(child)
+    assert {:ok, %{steered: false}} = Agent.send(child, "more", from: "main")
+    assert %{"from" => "main"} = await_user_message("[agent main] more")
+    # ... and its second report wakes the parent again
+    await("turn/started")
+    await_turn_end()
+
+    Process.exit(Agent.whereis(child), :kill)
+    assert %{"turn" => %{"id" => woke}} = await("turn/started")
+
+    assert %{"turnId" => ^woke} =
+             await_user_message_matching(~r/\[agent helper\] .*exited: killed/)
+
+    await_turn_end()
+    assert Agent.children(parent) == []
+
+    {:ok, child2} = Agent.spawn(parent, "helper2", "wait", model: nil)
+    pid = Agent.whereis(child2)
+    ref = Process.monitor(pid)
+    :ok = Agent.stop(parent)
+    assert_receive {:DOWN, ^ref, :process, ^pid, _}, 5_000
+  end
+
+  test "an idle agent leaves after idle_ms and comes back on demand from its transcript", %{
+    bypass: bypass,
+    dir: dir
+  } do
+    id = agent!("idle-#{System.unique_integer([:positive])}", dir, idle_ms: 150)
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("one"),
+      ResponsesFixture.assistant_message("two")
+    ])
+
+    {:ok, _} = Agent.send(id, "hi")
+    await_turn_end()
+
+    pid = Agent.whereis(id)
+    ref = Process.monitor(pid)
+    assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 2_000
+    assert Agent.whereis(id) == nil
+
+    # the same spec, the same history
+    assert {:ok, _} = Agent.ensure_alive(id)
+    assert Agent.whereis(id)
+    {:ok, _} = Agent.send(id, "again")
+    await_turn_end()
+    assert_receive {:request, _}
+    assert_receive {:request, body}
+    assert length(body["input"]) == 3
+  end
+
+  defmodule Delegating do
+    use Longx.Agent.Plug
+
+    # a strategy: a turn end with no worker yet sends one out; its report comes back as a turn
+    def call(%Step{phase: :turn_end} = step, _) do
+      if Enum.any?(step.assigns.children, &(&1.name == "worker")),
+        do: step,
+        else: Step.spawn(step, "worker", "do the work")
+    end
+
+    def call(step, _), do: step
+  end
+
+  defmodule DelegatingPipeline do
+    use Longx.Agent.Pipeline
+    plug Delegating
+    plug Longx.Agent.Plugs.Request
+  end
+
+  test "a plug spawns a child through the spawn effect", %{bypass: bypass, dir: dir} do
+    parent =
+      agent!("deleg-#{System.unique_integer([:positive])}", dir, pipeline: DelegatingPipeline)
+
+    route!(bypass, fn body ->
+      case first_text(body) do
+        "do the work" -> ResponsesFixture.assistant_message("WORK DONE")
+        _ -> ResponsesFixture.assistant_message("ok")
+      end
+    end)
+
+    {:ok, %{turn_id: first}} = Agent.send(parent, "go")
+    await("turn/started")
+    assert %{"id" => ^first, "status" => "completed"} = await_turn_end()
+    assert [%{name: "worker"}] = Agent.children(parent)
+
+    assert %{"turn" => %{"id" => woke}} = await("turn/started")
+
+    assert %{"turnId" => ^woke, "from" => "worker"} =
+             await_user_message("[agent worker] WORK DONE")
+
+    assert %{"id" => ^woke, "status" => "completed"} = await_turn_end()
+    # the second turn saw its child and sent nobody else
+    assert [%{name: "worker"}] = Agent.children(parent)
+  end
+
   defmodule Budget do
     use Longx.Agent.Plug
     def call(step, _), do: Step.halt(step, "budget spent")
@@ -1030,6 +1235,17 @@ defmodule Longx.AgentTest do
         item
     after
       5_000 -> flunk("no user message #{text}")
+    end
+  end
+
+  defp await_user_message_matching(regex) do
+    receive do
+      {:codex, _, "item/completed",
+       %{"item" => %{"type" => "userMessage", "content" => [%{"text" => text}]} = item}}
+      when is_binary(text) ->
+        if Regex.match?(regex, text), do: item, else: await_user_message_matching(regex)
+    after
+      5_000 -> flunk("no user message matching #{inspect(regex)}")
     end
   end
 

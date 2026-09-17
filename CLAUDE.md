@@ -435,7 +435,7 @@ React Native client planned on the same core code.
   commands run on the machine as the person (isolation is the deployment's job — the whole
   of Longx in a container — never the kernel's).
   - `Longx.Agent` — one GenServer per thread (`Longx.Agent.Registry`, under
-    `Longx.Agent.Supervisor`, `restart: :transient`), **the loop as OTP recursion**: a step
+    `Longx.Agent.Supervisor`, `restart: :temporary`), **the loop as OTP recursion**: a step
     runs the pipeline at `:request` (pure: prompt, tools, the request), the model streams
     from a task (`Longx.Agent.Model`) as `{:model, ref, event}` messages, the pipeline runs
     at `:response` (the model's calls known, none run yet), tool calls run as tasks under
@@ -449,14 +449,42 @@ React Native client planned on the same core code.
     command's shim tree dies with its task) and ends the turn `interrupted`; `retract/2`
     also truncates the turn from the transcript and `ThreadState.drop_turns`;
     `compact/1`; `status/1`. Guards: `max_steps` per turn (500, `config :longx,
-    Longx.Agent, max_steps:`) and 20 continuations. A crash restarts the process from the
-    transcript; the turn in flight is not resumed.
+    Longx.Agent, max_steps:`) and 20 continuations. **The process is light and leaves
+    when idle** (`idle_ms:`, default 30 min, `config :longx, Longx.Agent, idle_ms:`;
+    `{:stop, :normal}`, nothing restarts it): `Longx.Agent.Specs` (ETS, in the tree)
+    keeps what every agent was `ensure`d with, `ensure_alive/1` starts it again from
+    that and its transcript, and `send/3` does so by itself — a message brings an agent
+    back in milliseconds; a crash likewise (the turn in flight is not resumed; a BEAM
+    restart forgets the specs and `Projects.host_thread` rebuilds from the row).
+  - **A team is more processes of the same loop, talking through the mailbox** — no
+    wait tool, no shared inbox, no state machine: `spawn/4` (`Agent.spawn(parent_id,
+    name, task, model:/effort:/cwd:/pipeline:)`, or the `Step.spawn/4` effect from any
+    phase) starts a child `Longx.Agent` (`parent:` + `name:` options; `info/1`,
+    `children/1`) and sends it the task; the child's instructions say it is the
+    sub-agent "name" and that its final message is its report. **That report is a
+    message in the parent's mailbox** (`{:agent_message, from, text}`): a steer while
+    the parent runs (folded at its next step — a step is added when the model had
+    already stopped), a new turn when it is idle (`turn/started`; the Tracker gives it
+    a row, user text "（agent 消息）"). Words between agents are **user messages
+    prefixed `[agent <name>] `** (the Responses API has no agent role every provider
+    reads) with `"from"` on the UI item; `send/3` takes `from:`. The parent monitors
+    its children: `:normal` / `:shutdown` says nothing, anything else is a message
+    "[agent X] exited: reason"; a child monitors its parent and stops with it (its turn
+    interrupted). How a child is made is the `spawner:` function the agent was
+    `ensure`d with (`Longx.Projects.spawn_native_agent/4`: a Thread row under the
+    parent with `parent_thread_id` / `agent_path` `/root/<name>` / title, the task as
+    its first Turn row; a bare agent otherwise). `step.assigns` carries `parent`, `name`
+    and `children` so a strategy can see its team; **`step.state`** (`Step.put_state/3`)
+    is a map the kernel keeps across the phases and steps of one turn (fresh per turn)
+    for a strategy that counts rounds. The rest of the design — declared agents in
+    `.longx/agents/<name>/`, `Plugs.Agents` / `Plugs.Goal`, limits in the settings —
+    is `docs/agent-kernel-plan.md`.
   - **Effects are what a plug asks the kernel to do**, data on the step the kernel
     interprets after each phase: `Step.enqueue_call/3` (`:response`; a synthetic
     `function_call` with a `longx_` call id, run with the model's), `Step.continue/2`
     (`:turn_end`; another step with that text — a user message — instead of ending),
     `Step.compact/2` (`:request`; fold the context first), `Step.halt/2` (end the turn,
-    `failed` with the reason). `step.usage` (`last` / `total`) and `step.context_window`
+    `failed` with the reason), `Step.spawn/4` (any phase; a child agent, above). `step.usage` (`last` / `total`) and `step.context_window`
     let a plug judge the context; `step.calls` are the model's calls at `:response`.
   - **Events are codex's vocabulary**, fed to `Longx.Codex.ThreadState.ingest/3` on the
     same topic (`turn/started`, `item/started`, `item/agentMessage/delta`,

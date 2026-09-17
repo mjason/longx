@@ -210,7 +210,8 @@ defmodule Longx.Projects do
              model: model_slug,
              effort: effort,
              web_search: Keyword.get(opts, :web_search, project.web_search),
-             trust: trust_fun(project.id)
+             trust: trust_fun(project.id),
+             spawner: &__MODULE__.spawn_native_agent/4
            ),
          {:ok, thread} <-
            create_thread(%{
@@ -285,17 +286,84 @@ defmodule Longx.Projects do
   def native?(%Thread{codex_thread_id: "native_" <> _}), do: true
   def native?(%Thread{}), do: false
 
-  # (re)starts the thread's agent with what the row knows
+  # (re)starts the thread's agent with what the row knows — a sub-agent's row
+  # knows its parent and its name (the last segment of its path)
   defp ensure_agent(%Thread{} = thread) do
     Longx.Agent.ensure(
-      thread_id: thread.codex_thread_id,
-      project_id: thread.project_id,
-      cwd: thread.cwd,
-      model: thread.model_slug,
-      effort: thread.reasoning_effort,
-      web_search: thread.web_search,
-      trust: trust_fun(thread.project_id)
+      [
+        thread_id: thread.codex_thread_id,
+        project_id: thread.project_id,
+        cwd: thread.cwd,
+        model: thread.model_slug,
+        effort: thread.reasoning_effort,
+        web_search: thread.web_search,
+        trust: trust_fun(thread.project_id),
+        spawner: &__MODULE__.spawn_native_agent/4
+      ] ++ team_opts(thread)
     )
+  end
+
+  defp team_opts(%Thread{parent_thread_id: nil}), do: []
+
+  defp team_opts(%Thread{parent_thread_id: parent_id, agent_path: path}) do
+    case Ash.get(Thread, parent_id) do
+      {:ok, %Thread{codex_thread_id: parent}} ->
+        [parent: parent, name: (path || "") |> String.split("/") |> List.last()]
+
+      _ ->
+        []
+    end
+  end
+
+  # how the kernel starts a child on a native thread: a row under the parent
+  # (like the rows codex's sub-agents get), its agent, and the task as its
+  # first turn — the child's report is a message in the parent's mailbox
+  @doc false
+  @spec spawn_native_agent(map, String.t(), String.t(), keyword) ::
+          {:ok, String.t()} | {:error, term}
+  def spawn_native_agent(parent_state, name, task, opts) do
+    child_id = "native_" <> Ash.UUID.generate()
+    turn_id = "turn_" <> Ash.UUID.generate()
+
+    with {:ok, %Thread{} = parent} <- get_thread_by_codex_id(parent_state.thread_id),
+         model_slug = Keyword.get(opts, :model, parent.model_slug),
+         effort = Keyword.get(opts, :effort, parent.reasoning_effort),
+         {:ok, child} <-
+           create_thread(%{
+             codex_thread_id: child_id,
+             project_id: parent.project_id,
+             parent_thread_id: parent.id,
+             agent_path: (parent.agent_path || "/root") <> "/" <> name,
+             title: name,
+             cwd: Keyword.get(opts, :cwd, parent.cwd),
+             model_slug: model_slug,
+             reasoning_effort: effort,
+             approval_policy: parent.approval_policy,
+             sandbox: parent.sandbox,
+             network_access: parent.network_access,
+             web_search: parent.web_search,
+             multi_agent: parent.multi_agent,
+             auto_review: parent.auto_review,
+             tools: parent.tools,
+             status: :active
+           }),
+         {:ok, _pid} <- ensure_agent(child),
+         :ok <- Tracker.track(child_id),
+         {:ok, _turn} <-
+           create_turn(%{
+             codex_turn_id: turn_id,
+             thread_id: child.id,
+             user_text: String.slice(task, 0, 200),
+             model_slug: model_slug,
+             reasoning_effort: effort,
+             commit_before: head_or_nil(child.cwd),
+             dirty_start: false,
+             started_at: DateTime.utc_now()
+           }),
+         {:ok, %{steered: false}} <- Longx.Agent.send(child_id, task, turn_id: turn_id) do
+      broadcast_changed(parent.project_id)
+      {:ok, child_id}
+    end
   end
 
   # read at every turn: the switch in the settings applies without a restart
@@ -740,7 +808,7 @@ defmodule Longx.Projects do
     text =
       case goal do
         %{"objective" => objective} when is_binary(objective) -> "（目标续跑）" <> objective
-        _ -> "（codex 自动续跑）"
+        _ -> if native?(thread), do: "（agent 消息）", else: "（codex 自动续跑）"
       end
 
     bookmark =

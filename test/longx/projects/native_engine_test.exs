@@ -284,6 +284,57 @@ defmodule Longx.Projects.NativeEngineTest do
     assert "deploy" in Enum.map(body["tools"], & &1["name"])
   end
 
+  test "a child agent is a thread row under its parent; its report is a turn of the parent", %{
+    bypass: bypass,
+    project: project
+  } do
+    script!(bypass, [
+      ResponsesFixture.assistant_message("delegating"),
+      ResponsesFixture.assistant_message("REPORT: done"),
+      ResponsesFixture.assistant_message("thanks")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, first} = Projects.send_message(thread, "hi")
+    assert_eventually_ok(fn -> turn!(first.id).status == :completed end)
+
+    assert {:ok, child_id} = Agent.spawn(thread.codex_thread_id, "researcher", "look it up")
+    assert [%Thread{codex_thread_id: ^child_id} = child] = Projects.list_subagents!(thread.id)
+    assert child.title == "researcher"
+    assert child.agent_path == "/root/researcher"
+    assert child.parent_thread_id == thread.id
+    assert child.cwd == thread.cwd
+    assert %{parent: parent_id, name: "researcher"} = Agent.info(child_id)
+    assert parent_id == thread.codex_thread_id
+
+    # the child's task is a turn of its own; the report wakes the parent into a turn with a row
+    assert_eventually_ok(fn ->
+      match?([%Turn{status: :completed, user_text: "look it up"}], Projects.list_turns!(child))
+    end)
+
+    assert_eventually_ok(fn ->
+      match?(
+        [%Turn{status: :completed}, %Turn{status: :completed, user_text: "（agent 消息）"}],
+        Projects.list_turns!(thread)
+      )
+    end)
+
+    assert thread!(child.id).status == :idle
+    assert thread!(thread.id).status == :idle
+
+    assert %{items: items} = ThreadState.snapshot(thread.codex_thread_id)
+
+    assert Enum.any?(items, fn item ->
+             item["type"] == "userMessage" and item["from"] == "researcher" and
+               hd(item["content"])["text"] == "[agent researcher] REPORT: done"
+           end)
+
+    # a restart forgets nothing: the child comes back knowing its parent
+    Agent.stop(child_id)
+    assert {:ok, ^child_id} = Projects.host_thread(child_id)
+    assert %{parent: ^parent_id, name: "researcher"} = Agent.info(child_id)
+  end
+
   test "what the kernel does not do yet is refused, not attempted", %{project: project} do
     {:ok, thread} = Projects.start_thread(project)
     # /compact is the kernel's own (nothing to fold on an empty thread is fine)
