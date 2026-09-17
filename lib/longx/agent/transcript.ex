@@ -48,6 +48,46 @@ defmodule Longx.Agent.Transcript do
     end
   end
 
+  # the Responses API wants every output of a batch of calls right behind the
+  # calls: anything else that slipped in between (an image a tool attached
+  # while a sibling call was still running, in 0.1.22) moves behind the outputs
+  defp regroup(items), do: regroup(items, [], [])
+
+  defp regroup([], acc, deferred), do: Enum.reverse(acc) ++ deferred
+
+  defp regroup([%Item{kind: :function_call} = call | rest], acc, deferred) do
+    {calls, rest} = Enum.split_while(rest, &(&1.kind == :function_call))
+    calls = [call | calls]
+    wanted = MapSet.new(calls, & &1.input["call_id"])
+    {outputs, others, rest} = take_outputs(rest, wanted, [], [])
+    regroup(rest, Enum.reverse(calls ++ outputs) ++ acc, deferred ++ others)
+  end
+
+  defp regroup([item | rest], acc, deferred),
+    do: regroup(rest, [item | Enum.reverse(deferred) ++ acc], [])
+
+  # the outputs of the batch, in order, and what stood between them
+  defp take_outputs(rest, wanted, outputs, others) do
+    if MapSet.size(wanted) == 0 do
+      {Enum.reverse(outputs), Enum.reverse(others), rest}
+    else
+      case rest do
+        [%Item{kind: :function_call_output, input: %{"call_id" => id}} = out | more] ->
+          if MapSet.member?(wanted, id),
+            do: take_outputs(more, MapSet.delete(wanted, id), [out | outputs], others),
+            else: take_outputs(more, wanted, outputs, [out | others])
+
+        [%Item{kind: kind} = item | more]
+        when kind in [:user_message, :agent_message, :reasoning] ->
+          take_outputs(more, wanted, outputs, [item | others])
+
+        _ ->
+          # a new batch of calls or the end: the missing outputs are closed later
+          {Enum.reverse(outputs), Enum.reverse(others), rest}
+      end
+    end
+  end
+
   defp user_words?(%{"role" => "user", "content" => content}) when is_list(content),
     do: Enum.any?(content, &(&1["type"] == "input_text"))
 
@@ -92,7 +132,7 @@ defmodule Longx.Agent.Transcript do
   """
   @spec input([Item.t()], keyword) :: [map]
   def input(items, opts \\ []) do
-    items = fold(items, Keyword.get(opts, :keep_user_bytes, @keep_user_bytes))
+    items = items |> fold(Keyword.get(opts, :keep_user_bytes, @keep_user_bytes)) |> regroup()
 
     answered =
       for %Item{kind: :function_call_output, input: %{"call_id" => id}} <- items,
