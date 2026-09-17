@@ -9,7 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
-import { channel, model, ok, project, thread } from "@/ui/test-mocks";
+import { channel, failed, model, ok, project, thread } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("sonner", async (importOriginal) => {
@@ -24,6 +24,7 @@ import {
   answerRequest,
   clearGoal,
   getProject,
+  getThread,
   listModels,
   listSkills,
   listThreads,
@@ -1167,6 +1168,8 @@ describe("ThreadPage", () => {
 
   test("a thread that no longer exists (a stale link) says so and offers a new chat", async () => {
     const user = userEvent.setup();
+    // not in the list, and not a hidden sub-agent row either
+    vi.mocked(getThread).mockResolvedValueOnce(failed("not found", ["id"]) as never);
     const { router } = renderAt("/p/app-1/t/gone");
     await screen.findByText("找不到这个会话");
     await user.click(screen.getByRole("link", { name: "新会话" }));

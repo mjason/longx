@@ -473,7 +473,23 @@ React Native client planned on the same core code.
     interrupted). How a child is made is the `spawner:` function the agent was
     `ensure`d with (`Longx.Projects.spawn_native_agent/4`: a Thread row under the
     parent with `parent_thread_id` / `agent_path` `/root/<name>` / title, the task as
-    its first Turn row; a bare agent otherwise). `step.assigns` carries `parent`, `name`
+    its first Turn row; a bare agent otherwise). The kernel itself keeps names unique
+    among the live children (`helper`, `helper-2`) and refuses a spawn past the depth
+    limit (`{:error, :too_deep}`; the settings' `max_depth`, else `config :longx,
+    Longx.Agent, max_depth:` 2) — a strategy plug inherited by its own children would
+    otherwise recurse for ever. **The parent's view shows a child the way codex does**:
+    the kernel emits `subAgentActivity` items (`agentThreadId`, `agentPath`, `kind`
+    started / interacted / completed / interrupted) on spawn, `send_message`
+    (`Agent.interacted/2`), a report and a crash — kept in the transcript as
+    `:activity` items (UI only, never model input: `append(…, context?: false)`,
+    `Transcript.input/1` drops them) so a rebuilt view has them; `messages.ts` folds
+    them into the `subagent` row whose body is the child's own conversation
+    (`useThreadViews`), the Tracker's handler marks the child's row active / idle, the
+    Agents tool lists it, and **its own page opens**: `useCodexRuntime` fetches a thread
+    the project list hides by id (RPC `get_thread`, the Thread `by_id` read; `missing`
+    only once that fails). `Agent.stop/1` is a normal `GenServer.stop`, never the
+    supervisor's kill: a transcript write in flight finishes (a killed writer left
+    SQLite's connection mid-transaction and every later query said "Database busy"). `step.assigns` carries `parent`, `name`
     and `children` so a strategy can see its team; **`step.state`** (`Step.put_state/3`)
     is a map the kernel keeps across the phases and steps of one turn (fresh per turn)
     for a strategy that counts rounds. The design is `docs/agent-kernel-plan.md` (all

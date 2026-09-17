@@ -61,7 +61,9 @@ defmodule Longx.Agent.Item do
                     :function_call,
                     :function_call_output,
                     :compaction,
-                    :hosted_call
+                    :hosted_call,
+                    # a UI-only marker (a sub-agent's activity): never model input
+                    :activity
                   ]
     end
 

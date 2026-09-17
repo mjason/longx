@@ -12,7 +12,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { archiveThread, deleteThread, renameThread, steerTurn } from "@/ash_rpc";
-import { queryKeys, unwrap, useSkills, useStartThread, useThreads } from "@/core/projects";
+import { queryKeys, unwrap, useSkills, useStartThread, useThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
@@ -118,7 +118,10 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     () => (threads.data ?? []) as ThreadRow[],
     [threads.data],
   );
-  const thread = threadId ? rows.find((t) => t.id === threadId) : undefined;
+  const listed = threadId ? rows.find((t) => t.id === threadId) : undefined;
+  // a sub-agent's row is not in the project's list: fetched by id for its own page
+  const single = useThread(threadId !== undefined && !threads.isPending && !listed ? threadId : undefined);
+  const thread = listed ?? (single.data as ThreadRow | undefined);
   const { view, ready, error, refetch } = useThreadView(thread?.codexThreadId, onSignal);
   // sub-agents work on their own codex threads; the parent's activities name
   // them, and a child's activities name its own children
@@ -372,7 +375,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     engine,
     thread,
     missing:
-      threadId !== undefined && !threads.isPending && thread === undefined,
+      threadId !== undefined && !threads.isPending && thread === undefined && !single.isPending,
     view,
     subviews,
     ready,

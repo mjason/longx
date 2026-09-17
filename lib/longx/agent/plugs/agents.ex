@@ -129,10 +129,10 @@ defmodule Longx.Agent.Plugs.Agents do
   ## The tools
 
   def spawn_agent(%{"agent" => role, "task" => task}, ctx) do
-    name = unique_name(role, ctx.thread_id)
+    case Longx.Agent.spawn(ctx.thread_id, role, task, role: role) do
+      {:ok, child_id} ->
+        name = Longx.Agent.info(child_id).name
 
-    case Longx.Agent.spawn(ctx.thread_id, name, task, role: role) do
-      {:ok, _child_id} ->
         {:ok,
          "agent #{name} started on the task; its report will arrive as a message from it (\"[agent #{name}] …\") — carry on, do not wait for it"}
 
@@ -144,6 +144,7 @@ defmodule Longx.Agent.Plugs.Agents do
   def send_message(%{"agent" => name, "message" => text}, ctx) do
     with {:ok, id} <- child(ctx.thread_id, name),
          {:ok, _} <- Longx.Agent.send(id, text, from: own_name(ctx.thread_id)) do
+      Longx.Agent.interacted(ctx.thread_id, id)
       {:ok, "delivered to #{name}"}
     end
   end
@@ -160,15 +161,6 @@ defmodule Longx.Agent.Plugs.Agents do
       %{id: id} -> {:ok, id}
       nil -> {:error, "no live agent named #{name}"}
     end
-  end
-
-  # a second researcher is researcher-2: names must be unique among the live children
-  defp unique_name(role, parent_id) do
-    taken = parent_id |> Longx.Agent.children() |> Enum.map(& &1.name)
-
-    if role in taken,
-      do: Enum.find(Stream.map(2..1000, &"#{role}-#{&1}"), &(&1 not in taken)),
-      else: role
   end
 
   defp own_name(thread_id), do: Longx.Agent.info(thread_id).name || "main"

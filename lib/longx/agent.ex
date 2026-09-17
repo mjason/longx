@@ -91,6 +91,8 @@ defmodule Longx.Agent do
               role: nil,
               # how many parents above (the Agents plug's depth limit)
               depth: 0,
+              # codex's agent path ("/root", "/root/researcher"): the UI's name for the agent
+              path: "/root",
               children: %{},
               # `step.state`: kept across the phases and steps of one turn
               turn_state: %{},
@@ -152,6 +154,10 @@ defmodule Longx.Agent do
   def spawn(parent_id, name, task, opts \\ []),
     do: GenServer.call(via(parent_id), {:spawn, name, task, opts})
 
+  @doc "Notes that the parent spoke to a child (the child's row in the parent's view shows it)."
+  @spec interacted(String.t(), String.t()) :: :ok
+  def interacted(parent_id, child_id), do: GenServer.cast(via(parent_id), {:interacted, child_id})
+
   @doc "Who spawned the agent, its name, its phase and its children."
   @spec info(String.t()) :: map
   def info(thread_id), do: GenServer.call(via(thread_id), :info)
@@ -166,8 +172,17 @@ defmodule Longx.Agent do
   @spec stop(String.t()) :: :ok
   def stop(thread_id) do
     case whereis(thread_id) do
-      nil -> :ok
-      pid -> DynamicSupervisor.terminate_child(@supervisor, pid)
+      nil ->
+        :ok
+
+      pid ->
+        # a normal stop: the callback in flight (a transcript write) finishes first —
+        # the supervisor's kill left SQLite's connection mid-transaction
+        try do
+          GenServer.stop(pid, :normal, 15_000)
+        catch
+          :exit, _ -> :ok
+        end
     end
   end
 
@@ -258,6 +273,7 @@ defmodule Longx.Agent do
       name: Keyword.get(opts, :name),
       role: Keyword.get(opts, :role),
       depth: Keyword.get(opts, :depth, 0),
+      path: Keyword.get(opts, :path) || "/root",
       spawner: Keyword.get(opts, :spawner),
       settings: Keyword.get(opts, :settings, fn -> nil end),
       idle_ms: Keyword.get(opts, :idle_ms, configured_idle_ms()),
@@ -390,6 +406,14 @@ defmodule Longx.Agent do
   def handle_call(:status, _from, %State{turn_id: id} = state),
     do: {:reply, {:running, id}, state}
 
+  @impl true
+  def handle_cast({:interacted, child_id}, %State{children: children} = state) do
+    case Map.get(children, child_id) do
+      %{name: name} -> {:noreply, activity(state, child_id, name, "interacted")}
+      nil -> {:noreply, state}
+    end
+  end
+
   # a new turn on an idle agent: from the person, or from another agent (`from:`)
   defp start_turn(%State{} = state, text, opts) do
     turn_id = Keyword.get(opts, :turn_id) || new_id("turn")
@@ -408,10 +432,14 @@ defmodule Longx.Agent do
           turn_state: %{}
       }
       |> tap(&emit(&1, "turn/started", %{"turn" => %{"id" => turn_id, "status" => "inProgress"}}))
+      |> with_activity(Keyword.get(opts, :activity))
       |> append_user(text, Keyword.get(opts, :images, []), from)
 
     {turn_id, state}
   end
+
+  defp with_activity(state, nil), do: state
+  defp with_activity(state, {child_id, name, kind}), do: activity(state, child_id, name, kind)
 
   # into the model's context at the next step, and shown then (until then
   # it is the client's queue, where it can still be taken back)
@@ -433,12 +461,30 @@ defmodule Longx.Agent do
 
   # a message arriving on its own (a child's report, its crash): a steer
   # while a turn runs, a turn of its own when idle
-  defp deliver(%State{phase: :idle} = state, text, from) do
-    {_turn_id, state} = start_turn(state, text, from: from)
+  defp deliver(%State{phase: :idle} = state, text, from, activity) do
+    {_turn_id, state} = start_turn(state, text, from: from, activity: activity)
     {:noreply, state, {:continue, :step}}
   end
 
-  defp deliver(state, text, from), do: {:noreply, queue_steer(state, text, from: from)}
+  defp deliver(state, text, from, activity),
+    do: {:noreply, state |> with_activity(activity) |> queue_steer(text, from: from)}
+
+  # what the parent's view shows of a child: codex's subAgentActivity item
+  # (the client folds them into one row with the child's conversation), kept
+  # in the transcript as a UI-only item so a rebuilt view has it
+  defp activity(%State{} = state, child_id, name, kind) do
+    ui = %{
+      "id" => new_id("item"),
+      "type" => "subAgentActivity",
+      "turnId" => state.turn_id,
+      "agentThreadId" => child_id,
+      "agentPath" => state.path <> "/" <> name,
+      "kind" => kind
+    }
+
+    emit(state, "item/started", %{"item" => ui, "turnId" => state.turn_id})
+    append(state, :activity, %{"type" => "longx_activity"}, ui, context?: false)
+  end
 
   ## The goal
 
@@ -475,15 +521,40 @@ defmodule Longx.Agent do
 
   ## Children
 
+  @default_max_depth 2
+
   defp spawn_child(%State{} = state, name, task, opts) do
     spawner = Keyword.get(opts, :spawner) || state.spawner || configured_spawner()
+    name = unique_name(state, name)
 
-    with {:ok, child_id} <- spawner.(state, name, task, opts),
+    with :ok <- depth_ok(state),
+         {:ok, child_id} <- spawner.(state, name, task, opts),
          pid when is_pid(pid) <- whereis(child_id) || {:error, :not_started} do
       ref = Process.monitor(pid)
       child = %{name: name, pid: pid, ref: ref}
-      {:ok, child_id, %{state | children: Map.put(state.children, child_id, child)}}
+      state = %{state | children: Map.put(state.children, child_id, child)}
+      {:ok, child_id, activity(state, child_id, name, "started")}
     end
+  end
+
+  # a team nests only so deep, whoever asks (the settings' max_depth, else the kernel's)
+  defp depth_ok(%State{depth: depth, settings: settings}) do
+    limit =
+      case settings && settings.() do
+        %{max_depth: n} when is_integer(n) -> n
+        _ -> Application.get_env(:longx, __MODULE__, [])[:max_depth] || @default_max_depth
+      end
+
+    if depth < limit, do: :ok, else: {:error, :too_deep}
+  end
+
+  # a second helper is helper-2: names are unique among the live children
+  defp unique_name(%State{children: children}, name) do
+    taken = children |> Map.values() |> Enum.map(& &1.name)
+
+    if name in taken,
+      do: Enum.find(Stream.map(2..1000, &"#{name}-#{&1}"), &(&1 not in taken)),
+      else: name
   end
 
   # how a child is made when the agent was given no `spawner:`:
@@ -510,6 +581,7 @@ defmodule Longx.Agent do
              effort: Keyword.get(opts, :effort),
              role: Keyword.get(opts, :role),
              depth: parent.depth + 1,
+             path: parent.path <> "/" <> name,
              pipeline: Keyword.get(opts, :pipeline, parent.pipeline),
              trust: parent.trust,
              web_search: parent.web_search,
@@ -857,7 +929,15 @@ defmodule Longx.Agent do
     do: {:noreply, state, {:continue, :step}}
 
   # another agent (a child reporting back) speaks: into the mailbox, like the person
-  def handle_info({:agent_message, from, text}, state), do: deliver(state, text, from)
+  def handle_info({:agent_message, from, text}, state) do
+    activity =
+      case Enum.find(state.children, fn {_id, c} -> c.name == from end) do
+        {id, _} -> {id, from, "completed"}
+        nil -> nil
+      end
+
+    deliver(state, text, from, activity)
+  end
 
   # a child left: `:normal` is nothing to say, a crash is news for the model;
   # the parent gone takes this agent along
@@ -868,7 +948,7 @@ defmodule Longx.Agent do
 
         if reason in [:normal, :shutdown] or match?({:shutdown, _}, reason),
           do: {:noreply, state},
-          else: deliver(state, "exited: #{exit_text(reason)}", name)
+          else: deliver(state, "exited: #{exit_text(reason)}", name, {id, name, "interrupted"})
 
       nil ->
         if state.parent && whereis(state.parent) in [nil, pid],
@@ -1554,7 +1634,10 @@ defmodule Longx.Agent do
     if ui && Keyword.get(opts, :show?, true),
       do: emit(state, "item/completed", %{"item" => ui, "turnId" => state.turn_id})
 
-    %{state | seq: seq, transcript: state.transcript ++ [input]}
+    # a UI-only item (a sub-agent's activity) is logged but never model input
+    if Keyword.get(opts, :context?, true),
+      do: %{state | seq: seq, transcript: state.transcript ++ [input]},
+      else: %{state | seq: seq}
   end
 
   ## UI items

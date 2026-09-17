@@ -5151,6 +5151,79 @@ export async function validateArchiveThread(
 }
 
 
+export type GetThreadInput = {
+  id: UUID;
+};
+
+export type GetThreadFields = UnifiedFieldSelection<ThreadResourceSchema>[];
+export type InferGetThreadResult<
+  Fields extends GetThreadFields,
+> = InferResult<ThreadResourceSchema, Fields>;
+
+export type GetThreadResult<Fields extends GetThreadFields> = | { success: true; data: InferGetThreadResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Read Thread records
+ *
+ * @ashActionType :read
+ */
+export async function getThread<Fields extends GetThreadFields>(
+  config: {
+  tenant?: string;
+  input: GetThreadInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<GetThreadResult<Fields>> {
+  const payload = {
+    action: "get_thread",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<GetThreadResult<Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Read Thread records
+ *
+ * @ashActionType :read
+ * @validation true
+ */
+export async function validateGetThread(
+  config: {
+  tenant?: string;
+  input: GetThreadInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "get_thread",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ClearGoalInput = {
   threadId: UUID;
 };

@@ -37,6 +37,7 @@ defmodule Longx.Projects do
 
     resource Longx.Projects.Thread do
       rpc_action :list_threads, :for_project
+      rpc_action :get_thread, :by_id
       rpc_action :list_subagents, :subagents_of
       rpc_action :start_thread, :start_thread
       rpc_action :send_message, :send_message
@@ -355,7 +356,7 @@ defmodule Longx.Projects do
     case Ash.get(Thread, parent_id) do
       {:ok, %Thread{codex_thread_id: parent}} ->
         name = (path || "") |> String.split("/") |> List.last()
-        [parent: parent, name: name, role: role_of(name), depth: depth_of(path)]
+        [parent: parent, name: name, role: role_of(name), depth: depth_of(path), path: path]
 
       _ ->
         []

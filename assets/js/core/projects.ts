@@ -21,6 +21,7 @@ import {
   restoreProposal,
   listProjects,
   listSubagents,
+  getThread,
   listThreads,
   restartCodex,
   sandboxStatus,
@@ -290,6 +291,17 @@ export function useThreads(id: string | undefined) {
           input: { projectId: id! },
         }),
       ),
+  });
+}
+
+/** One thread by id — a sub-agent's row, which the project list hides, for its own page. */
+export function useThread(id: string | undefined) {
+  return useQuery({
+    queryKey: ["thread", id ?? ""] as const,
+    enabled: !!id,
+    retry: false,
+    queryFn: async () =>
+      unwrap(await getThread({ fields: [...threadFields, "parentThreadId", "agentPath"], input: { id: id! } })),
   });
 }
 

@@ -424,6 +424,13 @@ defmodule Longx.Projects.Thread do
       change set_attribute(:status, :archived)
     end
 
+    # one row by id — a sub-agent's, which the project list hides, for its page
+    read :by_id do
+      argument :id, :uuid, allow_nil?: false
+      get? true
+      filter expr(id == ^arg(:id))
+    end
+
     read :by_codex_id do
       argument :codex_thread_id, :string, allow_nil?: false
       get? true

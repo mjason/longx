@@ -132,7 +132,11 @@ defmodule Longx.Agent.Transcript do
   """
   @spec input([Item.t()], keyword) :: [map]
   def input(items, opts \\ []) do
-    items = items |> fold(Keyword.get(opts, :keep_user_bytes, @keep_user_bytes)) |> regroup()
+    items =
+      items
+      |> Enum.reject(&(&1.kind == :activity))
+      |> fold(Keyword.get(opts, :keep_user_bytes, @keep_user_bytes))
+      |> regroup()
 
     answered =
       for %Item{kind: :function_call_output, input: %{"call_id" => id}} <- items,

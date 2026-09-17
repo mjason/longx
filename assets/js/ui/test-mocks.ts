@@ -138,6 +138,7 @@ export function rpcMock() {
       }),
     ),
     listThreads: vi.fn(async () => ok([thread(1)])),
+    getThread: vi.fn(async ({ input }: { input: { id: string } }) => ok({ ...thread(1), id: input.id })),
     listModels: vi.fn(async () =>
       ok([
         model(1, { slug: "deepseek-flash", default: true }),

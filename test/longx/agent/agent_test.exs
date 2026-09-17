@@ -1038,13 +1038,36 @@ defmodule Longx.AgentTest do
     assert %{parent: ^parent, name: "researcher"} = Agent.info(child)
     assert [%{id: ^child, name: "researcher"}] = Agent.children(parent)
 
+    # the parent's view shows the child the way codex does: a subAgentActivity item (the
+    # client folds it into a subagent row whose body is the child's own conversation)
+    assert %{
+             "item" => %{
+               "type" => "subAgentActivity",
+               "agentThreadId" => ^child,
+               "agentPath" => "/root/researcher",
+               "kind" => "started"
+             }
+           } = await_item_completed_of_type("subAgentActivity")
+
     # the child's final message wakes the idle parent: a new turn whose input is the report, attributed
     assert %{"turn" => %{"id" => woke}} = await("turn/started")
+
+    assert %{
+             "item" => %{
+               "type" => "subAgentActivity",
+               "agentThreadId" => ^child,
+               "kind" => "completed"
+             },
+             "turnId" => ^woke
+           } = await_item_completed_of_type("subAgentActivity")
 
     assert %{"turnId" => ^woke, "from" => "researcher"} =
              await_user_message("[agent researcher] CHILD REPORT: 42")
 
     assert %{"id" => ^woke, "status" => "completed"} = await_turn_end()
+    # the activities survive a rebuild of the view from the transcript
+    assert 2 ==
+             Enum.count(ThreadState.snapshot(parent).items, &(&1["type"] == "subAgentActivity"))
 
     requests = collect_requests([])
     child_request = Enum.find(requests, &(first_text(&1) == "find the answer"))
@@ -1072,12 +1095,22 @@ defmodule Longx.AgentTest do
     :ok = ThreadState.subscribe(child)
     assert {:ok, %{steered: false}} = Agent.send(child, "more", from: "main")
     assert %{"from" => "main"} = await_user_message("[agent main] more")
-    # ... and its second report wakes the parent again
-    await("turn/started")
-    await_turn_end()
+    # ... and its second report wakes the parent again (both threads are subscribed now)
+    await_on(parent, "turn/started")
+    await_on(parent, "turn/completed")
+    drain_activities()
 
     Process.exit(Agent.whereis(child), :kill)
-    assert %{"turn" => %{"id" => woke}} = await("turn/started")
+    assert %{"turn" => %{"id" => woke}} = await_on(parent, "turn/started")
+
+    assert %{
+             "item" => %{
+               "type" => "subAgentActivity",
+               "kind" => "interrupted",
+               "agentThreadId" => ^child
+             }
+           } =
+             await_item_completed_of_type("subAgentActivity")
 
     assert %{"turnId" => ^woke} =
              await_user_message_matching(~r/\[agent helper\] .*exited: killed/)
@@ -1124,9 +1157,10 @@ defmodule Longx.AgentTest do
   defmodule Delegating do
     use Longx.Agent.Plug
 
-    # a strategy: a turn end with no worker yet sends one out; its report comes back as a turn
+    # a strategy: a turn end with no worker yet sends one out; its report comes back as
+    # a turn (the worker inherits this pipeline: at depth 1 it delegates to nobody)
     def call(%Step{phase: :turn_end} = step, _) do
-      if Enum.any?(step.assigns.children, &(&1.name == "worker")),
+      if step.assigns.depth > 0 or Enum.any?(step.assigns.children, &(&1.name == "worker")),
         do: step,
         else: Step.spawn(step, "worker", "do the work")
     end
@@ -1166,8 +1200,37 @@ defmodule Longx.AgentTest do
     assert [%{name: "worker"}] = Agent.children(parent)
   end
 
+  test "the kernel names children uniquely and refuses a spawn past the depth limit", %{
+    bypass: bypass,
+    dir: dir
+  } do
+    parent =
+      agent!("deep-#{System.unique_integer([:positive])}", dir,
+        pipeline: EffectsPipeline,
+        depth: 2
+      )
+
+    route!(bypass, fn _body -> ResponsesFixture.assistant_message("fine") end)
+    assert {:error, :too_deep} = Agent.spawn(parent, "helper", "x", model: nil)
+
+    shallow =
+      agent!("shallow-#{System.unique_integer([:positive])}", dir, pipeline: EffectsPipeline)
+
+    assert {:ok, a} = Agent.spawn(shallow, "helper", "x", model: nil)
+    assert {:ok, b} = Agent.spawn(shallow, "helper", "y", model: nil)
+    assert a != b
+
+    assert ["helper", "helper-2"] =
+             shallow |> Agent.children() |> Enum.map(& &1.name) |> Enum.sort()
+
+    assert %{name: "helper-2"} = Agent.info(b)
+    # the children may not have reached the model before the test ends
+    Bypass.pass(bypass)
+  end
+
   test "the shipped Agents plug: spawn_agent starts a declared role on its own description, the report comes back",
        %{bypass: bypass, dir: dir} do
+    test = self()
     File.mkdir_p!(Path.join(dir, ".longx"))
 
     File.write!(
@@ -1178,8 +1241,8 @@ defmodule Longx.AgentTest do
     parent = agent!("team-#{System.unique_integer([:positive])}", dir, trust: fn -> true end)
 
     route!(bypass, fn body ->
-      case {first_text(body), List.last(body["input"])["type"]} do
-        {"go", "message"} ->
+      case {first_text(body), length(body["input"])} do
+        {"go", 1} ->
           ResponsesFixture.function_call("spawn_agent", nil, %{
             "agent" => "researcher",
             "task" => "find X"
@@ -1189,7 +1252,12 @@ defmodule Longx.AgentTest do
           ResponsesFixture.assistant_message("delegated")
 
         _ ->
-          ResponsesFixture.assistant_message("REPORT X")
+          # the child's answer waits until the parent's turn is over: the report then wakes it
+          send(test, {:held, self()})
+
+          receive do
+            :go -> ResponsesFixture.assistant_message("REPORT X")
+          end
       end
     end)
 
@@ -1197,6 +1265,8 @@ defmodule Longx.AgentTest do
     await("turn/started")
     assert %{"status" => "completed"} = await_turn_end()
     assert [%{name: "researcher"}] = Agent.children(parent)
+    assert_receive {:held, handler}, 5_000
+    send(handler, :go)
 
     assert %{"turn" => %{"id" => woke}} = await("turn/started")
 
@@ -1371,6 +1441,22 @@ defmodule Longx.AgentTest do
         if Regex.match?(regex, text), do: item, else: await_user_message_matching(regex)
     after
       5_000 -> flunk("no user message matching #{inspect(regex)}")
+    end
+  end
+
+  defp await_on(thread_id, method) do
+    receive do
+      {:codex, _seq, ^method, %{"threadId" => ^thread_id} = params} -> params
+    after
+      5_000 -> flunk("no #{method} on #{thread_id}")
+    end
+  end
+
+  defp drain_activities do
+    receive do
+      {:codex, _, _, %{"item" => %{"type" => "subAgentActivity"}}} -> drain_activities()
+    after
+      0 -> :ok
     end
   end
 

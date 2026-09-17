@@ -7,7 +7,7 @@ import { useCodexRuntime } from "./runtime";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { archiveThread, deleteThread, listThreads, startThread } from "@/ash_rpc";
+import { archiveThread, deleteThread, getThread, listThreads, startThread } from "@/ash_rpc";
 
 const defaults = { sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true, multiAgent: true, autoReview: true } as const;
 
@@ -77,6 +77,15 @@ describe("useCodexRuntime", () => {
     await act(async () => { await result.current.runtime.threads.switchToNewThread(); });
     expect(onOpenThread).toHaveBeenCalledWith(null);
     expect(startThread).not.toHaveBeenCalled();
+  });
+
+  test("a sub-agent's page: a thread the project's list hides (it has a parent) is fetched by id, not 找不到", async () => {
+    vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
+    vi.mocked(getThread).mockResolvedValue(ok({ ...thread(9), parentThreadId: "t1", agentPath: "/root/researcher", title: "researcher" }) as never);
+    const { result } = renderHook(() => useCodexRuntime({ projectId: "id-1", defaults, threadId: "t9", onOpenThread: () => {} }), { wrapper });
+    await waitFor(() => expect(result.current.thread?.id).toBe("t9"));
+    expect(result.current.missing).toBe(false);
+    expect(getThread).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "t9" } }));
   });
 
   test("the first message of a new chat opens its thread without a moment of 找不到这个会话: the row is in the list before the page moves", async () => {
