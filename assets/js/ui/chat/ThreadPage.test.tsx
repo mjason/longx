@@ -590,7 +590,7 @@ describe("ThreadPage", () => {
     );
   });
 
-  test("a message typed while a turn runs goes into that turn (steer), not a new one; once it is over a message is a new turn", async () => {
+  test("a message typed while a turn runs is queued above the composer: inserted into the turn now, or sent when it ends", async () => {
     const user = userEvent.setup();
     await open();
     act(() =>
@@ -600,19 +600,32 @@ describe("ThreadPage", () => {
         params: { turn: { id: "turn_2", status: "inProgress" } },
       }),
     );
-    // the send button is there while running, next to the stop
-    expect(screen.getByRole("button", { name: "发送" })).toBeInTheDocument();
+    // one button: stop while the draft is empty, send (into the queue) once there is text
+    expect(screen.queryByRole("button", { name: "发送" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /停止/ })).toBeInTheDocument();
-    await user.type(
-      screen.getByRole("textbox", { name: "随心输入" }),
-      "and then this{Enter}",
-    );
+    const input = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(input, "and then this");
+    expect(screen.getByRole("button", { name: "加入队列" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /停止/ })).not.toBeInTheDocument();
+    await user.type(input, "{Enter}");
+    const queue = await screen.findByTestId("message-queue");
+    expect(queue).toHaveTextContent("and then this");
+    expect(steerTurn).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
+    // 插入: into the running turn now (turn/steer), off the queue
+    await user.click(within(queue).getByRole("button", { name: "插入" }));
     await waitFor(() =>
       expect(steerTurn).toHaveBeenCalledWith(
         expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "and then this" }) }),
       ),
     );
-    expect(sendMessage).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByTestId("message-queue")).not.toBeInTheDocument());
+    // a second one waits; 取消 takes it back; a third goes out as a new turn when the turn ends
+    await user.type(input, "never mind{Enter}");
+    await user.click(within(await screen.findByTestId("message-queue")).getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.queryByTestId("message-queue")).not.toBeInTheDocument());
+    await user.type(input, "later{Enter}");
+    expect(await screen.findByTestId("message-queue")).toHaveTextContent("later");
     act(() =>
       channel.deliver("codex", {
         seq: 5,
@@ -620,15 +633,12 @@ describe("ThreadPage", () => {
         params: { turn: { id: "turn_2", status: "completed" } },
       }),
     );
-    await user.type(
-      screen.getByRole("textbox", { name: "随心输入" }),
-      "a new turn{Enter}",
-    );
     await waitFor(() =>
       expect(sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "a new turn" }) }),
+        expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "later" }) }),
       ),
     );
+    expect(steerTurn).toHaveBeenCalledTimes(1);
   });
 
   test("a sub-agent joins its own thread: its conversation nests under the parent, its approval is answered there, the plan shows", async () => {

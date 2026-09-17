@@ -372,9 +372,18 @@ defmodule Longx.AgentTest do
     assert_receive {:held, handler}, 5_000
 
     assert {:ok, %{turn_id: ^turn_id, steered: true}} = Agent.send(id, "also this")
-    assert %{"turnId" => ^turn_id} = await_user_message("also this")
+    # not in the transcript yet: it shows when the kernel folds it into the next step
+    refute_receive {:codex, _, "item/completed",
+                    %{
+                      "item" => %{
+                        "type" => "userMessage",
+                        "content" => [%{"text" => "also this"}]
+                      }
+                    }},
+                   200
 
     send(handler, :go)
+    assert %{"turnId" => ^turn_id} = await_user_message("also this")
     assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
 
     assert_receive {:request, _first}

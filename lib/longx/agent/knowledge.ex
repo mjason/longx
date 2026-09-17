@@ -183,6 +183,45 @@ defmodule Longx.Agent.Knowledge do
     end
   end
 
+  @doc "The whole file of one doc, front matter included (the editor's text)."
+  @spec read_raw(Path.t(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  def read_raw(cwd, path) do
+    with {:ok, _root, file} <- locate(cwd, path) do
+      case File.read(file) do
+        {:ok, text} -> {:ok, text}
+        {:error, :enoent} -> {:error, "no knowledge at #{path}"}
+        {:error, reason} -> {:error, "cannot read #{path}: #{:file.format_error(reason)}"}
+      end
+    end
+  end
+
+  @doc "Removes a doc (the global root commits the removal)."
+  @spec delete(Path.t(), String.t()) :: :ok | {:error, String.t()}
+  def delete(cwd, path) do
+    with {:ok, root, file} <- locate(cwd, path),
+         :ok <- writable(root),
+         :ok <- rm(file, path),
+         :ok <- commit(root, roots(cwd)[root], "remove " <> path) do
+      :ok
+    end
+  end
+
+  defp rm(file, path) do
+    case File.rm(file) do
+      :ok -> :ok
+      {:error, :enoent} -> {:error, "no knowledge at #{path}"}
+      {:error, reason} -> {:error, "cannot delete #{path}: #{:file.format_error(reason)}"}
+    end
+  end
+
+  @doc "The docs of the shipped and the person's roots — what the settings page manages."
+  @spec global_docs() :: [doc]
+  def global_docs, do: docs(global_cwd(), [:longx, :global])
+
+  # a working directory with no project root under it: the global roots alone
+  @doc false
+  def global_cwd, do: Longx.Agent.Loader.global_dir()
+
   defp locate(cwd, path) do
     case String.split(path, "/", parts: 2) do
       [root, rel] when root in ["longx", "global", "project"] and rel != "" ->

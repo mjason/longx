@@ -202,6 +202,15 @@ export function rpcMock() {
         identity: string;
       }) => ok({ id: identity, enabled: input.enabled }),
     ),
+    knowledgeDocs: vi.fn(async () =>
+      ok([
+        { root: "longx", path: "longx/writing-plugs.md", title: "Writing plugs", summary: "the plug API", tags: ["longx"], always: false, writable: false },
+        { root: "global", path: "global/me.md", title: "About me", summary: "how I like things", tags: ["me"], always: true, writable: true },
+      ]),
+    ),
+    knowledgeRead: vi.fn(async () => ok({ text: "---\ntitle: About me\nsummary: how I like things\ntags: [me]\nalways: true\n---\nTabs, never spaces.\n" })),
+    knowledgeWrite: vi.fn(async () => ok(null)),
+    knowledgeDelete: vi.fn(async () => ok(null)),
     memoryIndex: vi.fn(async () =>
       ok({ text: "# MEMORY\n\n- Tabs over spaces\n" }),
     ),

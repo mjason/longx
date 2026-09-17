@@ -83,6 +83,8 @@ export type ThreadComponents = {
   ComposerTrailing?: ComponentType | undefined;
   /** Longx: trigger popovers (`@` mentions) rendered inside the composer root */
   ComposerPopovers?: ComponentType | undefined;
+  /** Longx: what was typed while a turn runs, above the composer (the message-queue element) */
+  ComposerQueue?: ComponentType | undefined;
   /** Longx: how a user message's text renders (directive chips) */
   UserText?: TextMessagePartComponent | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
@@ -251,13 +253,14 @@ const ThreadWelcome: FC = () => {
 };
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
-  const { ComposerPopovers } = useContext(ThreadComponentsContext);
+  const { ComposerPopovers, ComposerQueue } = useContext(ThreadComponentsContext);
   // ↑ / ↓ on an empty draft walk the messages sent before (a terminal's habit)
   const history = unstable_useComposerInputHistory();
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       {ComposerPopovers ? <ComposerPopovers /> : null}
+      {ComposerQueue ? <ComposerQueue /> : null}
       <ComposerPrimitive.AttachmentDropzone asChild>
         <div
           data-slot="aui_composer-shell"
@@ -278,6 +281,27 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
       </ComposerPrimitive.AttachmentDropzone>
     </ComposerPrimitive.Root>
     </ComposerPrimitive.Unstable_TriggerPopoverRoot>
+  );
+};
+
+// the send button names what it does: a turn, or a place in the queue while one runs
+const SendButton: FC = () => {
+  const running = useAuiState((s) => s.thread.isRunning);
+  const label = running ? t.queueSend : t.send;
+  return (
+    <ComposerPrimitive.Send asChild>
+      <TooltipIconButton
+        tooltip={label}
+        side="bottom"
+        type="button"
+        variant="default"
+        size="icon"
+        className="aui-composer-send size-7 rounded-full"
+        aria-label={label}
+      >
+        <ArrowUpIcon className="aui-composer-send-icon size-4" />
+      </TooltipIconButton>
+    </ComposerPrimitive.Send>
   );
 };
 
@@ -325,22 +349,12 @@ const ComposerAction: FC = () => {
             </ComposerPrimitive.StopDictation>
           </AuiIf>
         </AuiIf>
-        {/* Longx: the send stays while a turn runs — the message goes into
-            that turn (turn/steer, what the Codex app does), next to the stop */}
-        <ComposerPrimitive.Send asChild>
-          <TooltipIconButton
-            tooltip={t.send}
-            side="bottom"
-            type="button"
-            variant="default"
-            size="icon"
-            className="aui-composer-send size-7 rounded-full"
-            aria-label={t.send}
-          >
-            <ArrowUpIcon className="aui-composer-send-icon size-4" />
-          </TooltipIconButton>
-        </ComposerPrimitive.Send>
-        <AuiIf condition={(s) => s.thread.isRunning}>
+        {/* Longx: one button — send (a turn, or into the queue while one runs)
+            when there is text, stop while a turn runs and the draft is empty */}
+        <AuiIf condition={(s) => !s.thread.isRunning || s.composer.text.trim().length > 0}>
+          <SendButton />
+        </AuiIf>
+        <AuiIf condition={(s) => s.thread.isRunning && s.composer.text.trim().length === 0}>
           <ComposerPrimitive.Cancel asChild>
             <Button
               type="button"

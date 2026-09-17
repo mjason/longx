@@ -10,15 +10,15 @@ import {
   type AssistantRuntime,
 } from "@assistant-ui/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createSteerQueue } from "./steerQueue";
-import { archiveThread, deleteThread, renameThread } from "@/ash_rpc";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { archiveThread, deleteThread, renameThread, steerTurn } from "@/ash_rpc";
 import { queryKeys, unwrap, useSkills, useStartThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
   SimpleTextAttachmentAdapter,
   WebSpeechDictationAdapter,
+  createMessageQueue,
 } from "@assistant-ui/react";
 import {
   buildAdapter,
@@ -84,6 +84,8 @@ export type CodexRuntime = {
   /** the access mode the next turn runs with */
   mode: AccessMode;
   setMode: (mode: AccessMode) => void;
+  /** a queued message into the running turn now (codex's steer) */
+  insertQueued: (queueItemId: string) => Promise<void>;
 };
 
 // voice input is wired (WebSpeechDictationAdapter, the mic in the composer rail)
@@ -227,11 +229,46 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     [rows, threadId, threads.isPending, onOpenThread, invalidate],
   );
 
-  // a message while a turn runs goes into that turn (the adapter steers it):
-  // the "queue" is what lets the composer send while running and holds
-  // nothing; it reads the latest adapter through a ref (rebuilt per view)
+  // a message while a turn runs waits in assistant-ui's queue (the message-queue
+  // element shows it above the composer) and goes out as a new turn when the
+  // turn ends — what the Codex app does; `insertQueued` is its "insert now"
+  // (turn/steer). The queue runs the latest adapter through a ref.
   const onNewRef = useRef<(message: AppendMessage) => Promise<void>>(async () => {});
-  const [queue] = useState(() => createSteerQueue((message) => onNewRef.current(message)));
+  const [queue] = useState(() => createMessageQueue({ run: (message) => void onNewRef.current(message) }));
+  // the store reads the queue's lanes when this component renders: a change
+  // in the queue (a message added, taken back, dispatched) must render it
+  // (the runtime only re-applies a *new* adapter object, so the version is a dependency of the memo below)
+  const [queueVersion, queueChanged] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    const source = queue as unknown as { subscribe?: (cb: () => void) => () => void };
+    const adapter = queue.adapter as unknown as { subscribe?: (cb: () => void) => () => void };
+    const unsubscribe = (source.subscribe ?? adapter.subscribe)?.(queueChanged);
+    return () => unsubscribe?.();
+  }, [queue]);
+  const running = thread !== undefined && runningTurnId(view) !== null;
+  const wasRunning = useRef(running);
+  useEffect(() => {
+    if (!wasRunning.current && running) queue.notifyBusy();
+    if (wasRunning.current && !running) queue.notifyIdle();
+    wasRunning.current = running;
+  }, [running, queue]);
+  const insertQueued = useCallback(
+    async (queueItemId: string) => {
+      // a send while running lands in the steer lane, a later move in the other
+      const item = [...queue.adapter.steerItems, ...queue.adapter.items].find((i) => i.id === queueItemId);
+      if (!item || !thread) return;
+      const text = item.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
+      const steered = await steerTurn({ fields: ["codexTurnId"], input: { threadId: thread.id, text } });
+      if (steered.success) {
+        queue.adapter.remove(queueItemId);
+        void invalidate();
+      } else if (!steered.errors.some((e) => e.message === "not_running")) {
+        unwrap(steered);
+      }
+      // not_running: the turn ended meanwhile; the queue sends it as a new turn
+    },
+    [queue, thread, invalidate],
+  );
   // what the composer can take: images (to the model as data urls), text
   // files (inlined) and any other file (uploaded to the server, its path in
   // the message), and the browser's speech recognition where it exists —
@@ -285,7 +322,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         onRetract,
         refetch,
         threadList,
-        queue,
+        queue: queue.adapter,
         attachments,
         dictation,
         ...(skills ? { skills } : {}),
@@ -313,6 +350,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
       attachments,
       dictation,
       skills,
+      queueVersion,
     ],
   );
   onNewRef.current = adapter.onNew;
@@ -348,5 +386,6 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     setEffort,
     mode,
     setMode,
+    insertQueued,
   };
 }

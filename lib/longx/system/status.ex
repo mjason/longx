@@ -103,6 +103,93 @@ defmodule Longx.System.Status do
 
     # Longx.Memory — the global memory a settings page edits: the curated
     # index, the notes inbox, a search over both
+    # the native kernel's knowledge, the shipped root (read-only) and the
+    # person's global root: what Settings → 知识 lists and edits
+    @knowledge_doc_fields [
+      root: [type: :string, allow_nil?: false],
+      path: [type: :string, allow_nil?: false],
+      title: [type: :string, allow_nil?: false],
+      summary: [type: :string, allow_nil?: false],
+      tags: [type: {:array, :string}, allow_nil?: false],
+      always: [type: :boolean, allow_nil?: false],
+      writable: [type: :boolean, allow_nil?: false]
+    ]
+
+    action :knowledge_docs, {:array, :map} do
+      constraints items: [fields: @knowledge_doc_fields]
+
+      run fn _input, _ ->
+        {:ok,
+         Enum.map(Longx.Agent.Knowledge.global_docs(), fn doc ->
+           %{
+             root: Atom.to_string(doc.root),
+             path: doc.path,
+             title: doc.title,
+             summary: doc.summary,
+             tags: doc.tags,
+             always: doc.always?,
+             writable: doc.root != :longx
+           }
+         end)}
+      end
+    end
+
+    action :knowledge_read, :map do
+      # a file's text, as it is: Ash trims strings unless told not to
+      constraints fields: [
+                    text: [
+                      type: :string,
+                      allow_nil?: false,
+                      constraints: [trim?: false, allow_empty?: true]
+                    ]
+                  ]
+
+      argument :path, :string, allow_nil?: false
+
+      run fn input, _ ->
+        case Longx.Agent.Knowledge.read_raw(
+               Longx.Agent.Knowledge.global_cwd(),
+               input.arguments.path
+             ) do
+          {:ok, text} -> {:ok, %{text: text}}
+          {:error, message} -> argument_error(:path, message)
+        end
+      end
+    end
+
+    action :knowledge_write do
+      argument :path, :string, allow_nil?: false
+
+      argument :content, :string,
+        allow_nil?: false,
+        constraints: [trim?: false, allow_empty?: true]
+
+      run fn input, _ ->
+        case Longx.Agent.Knowledge.write(
+               Longx.Agent.Knowledge.global_cwd(),
+               input.arguments.path,
+               input.arguments.content
+             ) do
+          {:ok, _file} -> :ok
+          {:error, message} -> argument_error(:content, message)
+        end
+      end
+    end
+
+    action :knowledge_delete do
+      argument :path, :string, allow_nil?: false
+
+      run fn input, _ ->
+        case Longx.Agent.Knowledge.delete(
+               Longx.Agent.Knowledge.global_cwd(),
+               input.arguments.path
+             ) do
+          :ok -> :ok
+          {:error, message} -> argument_error(:path, message)
+        end
+      end
+    end
+
     action :memory_index, :map do
       constraints fields: [text: [type: :string, allow_nil?: false]]
 
@@ -401,5 +488,12 @@ defmodule Longx.System.Status do
       {<<String.downcase(<<first>>)::binary, rest::binary>>,
        if(is_map(value), do: camelize(value), else: value)}
     end)
+  end
+
+  defp argument_error(field, message) do
+    {:error,
+     Ash.Error.Invalid.exception(
+       errors: [%Ash.Error.Changes.InvalidArgument{field: field, message: message}]
+     )}
   end
 end

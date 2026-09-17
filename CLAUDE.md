@@ -443,9 +443,9 @@ React Native client planned on the same core code.
     until the model answers without a call, then the pipeline runs at `:turn_end`. **Never a
     blocking receive or a synchronous model call in a callback**: the mailbox is how steer,
     interrupt and `/compact` get in. `send/3` (`turn_id:`, `model:`, `effort:`, `images:`)
-    starts a turn when idle and is a *steer* while one runs (shown at once as a
-    `userMessage`, folded into the context at the next step after the tool outputs; a step
-    is added when the model stopped before seeing it); `interrupt/1` kills the tasks (a
+    starts a turn when idle and is a *steer* while one runs (into the context at the next
+    step after the tool outputs, and **shown then** — until then it is the client's queue;
+    a step is added when the model stopped before seeing it); `interrupt/1` kills the tasks (a
     command's shim tree dies with its task) and ends the turn `interrupted`; `retract/2`
     also truncates the turn from the transcript and `ThreadState.drop_turns`;
     `compact/1`; `status/1`. Guards: `max_steps` per turn (500, `config :longx,
@@ -592,6 +592,26 @@ React Native client planned on the same core code.
     status strip say "原生内核" instead of the mode picker / codex state; the project
     settings show the definition (`settings` `AgentSection`, `useAgentDefinition`) with
     the trust switch, in place of codex's skills list.
+  - **A message typed while a turn runs is queued, the Codex app's way** (client):
+    `useCodexRuntime` gives assistant-ui `createMessageQueue` as the runtime's queue
+    (`notifyBusy` / `notifyIdle` from the view's running turn; the host subscribes to
+    the controller and bumps a `queueVersion` into the adapter memo — the runtime only
+    re-applies a *new* adapter object, and the store reads the lanes from it), so a
+    send while running lands in the queue and goes out as a new turn when the turn ends;
+    `elements/message-queue.tsx` (the registry element, ours) stacks the items above
+    the composer (`ComposerQueue` slot of `thread.aui`) with 取消 (`QueueItemPrimitive.
+    Remove`) and 插入 — `insertQueued` → RPC `steer_turn` into the running turn now,
+    off the queue (a send while running sits in the *steer* lane; `insertQueued` looks
+    in both). The composer has **one** action button: send (a turn; 加入队列 while one
+    runs) when there is text, stop while a turn runs and the draft is empty.
+  - **Knowledge in Settings** (设置 → 知识, `settings/KnowledgeSection`): the person's
+    global docs listed, edited in the CodeEditor (a save is a commit), created from a
+    template, deleted with a confirm; Longx's shipped docs read-only. RPC on
+    `Longx.System.Status`: `knowledge_docs` / `knowledge_read` (`trim?: false` — Ash
+    trims strings) / `knowledge_write` / `knowledge_delete` over
+    `Longx.Agent.Knowledge.global_docs/0`, `read_raw/2`, `write/3`, `delete/2`
+    (`knowledge_rpc_test`). A page read (`web_fetch`, an `openPage` action) renders as
+    one link row (`ReadPage` in the toolkit), not the search element.
   - Tests: `test/longx/agent/` (`pipeline_test` the DSL and phases, `config_test`,
     `loader_test` (namespaces, reload, notices, trust), `knowledge_test`,
     `web_search_test` (Tavily by Bypass, the fake obscura), `patch_test`,

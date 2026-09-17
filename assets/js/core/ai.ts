@@ -3,6 +3,10 @@
 // invalidates the AI queries and the composer's model list.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  knowledgeDelete,
+  knowledgeDocs,
+  knowledgeRead,
+  knowledgeWrite,
   applyPreset,
   checkModel,
   createModel,
@@ -469,5 +473,42 @@ export function useMemoryActions() {
       unwrap(await memorySetAutoExtract({ input: { enabled } })),
     ),
     run: useMemoryWrite(async () => unwrap(await memoryRun({}))),
+  };
+}
+
+/** The native kernel's knowledge: Longx's shipped docs (read-only) and the person's global root. */
+export type KnowledgeDoc = { root: string; path: string; title: string; summary: string; tags: string[]; always: boolean; writable: boolean };
+
+export const knowledgeKeys = {
+  all: ["knowledge"] as const,
+  docs: ["knowledge", "docs"] as const,
+  doc: (path: string) => ["knowledge", "doc", path] as const,
+};
+
+export function useKnowledgeDocs() {
+  return useQuery({
+    queryKey: knowledgeKeys.docs,
+    queryFn: async () =>
+      unwrap(await knowledgeDocs({ fields: ["root", "path", "title", "summary", "tags", "always", "writable"] })) as KnowledgeDoc[],
+  });
+}
+
+export function useKnowledgeDoc(path: string | null) {
+  return useQuery({
+    queryKey: knowledgeKeys.doc(path ?? ""),
+    queryFn: async () => (unwrap(await knowledgeRead({ fields: ["text"], input: { path: path! } })) as { text: string }).text,
+    enabled: path !== null,
+  });
+}
+
+function useKnowledgeWrite<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: fn, onSuccess: () => void client.invalidateQueries({ queryKey: knowledgeKeys.all }) });
+}
+
+export function useKnowledgeActions() {
+  return {
+    write: useKnowledgeWrite(async ({ path, content }: { path: string; content: string }) => unwrap(await knowledgeWrite({ input: { path, content } }))),
+    remove: useKnowledgeWrite(async (path: string) => unwrap(await knowledgeDelete({ input: { path } }))),
   };
 }

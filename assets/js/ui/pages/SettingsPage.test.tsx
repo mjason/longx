@@ -9,6 +9,8 @@ vi.mock("@/core/socket", async () =>
   (await import("@/ui/test-mocks")).socketMock(),
 );
 import {
+  knowledgeDelete,
+  knowledgeWrite,
   setBrowserPrivateNetwork,
   applyPreset,
   checkModel,
@@ -496,6 +498,45 @@ describe("SettingsPage", () => {
     const banner = await screen.findByTestId("sandbox-banner");
     expect(banner).toHaveTextContent("断网隔离不可用");
     expect(banner).toHaveTextContent("RTM_NEWADDR");
+  });
+
+  test("knowledge: the global docs are listed and edited, a shipped doc opens read-only, a new doc gets a template", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/knowledge");
+    const section = await screen.findByTestId("section-knowledge");
+    await within(section).findByText("About me");
+    expect(within(section).getByText("Writing plugs")).toBeInTheDocument();
+    expect(within(section).getByText("每轮注入")).toBeInTheDocument();
+
+    // a global doc opens in the editor; a change is saved as the whole file
+    await user.click(within(section).getByText("About me"));
+    const editor = await within(section).findByTestId("code-editor");
+    await waitFor(() => expect(editor.querySelector(".cm-content")).toHaveTextContent("Tabs, never spaces."));
+    await user.click(editor.querySelector(".cm-content")!);
+    await user.keyboard("!");
+    await user.click(within(section).getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(knowledgeWrite).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ path: "global/me.md", content: expect.stringContaining("!") }) })),
+    );
+    // delete asks first
+    await user.click(within(section).getByRole("button", { name: /删除/ }));
+    await user.click(await screen.findByRole("button", { name: "删除" }));
+    await waitFor(() => expect(knowledgeDelete).toHaveBeenCalledWith(expect.objectContaining({ input: { path: "global/me.md" } })));
+
+    // a shipped doc is read-only
+    await user.click(within(section).getByText("Writing plugs"));
+    await within(section).findByText("出厂知识只读");
+    expect(within(section).queryByRole("button", { name: "保存" })).not.toBeInTheDocument();
+    await user.click(within(section).getByRole("button", { name: "关闭" }));
+
+    // a new doc: a name, a template, straight into the editor
+    await user.click(within(section).getByRole("button", { name: /新建/ }));
+    await user.type(within(section).getByLabelText("文件名"), "tools/deploy");
+    await user.click(within(await screen.findByTestId("knowledge-new")).getByRole("button", { name: "新建" }));
+    await waitFor(() =>
+      expect(knowledgeWrite).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ path: "global/tools/deploy.md", content: expect.stringContaining("title: deploy") }) })),
+    );
   });
 
   test("memory: the index is editable, the notes are listed with their origin and can be deleted, search finds lines", async () => {

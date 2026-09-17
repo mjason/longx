@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+import { ShimmerLabel, mono } from "@/ui/components/assistant-ui/elements/surfaces";
 // How codex's items render inside an assistant message — with the
 // assistant-ui "Tool use" elements, nothing of our own: every invocation is
 // a ToolCall row (verb, chip, check) whose body is the element for that
@@ -27,7 +29,7 @@ import { FileTree, type FileTreeNode } from "@/ui/components/assistant-ui/elemen
 import { TerminalBlock } from "@/ui/components/assistant-ui/elements/terminal-block";
 import { ToolCall } from "@/ui/components/assistant-ui/elements/tool-call";
 import { ToolError } from "@/ui/components/assistant-ui/elements/tool-error";
-import { WebSearch } from "@/ui/components/assistant-ui/elements/web-search";
+import { WebSearch, domainOf } from "@/ui/components/assistant-ui/elements/web-search";
 import { t } from "@/ui/strings";
 
 type CommandArgs = { command?: string; fullCommand?: string; cwd?: string; review?: AutoReview };
@@ -364,10 +366,38 @@ export const WebSearchTool: ToolCallMessagePartComponent<WebSearchArgs, WebSearc
   const labels = kind === "open" ? [t.readPage, t.readingPage] : kind === "find" ? [t.foundInPage, t.findingInPage] : [t.searchedWeb, t.searching];
   return (
     <ToolRow label={labels[0]!} activeLabel={labels[1]!} query={query} running={searching} failed={p.isError === true} testId="tool-web-search">
-      <WebSearch query={query} results={results} searching={searching} searchingLabel={labels[1]!} readLabel={kind === "search" ? t.readSources(results.length) : t.pageRead} className="max-w-none" />
+      {kind === "open" ? (
+        <ReadPage url={query} title={results[0]?.title ?? ""} running={searching} />
+      ) : (
+        <WebSearch query={query} results={results} searching={searching} searchingLabel={labels[1]!} readLabel={kind === "search" ? t.readSources(results.length) : t.pageRead} className="max-w-none" />
+      )}
     </ToolRow>
   );
 };
+
+// a page read: one link row (the page's title, its domain), not a search box
+function ReadPage({ url, title, running }: { url: string; title: string; running: boolean }) {
+  const domain = domainOf(url);
+  return (
+    <div className="flex w-full flex-col gap-1.5 text-xs" data-testid="tool-read-page">
+      {running ? (
+        <ShimmerLabel className="text-foreground/45 relative inline-block leading-none">{t.readingPage}</ShimmerLabel>
+      ) : null}
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="hover:bg-foreground/[0.03] -mx-2.5 flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 transition-colors"
+      >
+        <span className="bg-foreground/[0.06] text-foreground/45 flex size-4 shrink-0 items-center justify-center rounded text-[9px] font-medium">
+          {domain.charAt(0).toUpperCase()}
+        </span>
+        <span className="text-foreground/90 min-w-0 flex-1 truncate text-[13.5px]">{title || url}</span>
+        <span className={cn(mono, "text-foreground/35 shrink-0")}>{domain}</span>
+      </a>
+    </div>
+  );
+}
 
 type Question = { id: string; header?: string; question: string; options?: { label: string; description?: string }[] | null; isOther?: boolean; isSecret?: boolean };
 type QuestionsArgs = { requestId?: string; questions?: Question[] };

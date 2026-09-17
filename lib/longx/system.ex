@@ -10,6 +10,10 @@ defmodule Longx.System do
       rpc_action :list_codex_processes, :list_codex_processes
       rpc_action :list_directory, :list_directory
       rpc_action :create_directory, :create_directory
+      rpc_action :knowledge_docs, :knowledge_docs
+      rpc_action :knowledge_read, :knowledge_read
+      rpc_action :knowledge_write, :knowledge_write
+      rpc_action :knowledge_delete, :knowledge_delete
       rpc_action :memory_index, :memory_index
       rpc_action :memory_write_index, :memory_write_index
       rpc_action :memory_notes, :memory_notes

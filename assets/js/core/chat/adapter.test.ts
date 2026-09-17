@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { createSteerQueue } from "./steerQueue";
+import { createMessageQueue } from "@assistant-ui/react";
 import { buildAdapter, textOf } from "./adapter";
 import { emptyView } from "./thread";
 
@@ -404,7 +404,7 @@ describe("chat adapter", () => {
   test("loading, send-disabled, refetch, thread list, queue and extras pass through to the runtime", async () => {
     const refetch = vi.fn(async () => {});
     const threadList = { threadId: "row-1", threads: [] };
-    const queue = createSteerQueue(async () => {});
+    const queue = createMessageQueue({ run: () => {} }).adapter;
     const adapter = buildAdapter({
       target,
       view: emptyView("thr_1"),
@@ -418,7 +418,7 @@ describe("chat adapter", () => {
     expect(adapter.isLoading).toBe(true);
     expect(adapter.isSendDisabled).toBe(true);
     expect(adapter.adapters?.threadList).toBe(threadList);
-    // the hold-nothing queue (steerQueue) is what lets the composer send while a turn runs
+    // the queue adapter is what lets the composer send while a turn runs
     expect(adapter.queue).toBe(queue);
     await adapter.onRefetchThread!();
     expect(refetch).toHaveBeenCalled();

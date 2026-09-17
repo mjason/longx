@@ -11,6 +11,7 @@ import { GoalBar } from "./GoalBar";
 import { ReasoningSteps } from "./ReasoningSteps";
 import { SlashCommands } from "./SlashCommands";
 import { ComposerLeading, ComposerTrailing } from "./TurnBar";
+import { MessageQueue } from "@/ui/components/assistant-ui/elements/message-queue";
 
 const Welcome = () => (
   <div className="mb-6 flex flex-col items-center px-4 text-center">
@@ -29,7 +30,13 @@ const ComposerPopovers = () => (
 );
 
 // module scope: a new object per render would remount every message
-const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers, UserText: FileMentionText, ReasoningGroup: ReasoningSteps };
+// what was typed while a turn runs: sent when it ends, or inserted into it now
+const ComposerQueue = () => {
+  const { insertQueued } = useChat();
+  return <MessageQueue onInsert={(id) => void insertQueued(id)} insertLabel={t.queueInsert} removeLabel={t.queueRemove} hint={t.queueHint} />;
+};
+
+const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers, ComposerQueue, UserText: FileMentionText, ReasoningGroup: ReasoningSteps };
 
 /**
  * The centre of the project window: assistant-ui's Thread element over the

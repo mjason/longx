@@ -6713,6 +6713,283 @@ export async function validateGatewayRequests(
 }
 
 
+export type KnowledgeDeleteInput = {
+  path: string;
+};
+
+export type InferKnowledgeDeleteResult = {};
+
+export type KnowledgeDeleteResult = | { success: true; data: InferKnowledgeDeleteResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function knowledgeDelete(
+  config: {
+  tenant?: string;
+  input: KnowledgeDeleteInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<KnowledgeDeleteResult> {
+  const payload = {
+    action: "knowledge_delete",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<KnowledgeDeleteResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateKnowledgeDelete(
+  config: {
+  tenant?: string;
+  input: KnowledgeDeleteInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "knowledge_delete",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type KnowledgeDocsFields = UnifiedFieldSelection<{root: string, path: string, title: string, summary: string, tags: Array<string>, always: boolean, writable: boolean, __type: "TypedMap", __primitiveFields: "root" | "path" | "title" | "summary" | "tags" | "always" | "writable"}>[];
+
+export type InferKnowledgeDocsResult<
+  Fields extends KnowledgeDocsFields | undefined,
+> = Array<InferResult<{root: string, path: string, title: string, summary: string, tags: Array<string>, always: boolean, writable: boolean, __type: "TypedMap", __primitiveFields: "root" | "path" | "title" | "summary" | "tags" | "always" | "writable"}, Fields>>;
+
+export type KnowledgeDocsResult<Fields extends KnowledgeDocsFields | undefined = undefined> = | { success: true; data: InferKnowledgeDocsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function knowledgeDocs<Fields extends KnowledgeDocsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<KnowledgeDocsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "knowledge_docs",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<KnowledgeDocsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateKnowledgeDocs(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "knowledge_docs",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type KnowledgeReadInput = {
+  path: string;
+};
+
+export type KnowledgeReadFields = UnifiedFieldSelection<{text: string, __type: "TypedMap", __primitiveFields: "text"}>[];
+
+export type InferKnowledgeReadResult<
+  Fields extends KnowledgeReadFields | undefined,
+> = InferResult<{text: string, __type: "TypedMap", __primitiveFields: "text"}, Fields>;
+
+export type KnowledgeReadResult<Fields extends KnowledgeReadFields | undefined = undefined> = | { success: true; data: InferKnowledgeReadResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function knowledgeRead<Fields extends KnowledgeReadFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: KnowledgeReadInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<KnowledgeReadResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "knowledge_read",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<KnowledgeReadResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateKnowledgeRead(
+  config: {
+  tenant?: string;
+  input: KnowledgeReadInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "knowledge_read",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type KnowledgeWriteInput = {
+  path: string;
+  content: string;
+};
+
+export type InferKnowledgeWriteResult = {};
+
+export type KnowledgeWriteResult = | { success: true; data: InferKnowledgeWriteResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function knowledgeWrite(
+  config: {
+  tenant?: string;
+  input: KnowledgeWriteInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<KnowledgeWriteResult> {
+  const payload = {
+    action: "knowledge_write",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<KnowledgeWriteResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateKnowledgeWrite(
+  config: {
+  tenant?: string;
+  input: KnowledgeWriteInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "knowledge_write",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ListCodexProcessesFields = UnifiedFieldSelection<{processes: Array<Record<string, any>>, idleAfterMs: number | null, __type: "TypedMap", __primitiveFields: "processes" | "idleAfterMs"}>[];
 
 export type InferListCodexProcessesResult<

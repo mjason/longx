@@ -230,12 +230,10 @@ defmodule Longx.Agent do
   end
 
   def handle_call({:send, text, opts}, _from, %State{turn_id: turn_id} = state) do
-    # shown now, in the model's context at the next step
+    # into the model's context at the next step, and shown then (until
+    # then it is the client's queue, where it can still be taken back)
     images = Keyword.get(opts, :images, [])
     ui = user_ui(new_id("item"), turn_id, text, images)
-    emit(state, "item/started", %{"item" => ui, "turnId" => turn_id})
-    emit(state, "item/completed", %{"item" => ui, "turnId" => turn_id})
-
     state = %{state | steers: state.steers ++ [{user_input(text, images), ui}]}
     {:reply, {:ok, %{turn_id: turn_id, steered: true}}, state}
   end
@@ -441,6 +439,7 @@ defmodule Longx.Agent do
 
   defp fold_steers(%State{steers: steers} = state) do
     Enum.reduce(steers, %{state | steers: []}, fn {input, ui}, acc ->
+      emit(acc, "item/started", %{"item" => ui, "turnId" => acc.turn_id})
       append(acc, :user_message, input, ui)
     end)
   end
