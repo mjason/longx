@@ -143,7 +143,7 @@ describe("ThreadPage", () => {
       expect(pick.title).toBe("模型");
       expect(pick.selected).toBe("deepseek-flash");
       // the tiers and aliases first (their own section), then the models by provider
-      expect(pick.sections.flatMap((s) => s.options.map((o) => o.id))).toEqual(["flagship", "advanced", "standard", "deepseek-flash", "glm-5"]);
+      expect(pick.sections.flatMap((s) => s.options.map((o) => o.id))).toEqual(["ultra", "pro", "plus", "deepseek-flash", "glm-5"]);
       window.LongxShell!.picked(pick.id, "glm-5");
       // the model has levels: a second list, the model's default preselected
       await waitFor(() => expect(posts.filter((p) => p["type"] === "pick")).toHaveLength(2));
@@ -1164,10 +1164,10 @@ describe("ThreadPage", () => {
       await waitFor(() => expect(screen.getByTestId("model-picker")).toHaveTextContent("glm-5"));
       expect(screen.getByTestId("model-picker")).toHaveTextContent("high");
       await user.click(screen.getByTestId("model-picker"));
-      await user.click(await screen.findByRole("option", { name: /flagship/ }));
+      await user.click(await screen.findByRole("option", { name: /ultra/ }));
       await user.type(screen.getByRole("textbox", { name: "随心输入" }), "go{Enter}");
       await waitFor(() =>
-        expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ text: "go", model: "flagship" }) })),
+        expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ text: "go", model: "ultra" }) })),
       );
     } finally {
       vi.mocked(getProject).mockResolvedValue(ok(project(1)) as never);

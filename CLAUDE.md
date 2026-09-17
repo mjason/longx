@@ -622,7 +622,7 @@ React Native client planned on the same core code.
     that picked none (`definitionModel` in `useCodexRuntime`, `TurnBar`'s `current`): a
     turn went to Bailian's qwen while the rail said deepseek-flash, and the person
     thought the DeepSeek quota had failed. **Tiers and aliases — `Longx.AI.Aliases`**:
-    `flagship` / `advanced` / `standard` (旗舰 / 高级 / 普通, always there; unmapped = the
+    `ultra` / `pro` / `plus` (旗舰 / 高级 / 普通, always there; unmapped = the
     default model) and any alias a team agrees on (青龙 …), each a **chain** of slugs
     (one `Longx.System.Setting`, `model_aliases`; `put/2` validated — a word, not a
     slug, models known; a tier is emptied, never deleted). `Longx.AI` sees through them:

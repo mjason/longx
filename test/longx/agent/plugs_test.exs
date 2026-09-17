@@ -150,7 +150,7 @@ defmodule Longx.Agent.PlugsTest do
     } do
       choices = [
         %{
-          slug: "flagship",
+          slug: "ultra",
           name: "旗舰",
           provider: "",
           levels: [],
@@ -159,7 +159,7 @@ defmodule Longx.Agent.PlugsTest do
           alias: ["qwen3.8-max", "deepseek-flash"]
         },
         %{
-          slug: "advanced",
+          slug: "pro",
           name: "高级",
           provider: "",
           levels: [],
@@ -194,8 +194,8 @@ defmodule Longx.Agent.PlugsTest do
       text = Enum.join(step.instructions, "\n")
       assert text =~ "# Models"
       # tiers and aliases first, with their chain; a description should prefer them
-      assert text =~ "`flagship` (旗舰) → qwen3.8-max, then deepseek-flash"
-      assert text =~ "`advanced` (高级) → deepseek-flash"
+      assert text =~ "`ultra` (旗舰) → qwen3.8-max, then deepseek-flash"
+      assert text =~ "`pro` (高级) → deepseek-flash"
       assert text =~ "Prefer a tier or alias"
 
       assert text =~

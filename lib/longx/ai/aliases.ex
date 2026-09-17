@@ -1,11 +1,11 @@
 defmodule Longx.AI.Aliases do
   @moduledoc """
   Names for models that survive a migration: three **tiers** every
-  installation has — `flagship` (旗舰), `advanced` (高级), `standard`
+  installation has — `ultra` (旗舰), `pro` (高级), `plus`
   (普通) — and any **aliases** a team agrees on (青龙, 朱雀 …). Each maps
   to an ordered chain of model slugs: the first is the one to use, the
   rest are fallbacks when it fails (quota gone, auth refused, upstream
-  down). A description (`model "flagship"`), a child's default model, the
+  down). A description (`model "ultra"`), a child's default model, the
   reviewer model, the composer — all may name a tier or alias, or still a
   concrete slug; `Longx.AI` resolves them (`resolve_targets/1`). A tier
   left unmapped means the default model. One `Longx.System.Setting`
@@ -15,8 +15,8 @@ defmodule Longx.AI.Aliases do
   alias Longx.AI
 
   @key "model_aliases"
-  @tiers ["flagship", "advanced", "standard"]
-  @labels %{"flagship" => "旗舰", "advanced" => "高级", "standard" => "普通"}
+  @tiers ["ultra", "pro", "plus"]
+  @labels %{"ultra" => "旗舰", "pro" => "高级", "plus" => "普通"}
 
   @type entry :: %{name: String.t(), label: String.t(), models: [String.t()], builtin?: boolean}
 
@@ -51,6 +51,8 @@ defmodule Longx.AI.Aliases do
   """
   @spec resolve(String.t() | nil) :: {:ok, [String.t()]} | :error
   def resolve(name) when is_binary(name) do
+    name = tier_name(name)
+
     case {Map.get(saved(), name), name in @tiers} do
       {[_ | _] = models, _} -> {:ok, models}
       {_, true} -> with {:ok, slug} <- default_slug(), do: {:ok, [slug]}
@@ -72,7 +74,7 @@ defmodule Longx.AI.Aliases do
   @spec put(String.t(), [String.t()]) ::
           {:ok, entry} | {:error, %{field: atom, message: String.t()}}
   def put(name, models) when is_binary(name) and is_list(models) do
-    name = String.trim(name)
+    name = name |> String.trim() |> tier_name()
     models = models |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == "")) |> Enum.uniq()
 
     with :ok <- check_name(name),
@@ -90,6 +92,12 @@ defmodule Longx.AI.Aliases do
        %{field: :name, message: "#{name} is a tier; map it to no model instead of removing it"}}
 
   def delete(name) when is_binary(name), do: save(Map.delete(saved(), name))
+
+  # Ultra, PRO, plus: a tier is known whatever the case
+  defp tier_name(name) do
+    down = String.downcase(name)
+    if down in @tiers, do: down, else: name
+  end
 
   defp check_name(""), do: {:error, %{field: :name, message: "a name is needed"}}
 

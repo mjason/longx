@@ -747,7 +747,7 @@ defmodule Longx.AgentTest do
         provider_id: model.provider_id
       })
 
-    {:ok, _} = Longx.AI.Aliases.put("flagship", [model.slug, second.slug])
+    {:ok, _} = Longx.AI.Aliases.put("ultra", [model.slug, second.slug])
     id = agent!("chain-#{System.unique_integer([:positive])}", dir, pipeline: EffectsPipeline)
 
     Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
@@ -762,7 +762,7 @@ defmodule Longx.AgentTest do
       end
     end)
 
-    {:ok, _} = Agent.send(id, "hi", model: "flagship")
+    {:ok, _} = Agent.send(id, "hi", model: "ultra")
 
     assert %{"fromModel" => "real-model", "toModel" => "real-model-2", "reason" => reason} =
              await("model/rerouted")

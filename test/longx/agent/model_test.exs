@@ -109,7 +109,7 @@ defmodule Longx.Agent.ModelTest do
         context_window: 32_000
       })
 
-    {:ok, _} = Longx.AI.Aliases.put("flagship", [model.slug, second.slug])
+    {:ok, _} = Longx.AI.Aliases.put("ultra", [model.slug, second.slug])
 
     Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
       case body!(conn)["model"] do
@@ -122,7 +122,7 @@ defmodule Longx.Agent.ModelTest do
     end)
 
     ref2 = make_ref()
-    assert :ok = Model.stream(%{@request | "model" => "flagship"}, self(), ref2)
+    assert :ok = Model.stream(%{@request | "model" => "ultra"}, self(), ref2)
     assert_receive {:model, ^ref2, {:fallback, "real-model", "real-model-2", reason}}, 5_000
     assert reason =~ "quota"
     assert_receive {:model, ^ref2, {:completed, _, %{context_window: 32_000}}}, 5_000

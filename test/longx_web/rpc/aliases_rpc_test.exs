@@ -43,18 +43,18 @@ defmodule LongxWeb.AliasesRpcTest do
     assert %{
              "success" => true,
              "data" => [
-               %{"name" => "flagship", "label" => "旗舰", "models" => [], "builtin" => true} | _
+               %{"name" => "ultra", "label" => "旗舰", "models" => [], "builtin" => true} | _
              ]
            } =
              rpc(conn, "model_aliases", %{"fields" => @fields})
 
     assert %{
              "success" => true,
-             "data" => %{"name" => "flagship", "models" => ["model-b", "model-a"]}
+             "data" => %{"name" => "ultra", "models" => ["model-b", "model-a"]}
            } =
              rpc(conn, "set_model_alias", %{
                "fields" => @fields,
-               "input" => %{"name" => "flagship", "models" => ["model-b", "model-a"]}
+               "input" => %{"name" => "ultra", "models" => ["model-b", "model-a"]}
              })
 
     assert %{"success" => true, "data" => %{"name" => "青龙", "builtin" => false}} =
@@ -72,8 +72,8 @@ defmodule LongxWeb.AliasesRpcTest do
     assert %{"success" => true} = rpc(conn, "delete_model_alias", %{"input" => %{"name" => "青龙"}})
 
     assert %{"success" => false} =
-             rpc(conn, "delete_model_alias", %{"input" => %{"name" => "flagship"}})
+             rpc(conn, "delete_model_alias", %{"input" => %{"name" => "ultra"}})
 
-    assert {:ok, ["model-b", "model-a"]} = AI.Aliases.resolve("flagship")
+    assert {:ok, ["model-b", "model-a"]} = AI.Aliases.resolve("ultra")
   end
 end

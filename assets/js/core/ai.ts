@@ -56,7 +56,7 @@ export const aiKeys = {
   aliases: ["ai", "aliases"] as const,
 };
 
-/** a tier (flagship / advanced / standard, always there) or a team's alias: a chain of model slugs, the first used, the rest fallbacks */
+/** a tier (ultra / pro / plus, always there) or a team's alias: a chain of model slugs, the first used, the rest fallbacks */
 export type ModelAlias = { name: string; label: string; models: string[]; builtin: boolean };
 
 export function useModelAliases() {

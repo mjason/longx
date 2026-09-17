@@ -36,17 +36,21 @@ defmodule Longx.AI.AliasesTest do
 
   test "the three tiers always exist; unset they mean the default model; a custom alias can be added and removed" do
     assert [
-             %{name: "flagship", models: [], builtin?: true},
-             %{name: "advanced"},
-             %{name: "standard"}
+             %{name: "ultra", models: [], builtin?: true},
+             %{name: "pro"},
+             %{name: "plus"}
            ] = Aliases.all()
 
-    assert {:ok, ["model-a"]} = Aliases.resolve("flagship")
+    assert {:ok, ["model-a"]} = Aliases.resolve("ultra")
     assert :error = Aliases.resolve("model-a")
     assert :error = Aliases.resolve("nothing")
 
-    assert {:ok, _} = Aliases.put("flagship", ["model-b", "model-a"])
-    assert {:ok, ["model-b", "model-a"]} = Aliases.resolve("flagship")
+    assert {:ok, _} = Aliases.put("ultra", ["model-b", "model-a"])
+    assert {:ok, ["model-b", "model-a"]} = Aliases.resolve("ultra")
+    # a tier is known whatever the case it is written in
+    assert {:ok, ["model-b", "model-a"]} = Aliases.resolve("Ultra")
+    assert {:ok, _} = Aliases.put("PRO", ["model-a"])
+    assert {:ok, ["model-a"]} = Aliases.resolve("pro")
 
     assert {:ok, _} = Aliases.put("青龙", ["model-b"])
 
@@ -56,9 +60,9 @@ defmodule Longx.AI.AliasesTest do
     assert :ok = Aliases.delete("青龙")
     assert :error = Aliases.resolve("青龙")
     # a tier is never deleted, only emptied
-    assert {:error, _} = Aliases.delete("flagship")
-    assert {:ok, _} = Aliases.put("flagship", [])
-    assert {:ok, ["model-a"]} = Aliases.resolve("flagship")
+    assert {:error, _} = Aliases.delete("ultra")
+    assert {:ok, _} = Aliases.put("ultra", [])
+    assert {:ok, ["model-a"]} = Aliases.resolve("ultra")
   end
 
   test "an alias is validated: a name that is a model's slug, an unknown model, a bad name" do
@@ -69,24 +73,24 @@ defmodule Longx.AI.AliasesTest do
   end
 
   test "the rest of Longx.AI sees through an alias: targets in order, the first model's levels, the prompt's list" do
-    {:ok, _} = Aliases.put("advanced", ["model-b", "model-a"])
-    assert {:ok, [%{model: "b"}, %{model: "a"}]} = AI.resolve_targets("advanced")
+    {:ok, _} = Aliases.put("pro", ["model-b", "model-a"])
+    assert {:ok, [%{model: "b"}, %{model: "a"}]} = AI.resolve_targets("pro")
     assert {:ok, [%{model: "a"}]} = AI.resolve_targets("model-a")
     assert {:ok, [%{model: "a"}]} = AI.resolve_targets(nil)
     assert {:error, {:unknown_model, "nope"}} = AI.resolve_targets("nope")
     # the first model answers for the alias
-    assert {:ok, %{model: "b"}} = AI.resolve_target("advanced")
-    assert :ok = AI.check_effort("advanced", "anything")
-    assert {:error, {:unknown_effort, "mid"}} = AI.check_effort("flagship", "mid")
-    assert {:ok, opts} = AI.thread_options("advanced")
-    assert opts[:model] == "advanced"
+    assert {:ok, %{model: "b"}} = AI.resolve_target("pro")
+    assert :ok = AI.check_effort("pro", "anything")
+    assert {:error, {:unknown_effort, "mid"}} = AI.check_effort("ultra", "mid")
+    assert {:ok, opts} = AI.thread_options("pro")
+    assert opts[:model] == "pro"
 
     choices = AI.model_choices()
 
     assert [
-             %{slug: "flagship", alias: ["model-a"]},
-             %{slug: "advanced", alias: ["model-b", "model-a"]},
-             %{slug: "standard"} | models
+             %{slug: "ultra", alias: ["model-a"]},
+             %{slug: "pro", alias: ["model-b", "model-a"]},
+             %{slug: "plus"} | models
            ] = choices
 
     assert Enum.map(models, & &1.slug) == ["model-a", "model-b"]

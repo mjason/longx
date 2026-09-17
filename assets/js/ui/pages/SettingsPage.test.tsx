@@ -352,16 +352,16 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     renderAt("/settings/models");
     const card = await screen.findByTestId("model-aliases");
-    const flagship = within(card).getByTestId("alias-flagship");
-    expect(within(flagship).getByRole("combobox", { name: "flagship 用的模型" })).toHaveTextContent("glm-5");
-    expect(within(flagship).getByRole("combobox", { name: "flagship 备选 1" })).toHaveTextContent("deepseek-flash");
-    expect(within(within(card).getByTestId("alias-advanced")).getByRole("combobox", { name: "advanced 用的模型" })).toHaveTextContent("默认模型");
+    const flagship = within(card).getByTestId("alias-ultra");
+    expect(within(flagship).getByRole("combobox", { name: "ultra 用的模型" })).toHaveTextContent("glm-5");
+    expect(within(flagship).getByRole("combobox", { name: "ultra 备选 1" })).toHaveTextContent("deepseek-flash");
+    expect(within(within(card).getByTestId("alias-pro")).getByRole("combobox", { name: "pro 用的模型" })).toHaveTextContent("默认模型");
     // a tier has no delete; a fallback picked is saved as the whole chain
     expect(within(flagship).queryByRole("button", { name: /删除/ })).not.toBeInTheDocument();
-    await user.click(within(flagship).getByRole("combobox", { name: "flagship 备选 2" }));
+    await user.click(within(flagship).getByRole("combobox", { name: "ultra 备选 2" }));
     await user.click(await screen.findByRole("option", { name: "deepseek-flash" }));
     await waitFor(() =>
-      expect(setModelAlias).toHaveBeenCalledWith(expect.objectContaining({ input: { name: "flagship", models: ["glm-5", "deepseek-flash", "deepseek-flash"] } })),
+      expect(setModelAlias).toHaveBeenCalledWith(expect.objectContaining({ input: { name: "ultra", models: ["glm-5", "deepseek-flash", "deepseek-flash"] } })),
     );
     // a new alias starts on the first model
     await user.type(within(card).getByRole("textbox", { name: "添加别名" }), "青龙");
