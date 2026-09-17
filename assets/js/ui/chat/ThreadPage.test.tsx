@@ -27,6 +27,7 @@ import {
   getThread,
   listModels,
   listThreads,
+  interruptTurn,
   retractTurn,
   steerTurn,
   searchFiles,
@@ -271,6 +272,26 @@ describe("ThreadPage", () => {
     expect(screen.getByText("removing…")).toBeInTheDocument();
     // the composer offers stop while the turn runs
     expect(screen.getByRole("button", { name: /停止/ })).toBeInTheDocument();
+  });
+
+  test("Escape in the composer never stops the turn: an IME user presses it all the time; stop is the button", async () => {
+    const user = userEvent.setup();
+    await open();
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", {
+        seq: 5,
+        method: "item/started",
+        params: { turnId: "turn_2", item: { id: "c2", type: "commandExecution", command: "sleep 45", cwd: "/p", status: "inProgress" } },
+      });
+    });
+    expect(screen.getByRole("button", { name: /停止/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("textbox", { name: "随心输入" }));
+    await user.keyboard("{Escape}");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(interruptTurn).not.toHaveBeenCalled();
+    expect(retractTurn).not.toHaveBeenCalled();
+    expect(screen.getByTestId("turn-bar")).toHaveTextContent("进行中");
   });
 
   test("stop before anything came back: the turn is taken back and its text is in the composer again, ready to edit", async () => {

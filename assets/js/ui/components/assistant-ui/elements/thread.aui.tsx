@@ -267,6 +267,9 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) transition-[border-color] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
         >
           <ComposerAttachments />
+          {/* Longx: Escape never stops the turn — a Chinese IME user presses it to
+              dismiss candidates, and assistant-ui would cancel the run on it (a 10
+              minute tool call died to a stray Escape); stop is the button */}
           <ComposerPrimitive.Input
             placeholder={t.composerPlaceholder}
             className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-8 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 outline-none"
@@ -274,6 +277,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
             autoFocus={autoFocus}
             enterKeyHint="send"
             aria-label={t.composerPlaceholder}
+            cancelOnEscape={false}
             {...history}
           />
           <ComposerAction />
