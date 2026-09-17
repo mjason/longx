@@ -409,17 +409,18 @@ describe("SettingsPage", () => {
       vi.mocked(browserInstall).mockResolvedValueOnce(downloading as never);
       await user.click(within(card).getByRole("button", { name: /下载/ }));
       await waitFor(() => expect(browserInstall).toHaveBeenCalled());
-      const bar = await within(card).findByRole("progressbar");
+      // the card polls once a second: under a loaded suite a poll can miss the default 1 s wait
+      const bar = await within(card).findByRole("progressbar", {}, { timeout: 5000 });
       expect(bar).toHaveAttribute("aria-valuenow", "15000000");
       expect(card).toHaveTextContent("14 MB / 57 MB");
       // a failure says why and offers a retry
       vi.mocked(browserStatus).mockResolvedValue(ok({ ...browserIdle, stage: "failed", error: "download failed (HTTP 500)" }) as never);
-      expect(await within(card).findByText(/HTTP 500/)).toBeInTheDocument();
+      expect(await within(card).findByText(/HTTP 500/, {}, { timeout: 5000 })).toBeInTheDocument();
       expect(within(card).getByRole("button", { name: /重试/ })).toBeInTheDocument();
       // installed: the path, no button
       vi.mocked(browserStatus).mockResolvedValue(ok({ ...browserIdle, stage: "installed", path: "/data/obscura/0.2.2/x86_64-linux/obscura" }) as never);
       await user.click(within(card).getByRole("button", { name: /重试/ }));
-      expect(await within(card).findByText(/已安装/)).toBeInTheDocument();
+      expect(await within(card).findByText(/已安装/, {}, { timeout: 5000 })).toBeInTheDocument();
       expect(within(card).queryByRole("button", { name: /下载|重试/ })).not.toBeInTheDocument();
     } finally {
       vi.mocked(browserStatus).mockResolvedValue(ok({ ...browserIdle, stage: "installed", path: "/data/obscura/0.2.2/x86_64-linux/obscura" }) as never);
