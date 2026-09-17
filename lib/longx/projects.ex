@@ -214,6 +214,7 @@ defmodule Longx.Projects do
              web_search: Keyword.get(opts, :web_search, project.web_search),
              trust: trust_fun(project.id),
              settings: settings_fun(project.id),
+             models: &Longx.AI.model_choices/0,
              idle_ms: Longx.Agent.Settings.idle_ms(Longx.Agent.Settings.for_project(project)),
              spawner: &__MODULE__.spawn_native_agent/4
            ),
@@ -328,6 +329,7 @@ defmodule Longx.Projects do
         web_search: thread.web_search,
         trust: trust_fun(thread.project_id),
         settings: settings_fun(thread.project_id),
+        models: &Longx.AI.model_choices/0,
         idle_ms:
           Longx.Agent.Settings.idle_ms(Longx.Agent.Settings.for_project_id(thread.project_id)),
         spawner: &__MODULE__.spawn_native_agent/4

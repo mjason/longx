@@ -100,6 +100,8 @@ defmodule Longx.Agent do
               spawner: nil,
               # the settings page's layer, read per turn (Longx.Agent.Settings map or nil)
               settings: nil,
+              # the models the agent may name (Longx.AI.model_choices/0), read per step; nil = unknown
+              models: nil,
               # the thread's goal (codex's shape: objective, status, tokenBudget,
               # tokensUsed, timeUsedSeconds), kept in the view across restarts
               goal: nil,
@@ -176,9 +178,12 @@ defmodule Longx.Agent do
         :ok
 
       pid ->
-        # a normal stop: the callback in flight (a transcript write) finishes first —
+        # the children first, and to the end: a child left to notice the parent's
+        # death would still be closing its turn (transcript writes) after this
+        # returned. Then a normal stop: the callback in flight finishes first —
         # the supervisor's kill left SQLite's connection mid-transaction
         try do
+          for %{id: child} <- GenServer.call(pid, :children, 5_000), do: stop(child)
           GenServer.stop(pid, :normal, 15_000)
         catch
           :exit, _ -> :ok
@@ -276,6 +281,7 @@ defmodule Longx.Agent do
       path: Keyword.get(opts, :path) || "/root",
       spawner: Keyword.get(opts, :spawner),
       settings: Keyword.get(opts, :settings, fn -> nil end),
+      models: Keyword.get(opts, :models, fn -> nil end),
       idle_ms: Keyword.get(opts, :idle_ms, configured_idle_ms()),
       last_active: System.monotonic_time(:millisecond),
       trust: Keyword.get(opts, :trust, fn -> false end),
@@ -587,6 +593,7 @@ defmodule Longx.Agent do
              web_search: parent.web_search,
              spawner: parent.spawner,
              settings: parent.settings,
+             models: parent.models,
              idle_ms: parent.idle_ms
            ),
          {:ok, _} <- __MODULE__.send(child_id, task) do
@@ -687,7 +694,11 @@ defmodule Longx.Agent do
     ref = make_ref()
 
     task =
-      Task.Supervisor.async_nolink(@tasks, Longx.Agent.Model, :stream, [request, self(), ref])
+      Task.Supervisor.async_nolink(@tasks, Longx.Agent.Model, :run, [
+        Longx.Agent.Model.prepare(request),
+        self(),
+        ref
+      ])
 
     {:noreply,
      %{
@@ -718,6 +729,7 @@ defmodule Longx.Agent do
         assigns: %{
           trust: state.trust,
           settings: state.settings,
+          models_fun: state.models,
           web_search: state.web_search,
           context_overflow: state.context_overflow,
           compact_requested: state.compact_requested,
@@ -737,14 +749,24 @@ defmodule Longx.Agent do
   defp run_pipeline(nil, step), do: run_pipeline({:loaded, load_definition(step)}, step)
 
   defp run_pipeline({:loaded, loaded}, step) do
-    # the description's model and level stand where the person chose none;
-    # its notices (a file that failed to load, an old format) lead the prompt
+    # the description's model and level stand where the person chose none —
+    # if Longx has that model; a slug nobody configured is a notice and the
+    # default runs (a failed turn taught the agent nothing). The notices (a
+    # file that failed to load, an old format) lead the prompt.
+    models = (step.assigns[:models_fun] || fn -> nil end).()
+    {model, effort, notices} = description_model(step, loaded, models)
+
     step = %{
       step
-      | model: step.model || loaded.model,
-        effort: step.effort || (step.model == nil && loaded.effort) || nil,
-        instructions: Enum.map(loaded.notices, &("⚠ " <> &1)) ++ step.instructions,
-        assigns: Map.merge(step.assigns, %{agents: loaded.agents, allowed: loaded.allowed})
+      | model: model,
+        effort: effort,
+        instructions: Enum.map(notices, &("⚠ " <> &1)) ++ step.instructions,
+        assigns:
+          Map.merge(step.assigns, %{
+            agents: loaded.agents,
+            allowed: loaded.allowed,
+            models: models
+          })
     }
 
     {:ok, Longx.Agent.Pipeline.run(step, loaded.plugs)}
@@ -756,6 +778,27 @@ defmodule Longx.Agent do
     {:ok, pipeline.run(step)}
   rescue
     e -> {:error, "pipeline failed: " <> Exception.message(e)}
+  end
+
+  defp description_model(%Step{model: chosen} = step, loaded, _models) when is_binary(chosen),
+    do: {chosen, step.effort, loaded.notices}
+
+  defp description_model(%Step{} = step, %{model: nil} = loaded, _models),
+    do: {nil, step.effort, loaded.notices}
+
+  defp description_model(%Step{} = step, %{model: slug} = loaded, models) do
+    known = models && Enum.map(models, & &1.slug)
+
+    if known == nil or slug in known do
+      {slug, step.effort || loaded.effort, loaded.notices}
+    else
+      notice =
+        "The agent description names model #{inspect(slug)}, which is not configured in Longx; " <>
+          "running on the default model instead. Models you may name: " <>
+          Enum.join(known, ", ") <> ". Fix the description (model \"<slug>\")."
+
+      {nil, step.effort, loaded.notices ++ [notice]}
+    end
   end
 
   defp load_definition(%Step{cwd: cwd, project_id: project_id, assigns: assigns}) do
@@ -1234,7 +1277,11 @@ defmodule Longx.Agent do
     }
 
     task =
-      Task.Supervisor.async_nolink(@tasks, Longx.Agent.Model, :stream, [request, self(), ref])
+      Task.Supervisor.async_nolink(@tasks, Longx.Agent.Model, :run, [
+        Longx.Agent.Model.prepare(request),
+        self(),
+        ref
+      ])
 
     %{
       state

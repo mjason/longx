@@ -29,19 +29,41 @@ defmodule Longx.Agent.Model do
 
   @default_retry_ms [1_000, 2_000, 4_000]
 
-  @spec stream(map, pid, reference) :: :ok
-  def stream(request, owner, ref) when is_map(request) and is_pid(owner) do
+  @typedoc "A request resolved and prepared (`prepare/1`), or why it could not be."
+  @type prepared :: {:ok, %{up: map, target: AI.Target.t(), log: term}} | {:error, String.t()}
+
+  @doc """
+  Resolves the model and prepares the request — the part that reads the
+  database. It runs in the kernel's own process, never in the task: a task
+  killed mid-query (an interrupt, a parent stopping) took SQLite's
+  connection down with it and the next write anywhere said "Database busy".
+  """
+  @spec prepare(map) :: prepared
+  def prepare(request) when is_map(request) do
     with {:ok, target} <- AI.resolve_target(request["model"]),
          {:ok, up} <- request |> custom_tools(target) |> Gateway.prepare(target) do
       log = Log.begin(request, %{upstream_id: target.model, provider: target.provider_slug})
-      Process.monitor(owner)
-      attempt(up, target, owner, ref, log, retry_ms())
+      {:ok, %{up: up, target: target, log: log}}
     else
       {:error, reason} ->
         Log.begin(request, nil) |> Log.finish(%{status: nil, error: describe(reason)})
-        failed(owner, ref, describe(reason))
+        {:error, describe(reason)}
     end
   end
+
+  @doc "Streams a prepared request to `owner` (the task's body); a failed preparation is reported the same way."
+  @spec run(prepared, pid, reference) :: :ok
+  def run({:ok, %{up: up, target: target, log: log}}, owner, ref) when is_pid(owner) do
+    Process.monitor(owner)
+    attempt(up, target, owner, ref, log, retry_ms())
+  end
+
+  def run({:error, message}, owner, ref) when is_pid(owner), do: failed(owner, ref, message)
+
+  @doc "`prepare/1` then `run/3`, in the calling process (tests, scripts)."
+  @spec stream(map, pid, reference) :: :ok
+  def stream(request, owner, ref) when is_map(request) and is_pid(owner),
+    do: request |> prepare() |> run(owner, ref)
 
   # a tool with a grammar goes out as a `custom` tool where the provider runs
   # them (OpenAI's Responses API); everyone else keeps the function form

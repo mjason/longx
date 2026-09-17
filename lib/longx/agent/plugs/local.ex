@@ -22,7 +22,9 @@ defmodule Longx.Agent.Plugs.Local do
 
   @impl true
   def call(%Step{phase: :request} = step, {root, trusted?}) do
-    Step.instructions(step, """
+    step
+    |> Step.instructions(models_section(step.assigns[:models]))
+    |> Step.instructions("""
     # Your own definition
 
     This project's agent — the pipeline you run through, your prompt, your tools, the agents you may spawn — is defined in `#{Path.join(root, ".longx")}`: `agent.exs` (the shared description), `shared/` (agents, plugs, knowledge — in git, reviewed by the person) and `local/` (the same, gitignored — this machine's and yours). Write your own additions to `local/` (`local/agent.exs`, `local/plugs/*.exs`, `local/agents/<name>/`); the person promotes what they reviewed into `shared/`. Changes load at your next step — no restart; a file that fails to load comes back to you as a notice, so fix it. **A custom tool is two files**: the plug module in `local/plugs/<name>.exs` and a `plug <Module>` line in `local/agent.exs`; at the next step the tool is in your list (or a notice says what broke). When a workflow keeps repeating, write it as a plug with a tool; when an instruction should always hold, add it to the description's `prompt`; when a kind of task keeps being delegated, declare it as an agent. Record the difference to the default (`extends :default` + `plug` / `options` / `drop`), not a copy of the whole pipeline.
@@ -34,4 +36,26 @@ defmodule Longx.Agent.Plugs.Local do
   end
 
   def call(step, _opts), do: step
+
+  # the models a description may name: nothing else is known to Longx
+  defp models_section(nil), do: nil
+  defp models_section([]), do: nil
+
+  defp models_section(models) do
+    lines =
+      Enum.map_join(models, "\n", fn m ->
+        levels = if m.levels == [], do: "", else: "; levels " <> Enum.join(m.levels, ", ")
+        level = if m.default_level, do: "; default level #{m.default_level}", else: ""
+        default = if m.default?, do: "; the default model", else: ""
+        "- `#{m.slug}` — #{m.name} (#{m.provider})#{levels}#{level}#{default}"
+      end)
+
+    """
+    # Models
+
+    These are the models Longx can reach — the only slugs a description may name (`model "<slug>", effort: "<level>"`, for an agent or a role); anything else fails to resolve. The person's own choice for a turn overrides the description.
+
+    #{lines}
+    """
+  end
 end

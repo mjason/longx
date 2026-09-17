@@ -610,8 +610,14 @@ React Native client planned on the same core code.
     the agent itself wrote (an agent that already runs commands as the person gains no
     new power from it); gating it too left a declared researcher invisible on an
     untrusted project, the model saying "no spawn_agent here" for three turns.
-    `Plugs.Local` is mounted for every project with a `.longx` (`trusted:` option:
-    untrusted, it says the shared tree waits for the switch): what the agent is told
+    `Plugs.Local` is mounted for every project, `.longx` or not (`trusted:` option:
+    untrusted, it says the shared tree waits for the switch), and **lists the models
+    the agent may name** (`# Models`: slug, name, provider, levels, default level, the
+    default — `Longx.AI.model_choices/0`, handed to the kernel as `models:`, a function
+    read per step like `trust:`; `assigns.models`). A description naming a slug Longx
+    does not have (a model wrote `model "qwen-max"` and the next turn failed with
+    "unknown model") is a **notice** naming the known slugs, and the default model runs
+    (`description_model/3`); the person's own choice for a turn always stands. It is what the agent is told
     about its own definition (write to `local/`, the person promotes; a custom tool is
     two files — `local/plugs/<name>.exs` + `plug <Module>` in `local/agent.exs`, live at
     the next step, a broken file back as a notice), with the compact API reference
@@ -688,10 +694,15 @@ React Native client planned on the same core code.
     the transcript (user words verbatim + summary), clears the usage and continues the
     step. A failed summary: the step goes on without folding, or fails the turn when the
     provider had refused the length.
-  - `Longx.Agent.Model` — the streamed call, in a task: `Longx.AI.resolve_target/1`
-    (`longx` = the default model), `Gateway.prepare/2` (reasoning items sanitised per
-    provider, the output cap — the same path codex's requests take), the `custom` tool
-    swap for `:openai`, a `Limiter` slot, a `Gateway.Log` entry (Settings → 请求记录 shows
+  - `Longx.Agent.Model` — the streamed call, in a task. **`prepare/1` runs in the kernel's
+    own process** (`Longx.AI.resolve_target/1` — `longx` = the default model —,
+    `Gateway.prepare/2`, the `Gateway.Log` entry) and the task only `run/3`s the prepared
+    request: a task killed mid-query (an interrupt, a parent stopping, a test's sweep)
+    took the shared SQLite connection down with it and the next write anywhere said
+    "Database busy" — a flake that only showed with several agents per test.
+    `stream/3` = both, for tests. Preparation is reasoning items sanitised per
+    provider, the output cap — the same path codex's requests take —, the `custom` tool
+    swap for `:openai`; then a `Limiter` slot, a `Gateway.Log` entry (Settings → 请求记录 shows
     native requests too, `request_kind` `agent` / `compaction`), `Longx.Agent.SSE` →
     `{:item_added | :text_delta | :reasoning_delta | :reasoning_text_delta | :item_done |
     :completed | :failed}`. 429 / 5xx / transport errors before anything streamed are

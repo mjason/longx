@@ -189,8 +189,12 @@ defmodule Longx.Agent.LoaderTest do
     assert loaded.errors == []
     assert loaded.present? == true
 
+    # no .longx yet: the default pipeline, plus the agent told how to grow one
     empty = Loader.load(root <> "-none", tag: tag <> "n", trusted: true)
-    assert names(empty.plugs) == names(Longx.Agent.Pipelines.Default.plugs())
+
+    assert names(empty.plugs) -- [Longx.Agent.Plugs.Local] ==
+             names(Longx.Agent.Pipelines.Default.plugs())
+
     assert empty.present? == false
   end
 

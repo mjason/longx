@@ -133,7 +133,8 @@ defmodule Longx.Projects.NativeEngineTest do
   test "a message is a turn the Tracker completes with its git bookmarks", %{
     bypass: bypass,
     project: project,
-    dir: dir
+    dir: dir,
+    model: model
   } do
     script!(bypass, [ResponsesFixture.assistant_message("hi back")])
     {:ok, thread} = Projects.start_thread(project)
@@ -152,6 +153,8 @@ defmodule Longx.Projects.NativeEngineTest do
 
     assert_receive {:request, body}
     assert body["reasoning"]["effort"] == "low"
+    # the agent knows the models it may name in its description
+    assert body["instructions"] =~ "`#{model.slug}`"
     assert [_, %{kind: :agent_message}] = Transcript.items!(thread.codex_thread_id)
 
     assert {:error, :not_running} = Projects.steer_message(thread, "late")

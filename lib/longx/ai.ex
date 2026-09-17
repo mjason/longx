@@ -287,6 +287,35 @@ defmodule Longx.AI do
     end
   end
 
+  @doc """
+  Every model as the native kernel's prompt names it: slug, name, provider,
+  the levels it offers, its default level, whether it is the default — what
+  an agent may write as `model "<slug>"` in its description.
+  """
+  @spec model_choices() :: [
+          %{
+            slug: String.t(),
+            name: String.t(),
+            provider: String.t(),
+            levels: [String.t()],
+            default_level: String.t() | nil,
+            default?: boolean
+          }
+        ]
+  def model_choices do
+    for %Model{slug: slug} = model <- list_models!(), is_binary(slug) do
+      %{
+        slug: slug,
+        name: model.name,
+        provider: (model.provider && model.provider.name) || "",
+        levels: model.reasoning_levels || [],
+        default_level: model.reasoning_effort,
+        default?: model.default
+      }
+    end
+    |> Enum.sort_by(&{!&1.default?, &1.provider, &1.slug})
+  end
+
   @doc "The global default model's target."
   @spec resolve_target() ::
           {:ok, Target.t()} | {:error, :no_default_model | {:missing_api_key, String.t()}}

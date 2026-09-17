@@ -277,12 +277,8 @@ defmodule Longx.Agent.Loader do
     end)
   end
 
-  # the growth plug: every project with a .longx — untrusted, it says the shared tree waits
-  defp with_local(plugs, project_dir, root, trusted?) do
-    if File.dir?(project_dir), do: mount_local(plugs, root, trusted?), else: plugs
-  end
-
-  defp mount_local(plugs, root, trusted?) do
+  # the growth plug, always: a project with no .longx yet is told how to grow one
+  defp with_local(plugs, _project_dir, root, trusted?) do
     entry = {Local, [root: root, trusted: trusted?]}
 
     case Enum.find_index(plugs, &match?({Request, _}, &1)) do

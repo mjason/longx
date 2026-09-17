@@ -8,6 +8,17 @@ defmodule Longx.AgentTest do
   alias Longx.Test.ResponsesFixture
 
   setup do
+    # nothing of a previous test may still be writing: every agent and every
+    # tool / model task goes before the next test's sandbox starts
+    on_exit(fn ->
+      for {_, pid, _, _} <- DynamicSupervisor.which_children(Longx.Agent.Supervisor),
+          is_pid(pid),
+          do: catch_exit(GenServer.stop(pid, :normal, 5_000))
+
+      for pid <- Task.Supervisor.children(Longx.Agent.TaskSupervisor),
+          do: Task.Supervisor.terminate_child(Longx.Agent.TaskSupervisor, pid)
+    end)
+
     Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
 
@@ -679,6 +690,51 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "⚠"
     assert body["instructions"] =~ "deploy.exs"
     refute "deploy" in Enum.map(body["tools"], & &1["name"])
+  end
+
+  test "the agent is told which models it may name; an unknown one in its description is a notice, not a failed turn",
+       %{bypass: bypass, dir: dir} do
+    File.mkdir_p!(Path.join(dir, ".longx/local"))
+
+    File.write!(
+      Path.join(dir, ".longx/local/agent.exs"),
+      "import Longx.Agent.Config\nagent do\n  model \"qwen-max\"\nend\n"
+    )
+
+    choices = [
+      %{
+        slug: "fake-x",
+        name: "Fake X",
+        provider: "Upstream",
+        levels: ["low", "high"],
+        default_level: "low",
+        default?: true
+      },
+      %{
+        slug: "fake-y",
+        name: "Fake Y",
+        provider: "Upstream",
+        levels: [],
+        default_level: nil,
+        default?: false
+      }
+    ]
+
+    id = agent!("models-#{System.unique_integer([:positive])}", dir, models: fn -> choices end)
+    script!(bypass, [ResponsesFixture.assistant_message("ok")])
+    {:ok, _} = Agent.send(id, "hi")
+    assert %{"status" => "completed"} = await_turn_end()
+    assert_receive {:request, body}
+
+    # the default model, not the unknown one (the gateway resolved the placeholder); the notice names both
+    assert body["model"] == "real-model"
+    assert body["instructions"] =~ "⚠"
+    assert body["instructions"] =~ "qwen-max"
+    assert body["instructions"] =~ "fake-x"
+    # the list the agent may choose from, with levels and the default marked
+    assert body["instructions"] =~ "# Models"
+    assert body["instructions"] =~ "fake-x"
+    assert body["instructions"] =~ "low, high"
   end
 
   defmodule CompactingPipeline do

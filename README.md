@@ -382,8 +382,12 @@ priv 里的出厂描述、`<data>/agent/` 你自己的、项目的 `.longx/`（s
 加载失败退回下一层，错误以提示进 prompt——agent 改坏了自己下一轮能自己修。
 
 仓库里的 `.exs` 会以你的身份在 Longx 里执行，所以每个项目有一个开关（项目设置 →「信任并加载
-.longx/ 里的定义」，默认关）。开了之后 agent 也被告知自己的定义在哪、怎么写（`priv/agent/reference.md`），
-重复出现的流程它会写成 plug，和代码一起进 git。
+.longx/ 里的定义」，默认关）——它管的是 `agent.exs` 和 `shared/`（clone 来的代码）；`local/` 不进 git、
+是这台机器上 agent 自己写的，**不用开关，一直加载**。agent 总是被告知自己的定义在哪、怎么写
+（`priv/agent/reference.md`：自定义工具就是两个文件，`local/plugs/x.exs` 加 `local/agent.exs` 里一行 `plug X`，
+下一步生效，写坏了以提示回到它面前），也被告知 Longx 里有哪些模型可以在描述里写（`model "<slug>"`，带档位和
+默认标记）——写了不存在的模型不会让那一轮失败，而是以提示告诉它、先用默认模型跑。重复出现的流程它会写成 plug，
+你审过再提升进 `shared/`。
 
 **知识代替记忆**：`.longx/shared/knowledge/`（项目的，进 git）、`.longx/local/knowledge/`（本机的，agent
 默认写这里）、`<data>/agent/knowledge/`（你自己的，自己是个 git 仓库）、`priv/agent/knowledge/`（Longx 出厂的，

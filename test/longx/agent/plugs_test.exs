@@ -144,6 +144,47 @@ defmodule Longx.Agent.PlugsTest do
 
       assert Enum.join(untrusted.instructions, "\n") =~ "not trusted"
     end
+
+    test "the models the agent may name in a description, with their levels and the default", %{
+      dir: dir
+    } do
+      choices = [
+        %{
+          slug: "deepseek-flash",
+          name: "DeepSeek Flash",
+          provider: "DeepSeek",
+          levels: ["none", "low", "high"],
+          default_level: "high",
+          default?: true
+        },
+        %{
+          slug: "qwen3.8-max",
+          name: "Qwen 3.8 Max",
+          provider: "阿里云百炼",
+          levels: [],
+          default_level: nil,
+          default?: false
+        }
+      ]
+
+      step =
+        Local.call(
+          Step.new(phase: :request, cwd: dir, assigns: %{models: choices}),
+          Local.init(root: dir)
+        )
+
+      text = Enum.join(step.instructions, "\n")
+      assert text =~ "# Models"
+
+      assert text =~
+               "`deepseek-flash` — DeepSeek Flash (DeepSeek); levels none, low, high; default level high; the default model"
+
+      assert text =~ "`qwen3.8-max` — Qwen 3.8 Max (阿里云百炼)"
+      assert text =~ "model \"<slug>\""
+
+      none = Local.call(Step.new(phase: :request, cwd: dir), Local.init(root: dir))
+      refute Enum.join(none.instructions, "\n") =~ "# Models"
+    end
   end
 
   describe "Environment" do
