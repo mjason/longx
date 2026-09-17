@@ -162,7 +162,7 @@ defmodule Longx.UpgradeTest do
           |> Plug.Conn.send_chunked(200)
 
         for chunk <- chunks(data, 3) do
-          {:ok, conn} = Plug.Conn.chunk(conn, chunk)
+          {:ok, _} = Plug.Conn.chunk(conn, chunk)
         end
 
         conn

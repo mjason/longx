@@ -2,7 +2,7 @@ defmodule LongxWeb.BrowserRpcTest do
   @moduledoc "The built-in browser's settings on the wire: private addresses allowed or not."
   use LongxWeb.ConnCase, async: false
 
-  defp rpc(conn, action, params \\ %{}) do
+  defp rpc(conn, action, params) do
     conn
     |> put_req_header("content-type", "application/json")
     |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
