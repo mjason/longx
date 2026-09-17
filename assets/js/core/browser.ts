@@ -14,13 +14,35 @@ export type BrowserStatus = {
   total: number | null;
   error: string | null;
   version: string;
+  /** the version Longx pins (what a download installs) */
+  latest: string;
   /** null where upstream builds nothing for this platform */
   target: string | null;
-  /** the installed binary, when there is one */
+  /** the binary in use, when there is one */
   path: string | null;
+  /** where it comes from: LONGX_OBSCURA, the machine's PATH, or the download; null when none */
+  source: BrowserSource | null;
+  /** the version of the binary in use (a download's directory, or what --version prints) */
+  installedVersion: string | null;
+  /** a download older than the pin: install/0 replaces it */
+  upgradable: boolean;
 };
 
-export const browserFields = ["stage", "received", "total", "error", "version", "target", "path"] as const;
+export type BrowserSource = "env" | "system" | "downloaded";
+
+export const browserFields = [
+  "stage",
+  "received",
+  "total",
+  "error",
+  "version",
+  "latest",
+  "target",
+  "path",
+  "source",
+  "installedVersion",
+  "upgradable",
+] as const;
 
 export const browserKey = ["browser-status"] as const;
 

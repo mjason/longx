@@ -72,6 +72,22 @@ function BrowserCard() {
             <p className="text-warning text-xs">{s.browserUnavailable}</p>
           ) : browserBusy(st.stage) ? (
             <DownloadBar label={s.browserStages[st.stage] ?? st.stage} received={st.received} total={st.total} />
+          ) : installed && st.source === "system" ? (
+            // the machine's own obscura (a container image that ships one): nothing to download
+            <p className="text-muted-foreground font-mono text-xs break-all">{s.browserSystem(st.path ?? "", st.installedVersion)}</p>
+          ) : installed && st.source === "env" ? (
+            <p className="text-muted-foreground font-mono text-xs break-all">{s.browserEnv(st.path ?? "", st.installedVersion)}</p>
+          ) : installed && st.upgradable ? (
+            // a download behind the pin (a Longx upgrade moved it): the old one keeps working meanwhile
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-0">
+                <p className="text-muted-foreground font-mono text-xs break-all">{s.browserInstalled(st.path ?? "")}</p>
+                <p className="text-xs">{s.browserUpgradable(st.installedVersion, st.latest)}</p>
+              </div>
+              <Button size="sm" variant="outline" disabled={install.isPending} onClick={() => install.mutate(undefined, { onError: fail })}>
+                {s.browserUpgrade}
+              </Button>
+            </div>
           ) : installed ? (
             <p className="text-muted-foreground font-mono text-xs break-all">{s.browserInstalled(st.path ?? "")}</p>
           ) : (

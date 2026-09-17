@@ -8,7 +8,11 @@ defmodule Longx.Browser.Installer do
   `:extracting` → `:installed`, or `:failed` with the reason (nothing
   half-written stays: `Longx.Bundle` unpacks into a staging directory and
   swaps it in whole). The first `Longx.Browser.fetch/2` with no browser
-  starts it. `config :longx, Longx.Browser` — `download_url:` /
+  starts it. Nothing is downloaded while an obscura is on PATH or named by
+  `LONGX_OBSCURA` (`Longx.Browser.Runtime.resolve/2`); an older download is
+  upgraded by `install/0` — the pinned version comes in, the old ones go —
+  and `status/0` says so (`source`, `installed_version`, `latest`,
+  `upgradable`). `config :longx, Longx.Browser` — `download_url:` /
   `download_sha256:` stand in for the pinned release (tests).
   """
 
@@ -27,8 +31,12 @@ defmodule Longx.Browser.Installer do
           total: non_neg_integer | nil,
           error: String.t() | nil,
           version: String.t(),
+          latest: String.t(),
           target: String.t() | nil,
-          path: Path.t() | nil
+          path: Path.t() | nil,
+          source: Runtime.source() | nil,
+          installed_version: String.t() | nil,
+          upgradable: boolean
         }
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -70,7 +78,11 @@ defmodule Longx.Browser.Installer do
         {:reply, {:error, :unsupported_platform}, state}
 
       target ->
-        if Runtime.installed?(target) do
+        # nothing to download when the binary is the machine's (LONGX_OBSCURA,
+        # PATH) or the pinned version is already here; an older download is
+        # replaced by the pinned one — the upgrade
+        if match?({:ok, s, _} when s in [:env, :system], Runtime.resolve(target)) or
+             Runtime.installed?(target) do
           {:reply, :ok, stage(%{state | task: nil}, :installed)}
         else
           server = self()
@@ -109,6 +121,8 @@ defmodule Longx.Browser.Installer do
     case result do
       {:ok, path} ->
         Logger.info("browser: installed #{path}")
+        # the pinned version is in: older downloads are dead weight now
+        if target = Runtime.current_target(), do: Runtime.prune_old(target)
         {:noreply, stage(%{state | task: nil, error: nil}, :installed)}
 
       {:error, reason} ->
@@ -130,21 +144,41 @@ defmodule Longx.Browser.Installer do
     state
   end
 
+  # what is in use (`Runtime.resolve/2`) and whether the download is behind
+  # the pin: an idle installer with a usable binary reports `:installed`
   defp public(state) do
     target = Runtime.current_target()
+    latest = Runtime.version()
+
+    {source, path} =
+      case Runtime.resolve(target) do
+        {:ok, source, path} -> {source, path}
+        {:error, _} -> {nil, nil}
+      end
+
+    installed_version =
+      case source do
+        :downloaded -> Runtime.installed_version(target)
+        nil -> nil
+        _ -> Runtime.version_of(path)
+      end
+
+    upgradable =
+      source == :downloaded and is_binary(installed_version) and
+        Version.compare(installed_version, latest) == :lt
 
     %{
-      stage: state.stage,
+      stage: if(state.stage == :idle and path != nil, do: :installed, else: state.stage),
       received: state.received,
       total: state.total,
       error: state.error,
-      version: Runtime.version(),
+      version: latest,
+      latest: latest,
       target: target,
-      path:
-        case Runtime.executable(target) do
-          {:ok, path} -> path
-          _ -> nil
-        end
+      path: path,
+      source: source,
+      installed_version: installed_version,
+      upgradable: upgradable
     }
   end
 

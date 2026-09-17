@@ -85,28 +85,174 @@ defmodule Longx.Browser.Runtime do
 
   ## Resolution
 
-  @doc "Path to the installed obscura for `target`, honouring `LONGX_OBSCURA`."
-  @spec executable(target | nil, keyword) :: {:ok, Path.t()} | {:error, :not_installed}
-  def executable(target \\ current_target(), opts \\ []) do
-    case System.get_env(@env_override) do
-      path when is_binary(path) and path != "" ->
-        {:ok, path}
+  @type source :: :env | :system | :downloaded
 
-      _ when is_nil(target) ->
-        {:error, :not_installed}
+  @doc """
+  What runs, in this order: `LONGX_OBSCURA` (`:env`), an `obscura` on PATH
+  (`:system` — a container image that ships one never downloads), the
+  download (`:downloaded`: the pinned version, else the newest older one so
+  the browser keeps working right after a Longx upgrade). `path:` names the
+  directories to search instead of PATH (`config :longx, Longx.Browser,
+  system_path:` does the same; the test config sets it empty so the box's
+  own obscura never leaks into the suite).
+  """
+  @spec resolve(target | nil, keyword) :: {:ok, source, Path.t()} | {:error, :not_installed}
+  def resolve(target \\ current_target(), opts \\ []) do
+    env = System.get_env(@env_override)
 
-      _ ->
-        path = executable_path(root(dir(opts), target), platform_of(target))
-        if File.regular?(path), do: {:ok, path}, else: {:error, :not_installed}
+    cond do
+      is_binary(env) and env != "" -> {:ok, :env, env}
+      (path = system_executable(opts)) != nil -> {:ok, :system, path}
+      is_nil(target) -> {:error, :not_installed}
+      (path = downloaded(target, opts)) != nil -> {:ok, :downloaded, path}
+      true -> {:error, :not_installed}
     end
   end
 
+  @doc "Path to the obscura in use (`resolve/2` without its source)."
+  @spec executable(target | nil, keyword) :: {:ok, Path.t()} | {:error, :not_installed}
+  def executable(target \\ current_target(), opts \\ []) do
+    case resolve(target, opts) do
+      {:ok, _source, path} -> {:ok, path}
+      {:error, _} = error -> error
+    end
+  end
+
+  @doc "An `obscura` on PATH (or on `path:` / `system_path`), nil when none."
+  @spec system_executable(keyword) :: Path.t() | nil
+  def system_executable(opts \\ []) do
+    name = Path.basename(executable_path(".", Platform.current()))
+
+    opts
+    |> Keyword.get(:path)
+    |> Kernel.||(config(:system_path))
+    |> Kernel.||(System.get_env("PATH") || "")
+    |> String.split(path_separator(), trim: true)
+    |> Enum.map(&Path.join(&1, name))
+    |> Enum.find(&executable_file?/1)
+  end
+
+  # the pinned version when installed, else the newest older download
+  defp downloaded(target, opts) do
+    case installed_versions(target, opts) do
+      [] -> nil
+      [newest | _] -> executable_path(Path.join([dir(opts), newest, target]), platform_of(target))
+    end
+  end
+
+  @doc "The pinned version is installed for `target`."
   @spec installed?(target | nil, keyword) :: boolean
   def installed?(target \\ current_target(), opts \\ [])
   def installed?(nil, _opts), do: false
 
   def installed?(target, opts),
     do: File.regular?(executable_path(root(dir(opts), target), platform_of(target)))
+
+  @doc "Every downloaded version that holds the binary for `target`, newest first."
+  @spec installed_versions(target | nil, keyword) :: [String.t()]
+  def installed_versions(target, opts \\ [])
+  def installed_versions(nil, _opts), do: []
+
+  def installed_versions(target, opts) do
+    base = dir(opts)
+    platform = platform_of(target)
+
+    case File.ls(base) do
+      {:ok, entries} ->
+        entries
+        |> Enum.filter(&match?({:ok, _}, Version.parse(&1)))
+        |> Enum.filter(&File.regular?(executable_path(Path.join([base, &1, target]), platform)))
+        |> Enum.sort({:desc, Version})
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  @doc "The newest downloaded version for `target`, nil when none."
+  @spec installed_version(target | nil, keyword) :: String.t() | nil
+  def installed_version(target, opts \\ []),
+    do: target |> installed_versions(opts) |> List.first()
+
+  @doc "Removes every downloaded version of `target` but the pinned one (after an upgrade)."
+  @spec prune_old(target, keyword) :: :ok
+  def prune_old(target, opts \\ []) do
+    base = dir(opts)
+
+    for version <- installed_versions(target, opts), version != @version do
+      File.rm_rf!(Path.join([base, version, target]))
+      # the version directory goes when nothing else (another target) is in it
+      _ = File.rmdir(Path.join(base, version))
+    end
+
+    :ok
+  end
+
+  @version_timeout 2_000
+  @version_ttl_ms :timer.minutes(10)
+  @versions_key {__MODULE__, :versions}
+
+  @doc """
+  The version a binary prints for `--version` (through the shim, killed after
+  two seconds), nil when it prints nothing usable; remembered for ten
+  minutes per path.
+  """
+  @spec version_of(Path.t()) :: String.t() | nil
+  def version_of(path) do
+    now = System.monotonic_time(:millisecond)
+    cache = :persistent_term.get(@versions_key, %{})
+
+    case Map.get(cache, path) do
+      {at, version} when now - at < @version_ttl_ms ->
+        version
+
+      _ ->
+        version = read_version(path)
+        :persistent_term.put(@versions_key, Map.put(cache, path, {now, version}))
+        version
+    end
+  end
+
+  @doc "Forgets the remembered versions (tests)."
+  @spec forget_versions() :: :ok
+  def forget_versions do
+    :persistent_term.erase(@versions_key)
+    :ok
+  end
+
+  defp read_version(path) do
+    case Longx.Shim.run([path, "--version"], timeout: @version_timeout) do
+      {:ok, %{stdout: out, stderr: err}} -> parse_version(out <> "\n" <> err)
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp parse_version(text) do
+    case Regex.run(~r/(\d+\.\d+(?:\.\d+)?)/, text) do
+      [_, version] -> version
+      _ -> nil
+    end
+  end
+
+  # a regular file that may be executed (any exec bit; Windows has none to check)
+  defp executable_file?(path) do
+    case {File.stat(path), Platform.current()} do
+      {{:ok, %File.Stat{type: :regular}}, {:windows, _}} -> true
+      {{:ok, %File.Stat{type: :regular, mode: mode}}, _} -> Bitwise.band(mode, 0o111) != 0
+      _ -> false
+    end
+  end
+
+  defp path_separator do
+    case Platform.current() do
+      {:windows, _} -> ";"
+      _ -> ":"
+    end
+  end
+
+  defp config(key), do: :longx |> Application.get_env(Longx.Browser, []) |> Keyword.get(key)
 
   @doc """
   Downloads (or copies), verifies and unpacks the archive for `target`; see

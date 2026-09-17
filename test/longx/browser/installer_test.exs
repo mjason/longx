@@ -63,8 +63,16 @@ defmodule Longx.Browser.InstallerTest do
   end
 
   test "nothing installed: the status says so and the executable is not there" do
-    assert %{stage: :idle, version: "0.2.2", path: nil, target: "x86_64-linux"} =
-             Installer.status()
+    assert %{
+             stage: :idle,
+             version: "0.2.2",
+             path: nil,
+             target: "x86_64-linux",
+             source: nil,
+             installed_version: nil,
+             latest: "0.2.2",
+             upgradable: false
+           } = Installer.status()
 
     assert {:error, :not_installed} = Runtime.executable()
     refute Browser.available?()
@@ -96,6 +104,66 @@ defmodule Longx.Browser.InstallerTest do
     # the stages seen in order, the download counted in bytes
     stages = collect_stages([])
     assert :verifying in stages and :extracting in stages
+  end
+
+  test "an obscura on PATH is used as it is: the status names it, install/0 downloads nothing",
+       %{root: root} do
+    bin = Path.join(root, "bin")
+    system = Path.join(bin, "obscura")
+    File.mkdir_p!(bin)
+    File.cp!(Path.expand("../../support/fake_obscura.sh", __DIR__), system)
+    File.chmod!(system, 0o755)
+
+    Application.put_env(
+      :longx,
+      Longx.Browser,
+      Keyword.put(Application.get_env(:longx, Longx.Browser), :system_path, bin)
+    )
+
+    assert %{
+             stage: :installed,
+             source: :system,
+             path: ^system,
+             upgradable: false,
+             latest: "0.2.2"
+           } =
+             status = Installer.status()
+
+    assert is_binary(status.installed_version)
+    # nothing to download (Bypass would fail the test on an unexpected request)
+    assert :ok = Installer.install()
+    assert %{stage: :installed, source: :system} = Installer.status()
+    assert Browser.available?()
+    refute_receive {:browser_install, %{stage: :downloading}}, 200
+  end
+
+  test "an older download is upgradable: install/0 brings the pinned version and removes the old one",
+       %{bypass: bypass, archive: archive, root: root} do
+    old = Path.join([root, "obscura", "0.2.1", "x86_64-linux", "obscura"])
+    File.mkdir_p!(Path.dirname(old))
+    File.write!(old, "#!/bin/sh\necho obscura 0.2.1\n")
+    File.chmod!(old, 0o755)
+
+    assert %{
+             stage: :installed,
+             source: :downloaded,
+             path: ^old,
+             installed_version: "0.2.1",
+             latest: "0.2.2",
+             upgradable: true
+           } = Installer.status()
+
+    assert {:ok, ^old} = Runtime.executable()
+
+    serve!(bypass, archive)
+    assert :ok = Installer.install()
+    assert_receive {:browser_install, %{stage: :installed, path: path}}, 10_000
+    assert path == Path.join([root, "obscura", "0.2.2", "x86_64-linux", "obscura"])
+
+    assert %{source: :downloaded, installed_version: "0.2.2", upgradable: false} =
+             Installer.status()
+
+    refute File.exists?(Path.join([root, "obscura", "0.2.1"]))
   end
 
   test "a failed download leaves nothing behind and says why", %{bypass: bypass, root: root} do
