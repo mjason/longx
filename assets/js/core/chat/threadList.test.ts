@@ -2,9 +2,9 @@ import { describe, expect, test, vi } from "vitest";
 import { buildThreadListAdapter } from "./threadList";
 
 const rows = [
-  { id: "t1", codexThreadId: "thr_1", title: "Fix tests", preview: null, status: "idle" },
-  { id: "t2", codexThreadId: "thr_2", title: null, preview: "run ls and…", status: "active" },
-  { id: "t3", codexThreadId: "thr_3", title: null, preview: null, status: "archived" },
+  { id: "t1", kernelThreadId: "thr_1", title: "Fix tests", preview: null, status: "idle" },
+  { id: "t2", kernelThreadId: "thr_2", title: null, preview: "run ls and…", status: "active" },
+  { id: "t3", kernelThreadId: "thr_3", title: null, preview: null, status: "archived" },
 ];
 
 describe("thread list adapter", () => {

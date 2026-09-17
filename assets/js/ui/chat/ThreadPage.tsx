@@ -6,7 +6,6 @@ import { Button } from "@/ui/components/ui/button";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 import { FileMentions, FileMentionText } from "./FileMentions";
-import { SkillMentions } from "./SkillMentions";
 import { GoalBar } from "./GoalBar";
 import { ReasoningSteps } from "./ReasoningSteps";
 import { SlashCommands } from "./SlashCommands";
@@ -24,7 +23,6 @@ const Welcome = () => (
 const ComposerPopovers = () => (
   <>
     <FileMentions />
-    <SkillMentions />
     <SlashCommands />
   </>
 );

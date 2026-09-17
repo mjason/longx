@@ -14,10 +14,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/ui/components/ui/alert-dialog";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { browserSettings, setBrowserPrivateNetwork } from "@/ash_rpc";
+import { unwrap } from "@/core/projects";
 import { Button } from "@/ui/components/ui/button";
 import { Input } from "@/ui/components/ui/input";
 import { Label } from "@/ui/components/ui/label";
 import { Skeleton } from "@/ui/components/ui/skeleton";
+import { Switch } from "@/ui/components/ui/switch";
 import { AgentSettingsFields, agentSettingsForm, agentSettingsInput, type AgentSettingsForm } from "@/ui/components/AgentSettingsFields";
 import { CodeEditor } from "@/ui/editor/CodeEditor";
 import { t } from "@/ui/strings";
@@ -31,7 +35,45 @@ export function AgentKernelSection() {
       <p className="text-muted-foreground text-sm">{s.hint}</p>
       <SettingsCard />
       <PublicUrlCard />
+      <BrowserCard />
       <FilesCard />
+    </div>
+  );
+}
+
+const browserKey = ["browser-settings"] as const;
+
+/** the built-in browser (web_fetch, a search's page reads): whether it may fetch private / loopback addresses */
+function BrowserCard() {
+  const client = useQueryClient();
+  const settings = useQuery({
+    queryKey: browserKey,
+    queryFn: async () => unwrap(await browserSettings({ fields: ["allowPrivateNetwork", "available"] })),
+  });
+  const set = useMutation({
+    mutationFn: async (enabled: boolean) => unwrap(await setBrowserPrivateNetwork({ fields: ["allowPrivateNetwork", "available"], input: { enabled } })),
+    onSuccess: (data) => client.setQueryData(browserKey, data),
+    onError: fail,
+  });
+  return (
+    <div className="rounded-lg border p-3" data-testid="browser-settings">
+      <p className="text-sm font-medium">{s.browserTitle}</p>
+      <p className="text-muted-foreground mt-0.5 text-xs">{settings.data?.available === false ? s.browserUnavailable : s.browserHint}</p>
+      <div className="mt-3 flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <label htmlFor="browser-private-network" className="text-sm">
+            {s.privateNetwork}
+          </label>
+          <p className="text-muted-foreground mt-0.5 text-xs">{s.privateNetworkHint}</p>
+        </div>
+        <Switch
+          id="browser-private-network"
+          aria-label={s.privateNetwork}
+          checked={settings.data?.allowPrivateNetwork ?? false}
+          disabled={settings.isPending || set.isPending}
+          onCheckedChange={(v) => set.mutate(v)}
+        />
+      </div>
     </div>
   );
 }

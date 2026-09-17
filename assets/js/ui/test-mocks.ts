@@ -52,19 +52,9 @@ export const project = (n: number) => ({
   name: `App ${n}`,
   description: null,
   rootPath: `/srv/app-${n}`,
-  sandbox: "workspace_write",
-  approvalPolicy: "on_request",
-  networkAccess: false,
-  writableRoots: [],
-  passthroughPaths: [],
   webSearch: true,
-  multiAgent: true,
-  autoReview: true,
   dirtyStart: "commit",
-  tools: [],
-  memoryLimitMb: null,
   modelId: null,
-  engine: "codex",
   trustLocalAgent: false,
   agentSettings: null,
   archivedAt: null,
@@ -73,18 +63,13 @@ export const project = (n: number) => ({
 
 export const thread = (n: number) => ({
   id: `t${n}`,
-  codexThreadId: `thr_${n}`,
+  kernelThreadId: `thr_${n}`,
   title: null,
   preview: `thread ${n}`,
   status: "idle",
   modelSlug: null,
   reasoningEffort: null,
-  sandbox: "workspace_write",
-  approvalPolicy: "on_request",
-  networkAccess: false,
   webSearch: true,
-  multiAgent: true,
-  autoReview: true,
   lastActivityAt: "2026-09-12T00:00:00Z",
   insertedAt: "2026-09-12T00:00:00Z",
 });
@@ -113,9 +98,6 @@ export function rpcMock() {
     updateProject: vi.fn(async () => ok(project(1))),
     archiveProject: vi.fn(async () => ok(project(1))),
     deleteProject: vi.fn(async () => ok(null)),
-    clearCodexMemories: vi.fn(async () => ok(null)),
-    resetCodexHome: vi.fn(async () => ok(null)),
-    clearCodexHistory: vi.fn(async () => ok(null)),
     gitInfo: vi.fn(async () =>
       ok({
         repository: true,
@@ -126,16 +108,6 @@ export function rpcMock() {
       }),
     ),
     initGit: vi.fn(),
-    codexInfo: vi.fn(async () =>
-      ok({
-        home: "/x",
-        exists: false,
-        bytes: 0,
-        files: {},
-        worker: null,
-        stale: [],
-      }),
-    ),
     listThreads: vi.fn(async () => ok([thread(1)])),
     getThread: vi.fn(async ({ input }: { input: { id: string } }) => ok({ ...thread(1), id: input.id })),
     listModels: vi.fn(async () =>
@@ -144,7 +116,6 @@ export function rpcMock() {
         model(2, { slug: "glm-5", reasoningLevels: ["low", "high"] }),
       ]),
     ),
-    reviewSettings: vi.fn(async () => ok({ modelSlug: null, effort: null })),
     modelAliases: vi.fn(async () =>
       ok([
         { name: "ultra", label: "旗舰", models: ["glm-5", "deepseek-flash"], builtin: true },
@@ -159,7 +130,6 @@ export function rpcMock() {
       ok({ objective: input["objective"] ?? "", status: input["status"] ?? "active", tokenBudget: input["tokenBudget"] ?? null, tokensUsed: 0, timeUsedSeconds: 0 }),
     ),
     clearGoal: vi.fn(async () => ok({ cleared: true })),
-    listSkills: vi.fn(async () => ok([])),
     agentDefinition: vi.fn(async () => ok(agentDefinitionData())),
     promoteLocal: vi.fn(async ({ input }: { input: { path: string } }) => ok({ path: `shared/${input.path}` })),
     agentSettings: vi.fn(async () => ok(agentSettingsData())),
@@ -170,7 +140,6 @@ export function rpcMock() {
     agentDeleteFile: vi.fn(async () => ok(null)),
     publicUrl: vi.fn(async () => ok({ url: "http://192.168.2.129:7788", setting: null })),
     setPublicUrl: vi.fn(async ({ input }: { input: { url: string } }) => ok({ url: input.url || "http://192.168.2.129:7788", setting: input.url || null })),
-    setReviewModel: vi.fn(async () => ok(null)),
     listProviders: vi.fn(async () => ok([provider(1), provider(2)])),
     createProvider: vi.fn(
       async ({ input }: { input: Record<string, unknown> }) =>
@@ -208,28 +177,6 @@ export function rpcMock() {
     updateSearchProvider: vi.fn(async () => ok({ id: "s1", hasApiKey: true })),
     listPresets: vi.fn(async () => ok(presets())),
     applyPreset: vi.fn(async () => ok({ providerId: "p9", modelIds: ["m9"] })),
-    listTools: vi.fn(async () =>
-      ok([
-        {
-          id: "t1",
-          namespace: "builtin",
-          name: "echo",
-          qualifiedName: "builtin.echo",
-          description: "Echoes its input back.",
-          inputSchema: {},
-          enabled: false,
-        },
-        {
-          id: "t2",
-          namespace: "builtin",
-          name: "browser_fetch",
-          qualifiedName: "builtin.browser_fetch",
-          description: "Reads a rendered page.",
-          inputSchema: {},
-          enabled: true,
-        },
-      ]),
-    ),
     gatewayRequests: vi.fn(async () =>
       ok({
         keep: 1000,
@@ -241,15 +188,6 @@ export function rpcMock() {
     ),
     browserSettings: vi.fn(async () => ok({ allowPrivateNetwork: false, available: true })),
     setBrowserPrivateNetwork: vi.fn(async ({ input }: { input: { enabled: boolean } }) => ok({ allowPrivateNetwork: input.enabled, available: true })),
-    setToolEnabled: vi.fn(
-      async ({
-        input,
-        identity,
-      }: {
-        input: { enabled: boolean };
-        identity: string;
-      }) => ok({ id: identity, enabled: input.enabled }),
-    ),
     knowledgeDocs: vi.fn(async () =>
       ok([
         { root: "longx", path: "longx/writing-plugs.md", title: "Writing plugs", summary: "the plug API", tags: ["longx"], always: false, writable: false },
@@ -275,20 +213,11 @@ export function rpcMock() {
     setGithubToken: vi.fn(async ({ input }: { input: { token?: string | null } }) =>
       ok({ ...upgradeIdle, hasGithubToken: !!input.token }),
     ),
-    probeSandbox: vi.fn(async () =>
-      ok({
-        status: "unavailable",
-        reason: "bwrap: setting up uid map: Permission denied",
-        checkedAt: "2026-09-14T00:00:00Z",
-      }),
-    ),
     sendMessage: vi.fn(async () => ok({ id: "turn-row" })),
     compactThread: vi.fn(async () => ok(null)),
-    reviewThread: vi.fn(async () => ok({ id: "turn-review" })),
     interruptTurn: vi.fn(async () => ok(null)),
     retractTurn: vi.fn(async () => ok({ text: "look at pandas" })),
-    steerTurn: vi.fn(async () => ok({ codexTurnId: "turn_2" })),
-    respond: vi.fn(async () => ok(null)),
+    steerTurn: vi.fn(async () => ok({ kernelTurnId: "turn_2" })),
     answerRequest: vi.fn(async () => ok(null)),
     deleteThread: vi.fn(async () => ok(null)),
     listTurns: vi.fn(async () => ok([])),
@@ -377,24 +306,9 @@ export function rpcMock() {
     restoreFiles: vi.fn(async () =>
       ok({ safetyCommit: null, head: "aaaa1111" }),
     ),
-    redoTurn: vi.fn(async () => ok({ id: "tu9", threadId: "t1" })),
     renameThread: vi.fn(async () => ok(thread(1))),
     archiveThread: vi.fn(async () => ok(thread(1))),
     startThread: vi.fn(async () => ok(thread(2))),
-    stopCodex: vi.fn(async () => ok(null)),
-    restartCodex: vi.fn(),
-    listCodexProcesses: vi.fn(async () =>
-      ok({
-        idleAfterMs: 30 * 60 * 1000,
-        processes: [
-          { projectId: "id-1", name: "App One", slug: "app-1", osPid: 4242, stats: { rssBytes: 314572800, processes: 3, cpuMs: 1200 }, memoryLimit: null, startedAt: "2026-09-15T08:00:00Z", lastTurnAt: "2026-09-15T09:30:00Z", turns: 12, activeTurns: 0, threads: 2 },
-          { projectId: "id-2", name: "App Two", slug: "app-2", osPid: 4343, stats: { rssBytes: 52428800, processes: 1, cpuMs: 10 }, memoryLimit: null, startedAt: "2026-09-15T09:55:00Z", lastTurnAt: null, turns: 1, activeTurns: 1, threads: 1 },
-        ],
-      }),
-    ),
-    sandboxStatus: vi.fn(async () =>
-      ok({ status: "ok", reason: null, bwrap: null, gpu: false, presets: [], platform: "linux", home: "/home/mj", checkedAt: "" }),
-    ),
     createDirectory: vi.fn(
       async ({ input }: { input: { parent: string; name: string } }) =>
         ok({

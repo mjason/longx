@@ -1,6 +1,6 @@
 // The settings page's half of Longx.AI: providers and their models, the
-// search provider, the tool switches, plus the sandbox probe. Every write
-// invalidates the AI queries and the composer's model list.
+// search provider, the aliases, the knowledge docs. Every write invalidates
+// the AI queries and the composer's model list.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   knowledgeDelete,
@@ -18,15 +18,10 @@ import {
   listPresets,
   listProviders,
   listSearchProviders,
-  reviewSettings,
-  setReviewModel,
   modelAliases,
   setModelAlias,
   deleteModelAlias,
-  listTools,
   makeDefaultModel,
-  probeSandbox,
-  setToolEnabled,
   updateModel,
   updateProvider,
   updateSearchProvider,
@@ -42,9 +37,7 @@ export const aiKeys = {
   providers: ["ai", "providers"] as const,
   models: ["ai", "models"] as const,
   search: ["ai", "search"] as const,
-  tools: ["ai", "tools"] as const,
   presets: ["ai", "presets"] as const,
-  review: ["ai", "review"] as const,
   aliases: ["ai", "aliases"] as const,
 };
 
@@ -84,17 +77,6 @@ export function useDiscoverModels(providerId: string | null) {
   });
 }
 
-/** codex's automatic approval review: the model it runs on (null = the thread's own) and a pinned level */
-export type ReviewSettings = { modelSlug: string | null; effort: string | null };
-
-export function useReviewSettings() {
-  return useQuery({
-    queryKey: aiKeys.review,
-    queryFn: async () =>
-      unwrap(await reviewSettings({ fields: ["modelSlug", "effort"] })) as ReviewSettings,
-  });
-}
-
 export type Provider = {
   id: string;
   name: string;
@@ -121,7 +103,7 @@ export type ModelRow = {
   reasoningEffort: string | null;
   reasoningSummary: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens: number | null;
-  /** the model runs codex's web_search tool itself; null = the provider's say */
+  /** the model's provider searches the web on its side; null = the provider's say */
   hostedWebSearch: boolean | null;
   providerId: string;
 };
@@ -167,20 +149,6 @@ export type SearchProviderRow = {
   hasApiKey: boolean;
   default: boolean;
 };
-export type ToolRow = {
-  id: string;
-  namespace: string;
-  name: string;
-  qualifiedName: string;
-  description: string;
-  enabled: boolean;
-};
-export type SandboxReport = {
-  status: "ok" | "unavailable";
-  reason: string | null;
-  checkedAt: string;
-};
-
 const providerFields = [
   "id",
   "name",
@@ -270,25 +238,6 @@ export function usePresets() {
   });
 }
 
-export function useTools() {
-  return useQuery({
-    queryKey: aiKeys.tools,
-    queryFn: async () =>
-      unwrap(
-        await listTools({
-          fields: [
-            "id",
-            "namespace",
-            "name",
-            "qualifiedName",
-            "description",
-            "enabled",
-          ],
-        }),
-      ) as ToolRow[],
-  });
-}
-
 function useAiWrite<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
   const client = useQueryClient();
   return useMutation({
@@ -345,9 +294,6 @@ export function useAiActions() {
           }),
         ) as { ok: boolean; latencyMs: number | null; error: string | null },
     ),
-    setReviewModel: useAiWrite(async (input: ReviewSettings) =>
-      unwrap(await setReviewModel({ input })),
-    ),
     setModelAlias: useAiWrite(async (input: { name: string; models: string[] }) =>
       unwrap(await setModelAlias({ fields: ["name", "label", "models", "builtin"], input })),
     ),
@@ -362,33 +308,10 @@ export function useAiActions() {
           }),
         ),
     ),
-    setToolEnabled: useAiWrite(
-      async ({ id, enabled }: { id: string; enabled: boolean }) =>
-        unwrap(
-          await setToolEnabled({
-            fields: ["id"],
-            identity: id,
-            input: { enabled },
-          }),
-        ),
-    ),
   };
 }
 
-/** runs the bwrap probe again and hands back the report (the cached status query is refreshed) */
-export function useProbeSandbox() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: async () =>
-      unwrap(
-        await probeSandbox({ fields: ["status", "reason", "bwrap", "gpu", "presets", "platform", "home", "checkedAt"] }),
-      ) as SandboxReport,
-    onSuccess: (report) => client.setQueryData(queryKeys.sandbox, report),
-  });
-}
-
-
-/** The native kernel's knowledge: Longx's shipped docs (read-only) and the person's global root. */
+/** The kernel's knowledge: Longx's shipped docs (read-only) and the person's global root. */
 export type KnowledgeDoc = { root: string; path: string; title: string; summary: string; tags: string[]; always: boolean; writable: boolean };
 
 export const knowledgeKeys = {

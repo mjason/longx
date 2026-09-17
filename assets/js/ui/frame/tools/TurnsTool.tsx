@@ -1,21 +1,18 @@
-import { AlertCircle, CheckCircle2, ChevronRight, Loader2, RotateCcw, Undo2, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronRight, Loader2, Undo2, XCircle } from "lucide-react";
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useParams } from "react-router";
 import { toast } from "sonner";
 import { relativeTime } from "@/core/format";
-import { fetchRestoreProposal, useModels, useRedoTurn, useRestoreFiles, useTurns, type RestoreProposal } from "@/core/projects";
+import { fetchRestoreProposal, useRestoreFiles, useTurns, type RestoreProposal } from "@/core/projects";
 import { parseDiff } from "@/ui/chat/toolkit";
 import { CheckpointHistory, type Checkpoint } from "@/ui/components/assistant-ui/elements/checkpoint-history";
 import { CodeDiff } from "@/ui/components/assistant-ui/elements/code-diff";
 import { Button } from "@/ui/components/ui/button";
-import { Checkbox } from "@/ui/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/ui/components/ui/collapsible";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
 import { Label } from "@/ui/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/ui/components/ui/radio-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { Skeleton } from "@/ui/components/ui/skeleton";
-import { Textarea } from "@/ui/components/ui/textarea";
 import { t } from "@/ui/strings";
 import type { ProjectContext } from "../ProjectWindow";
 
@@ -31,14 +28,12 @@ const STATUS_ICON: Record<string, typeof CheckCircle2> = {
 
 /**
  * IDEA's history/changes tab, for us: the thread's turns with their git
- * bookmarks — what each one changed, going back to before one, and running
- * one again with other text or another model.
+ * bookmarks — what each one changed, and going back to before one.
  */
-export function TurnsTool({ ctx }: { ctx: ProjectContext }) {
+export function TurnsTool(_props: { ctx: ProjectContext }) {
   const { threadId } = useParams();
   const turns = useTurns(threadId);
   const [restoring, setRestoring] = useState<Turn | null>(null);
-  const [redoing, setRedoing] = useState<Turn | null>(null);
 
   if (!threadId) return <p className="text-muted-foreground text-sm">{t.pickThread}</p>;
   if (turns.isPending) return <Skeleton className="h-16 w-full" />;
@@ -64,15 +59,14 @@ export function TurnsTool({ ctx }: { ctx: ProjectContext }) {
         />
       ) : null}
       {turns.data.map((turn, i) => (
-        <TurnRow key={turn.id} turn={turn} index={i + 1} onRedo={() => setRedoing(turn)} />
+        <TurnRow key={turn.id} turn={turn} index={i + 1} />
       ))}
       <RestoreDialog turn={restoring} threadId={threadId} onClose={() => setRestoring(null)} />
-      <RedoDialog turn={redoing} threadId={threadId} slug={ctx.slug} onClose={() => setRedoing(null)} />
     </div>
   );
 }
 
-function TurnRow({ turn, index, onRedo }: { turn: Turn; index: number; onRedo: () => void }) {
+function TurnRow({ turn, index }: { turn: Turn; index: number }) {
   const Icon = STATUS_ICON[turn.status] ?? CheckCircle2;
   const files = turn.diff ? splitDiff(turn.diff) : [];
   return (
@@ -106,18 +100,11 @@ function TurnRow({ turn, index, onRedo }: { turn: Turn; index: number; onRedo: (
           </CollapsibleContent>
         </Collapsible>
       ) : null}
-      {turn.status !== "reverted" && turn.status !== "in_progress" ? (
-        <div className="mt-2 flex gap-1">
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onRedo}>
-            <RotateCcw /> {t.redo}
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 }
 
-/** codex's per-turn diff (all files in one unified diff) → one CodeDiff per file. */
+/** The turn's diff (all files in one unified diff) → one CodeDiff per file. */
 export function splitDiff(diff: string) {
   const out: { path: string; lines: ReturnType<typeof parseDiff>["lines"]; additions: number; deletions: number }[] = [];
   const chunks = diff.split(/^diff --git /m).filter(Boolean);
@@ -200,94 +187,6 @@ function RestoreDialog({ turn, threadId, onClose }: { turn: Turn | null; threadI
           </Button>
           <Button onClick={confirm} disabled={!proposal || restore.isPending}>
             {t.restoreFiles}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function RedoDialog({ turn, threadId, slug, onClose }: { turn: Turn | null; threadId: string; slug: string; onClose: () => void }) {
-  const [text, setText] = useState("");
-  const [model, setModel] = useState<string>("__same");
-  const [mode, setMode] = useState<"revert" | "fork">("revert");
-  const [restoreFirst, setRestoreFirst] = useState(false);
-  const [openedFor, setOpenedFor] = useState<string | null>(null);
-  const models = useModels();
-  const redo = useRedoTurn(threadId);
-  const navigate = useNavigate();
-
-  if (turn && openedFor !== turn.id) {
-    setOpenedFor(turn.id);
-    setText(turn.userText ?? "");
-    setModel("__same");
-    setMode("revert");
-    setRestoreFirst(false);
-  }
-
-  async function submit() {
-    if (!turn) return;
-    try {
-      const result = await redo.mutateAsync({ turnId: turn.id, text, mode, restoreFiles: restoreFirst, ...(model !== "__same" ? { model } : {}) });
-      onClose();
-      if (result.threadId !== threadId) navigate(`/p/${slug}/t/${result.threadId}`);
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
-
-  return (
-    <Dialog open={turn !== null} onOpenChange={(open) => (open ? null : onClose())}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t.redoTitle}</DialogTitle>
-          <DialogDescription>{t.redoHint}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <Textarea value={text} onChange={(e) => setText(e.target.value)} aria-label={t.redoText} rows={3} />
-          <div className="flex items-center gap-2">
-            <Label className="w-16 shrink-0">{t.model}</Label>
-            <Select value={model} onValueChange={setModel}>
-              <SelectTrigger className="font-mono text-xs" aria-label={t.model}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__same" className="font-mono text-xs">
-                  {turn?.modelSlug ?? t.defaultModel} · {t.sameModel}
-                </SelectItem>
-                {(models.data ?? [])
-                  .filter((m) => m.slug)
-                  .map((m) => (
-                    <SelectItem key={m.id} value={m.slug!} className="font-mono text-xs">
-                      {m.slug}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <RadioGroup value={mode} onValueChange={(v) => setMode(v as typeof mode)} className="gap-1">
-            <div className="flex items-center gap-2">
-              <RadioGroupItem value="revert" id="redo-revert" />
-              <Label htmlFor="redo-revert">{t.redoRevert}</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <RadioGroupItem value="fork" id="redo-fork" />
-              <Label htmlFor="redo-fork">{t.redoFork}</Label>
-            </div>
-          </RadioGroup>
-          {turn?.commitBefore ? (
-            <div className="flex items-center gap-2">
-              <Checkbox id="redo-restore" checked={restoreFirst} onCheckedChange={(v) => setRestoreFirst(v === true)} />
-              <Label htmlFor="redo-restore">{t.redoRestoreFirst}</Label>
-            </div>
-          ) : null}
-        </div>
-        <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            {t.cancel}
-          </Button>
-          <Button onClick={submit} disabled={redo.isPending || !text.trim()}>
-            {t.redoRun}
           </Button>
         </DialogFooter>
       </DialogContent>

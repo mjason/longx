@@ -1,6 +1,6 @@
 // IDEA's / VS Code's project tree: folders first, children loaded when a
 // folder opens, git status coloured on files and rolled up onto their
-// folders, a row menu for new / rename / delete, and a filter over codex's
+// folders, a row menu for new / rename / delete, and a filter over the project's
 // fuzzy file index. A file opens as a tab in the workbench; on a phone the
 // tree is a sheet, so the tap also closes it.
 import { ChevronRight, File, FilePlus2, Folder, FolderOpen, FolderPlus, ListCollapse, MoreHorizontal, RefreshCw } from "lucide-react";
@@ -111,7 +111,7 @@ export function FilesTool({ ctx }: { ctx: ProjectContext }) {
   );
 }
 
-/** VS Code's quick open, inside the tool: codex's fuzzy file index, a tap opens. */
+/** VS Code's quick open, inside the tool: the project's fuzzy file index, a tap opens. */
 function FilterResults({ projectId, query, git }: { projectId: string; query: string; git: GitStatus }) {
   const workbench = useWorkbench(projectId);
   const frame = useFrame();

@@ -49,104 +49,15 @@ describe("toMessages", () => {
   test("a non-zero exit is an error; interrupted and failed turns are incomplete", () => {
     const failed = toMessages(
       view({
-        turn: { id: "t3", status: "failed", error: { message: "codex restarted" } },
+        turn: { id: "t3", status: "failed", error: { message: "model failed" } },
         items: [{ id: "c3", type: "commandExecution", turnId: "t3", command: "x", status: "completed", exitCode: 2 }],
       }),
     );
     expect(parts(failed[0]!)[0]).toMatchObject({ isError: true });
-    expect(failed[0]!.status).toEqual({ type: "incomplete", reason: "error", error: "codex restarted" });
+    expect(failed[0]!.status).toEqual({ type: "incomplete", reason: "error", error: "model failed" });
 
     const interrupted = toMessages(view({ turn: { id: "t4", status: "interrupted" }, items: [{ id: "a4", type: "agentMessage", turnId: "t4", text: "half" }] }));
     expect(interrupted[0]!.status).toEqual({ type: "incomplete", reason: "cancelled" });
-  });
-
-  test("a pending approval rides on its tool call with the three options", () => {
-    const msgs = toMessages(
-      view({
-        turn: { id: "t5", status: "inProgress" },
-        items: [{ id: "c5", type: "commandExecution", turnId: "t5", command: "rm -rf build", status: "inProgress" }],
-        requests: [{ id: 42, method: "item/commandExecution/requestApproval", params: { requestId: 42, itemId: "c5", command: "rm -rf build" } }],
-      }),
-    );
-    const tool = parts(msgs[0]!)[0] as unknown as { approval: { id: string; options: { id: string }[]; prompt: string } };
-    expect(tool.approval.id).toBe("42");
-    expect(tool.approval.options.map((o) => o.id)).toEqual(["accept", "accept_for_session", "decline"]);
-    expect(tool.approval.prompt).toBe("允许执行这条命令？");
-    // assistant-ui only shows approval controls on a requires-action part
-    expect(msgs[0]!.status).toEqual({ type: "requires-action", reason: "interrupt" });
-  });
-
-  test("a command asking for extra permissions: the card says what it wants, with the options codex offered", () => {
-    const msgs = toMessages(
-      view({
-        turn: { id: "t5", status: "inProgress" },
-        items: [{ id: "call_1", type: "commandExecution", turnId: "t5", command: "uv run x", status: "inProgress" }],
-        requests: [
-          {
-            id: 7,
-            method: "item/commandExecution/requestApproval",
-            params: {
-              requestId: 7,
-              itemId: "call_1",
-              command: "/usr/bin/zsh -lc 'uv run x'",
-              reason: "uv keeps its cache there",
-              additionalPermissions: { fileSystem: { write: ["/home/mj/.cache/uv"], read: null }, network: null },
-              availableDecisions: ["accept", "cancel"],
-            },
-          },
-        ],
-      }),
-    );
-    const tool = parts(msgs[0]!)[0] as unknown as { approval: { options: { id: string; label: string }[]; prompt: string } };
-    expect(tool.approval.prompt).toBe("这条命令要额外权限：写 /home/mj/.cache/uv——uv keeps its cache there");
-    // no session option offered → none shown
-    expect(tool.approval.options.map((o) => [o.id, o.label])).toEqual([
-      ["accept", "允许"],
-      ["decline", "拒绝"],
-    ]);
-  });
-
-  test("a permissions request (request_permissions) is a standalone part: what it asks, granted for the turn or the session, or refused", () => {
-    const msgs = toMessages(
-      view({
-        turn: { id: "t5", status: "inProgress" },
-        items: [{ id: "u1", type: "userMessage", turnId: "t5", text: "go" }],
-        requests: [
-          {
-            id: 9,
-            method: "item/permissions/requestApproval",
-            params: {
-              requestId: 9,
-              itemId: "call_9",
-              reason: "install into the home and fetch a package",
-              permissions: { fileSystem: { write: ["/home/mj"], read: ["/etc/x"] }, network: { enabled: true } },
-            },
-          },
-        ],
-      }),
-    );
-    const last = msgs[msgs.length - 1]!;
-    const tool = parts(last).find((p) => (p as { toolName?: string }).toolName === "permissions") as unknown as {
-      args: { reason: string; lines: string[] };
-      approval: { options: { id: string; label: string }[]; prompt: string };
-    };
-    expect(tool.args.lines).toEqual(["写 /home/mj", "读 /etc/x", "联网"]);
-    expect(tool.approval.prompt).toBe("install into the home and fetch a package");
-    expect(tool.approval.options.map((o) => o.label)).toEqual(["本轮允许", "本会话允许", "拒绝"]);
-    expect(last.status).toEqual({ type: "requires-action", reason: "interrupt" });
-  });
-
-  test("an approval whose item has not arrived still gets a place", () => {
-    const msgs = toMessages(
-      view({
-        turn: { id: "t6", status: "inProgress" },
-        items: [{ id: "u6", type: "userMessage", turnId: "t6", content: [{ type: "text", text: "go" }] }],
-        requests: [{ id: "r1", method: "item/fileChange/requestApproval", params: { requestId: "r1", itemId: "f9" } }],
-      }),
-    );
-    expect(msgs).toHaveLength(2);
-    expect(parts(msgs[1]!)[0]).toMatchObject({ toolName: "fileChange", toolCallId: "f9" });
-    expect(msgs[1]!.status).toEqual({ type: "requires-action", reason: "interrupt" });
   });
 
   test("unknown item types are kept as data parts; dynamic tools use ns.name", () => {
@@ -159,11 +70,11 @@ describe("toMessages", () => {
       }),
     );
     const ps = parts(msgs[0]!);
-    // codex compacted the context here: a marker, not a tool
+    // the kernel compacted the context here: a marker, not a tool
     expect(ps[0]).toEqual({ type: "data-compaction", data: { id: "x1" } });
     expect(ps[1]).toMatchObject({ toolName: "builtin.echo", args: { message: "hi" }, result: { success: true } });
-    const other = toMessages(view({ items: [{ id: "e1", type: "enteredReviewMode", turnId: "t7", review: "x" }] }));
-    expect(parts(other[0]!)[0]).toMatchObject({ type: "data-codex" });
+    const other = toMessages(view({ items: [{ id: "e1", type: "somethingNew", turnId: "t7", detail: "x" }] }));
+    expect(parts(other[0]!)[0]).toMatchObject({ type: "data-item" });
   });
 
   test("reasoning lists (summary or full text) become one reasoning part", () => {
@@ -184,7 +95,7 @@ describe("toMessages", () => {
     ]);
   });
 
-  test("displayCommand unwraps codex's login-shell wrapper, keeps anything else", () => {
+  test("displayCommand unwraps the login-shell wrapper, keeps anything else", () => {
     expect(displayCommand("/usr/bin/zsh -lc 'ls -la'")).toBe("ls -la");
     expect(displayCommand("bash -lc \"cat 'a b.txt'\"")).toBe("cat 'a b.txt'");
     expect(displayCommand("/bin/sh -c 'echo hi'")).toBe("echo hi");
@@ -224,23 +135,32 @@ describe("toMessages", () => {
     expect(running[0]!.metadata?.timing?.totalStreamTime).toBeUndefined();
   });
 
-  test("a pending requestUserInput becomes a standalone question part answered through extras", () => {
+  test("a tool's ask (Context.ask) is a standalone action part on the last message, answered through extras", () => {
     const msgs = toMessages(
       view({
         turn: { id: "t12", status: "inProgress" },
-        items: [{ id: "u12", type: "userMessage", turnId: "t12", content: [{ type: "text", text: "go" }] }],
+        items: [
+          { id: "u12", type: "userMessage", turnId: "t12", content: [{ type: "text", text: "go" }] },
+          { id: "a12", type: "agentMessage", turnId: "t12", text: "logging in" },
+        ],
         requests: [
           {
             id: 3,
-            method: "item/tool/requestUserInput",
-            params: { requestId: 3, itemId: "call_3", turnId: "t12", isBlocking: true, questions: [{ id: "q1", header: "DB", question: "which db?", options: [{ label: "sqlite", description: "" }], isOther: true }] },
+            method: "longx/action/request",
+            params: { requestId: 3, itemId: "call_3", turnId: "t12", title: "登录 GitHub", text: "打开链接完成登录", url: "https://x.dev/login", fields: [{ id: "code", label: "验证码" }] },
           },
         ],
       }),
     );
-    const part = parts(msgs[1]!)[0]!;
-    expect(part).toMatchObject({ type: "tool-call", toolName: "requestUserInput", toolCallId: "call_3", args: { requestId: "3", questions: [{ id: "q1" }] } });
+    const ps = parts(msgs[1]!);
+    expect(ps.map((p) => p["type"])).toEqual(["text", "tool-call"]);
+    expect(ps[1]).toMatchObject({ toolName: "action", toolCallId: "call_3:ask", args: { requestId: "3", title: "登录 GitHub", text: "打开链接完成登录", url: "https://x.dev/login", fields: [{ id: "code", label: "验证码" }] } });
+    // assistant-ui only shows the controls on a requires-action message
     expect(msgs[1]!.status).toEqual({ type: "requires-action", reason: "interrupt" });
+    // an ask with nothing to hang on yet still gets a place
+    const bare = toMessages(view({ turn: { id: "t13", status: "inProgress" }, items: [{ id: "u13", type: "userMessage", turnId: "t13", content: [{ type: "text", text: "go" }] }], requests: [{ id: 4, method: "longx/action/request", params: { requestId: 4, title: "x" } }] }));
+    expect(bare).toHaveLength(2);
+    expect(parts(bare[1]!)[0]).toMatchObject({ toolName: "action", args: { url: null, fields: [] } });
   });
 
   test("a user message's images are image parts next to its text", () => {
@@ -257,54 +177,6 @@ describe("toMessages", () => {
   test("userText joins text parts", () => {
     expect(userText({ id: "u", type: "userMessage", content: [{ type: "text", text: "a" }, { type: "image" }, { type: "text", text: "b" }] })).toBe("ab");
     expect(userText({ id: "u", type: "userMessage", content: "plain" })).toBe("plain");
-  });
-});
-
-describe("automatic approval review", () => {
-  const action = { type: "command", source: "unifiedExec", command: "/usr/bin/zsh -lc 'touch ~/x'", cwd: "/p" };
-
-  test("a review of a command rides on that command's part; the command follows the verdict", () => {
-    const msgs = toMessages(
-      view({
-        turn: { id: "t1", status: "inProgress" },
-        items: [
-          { id: "c1", type: "commandExecution", turnId: "t1", command: "touch ~/x", cwd: "/p", status: "inProgress" },
-          { id: "rev-1", type: "autoApprovalReview", turnId: "t1", targetItemId: "c1", action, review: { status: "inProgress", rationale: null }, startedAtMs: 1 },
-        ],
-      }),
-    );
-    const ps = parts(msgs[0]!);
-    expect(ps.map((p) => p["type"])).toEqual(["tool-call"]);
-    expect(ps[0]).toMatchObject({ toolName: "commandExecution", args: { review: { id: "rev-1", status: "inProgress", userApproved: false } } });
-
-    const done = toMessages(
-      view({
-        turn: { id: "t1", status: "completed" },
-        items: [
-          { id: "c1", type: "commandExecution", turnId: "t1", command: "touch ~/x", cwd: "/p", status: "declined", exitCode: null },
-          { id: "rev-1", type: "autoApprovalReview", turnId: "t1", targetItemId: "c1", action, review: { status: "denied", riskLevel: "high", rationale: "writes outside" }, userApproved: true },
-        ],
-      }),
-    );
-    expect(parts(done[0]!)[0]).toMatchObject({ toolName: "commandExecution", isError: true, args: { review: { id: "rev-1", status: "denied", riskLevel: "high", rationale: "writes outside", userApproved: true } } });
-    // no message waits on the person: the reviewer decided
-    expect(done[0]!.status).toEqual({ type: "complete", reason: "stop" });
-  });
-
-  test("a review with no item of its own (a permissions request) is a standalone autoReview part", () => {
-    const perms = { type: "requestPermissions", reason: "install", permissions: { fileSystem: { write: ["/home/mj"], entries: [{ access: "write", path: { type: "path", path: "/home/mj" } }] }, network: { enabled: true } } };
-    const msgs = toMessages(
-      view({
-        turn: { id: "t1", status: "completed" },
-        items: [
-          { id: "rev-2", type: "autoApprovalReview", turnId: "t1", action: perms, review: { status: "approved", riskLevel: "low", rationale: "fine" } },
-          { id: "a1", type: "agentMessage", turnId: "t1", text: "done" },
-        ],
-      }),
-    );
-    const ps = parts(msgs[0]!);
-    expect(ps.map((p) => p["type"])).toEqual(["tool-call", "text"]);
-    expect(ps[0]).toMatchObject({ toolName: "autoReview", toolCallId: "rev-2", args: { review: { id: "rev-2", status: "approved", riskLevel: "low" }, reason: "install", lines: ["写 /home/mj", "联网"] } });
   });
 });
 
@@ -350,75 +222,18 @@ describe("multi-agent", () => {
     expect(msgs[0]!.status).toEqual({ type: "running" });
   });
 
-  test("a child's pending approval rides on the sub-agent call so the parent can answer it", () => {
+  test("a child waiting on the person shows its ask on the sub-agent row; the ask itself is answered inside the child's conversation", () => {
     const child = view({
       threadId: "child-alpha",
       turn: { id: "ct", status: "inProgress" },
-      items: [{ id: "cc", type: "commandExecution", turnId: "ct", command: "rm -rf x", status: "inProgress" }],
-      requests: [{ id: 7, method: "item/commandExecution/requestApproval", params: { requestId: 7, itemId: "cc", command: "rm -rf x" } }],
+      items: [{ id: "cc", type: "commandExecution", turnId: "ct", command: "gh auth login", status: "inProgress" }],
+      requests: [{ id: 7, method: "longx/action/request", params: { requestId: 7, itemId: "cc", title: "登录 GitHub" } }],
     });
     const msgs = toMessages(view({ turn: { id: "t20", status: "inProgress" }, items: [activity("act1", "started")] }), { "child-alpha": child });
-    const sub = parts(msgs[0]!)[0] as unknown as { approval: { id: string; prompt: string } };
-    expect(sub.approval.id).toBe("7");
-    expect(sub.approval.prompt).toContain("alpha");
-    expect(msgs[0]!.status).toEqual({ type: "requires-action", reason: "interrupt" });
-  });
-
-  test("collabAgentToolCall becomes a `collab` call naming the agents it talks to", () => {
-    const msgs = toMessages(
-      view({
-        turn: { id: "t20", status: "completed" },
-        items: [
-          activity("act1", "started"),
-          activity("act2", "started", "beta"),
-          {
-            id: "collab1",
-            type: "collabAgentToolCall",
-            turnId: "t20",
-            tool: "wait",
-            status: "completed",
-            senderThreadId: "thr_1",
-            receiverThreadIds: ["child-alpha", "child-beta"],
-            agentsStates: { "child-alpha": { status: "completed", message: "done by alpha" }, "child-beta": { status: "running", message: null } },
-            prompt: null,
-            model: null,
-          },
-          { id: "spawn1", type: "collabAgentToolCall", turnId: "t20", tool: "spawnAgent", status: "inProgress", senderThreadId: "thr_1", receiverThreadIds: [], agentsStates: {}, prompt: "read the docs", model: "deepseek-flash" },
-          { id: "wait2", type: "collabAgentToolCall", turnId: "t20", tool: "wait", status: "inProgress", senderThreadId: "thr_1", receiverThreadIds: [], agentsStates: {}, prompt: null, model: null },
-        ],
-      }),
-    );
-    const ps = parts(msgs[0]!);
-    expect(ps.map((p) => p["toolName"])).toEqual(["subagent", "subagent", "collab", "collab", "collab"]);
-    // a wait in flight names nobody yet: it waits for every agent so far
-    expect(ps[4]).toMatchObject({ args: { tool: "wait", agents: [{ name: "alpha" }, { name: "beta" }] } });
-    expect(ps[2]).toMatchObject({
-      toolCallId: "collab1",
-      // each agent carries its own latest activity too: real codex completes a wait with
-      // empty agentsStates, so the sub-agents' activities are what says who is done
-      args: { tool: "wait", agents: [{ threadId: "child-alpha", name: "alpha", kind: "started" }, { threadId: "child-beta", name: "beta", kind: "started" }] },
-      result: { status: "completed", agentsStates: { "child-alpha": { status: "completed" } } },
-    });
-    expect(ps[3]).toMatchObject({ args: { tool: "spawnAgent", prompt: "read the docs", model: "deepseek-flash" } });
-    expect(ps[3]!["result"]).toBeUndefined();
-  });
-
-  test("the turn's plan is a data part at the top of its message", () => {
-    const msgs = toMessages(
-      view({
-        turn: { id: "t21", status: "inProgress" },
-        plan: { turnId: "t21", explanation: "delegating", plan: [{ step: "spawn", status: "completed" }, { step: "wait", status: "inProgress" }] },
-        items: [
-          { id: "u21", type: "userMessage", turnId: "t21", content: [{ type: "text", text: "go" }] },
-          { id: "a21", type: "agentMessage", turnId: "t21", text: "on it" },
-        ],
-      }),
-    );
-    const ps = parts(msgs[1]!);
-    expect(ps[0]).toEqual({ type: "data-plan", data: { explanation: "delegating", steps: [{ step: "spawn", status: "completed" }, { step: "wait", status: "inProgress" }] } });
-    // an older turn's message does not show the current plan
-    const older = toMessages(view({ turn: { id: "t22", status: "inProgress" }, plan: { turnId: "t22", explanation: null, plan: [{ step: "x", status: "pending" }] }, items: [{ id: "a20", type: "agentMessage", turnId: "t20", text: "old" }] }));
-    expect(parts(older[0]!).map((p) => p["type"])).toEqual(["text"]);
+    const sub = parts(msgs[0]!)[0] as unknown as { args: { request: { title: string } | null }; messages: { content: { type: string; toolName?: string }[] }[] };
+    expect(sub.args.request).toEqual({ title: "登录 GitHub" });
+    expect(sub.messages.at(-1)!.content.map((p) => p.toolName)).toEqual(["commandExecution", "action"]);
+    expect(msgs[0]!.status).toEqual({ type: "running" });
   });
 });
 

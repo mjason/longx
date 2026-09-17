@@ -5,18 +5,13 @@ import type { ExternalStoreThreadData, ExternalStoreThreadListAdapter } from "@a
 
 export type ThreadRow = {
   id: string;
-  codexThreadId: string;
+  kernelThreadId: string;
   title: string | null;
   preview: string | null;
   status: string;
   modelSlug?: string | null;
   reasoningEffort?: string | null;
-  sandbox?: string;
-  approvalPolicy?: string;
-  networkAccess?: boolean;
   webSearch?: boolean;
-  multiAgent?: boolean;
-  autoReview?: boolean;
 };
 
 export type ThreadListActions = {

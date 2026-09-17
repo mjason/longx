@@ -7,15 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Page, TopBar } from "@/ui/shell/Shell";
 import { t } from "@/ui/strings";
 import { ModelsSection } from "./settings/ModelsSection";
-import { ProcessesSection } from "./settings/ProcessesSection";
-import { SandboxSection } from "./settings/SandboxSection";
-import { ToolsSection } from "./settings/ToolsSection";
 import { KnowledgeSection } from "./settings/KnowledgeSection";
 import { AgentKernelSection } from "./settings/AgentKernelSection";
 import { RequestsSection } from "./settings/RequestsSection";
 import { UpdateSection } from "./settings/UpdateSection";
 
-const SECTIONS = ["models", "knowledge", "agent", "tools", "processes", "sandbox", "update", "requests", "appearance"] as const;
+const SECTIONS = ["models", "knowledge", "agent", "update", "requests", "appearance"] as const;
 type Section = (typeof SECTIONS)[number];
 
 /**
@@ -85,12 +82,6 @@ function SectionBody({ section }: { section: Section }) {
       return <KnowledgeSection />;
     case "agent":
       return <AgentKernelSection />;
-    case "tools":
-      return <ToolsSection />;
-    case "processes":
-      return <ProcessesSection />;
-    case "sandbox":
-      return <SandboxSection />;
     case "update":
       return <UpdateSection />;
     case "requests":

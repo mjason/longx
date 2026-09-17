@@ -10,9 +10,9 @@ vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMoc
 import { listSubagents } from "@/ash_rpc";
 
 const subagents = [
-  { id: "t9", codexThreadId: "thr_1-alpha", title: "alpha", preview: "read a.txt", status: "active", agentPath: "/root/alpha", lastActivityAt: "2026-09-13T01:00:00Z", insertedAt: "2026-09-13T00:59:00Z" },
-  { id: "t10", codexThreadId: "thr_1-beta", title: "beta", preview: "read b.txt", status: "idle", agentPath: "/root/beta", lastActivityAt: "2026-09-13T01:00:30Z", insertedAt: "2026-09-13T00:59:00Z" },
-  { id: "t11", codexThreadId: "thr_1-gamma", title: "gamma", preview: null, status: "unrecoverable", agentPath: "/root/gamma", lastActivityAt: "2026-09-13T01:00:30Z", insertedAt: "2026-09-13T00:59:00Z" },
+  { id: "t9", kernelThreadId: "thr_1-alpha", title: "alpha", preview: "read a.txt", status: "active", agentPath: "/root/alpha", lastActivityAt: "2026-09-13T01:00:00Z", insertedAt: "2026-09-13T00:59:00Z" },
+  { id: "t10", kernelThreadId: "thr_1-beta", title: "beta", preview: "read b.txt", status: "idle", agentPath: "/root/beta", lastActivityAt: "2026-09-13T01:00:30Z", insertedAt: "2026-09-13T00:59:00Z" },
+  { id: "t11", kernelThreadId: "thr_1-gamma", title: "gamma", preview: null, status: "unrecoverable", agentPath: "/root/gamma", lastActivityAt: "2026-09-13T01:00:30Z", insertedAt: "2026-09-13T00:59:00Z" },
 ];
 
 describe("AgentsTool", () => {
@@ -24,11 +24,11 @@ describe("AgentsTool", () => {
     vi.mocked(listSubagents).mockResolvedValue(ok(subagents) as never);
   });
 
-  test("⌘5 lists the thread's sub-agents as background runs; a finished one opens its own thread", async () => {
+  test("⌘4 lists the thread's sub-agents as background runs; a finished one opens its own thread", async () => {
     const user = userEvent.setup();
     const { router } = renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-    await user.keyboard("{Meta>}5{/Meta}");
+    await user.keyboard("{Meta>}4{/Meta}");
     const panel = await screen.findByTestId("tool-panel");
     await within(panel).findByText("alpha");
     expect(listSubagents).toHaveBeenCalledWith(expect.objectContaining({ input: { parentThreadId: "t1" } }));
@@ -43,7 +43,7 @@ describe("AgentsTool", () => {
     const user = userEvent.setup();
     renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-    await user.keyboard("{Meta>}5{/Meta}");
+    await user.keyboard("{Meta>}4{/Meta}");
     const panel = await screen.findByTestId("tool-panel");
     await within(panel).findByText("这个会话没有派出子 agent");
   });

@@ -1,5 +1,5 @@
 // Settings → 请求记录: the gateway's last requests (Longx.AI.Gateway.Log) —
-// what codex asked the provider for and what came of it, newest first. The
+// what the kernel asked the provider for and what came of it, newest first. The
 // place to look when the level or the model on screen does not match what
 // the provider was asked; refreshed every few seconds while shown.
 import { useQuery } from "@tanstack/react-query";

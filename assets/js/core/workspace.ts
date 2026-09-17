@@ -86,7 +86,7 @@ export function useFileContent(projectId: string, path: string | null) {
   });
 }
 
-/** the tree, open files and git status are stale (codex reported a change under the root) */
+/** the tree, open files and git status are stale (the server reported a change under the root) */
 export function invalidateFiles(client: QueryClient, projectId: string) {
   void client.invalidateQueries({ queryKey: wsKeys.filesOf(projectId) });
   void client.invalidateQueries({ queryKey: wsKeys.changes(projectId) });

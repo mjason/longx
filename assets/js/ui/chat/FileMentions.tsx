@@ -1,4 +1,4 @@
-// `@` in the composer: the project's files from codex's own fuzzy index
+// `@` in the composer: the project's files from the server's fuzzy index
 // (search_files → fuzzyFileSearch), picked into the text as a path — the
 // registry's composer-trigger-popover over a live-completion adapter; the
 // message shows the path as a chip (directive-text with our formatter).

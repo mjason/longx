@@ -7,7 +7,7 @@ import { t } from "@/ui/strings";
 import type { ProjectContext } from "../ProjectWindow";
 
 // a sub-agent thread's status as a background run: still working, done
-// (its thread can be opened), or gone with its codex
+// (its thread can be opened), or gone
 function stateOf(status: string): BackgroundRun["state"] {
   if (status === "active" || status === "disconnected") return "running";
   if (status === "idle") return "ready";
@@ -15,7 +15,7 @@ function stateOf(status: string): BackgroundRun["state"] {
 }
 
 /**
- * The sub-agents codex spawned in this thread, as assistant-ui's background
+ * The sub-agents spawned in this thread, as assistant-ui's background
  * inbox: each is a thread of its own under the parent; a finished one opens
  * like any thread, with its full conversation.
  */
@@ -31,10 +31,10 @@ export function AgentsTool({ ctx }: { ctx: ProjectContext }) {
 
   const runs: BackgroundRun[] = subagents.data.map((row) => ({
     id: row.id,
-    title: row.title ?? row.agentPath ?? row.codexThreadId,
+    title: row.title ?? row.agentPath ?? row.kernelThreadId,
     state: stateOf(row.status),
     elapsed: relativeTime(row.lastActivityAt),
-    summary: row.preview ?? row.agentPath ?? row.codexThreadId,
+    summary: row.preview ?? row.agentPath ?? row.kernelThreadId,
   }));
 
   return (

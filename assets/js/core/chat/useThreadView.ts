@@ -1,4 +1,4 @@
-// React glue: the live view of one codex thread from its channel.
+// React glue: the live view of one kernel thread from its channel.
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { getSocket } from "@/core/socket";
 import { createBatcher } from "./batch";
@@ -28,7 +28,7 @@ function describe(reason: unknown): string {
 }
 
 /**
- * Joins `thread:<codexThreadId>` (nothing when undefined) and folds its
+ * Joins `thread:<kernelThreadId>` (nothing when undefined) and folds its
  * events — a burst of them once per frame (`createBatcher`). `refetch`
  * re-pulls the snapshot in place; a `thread/reverted` does that on its own
  * (the server dropped items we may still show).
@@ -37,19 +37,19 @@ function describe(reason: unknown): string {
 const SIGNALS = new Set(["model/rerouted"]);
 
 export function useThreadView(
-  codexThreadId: string | undefined,
+  kernelThreadId: string | undefined,
   onSignal?: (method: string, params: Record<string, unknown>) => void,
 ): ThreadViewState & { refetch: () => Promise<void> } {
   const signal = useRef(onSignal);
   signal.current = onSignal;
-  const [state, dispatch] = useReducer(reduce, codexThreadId ?? "", (id) => ({ view: emptyView(id), ready: false, error: null }));
+  const [state, dispatch] = useReducer(reduce, kernelThreadId ?? "", (id) => ({ view: emptyView(id), ready: false, error: null }));
   const handle = useRef<ThreadChannelHandle | null>(null);
 
   useEffect(() => {
-    dispatch({ type: "reset", id: codexThreadId ?? "" });
-    if (!codexThreadId) return;
+    dispatch({ type: "reset", id: kernelThreadId ?? "" });
+    if (!kernelThreadId) return;
     const events = createBatcher<ThreadEvent>((batch) => dispatch({ type: "events", events: batch }));
-    const joined = joinThreadChannel(getSocket(), codexThreadId, {
+    const joined = joinThreadChannel(getSocket(), kernelThreadId, {
       onSnapshot: (snapshot) => {
         events.cancel();
         dispatch({ type: "snapshot", snapshot });
@@ -67,7 +67,7 @@ export function useThreadView(
       events.cancel();
       joined.leave();
     };
-  }, [codexThreadId]);
+  }, [kernelThreadId]);
 
   const refetch = useCallback(() => handle.current?.snapshot() ?? Promise.resolve(), []);
   return { ...state, refetch };

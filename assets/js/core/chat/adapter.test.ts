@@ -6,16 +6,14 @@ import { emptyView } from "./thread";
 vi.mock("@/ash_rpc", () => ({
   sendMessage: vi.fn(async () => ({ success: true, data: { id: "turn-row" } })),
   interruptTurn: vi.fn(async () => ({ success: true, data: null })),
-  respond: vi.fn(async () => ({ success: true, data: null })),
   answerRequest: vi.fn(async () => ({ success: true, data: null })),
-  approveReview: vi.fn(async () => ({ success: true, data: null })),
   setGoal: vi.fn(async () => ({ success: true, data: { objective: "x", status: "active" } })),
   retractTurn: vi.fn(async () => ({ success: true, data: { text: "look at it" } })),
-  steerTurn: vi.fn(async () => ({ success: true, data: { codexTurnId: "turn_9" } })),
+  steerTurn: vi.fn(async () => ({ success: true, data: { kernelTurnId: "turn_9" } })),
 }));
-import { answerRequest, approveReview, interruptTurn, respond, retractTurn, sendMessage, setGoal, steerTurn } from "@/ash_rpc";
+import { answerRequest, interruptTurn, retractTurn, sendMessage, setGoal, steerTurn } from "@/ash_rpc";
 
-const target = { threadId: "row-1", codexThreadId: "thr_1" };
+const target = { threadId: "row-1", kernelThreadId: "thr_1" };
 const append = (text: string) =>
   ({
     role: "user",
@@ -148,34 +146,6 @@ describe("chat adapter", () => {
     expect(adapter.adapters?.dictation).toBe(dictation);
   });
 
-  test("the access mode rides on every message (the backend only records a change)", async () => {
-    const adapter = buildAdapter({
-      target,
-      view: emptyView("thr_1"),
-      model: null,
-      mode: {
-        sandbox: "read_only",
-        approvalPolicy: "never",
-        networkAccess: true,
-        webSearch: true,
-        multiAgent: true,
-        autoReview: true,
-      },
-    });
-    await adapter.onNew(append("look"));
-    expect(sendMessage).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        input: {
-          threadId: "row-1",
-          text: "look",
-          sandbox: "read_only",
-          approvalPolicy: "never",
-          networkAccess: true,
-        },
-      }),
-    );
-  });
-
   test("onNew while a turn runs steers the message into it; a turn that ended meanwhile makes it a new turn", async () => {
     vi.mocked(sendMessage).mockClear();
     const running = buildAdapter({
@@ -187,7 +157,7 @@ describe("chat adapter", () => {
     expect(steerTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", text: "also this" } }));
     expect(sendMessage).not.toHaveBeenCalled();
 
-    // codex says the turn is over: the message becomes a turn of its own
+    // the kernel says the turn is over: the message becomes a turn of its own
     vi.mocked(steerTurn).mockResolvedValueOnce({ success: false, errors: [{ type: "invalid", message: "not_running", shortMessage: "not_running", vars: {}, fields: ["threadId"], path: [], details: {} }] } as never);
     await running.onNew({ role: "user", content: [{ type: "text", text: "late" }], parentId: null, sourceId: null, runConfig: {} } as never);
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ text: "late" }) }));
@@ -214,7 +184,7 @@ describe("chat adapter", () => {
     await running.onCancel!();
     expect(interruptTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        input: { threadId: "row-1", codexTurnId: "turn_9" },
+        input: { threadId: "row-1", kernelTurnId: "turn_9" },
       }),
     );
   });
@@ -233,7 +203,7 @@ describe("chat adapter", () => {
       onRetract,
     });
     await untouched.onCancel!();
-    expect(retractTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", codexTurnId: "turn_9" } }));
+    expect(retractTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", kernelTurnId: "turn_9" } }));
     expect(onRetract).toHaveBeenCalledWith("look at it");
     expect(interruptTurn).not.toHaveBeenCalled();
 
@@ -274,14 +244,14 @@ describe("chat adapter", () => {
     expect(interruptTurn).toHaveBeenCalledTimes(1);
     expect(onRetract).toHaveBeenCalledTimes(2);
 
-    // a request waiting on the person (a permission asked for): the same
+    // a request waiting on the person (a tool's ask): the same
     const asking = buildAdapter({
       target,
       view: {
         ...emptyView("thr_1"),
         turn: { id: "turn_9", status: "inProgress" },
         items: [{ id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] }],
-        requests: [{ id: 7, method: "item/permissions/requestApproval", params: { threadId: "thr_1", turnId: "turn_9", permissions: {} } }],
+        requests: [{ id: 7, method: "longx/action/request", params: { threadId: "thr_1", turnId: "turn_9", title: "登录" } }],
       },
       model: null,
       onRetract,
@@ -289,43 +259,6 @@ describe("chat adapter", () => {
     await asking.onCancel!();
     expect(interruptTurn).toHaveBeenCalledTimes(2);
     expect(onRetract).toHaveBeenCalledTimes(2);
-  });
-
-  test("an approval answer goes back as codex's request id and our decision", async () => {
-    const view = {
-      ...emptyView("thr_1"),
-      requests: [
-        {
-          id: 42,
-          method: "item/commandExecution/requestApproval",
-          params: { requestId: 42, itemId: "c1" },
-        },
-      ],
-    };
-    const adapter = buildAdapter({ target, view, model: null });
-    await adapter.onRespondToToolApproval!({
-      approvalId: "42",
-      approved: true,
-      optionId: "accept_for_session",
-    });
-    expect(respond).toHaveBeenCalledWith(
-      expect.objectContaining({
-        input: {
-          threadId: "row-1",
-          requestId: "42",
-          decision: "accept_for_session",
-        },
-      }),
-    );
-    await adapter.onRespondToToolApproval!({
-      approvalId: "42",
-      approved: false,
-    });
-    expect(respond).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        input: expect.objectContaining({ decision: "decline" }),
-      }),
-    );
   });
 
   test("a dirty tree asks the page what to do, then resends with the answer", async () => {
@@ -377,7 +310,7 @@ describe("chat adapter", () => {
   test("without a thread, the first message creates one and lands there", async () => {
     const createThread = vi.fn(async () => ({
       threadId: "row-new",
-      codexThreadId: "thr_new",
+      kernelThreadId: "thr_new",
     }));
     const onSent = vi.fn();
     const adapter = buildAdapter({
@@ -397,7 +330,7 @@ describe("chat adapter", () => {
     );
     expect(onSent).toHaveBeenCalledWith({
       threadId: "row-new",
-      codexThreadId: "thr_new",
+      kernelThreadId: "thr_new",
     });
   });
 
@@ -423,34 +356,16 @@ describe("chat adapter", () => {
     await adapter.onRefetchThread!();
     expect(refetch).toHaveBeenCalled();
 
+    // a tool's ask is answered as it is: {done: true}, {cancelled: true}, or the fields typed
     const extras = adapter.extras as {
-      answerRequest: (
-        id: string,
-        answers: Record<string, string[]>,
-      ) => Promise<void>;
+      answerAction: (id: string, answers: Record<string, unknown>) => Promise<void>;
     };
-    await extras.answerRequest("3", { q1: ["sqlite"] });
+    await extras.answerAction("3", { code: "1234" });
     expect(answerRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        input: {
-          threadId: "row-1",
-          requestId: "3",
-          answers: { q1: { answers: ["sqlite"] } },
-        },
+        input: { threadId: "row-1", requestId: "3", answers: { code: "1234" } },
       }),
     );
-  });
-
-  test("a message naming skills ($name) sends them as skill inputs next to the text", async () => {
-    const skills = [{ name: "docs", description: "d", shortDescription: null, path: "/p/.agents/skills/docs/SKILL.md", enabled: true }];
-    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null, skills });
-    await adapter.onNew!(append("write it with $docs please"));
-    expect(sendMessage).toHaveBeenLastCalledWith(
-      expect.objectContaining({ input: expect.objectContaining({ text: "write it with $docs please", skills: [{ name: "docs", path: "/p/.agents/skills/docs/SKILL.md" }] }) }),
-    );
-    // none named: no skills field at all
-    await adapter.onNew!(append("plain"));
-    expect((vi.mocked(sendMessage).mock.calls.at(-1)![0] as { input: Record<string, unknown> }).input).not.toHaveProperty("skills");
   });
 
   test("a message that is `/goal <objective>` sets the thread's goal instead of being sent (a new chat gets its thread first)", async () => {
@@ -460,18 +375,11 @@ describe("chat adapter", () => {
     expect(setGoal).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", objective: "简单写一个 hello" } }));
     expect(sendMessage).not.toHaveBeenCalled();
 
-    const createThread = vi.fn(async () => ({ threadId: "row-9", codexThreadId: "thr_9" }));
+    const createThread = vi.fn(async () => ({ threadId: "row-9", kernelThreadId: "thr_9" }));
     const fresh = buildAdapter({ target: null, view: emptyView(""), model: null, createThread });
     await fresh.onNew!(append("/goal 跑通回测"));
     expect(createThread).toHaveBeenCalled();
     expect(setGoal).toHaveBeenLastCalledWith(expect.objectContaining({ input: { threadId: "row-9", objective: "跑通回测" } }));
-  });
-
-  test("extras.approveDeniedReview overrides a denied automatic review on the thread row", async () => {
-    const adapter = buildAdapter({ target, view: emptyView("thr_1"), model: null });
-    const extras = adapter.extras as { approveDeniedReview: (id: string) => Promise<void> };
-    await extras.approveDeniedReview("rev-1");
-    expect(approveReview).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", reviewId: "rev-1" } }));
   });
 
   test("textOf joins text parts and trims", () => {
@@ -480,7 +388,7 @@ describe("chat adapter", () => {
 });
 
 describe("sub-agents", () => {
-  test("the children's views nest into the parent's messages and a child's approval is answered on the parent thread", async () => {
+  test("the children's views nest into the parent's messages; a child's ask shows on its row", () => {
     const parent = {
       ...emptyView("thr_1"),
       turn: { id: "t1", status: "inProgress" },
@@ -503,15 +411,15 @@ describe("sub-agents", () => {
           id: "cc",
           type: "commandExecution",
           turnId: "ct",
-          command: "rm -rf x",
+          command: "gh auth login",
           status: "inProgress",
         },
       ],
       requests: [
         {
           id: 7,
-          method: "item/commandExecution/requestApproval",
-          params: { requestId: 7, itemId: "cc" },
+          method: "longx/action/request",
+          params: { requestId: 7, itemId: "cc", title: "登录 GitHub" },
         },
       ],
     };
@@ -525,20 +433,11 @@ describe("sub-agents", () => {
       adapter.messages![0]!.content as unknown as {
         toolName: string;
         messages?: unknown[];
-        approval?: { id: string };
+        args: { request: { title: string } | null };
       }[]
     )[0]!;
     expect(sub.toolName).toBe("subagent");
     expect(sub.messages).toHaveLength(1);
-    await adapter.onRespondToToolApproval!({
-      approvalId: sub.approval!.id,
-      approved: true,
-      optionId: "accept",
-    });
-    expect(respond).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        input: { threadId: "row-1", requestId: "7", decision: "accept" },
-      }),
-    );
+    expect(sub.args.request).toEqual({ title: "登录 GitHub" });
   });
 });

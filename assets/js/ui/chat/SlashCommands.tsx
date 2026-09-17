@@ -1,13 +1,12 @@
-// `/` in the composer: the commands codex's TUI has, over the registry's
-// composer-trigger-popover with the slash-command adapter. Thread commands
-// (/review, /compact, /init) go to the backend; the rest open a tool or a
-// page. The text clears on pick — a command is not part of the message.
+// `/` in the composer, over the registry's composer-trigger-popover with
+// the slash-command adapter. Thread commands (/compact, /init, /goal) go to
+// the backend; the rest open a tool or a page. The text clears on pick — a command is not part of the message.
 import { unstable_useSlashCommandAdapter, useAui } from "@assistant-ui/react";
-import { FolderTree, GitBranch, History, MessageSquarePlus, Minimize2, ScrollText, Search, Settings, Target } from "lucide-react";
+import { FolderTree, GitBranch, History, MessageSquarePlus, Minimize2, ScrollText, Settings, Target } from "lucide-react";
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { compactThread, reviewThread } from "@/ash_rpc";
+import { compactThread } from "@/ash_rpc";
 import { useFrame } from "@/core/frame";
 import { unwrap } from "@/core/projects";
 import { ComposerTriggerPopover } from "@/ui/components/assistant-ui/elements/composer-trigger-popover.aui";
@@ -15,7 +14,7 @@ import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 import { useGoalDialog } from "./GoalBar";
 
-const ICONS = { new: MessageSquarePlus, review: Search, compact: Minimize2, init: ScrollText, goal: Target, git: GitBranch, files: FolderTree, history: History, settings: Settings };
+const ICONS = { new: MessageSquarePlus, compact: Minimize2, init: ScrollText, goal: Target, git: GitBranch, files: FolderTree, history: History, settings: Settings };
 
 export function SlashCommands() {
   const { thread } = useChat();
@@ -34,15 +33,6 @@ export function SlashCommands() {
     };
     return [
       { id: "new", description: t.commands.new, icon: "new", execute: () => navigate(`/p/${slug}`) },
-      {
-        id: "review",
-        description: t.commands.review,
-        icon: "review",
-        execute: onThread(async (id) => {
-          unwrap(await reviewThread({ fields: ["id"], input: { threadId: id, target: "uncommitted" } }));
-          toast.success(t.commands.reviewStarted);
-        }),
-      },
       {
         id: "compact",
         description: t.commands.compact,

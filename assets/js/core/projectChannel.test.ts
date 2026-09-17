@@ -19,28 +19,19 @@ describe("joinProjectChannel", () => {
   test("joins project:<id> and dispatches the events", () => {
     const { socket, channel, handlers } = fakeSocket();
     const onChanged = vi.fn();
-    const onCodex = vi.fn();
-    const onSample = vi.fn();
     const onFiles = vi.fn();
-    const onNotice = vi.fn();
 
-    const leave = joinProjectChannel(socket as never, "abc", { onChanged, onCodex, onSample, onFiles, onNotice });
+    const leave = joinProjectChannel(socket as never, "abc", { onChanged, onFiles });
 
     expect(socket.channel).toHaveBeenCalledWith("project:abc", {});
     expect(channel.join).toHaveBeenCalled();
 
     handlers["changed"]!({});
-    handlers["codex"]!({ status: "down" });
-    handlers["sample"]!({ rss_bytes: 1, processes: 1, cpu_ms: 0, uptime_ms: 5, turns: 0, active_turns: 0 });
-
     expect(onChanged).toHaveBeenCalledTimes(1);
-    expect(onCodex).toHaveBeenCalledWith("down");
-    expect(onSample).toHaveBeenCalledWith(expect.objectContaining({ rss_bytes: 1 }));
-    // codex's fs/changed under the root, and its config / deprecation notices
+    // a change under the root
     handlers["files"]!({ paths: ["/p/a.txt"] });
     expect(onFiles).toHaveBeenCalledWith(["/p/a.txt"]);
-    handlers["notice"]!({ kind: "configWarning", summary: "bad key", details: null });
-    expect(onNotice).toHaveBeenCalledWith({ kind: "configWarning", summary: "bad key", details: null });
+    expect(Object.keys(handlers).sort()).toEqual(["changed", "files"]);
 
     leave();
     expect(channel.leave).toHaveBeenCalled();

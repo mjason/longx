@@ -1,4 +1,4 @@
-// codex's goal mode, above the thread: the objective, its status, the
+// The thread's goal (Plugs.Goal), above the thread: the objective, its status, the
 // budget spent and the time; pause / resume / clear, and a dialog that sets
 // or edits the objective and the token budget (also opened by /goal).
 import { Pause, Play, Pencil, Target, X } from "lucide-react";

@@ -1,4 +1,4 @@
-// `useCodexRuntime`: one hook that turns a project + the thread in the
+// `useLongxRuntime`: one hook that turns a project + the thread in the
 // route into an assistant-ui runtime — the same shape as
 // @assistant-ui/react-opencode (ExternalStoreRuntime over a coding-agent
 // server): the thread list, the live view, the
@@ -12,7 +12,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { archiveThread, deleteThread, renameThread, steerTurn } from "@/ash_rpc";
-import { queryKeys, unwrap, useAgentDefinition, useSkills, useStartThread, useThread, useThreads } from "@/core/projects";
+import { queryKeys, unwrap, useAgentDefinition, useStartThread, useThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
@@ -22,7 +22,6 @@ import {
 } from "@assistant-ui/react";
 import {
   buildAdapter,
-  type AccessMode,
   type DirtyChange,
   type DirtyDecision,
   type ThreadTarget,
@@ -35,15 +34,10 @@ import { buildThreadListAdapter, type ThreadRow } from "./threadList";
 import { useThreadView } from "./useThreadView";
 import { useThreadViews } from "./useThreadViews";
 
-/** which kernel runs the project's threads: codex (sandbox, approvals) or Longx's own */
-export type Engine = "codex" | "native";
-
-export type CodexRuntimeOptions = {
+export type LongxRuntimeOptions = {
   projectId: string;
-  /** the project's engine; the native kernel has no access mode to pick */
-  engine?: Engine;
-  /** the project's defaults: what a new chat starts with */
-  defaults: AccessMode;
+  /** the project's default for a new chat: whether the model may search the web */
+  webSearch?: boolean;
   /** the project's own default model (a `Longx.AI.Model` id; null = the global default) */
   defaultModelId?: string | null;
   /** the thread row id from the route; undefined = new chat (the first message creates one) */
@@ -57,17 +51,17 @@ export type CodexRuntimeOptions = {
   onRetract?: (text: string) => void;
 };
 
-export type TurnState = "idle" | "running" | "approval";
+/** idle, a turn running, or a tool waiting on the person (an ask) */
+export type TurnState = "idle" | "running" | "waiting";
 
-export type CodexRuntime = {
+export type LongxRuntime = {
   runtime: AssistantRuntime;
   projectId: string;
-  engine: Engine;
   thread: ThreadRow | undefined;
   /** the route names a thread the project does not have */
   missing: boolean;
   view: ThreadView;
-  /** the live views of the thread's sub-agents (and theirs), by codex thread id */
+  /** the live views of the thread's sub-agents (and theirs), by kernel thread id */
   subviews: SubViews;
   ready: boolean;
   error: string | null;
@@ -76,17 +70,14 @@ export type CodexRuntime = {
   disabledReason: string | null;
   /** the project's default model id, for the rail to name what a new chat starts on */
   defaultModelId: string | null;
-  /** the native kernel: the model (and level) the project's description names — what a turn runs on when nobody picks one */
+  /** the model (and level) the project's description names — what a turn runs on when nobody picks one */
   definitionModel: { model: string | null; effort: string | null } | null;
   model: string | null;
   setModel: (slug: string | null) => void;
   /** the reasoning level for the next turn (null = the thread's current, or the model's default) */
   effort: string | null;
   setEffort: (effort: string | null) => void;
-  /** the access mode the next turn runs with */
-  mode: AccessMode;
-  setMode: (mode: AccessMode) => void;
-  /** a queued message into the running turn now (codex's steer) */
+  /** a queued message into the running turn now (a steer) */
   insertQueued: (queueItemId: string) => Promise<void>;
 };
 
@@ -94,18 +85,17 @@ export type CodexRuntime = {
 // but off for now: flip this to show it again
 const DICTATION = false;
 
-// statuses that end a thread for good vs. a codex on its way back
+// statuses that end a thread for good
 const CLOSED = new Set(["unrecoverable", "archived"]);
 
 const subagentIds = (view: ThreadView): string[] => [
   ...subagentsOf(view).keys(),
 ];
 
-export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
+export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
   const {
     projectId,
-    engine = "codex",
-    defaults,
+    webSearch,
     defaultModelId = null,
     threadId,
     onOpenThread,
@@ -115,7 +105,6 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   } = opts;
   const client = useQueryClient();
   const threads = useThreads(projectId);
-  const skills = useSkills(projectId).data;
   const rows = useMemo(
     () => (threads.data ?? []) as ThreadRow[],
     [threads.data],
@@ -124,14 +113,14 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   // a sub-agent's row is not in the project's list: fetched by id for its own page
   const single = useThread(threadId !== undefined && !threads.isPending && !listed ? threadId : undefined);
   const thread = listed ?? (single.data as ThreadRow | undefined);
-  // the native kernel's description may name a model: the turn runs on it unless the person picks one
-  const definition = useAgentDefinition(engine === "native" ? projectId : undefined);
+  // the project's description may name a model: the turn runs on it unless the person picks one
+  const definition = useAgentDefinition(projectId);
   const definitionModel = useMemo(
-    () => (engine === "native" && definition.data ? { model: definition.data.model, effort: definition.data.effort } : null),
-    [engine, definition.data],
+    () => (definition.data ? { model: definition.data.model, effort: definition.data.effort } : null),
+    [definition.data],
   );
-  const { view, ready, error, refetch } = useThreadView(thread?.codexThreadId, onSignal);
-  // sub-agents work on their own codex threads; the parent's activities name
+  const { view, ready, error, refetch } = useThreadView(thread?.kernelThreadId, onSignal);
+  // sub-agents work on their own threads; the parent's activities name
   // them, and a child's activities name its own children
   const subviews = useThreadViews(
     useMemo(() => subagentIds(view), [view]),
@@ -142,8 +131,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   const start = useStartThread(projectId);
 
   // the model and level choices are per thread (a new model starts on its
-  // own default level); the mode starts from what the thread runs with (the
-  // row) and is only overridden by an explicit choice
+  // own default level)
   useEffect(() => {
     setModelState(null);
     setEffort(null);
@@ -152,62 +140,24 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     setModelState(slug);
     setEffort(null);
   }, []);
-  const [modeOverride, setModeOverride] = useState<{
-    threadId: string | undefined;
-    mode: AccessMode;
-  } | null>(null);
-  // referentially stable while nothing changes: assistant-ui re-applies the
-  // adapter after every render, and an adapter rebuilt each time notifies
-  // the store on every commit (a render loop once a subscriber re-renders us)
-  const rowMode: AccessMode | null = useMemo(
-    () =>
-      thread
-        ? {
-            sandbox: thread.sandbox as AccessMode["sandbox"],
-            approvalPolicy:
-              thread.approvalPolicy as AccessMode["approvalPolicy"],
-            networkAccess: thread.networkAccess ?? false,
-            webSearch: thread.webSearch ?? true,
-            multiAgent: thread.multiAgent ?? true,
-            autoReview: thread.autoReview ?? true,
-          }
-        : null,
-    [
-      thread?.sandbox,
-      thread?.approvalPolicy,
-      thread?.networkAccess,
-      thread?.webSearch,
-      thread?.multiAgent,
-      thread?.autoReview,
-      thread !== undefined,
-    ],
-  );
-  const mode =
-    modeOverride && modeOverride.threadId === threadId
-      ? modeOverride.mode
-      : (rowMode ?? defaults);
-  const setMode = useCallback(
-    (next: AccessMode) => setModeOverride({ threadId, mode: next }),
-    [threadId],
-  );
 
   const invalidate = useCallback(
     () => client.invalidateQueries({ queryKey: queryKeys.threads(projectId) }),
     [client, projectId],
   );
 
-  // a new chat starts in the mode picked in the rail (web search is start-only)
-  // and on the picked model and level (start-time config: window, search mode);
-  // `start` itself is a new object every render, its mutateAsync is stable
+  // a new chat starts with the project's web-search default and on the picked
+  // model and level; `start` itself is a new object every render, its
+  // mutateAsync is stable
   const startThread = start.mutateAsync;
   const createThread = useCallback(async (): Promise<ThreadTarget> => {
     const row = await startThread({
-      ...mode,
+      ...(webSearch !== undefined ? { webSearch } : {}),
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),
     });
-    return { threadId: row.id, codexThreadId: row.codexThreadId };
-  }, [startThread, mode, model, effort]);
+    return { threadId: row.id, kernelThreadId: row.kernelThreadId };
+  }, [startThread, webSearch, model, effort]);
 
   const threadList = useMemo(
     () =>
@@ -218,8 +168,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         actions: {
           switchTo: onOpenThread,
           // a new chat is the page without a thread: the first message creates
-          // the row (a row per click left "未命名会话"s behind and started a
-          // codex thread nobody used)
+          // the row (a row per click left "未命名会话"s behind)
           create: async () => onOpenThread(null),
           rename: async (id, title) => {
             unwrap(await renameThread({ identity: id, input: { title } }));
@@ -242,8 +191,8 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
 
   // a message while a turn runs waits in assistant-ui's queue (the message-queue
   // element shows it above the composer) and goes out as a new turn when the
-  // turn ends — what the Codex app does; `insertQueued` is its "insert now"
-  // (turn/steer). The queue runs the latest adapter through a ref.
+  // turn ends; `insertQueued` is its "insert now" (a steer). The queue runs
+  // the latest adapter through a ref.
   const onNewRef = useRef<(message: AppendMessage) => Promise<void>>(async () => {});
   const [queue] = useState(() => createMessageQueue({ run: (message) => void onNewRef.current(message) }));
   // the store reads the queue's lanes when this component renders: a change
@@ -269,7 +218,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
       const item = [...queue.adapter.steerItems, ...queue.adapter.items].find((i) => i.id === queueItemId);
       if (!item || !thread) return;
       const text = item.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
-      const steered = await steerTurn({ fields: ["codexTurnId"], input: { threadId: thread.id, text } });
+      const steered = await steerTurn({ fields: ["kernelTurnId"], input: { threadId: thread.id, text } });
       if (steered.success) {
         queue.adapter.remove(queueItemId);
         void invalidate();
@@ -304,7 +253,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   const disabledReason =
     thread && CLOSED.has(thread.status) ? thread.status : null;
   const target = thread
-    ? { threadId: thread.id, codexThreadId: thread.codexThreadId }
+    ? { threadId: thread.id, kernelThreadId: thread.kernelThreadId }
     : null;
   const onSent = useCallback(
     (sent: ThreadTarget) => {
@@ -322,10 +271,8 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         subviews,
         model,
         effort,
-        mode,
         disabled: disabledReason !== null,
-        sendDisabled:
-          thread?.status === "disconnected" || (thread !== undefined && !ready),
+        sendDisabled: thread !== undefined && !ready,
         loading: thread !== undefined && !ready && !error,
         createThread,
         onSent,
@@ -336,17 +283,15 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
         queue: queue.adapter,
         attachments,
         dictation,
-        ...(skills ? { skills } : {}),
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       target?.threadId,
-      target?.codexThreadId,
+      target?.kernelThreadId,
       view,
       subviews,
       model,
       effort,
-      mode,
       disabledReason,
       thread?.status,
       ready,
@@ -360,7 +305,6 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
       queue,
       attachments,
       dictation,
-      skills,
       queueVersion,
     ],
   );
@@ -372,7 +316,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     Object.values(subviews).some((v) => v.requests.length > 0);
   const state: TurnState =
     thread && awaiting
-      ? "approval"
+      ? "waiting"
       : thread && runningTurnId(view)
         ? "running"
         : "idle";
@@ -380,7 +324,6 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   return {
     runtime,
     projectId,
-    engine,
     thread,
     missing:
       threadId !== undefined && !threads.isPending && thread === undefined && !single.isPending,
@@ -396,8 +339,6 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     setModel,
     effort,
     setEffort,
-    mode,
-    setMode,
     insertQueued,
   };
 }

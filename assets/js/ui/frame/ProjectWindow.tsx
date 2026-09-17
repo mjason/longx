@@ -1,11 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Bot, FolderTree, GitBranch, History, MessagesSquare, Server, Settings, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { Bot, FolderTree, GitBranch, History, MessagesSquare, Settings, X } from "lucide-react";
+import { useEffect, type ReactNode } from "react";
 import { Link, Outlet, useMatch, useParams } from "react-router";
 import { Workbench } from "@/ui/workbench/Workbench";
-import { toast } from "sonner";
 import { TOOLS, toolForShortcut, useFrame, type Tool } from "@/core/frame";
-import { joinProjectChannel, type CodexSample } from "@/core/projectChannel";
+import { joinProjectChannel } from "@/core/projectChannel";
 import { queryKeys, useProject } from "@/core/projects";
 import { invalidateFiles } from "@/core/workspace";
 import { getSocket } from "@/core/socket";
@@ -22,13 +21,11 @@ import { AgentsTool } from "./tools/AgentsTool";
 import { FilesTool } from "./tools/FilesTool";
 import { TurnsTool } from "./tools/TurnsTool";
 import { GitTool } from "./tools/GitTool";
-import { ProcessTool } from "./tools/ProcessTool";
 import { ThreadsTool } from "./tools/ThreadsTool";
 
 const ICONS: Record<Tool, typeof MessagesSquare> = {
   threads: MessagesSquare,
   git: GitBranch,
-  process: Server,
   history: History,
   agents: Bot,
   files: FolderTree,
@@ -39,11 +36,6 @@ export type ProjectContext = {
   slug: string;
   name: string;
   rootPath: string;
-  sandbox: string;
-  approvalPolicy: string;
-  /** which kernel runs the project's threads */
-  engine: "codex" | "native";
-  sample: CodexSample | null;
 };
 
 /**
@@ -59,7 +51,6 @@ export function ProjectWindow() {
   // the settings page is a page, not part of the editor area
   const settings = useMatch("/p/:slug/settings") !== null;
   const client = useQueryClient();
-  const [sample, setSample] = useState<CodexSample | null>(null);
   const id = project.data?.id;
 
   useEffect(() => {
@@ -70,14 +61,7 @@ export function ProjectWindow() {
         client.invalidateQueries({ queryKey: ["turns"] });
         client.invalidateQueries({ queryKey: ["subagents"] });
       },
-      onCodex: (status) => {
-        client.invalidateQueries({ queryKey: queryKeys.codex(id) });
-        if (status === "down") toast.warning(t.codexDown);
-        else toast.success(t.codexReady);
-      },
-      onSample: setSample,
       onFiles: () => invalidateFiles(client, id),
-      onNotice: (notice) => toast.warning(notice.summary, notice.details ? { description: notice.details } : undefined),
     });
   }, [client, id]);
 
@@ -89,7 +73,7 @@ export function ProjectWindow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docked]);
 
-  // ⌘/Ctrl+1..6 toggle tool windows (desktop habit; harmless elsewhere)
+  // ⌘/Ctrl+1..5 toggle tool windows (desktop habit; harmless elsewhere)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -111,10 +95,6 @@ export function ProjectWindow() {
     slug,
     name: project.data.name,
     rootPath: project.data.rootPath,
-    sandbox: project.data.sandbox,
-    approvalPolicy: project.data.approvalPolicy,
-    engine: project.data.engine,
-    sample,
   };
 
   return (
@@ -122,9 +102,8 @@ export function ProjectWindow() {
     <ChatProvider
       projectId={project.data.id}
       slug={slug}
-      defaults={{ sandbox: project.data.sandbox, approvalPolicy: project.data.approvalPolicy, networkAccess: project.data.networkAccess, webSearch: project.data.webSearch, multiAgent: project.data.multiAgent, autoReview: project.data.autoReview }}
+      webSearch={project.data.webSearch}
       defaultModelId={project.data.modelId}
-      engine={project.data.engine}
     >
     <div className="flex h-dvh flex-col">
       <TopBar
@@ -186,8 +165,6 @@ function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
       return <ThreadsTool />;
     case "git":
       return <GitTool ctx={ctx} />;
-    case "process":
-      return <ProcessTool ctx={ctx} />;
     case "history":
       return <TurnsTool ctx={ctx} />;
     case "agents":

@@ -3,20 +3,18 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { channel, ok, thread } from "@/ui/test-mocks";
-import { useCodexRuntime } from "./runtime";
+import { useLongxRuntime } from "./runtime";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
 import { archiveThread, deleteThread, getThread, listThreads, startThread } from "@/ash_rpc";
-
-const defaults = { sandbox: "workspace_write", approvalPolicy: "on_request", networkAccess: false, webSearch: true, multiAgent: true, autoReview: true } as const;
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-describe("useCodexRuntime", () => {
+describe("useLongxRuntime", () => {
   beforeEach(() => {
     channel.reset();
     vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
@@ -24,17 +22,16 @@ describe("useCodexRuntime", () => {
 
   test("what the runtime is fed stays referentially stable across renders that change nothing", async () => {
     // assistant-ui's useExternalStoreRuntime calls setAdapter after every render; an adapter
-    // (or its thread list / mode) rebuilt each time notifies the store on every commit —
+    // (or its thread list) rebuilt each time notifies the store on every commit —
     // a render loop once anything subscribed re-renders the provider
     const onOpenThread = () => {};
-    const { result, rerender } = renderHook(() => useCodexRuntime({ projectId: "id-1", defaults, threadId: "t1", onOpenThread }), { wrapper });
+    const { result, rerender } = renderHook(() => useLongxRuntime({ projectId: "id-1", threadId: "t1", onOpenThread }), { wrapper });
     await waitFor(() => expect(result.current.thread).toBeDefined());
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
     act(() => channel.reply("ok", { thread_id: "thr_1", seq: 1, thread: null, turn: null, status: null, token_usage: null, items: [], pending_requests: [] }));
-    const before = { mode: result.current.mode, view: result.current.view, subviews: result.current.subviews, runtime: result.current.runtime };
+    const before = { view: result.current.view, subviews: result.current.subviews, runtime: result.current.runtime };
     rerender();
     rerender();
-    expect(result.current.mode).toBe(before.mode);
     expect(result.current.view).toBe(before.view);
     expect(result.current.subviews).toBe(before.subviews);
     expect(result.current.runtime).toBe(before.runtime);
@@ -50,7 +47,7 @@ describe("useCodexRuntime", () => {
   test("deleting or archiving the thread on screen leaves it for a new chat; another thread does not move the page", async () => {
     vi.mocked(listThreads).mockResolvedValue(ok([thread(1), thread(2)]) as never);
     const onOpenThread = vi.fn();
-    const { result } = renderHook(() => useCodexRuntime({ projectId: "id-1", defaults, threadId: "t1", onOpenThread }), { wrapper });
+    const { result } = renderHook(() => useLongxRuntime({ projectId: "id-1", threadId: "t1", onOpenThread }), { wrapper });
     await waitFor(() => expect(result.current.thread).toBeDefined());
     const list = result.current.runtime.threads;
     await waitFor(() => expect(list.getState().threadIds.length + list.getState().archivedThreadIds.length).toBe(2));
@@ -68,10 +65,10 @@ describe("useCodexRuntime", () => {
     expect(onOpenThread).toHaveBeenCalledWith(null);
   });
 
-  test("新会话 opens the new-chat page — no row, no codex thread until the first message", async () => {
+  test("新会话 opens the new-chat page — no row, no kernel thread until the first message", async () => {
     vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
     const onOpenThread = vi.fn();
-    const { result } = renderHook(() => useCodexRuntime({ projectId: "id-1", defaults, threadId: "t1", onOpenThread }), { wrapper });
+    const { result } = renderHook(() => useLongxRuntime({ projectId: "id-1", threadId: "t1", onOpenThread }), { wrapper });
     await waitFor(() => expect(result.current.thread).toBeDefined());
 
     await act(async () => { await result.current.runtime.threads.switchToNewThread(); });
@@ -82,7 +79,7 @@ describe("useCodexRuntime", () => {
   test("a sub-agent's page: a thread the project's list hides (it has a parent) is fetched by id, not 找不到", async () => {
     vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
     vi.mocked(getThread).mockResolvedValue(ok({ ...thread(9), parentThreadId: "t1", agentPath: "/root/researcher", title: "researcher" }) as never);
-    const { result } = renderHook(() => useCodexRuntime({ projectId: "id-1", defaults, threadId: "t9", onOpenThread: () => {} }), { wrapper });
+    const { result } = renderHook(() => useLongxRuntime({ projectId: "id-1", threadId: "t9", onOpenThread: () => {} }), { wrapper });
     await waitFor(() => expect(result.current.thread?.id).toBe("t9"));
     expect(result.current.missing).toBe(false);
     expect(getThread).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "t9" } }));
@@ -94,7 +91,7 @@ describe("useCodexRuntime", () => {
     vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
     let threadId: string | undefined = undefined;
     const onOpenThread = vi.fn((id: string | null) => { threadId = id ?? undefined; });
-    const { result, rerender } = renderHook(() => useCodexRuntime({ projectId: "id-1", defaults, threadId, onOpenThread }), { wrapper });
+    const { result, rerender } = renderHook(() => useLongxRuntime({ projectId: "id-1", threadId, onOpenThread }), { wrapper });
     await waitFor(() => expect(result.current.runtime).toBeDefined());
     let land: (rows: unknown) => void = () => {};
     vi.mocked(listThreads).mockImplementation(() => new Promise((resolve) => { land = resolve; }) as never);

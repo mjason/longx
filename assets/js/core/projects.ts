@@ -3,7 +3,6 @@ import type { ThreadRow } from "@/core/chat/threadList";
 import {
   agentDefinition,
   type AgentDefinitionFields,
-  codexInfo,
   createProject,
   getProject,
   gitInfo,
@@ -12,21 +11,16 @@ import {
   listDirectory,
   listModels,
   listRunningThreads,
-  listSkills,
   setGoal,
   clearGoal,
   listTurns,
-  redoTurn,
   restoreFiles,
   restoreProposal,
   listProjects,
   listSubagents,
   getThread,
   listThreads,
-  restartCodex,
-  sandboxStatus,
   startThread,
-  stopCodex,
   type AshRpcError,
   type ListModelsFields,
 } from "@/ash_rpc";
@@ -37,19 +31,9 @@ export const projectFields = [
   "name",
   "description",
   "rootPath",
-  "sandbox",
-  "approvalPolicy",
-  "networkAccess",
-  "writableRoots",
-  "passthroughPaths",
   "webSearch",
-  "multiAgent",
-  "autoReview",
   "dirtyStart",
-  "tools",
-  "memoryLimitMb",
   "modelId",
-  "engine",
   "trustLocalAgent",
   "agentSettings",
   "archivedAt",
@@ -58,26 +42,21 @@ export const projectFields = [
 
 export const threadFields = [
   "id",
-  "codexThreadId",
+  "kernelThreadId",
   "title",
   "preview",
   "status",
   "modelSlug",
   "reasoningEffort",
-  "sandbox",
-  "approvalPolicy",
-  "networkAccess",
   "webSearch",
-  "multiAgent",
-  "autoReview",
   "lastActivityAt",
   "insertedAt",
 ] as const;
 
-/** codex-spawned sub-agents of a thread (their rows live under the parent, never in the project list) */
+/** the sub-agents a thread spawned (their rows live under the parent, never in the project list) */
 export const subagentFields = [
   "id",
-  "codexThreadId",
+  "kernelThreadId",
   "title",
   "preview",
   "status",
@@ -93,15 +72,6 @@ export const gitFields = [
   "changes",
   "lfs",
 ] as const;
-export const codexFields = [
-  "home",
-  "exists",
-  "bytes",
-  "files",
-  "worker",
-  "stale",
-] as const;
-
 /** An RPC failure as an Error the UI can show; field errors keep their names. */
 export class RpcFailure extends Error {
   errors: AshRpcError[];
@@ -129,16 +99,14 @@ export const queryKeys = {
   projects: ["projects"] as const,
   project: (slug: string) => ["project", slug] as const,
   git: (id: string) => ["project", id, "git"] as const,
-  codex: (id: string) => ["project", id, "codex"] as const,
   threads: (id: string) => ["project", id, "threads"] as const,
-  sandbox: ["sandbox"] as const,
   models: ["models"] as const,
   turns: (threadId: string) => ["turns", threadId] as const,
   subagents: (threadId: string) => ["subagents", threadId] as const,
   running: ["running-threads"] as const,
 };
 
-/** codex's goal mode: set / change (objective, status, budget) or clear the thread's goal. */
+/** goal mode: set / change (objective, status, budget) or clear the thread's goal. */
 export function useGoalActions(threadId: string | undefined) {
   const set = useMutation({
     mutationFn: async (input: { objective?: string; status?: "active" | "paused" | "complete"; tokenBudget?: number | null }) => {
@@ -153,19 +121,6 @@ export function useGoalActions(threadId: string | undefined) {
     },
   });
   return { set, clear };
-}
-
-/** A skill codex found for the project (`$name` in the composer puts its SKILL.md in the turn). */
-export type Skill = { name: string; description: string; shortDescription: string | null; path: string | null; enabled: boolean };
-
-export function useSkills(projectId: string | undefined) {
-  return useQuery({
-    queryKey: ["project", projectId, "skills"] as const,
-    queryFn: async () =>
-      unwrap(await listSkills({ fields: ["name", "description", "shortDescription", "path", "enabled"], input: { id: projectId! } })) as Skill[],
-    enabled: !!projectId,
-    staleTime: 60_000,
-  });
 }
 
 /** The native kernel's layered agent definition of a project (the settings page). */
@@ -222,14 +177,14 @@ export function useAgentDefinition(projectId: string | undefined) {
 /** A thread with a turn in flight, anywhere (the welcome page's way back in). */
 export type RunningThread = {
   id: string;
-  codexThreadId: string;
+  kernelThreadId: string;
   title: string | null;
   preview: string | null;
   lastActivityAt: string | null;
   projectId: string;
   projectSlug: string;
   projectName: string;
-  /** codex holds a question for the person (an approval, a permissions request…) */
+  /** a tool holds a question for the person (an ask waiting to be answered) */
   waiting: boolean;
 };
 
@@ -268,17 +223,6 @@ export function useGitInfo(id: string | undefined) {
   });
 }
 
-export function useCodexInfo(id: string | undefined) {
-  return useQuery({
-    queryKey: queryKeys.codex(id ?? ""),
-    enabled: !!id,
-    queryFn: async () =>
-      unwrap(await codexInfo({ fields: [...codexFields], input: { id: id! } })),
-    // `stale` (settings changed under the running codex) is checked server-side per call
-    refetchInterval: 30_000,
-  });
-}
-
 export function useThreads(id: string | undefined) {
   return useQuery({
     queryKey: queryKeys.threads(id ?? ""),
@@ -306,7 +250,7 @@ export function useThread(id: string | undefined) {
 
 export const turnFields = [
   "id",
-  "codexTurnId",
+  "kernelTurnId",
   "userText",
   "modelSlug",
   "status",
@@ -386,24 +330,6 @@ export function useRestoreFiles(threadId: string | undefined) {
   });
 }
 
-export function useRedoTurn(threadId: string | undefined) {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: {
-      turnId: string;
-      text?: string;
-      model?: string;
-      mode?: "revert" | "fork";
-      restoreFiles?: boolean;
-    }) => unwrap(await redoTurn({ fields: ["id", "threadId"], input })),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["project"] });
-      if (threadId)
-        client.invalidateQueries({ queryKey: queryKeys.turns(threadId) });
-    },
-  });
-}
-
 export const modelFields: ListModelsFields = [
   "id",
   "name",
@@ -415,7 +341,7 @@ export const modelFields: ListModelsFields = [
   { provider: ["name"] },
 ];
 
-/** The models a turn can pick from (Longx.AI); slug is what codex is told. */
+/** The models a turn can pick from (Longx.AI); slug is what the kernel is told. */
 export function useModels() {
   return useQuery({
     queryKey: queryKeys.models,
@@ -424,33 +350,11 @@ export function useModels() {
   });
 }
 
-/** a group of host paths worth letting into the sandbox on this machine (server-typed loosely) */
-export type SandboxPreset = { id: string; label: string; paths: string[]; danger: boolean };
-
-export function sandboxPresets(data: { presets?: unknown } | undefined): SandboxPreset[] {
-  return Array.isArray(data?.presets) ? (data.presets as SandboxPreset[]) : [];
-}
-
-export function useSandboxStatus() {
-  return useQuery({
-    queryKey: queryKeys.sandbox,
-    staleTime: Infinity,
-    queryFn: async () =>
-      unwrap(
-        await sandboxStatus({ fields: ["status", "reason", "bwrap", "gpu", "presets", "platform", "home", "checkedAt"] }),
-      ),
-  });
-}
-
 export type NewProjectInput = {
   name: string;
   rootPath: string;
   description?: string;
   initGit?: boolean;
-  sandbox?: "read_only" | "workspace_write" | "danger_full_access";
-  approvalPolicy?: "never" | "on_request" | "untrusted";
-  networkAccess?: boolean;
-  engine?: "codex" | "native";
 };
 
 export type DirectoryEntry = { name: string; path: string; git: boolean };
@@ -505,16 +409,9 @@ export function useInitGit(id: string) {
   });
 }
 
-export type StartThreadMode = {
-  sandbox: "read_only" | "workspace_write" | "danger_full_access";
-  approvalPolicy: "never" | "on_request" | "untrusted" | "auto_accept";
-  networkAccess: boolean;
-  webSearch: boolean;
-  multiAgent: boolean;
-  autoReview: boolean;
-};
-/** what a new chat starts with: the mode, and the model / reasoning level when picked (a thread-start config, unlike a mid-thread switch) */
-export type StartThreadInput = Partial<StartThreadMode> & {
+/** what a new chat starts with: the web-search switch, and the model / reasoning level when picked */
+export type StartThreadInput = {
+  webSearch?: boolean;
   model?: string;
   effort?: string;
 };
@@ -537,23 +434,6 @@ export function useStartThread(id: string) {
         rows && !rows.some((r) => r.id === row.id) ? [row, ...rows] : rows,
       );
       client.invalidateQueries({ queryKey: queryKeys.threads(id) });
-      client.invalidateQueries({ queryKey: queryKeys.codex(id) });
     },
   });
-}
-
-export function useCodexControls(id: string) {
-  const client = useQueryClient();
-  const refresh = () =>
-    client.invalidateQueries({ queryKey: queryKeys.codex(id) });
-  const stop = useMutation({
-    mutationFn: async (force: boolean) =>
-      unwrap(await stopCodex({ input: { id, force } })),
-    onSuccess: refresh,
-  });
-  const restart = useMutation({
-    mutationFn: async () => unwrap(await restartCodex({ input: { id } })),
-    onSuccess: refresh,
-  });
-  return { stop, restart };
 }

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { field, inkButton, mono, paper } from "./surfaces";
 
 // Longx: the registry's form is a display mock; this one is interactive
-// (`onChange`) and worded through props, so codex's requestUserInput
+// (`onChange`) and worded through props, so a tool's ask
 // questions can be answered in it.
 export type ElicitationState = "request" | "accepted" | "declined";
 

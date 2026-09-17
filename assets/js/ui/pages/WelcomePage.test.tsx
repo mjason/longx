@@ -27,8 +27,8 @@ describe("WelcomePage", () => {
     vi.mocked(listRunningThreads).mockResolvedValue(
       ok({
         threads: [
-          { id: "t-1", codexThreadId: "thr_1", title: null, preview: "跑一下测试", lastActivityAt: new Date().toISOString(), projectId: "id-1", projectSlug: "app-1", projectName: "App 1", waiting: true },
-          { id: "t-2", codexThreadId: "thr_2", title: "重构登录", preview: "…", lastActivityAt: new Date().toISOString(), projectId: "id-2", projectSlug: "app-2", projectName: "App 2", waiting: false },
+          { id: "t-1", kernelThreadId: "thr_1", title: null, preview: "跑一下测试", lastActivityAt: new Date().toISOString(), projectId: "id-1", projectSlug: "app-1", projectName: "App 1", waiting: true },
+          { id: "t-2", kernelThreadId: "thr_2", title: "重构登录", preview: "…", lastActivityAt: new Date().toISOString(), projectId: "id-2", projectSlug: "app-2", projectName: "App 2", waiting: false },
         ],
       }) as never,
     );

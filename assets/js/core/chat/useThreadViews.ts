@@ -1,6 +1,6 @@
-// React glue: the live views of several codex threads at once — a thread's
+// React glue: the live views of several kernel threads at once — a thread's
 // sub-agents. Each id joins its own `thread:<id>` channel (a sub-agent is
-// hosted by its parent's codex, so the join works like any thread's); ids
+// hosted by the same server, so the join works like any thread's); ids
 // that disappear leave. A join that fails (the child is gone) yields no view.
 import { useEffect, useReducer, useRef } from "react";
 import { getSocket } from "@/core/socket";

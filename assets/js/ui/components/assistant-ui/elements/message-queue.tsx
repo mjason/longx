@@ -3,7 +3,7 @@
 // The registry's message-queue element (with a runtime), Longx's copy:
 // what was typed while a turn runs, stacked above the composer until the
 // turn ends — each row can be taken back, or inserted into the running
-// turn right now (codex's steer), which the runtime does not offer itself.
+// turn right now (a steer), which the runtime does not offer itself.
 import { ComposerPrimitive, QueueItemPrimitive, useAuiState } from "@assistant-ui/react";
 import { ArrowDownToLineIcon, XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";

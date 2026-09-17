@@ -20,38 +20,26 @@ import { Button } from "@/ui/components/ui/button";
 import { shellPick, shellPresent } from "@/ui/shell/longxShell";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
-import { ModePicker } from "./ModePicker";
 
 /**
- * Left of the composer rail (Codex's layout): the access mode the next
- * turn runs with, and what the turn is doing right now.
+ * Left of the composer rail: what the turn is doing right now (running,
+ * or waiting on the person to act).
  */
 export function ComposerLeading() {
-  const { state, mode, setMode, disabledReason, thread, engine, view } = useChat();
+  const { state, view } = useChat();
   return (
     <div
       className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs"
       data-testid="turn-bar"
     >
-      {engine === "native" ? (
-        // no sandbox, no approvals: nothing to pick, only which kernel this is
-        <span className="shrink-0">{t.engineNativeShort}</span>
-      ) : (
-        <ModePicker
-          mode={mode}
-          onChange={setMode}
-          disabled={disabledReason !== null}
-          started={thread !== undefined}
-        />
-      )}
       {state === "running" ? (
         <span className="flex items-center gap-1">
           <Loader2 className="size-3.5 animate-spin" /> {t.turnRunning}
         </span>
-      ) : state === "approval" ? (
+      ) : state === "waiting" ? (
         <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
           <ShieldAlert className="size-3.5" />{" "}
-          {view.requests.some((r) => r.method === "longx/action/request") ? t.awaitingAction : t.awaitingApproval}
+          {t.awaitingAction}
         </span>
       ) : null}
     </div>
@@ -59,8 +47,8 @@ export function ComposerLeading() {
 }
 
 /**
- * Right of the rail, before send: how full the model's context is (codex's
- * token usage against the window it was told) and the model the next turn
+ * Right of the rail, before send: how full the model's context is (the last
+ * turn's token usage against the model's window) and the model the next turn
  * uses (null = the thread's current) with its reasoning level — the Model
  * selector element, standalone: the choice is ours to send, not a model
  * context registration.
@@ -74,9 +62,9 @@ export function ComposerTrailing() {
     () => (models.data ?? []).filter((m) => m.slug),
     [models.data],
   );
-  // the model in force when nobody picks one: the thread's own; on the native kernel the
-  // description's (it overrides the default silently otherwise — a turn went to a provider
-  // the rail never named); a new chat the project's default, else the global one
+  // the model in force when nobody picks one: the thread's own, else the description's
+  // (it overrides the default silently otherwise — a turn went to a provider the rail
+  // never named); a new chat the project's default, else the global one
   const described = definitionModel?.model ?? null;
   const current = thread
     ? (thread.modelSlug ?? described ?? rows.find((m) => m.default)?.slug ?? null)

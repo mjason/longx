@@ -9,7 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
-import { agentDefinitionData, channel, failed, model, ok, project, thread } from "@/ui/test-mocks";
+import { agentDefinitionData, channel, failed, model, ok, thread } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("sonner", async (importOriginal) => {
@@ -24,12 +24,9 @@ import {
   agentDefinition,
   answerRequest,
   clearGoal,
-  getProject,
   getThread,
   listModels,
-  listSkills,
   listThreads,
-  respond,
   retractTurn,
   steerTurn,
   searchFiles,
@@ -86,7 +83,6 @@ describe("ThreadPage", () => {
     _resetFrameStoreForTests();
     channel.reset();
     vi.mocked(sendMessage).mockClear();
-    vi.mocked(respond).mockClear();
     vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
     setViewport(1280);
   });
@@ -116,7 +112,6 @@ describe("ThreadPage", () => {
             threadId: "t1",
             text: "next step",
             model: "glm-5",
-            sandbox: "workspace_write",
           }),
         }),
       ),
@@ -248,8 +243,7 @@ describe("ThreadPage", () => {
     );
   });
 
-  test("live events stream in; an approval can be answered from the message", async () => {
-    const user = userEvent.setup();
+  test("live events stream in: a running command opens its row, the composer offers stop", async () => {
     await open();
     act(() => {
       channel.deliver("codex", {
@@ -271,27 +265,10 @@ describe("ThreadPage", () => {
           },
         },
       });
-      channel.deliver("codex", {
-        seq: 6,
-        method: "item/commandExecution/requestApproval",
-        params: {
-          requestId: 7,
-          itemId: "c2",
-          threadId: "thr_1",
-          turnId: "turn_2",
-          command: "rm -rf build",
-        },
-      });
+      channel.deliver("codex", { seq: 6, method: "item/commandExecution/outputDelta", params: { itemId: "c2", delta: "removing…\n" } });
     });
-    expect(screen.getByTestId("turn-bar")).toHaveTextContent("等待审批");
-    await user.click(screen.getByRole("button", { name: "允许" }));
-    await waitFor(() =>
-      expect(respond).toHaveBeenCalledWith(
-        expect.objectContaining({
-          input: { threadId: "t1", requestId: "7", decision: "accept" },
-        }),
-      ),
-    );
+    expect(screen.getByTestId("turn-bar")).toHaveTextContent("进行中");
+    expect(screen.getByText("removing…")).toBeInTheDocument();
     // the composer offers stop while the turn runs
     expect(screen.getByRole("button", { name: /停止/ })).toBeInTheDocument();
   });
@@ -308,7 +285,7 @@ describe("ThreadPage", () => {
       });
     });
     await user.click(await screen.findByRole("button", { name: /停止/ }));
-    await waitFor(() => expect(retractTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", codexTurnId: "turn_2" } })));
+    await waitFor(() => expect(retractTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", kernelTurnId: "turn_2" } })));
     await waitFor(() => expect(screen.getByRole("textbox", { name: "随心输入" })).toHaveValue("look at pandas"));
   });
 
@@ -318,7 +295,7 @@ describe("ThreadPage", () => {
       data: [
         {
           id: "t1",
-          codexThreadId: "thr_1",
+          kernelThreadId: "thr_1",
           title: null,
           preview: "x",
           status: "unrecoverable",
@@ -329,31 +306,17 @@ describe("ThreadPage", () => {
       ],
     } as never);
     await open();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "codex 已不认识这个会话",
-    );
+    expect(screen.getByRole("alert")).toHaveTextContent("已无法恢复");
     expect(screen.getByRole("textbox", { name: "随心输入" })).toBeDisabled();
   });
 
-  test("the project route is a new chat: the first message creates the thread (in the picked mode, web search included) and opens it", async () => {
+  test("the project route is a new chat: the first message creates the thread (with the project's web search) and opens it", async () => {
     const user = userEvent.setup();
     const { router } = renderAt("/p/app-1");
     await screen.findByText("让 agent 在这个项目里干活");
     expect(channel.topics.filter((t) => t.startsWith("thread:"))).toEqual([]);
-    // web search can only be chosen before the thread exists
-    await user.click(screen.getByTestId("mode-picker"));
-    const webSearch = await screen.findByRole("switch", { name: /网页搜索/ });
-    expect(webSearch).toBeEnabled();
-    await user.click(webSearch);
-    // so can the sub-agent tools
-    const multiAgent = screen.getByRole("switch", { name: /子 agent/ });
-    expect(multiAgent).toBeChecked();
-    await user.click(multiAgent);
-    // and codex's automatic approval review (on by default)
-    const autoReview = screen.getByRole("switch", { name: /自动审核/ });
-    expect(autoReview).toBeChecked();
-    await user.click(autoReview);
-    await user.keyboard("{Escape}");
+    // no access mode to pick: the kernel runs as the person
+    expect(screen.queryByTestId("mode-picker")).not.toBeInTheDocument();
     await user.type(
       screen.getByRole("textbox", { name: "随心输入" }),
       "start here{Enter}",
@@ -363,10 +326,7 @@ describe("ThreadPage", () => {
         expect.objectContaining({
           input: expect.objectContaining({
             projectId: "id-1",
-            webSearch: false,
-            multiAgent: false,
-            autoReview: false,
-            sandbox: "workspace_write",
+            webSearch: true,
           }),
         }),
       ),
@@ -386,45 +346,7 @@ describe("ThreadPage", () => {
     );
   });
 
-  test("the access mode is picked in the composer rail and rides on the next message", async () => {
-    const user = userEvent.setup();
-    await open();
-    await user.click(screen.getByTestId("mode-picker"));
-    // an existing thread's web search is fixed
-    expect(
-      await screen.findByRole("switch", { name: /网页搜索/ }),
-    ).toBeDisabled();
-    await user.click(
-      await screen.findByRole("radio", { name: "完全访问（危险）" }),
-    );
-    await user.click(screen.getByRole("radio", { name: /全部放行/ }));
-    // 全部放行 answers before any reviewer could: the switch is moot
-    expect(screen.getByRole("switch", { name: /自动审核/ })).toBeDisabled();
-    await user.keyboard("{Escape}");
-    expect(screen.getByTestId("mode-picker")).toHaveTextContent("完全访问");
-    expect(screen.getByTestId("mode-picker")).toHaveTextContent("全部放行");
-    // the full name where there is room, the short one on a phone's rail — never the icon alone
-    expect(within(screen.getByTestId("mode-picker")).getByText("完全访问（危险）")).toHaveClass("hidden", "sm:inline");
-    expect(within(screen.getByTestId("mode-picker")).getByText("完全访问")).toHaveClass("sm:hidden");
-    await user.type(
-      screen.getByRole("textbox", { name: "随心输入" }),
-      "go wild{Enter}",
-    );
-    await waitFor(() =>
-      expect(sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          input: expect.objectContaining({
-            text: "go wild",
-            sandbox: "danger_full_access",
-            approvalPolicy: "auto_accept",
-            networkAccess: false,
-          }),
-        }),
-      ),
-    );
-  });
-
-  test("the goal (codex's goal mode) sits above the thread: objective, status, budget; pause / resume / clear; edited in a dialog; /goal opens it", async () => {
+  test("the goal sits above the thread: objective, status, budget; pause / resume / clear; edited in a dialog; /goal opens it", async () => {
     const user = userEvent.setup();
     await open();
     expect(screen.queryByTestId("goal-bar")).not.toBeInTheDocument();
@@ -479,13 +401,13 @@ describe("ThreadPage", () => {
     expect(within(fresh).getByLabelText("目标")).toHaveValue("");
   });
 
-  test("codex rerouting the model mid-turn is said in a toast", async () => {
+  test("the kernel falling back to another model of the chain mid-turn is said in a toast", async () => {
     await open();
     act(() => {
       channel.deliver("codex", {
         seq: 4,
         method: "model/rerouted",
-        params: { threadId: "thr_1", turnId: "turn_1", fromModel: "a", toModel: "b", reason: "highRiskCyberActivity" },
+        params: { threadId: "thr_1", turnId: "turn_1", fromModel: "a", toModel: "b", reason: "quota" },
       });
     });
     await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(expect.stringMatching(/模型已切换.*a.*b/), expect.anything()));
@@ -497,7 +419,7 @@ describe("ThreadPage", () => {
       data: [
         {
           id: "t1",
-          codexThreadId: "thr_1",
+          kernelThreadId: "thr_1",
           title: null,
           preview: "x",
           status: "disconnected",
@@ -508,60 +430,15 @@ describe("ThreadPage", () => {
       ],
     } as never);
     await open();
-    expect(screen.getByRole("alert")).toHaveTextContent("codex 断开了");
+    expect(screen.getByRole("alert")).toHaveTextContent("连接断开了");
     const box = screen.getByRole("textbox", { name: "随心输入" });
     expect(box).toBeEnabled();
     expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
   });
 
-  test("a question from codex is a form; the answers go back through answer_request", async () => {
-    const user = userEvent.setup();
-    await open();
-    act(() => {
-      channel.deliver("codex", {
-        seq: 4,
-        method: "turn/started",
-        params: { turn: { id: "turn_2", status: "inProgress" } },
-      });
-      channel.deliver("codex", {
-        seq: 5,
-        method: "item/tool/requestUserInput",
-        params: {
-          requestId: 9,
-          itemId: "call_9",
-          threadId: "thr_1",
-          turnId: "turn_2",
-          isBlocking: true,
-          questions: [
-            {
-              id: "q1",
-              header: "DB",
-              question: "which db?",
-              options: [{ label: "sqlite", description: "" }],
-            },
-          ],
-        },
-      });
-    });
-    await user.click(screen.getByRole("button", { name: "sqlite" }));
-    // the form's own send (the composer keeps its send button while the turn runs)
-    await user.click(within(screen.getByTestId("tool-questions")).getByRole("button", { name: "发送" }));
-    await waitFor(() =>
-      expect(answerRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          input: {
-            threadId: "t1",
-            requestId: "9",
-            answers: { q1: { answers: ["sqlite"] } },
-          },
-        }),
-      ),
-    );
-  });
-
   test("a finished turn shows its timing; a revert re-pulls the snapshot", async () => {
     await open();
-    // the snapshot's turn carries codex's epoch-second stamps
+    // the snapshot's turn carries the kernel's epoch-second stamps
     expect(
       screen.queryByRole("button", { name: "这一轮的耗时" }),
     ).not.toBeInTheDocument();
@@ -644,7 +521,7 @@ describe("ThreadPage", () => {
     expect(steerTurn).toHaveBeenCalledTimes(1);
   });
 
-  test("a sub-agent joins its own thread: its conversation nests under the parent, its approval is answered there, the plan shows", async () => {
+  test("a sub-agent joins its own thread: its conversation nests under the parent, its ask is answered there", async () => {
     const user = userEvent.setup();
     await open();
     const child = "thr_1-alpha";
@@ -653,18 +530,6 @@ describe("ThreadPage", () => {
         seq: 4,
         method: "turn/started",
         params: { turn: { id: "turn_2", status: "inProgress" } },
-      });
-      channel.deliverTo("thread:thr_1", "codex", {
-        seq: 5,
-        method: "turn/plan/updated",
-        params: {
-          turnId: "turn_2",
-          explanation: "delegating",
-          plan: [
-            { step: "spawn alpha", status: "completed" },
-            { step: "wait for alpha", status: "inProgress" },
-          ],
-        },
       });
       channel.deliverTo("thread:thr_1", "codex", {
         seq: 6,
@@ -691,7 +556,6 @@ describe("ThreadPage", () => {
         turn: { id: "turn_2-alpha", status: "inProgress" },
         status: null,
         token_usage: null,
-        plan: null,
         items: [
           {
             id: "cmd_alpha",
@@ -705,29 +569,25 @@ describe("ThreadPage", () => {
         pending_requests: [
           {
             id: 9,
-            method: "item/commandExecution/requestApproval",
-            params: {
-              requestId: 9,
-              itemId: "cmd_alpha",
-              threadId: child,
-              command: "echo alpha",
-            },
+            method: "longx/action/request",
+            params: { requestId: 9, itemId: "cmd_alpha", threadId: child, title: "登录 alpha 的账号", text: "", url: null, fields: [] },
           },
         ],
       }),
     );
-    expect(screen.getByTestId("plan")).toHaveTextContent("wait for alpha");
     const sub = screen.getByTestId("tool-subagent");
     expect(sub).toHaveTextContent("alpha");
     expect(within(sub).getByTestId("subagent-messages")).toHaveTextContent(
       "echo alpha",
     );
-    expect(screen.getByTestId("turn-bar")).toHaveTextContent("等待审批");
-    await user.click(screen.getAllByRole("button", { name: "允许" })[0]!);
+    // the child's ask: named on the row, answered inside its conversation, on the child's thread
+    expect(sub).toHaveTextContent("登录 alpha 的账号");
+    expect(screen.getByTestId("turn-bar")).toHaveTextContent("等待你操作");
+    await user.click(within(sub).getByRole("button", { name: "已完成" }));
     await waitFor(() =>
-      expect(respond).toHaveBeenCalledWith(
+      expect(answerRequest).toHaveBeenCalledWith(
         expect.objectContaining({
-          input: { threadId: "t1", requestId: "9", decision: "accept" },
+          input: { threadId: "t1", requestId: "9", answers: { done: true } },
         }),
       ),
     );
@@ -792,7 +652,7 @@ describe("ThreadPage", () => {
     expect(screen.getByText("done by alpha")).toBeInTheDocument();
   });
 
-  test("the composer rail shows how full the model's context is, from codex's token usage", async () => {
+  test("the composer rail shows how full the model's context is, from the token usage", async () => {
     await open();
     expect(screen.queryByLabelText("上下文用量")).not.toBeInTheDocument();
     act(() =>
@@ -859,7 +719,7 @@ describe("ThreadPage", () => {
 
     const box = screen.getByRole("textbox", { name: "随心输入" });
     await user.type(box, "look at @gat");
-    // the popover asks codex's index (debounced) and lists the matches
+    // the popover asks the server's index (debounced) and lists the matches
     await user.click(
       await screen.findByRole("option", { name: /gateway\.ex/ }),
     );
@@ -880,59 +740,14 @@ describe("ThreadPage", () => {
     r.unmount();
   });
 
-  test("$ in the composer offers codex's skills; the pick is $name in the text, a chip in the message, and the SKILL.md rides on the turn", async () => {
-    vi.mocked(listSkills).mockResolvedValue(
-      ok([
-        { name: "review-agent", description: "Review code changes", shortDescription: "review", path: "/srv/app-1/.agents/skills/review-agent/SKILL.md", enabled: true },
-        { name: "docs", description: "Write the docs", shortDescription: null, path: "/srv/app-1/.agents/skills/docs/SKILL.md", enabled: true },
-      ]) as never,
-    );
-    const user = userEvent.setup();
-    const r = renderAt("/p/app-1/t/t1");
-    await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-    act(() =>
-      channel.reply("ok", {
-        ...snapshot,
-        items: [{ id: "u1", type: "userMessage", turnId: "turn_1", content: [{ type: "text", text: "use $docs here" }] }],
-      }),
-    );
-    const chip = await screen.findByText("docs");
-    expect(chip.closest("[data-slot=directive-text-chip]")).not.toBeNull();
-
-    const box = screen.getByRole("textbox", { name: "随心输入" });
-    await user.type(box, "please $rev");
-    await user.click(await screen.findByRole("option", { name: /review-agent/ }));
-    expect(box).toHaveValue("please $review-agent ");
-    await user.type(box, "{Enter}");
-    await waitFor(() =>
-      expect(sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          input: expect.objectContaining({
-            text: "please $review-agent",
-            skills: [{ name: "review-agent", path: "/srv/app-1/.agents/skills/review-agent/SKILL.md" }],
-          }),
-        }),
-      ),
-    );
-    r.unmount();
-    vi.mocked(listSkills).mockResolvedValue(ok([]) as never);
-  });
-
-  test("/ in the composer lists the commands: /review starts a review, /compact compacts, /init sends the prompt, /git opens the tool", async () => {
-    const { compactThread, reviewThread } = await import("@/ash_rpc");
+  test("/ in the composer lists the commands: /compact compacts, /init sends the prompt, /git opens the tool; no /review", async () => {
+    const { compactThread } = await import("@/ash_rpc");
     const user = userEvent.setup();
     await open();
     const box = screen.getByRole("textbox", { name: "随心输入" });
     await user.type(box, "/rev");
-    await user.click(await screen.findByRole("option", { name: /review/ }));
-    await waitFor(() =>
-      expect(reviewThread).toHaveBeenCalledWith(
-        expect.objectContaining({
-          input: { threadId: "t1", target: "uncommitted" },
-        }),
-      ),
-    );
-    expect(box).toHaveValue("");
+    expect(screen.queryByRole("option", { name: /review/ })).not.toBeInTheDocument();
+    await user.clear(box);
 
     await user.type(box, "/comp");
     await user.click(await screen.findByRole("option", { name: /compact/ }));
@@ -941,6 +756,7 @@ describe("ThreadPage", () => {
         expect.objectContaining({ input: { threadId: "t1" } }),
       ),
     );
+    expect(box).toHaveValue("");
 
     await user.type(box, "/init");
     await user.click(await screen.findByRole("option", { name: /init/ }));
@@ -1165,19 +981,7 @@ describe("ThreadPage", () => {
     );
   });
 
-  test("a native-engine project has no access mode to pick: the rail says which kernel runs", async () => {
-    vi.mocked(getProject).mockResolvedValue(ok({ ...project(1), engine: "native" }) as never);
-    try {
-      await open();
-      await waitFor(() => expect(screen.getByTestId("turn-bar")).toHaveTextContent("原生内核"));
-      expect(screen.queryByTestId("mode-picker")).not.toBeInTheDocument();
-    } finally {
-      vi.mocked(getProject).mockResolvedValue(ok(project(1)) as never);
-    }
-  });
-
-  test("native: the picker shows the model the project's description names, and a tier is a choice like a model", async () => {
-    vi.mocked(getProject).mockResolvedValue(ok({ ...project(1), engine: "native" }) as never);
+  test("the picker shows the model the project's description names, and a tier is a choice like a model", async () => {
     vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData({ present: true, model: "glm-5", effort: "high" })) as never);
     try {
       const user = userEvent.setup();
@@ -1192,23 +996,8 @@ describe("ThreadPage", () => {
         expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ text: "go", model: "ultra" }) })),
       );
     } finally {
-      vi.mocked(getProject).mockResolvedValue(ok(project(1)) as never);
       vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData()) as never);
     }
-  });
-
-  test("phone: the access mode names itself in the rail and opens as a bottom sheet, not a popover", async () => {
-    setViewport(390);
-    const user = userEvent.setup();
-    await open();
-    const picker = screen.getByTestId("mode-picker");
-    // the short name (a phone has no room for the long one), never an icon alone
-    expect(picker).toHaveTextContent("可写");
-    await user.click(picker);
-    const sheet = await screen.findByTestId("mode-sheet");
-    expect(within(sheet).getByRole("radio", { name: "完全访问（危险）" })).toBeInTheDocument();
-    expect(within(sheet).getByRole("switch", { name: /自动审核/ })).toBeInTheDocument();
-    expect(screen.queryByTestId("mode-popover")).not.toBeInTheDocument();
   });
 
   test("a thread that no longer exists (a stale link) says so and offers a new chat", async () => {

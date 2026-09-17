@@ -31,22 +31,6 @@ describe("ProjectWizard", () => {
     );
   });
 
-  test("under 高级 the engine can be the native kernel", async () => {
-    vi.mocked(createProject).mockResolvedValue(ok(project(1)) as never);
-    const user = userEvent.setup();
-    renderAt("/new");
-    const entries = await screen.findByTestId("directory-entries");
-    await user.click(await within(entries).findByText("code"));
-    await user.click(await within(entries).findByText("my-app"));
-    await user.click(screen.getByRole("button", { name: "就用这个目录" }));
-    await user.click(screen.getByRole("button", { name: "高级" }));
-    await user.click(screen.getByRole("radio", { name: /原生内核/ }));
-    await user.click(screen.getByRole("button", { name: "创建" }));
-    await waitFor(() =>
-      expect(createProject).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ engine: "native" }) })),
-    );
-  });
-
   test("a directory that is already a repository is an open: no git checkbox", async () => {
     const user = userEvent.setup();
     renderAt("/new");

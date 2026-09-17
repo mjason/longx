@@ -21,7 +21,6 @@ import {
   usePresets,
   useProviders,
   useModelAliases,
-  useReviewSettings,
   type ModelAlias,
   useSearchProviders,
   type ModelInput,
@@ -124,7 +123,6 @@ export function ModelsSection() {
         ))}
       </section>
       <AliasesCard models={models.data} />
-      <ReviewModelCard models={models.data} />
       <SearchProviderCard />
       {editing?.kind === "choose" ? (
         <PresetChooser
@@ -1081,7 +1079,7 @@ function ModelDialog({
   );
 }
 
-// codex's known efforts, in order; a model may add its own
+// the known efforts, in order; a model may add its own
 const KNOWN_LEVELS = [
   "none",
   "minimal",
@@ -1243,87 +1241,6 @@ function AliasRow({ alias, slugs, onSave, onRemove }: { alias: ModelAlias; slugs
         <span />
       )}
     </div>
-  );
-}
-
-/**
- * codex's automatic approval review on a model of its own: any model the
- * gateway knows, at one of its levels (or codex's rule: low when offered).
- */
-function ReviewModelCard({ models }: { models: ModelRow[] }) {
-  const review = useReviewSettings();
-  const actions = useAiActions();
-  if (!review.data) return null;
-  const current = review.data;
-  const chosen = models.find((m) => m.slug === current.modelSlug) ?? null;
-  const levels = chosen?.reasoningLevels ?? [];
-  const save = (input: { modelSlug: string | null; effort: string | null }) =>
-    actions.setReviewModel.mutate(input, {
-      onSuccess: () => toast.success(s.saved),
-      onError: fail,
-    });
-  return (
-    <section className="flex flex-col gap-3" data-testid="review-model">
-      <h2 className="text-base font-medium">{s.review}</h2>
-      <p className="text-muted-foreground text-sm">{s.reviewHint}</p>
-      <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
-        <Field id="review-model" label={s.reviewModel}>
-          <Select
-            value={current.modelSlug ?? "__same"}
-            onValueChange={(v) =>
-              save({ modelSlug: v === "__same" ? null : v, effort: null })
-            }
-          >
-            <SelectTrigger
-              id="review-model"
-              className="w-full"
-              aria-label={s.reviewModel}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__same">{s.reviewSameModel}</SelectItem>
-              {models
-                .filter((m) => m.slug)
-                .map((m) => (
-                  <SelectItem key={m.id} value={m.slug!} className="font-mono">
-                    {m.slug}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        {chosen && levels.length > 0 ? (
-          <Field id="review-effort" label={s.reviewEffort}>
-            <Select
-              value={current.effort ?? "__auto"}
-              onValueChange={(v) =>
-                save({
-                  modelSlug: chosen.slug!,
-                  effort: v === "__auto" ? null : v,
-                })
-              }
-            >
-              <SelectTrigger
-                id="review-effort"
-                className="w-full"
-                aria-label={s.reviewEffort}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__auto">{s.reviewEffortAuto}</SelectItem>
-                {levels.map((level) => (
-                  <SelectItem key={level} value={level} className="font-mono">
-                    {level}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        ) : null}
-      </div>
-    </section>
   );
 }
 

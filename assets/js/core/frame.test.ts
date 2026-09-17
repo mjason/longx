@@ -8,8 +8,8 @@ describe("frame transitions", () => {
     expect(s.tool).toBe("git");
     s = toggleTool(s, "git");
     expect(s.tool).toBeNull();
-    s = toggleTool(s, "process");
-    expect(s.tool).toBe("process");
+    s = toggleTool(s, "history");
+    expect(s.tool).toBe("history");
   });
 
   test("panel width is clamped", () => {
@@ -18,13 +18,13 @@ describe("frame transitions", () => {
     expect(resizePanel(DEFAULT_FRAME, 400.4).panelWidth).toBe(400);
   });
 
-  test("⌘1..6 map to the tools in rail order", () => {
+  test("⌘1..5 map to the tools in rail order", () => {
     expect(toolForShortcut("1")).toBe("threads");
     expect(toolForShortcut("2")).toBe("git");
-    expect(toolForShortcut("4")).toBe("history");
-    expect(toolForShortcut("5")).toBe("agents");
-    expect(toolForShortcut("6")).toBe("files");
-    expect(toolForShortcut("7")).toBeNull();
+    expect(toolForShortcut("3")).toBe("history");
+    expect(toolForShortcut("4")).toBe("agents");
+    expect(toolForShortcut("5")).toBe("files");
+    expect(toolForShortcut("6")).toBeNull();
     expect(toolForShortcut("k")).toBeNull();
   });
 });

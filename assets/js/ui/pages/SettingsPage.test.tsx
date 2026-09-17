@@ -23,16 +23,9 @@ import {
   createProvider,
   deleteModel,
   discoverModels,
-  listCodexProcesses,
   listModels,
   makeDefaultModel,
-  probeSandbox,
-  reviewSettings,
-  sandboxStatus,
   setGithubToken,
-  setReviewModel,
-  setToolEnabled,
-  stopCodex,
   updateSearchProvider,
   upgradeApply,
   upgradeCheck,
@@ -365,28 +358,6 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(setModelAlias).toHaveBeenLastCalledWith(expect.objectContaining({ input: { name: "青龙", models: ["deepseek-flash"] } })));
   });
 
-  test("models: the reviewer model — a model and one of its levels, or the thread's own", async () => {
-    setViewport(1280);
-    const user = userEvent.setup();
-    renderAt("/settings/models");
-    const card = await screen.findByTestId("review-model");
-    // the thread's own model by default: no level to pick
-    expect(within(card).getByRole("combobox", { name: "自动审核用的模型" })).toHaveTextContent("和会话相同");
-    expect(within(card).queryByRole("combobox", { name: "思考档位" })).not.toBeInTheDocument();
-
-    await user.click(within(card).getByRole("combobox", { name: "自动审核用的模型" }));
-    // what the server answers once the pick is saved (the write refetches the settings)
-    vi.mocked(reviewSettings).mockResolvedValue(ok({ modelSlug: "glm-5", effort: null }) as never);
-    await user.click(await screen.findByRole("option", { name: "glm-5" }));
-    await waitFor(() => expect(setReviewModel).toHaveBeenCalledWith(expect.objectContaining({ input: { modelSlug: "glm-5", effort: null } })));
-
-    await waitFor(() => expect(within(card).getByRole("combobox", { name: "思考档位" })).toBeInTheDocument());
-    await user.click(within(card).getByRole("combobox", { name: "思考档位" }));
-    await user.click(await screen.findByRole("option", { name: "high" }));
-    await waitFor(() => expect(setReviewModel).toHaveBeenLastCalledWith(expect.objectContaining({ input: { modelSlug: "glm-5", effort: "high" } })));
-    vi.mocked(reviewSettings).mockResolvedValue(ok({ modelSlug: null, effort: null }) as never);
-  });
-
   test("requests: the gateway's last requests — model, effort, tools, outcome — newest first", async () => {
     setViewport(1280);
     renderAt("/settings/requests");
@@ -396,7 +367,7 @@ describe("SettingsPage", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveTextContent("deepseek-flash");
     expect(rows[0]).toHaveTextContent("deepseek-v4-flash");
-    // the reasoning effort codex asked for, per request; absent = the model's default
+    // the reasoning effort asked for, per request; absent = the model's default
     expect(rows[0]).toHaveTextContent("low");
     expect(rows[1]).toHaveTextContent("未指定");
     expect(rows[0]).toHaveTextContent("200");
@@ -410,116 +381,16 @@ describe("SettingsPage", () => {
     expect(within(section).getByText(/思考档位: low · summary auto/)).toBeInTheDocument();
   });
 
-  test("tools: the built-in browser's private-network switch (a fake-ip network needs it)", async () => {
+  test("agent kernel: the built-in browser's private-network switch (a fake-ip network needs it)", async () => {
     setViewport(1280);
     const user = userEvent.setup();
-    renderAt("/settings/tools");
+    renderAt("/settings/agent");
     const card = await screen.findByTestId("browser-settings");
     const sw = within(card).getByRole("switch", { name: /私网|局域网/ });
     expect(sw).not.toBeChecked();
     await user.click(sw);
     await waitFor(() => expect(setBrowserPrivateNetwork).toHaveBeenCalledWith(expect.objectContaining({ input: { enabled: true } })));
     await waitFor(() => expect(within(card).getByRole("switch", { name: /私网|局域网/ })).toBeChecked());
-  });
-
-  test("tools: the catalogue with a switch per tool", async () => {
-    setViewport(1280);
-    const user = userEvent.setup();
-    renderAt("/settings/tools");
-    const echo = await screen.findByTestId("tool-builtin.echo");
-    expect(echo).toHaveTextContent("Echoes its input back.");
-    const sw = within(echo).getByRole("switch");
-    expect(sw).not.toBeChecked();
-    await user.click(sw);
-    await waitFor(() =>
-      expect(setToolEnabled).toHaveBeenCalledWith(
-        expect.objectContaining({ identity: "t1", input: { enabled: true } }),
-      ),
-    );
-    expect(
-      within(screen.getByTestId("tool-builtin.browser_fetch")).getByRole(
-        "switch",
-      ),
-    ).toBeChecked();
-  });
-
-  test("processes: every running codex with its cost and last use; an idle one can be stopped, a busy one is said so", async () => {
-    setViewport(1280);
-    const user = userEvent.setup();
-    renderAt("/settings/processes");
-    const section = await screen.findByTestId("section-processes");
-    expect(section).toHaveTextContent("30 分钟");
-    const one = await within(section).findByTestId("codex-process-id-1");
-    expect(one).toHaveTextContent("App One");
-    expect(one).toHaveTextContent("300 MB");
-    expect(one).toHaveTextContent("12");
-    const two = within(section).getByTestId("codex-process-id-2");
-    expect(two).toHaveTextContent("1 轮进行中");
-    await user.click(within(one).getByRole("button", { name: "停止" }));
-    await waitFor(() => expect(stopCodex).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "id-1", force: false } })));
-    expect(listCodexProcesses).toHaveBeenCalled();
-  });
-
-  test("processes: nothing running is said, not an empty table", async () => {
-    setViewport(1280);
-    vi.mocked(listCodexProcesses).mockResolvedValue(ok({ idleAfterMs: null, processes: [] }) as never);
-    renderAt("/settings/processes");
-    const section = await screen.findByTestId("section-processes");
-    await within(section).findByText("没有在运行的 codex");
-  });
-
-  test("sandbox: the report, and a fresh probe on request", async () => {
-    setViewport(1280);
-    const user = userEvent.setup();
-    renderAt("/settings/sandbox");
-    await screen.findByText("可用");
-    const section = screen.getByTestId("section-sandbox");
-    await user.click(within(section).getByRole("button", { name: "重新检测" }));
-    await waitFor(() => expect(probeSandbox).toHaveBeenCalled());
-    await within(section).findByText("不可用");
-    expect(section).toHaveTextContent("Permission denied");
-  });
-
-  test("sandbox: Ubuntu's AppArmor restriction is named with the profile that lifts it", async () => {
-    setViewport(1280);
-    vi.mocked(sandboxStatus).mockResolvedValue(
-      ok({
-        status: "unavailable",
-        reason: "apparmor: bwrap: setting up uid map: Permission denied",
-        bwrap: "/usr/bin/bwrap",
-        checkedAt: "2026-09-14T00:00:00Z",
-      }) as never,
-    );
-    renderAt("/settings/sandbox");
-    await waitFor(() =>
-      expect(screen.getByTestId("section-sandbox")).toHaveTextContent("AppArmor"),
-    );
-    const section = screen.getByTestId("section-sandbox");
-    expect(section).toHaveTextContent("apparmor_parser -r /etc/apparmor.d/longx-bwrap");
-    // the profile covers the bwrap codex runs — the system one here — and the bundled path
-    expect(section).toHaveTextContent("profile longx-system-bwrap /usr/bin/bwrap");
-    expect(section).toHaveTextContent("codex-resources/bwrap flags=(unconfined)");
-    expect(section).toHaveTextContent("codex 用的是 /usr/bin/bwrap");
-    expect(await screen.findByTestId("sandbox-banner")).toHaveTextContent("AppArmor");
-  });
-
-  test("sandbox: no network isolation is a warning that names the way out, on the page and in the banner", async () => {
-    setViewport(1280);
-    vi.mocked(sandboxStatus).mockResolvedValue(
-      ok({
-        status: "no_net_isolation",
-        reason: "network_isolation: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
-        checkedAt: "2026-09-14T00:00:00Z",
-      }) as never,
-    );
-    renderAt("/settings/sandbox");
-    await waitFor(() =>
-      expect(screen.getByTestId("section-sandbox")).toHaveTextContent("可用，但断网隔离不可用"),
-    );
-    expect(screen.getByTestId("section-sandbox")).toHaveTextContent("网络访问");
-    const banner = await screen.findByTestId("sandbox-banner");
-    expect(banner).toHaveTextContent("断网隔离不可用");
-    expect(banner).toHaveTextContent("RTM_NEWADDR");
   });
 
   test("knowledge: the global docs are listed and edited, a shipped doc opens read-only, a new doc gets a template", async () => {

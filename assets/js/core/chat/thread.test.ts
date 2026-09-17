@@ -66,13 +66,13 @@ describe("thread view", () => {
     expect(v.items.at(-1)).toMatchObject({ id: "c1", type: "unknown", aggregatedOutput: "line 1\nline 2\n" });
   });
 
-  test("server requests wait until resolved", () => {
+  test("server requests (a tool's ask) wait until resolved", () => {
     let v = fromSnapshot(snapshot);
-    v = applyEvent(v, { seq: 11, method: "item/commandExecution/requestApproval", params: { requestId: 7, itemId: "c1", command: "rm -rf x" } });
+    v = applyEvent(v, { seq: 11, method: "longx/action/request", params: { requestId: 7, itemId: "c1", title: "登录" } });
     expect(v.requests).toHaveLength(1);
-    expect(v.requests[0]).toMatchObject({ id: 7, method: "item/commandExecution/requestApproval" });
+    expect(v.requests[0]).toMatchObject({ id: 7, method: "longx/action/request" });
     // a repeat of the same request (a rejoin) is not a second one
-    v = applyEvent(v, { seq: 12, method: "item/commandExecution/requestApproval", params: { requestId: "7", itemId: "c1" } });
+    v = applyEvent(v, { seq: 12, method: "longx/action/request", params: { requestId: "7", itemId: "c1" } });
     expect(v.requests).toHaveLength(1);
     v = applyEvent(v, { seq: 13, method: "serverRequest/resolved", params: { requestId: "7" } });
     expect(v.requests).toHaveLength(0);
@@ -86,52 +86,10 @@ describe("thread view", () => {
   });
 });
 
-describe("plan", () => {
-  test("the snapshot carries the turn's plan and turn/plan/updated replaces it", () => {
-    const v = fromSnapshot({ ...snapshot, plan: { turnId: "turn_1", explanation: null, plan: [{ step: "a", status: "completed" }] } });
-    expect(v.plan).toEqual({ turnId: "turn_1", explanation: null, plan: [{ step: "a", status: "completed" }] });
-    const v2 = applyEvent(v, {
-      seq: 11,
-      method: "turn/plan/updated",
-      params: { turnId: "turn_2", explanation: "next", plan: [{ step: "b", status: "inProgress" }, { step: "c", status: "pending" }] },
-    });
-    expect(v2.plan).toEqual({ turnId: "turn_2", explanation: "next", plan: [{ step: "b", status: "inProgress" }, { step: "c", status: "pending" }] });
-    // a snapshot without a plan (older server, empty thread) is fine
-    expect(fromSnapshot(snapshot).plan).toBeNull();
-  });
-});
-
-describe("automatic approval review", () => {
-  const action = { type: "command", source: "unifiedExec", command: "zsh -lc 'touch ~/x'", cwd: "/p" };
-
-  test("started / completed make one item keyed by the review id; userApproved marks it (like the Store)", () => {
-    let v = fromSnapshot(snapshot);
-    v = applyEvent(v, {
-      seq: 11,
-      method: "item/autoApprovalReview/started",
-      params: { threadId: "thr_1", turnId: "turn_2", reviewId: "rev-1", targetItemId: "c1", action, review: { status: "inProgress", rationale: null }, startedAtMs: 10 },
-    });
-    expect(v.items.at(-1)).toMatchObject({ id: "rev-1", type: "autoApprovalReview", turnId: "turn_2", targetItemId: "c1", action, review: { status: "inProgress" } });
-
-    v = applyEvent(v, {
-      seq: 12,
-      method: "item/autoApprovalReview/completed",
-      params: { threadId: "thr_1", turnId: "turn_2", reviewId: "rev-1", targetItemId: "c1", action, review: { status: "denied", riskLevel: "high", rationale: "exfil" }, decisionSource: "agent", startedAtMs: 10, completedAtMs: 20 },
-    });
-    expect(v.items.filter((i) => i.type === "autoApprovalReview")).toHaveLength(1);
-    expect(v.items.at(-1)).toMatchObject({ id: "rev-1", review: { status: "denied", riskLevel: "high" }, completedAtMs: 20 });
-
-    v = applyEvent(v, { seq: 13, method: "item/autoApprovalReview/userApproved", params: { threadId: "thr_1", reviewId: "rev-1" } });
-    expect(v.items.at(-1)).toMatchObject({ id: "rev-1", userApproved: true });
-    // a mark for a review we never saw changes nothing
-    expect(applyEvent(v, { seq: 14, method: "item/autoApprovalReview/userApproved", params: { reviewId: "rev-9" } }).items).toEqual(v.items);
-  });
-});
-
 describe("goal", () => {
   const goal = { threadId: "thr_1", objective: "make it pass", status: "active" as const, tokenBudget: 50000, tokensUsed: 12, timeUsedSeconds: 3, createdAt: 1, updatedAt: 2 };
 
-  test("the snapshot carries codex's goal; updated replaces it, cleared removes it", () => {
+  test("the snapshot carries the thread's goal; updated replaces it, cleared removes it", () => {
     const v = fromSnapshot({ ...snapshot, goal });
     expect(v.goal).toEqual(goal);
     expect(fromSnapshot(snapshot).goal).toBeNull();

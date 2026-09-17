@@ -1,8 +1,8 @@
 // The assistant-ui ExternalStoreAdapter for a Longx thread: the app owns
 // the messages (ThreadView → toMessages); the runtime calls back into our
-// RPCs for sending, stopping and answering approvals / questions. UI
-// features are handler-driven (assistant-ui): a handler that is present
-// turns its button on, so only what codex can do is wired here.
+// RPCs for sending, stopping and answering a tool's asks. UI features are
+// handler-driven (assistant-ui): a handler that is present turns its
+// button on, so only what the kernel can do is wired here.
 import type {
   AppendMessage,
   AttachmentAdapter,
@@ -11,48 +11,23 @@ import type {
   ExternalStoreThreadListAdapter,
     ThreadMessageLike,
 } from "@assistant-ui/react";
-import { answerRequest, approveReview, interruptTurn, respond, retractTurn, sendMessage, setGoal, steerTurn } from "@/ash_rpc";
-import { skillsIn, type SkillRef } from "./mentions";
+import { answerRequest, interruptTurn, retractTurn, sendMessage, setGoal, steerTurn } from "@/ash_rpc";
 import { RpcFailure, unwrap } from "@/core/projects";
-import {
-  requestIdFor,
-  toMessages,
-  type ApprovalDecision,
-  type SubViews,
-} from "./messages";
+import { toMessages, type SubViews } from "./messages";
 import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
 import { runningTurnId, type ThreadView } from "./thread";
 
-export type ThreadTarget = { threadId: string; codexThreadId: string };
+export type ThreadTarget = { threadId: string; kernelThreadId: string };
 
 export type DirtyChange = { path: string; status: string };
 
-/** The access mode codex runs a turn with; codex keeps it for the turns after. */
-export type AccessMode = {
-  sandbox: "read_only" | "workspace_write" | "danger_full_access";
-  approvalPolicy: "never" | "on_request" | "untrusted" | "auto_accept";
-  networkAccess: boolean;
-  /** codex's web.run (search + open URL, run by Longx, not the sandbox); fixed at thread start */
-  webSearch: boolean;
-  /** codex's sub-agent tools (spawn / wait / …); fixed at thread start */
-  multiAgent: boolean;
-  /** codex's automatic approval review (Guardian) instead of a card; fixed at thread start */
-  autoReview: boolean;
-};
 /** what to do with uncommitted changes when the project's policy is "ask"; null = don't send */
 export type DirtyDecision = "commit" | "ignore" | null;
 
 /** What renderers reach through `useAuiState((s) => s.thread.extras)`. */
-export type CodexExtras = {
-  /** answers a requestUserInput: question id → the chosen answers */
-  answerRequest: (
-    requestId: string,
-    answers: Record<string, unknown>,
-  ) => Promise<void>;
-  /** answers the native kernel's ask (Context.ask) as it is: {done: true}, {cancelled: true}, or the fields typed */
+export type ThreadExtras = {
+  /** answers the kernel's ask (Context.ask) as it is: {done: true}, {cancelled: true}, or the fields typed */
   answerAction: (requestId: string, answers: Record<string, unknown>) => Promise<void>;
-  /** overrides a denial of codex's automatic approval review (the person allows the action) */
-  approveDeniedReview: (reviewId: string) => Promise<void>;
 };
 
 export type AdapterOptions = {
@@ -61,17 +36,15 @@ export type AdapterOptions = {
   /** null = no thread open yet: the first message creates one (`createThread`) */
   target: ThreadTarget | null;
   view: ThreadView;
-  /** the live views of the thread's sub-agents (nested conversations; their approvals surface here) */
+  /** the live views of the thread's sub-agents (nested conversations; their asks surface here) */
   subviews?: SubViews;
   /** the model slug for the next turn (null = the thread's current) */
   model: string | null;
   /** the reasoning level for the next turn (null = the thread's current / the model's default) */
   effort?: string | null;
-  /** the access mode for the next turn (undefined = the thread's current) */
-  mode?: AccessMode;
   /** the thread cannot take messages at all (unrecoverable / archived) */
   disabled?: boolean;
-  /** typing is fine, sending is not (codex reconnecting) */
+  /** typing is fine, sending is not (the view not loaded yet) */
   sendDisabled?: boolean;
   /** the snapshot has not arrived yet */
   loading?: boolean;
@@ -82,12 +55,10 @@ export type AdapterOptions = {
   /** re-pull the snapshot in place (threads.reloadMainThread) */
   refetch?: () => Promise<void>;
   threadList?: ExternalStoreThreadListAdapter;
-  /** files staged in the composer (images → codex image inputs, text files → text) */
+  /** files staged in the composer (images → image inputs, text files → text) */
   attachments?: AttachmentAdapter;
   /** voice input written into the composer (the browser's speech recognition) */
   dictation?: DictationAdapter;
-  /** the project's skills: a `$name` in the text rides on the turn as a skill input */
-  skills?: readonly SkillRef[];
   /** a stop before anything came back took the turn out; its text comes back to the composer */
   onRetract?: (text: string) => void;
 };
@@ -99,7 +70,7 @@ export function textOf(message: AppendMessage): string {
     .trim();
 }
 
-/** What a message carries for codex: the typed text plus any text attachments, and the images as data urls. */
+/** What a message carries for the model: the typed text plus any text attachments, and the images as data urls. */
 export function inputOf(message: AppendMessage): {
   text: string;
   images: string[];
@@ -123,8 +94,8 @@ const HARMLESS_ITEMS = new Set(["userMessage", "agentMessage", "reasoning", "pla
 
 /**
  * Whether the turn ran anything — a command, a patch, a tool, a search, a
- * sub-agent — or waits to (an approval or a question pending): then a revert
- * cannot take it back, and a stop is only an interrupt.
+ * sub-agent — or waits to (an ask pending): then a revert cannot take it
+ * back, and a stop is only an interrupt.
  */
 export function turnHadEffects(view: ThreadView, turnId: string): boolean {
   return (
@@ -138,28 +109,11 @@ export function buildAdapter(
 ): ExternalStoreAdapter<ThreadMessageLike> {
   const { view } = opts;
   const threadId = () => opts.target?.threadId;
-  const extras: CodexExtras = {
-    answerRequest: async (requestId, answers) => {
-      const id = threadId();
-      if (!id) return;
-      const shaped = Object.fromEntries(
-        Object.entries(answers).map(([q, a]) => [q, { answers: a }]),
-      );
-      unwrap(
-        await answerRequest({
-          input: { threadId: id, requestId, answers: shaped },
-        }),
-      );
-    },
+  const extras: ThreadExtras = {
     answerAction: async (requestId, answers) => {
       const id = threadId();
       if (!id) return;
       unwrap(await answerRequest({ input: { threadId: id, requestId, answers } }));
-    },
-    approveDeniedReview: async (reviewId) => {
-      const id = threadId();
-      if (!id) return;
-      unwrap(await approveReview({ input: { threadId: id, reviewId } }));
     },
   };
   return {
@@ -180,7 +134,6 @@ export function buildAdapter(
     onNew: async (message) => {
       const { text, images } = inputOf(message);
       if (!text && images.length === 0) return;
-      const skills = skillsIn(text, opts.skills ?? []);
       let target = opts.target;
       if (!target) {
         if (!opts.createThread) throw new Error("no thread to send to");
@@ -198,13 +151,13 @@ export function buildAdapter(
         opts.onSent?.(target);
         return;
       }
-      // a turn in flight: the message goes into it (turn/steer — codex hands
-      // it to the model at its next request), what the Codex app does; a
-      // turn that ended meanwhile is "not_running" and the message a new turn
+      // a turn in flight: the message goes into it (a steer — the kernel folds
+      // it in at its next step); a turn that ended meanwhile is "not_running"
+      // and the message a new turn
       const running = runningTurnId(view);
       if (running && target.threadId === opts.target?.threadId) {
         const steered = await steerTurn({
-          fields: ["codexTurnId"],
+          fields: ["kernelTurnId"],
           input: { threadId: target.threadId, text, ...(images.length > 0 ? { images } : {}) },
         });
         if (steered.success) {
@@ -220,16 +173,8 @@ export function buildAdapter(
             threadId: target.threadId,
             text,
             ...(images.length > 0 ? { images } : {}),
-            ...(skills.length > 0 ? { skills } : {}),
             ...(opts.model ? { model: opts.model } : {}),
             ...(opts.effort ? { effort: opts.effort } : {}),
-            ...(opts.mode
-              ? {
-                  sandbox: opts.mode.sandbox,
-                  approvalPolicy: opts.mode.approvalPolicy,
-                  networkAccess: opts.mode.networkAccess,
-                }
-              : {}),
             ...(dirty ? { dirty } : {}),
           },
         });
@@ -251,29 +196,13 @@ export function buildAdapter(
       // nothing ran yet: take the turn back, the text returns to the composer
       if (!turnHadEffects(view, turnId) && opts.onRetract) {
         const { text } = unwrap(
-          await retractTurn({ fields: ["text"], input: { threadId: id, codexTurnId: turnId } }),
+          await retractTurn({ fields: ["text"], input: { threadId: id, kernelTurnId: turnId } }),
         );
         opts.onRetract(text);
         return;
       }
       unwrap(
-        await interruptTurn({ input: { threadId: id, codexTurnId: turnId } }),
-      );
-    },
-    onRespondToToolApproval: async ({ approvalId, optionId, approved }) => {
-      const id = threadId();
-      if (!id) return;
-      const decision =
-        (optionId as ApprovalDecision | undefined) ??
-        (approved ? "accept" : "decline");
-      unwrap(
-        await respond({
-          input: {
-            threadId: id,
-            requestId: String(requestIdFor(view, approvalId)),
-            decision,
-          },
-        }),
+        await interruptTurn({ input: { threadId: id, kernelTurnId: turnId } }),
       );
     },
   };

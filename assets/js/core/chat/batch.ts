@@ -1,5 +1,5 @@
 // Coalesces a burst of channel events into one state update per animation
-// frame: codex streams reasoning / output deltas every few milliseconds, and
+// frame: the kernel streams reasoning / output deltas every few milliseconds, and
 // a React commit per delta cannot keep up — React then sees a commit that
 // always leaves work pending and stops it as a runaway update loop
 // ("Maximum update depth exceeded"). One fold per frame keeps the view

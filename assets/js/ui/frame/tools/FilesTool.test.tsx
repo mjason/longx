@@ -23,7 +23,7 @@ async function openFiles(width = 1280) {
   const user = userEvent.setup();
   const r = renderAt("/p/app-1/t/t1");
   await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-  await user.keyboard("{Meta>}6{/Meta}");
+  await user.keyboard("{Meta>}5{/Meta}");
   const panel = await screen.findByTestId(width < 1024 ? "tool-sheet" : "tool-panel");
   await within(panel).findByText("README.md");
   return { user, panel, ...r };
@@ -42,7 +42,7 @@ describe("FilesTool", () => {
     vi.mocked(readFile).mockResolvedValue(ok({ path: "lib/a.ex", content: "defmodule A do\nend\n", size: 12, binary: false, truncated: false }) as never);
   });
 
-  test("⌘6 shows the tree: folders first, lazy children, git status on files and their folders; a file opens in the editor", async () => {
+  test("⌘5 shows the tree: folders first, lazy children, git status on files and their folders; a file opens in the editor", async () => {
     const { user, panel } = await openFiles();
     const rows = within(panel).getAllByRole("treeitem");
     expect(rows.map((r) => r.textContent)).toEqual(["lib", "README.md"]);
@@ -101,7 +101,7 @@ describe("FilesTool", () => {
     await waitFor(() => expect(deleteEntry).toHaveBeenCalledWith(expect.objectContaining({ input: { projectId: "id-1", path: "README.md" } })));
   });
 
-  test("the filter finds files through codex's fuzzy index and opens one", async () => {
+  test("the filter finds files through the server's fuzzy index and opens one", async () => {
     const { searchFiles } = await import("@/ash_rpc");
     vi.mocked(searchFiles).mockResolvedValue(ok([{ path: "lib/deep/gateway.ex", fileName: "gateway.ex", matchType: "file", root: "/", score: 1, indices: null }]) as never);
     const { user, panel } = await openFiles();

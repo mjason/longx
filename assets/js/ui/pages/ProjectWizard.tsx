@@ -1,13 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
-import { RpcFailure, useCreateProject, type NewProjectInput } from "@/core/projects";
+import { RpcFailure, useCreateProject } from "@/core/projects";
 import { DirectoryPicker } from "@/ui/components/DirectoryPicker";
 import { Button } from "@/ui/components/ui/button";
 import { Checkbox } from "@/ui/components/ui/checkbox";
 import { Input } from "@/ui/components/ui/input";
 import { Label } from "@/ui/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/ui/components/ui/radio-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { BottomBar, Page, TopBar } from "@/ui/shell/Shell";
 import { t } from "@/ui/strings";
 
@@ -26,11 +24,6 @@ export function ProjectWizard() {
   const [dirIsRepo, setDirIsRepo] = useState(false);
   const [name, setName] = useState("");
   const [initGit, setInitGit] = useState(true);
-  const [advanced, setAdvanced] = useState(false);
-  const [sandbox, setSandbox] = useState<NonNullable<NewProjectInput["sandbox"]>>("workspace_write");
-  const [approval, setApproval] = useState<NonNullable<NewProjectInput["approvalPolicy"]>>("on_request");
-  const [network, setNetwork] = useState(false);
-  const [engine, setEngine] = useState<NonNullable<NewProjectInput["engine"]>>("codex");
 
   const fieldErrors = create.error instanceof RpcFailure ? create.error.fieldErrors() : {};
   const generalError = create.error && Object.keys(fieldErrors).length === 0 ? create.error.message : null;
@@ -49,10 +42,6 @@ export function ProjectWizard() {
         name,
         rootPath: dir,
         initGit: !dirIsRepo && initGit,
-        sandbox,
-        approvalPolicy: approval,
-        networkAccess: network,
-        engine,
       })
       .catch(() => null);
     if (project) navigate(`/p/${project.slug}`, { replace: true });
@@ -105,47 +94,6 @@ export function ProjectWizard() {
               <span>{t.initGitOption}</span>
             </label>
           )}
-
-          <button type="button" className="text-muted-foreground touch-target self-start text-sm underline" onClick={() => setAdvanced((v) => !v)} aria-expanded={advanced}>
-            {t.advanced}
-          </button>
-          {advanced ? (
-            <div className="grid gap-4 rounded-lg border p-4">
-              <div className="grid gap-2">
-                <Label>{t.sandbox}</Label>
-                <Select value={sandbox} onValueChange={(v) => setSandbox(v as typeof sandbox)}>
-                  <SelectTrigger className="h-11 w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(t.sandboxOptions).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>{t.approval}</Label>
-                <Select value={approval} onValueChange={(v) => setApproval(v as typeof approval)}>
-                  <SelectTrigger className="h-11 w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(t.approvalOptions).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <label className="flex items-center gap-3 text-sm">
-                <Checkbox checked={network} onCheckedChange={(v) => setNetwork(v === true)} /> {t.network}
-              </label>
-              <fieldset className="flex flex-col gap-2">
-                <legend className="text-sm">{t.engine}</legend>
-                <RadioGroup value={engine} onValueChange={(v) => setEngine(v as typeof engine)}>
-                  {(["codex", "native"] as const).map((e) => (
-                    <div key={e} className="flex items-center gap-2">
-                      <RadioGroupItem value={e} id={`pw-engine-${e}`} />
-                      <Label htmlFor={`pw-engine-${e}`}>{t.engineOptions[e]}</Label>
-                    </div>
-                  ))}
-                </RadioGroup>
-                {engine === "native" ? <p className="text-destructive text-xs">{t.engineNativeHint}</p> : null}
-              </fieldset>
-            </div>
-          ) : null}
 
           {generalError ? <p role="alert" className="text-destructive text-sm">{generalError}</p> : null}
         </form>

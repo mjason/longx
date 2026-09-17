@@ -1,48 +1,39 @@
-// codex items → assistant-ui messages. One user message per userMessage
+// thread items → assistant-ui messages. One user message per userMessage
 // item; everything else a turn produced becomes one assistant message whose
-// parts follow the items in order. Pending approvals ride on the tool-call
-// part they belong to (assistant-ui's `approval` seam). Pure; DOM-free.
-import { fromThreadMessageLike, type MessageTiming, type ThreadMessage, type ThreadMessageLike } from "@assistant-ui/react";
-import { runningTurnId, sameId, type CodexItem, type PendingRequest, type ThreadView } from "./thread";
-
-export type ApprovalDecision = "accept" | "accept_for_session" | "decline";
-
-/** The options an approval offers; the ids are what `respond` receives back. */
-export const APPROVAL_OPTIONS = [
-  { id: "accept", kind: "allow-once", label: "允许" },
-  { id: "accept_for_session", kind: "allow-always", label: "本会话都允许" },
-  { id: "decline", kind: "reject-once", label: "拒绝" },
-] as const;
+// parts follow the items in order. A tool's ask (Context.ask) is a standalone
+// `action` part on the message it belongs to. Pure; DOM-free.
+import {
+  fromThreadMessageLike,
+  type MessageTiming,
+  type ThreadMessage,
+  type ThreadMessageLike,
+} from "@assistant-ui/react";
+import {
+  runningTurnId,
+  type ThreadItem,
+  type PendingRequest,
+  type ThreadView,
+} from "./thread";
 
 type Part = Exclude<ThreadMessageLike["content"], string>[number];
 type ToolPart = Extract<Part, { type: "tool-call" }>;
 
-/** The live views of a thread's sub-agents, by their codex thread id (for the nested conversations). */
+/** The live views of a thread's sub-agents, by their kernel thread id (for the nested conversations). */
 export type SubViews = Record<string, ThreadView>;
 
-/** codex's automatic approval review (Guardian) of one action, as the renderers see it. */
-export type AutoReview = {
-  id: string;
-  status: "inProgress" | "approved" | "denied" | "timedOut" | "aborted";
-  riskLevel: string | null;
-  rationale: string | null;
-  /** the person overrode a denial (thread/approveGuardianDeniedAction) */
-  userApproved: boolean;
+/** One sub-agent as the `subAgentActivity` items describe it: its path, thread and latest state. */
+export type SubAgent = {
+  threadId: string;
+  name: string;
+  path: string;
+  kind: string;
+  firstItemId: string;
+  startedAtMs?: number;
+  completedAtMs?: number;
 };
 
-export function autoReviewOf(item: CodexItem): AutoReview {
-  const review = (item["review"] as Record<string, unknown> | undefined) ?? {};
-  return {
-    id: item.id,
-    status: (review["status"] as AutoReview["status"] | undefined) ?? "inProgress",
-    riskLevel: (review["riskLevel"] as string | null | undefined) ?? null,
-    rationale: (review["rationale"] as string | null | undefined) ?? null,
-    userApproved: item["userApproved"] === true,
-  };
-}
-
-/** One sub-agent as codex's `subAgentActivity` items describe it: its path, thread and latest state. */
-export type SubAgent = { threadId: string; name: string; path: string; kind: string; firstItemId: string; startedAtMs?: number; completedAtMs?: number };
+/** The method of a tool's ask (Context.ask): the person has to act before the tool goes on. */
+export const ACTION_REQUEST = "longx/action/request";
 
 /** The sub-agents a view mentions, in order of first appearance. */
 export function subagentsOf(view: ThreadView): Map<string, SubAgent> {
@@ -54,8 +45,17 @@ export function subagentsOf(view: ThreadView): Map<string, SubAgent> {
     const path = String(item["agentPath"] ?? "");
     const kind = String(item["kind"] ?? "started");
     const known = agents.get(threadId);
-    const started = known?.startedAtMs ?? (typeof item["startedAtMs"] === "number" ? (item["startedAtMs"] as number) : undefined);
-    const completed = kind === "completed" || kind === "interrupted" ? (typeof item["completedAtMs"] === "number" ? (item["completedAtMs"] as number) : undefined) : undefined;
+    const started =
+      known?.startedAtMs ??
+      (typeof item["startedAtMs"] === "number"
+        ? (item["startedAtMs"] as number)
+        : undefined);
+    const completed =
+      kind === "completed" || kind === "interrupted"
+        ? typeof item["completedAtMs"] === "number"
+          ? (item["completedAtMs"] as number)
+          : undefined
+        : undefined;
     agents.set(threadId, {
       threadId,
       name: path.split("/").filter(Boolean).at(-1) ?? threadId,
@@ -69,10 +69,11 @@ export function subagentsOf(view: ThreadView): Map<string, SubAgent> {
   return agents;
 }
 
-export function toMessages(view: ThreadView, subviews: SubViews = {}): ThreadMessageLike[] {
+export function toMessages(
+  view: ThreadView,
+  subviews: SubViews = {},
+): ThreadMessageLike[] {
   const running = runningTurnId(view);
-  const approvals = approvalsByItem(view.requests);
-  const reviews = reviewsByItem(view.items);
   const agents = subagentsOf(view);
   const out: ThreadMessageLike[] = [];
   let current: { turnId: string | undefined; parts: Part[] } | null = null;
@@ -85,16 +86,16 @@ export function toMessages(view: ThreadView, subviews: SubViews = {}): ThreadMes
     if (current && current.parts.length) {
       const n = current.turnId ? (segments.get(current.turnId) ?? 0) : 0;
       if (current.turnId) segments.set(current.turnId, n + 1);
-      // the turn's plan leads its message; codex keeps one plan per turn
-      if (view.plan && current.turnId !== undefined && view.plan.turnId === current.turnId) {
-        current.parts.unshift({ type: "data-plan", data: { explanation: view.plan.explanation, steps: view.plan.plan } } as Part);
-      }
       const timing = timingFor(view, current.turnId, current.parts);
       out.push({
-        id: current.turnId ? (n === 0 ? `turn:${current.turnId}` : `turn:${current.turnId}:${n}`) : `turn:${out.length}`,
+        id: current.turnId
+          ? n === 0
+            ? `turn:${current.turnId}`
+            : `turn:${current.turnId}:${n}`
+          : `turn:${out.length}`,
         role: "assistant",
         content: current.parts,
-        status: awaitsApproval(current.parts) ? REQUIRES_ACTION : statusFor(view, current.turnId, running),
+        status: statusFor(view, current.turnId, running),
         ...(timing ? { metadata: { timing } } : {}),
       });
     }
@@ -104,7 +105,11 @@ export function toMessages(view: ThreadView, subviews: SubViews = {}): ThreadMes
   for (const item of view.items) {
     if (item.type === "userMessage") {
       flush();
-      out.push({ id: item.id, role: "user", content: [{ type: "text", text: userText(item) }, ...userImages(item)] });
+      out.push({
+        id: item.id,
+        role: "user",
+        content: [{ type: "text", text: userText(item) }, ...userImages(item)],
+      });
       continue;
     }
     if (!current || current.turnId !== item.turnId) {
@@ -114,166 +119,166 @@ export function toMessages(view: ThreadView, subviews: SubViews = {}): ThreadMes
     const part =
       item.type === "subAgentActivity"
         ? subagentPart(item, agents, subviews)
-        : item.type === "collabAgentToolCall"
-          ? collabPart(item, agents)
-          : item.type === "autoApprovalReview"
-            ? reviewPart(item, view.items)
-            : toPart(item, approvals.get(item.id), reviews.get(item.id));
+        : toPart(item);
     if (part) current.parts.push(part);
   }
   flush();
 
-  // an approval for an item we have not seen yet still needs a place to be answered
-  for (const [itemId, request] of approvals) {
-    if (!view.items.some((i) => i.id === itemId)) {
-      // a permissions request (the request_permissions tool) has no item of its own
-      const args = request.method === PERMISSIONS_REQUEST ? { reason: request.params["reason"] ?? null, lines: permissionLines(request.params["permissions"]) } : {};
-      attachPending(out, itemId, toolPart(itemId, toolNameFor(request.method), args, undefined, request));
-    }
-  }
-  // questions codex asks (requestUserInput) are standalone parts; the
-  // renderer answers them through the runtime's extras (answerRequest)
+  // a tool asking the person to act (a login, a code) — Context.ask — is a
+  // standalone part the renderer answers through the runtime's extras
   for (const request of view.requests) {
-    if (request.method === "item/tool/requestUserInput") {
-      const itemId = String(request.params["itemId"] ?? request.id);
-      const args = { requestId: String(request.id), questions: (request.params["questions"] as unknown[]) ?? [] };
-      attachPending(out, itemId, toolPart(itemId, "requestUserInput", args, undefined, undefined));
-    }
-    // the native kernel: a tool asking the person to act (a login, a code) — Context.ask
-    if (request.method === "longx/action/request") {
-      const itemId = String(request.params["itemId"] ?? request.id);
-      const args = {
-        requestId: String(request.id),
-        title: String(request.params["title"] ?? ""),
-        text: String(request.params["text"] ?? ""),
-        url: typeof request.params["url"] === "string" ? request.params["url"] : null,
-        fields: (request.params["fields"] as { id: string; label: string }[] | undefined) ?? [],
-      };
-      attachPending(out, `${itemId}:ask`, toolPart(`${itemId}:ask`, "action", args, undefined, undefined));
-    }
+    if (request.method !== ACTION_REQUEST) continue;
+    const itemId = String(request.params["itemId"] ?? request.id);
+    const args = {
+      requestId: String(request.id),
+      title: String(request.params["title"] ?? ""),
+      text: String(request.params["text"] ?? ""),
+      url:
+        typeof request.params["url"] === "string"
+          ? request.params["url"]
+          : null,
+      fields:
+        (request.params["fields"] as
+          { id: string; label: string }[] | undefined) ?? [],
+    };
+    attachPending(
+      out,
+      `${itemId}:ask`,
+      toolPart(`${itemId}:ask`, "action", args, undefined),
+    );
   }
   return out;
 }
 
 // every activity of one sub-agent folds into a single `subagent` call at the
 // place of its first one; the child's own conversation nests in `messages`
-// (assistant-ui's MessagePartPrimitive.Messages) and a child waiting for an
-// approval hands it up to the parent, which answers through the same codex
-function subagentPart(item: CodexItem, agents: Map<string, SubAgent>, subviews: SubViews): ToolPart | null {
+// (assistant-ui's MessagePartPrimitive.Messages), a child waiting on the
+// person shows it on the row
+function subagentPart(
+  item: ThreadItem,
+  agents: Map<string, SubAgent>,
+  subviews: SubViews,
+): ToolPart | null {
   const agent = agents.get(String(item["agentThreadId"] ?? ""));
   if (!agent || agent.firstItemId !== item.id) return null;
   const done = agent.kind === "completed" || agent.kind === "interrupted";
   const child = subviews[agent.threadId];
-  const pending = child?.requests.find((r) => r.method.endsWith("/requestApproval"));
+  const pending = child?.requests.find((r) => r.method === ACTION_REQUEST);
   const part = toolPart(
     agent.threadId,
     "subagent",
-    { name: agent.name, path: agent.path, threadId: agent.threadId, kind: agent.kind, request: pending ? requestSummary(pending) : null },
+    {
+      name: agent.name,
+      path: agent.path,
+      threadId: agent.threadId,
+      kind: agent.kind,
+      request: pending
+        ? { title: String(pending.params["title"] ?? "") }
+        : null,
+    },
     done ? { kind: agent.kind } : undefined,
-    pending ? { ...pending, params: { ...pending.params, reason: `子 agent ${agent.name}：${approvalPrompt(pending)}` } } : undefined,
     agent.kind === "interrupted",
     undefined,
-    agent.startedAtMs !== undefined ? { startedAt: agent.startedAtMs, ...(agent.completedAtMs !== undefined ? { completedAt: agent.completedAtMs } : {}) } : undefined,
+    agent.startedAtMs !== undefined
+      ? {
+          startedAt: agent.startedAtMs,
+          ...(agent.completedAtMs !== undefined
+            ? { completedAt: agent.completedAtMs }
+            : {}),
+        }
+      : undefined,
   );
   if (!child) return part;
-  const messages: ThreadMessage[] = toMessages(child, subviews).map((m, i) => fromThreadMessageLike(m, `${agent.threadId}:${i}`, { type: "complete", reason: "unknown" }));
+  const messages: ThreadMessage[] = toMessages(child, subviews).map((m, i) =>
+    fromThreadMessageLike(m, `${agent.threadId}:${i}`, {
+      type: "complete",
+      reason: "unknown",
+    }),
+  );
   return { ...part, messages };
 }
 
-// what a child asks approval for, so the parent's card can show it
-function requestSummary(request: PendingRequest): { command?: string; paths?: string[] } {
-  const p = request.params;
-  if (typeof p["command"] === "string") return { command: displayCommand(p["command"]) };
-  const changes = Array.isArray(p["changes"]) ? (p["changes"] as { path?: string }[]) : [];
-  return { paths: changes.map((c) => String(c.path ?? "")).filter(Boolean) };
-}
-
-// codex's collaboration tools (spawnAgent / sendMessage / wait / closeAgent…):
-// the agents it addresses by name, the states it reports as the result
-function collabPart(item: CodexItem, agents: Map<string, SubAgent>): ToolPart {
-  const status = item["status"];
-  const done = status === "completed" || status === "failed";
-  // a `wait` names nobody up front; the states it reports (or every agent so far) say who it waited for
-  const states = (item["agentsStates"] as Record<string, unknown> | undefined) ?? {};
-  const named = Array.isArray(item["receiverThreadIds"]) ? (item["receiverThreadIds"] as string[]) : [];
-  const receivers = named.length ? named : Object.keys(states).length ? Object.keys(states) : item["tool"] === "wait" ? [...agents.keys()] : [];
-  return toolPart(
-    item.id,
-    "collab",
-    {
-      tool: item["tool"],
-      prompt: item["prompt"] ?? null,
-      model: item["model"] ?? null,
-      agents: receivers.map((threadId) => ({ threadId, name: agents.get(threadId)?.name ?? threadId, kind: agents.get(threadId)?.kind ?? null })),
-    },
-    done ? { status, agentsStates: states } : undefined,
-    undefined,
-    status === "failed",
-    undefined,
-    timingOf(item),
-  );
-}
-
-function attachPending(out: ThreadMessageLike[], itemId: string, part: ToolPart) {
+function attachPending(
+  out: ThreadMessageLike[],
+  itemId: string,
+  part: ToolPart,
+) {
   const last = out.at(-1);
   if (last && last.role === "assistant" && Array.isArray(last.content)) {
-    out[out.length - 1] = { ...last, content: [...last.content, part], status: REQUIRES_ACTION };
+    out[out.length - 1] = {
+      ...last,
+      content: [...last.content, part],
+      status: REQUIRES_ACTION,
+    };
   } else {
-    out.push({ id: `pending:${itemId}`, role: "assistant", content: [part], status: REQUIRES_ACTION });
+    out.push({
+      id: `pending:${itemId}`,
+      role: "assistant",
+      content: [part],
+      status: REQUIRES_ACTION,
+    });
   }
 }
 
-// assistant-ui's MessageTiming from the turn (codex: epoch seconds) and the
-// last turn's token usage; older turns keep only what the turn row knows.
-function timingFor(view: ThreadView, turnId: string | undefined, parts: Part[]): MessageTiming | undefined {
+// assistant-ui's MessageTiming from the turn (epoch seconds) and the last
+// turn's token usage; older turns keep only what the turn row knows.
+function timingFor(
+  view: ThreadView,
+  turnId: string | undefined,
+  parts: Part[],
+): MessageTiming | undefined {
   const turn = view.turn;
-  if (!turn || turn["id"] !== turnId || typeof turn["startedAt"] !== "number") return undefined;
+  if (!turn || turn["id"] !== turnId || typeof turn["startedAt"] !== "number")
+    return undefined;
   const startedAt = (turn["startedAt"] as number) * 1000;
-  const completedAt = typeof turn["completedAt"] === "number" ? (turn["completedAt"] as number) * 1000 : undefined;
-  const last = (view.tokenUsage?.["last"] as { outputTokens?: number } | undefined) ?? undefined;
-  const tokenCount = completedAt !== undefined && typeof last?.outputTokens === "number" ? last.outputTokens : undefined;
-  const totalStreamTime = completedAt !== undefined ? completedAt - startedAt : undefined;
+  const completedAt =
+    typeof turn["completedAt"] === "number"
+      ? (turn["completedAt"] as number) * 1000
+      : undefined;
+  const last =
+    (view.tokenUsage?.["last"] as { outputTokens?: number } | undefined) ??
+    undefined;
+  const tokenCount =
+    completedAt !== undefined && typeof last?.outputTokens === "number"
+      ? last.outputTokens
+      : undefined;
+  const totalStreamTime =
+    completedAt !== undefined ? completedAt - startedAt : undefined;
   return {
     streamStartTime: startedAt,
     ...(totalStreamTime !== undefined ? { totalStreamTime } : {}),
     ...(tokenCount !== undefined ? { tokenCount } : {}),
-    ...(tokenCount !== undefined && totalStreamTime ? { tokensPerSecond: (tokenCount * 1000) / totalStreamTime } : {}),
+    ...(tokenCount !== undefined && totalStreamTime
+      ? { tokensPerSecond: (tokenCount * 1000) / totalStreamTime }
+      : {}),
     totalChunks: parts.length,
     toolCallCount: parts.filter((p) => p.type === "tool-call").length,
   };
 }
 
-// assistant-ui shows a part's approval controls only while its message
-// requires action; a running message hides them.
-const REQUIRES_ACTION = { type: "requires-action", reason: "interrupt" } as const;
-
-function awaitsApproval(parts: Part[]): boolean {
-  return parts.some((p) => p.type === "tool-call" && "approval" in p && p.approval !== undefined);
-}
+// assistant-ui shows a part's controls only while its message requires action
+const REQUIRES_ACTION = {
+  type: "requires-action",
+  reason: "interrupt",
+} as const;
 
 // the client stamps items when they start/complete (thread.ts); snapshot items have none
-function timingOf(item: CodexItem): { startedAt: number; completedAt?: number } | undefined {
+function timingOf(
+  item: ThreadItem,
+): { startedAt: number; completedAt?: number } | undefined {
   const startedAt = item["startedAtMs"];
   if (typeof startedAt !== "number") return undefined;
   const completedAt = item["completedAtMs"];
-  return typeof completedAt === "number" ? { startedAt, completedAt } : { startedAt };
+  return typeof completedAt === "number"
+    ? { startedAt, completedAt }
+    : { startedAt };
 }
 
-function approvalsByItem(requests: PendingRequest[]): Map<string, PendingRequest> {
-  const map = new Map<string, PendingRequest>();
-  for (const r of requests) {
-    const itemId = r.params["itemId"];
-    if (typeof itemId === "string" && r.method.endsWith("/requestApproval")) map.set(itemId, r);
-  }
-  return map;
-}
-
-function toolNameFor(method: string): string {
-  if (method === PERMISSIONS_REQUEST) return "permissions";
-  return method.includes("fileChange") ? "fileChange" : "commandExecution";
-}
-
-function statusFor(view: ThreadView, turnId: string | undefined, running: string | null): ThreadMessageLike["status"] {
+function statusFor(
+  view: ThreadView,
+  turnId: string | undefined,
+  running: string | null,
+): ThreadMessageLike["status"] {
   if (turnId && turnId === running) return { type: "running" };
   const turn = view.turn;
   if (turn && turn["id"] === turnId) {
@@ -281,111 +286,122 @@ function statusFor(view: ThreadView, turnId: string | undefined, running: string
     if (s === "interrupted") return { type: "incomplete", reason: "cancelled" };
     if (s === "failed") {
       const err = turn["error"] as { message?: string } | undefined;
-      return { type: "incomplete", reason: "error", error: err?.message ?? "failed" };
+      return {
+        type: "incomplete",
+        reason: "error",
+        error: err?.message ?? "failed",
+      };
     }
   }
   return { type: "complete", reason: "stop" };
 }
 
-/** codex runs commands through a login shell (`zsh -lc '…'`); people want the inner command. */
+/** The kernel runs commands through a login shell (`zsh -lc '…'`); people want the inner command. */
 export function displayCommand(command: string): string {
-  const m = /^(?:\S*\/)?(?:zsh|bash|sh|fish|dash)\s+-l?c\s+(['"])([\s\S]*)\1\s*$/.exec(command);
+  const m =
+    /^(?:\S*\/)?(?:zsh|bash|sh|fish|dash)\s+-l?c\s+(['"])([\s\S]*)\1\s*$/.exec(
+      command,
+    );
   return m ? m[2]! : command;
 }
 
 function joined(value: unknown): string {
   if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.filter((v) => typeof v === "string" && v).join("\n\n");
+  if (Array.isArray(value))
+    return value.filter((v) => typeof v === "string" && v).join("\n\n");
   return "";
 }
 
-export function userText(item: CodexItem): string {
+export function userText(item: ThreadItem): string {
   const content = item["content"];
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
-      .map((c: { type?: string; text?: string }) => (c.type === "text" ? (c.text ?? "") : ""))
+      .map((c: { type?: string; text?: string }) =>
+        c.type === "text" ? (c.text ?? "") : "",
+      )
       .join("");
   }
   return "";
 }
 
-/** The images a user message carried (codex echoes `image` inputs with their url; a `localImage` is a path we cannot show). */
-function userImages(item: CodexItem): Part[] {
+/** The images a user message carried (`image` parts with their data url). */
+function userImages(item: ThreadItem): Part[] {
   const content = item["content"];
   if (!Array.isArray(content)) return [];
-  return content.flatMap((c: { type?: string; url?: string }) => (c.type === "image" && typeof c.url === "string" ? [{ type: "image", image: c.url } as Part] : []));
+  return content.flatMap((c: { type?: string; url?: string }) =>
+    c.type === "image" && typeof c.url === "string"
+      ? [{ type: "image", image: c.url } as Part]
+      : [],
+  );
 }
 
-// a review that judged an item of the view rides on that item's part; one
-// with no item of its own (a permissions request) is a part by itself
-function reviewsByItem(items: CodexItem[]): Map<string, AutoReview> {
-  const map = new Map<string, AutoReview>();
-  for (const item of items) {
-    const target = item["targetItemId"];
-    if (item.type === "autoApprovalReview" && typeof target === "string") map.set(target, autoReviewOf(item));
-  }
-  return map;
-}
-
-function reviewPart(item: CodexItem, items: CodexItem[]): Part | null {
-  const target = item["targetItemId"];
-  if (typeof target === "string" && items.some((i) => i.id === target)) return null;
-  const action = (item["action"] as Record<string, unknown> | undefined) ?? {};
-  const review = autoReviewOf(item);
-  const args = {
-    review,
-    reason: (action["reason"] as string | null | undefined) ?? null,
-    lines: action["type"] === "requestPermissions" ? permissionLines(action["permissions"]) : [],
-    ...(typeof action["command"] === "string" ? { command: displayCommand(action["command"]), fullCommand: action["command"] } : {}),
-  };
-  return toolPart(item.id, "autoReview", args, review.status === "inProgress" ? undefined : { status: review.status }, undefined, review.status === "denied" && !review.userApproved, undefined, timingOf(item));
-}
-
-function toPart(item: CodexItem, approval: PendingRequest | undefined, review?: AutoReview): Part | null {
+function toPart(item: ThreadItem): Part | null {
   switch (item.type) {
     case "agentMessage": {
       const text = (item["text"] as string | undefined) ?? "";
       return { type: "text", text };
     }
-    case "plan":
-      return { type: "text", text: (item["text"] as string | undefined) ?? "" };
     case "reasoning": {
-      // codex: summary/content are string[]; a bare string is ours (deltas before item/started)
+      // summary/content are string[]; a bare string is a delta before item/started
       const text = joined(item["content"]) || joined(item["summary"]);
       return text ? { type: "reasoning", text } : null;
     }
     case "commandExecution": {
       const status = item["status"];
-      const done = status === "completed" || status === "failed" || status === "declined";
+      const done =
+        status === "completed" || status === "failed" || status === "declined";
       const exit = item["exitCode"] as number | null | undefined;
       return toolPart(
         item.id,
         "commandExecution",
-        { command: displayCommand(String(item["command"] ?? "")), fullCommand: item["command"], cwd: item["cwd"], ...(review ? { review } : {}) },
-        done ? { status, exitCode: exit, output: item["aggregatedOutput"] ?? "", durationMs: item["durationMs"] } : undefined,
-        approval,
-        done && ((typeof exit === "number" && exit !== 0) || status === "failed" || status === "declined"),
+        {
+          command: displayCommand(String(item["command"] ?? "")),
+          fullCommand: item["command"],
+          cwd: item["cwd"],
+        },
+        done
+          ? {
+              status,
+              exitCode: exit,
+              output: item["aggregatedOutput"] ?? "",
+              durationMs: item["durationMs"],
+            }
+          : undefined,
+        done &&
+          ((typeof exit === "number" && exit !== 0) ||
+            status === "failed" ||
+            status === "declined"),
         item["aggregatedOutput"],
         timingOf(item),
       );
     }
     case "fileChange": {
       const status = item["status"];
-      const done = status === "completed" || status === "failed" || status === "declined";
+      const done =
+        status === "completed" || status === "failed" || status === "declined";
       return toolPart(
         item.id,
         "fileChange",
-        { changes: item["changes"] ?? [], ...(review ? { review } : {}) },
+        { changes: item["changes"] ?? [] },
         done ? { status, output: item["output"] ?? "" } : undefined,
-        approval,
         status === "failed" || status === "declined",
         undefined,
         timingOf(item),
       );
     }
     case "webSearch":
-      return toolPart(item.id, "webSearch", { query: item["query"], action: item["action"] }, item["results"] !== undefined ? { results: item["results"] } : undefined, undefined, false, undefined, timingOf(item));
+      return toolPart(
+        item.id,
+        "webSearch",
+        { query: item["query"], action: item["action"] },
+        item["results"] !== undefined
+          ? { results: item["results"] }
+          : undefined,
+        false,
+        undefined,
+        timingOf(item),
+      );
     case "dynamicToolCall": {
       const status = item["status"];
       const done = status === "completed" || status === "failed";
@@ -393,8 +409,13 @@ function toPart(item: CodexItem, approval: PendingRequest | undefined, review?: 
         item.id,
         `${item["namespace"]}.${item["tool"]}`,
         (item["arguments"] as Record<string, unknown>) ?? {},
-        done ? { success: item["success"], contentItems: item["contentItems"] ?? [], durationMs: item["durationMs"] } : undefined,
-        undefined,
+        done
+          ? {
+              success: item["success"],
+              contentItems: item["contentItems"] ?? [],
+              durationMs: item["durationMs"],
+            }
+          : undefined,
         done && item["success"] === false,
         undefined,
         timingOf(item),
@@ -403,7 +424,7 @@ function toPart(item: CodexItem, approval: PendingRequest | undefined, review?: 
     case "contextCompaction":
       return { type: "data-compaction", data: { id: item.id } } as Part;
     default:
-      return { type: "data-codex", data: item } as Part;
+      return { type: "data-item", data: item } as Part;
   }
 }
 
@@ -412,12 +433,11 @@ function toolPart(
   toolName: string,
   args: Record<string, unknown>,
   result: unknown,
-  approval: PendingRequest | undefined,
   isError = false,
   artifact?: unknown,
   timing?: { startedAt: number; completedAt?: number },
 ): ToolPart {
-  const part: ToolPart = {
+  return {
     type: "tool-call",
     toolCallId: id,
     toolName,
@@ -427,74 +447,9 @@ function toolPart(
     ...(artifact !== undefined ? { artifact } : {}),
     ...(timing ? { timing } : {}),
   };
-  if (approval) {
-    return {
-      ...part,
-      approval: {
-        id: String(approval.id),
-        prompt: approvalPrompt(approval),
-        display: "select",
-        options: approvalOptions(approval),
-      },
-    };
-  }
-  return part;
 }
 
-// codex's reason when it gives one; the renderer shows the command / files itself
-const PERMISSIONS_REQUEST = "item/permissions/requestApproval";
-
-/** what a permission profile asks for, one line each: 写 /x · 读 /y · 联网 */
-export function permissionLines(perms: unknown): string[] {
-  if (!perms || typeof perms !== "object") return [];
-  const p = perms as { fileSystem?: { read?: string[] | null; write?: string[] | null } | null; network?: { enabled?: boolean | null } | null };
-  const lines: string[] = [];
-  for (const path of p.fileSystem?.write ?? []) lines.push(`写 ${path}`);
-  for (const path of p.fileSystem?.read ?? []) lines.push(`读 ${path}`);
-  if (p.network?.enabled) lines.push("联网");
-  return lines;
-}
-
-function approvalPrompt(request: PendingRequest): string {
-  const p = request.params;
-  const reason = typeof p["reason"] === "string" && p["reason"] ? p["reason"] : "";
-  if (request.method === PERMISSIONS_REQUEST) return reason || "agent 申请额外权限";
-  const extra = permissionLines(p["additionalPermissions"]);
-  if (extra.length) return `这条命令要额外权限：${extra.join("、")}${reason ? `——${reason}` : ""}`;
-  if (reason) return reason;
-  return request.method.includes("fileChange") ? "允许修改这些文件？" : "允许执行这条命令？";
-}
-
-type ApprovalOption = { id: ApprovalDecision; kind: (typeof APPROVAL_OPTIONS)[number]["kind"]; label: string };
-
-/**
- * The options as the request offers them. A permissions request is
- * granted for the turn or the session, or refused. A command approval lists
- * its `availableDecisions`: `acceptForSession` for a normal approval,
- * `acceptWithExecpolicyAmendment` (allow this command from now on) for an
- * escalation — both ride on our `accept_for_session`, the server sends
- * whichever the request listed; a request that lists nothing gets the usual three.
- */
-export function approvalOptions(request: PendingRequest): ApprovalOption[] {
-  if (request.method === PERMISSIONS_REQUEST) {
-    return [
-      { id: "accept", kind: "allow-once", label: "本轮允许" },
-      { id: "accept_for_session", kind: "allow-always", label: "本会话允许" },
-      { id: "decline", kind: "reject-once", label: "拒绝" },
-    ];
-  }
-  const offered = request.params["availableDecisions"];
-  if (!Array.isArray(offered) || offered.length === 0) return APPROVAL_OPTIONS.map((o) => ({ ...o }));
-  const names = offered.map((d) => (d && typeof d === "object" ? Object.keys(d as object)[0] : String(d)));
-  const options: ApprovalOption[] = [];
-  if (names.includes("accept")) options.push({ id: "accept", kind: "allow-once", label: "允许" });
-  if (names.includes("acceptForSession")) options.push({ id: "accept_for_session", kind: "allow-always", label: "本会话都允许" });
-  else if (names.includes("acceptWithExecpolicyAmendment")) options.push({ id: "accept_for_session", kind: "allow-always", label: "以后这条命令都允许" });
-  if (names.includes("decline") || names.includes("cancel")) options.push({ id: "decline", kind: "reject-once", label: "拒绝" });
-  return options.length ? options : APPROVAL_OPTIONS.map((o) => ({ ...o }));
-}
-
-/** The request id (as codex knows it) for an approval id we handed to assistant-ui. */
-export function requestIdFor(view: ThreadView, approvalId: string): unknown {
-  return view.requests.find((r) => sameId(r.id, approvalId))?.id ?? approvalId;
+/** What a request from a child asks of the person, for the parent's row (the ask's title). */
+export function requestTitle(request: PendingRequest): string {
+  return String(request.params["title"] ?? "");
 }
