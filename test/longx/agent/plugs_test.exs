@@ -150,6 +150,24 @@ defmodule Longx.Agent.PlugsTest do
     } do
       choices = [
         %{
+          slug: "flagship",
+          name: "旗舰",
+          provider: "",
+          levels: [],
+          default_level: nil,
+          default?: false,
+          alias: ["qwen3.8-max", "deepseek-flash"]
+        },
+        %{
+          slug: "advanced",
+          name: "高级",
+          provider: "",
+          levels: [],
+          default_level: nil,
+          default?: false,
+          alias: ["deepseek-flash"]
+        },
+        %{
           slug: "deepseek-flash",
           name: "DeepSeek Flash",
           provider: "DeepSeek",
@@ -175,12 +193,16 @@ defmodule Longx.Agent.PlugsTest do
 
       text = Enum.join(step.instructions, "\n")
       assert text =~ "# Models"
+      # tiers and aliases first, with their chain; a description should prefer them
+      assert text =~ "`flagship` (旗舰) → qwen3.8-max, then deepseek-flash"
+      assert text =~ "`advanced` (高级) → deepseek-flash"
+      assert text =~ "Prefer a tier or alias"
 
       assert text =~
                "`deepseek-flash` — DeepSeek Flash (DeepSeek); levels none, low, high; default level high; the default model"
 
       assert text =~ "`qwen3.8-max` — Qwen 3.8 Max (阿里云百炼)"
-      assert text =~ "model \"<slug>\""
+      assert text =~ "model \"<name>\""
 
       none = Local.call(Step.new(phase: :request, cwd: dir), Local.init(root: dir))
       refute Enum.join(none.instructions, "\n") =~ "# Models"

@@ -27,10 +27,12 @@ defmodule Longx.Agent.Model do
   alias Longx.AI.Gateway
   alias Longx.AI.Gateway.{Limiter, Log}
 
-  @default_retry_ms [1_000, 2_000, 4_000]
+  # a rate limit or a wobbly upstream: three waits, long enough for a limit window to pass
+  @default_retry_ms [5_000, 15_000, 30_000]
 
-  @typedoc "A request resolved and prepared (`prepare/1`), or why it could not be."
-  @type prepared :: {:ok, %{up: map, target: AI.Target.t(), log: term}} | {:error, String.t()}
+  @typedoc "A request resolved and prepared (`prepare/1`) — one entry per model of the chain — or why it could not be."
+  @type prepared ::
+          {:ok, [%{up: map, target: AI.Target.t(), request: map}]} | {:error, String.t()}
 
   @doc """
   Resolves the model and prepares the request — the part that reads the
@@ -40,10 +42,9 @@ defmodule Longx.Agent.Model do
   """
   @spec prepare(map) :: prepared
   def prepare(request) when is_map(request) do
-    with {:ok, target} <- AI.resolve_target(request["model"]),
-         {:ok, up} <- request |> custom_tools(target) |> Gateway.prepare(target) do
-      log = Log.begin(request, %{upstream_id: target.model, provider: target.provider_slug})
-      {:ok, %{up: up, target: target, log: log}}
+    with {:ok, targets} <- AI.resolve_targets(request["model"]),
+         {:ok, entries} <- prepare_each(targets, request) do
+      {:ok, entries}
     else
       {:error, reason} ->
         Log.begin(request, nil) |> Log.finish(%{status: nil, error: describe(reason)})
@@ -51,14 +52,48 @@ defmodule Longx.Agent.Model do
     end
   end
 
-  @doc "Streams a prepared request to `owner` (the task's body); a failed preparation is reported the same way."
+  defp prepare_each(targets, request) do
+    Enum.reduce_while(targets, {:ok, []}, fn target, {:ok, acc} ->
+      case request |> custom_tools(target) |> Gateway.prepare(target) do
+        {:ok, up} -> {:cont, {:ok, acc ++ [%{up: up, target: target, request: request}]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  @doc """
+  Streams a prepared request to `owner` (the task's body): the chain's first
+  model, then — when it is refused for its quota, its key or an upstream
+  that stays down — the next, telling the owner `{:fallback, from, to, why}`.
+  A failed preparation is reported the same way as a failed call.
+  """
   @spec run(prepared, pid, reference) :: :ok
-  def run({:ok, %{up: up, target: target, log: log}}, owner, ref) when is_pid(owner) do
+  def run({:ok, [first | rest]}, owner, ref) when is_pid(owner) do
     Process.monitor(owner)
-    attempt(up, target, owner, ref, log, retry_ms())
+    run_chain(first, rest, owner, ref)
   end
 
   def run({:error, message}, owner, ref) when is_pid(owner), do: failed(owner, ref, message)
+
+  defp run_chain(%{up: up, target: target, request: request}, rest, owner, ref) do
+    log = Log.begin(request, %{upstream_id: target.model, provider: target.provider_slug})
+
+    case attempt(up, target, owner, ref, log, retry_ms()) do
+      :ok ->
+        :ok
+
+      {:failed, message} ->
+        case rest do
+          [] ->
+            failed(owner, ref, message)
+
+          [next | others] ->
+            Logger.warning("agent model: #{message}; falling back to #{next.target.model}")
+            send(owner, {:model, ref, {:fallback, target.model, next.target.model, message}})
+            run_chain(next, others, owner, ref)
+        end
+    end
+  end
 
   @doc "`prepare/1` then `run/3`, in the calling process (tests, scripts)."
   @spec stream(map, pid, reference) :: :ok
@@ -81,6 +116,9 @@ defmodule Longx.Agent.Model do
   defp retry_ms,
     do: :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:retry_ms, @default_retry_ms)
 
+  # one model: `:ok` when its stream ended (well or with the provider's own
+  # failure relayed), `{:failed, message}` when the call never got going —
+  # what the chain's next model may pick up
   defp attempt(up, target, owner, ref, log, retries) do
     outcome =
       Limiter.run(up.provider_slug, up.max_concurrent, fn -> post(up, target, owner, ref) end)
@@ -88,6 +126,7 @@ defmodule Longx.Agent.Model do
     case {outcome, retries} do
       {{:ok, {:done, status}}, _} ->
         Log.finish(log, %{status: status, error: nil})
+        :ok
 
       {{:ok, {:retry, _status, message}}, [wait | rest]} ->
         Logger.info("agent model: #{message}; retrying in #{wait} ms")
@@ -95,8 +134,9 @@ defmodule Longx.Agent.Model do
         attempt(up, target, owner, ref, log, rest)
 
       {{:ok, {_retry_or_failed, status, message}}, _} ->
+        message = "#{target.model} (#{target.provider_slug}): #{message}"
         Log.finish(log, %{status: status, error: message})
-        failed(owner, ref, message)
+        {:failed, message}
 
       {:busy, [wait | rest]} ->
         Process.sleep(wait)
@@ -105,9 +145,13 @@ defmodule Longx.Agent.Model do
       {:busy, []} ->
         message = "provider #{up.provider_slug} is at its concurrency limit"
         Log.finish(log, %{status: 429, error: message})
-        failed(owner, ref, message)
+        {:failed, message}
     end
   end
+
+  # a 429 that is not a rate limit but a quota gone, an unpaid bill: no retry saves it
+  @quota ~r/quota|exhaust|insufficient|balance|credit|billing|payment|exceeded your/i
+  defp quota?(message), do: Regex.match?(@quota, message)
 
   defp post(up, target, owner, ref) do
     request =
@@ -127,9 +171,11 @@ defmodule Longx.Agent.Model do
       {:ok, %Req.Response{status: status} = resp} ->
         message = "upstream answered #{status}: #{resp |> collect() |> error_message()}"
 
-        if status == 429 or status >= 500,
-          do: {:retry, status, message},
-          else: {:failed, status, message}
+        cond do
+          status == 429 and quota?(message) -> {:failed, status, message}
+          status == 429 or status >= 500 -> {:retry, status, message}
+          true -> {:failed, status, message}
+        end
 
       {:error, %Req.TransportError{} = e} ->
         {:retry, nil, "upstream unreachable: #{Exception.message(e)}"}

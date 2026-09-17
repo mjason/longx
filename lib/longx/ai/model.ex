@@ -21,6 +21,13 @@ defmodule Longx.AI.Model do
     type_name "Model"
   end
 
+  @alias_fields [
+    name: [type: :string, allow_nil?: false],
+    label: [type: :string, allow_nil?: false],
+    models: [type: {:array, :string}, allow_nil?: false],
+    builtin: [type: :boolean, allow_nil?: false]
+  ]
+
   actions do
     defaults [:read, :destroy]
 
@@ -146,6 +153,37 @@ defmodule Longx.AI.Model do
       end
     end
 
+    # tiers and aliases (Longx.AI.Aliases): names that survive a migration
+    action :model_aliases, {:array, :map} do
+      constraints items: [fields: @alias_fields]
+
+      run fn _input, _ -> {:ok, Enum.map(Longx.AI.Aliases.all(), &alias_entry/1)} end
+    end
+
+    action :set_model_alias, :map do
+      constraints fields: @alias_fields
+      argument :name, :string, allow_nil?: false
+      argument :models, {:array, :string}, allow_nil?: false
+
+      run fn input, _ ->
+        case Longx.AI.Aliases.put(input.arguments.name, input.arguments.models) do
+          {:ok, entry} -> {:ok, alias_entry(entry)}
+          {:error, %{field: field, message: message}} -> alias_error(field, message)
+        end
+      end
+    end
+
+    action :delete_model_alias do
+      argument :name, :string, allow_nil?: false
+
+      run fn input, _ ->
+        case Longx.AI.Aliases.delete(input.arguments.name) do
+          :ok -> :ok
+          {:error, %{field: field, message: message}} -> alias_error(field, message)
+        end
+      end
+    end
+
     # Exactly one model is the default: clear the flag everywhere else first.
     update :clear_default do
       change set_attribute(:default, false)
@@ -230,5 +268,15 @@ defmodule Longx.AI.Model do
 
   identities do
     identity :unique_slug, [:slug]
+  end
+
+  defp alias_entry(%{name: name, label: label, models: models, builtin?: builtin?}),
+    do: %{name: name, label: label, models: models, builtin: builtin?}
+
+  defp alias_error(field, message) do
+    {:error,
+     Ash.Error.Invalid.exception(
+       errors: [%Ash.Error.Changes.InvalidArgument{field: field, message: message}]
+     )}
   end
 end

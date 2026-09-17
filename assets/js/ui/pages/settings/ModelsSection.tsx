@@ -9,6 +9,7 @@ import {
   MoreHorizontal,
   Plus,
   Star,
+  Trash2,
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -19,7 +20,9 @@ import {
   useModelRows,
   usePresets,
   useProviders,
+  useModelAliases,
   useReviewSettings,
+  type ModelAlias,
   useSearchProviders,
   type ModelInput,
   type ModelRow,
@@ -120,6 +123,7 @@ export function ModelsSection() {
           />
         ))}
       </section>
+      <AliasesCard models={models.data} />
       <ReviewModelCard models={models.data} />
       <SearchProviderCard />
       {editing?.kind === "choose" ? (
@@ -1161,6 +1165,83 @@ function LevelsEditor({
         </div>
       </div>
       <p className="text-muted-foreground text-xs">{s.reasoningLevelsHint}</p>
+    </div>
+  );
+}
+
+/**
+ * Tiers (flagship / advanced / standard) and the team's own aliases, each a
+ * chain of models: what a description names instead of a concrete slug, so
+ * a migration is a change here and nowhere else.
+ */
+function AliasesCard({ models }: { models: ModelRow[] }) {
+  const aliases = useModelAliases();
+  const actions = useAiActions();
+  const [adding, setAdding] = useState("");
+  if (!aliases.data) return null;
+  const slugs = models.filter((m) => m.slug).map((m) => m.slug!);
+  const save = (name: string, chain: string[]) =>
+    actions.setModelAlias.mutate({ name, models: chain.filter(Boolean) }, { onSuccess: () => toast.success(s.aliasSaved), onError: fail });
+  const add = () => {
+    const name = adding.trim();
+    if (!name || slugs.length === 0) return;
+    actions.setModelAlias.mutate({ name, models: [slugs[0]!] }, { onSuccess: () => { setAdding(""); toast.success(s.aliasSaved); }, onError: fail });
+  };
+  return (
+    <section className="flex flex-col gap-3" data-testid="model-aliases">
+      <h2 className="text-base font-medium">{s.aliases}</h2>
+      <p className="text-muted-foreground text-sm">{s.aliasesHint}</p>
+      <div className="flex flex-col gap-2">
+        {aliases.data.map((a) => (
+          <AliasRow key={a.name} alias={a} slugs={slugs} onSave={(chain) => save(a.name, chain)} onRemove={a.builtin ? undefined : () => actions.deleteModelAlias.mutate(a.name, { onError: fail })} />
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input value={adding} onChange={(e) => setAdding(e.target.value)} placeholder={s.aliasNamePlaceholder} aria-label={s.aliasAdd} className="w-40" />
+        <Button size="sm" variant="outline" onClick={add} disabled={!adding.trim() || actions.setModelAlias.isPending}>
+          <Plus className="size-4" /> {s.aliasAdd}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+const NONE = "__none";
+
+function AliasRow({ alias, slugs, onSave, onRemove }: { alias: ModelAlias; slugs: string[]; onSave: (chain: string[]) => void; onRemove?: () => void }) {
+  // the chain as three slots: the model used, then two fallbacks
+  const slots = [alias.models[0] ?? "", alias.models[1] ?? "", alias.models[2] ?? ""];
+  const set = (i: number, v: string) => {
+    const next = [...slots];
+    next[i] = v === NONE ? "" : v;
+    onSave(next);
+  };
+  return (
+    <div className="grid items-center gap-2 rounded-lg border p-3 sm:grid-cols-[8rem_1fr_1fr_1fr_auto]" data-testid={`alias-${alias.name}`}>
+      <div className="flex flex-col">
+        <span className="font-mono text-sm">{alias.name}</span>
+        {alias.label !== alias.name ? <span className="text-muted-foreground text-xs">{alias.label}</span> : null}
+      </div>
+      {slots.map((value, i) => (
+        <Select key={i} value={value || NONE} onValueChange={(v) => set(i, v)}>
+          <SelectTrigger className="w-full" aria-label={`${alias.name} ${i === 0 ? s.aliasPrimary : s.aliasFallback(i)}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>{i === 0 ? s.aliasNone : s.aliasNoFallback}</SelectItem>
+            {slugs.map((slug) => (
+              <SelectItem key={slug} value={slug} className="font-mono">{slug}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ))}
+      {onRemove ? (
+        <Button size="sm" variant="ghost" className="text-destructive" onClick={onRemove} aria-label={`${s.aliasRemove} ${alias.name}`}>
+          <Trash2 className="size-4" />
+        </Button>
+      ) : (
+        <span />
+      )}
     </div>
   );
 }

@@ -7,7 +7,7 @@ defmodule Longx.AI do
 
   use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
 
-  alias Longx.AI.{Model, Provider, SearchProvider, SearchTarget, Target}
+  alias Longx.AI.{Aliases, Model, Provider, SearchProvider, SearchTarget, Target}
 
   @doc """
   The Tavily row for codex's `web.run` search, the default when nothing is
@@ -52,6 +52,9 @@ defmodule Longx.AI do
       rpc_action :check_model, :check_model
       rpc_action :review_settings, :review_settings
       rpc_action :set_review_model, :set_review_model
+      rpc_action :model_aliases, :model_aliases
+      rpc_action :set_model_alias, :set_model_alias
+      rpc_action :delete_model_alias, :delete_model_alias
       rpc_action :delete_model, :delete
     end
 
@@ -281,11 +284,42 @@ defmodule Longx.AI do
   end
 
   def resolve_target(slug) when is_binary(slug) do
+    case Aliases.resolve(slug) do
+      {:ok, [first | _]} -> resolve_slug_target(first)
+      :error -> resolve_slug_target(slug)
+    end
+  end
+
+  defp resolve_slug_target(slug) do
     case get_model_by_slug(slug) do
       {:ok, %Model{} = model} -> target_for(model)
       {:error, _} -> {:error, {:unknown_model, slug}}
     end
   end
+
+  @doc """
+  Every target behind a name, in order: a tier or alias gives its chain
+  (the first to use, the rest fallbacks), a slug one, nil / `longx` the
+  default. A model whose provider has no key is left out of a chain; a
+  chain with nobody usable is its first model's error.
+  """
+  @spec resolve_targets(String.t() | nil) :: {:ok, [Target.t()]} | {:error, term}
+  def resolve_targets(name) when is_binary(name) and name != @placeholder_model do
+    case Aliases.resolve(name) do
+      {:ok, slugs} ->
+        results = Enum.map(slugs, &resolve_slug_target/1)
+
+        case for {:ok, target} <- results, do: target do
+          [] -> hd(results)
+          targets -> {:ok, targets}
+        end
+
+      :error ->
+        with {:ok, target} <- resolve_slug_target(name), do: {:ok, [target]}
+    end
+  end
+
+  def resolve_targets(_default), do: with({:ok, target} <- resolve_target(), do: {:ok, [target]})
 
   @doc """
   Every model as the native kernel's prompt names it: slug, name, provider,
@@ -303,17 +337,34 @@ defmodule Longx.AI do
           }
         ]
   def model_choices do
-    for %Model{slug: slug} = model <- list_models!(), is_binary(slug) do
-      %{
-        slug: slug,
-        name: model.name,
-        provider: (model.provider && model.provider.name) || "",
-        levels: model.reasoning_levels || [],
-        default_level: model.reasoning_effort,
-        default?: model.default
-      }
-    end
-    |> Enum.sort_by(&{!&1.default?, &1.provider, &1.slug})
+    aliases =
+      for %{name: name, label: label} <- Aliases.all(),
+          {:ok, chain} <- [Aliases.resolve(name)] do
+        %{
+          slug: name,
+          name: label,
+          provider: "",
+          levels: [],
+          default_level: nil,
+          default?: false,
+          alias: chain
+        }
+      end
+
+    models =
+      for %Model{slug: slug} = model <- list_models!(), is_binary(slug) do
+        %{
+          slug: slug,
+          name: model.name,
+          provider: (model.provider && model.provider.name) || "",
+          levels: model.reasoning_levels || [],
+          default_level: model.reasoning_effort,
+          default?: model.default
+        }
+      end
+      |> Enum.sort_by(&{!&1.default?, &1.provider, &1.slug})
+
+    aliases ++ models
   end
 
   @doc "The global default model's target."
@@ -428,9 +479,16 @@ defmodule Longx.AI do
   end
 
   defp fetch_model(slug) when is_binary(slug) do
-    case get_model_by_slug(slug) do
-      {:ok, %Model{} = model} -> {:ok, model, true}
-      {:error, _} -> {:error, {:unknown_model, slug}}
+    # a tier or alias answers as its first model, keeping its own name
+    case Aliases.resolve(slug) do
+      {:ok, [first | _]} ->
+        with {:ok, model, _} <- fetch_model(first), do: {:ok, %{model | slug: slug}, true}
+
+      :error ->
+        case get_model_by_slug(slug) do
+          {:ok, %Model{} = model} -> {:ok, model, true}
+          {:error, _} -> {:error, {:unknown_model, slug}}
+        end
     end
   end
 

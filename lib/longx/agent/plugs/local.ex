@@ -42,20 +42,40 @@ defmodule Longx.Agent.Plugs.Local do
   defp models_section([]), do: nil
 
   defp models_section(models) do
+    {aliases, concrete} = Enum.split_with(models, &Map.has_key?(&1, :alias))
+
+    alias_lines =
+      Enum.map_join(aliases, "\n", fn a ->
+        chain = Enum.join(a.alias, ", then ")
+        "- `#{a.slug}` (#{a.name}) → #{chain}"
+      end)
+
     lines =
-      Enum.map_join(models, "\n", fn m ->
+      Enum.map_join(concrete, "\n", fn m ->
         levels = if m.levels == [], do: "", else: "; levels " <> Enum.join(m.levels, ", ")
         level = if m.default_level, do: "; default level #{m.default_level}", else: ""
         default = if m.default?, do: "; the default model", else: ""
         "- `#{m.slug}` — #{m.name} (#{m.provider})#{levels}#{level}#{default}"
       end)
 
+    tiers =
+      if aliases == [],
+        do: "",
+        else: """
+        **Tiers and aliases** — names the person maps to models in the settings; each is a chain (the first is used, the rest are fallbacks when it fails). Prefer a tier or alias in a description: it survives a change of provider, a concrete slug does not.
+
+        #{alias_lines}
+
+        **Models**
+
+        """
+
     """
     # Models
 
-    These are the models Longx can reach — the only slugs a description may name (`model "<slug>", effort: "<level>"`, for an agent or a role); anything else fails to resolve. The person's own choice for a turn overrides the description.
+    These are the names Longx can resolve — the only ones a description may use (`model "<name>", effort: "<level>"`, for an agent or a role); anything else fails to resolve. The person's own choice for a turn overrides the description.
 
-    #{lines}
+    #{tiers}#{lines}
     """
   end
 end

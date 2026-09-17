@@ -617,7 +617,25 @@ React Native client planned on the same core code.
     read per step like `trust:`; `assigns.models`). A description naming a slug Longx
     does not have (a model wrote `model "qwen-max"` and the next turn failed with
     "unknown model") is a **notice** naming the known slugs, and the default model runs
-    (`description_model/3`); the person's own choice for a turn always stands. It is what the agent is told
+    (`description_model/3`); the person's own choice for a turn always stands — and the
+    composer **shows the description's model as the one in force** on a native thread
+    that picked none (`definitionModel` in `useCodexRuntime`, `TurnBar`'s `current`): a
+    turn went to Bailian's qwen while the rail said deepseek-flash, and the person
+    thought the DeepSeek quota had failed. **Tiers and aliases — `Longx.AI.Aliases`**:
+    `flagship` / `advanced` / `standard` (旗舰 / 高级 / 普通, always there; unmapped = the
+    default model) and any alias a team agrees on (青龙 …), each a **chain** of slugs
+    (one `Longx.System.Setting`, `model_aliases`; `put/2` validated — a word, not a
+    slug, models known; a tier is emptied, never deleted). `Longx.AI` sees through them:
+    `resolve_target/1` the first model, `resolve_targets/1` the whole chain (models
+    whose provider has no key skipped), `fetch_model/1` the first model under the
+    alias's own name (so `thread_options`, `check_effort`, the Thread row's `model_slug`
+    all take a tier), `model_choices/0` lists them first with `alias: chain`; the
+    prompt's `# Models` names tiers and aliases before the concrete models and tells
+    the agent to prefer them ("survives a change of provider"). The composer offers
+    them as options (a section of their own, the shell pick's too); Settings → 模型
+    has the 档位与别名 card (RPC `model_aliases` / `set_model_alias` /
+    `delete_model_alias` on `Longx.AI.Model`: three slots per name — the model used, two
+    fallbacks — a tier without a delete, an alias added by name). It is what the agent is told
     about its own definition (write to `local/`, the person promotes; a custom tool is
     two files — `local/plugs/<name>.exs` + `plug <Module>` in `local/agent.exs`, live at
     the next step, a broken file back as a notice), with the compact API reference
@@ -700,7 +718,15 @@ React Native client planned on the same core code.
     request: a task killed mid-query (an interrupt, a parent stopping, a test's sweep)
     took the shared SQLite connection down with it and the next write anywhere said
     "Database busy" — a flake that only showed with several agents per test.
-    `stream/3` = both, for tests. Preparation is reasoning items sanitised per
+    `stream/3` = both, for tests. `prepare/1` resolves the request's name to the
+    **chain** (`AI.resolve_targets/1`) and prepares every model of it; `run/3` streams the
+    first and, when it never got going — a 429 that is a **quota gone** (`quota|exhaust|
+    insufficient|balance|credit|billing…`, no retry: a retry never brings a quota back),
+    a 4xx, retries spent on a 5xx / real 429 (`[5, 15, 30]` s now) — moves to the next,
+    telling the kernel `{:fallback, from, to, why}`, which the kernel shows as codex's
+    `model/rerouted` (the client's toast); the last model's failure names the model and
+    provider (`qwen3.8-max (bailian-token-plan-team): upstream answered 429: …`).
+    Preparation is reasoning items sanitised per
     provider, the output cap — the same path codex's requests take —, the `custom` tool
     swap for `:openai`; then a `Limiter` slot, a `Gateway.Log` entry (Settings → 请求记录 shows
     native requests too, `request_kind` `agent` / `compaction`), `Longx.Agent.SSE` →

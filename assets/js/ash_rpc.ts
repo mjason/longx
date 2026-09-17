@@ -434,6 +434,74 @@ export async function validateDeleteModel(
 }
 
 
+export type DeleteModelAliasInput = {
+  name: string;
+};
+
+export type InferDeleteModelAliasResult = {};
+
+export type DeleteModelAliasResult = | { success: true; data: InferDeleteModelAliasResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Model
+ *
+ * @ashActionType :action
+ */
+export async function deleteModelAlias(
+  config: {
+  tenant?: string;
+  input: DeleteModelAliasInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DeleteModelAliasResult> {
+  const payload = {
+    action: "delete_model_alias",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<DeleteModelAliasResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Model
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateDeleteModelAlias(
+  config: {
+  tenant?: string;
+  input: DeleteModelAliasInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "delete_model_alias",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type MakeDefaultModelFields = UnifiedFieldSelection<ModelResourceSchema>[];
 
 export type InferMakeDefaultModelResult<
@@ -495,6 +563,72 @@ export async function validateMakeDefaultModel(
     action: "make_default_model",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     identity: config.identity
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ModelAliasesFields = UnifiedFieldSelection<{name: string, label: string, models: Array<string>, builtin: boolean, __type: "TypedMap", __primitiveFields: "name" | "label" | "models" | "builtin"}>[];
+
+export type InferModelAliasesResult<
+  Fields extends ModelAliasesFields | undefined,
+> = Array<InferResult<{name: string, label: string, models: Array<string>, builtin: boolean, __type: "TypedMap", __primitiveFields: "name" | "label" | "models" | "builtin"}, Fields>>;
+
+export type ModelAliasesResult<Fields extends ModelAliasesFields | undefined = undefined> = | { success: true; data: InferModelAliasesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Model
+ *
+ * @ashActionType :action
+ */
+export async function modelAliases<Fields extends ModelAliasesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ModelAliasesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "model_aliases",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ModelAliasesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Model
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateModelAliases(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "model_aliases",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
   };
 
   return executeValidationRpcRequest<ValidationResult>(
@@ -664,6 +798,81 @@ export async function validateReviewSettings(
   const payload = {
     action: "review_settings",
     ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetModelAliasInput = {
+  name: string;
+  models: Array<string>;
+};
+
+export type SetModelAliasFields = UnifiedFieldSelection<{name: string, label: string, models: Array<string>, builtin: boolean, __type: "TypedMap", __primitiveFields: "name" | "label" | "models" | "builtin"}>[];
+
+export type InferSetModelAliasResult<
+  Fields extends SetModelAliasFields | undefined,
+> = InferResult<{name: string, label: string, models: Array<string>, builtin: boolean, __type: "TypedMap", __primitiveFields: "name" | "label" | "models" | "builtin"}, Fields>;
+
+export type SetModelAliasResult<Fields extends SetModelAliasFields | undefined = undefined> = | { success: true; data: InferSetModelAliasResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Model
+ *
+ * @ashActionType :action
+ */
+export async function setModelAlias<Fields extends SetModelAliasFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SetModelAliasInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetModelAliasResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_model_alias",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetModelAliasResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Model
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetModelAlias(
+  config: {
+  tenant?: string;
+  input: SetModelAliasInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_model_alias",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
   };
 
   return executeValidationRpcRequest<ValidationResult>(

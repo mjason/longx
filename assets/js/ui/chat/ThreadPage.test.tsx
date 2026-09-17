@@ -9,7 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
-import { channel, failed, model, ok, project, thread } from "@/ui/test-mocks";
+import { agentDefinitionData, channel, failed, model, ok, project, thread } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("sonner", async (importOriginal) => {
@@ -21,6 +21,7 @@ vi.mock("@/core/socket", async () =>
   (await import("@/ui/test-mocks")).socketMock(),
 );
 import {
+  agentDefinition,
   answerRequest,
   clearGoal,
   getProject,
@@ -103,7 +104,7 @@ describe("ThreadPage", () => {
     const user = userEvent.setup();
     await open();
     await user.click(screen.getByTestId("model-picker"));
-    await user.click(await screen.findByRole("option", { name: /glm-5/ }));
+    await user.click(await screen.findByRole("option", { name: /^glm-5/ }));
     await user.type(
       screen.getByRole("textbox", { name: "随心输入" }),
       "next step{Enter}",
@@ -141,7 +142,8 @@ describe("ThreadPage", () => {
       const pick = posts.find((p) => p["type"] === "pick") as { id: string; title: string; sections: { label: string; options: { id: string }[] }[]; selected: string };
       expect(pick.title).toBe("模型");
       expect(pick.selected).toBe("deepseek-flash");
-      expect(pick.sections.flatMap((s) => s.options.map((o) => o.id))).toEqual(["deepseek-flash", "glm-5"]);
+      // the tiers and aliases first (their own section), then the models by provider
+      expect(pick.sections.flatMap((s) => s.options.map((o) => o.id))).toEqual(["flagship", "advanced", "standard", "deepseek-flash", "glm-5"]);
       window.LongxShell!.picked(pick.id, "glm-5");
       // the model has levels: a second list, the model's default preselected
       await waitFor(() => expect(posts.filter((p) => p["type"] === "pick")).toHaveLength(2));
@@ -220,7 +222,7 @@ describe("ThreadPage", () => {
     const { router } = renderAt("/p/app-1");
     await screen.findByText("让 agent 在这个项目里干活");
     await user.click(screen.getByTestId("model-picker"));
-    await user.click(await screen.findByRole("option", { name: /glm-5/ }));
+    await user.click(await screen.findByRole("option", { name: /^glm-5/ }));
     // switching models lands on the new model's default level
     expect(screen.getByTestId("model-picker")).toHaveTextContent(/glm-5\s*high/);
     await user.click(screen.getByTestId("model-picker"));
@@ -1149,6 +1151,27 @@ describe("ThreadPage", () => {
       expect(screen.queryByTestId("mode-picker")).not.toBeInTheDocument();
     } finally {
       vi.mocked(getProject).mockResolvedValue(ok(project(1)) as never);
+    }
+  });
+
+  test("native: the picker shows the model the project's description names, and a tier is a choice like a model", async () => {
+    vi.mocked(getProject).mockResolvedValue(ok({ ...project(1), engine: "native" }) as never);
+    vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData({ present: true, model: "glm-5", effort: "high" })) as never);
+    try {
+      const user = userEvent.setup();
+      await open();
+      // the thread picked nothing: the turn runs on the description's model, so that is what the rail says
+      await waitFor(() => expect(screen.getByTestId("model-picker")).toHaveTextContent("glm-5"));
+      expect(screen.getByTestId("model-picker")).toHaveTextContent("high");
+      await user.click(screen.getByTestId("model-picker"));
+      await user.click(await screen.findByRole("option", { name: /flagship/ }));
+      await user.type(screen.getByRole("textbox", { name: "随心输入" }), "go{Enter}");
+      await waitFor(() =>
+        expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ text: "go", model: "flagship" }) })),
+      );
+    } finally {
+      vi.mocked(getProject).mockResolvedValue(ok(project(1)) as never);
+      vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData()) as never);
     }
   });
 

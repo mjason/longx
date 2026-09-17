@@ -20,6 +20,9 @@ import {
   listSearchProviders,
   reviewSettings,
   setReviewModel,
+  modelAliases,
+  setModelAlias,
+  deleteModelAlias,
   listTools,
   makeDefaultModel,
   memoryDeleteNote,
@@ -50,7 +53,18 @@ export const aiKeys = {
   tools: ["ai", "tools"] as const,
   presets: ["ai", "presets"] as const,
   review: ["ai", "review"] as const,
+  aliases: ["ai", "aliases"] as const,
 };
+
+/** a tier (flagship / advanced / standard, always there) or a team's alias: a chain of model slugs, the first used, the rest fallbacks */
+export type ModelAlias = { name: string; label: string; models: string[]; builtin: boolean };
+
+export function useModelAliases() {
+  return useQuery({
+    queryKey: aiKeys.aliases,
+    queryFn: async () => unwrap(await modelAliases({ fields: ["name", "label", "models", "builtin"] })) as ModelAlias[],
+  });
+}
 
 /** a model the provider's own list names (GET /models), normalised by the server */
 export type DiscoveredModel = {
@@ -342,6 +356,10 @@ export function useAiActions() {
     setReviewModel: useAiWrite(async (input: ReviewSettings) =>
       unwrap(await setReviewModel({ input })),
     ),
+    setModelAlias: useAiWrite(async (input: { name: string; models: string[] }) =>
+      unwrap(await setModelAlias({ fields: ["name", "label", "models", "builtin"], input })),
+    ),
+    deleteModelAlias: useAiWrite(async (name: string) => unwrap(await deleteModelAlias({ input: { name } }))),
     setSearchKey: useAiWrite(
       async ({ id, apiKey }: { id: string; apiKey: string }) =>
         unwrap(

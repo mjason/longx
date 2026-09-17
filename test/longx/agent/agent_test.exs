@@ -737,6 +737,40 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "low, high"
   end
 
+  test "a model chain: the first model's quota is gone, the turn goes on with the next and the view says so",
+       %{bypass: bypass, dir: dir, model: model} do
+    second =
+      AI.create_model!(%{
+        name: "Second",
+        upstream_id: "real-model-2",
+        slug: "second-#{System.unique_integer([:positive])}",
+        provider_id: model.provider_id
+      })
+
+    {:ok, _} = Longx.AI.Aliases.put("flagship", [model.slug, second.slug])
+    id = agent!("chain-#{System.unique_integer([:positive])}", dir, pipeline: EffectsPipeline)
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      {body, conn} = body!(conn)
+
+      case body["model"] do
+        "real-model" ->
+          Plug.Conn.send_resp(conn, 429, ~s({"error":{"message":"quota exhausted"}}))
+
+        "real-model-2" ->
+          sse(conn, ResponsesFixture.assistant_message("served"))
+      end
+    end)
+
+    {:ok, _} = Agent.send(id, "hi", model: "flagship")
+
+    assert %{"fromModel" => "real-model", "toModel" => "real-model-2", "reason" => reason} =
+             await("model/rerouted")
+
+    assert reason =~ "quota"
+    assert %{"status" => "completed"} = await_turn_end()
+  end
+
   defmodule CompactingPipeline do
     use Longx.Agent.Pipeline
     plug Longx.Agent.Plugs.Shell

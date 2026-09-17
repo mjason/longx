@@ -12,7 +12,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { archiveThread, deleteThread, renameThread, steerTurn } from "@/ash_rpc";
-import { queryKeys, unwrap, useSkills, useStartThread, useThread, useThreads } from "@/core/projects";
+import { queryKeys, unwrap, useAgentDefinition, useSkills, useStartThread, useThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
@@ -76,6 +76,8 @@ export type CodexRuntime = {
   disabledReason: string | null;
   /** the project's default model id, for the rail to name what a new chat starts on */
   defaultModelId: string | null;
+  /** the native kernel: the model (and level) the project's description names — what a turn runs on when nobody picks one */
+  definitionModel: { model: string | null; effort: string | null } | null;
   model: string | null;
   setModel: (slug: string | null) => void;
   /** the reasoning level for the next turn (null = the thread's current, or the model's default) */
@@ -122,6 +124,12 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
   // a sub-agent's row is not in the project's list: fetched by id for its own page
   const single = useThread(threadId !== undefined && !threads.isPending && !listed ? threadId : undefined);
   const thread = listed ?? (single.data as ThreadRow | undefined);
+  // the native kernel's description may name a model: the turn runs on it unless the person picks one
+  const definition = useAgentDefinition(engine === "native" ? projectId : undefined);
+  const definitionModel = useMemo(
+    () => (engine === "native" && definition.data ? { model: definition.data.model, effort: definition.data.effort } : null),
+    [engine, definition.data],
+  );
   const { view, ready, error, refetch } = useThreadView(thread?.codexThreadId, onSignal);
   // sub-agents work on their own codex threads; the parent's activities name
   // them, and a child's activities name its own children
@@ -383,6 +391,7 @@ export function useCodexRuntime(opts: CodexRuntimeOptions): CodexRuntime {
     state,
     disabledReason,
     defaultModelId,
+    definitionModel,
     model,
     setModel,
     effort,

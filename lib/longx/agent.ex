@@ -903,7 +903,17 @@ defmodule Longx.Agent do
 
   ## Model events
 
+  # the chain moved on to its next model (a quota gone, a key refused, an
+  # upstream down): the person hears it the way codex's reroute is heard
   @impl true
+  def handle_info(
+        {:model, ref, {:fallback, from, to, reason}},
+        %State{model_task: %{ref: ref}} = state
+      ) do
+    emit(state, "model/rerouted", %{"fromModel" => from, "toModel" => to, "reason" => reason})
+    {:noreply, state}
+  end
+
   def handle_info(
         {:model, ref, event},
         %State{phase: :compacting, model_task: %{ref: ref}} = state

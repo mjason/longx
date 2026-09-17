@@ -2,6 +2,7 @@ import { Loader2, ShieldAlert } from "lucide-react";
 import { useMemo } from "react";
 import { contextUsage } from "@/core/chat/thread";
 import { useModels } from "@/core/projects";
+import { useModelAliases } from "@/core/ai";
 import { ContextDisplay } from "@/ui/components/assistant-ui/elements/context-display";
 import {
   ModelSelectorContent,
@@ -64,33 +65,51 @@ export function ComposerLeading() {
  * context registration.
  */
 export function ComposerTrailing() {
-  const { thread, view, model, setModel, effort, setEffort, defaultModelId } =
+  const { thread, view, model, setModel, effort, setEffort, defaultModelId, definitionModel } =
     useChat();
   const models = useModels();
+  const aliases = useModelAliases();
   const rows = useMemo(
     () => (models.data ?? []).filter((m) => m.slug),
     [models.data],
   );
-  // the thread's model (a new chat: the project's default, else the global one), unless another was picked
+  // the model in force when nobody picks one: the thread's own; on the native kernel the
+  // description's (it overrides the default silently otherwise — a turn went to a provider
+  // the rail never named); a new chat the project's default, else the global one
+  const described = definitionModel?.model ?? null;
   const current = thread
-    ? (thread.modelSlug ?? rows.find((m) => m.default)?.slug ?? null)
-    : (defaultModelId && rows.find((m) => m.id === defaultModelId)?.slug) ||
+    ? (thread.modelSlug ?? described ?? rows.find((m) => m.default)?.slug ?? null)
+    : described ||
+      (defaultModelId && rows.find((m) => m.id === defaultModelId)?.slug) ||
       rows.find((m) => m.default)?.slug ||
       null;
   const selected = model ?? current ?? undefined;
-  const row = rows.find((m) => m.slug === selected);
-  // the level in force: the thread's own while it stays on its model, else the model's default
+  // a tier or alias answers with its first model's levels
+  const aliasRow = aliases.data?.find((a) => a.name === selected);
+  const row = rows.find((m) => m.slug === (aliasRow ? aliasRow.models[0] : selected));
+  // the level in force: the thread's own while it stays on its model, the description's, else the model's default
   const inForce =
     (thread && (model === null || model === thread.modelSlug)
       ? thread.reasoningEffort
       : null) ??
+    (model === null && described && described === current ? definitionModel?.effort : null) ??
     row?.reasoningEffort ??
     undefined;
   const shownEffort = effort ?? inForce;
 
   const options = useMemo<ModelOption[]>(
-    () =>
-      rows.map((m) => ({
+    () => [
+      ...(aliases.data ?? []).map((a) => ({
+        id: a.name,
+        name: a.label === a.name ? a.name : `${a.name}（${a.label}）`,
+        description: a.models.length ? a.models.join(" → ") : t.ai.aliasNone,
+        provider: t.ai.aliases,
+        efforts: (rows.find((m) => m.slug === a.models[0])?.reasoningLevels ?? []).map((level) => ({
+          id: level,
+          name: effortLabel(level),
+        })),
+      })),
+      ...rows.map((m) => ({
         id: m.slug!,
         name: m.slug!,
         description: `${providerName(m.provider)} · ${formatWindow(m.contextWindow)}`,
@@ -104,16 +123,19 @@ export function ComposerTrailing() {
             }
           : {}),
       })),
-    [rows],
+    ],
+    [rows, aliases.data],
   );
   const groups = useMemo(() => {
+    const aliasCount = aliases.data?.length ?? 0;
     const byProvider = new Map<string, ModelOption[]>();
     rows.forEach((m, i) => {
       const key = providerName(m.provider);
-      byProvider.set(key, [...(byProvider.get(key) ?? []), options[i]!]);
+      byProvider.set(key, [...(byProvider.get(key) ?? []), options[aliasCount + i]!]);
     });
-    return [...byProvider.entries()];
-  }, [rows, options]);
+    const tiers: [string, ModelOption[]][] = aliasCount ? [[t.ai.aliases, options.slice(0, aliasCount)]] : [];
+    return [...tiers, ...byProvider.entries()];
+  }, [rows, options, aliases.data]);
   // one object per token-usage update: the ring stores what it is given and
   // re-syncs (a render-phase setState) whenever the identity changes
   const usage = useMemo(() => contextUsage(view), [view.tokenUsage]); // eslint-disable-line react-hooks/exhaustive-deps

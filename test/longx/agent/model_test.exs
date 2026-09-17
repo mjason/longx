@@ -82,6 +82,52 @@ defmodule Longx.Agent.ModelTest do
              Longx.AI.Gateway.Log.recent(5)
   end
 
+  test "a quota exhaustion is final at once and names the model; a chain falls back to its next model",
+       %{bypass: bypass, model: model} do
+    Bypass.expect_once(bypass, "POST", "/v1/responses", fn conn ->
+      Plug.Conn.send_resp(
+        conn,
+        429,
+        ~s({"error":{"message":"Your token-plan quota has been exhausted."}})
+      )
+    end)
+
+    ref = make_ref()
+    assert :ok = Model.stream(@request, self(), ref)
+    assert_receive {:model, ^ref, {:failed, message}}, 2_000
+    assert message =~ "quota has been exhausted"
+    assert message =~ "real-model"
+    assert message =~ "upstream-"
+
+    # an alias with two models: the first one's quota is gone, the second serves
+    second =
+      Longx.AI.create_model!(%{
+        name: "Second",
+        upstream_id: "real-model-2",
+        slug: "second-#{System.unique_integer([:positive])}",
+        provider_id: model.provider_id,
+        context_window: 32_000
+      })
+
+    {:ok, _} = Longx.AI.Aliases.put("flagship", [model.slug, second.slug])
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      case body!(conn)["model"] do
+        "real-model" ->
+          Plug.Conn.send_resp(conn, 429, ~s({"error":{"message":"quota exhausted"}}))
+
+        "real-model-2" ->
+          sse(conn, ResponsesFixture.assistant_message("second serves"))
+      end
+    end)
+
+    ref2 = make_ref()
+    assert :ok = Model.stream(%{@request | "model" => "flagship"}, self(), ref2)
+    assert_receive {:model, ^ref2, {:fallback, "real-model", "real-model-2", reason}}, 5_000
+    assert reason =~ "quota"
+    assert_receive {:model, ^ref2, {:completed, _, %{context_window: 32_000}}}, 5_000
+  end
+
   test "a 5xx or a 429 is retried; a 4xx is final", %{bypass: bypass} do
     {:ok, counter} = Agent.start_link(fn -> 0 end)
 

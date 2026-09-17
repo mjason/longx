@@ -813,6 +813,17 @@ export const t = {
     reviewSameModel: "和会话相同",
     reviewEffort: "思考档位",
     reviewEffortAuto: "自动（有 low 就用 low，否则用模型默认）",
+    aliases: "档位与别名",
+    aliasesHint:
+      "描述、子 agent、对话框里都可以写档位或别名而不是具体模型：换 provider 时只改这里的映射，.longx 一个字不用动。每个名字是一条链：第一个是用的，后面是它不可用（配额用完、密钥被拒、上游挂了）时的备选。三档没映射时等于默认模型。",
+    aliasPrimary: "用的模型",
+    aliasFallback: (n: number) => `备选 ${n}`,
+    aliasNone: "（未映射：默认模型）",
+    aliasNoFallback: "（无）",
+    aliasAdd: "添加别名",
+    aliasNamePlaceholder: "青龙",
+    aliasRemove: "删除",
+    aliasSaved: "已保存",
     search: "联网搜索",
     searchHint:
       "codex 的 web.run 搜索由 Longx 代为执行；需要一个搜索服务的密钥。",

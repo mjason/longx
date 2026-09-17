@@ -15,6 +15,7 @@ import {
   knowledgeDelete,
   knowledgeWrite,
   setBrowserPrivateNetwork,
+  setModelAlias,
   applyPreset,
   checkModel,
   createModel,
@@ -344,6 +345,28 @@ describe("SettingsPage", () => {
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(dialog).toHaveTextContent("401 bad key"));
     vi.mocked(discoverModels).mockResolvedValue(ok({ ok: true, error: null, models: [] }) as never);
+  });
+
+  test("models: tiers and aliases — a chain per name, mapped in place; an alias can be added and removed", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/models");
+    const card = await screen.findByTestId("model-aliases");
+    const flagship = within(card).getByTestId("alias-flagship");
+    expect(within(flagship).getByRole("combobox", { name: "flagship 用的模型" })).toHaveTextContent("glm-5");
+    expect(within(flagship).getByRole("combobox", { name: "flagship 备选 1" })).toHaveTextContent("deepseek-flash");
+    expect(within(within(card).getByTestId("alias-advanced")).getByRole("combobox", { name: "advanced 用的模型" })).toHaveTextContent("默认模型");
+    // a tier has no delete; a fallback picked is saved as the whole chain
+    expect(within(flagship).queryByRole("button", { name: /删除/ })).not.toBeInTheDocument();
+    await user.click(within(flagship).getByRole("combobox", { name: "flagship 备选 2" }));
+    await user.click(await screen.findByRole("option", { name: "deepseek-flash" }));
+    await waitFor(() =>
+      expect(setModelAlias).toHaveBeenCalledWith(expect.objectContaining({ input: { name: "flagship", models: ["glm-5", "deepseek-flash", "deepseek-flash"] } })),
+    );
+    // a new alias starts on the first model
+    await user.type(within(card).getByRole("textbox", { name: "添加别名" }), "青龙");
+    await user.click(within(card).getByRole("button", { name: /添加别名/ }));
+    await waitFor(() => expect(setModelAlias).toHaveBeenLastCalledWith(expect.objectContaining({ input: { name: "青龙", models: ["deepseek-flash"] } })));
   });
 
   test("models: the reviewer model — a model and one of its levels, or the thread's own", async () => {
