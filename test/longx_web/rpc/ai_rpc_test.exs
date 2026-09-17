@@ -1,7 +1,7 @@
 defmodule LongxWeb.AiRpcTest do
   @moduledoc """
   The settings page's half of the RPC surface: providers and their models,
-  the search provider, the tool switches, the sandbox probe.
+  the search provider.
   """
   use LongxWeb.ConnCase, async: false
 
@@ -223,55 +223,6 @@ defmodule LongxWeb.AiRpcTest do
              })
   end
 
-  test "the reviewer model: read, set with a level the model offers (errors on the argument), cleared",
-       %{conn: conn} do
-    %{"success" => true, "data" => %{"id" => provider}} =
-      rpc(conn, "create_provider", %{
-        "fields" => ["id"],
-        "input" => %{
-          "name" => "DS",
-          "slug" => "ds",
-          "baseUrl" => "https://api.deepseek.com/v1",
-          "apiKey" => "k"
-        }
-      })
-
-    %{"success" => true} =
-      rpc(conn, "create_model", %{
-        "fields" => ["id"],
-        "input" => %{
-          "name" => "Cheap",
-          "upstreamId" => "cheap",
-          "providerId" => provider,
-          "reasoningLevels" => ["low", "high"]
-        }
-      })
-
-    assert %{"success" => true, "data" => %{"modelSlug" => nil, "effort" => nil}} =
-             rpc(conn, "review_settings", %{"fields" => ["modelSlug", "effort"]})
-
-    assert %{"success" => true} =
-             rpc(conn, "set_review_model", %{
-               "input" => %{"modelSlug" => "cheap", "effort" => "high"}
-             })
-
-    assert %{"success" => true, "data" => %{"modelSlug" => "cheap", "effort" => "high"}} =
-             rpc(conn, "review_settings", %{"fields" => ["modelSlug", "effort"]})
-
-    assert %{"success" => false, "errors" => [%{"fields" => ["effort"]}]} =
-             rpc(conn, "set_review_model", %{
-               "input" => %{"modelSlug" => "cheap", "effort" => "max"}
-             })
-
-    assert %{"success" => false, "errors" => [%{"fields" => ["modelSlug"]}]} =
-             rpc(conn, "set_review_model", %{"input" => %{"modelSlug" => "nope"}})
-
-    assert %{"success" => true} = rpc(conn, "set_review_model", %{"input" => %{}})
-
-    assert %{"success" => true, "data" => %{"modelSlug" => nil}} =
-             rpc(conn, "review_settings", %{"fields" => ["modelSlug"]})
-  end
-
   test "check_model answers with ok / latency or the error, never a failure", %{conn: conn} do
     %{"success" => true, "data" => %{"id" => provider}} =
       rpc(conn, "create_provider", %{
@@ -373,52 +324,5 @@ defmodule LongxWeb.AiRpcTest do
                "identity" => id,
                "input" => %{"apiKey" => "tvly-x"}
              })
-  end
-
-  test "tools: the catalogue with its switches", %{conn: conn} do
-    assert %{"success" => true, "data" => tools} =
-             rpc(conn, "list_tools", %{
-               "fields" => ["id", "qualifiedName", "description", "enabled"]
-             })
-
-    echo = Enum.find(tools, &(&1["qualifiedName"] == "builtin.echo"))
-    assert is_binary(echo["description"])
-
-    assert %{"success" => true, "data" => %{"enabled" => true}} =
-             rpc(conn, "set_tool_enabled", %{
-               "fields" => ["enabled"],
-               "identity" => echo["id"],
-               "input" => %{"enabled" => true}
-             })
-  end
-
-  test "sandbox: the cached report, and a fresh probe on request", %{conn: conn} do
-    assert %{
-             "success" => true,
-             "data" => %{
-               "status" => status,
-               "checkedAt" => at,
-               "bwrap" => bwrap,
-               "presets" => presets,
-               "platform" => platform,
-               "home" => home
-             }
-           } =
-             rpc(conn, "probe_sandbox", %{
-               "fields" => ~w(status reason bwrap gpu presets platform home checkedAt)
-             })
-
-    assert platform in ["linux", "darwin", "windows"]
-    assert is_binary(home)
-    # what this machine could let into the sandbox (id, label, paths, danger), maybe nothing
-    assert is_list(presets)
-
-    for preset <- presets,
-        do: assert(%{"id" => _, "label" => _, "paths" => [_ | _], "danger" => _} = preset)
-
-    assert status in ["ok", "no_net_isolation", "unavailable"]
-    # the bwrap codex will run: the system one when installed, else the bundled
-    assert is_nil(bwrap) or String.ends_with?(bwrap, "bwrap")
-    assert is_binary(at)
   end
 end

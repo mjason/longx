@@ -1,9 +1,9 @@
-defmodule Longx.Codex.ThreadState do
+defmodule Longx.Agent.ThreadState do
   @moduledoc """
   The single writer for one codex thread's materialised state.
 
   Every event for the thread passes through this process so it can (1) fold
-  it into the ETS-backed `Longx.Codex.ThreadState.Store`, (2) stamp it with a
+  it into the ETS-backed `Longx.Agent.ThreadState.Store`, (2) stamp it with a
   strictly increasing `seq`, and (3) broadcast `{:codex, seq, method, params}`
   on `"codex:thread:<id>"`. Reads (`snapshot/1`) go straight to ETS and work
   whether or not this process is alive; the sequence continues where it left
@@ -22,13 +22,13 @@ defmodule Longx.Codex.ThreadState do
 
   use GenServer
 
-  alias Longx.Codex.ThreadState.Store
+  alias Longx.Agent.ThreadState.Store
 
   require Logger
   alias Phoenix.PubSub
 
-  @registry Longx.Codex.ThreadRegistry
-  @supervisor Longx.Codex.ThreadState.Supervisor
+  @registry Longx.Agent.ThreadRegistry
+  @supervisor Longx.Agent.ThreadState.Supervisor
   @pubsub Longx.PubSub
 
   @type snapshot :: %{
@@ -127,8 +127,8 @@ defmodule Longx.Codex.ThreadState do
   # notification take the codex connection down.
   @impl true
   def handle_cast({:ingest, method, params}, thread_id) do
-    Store.fold(thread_id, method, params)
-    broadcast(thread_id, method, params)
+    seq = Store.event(thread_id, fn -> Store.fold(thread_id, method, params) end)
+    PubSub.broadcast(@pubsub, topic(thread_id), {:codex, seq, method, params})
     {:noreply, thread_id}
   rescue
     e ->
@@ -139,15 +139,30 @@ defmodule Longx.Codex.ThreadState do
       {:noreply, thread_id}
   end
 
+  # a request names its thread like every other event: the Tracker (the
+  # notify feed) and the channel route on it
   def handle_cast({:put_request, id, method, params}, thread_id) do
-    Store.put_request(thread_id, id, method, params)
-    broadcast(thread_id, method, Map.put(params, "requestId", id))
+    seq = Store.event(thread_id, fn -> Store.put_request(thread_id, id, method, params) end)
+
+    PubSub.broadcast(
+      @pubsub,
+      topic(thread_id),
+      {:codex, seq, method,
+       params |> Map.put("requestId", id) |> Map.put_new("threadId", thread_id)}
+    )
+
     {:noreply, thread_id}
   end
 
   def handle_cast({:resolve_request, id}, thread_id) do
-    Store.delete_request(thread_id, id)
-    broadcast(thread_id, "serverRequest/resolved", %{"requestId" => id})
+    seq = Store.event(thread_id, fn -> Store.delete_request(thread_id, id) end)
+
+    PubSub.broadcast(
+      @pubsub,
+      topic(thread_id),
+      {:codex, seq, "serverRequest/resolved", %{"requestId" => id, "threadId" => thread_id}}
+    )
+
     {:noreply, thread_id}
   end
 
@@ -164,8 +179,14 @@ defmodule Longx.Codex.ThreadState do
   end
 
   def handle_call({:drop_turns, turn_ids}, _from, thread_id) do
-    Store.delete_turns(thread_id, turn_ids)
-    broadcast(thread_id, "thread/reverted", %{"threadId" => thread_id, "turnIds" => turn_ids})
+    seq = Store.event(thread_id, fn -> Store.delete_turns(thread_id, turn_ids) end)
+
+    PubSub.broadcast(
+      @pubsub,
+      topic(thread_id),
+      {:codex, seq, "thread/reverted", %{"threadId" => thread_id, "turnIds" => turn_ids}}
+    )
+
     {:reply, :ok, thread_id}
   end
 

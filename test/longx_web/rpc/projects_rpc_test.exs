@@ -1,21 +1,55 @@
 defmodule LongxWeb.ProjectsRpcTest do
   @moduledoc """
   The typed RPC surface the SPA uses (`POST /rpc/run`, ash_typescript):
-  projects, their git and codex, threads and turns. Exercised at the wire
-  so the generated client's contract is what is tested.
+  projects, their git, threads and turns. Exercised at the wire so the
+  generated client's contract is what is tested. Bypass plays the model.
   """
   use LongxWeb.ConnCase, async: false
 
+  alias Longx.Agent.ThreadState
+  alias Longx.AI
   alias Longx.Projects
+  alias Longx.Test.ResponsesFixture
 
   setup do
     Ash.bulk_destroy!(Projects.Turn, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(Projects.Thread, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(Projects.Project, :destroy, %{}, authorize?: false)
-    dir = Path.join(System.tmp_dir!(), "longx-rpc-#{System.unique_integer([:positive])}")
+    Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
+
+    bypass = Bypass.open()
+    n = System.unique_integer([:positive])
+
+    provider =
+      AI.create_provider!(%{
+        name: "Upstream #{n}",
+        slug: "upstream-#{n}",
+        base_url: "http://localhost:#{bypass.port}/v1",
+        api_key: "sk-upstream"
+      })
+
+    model =
+      AI.create_model!(%{
+        name: "Fake",
+        upstream_id: "real-model",
+        slug: "fake-#{n}",
+        provider_id: provider.id,
+        reasoning_levels: ["low", "high"],
+        reasoning_effort: "high"
+      })
+
+    AI.make_default_model!(model)
+
+    dir = Path.join(System.tmp_dir!(), "longx-rpc-#{n}")
     File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
-    %{dir: dir}
+
+    on_exit(fn ->
+      Longx.Test.Agents.stop_all!()
+      File.rm_rf!(dir)
+    end)
+
+    %{dir: dir, bypass: bypass, model: model}
   end
 
   defp rpc(conn, action, params) do
@@ -28,11 +62,83 @@ defmodule LongxWeb.ProjectsRpcTest do
   defp create!(conn, dir, extra \\ %{}) do
     %{"success" => true, "data" => project} =
       rpc(conn, "create_project", %{
-        "fields" => ["id", "slug", "name", "rootPath", "sandbox", "networkAccess"],
+        "fields" => ["id", "slug", "name", "rootPath", "webSearch", "dirtyStart"],
         "input" => Map.merge(%{"name" => "Demo App", "rootPath" => dir}, extra)
       })
 
     project
+  end
+
+  defp start!(conn, project) do
+    %{"success" => true, "data" => %{"id" => thread_id, "kernelThreadId" => kernel_id}} =
+      rpc(conn, "start_thread", %{
+        "fields" => ["id", "kernelThreadId", "status"],
+        "input" => %{"projectId" => project["id"]}
+      })
+
+    {thread_id, kernel_id}
+  end
+
+  defp sse(conn, chunks) do
+    conn =
+      conn
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_chunked(200)
+
+    Enum.reduce(chunks, conn, fn chunk, c ->
+      {:ok, c} = Plug.Conn.chunk(c, chunk)
+      c
+    end)
+  end
+
+  # the model's replies in order; a function holds the reply until told :go
+  defp script!(bypass, replies) do
+    {:ok, queue} = Elixir.Agent.start_link(fn -> replies end)
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      case Elixir.Agent.get_and_update(queue, fn [h | t] -> {h, t} end) do
+        reply when is_function(reply, 1) -> reply.(conn)
+        chunks when is_list(chunks) -> sse(conn, chunks)
+      end
+    end)
+  end
+
+  defp held(chunks) do
+    test = self()
+
+    fn conn ->
+      send(test, {:held, self()})
+
+      receive do
+        :go -> sse(conn, chunks)
+      end
+    end
+  end
+
+  defp assert_eventually(fun, attempts \\ 200) do
+    cond do
+      fun.() ->
+        :ok
+
+      attempts == 0 ->
+        flunk("condition never held")
+
+      true ->
+        Process.sleep(25)
+        assert_eventually(fun, attempts - 1)
+    end
+  end
+
+  defp thread_idle(conn, project_id, thread_id) do
+    assert_eventually(fn ->
+      %{"success" => true, "data" => threads} =
+        rpc(conn, "list_threads", %{
+          "fields" => ["id", "status"],
+          "input" => %{"projectId" => project_id}
+        })
+
+      match?(%{"status" => "idle"}, Enum.find(threads, &(&1["id"] == thread_id)))
+    end)
   end
 
   describe "projects" do
@@ -40,7 +146,8 @@ defmodule LongxWeb.ProjectsRpcTest do
       project = create!(conn, dir)
       assert project["slug"] == "demo-app"
       assert project["rootPath"] == Path.expand(dir)
-      assert project["sandbox"] == "workspace_write"
+      assert project["webSearch"] == true
+      assert project["dirtyStart"] == "commit"
 
       assert %{"success" => true, "data" => [%{"id" => id}]} =
                rpc(conn, "list_projects", %{"fields" => ["id"]})
@@ -53,11 +160,11 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"slug" => "demo-app"}
                })
 
-      assert %{"success" => true, "data" => %{"sandbox" => "read_only"}} =
+      assert %{"success" => true, "data" => %{"webSearch" => false, "trustLocalAgent" => true}} =
                rpc(conn, "update_project", %{
-                 "fields" => ["sandbox"],
+                 "fields" => ["webSearch", "trustLocalAgent"],
                  "identity" => id,
-                 "input" => %{"sandbox" => "read_only"}
+                 "input" => %{"webSearch" => false, "trustLocalAgent" => true}
                })
 
       assert %{"success" => true, "data" => %{"archivedAt" => at}} =
@@ -78,25 +185,6 @@ defmodule LongxWeb.ProjectsRpcTest do
 
       assert error["message"] =~ "existing directory"
       assert "rootPath" in error["fields"]
-    end
-
-    test "the codex home can be cleared of its memories or reset whole", %{conn: conn, dir: dir} do
-      project = create!(conn, dir)
-      home = Longx.Codex.Pool.home_dir(project["id"])
-      File.mkdir_p!(Path.join(home, "memories"))
-      File.write!(Path.join(home, "memories/MEMORY.md"), "x")
-      File.write!(Path.join(home, "config.toml"), "# ours")
-
-      assert %{"success" => true} =
-               rpc(conn, "clear_codex_memories", %{"input" => %{"id" => project["id"]}})
-
-      refute File.exists?(Path.join(home, "memories"))
-      assert File.exists?(Path.join(home, "config.toml"))
-
-      assert %{"success" => true} =
-               rpc(conn, "reset_codex_home", %{"input" => %{"id" => project["id"]}})
-
-      refute File.exists?(home)
     end
 
     test "delete needs confirm and removes the project", %{conn: conn, dir: dir} do
@@ -141,31 +229,18 @@ defmodule LongxWeb.ProjectsRpcTest do
     end
   end
 
-  describe "codex" do
-    test "codex_info for a project whose codex never ran", %{conn: conn, dir: dir} do
+  describe "threads and turns" do
+    test "start_thread → send_message → list_threads / list_turns; stop, images, effort, /compact",
+         %{conn: conn, dir: dir, bypass: bypass} do
+      script!(bypass, [
+        held(ResponsesFixture.assistant_message("hi")),
+        ResponsesFixture.assistant_message("looked"),
+        ResponsesFixture.assistant_message("low")
+      ])
+
       project = create!(conn, dir)
-
-      assert %{"success" => true, "data" => %{"exists" => false, "bytes" => 0, "worker" => nil}} =
-               rpc(conn, "codex_info", %{
-                 "fields" => ["home", "exists", "bytes", "files", "worker"],
-                 "input" => %{"id" => project["id"]}
-               })
-    end
-
-    test "start_thread → send_message → list_threads/list_turns, then stop_codex", %{
-      conn: conn,
-      dir: dir
-    } do
-      project = create!(conn, dir)
-      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
-
-      assert %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
-               rpc(conn, "start_thread", %{
-                 "fields" => ["id", "codexThreadId", "status"],
-                 "input" => %{"projectId" => project["id"]}
-               })
-
-      assert codex_id =~ ~r/^thr_/
+      {thread_id, kernel_id} = start!(conn, project)
+      assert kernel_id =~ ~r/^native_/
 
       assert %{"success" => true, "data" => %{"id" => turn_id, "status" => "in_progress"}} =
                rpc(conn, "send_message", %{
@@ -173,17 +248,27 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"threadId" => thread_id, "text" => "say hi"}
                })
 
+      assert_receive {:held, _}, 5_000
+      Bypass.pass(bypass)
+
       # the turn in flight can be stopped from the composer; a stale id is an error, not a crash
-      %{"success" => true, "data" => [%{"codexTurnId" => codex_turn_id}]} =
+      %{"success" => true, "data" => [%{"kernelTurnId" => kernel_turn_id}]} =
         rpc(conn, "list_turns", %{
-          "fields" => ["codexTurnId"],
+          "fields" => ["kernelTurnId"],
           "input" => %{"threadId" => thread_id}
         })
 
       assert %{"success" => true} =
                rpc(conn, "interrupt_turn", %{
-                 "input" => %{"threadId" => thread_id, "codexTurnId" => codex_turn_id}
+                 "input" => %{"threadId" => thread_id, "kernelTurnId" => kernel_turn_id}
                })
+
+      assert %{"success" => false, "errors" => [%{"fields" => ["kernelTurnId"]}]} =
+               rpc(conn, "interrupt_turn", %{
+                 "input" => %{"threadId" => thread_id, "kernelTurnId" => kernel_turn_id}
+               })
+
+      thread_idle(conn, project["id"], thread_id)
 
       # the composer's attachments: images ride along as data urls
       assert %{"success" => true, "data" => %{"userText" => "say look"}} =
@@ -199,11 +284,6 @@ defmodule LongxWeb.ProjectsRpcTest do
       thread_idle(conn, project["id"], thread_id)
 
       # the composer's reasoning level: on the turn and remembered by the thread
-      Longx.AI.update_model!(Longx.AI.default_model!(), %{
-        reasoning_levels: ["low", "high"],
-        reasoning_effort: "high"
-      })
-
       assert %{"success" => true, "data" => %{"reasoningEffort" => "low"}} =
                rpc(conn, "send_message", %{
                  "fields" => ["reasoningEffort"],
@@ -212,9 +292,9 @@ defmodule LongxWeb.ProjectsRpcTest do
 
       thread_idle(conn, project["id"], thread_id)
 
-      assert %{"success" => true, "data" => [%{"reasoningEffort" => "low"}]} =
+      assert %{"success" => true, "data" => [%{"reasoningEffort" => "low", "status" => "idle"}]} =
                rpc(conn, "list_threads", %{
-                 "fields" => ["reasoningEffort"],
+                 "fields" => ["reasoningEffort", "status"],
                  "input" => %{"projectId" => project["id"]}
                })
 
@@ -227,35 +307,18 @@ defmodule LongxWeb.ProjectsRpcTest do
 
       assert message =~ "ultra"
 
-      # the slash commands: /compact and /review
       assert %{"success" => true} =
                rpc(conn, "compact_thread", %{"input" => %{"threadId" => thread_id}})
 
-      assert %{"success" => true, "data" => %{"userText" => "/review", "status" => "in_progress"}} =
-               rpc(conn, "review_thread", %{
-                 "fields" => ["userText", "status"],
-                 "input" => %{"threadId" => thread_id, "target" => "uncommitted"}
-               })
-
-      thread_idle(conn, project["id"], thread_id)
-
-      assert %{"success" => true, "data" => [%{"id" => ^thread_id}]} =
-               rpc(conn, "list_threads", %{
-                 "fields" => ["id"],
-                 "input" => %{"projectId" => project["id"]}
-               })
-
-      # a thread's sub-agents (codex-spawned children) are listed under it, never in the project list
+      # a thread's sub-agents are listed under it, never in the project list
       child =
-        Longx.Projects.create_thread!(%{
+        Projects.create_thread!(%{
           project_id: project["id"],
-          codex_thread_id: "#{codex_id}-alpha",
+          kernel_thread_id: "#{kernel_id}-alpha",
           parent_thread_id: thread_id,
           agent_path: "/root/alpha",
           title: "alpha",
           cwd: dir,
-          sandbox: :workspace_write,
-          approval_policy: :on_request,
           status: :active
         })
 
@@ -273,23 +336,16 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"projectId" => project["id"]}
                })
 
-      # the first message, the one with the image, the low one, the review
       assert %{
                "success" => true,
-               "data" => [%{"id" => ^turn_id}, _, _, %{"userText" => "/review"}]
+               "data" => [%{"id" => ^turn_id, "status" => "interrupted"}, _, _]
              } =
                rpc(conn, "list_turns", %{
-                 "fields" => ["id", "userText"],
+                 "fields" => ["id", "userText", "status"],
                  "input" => %{"threadId" => thread_id}
                })
 
-      assert %{"success" => true, "data" => %{"worker" => %{"phase" => "ready"}}} =
-               rpc(conn, "codex_info", %{
-                 "fields" => ["worker"],
-                 "input" => %{"id" => project["id"]}
-               })
-
-      # the composer's @ mentions come from codex's file index
+      # the composer's @ mentions
       File.write!(Path.join(dir, "notes.md"), "")
 
       assert %{"success" => true, "data" => [%{"path" => "notes.md", "fileName" => "notes.md"}]} =
@@ -298,131 +354,152 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"id" => project["id"], "query" => "nts"}
                })
 
-      # Settings → codex 进程: every running codex across projects, with what
-      # it costs and when it was last used (the idle reaper's clock)
-      assert %{"success" => true, "data" => %{"processes" => processes, "idleAfterMs" => idle}} =
-               rpc(conn, "list_codex_processes", %{"fields" => ["processes", "idleAfterMs"]})
-
-      assert is_integer(idle)
-      pid = project["id"]
-
-      assert [
-               %{
-                 "projectId" => ^pid,
-                 "name" => "Demo App",
-                 "slug" => slug,
-                 "osPid" => os_pid,
-                 "turns" => turns,
-                 "activeTurns" => 0,
-                 "lastTurnAt" => last,
-                 "startedAt" => started,
-                 "threads" => 1
-               }
-             ] =
-               Enum.filter(processes, &(&1["projectId"] == pid))
-
-      assert slug == project["slug"] and is_integer(os_pid) and turns >= 4
-      assert is_binary(last) and is_binary(started)
-
-      assert %{"success" => true} =
-               rpc(conn, "stop_codex", %{"input" => %{"id" => project["id"], "force" => true}})
-
-      assert %{"success" => true, "data" => %{"worker" => nil}} =
-               rpc(conn, "codex_info", %{
-                 "fields" => ["worker"],
-                 "input" => %{"id" => project["id"]}
+      # rename / archive / get
+      assert %{"success" => true, "data" => %{"title" => "Named"}} =
+               rpc(conn, "rename_thread", %{
+                 "fields" => ["title"],
+                 "identity" => thread_id,
+                 "input" => %{"title" => "Named"}
                })
 
-      assert %{"success" => true, "data" => %{"processes" => processes}} =
-               rpc(conn, "list_codex_processes", %{"fields" => ["processes"]})
-
-      refute Enum.any?(processes, &(&1["projectId"] == pid))
+      assert %{"success" => true, "data" => %{"title" => "Named"}} =
+               rpc(conn, "get_thread", %{"fields" => ["title"], "input" => %{"id" => thread_id}})
     end
-  end
 
-  describe "approvals" do
-    test "respond answers codex's (integer) request id given as the string the client has", %{
-      conn: conn,
-      dir: dir
-    } do
+    test "steer_turn: a message while a turn runs goes into it; nothing running is not_running on threadId",
+         %{conn: conn, dir: dir, bypass: bypass} do
+      # the steered message is shown at the next step: the model is asked once more
+      script!(bypass, [
+        held(ResponsesFixture.assistant_message("one")),
+        ResponsesFixture.assistant_message("two")
+      ])
+
       project = create!(conn, dir)
-      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
+      {thread_id, kernel_id} = start!(conn, project)
+      :ok = ThreadState.subscribe(kernel_id)
 
-      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
-        rpc(conn, "start_thread", %{
-          "fields" => ["id", "codexThreadId"],
-          "input" => %{"projectId" => project["id"]}
-        })
-
-      :ok = Longx.Codex.Thread.subscribe(codex_id)
-
-      %{"success" => true} =
+      %{"success" => true, "data" => %{"kernelTurnId" => turn_id}} =
         rpc(conn, "send_message", %{
-          "fields" => ["id"],
-          "input" => %{"threadId" => thread_id, "text" => "approve make"}
+          "fields" => ["kernelTurnId"],
+          "input" => %{"threadId" => thread_id, "text" => "first"}
         })
 
-      assert_receive {:codex, _, "item/commandExecution/requestApproval",
-                      %{"requestId" => request_id}},
-                     10_000
+      assert_receive {:held, h}, 5_000
 
-      assert is_integer(request_id)
-
-      assert %{"success" => true} =
-               rpc(conn, "respond", %{
-                 "input" => %{
-                   "threadId" => thread_id,
-                   "requestId" => Integer.to_string(request_id),
-                   "decision" => "accept"
-                 }
+      assert %{"success" => true, "data" => %{"kernelTurnId" => ^turn_id}} =
+               rpc(conn, "steer_turn", %{
+                 "fields" => ["kernelTurnId"],
+                 "input" => %{"threadId" => thread_id, "text" => "还有这个"}
                })
 
-      assert_receive {:codex, _, "serverRequest/resolved", %{"requestId" => ^request_id}}, 5_000
-      assert_receive {:codex, _, "turn/completed", _}, 10_000
+      # a second send while running is refused on threadId — the client steers
+      assert %{"success" => false, "errors" => [%{"fields" => ["threadId"]}]} =
+               rpc(conn, "send_message", %{
+                 "fields" => ["id"],
+                 "input" => %{"threadId" => thread_id, "text" => "again"}
+               })
 
-      # answering twice (or a stale id) is an error, not a crash
-      assert %{"success" => false} =
-               rpc(conn, "respond", %{
-                 "input" => %{
-                   "threadId" => thread_id,
-                   "requestId" => Integer.to_string(request_id),
-                   "decision" => "accept"
-                 }
+      send(h, :go)
+      assert_receive {:codex, _, "turn/completed", %{"turn" => %{"id" => ^turn_id}}}, 5_000
+      thread_idle(conn, project["id"], thread_id)
+
+      assert %{
+               "success" => false,
+               "errors" => [%{"fields" => ["threadId"], "message" => "not_running"}]
+             } =
+               rpc(conn, "steer_turn", %{
+                 "fields" => ["kernelTurnId"],
+                 "input" => %{"threadId" => thread_id, "text" => "late"}
                })
     end
-  end
 
-  describe "running threads" do
-    test "list_running_threads: every thread with a turn in flight, its project, and whether it waits on the person",
-         %{
-           conn: conn,
-           dir: dir
-         } do
+    test "retract_turn stops a turn nothing came back for and hands the text back", %{
+      conn: conn,
+      dir: dir,
+      bypass: bypass
+    } do
+      script!(bypass, [held(ResponsesFixture.assistant_message("one"))])
       project = create!(conn, dir)
-      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
+      {thread_id, _kernel_id} = start!(conn, project)
+
+      %{"success" => true, "data" => %{"kernelTurnId" => turn_id}} =
+        rpc(conn, "send_message", %{
+          "fields" => ["kernelTurnId"],
+          "input" => %{"threadId" => thread_id, "text" => "wait"}
+        })
+
+      assert_receive {:held, _}, 5_000
+      Bypass.pass(bypass)
+
+      assert %{"success" => true, "data" => %{"text" => "wait"}} =
+               rpc(conn, "retract_turn", %{
+                 "fields" => ["text"],
+                 "input" => %{"threadId" => thread_id, "kernelTurnId" => turn_id}
+               })
+
+      assert %{
+               "success" => false,
+               "errors" => [%{"fields" => ["kernelTurnId"], "message" => "not_running"}]
+             } =
+               rpc(conn, "retract_turn", %{
+                 "fields" => ["text"],
+                 "input" => %{"threadId" => thread_id, "kernelTurnId" => turn_id}
+               })
+
+      assert %{"success" => true, "data" => []} =
+               rpc(conn, "list_turns", %{
+                 "fields" => ["id"],
+                 "input" => %{"threadId" => thread_id}
+               })
+    end
+
+    test "list_running_threads and answer_request: a thread waiting on the person, then answered",
+         %{conn: conn, dir: dir, bypass: bypass} do
+      File.mkdir_p!(Path.join(dir, ".longx/local/plugs"))
+
+      File.write!(Path.join(dir, ".longx/local/plugs/login.exs"), """
+      defmodule Login do
+        use Longx.Agent.Plug
+
+        tool :login, "signs the person in" do
+        end
+
+        def login(_args, ctx) do
+          case Context.ask(ctx, title: "登录", text: "去登录") do
+            {:ok, answer} -> {:ok, "answered " <> Jason.encode!(answer)}
+            {:error, why} -> {:error, "no: \#{why}"}
+          end
+        end
+      end
+      """)
+
+      File.write!(
+        Path.join(dir, ".longx/local/agent.exs"),
+        "import Longx.Agent.Config\nagent do\n  plug Login\nend\n"
+      )
+
+      script!(bypass, [
+        ResponsesFixture.function_call("login", nil, %{}),
+        ResponsesFixture.assistant_message("done")
+      ])
+
+      project = create!(conn, dir)
 
       assert %{"success" => true, "data" => %{"threads" => []}} =
                rpc(conn, "list_running_threads", %{"fields" => ["threads"]})
 
-      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
-        rpc(conn, "start_thread", %{
-          "fields" => ["id", "codexThreadId"],
-          "input" => %{"projectId" => project["id"]}
-        })
-
-      :ok = Longx.Codex.Thread.subscribe(codex_id)
+      {thread_id, kernel_id} = start!(conn, project)
+      :ok = ThreadState.subscribe(kernel_id)
 
       %{"success" => true} =
         rpc(conn, "send_message", %{
           "fields" => ["id"],
-          "input" => %{"threadId" => thread_id, "text" => "approve make"}
+          "input" => %{"threadId" => thread_id, "text" => "log me in"}
         })
 
-      assert_receive {:codex, _, "item/commandExecution/requestApproval", _}, 10_000
-      # the preview is the Tracker's (from the first user message), a moment later
-      assert_eventually(fn ->
-        Ash.get!(Longx.Projects.Thread, thread_id).preview == "approve make"
-      end)
+      assert_receive {:codex, _, "longx/action/request", %{"requestId" => request_id}}, 5_000
+
+      assert_eventually(fn -> Ash.get!(Projects.Thread, thread_id).preview == "log me in" end)
 
       assert %{"success" => true, "data" => %{"threads" => [running]}} =
                rpc(conn, "list_running_threads", %{"fields" => ["threads"]})
@@ -430,210 +507,50 @@ defmodule LongxWeb.ProjectsRpcTest do
       assert running["id"] == thread_id
       assert running["projectSlug"] == project["slug"]
       assert running["projectName"] == "Demo App"
-      assert running["preview"] == "approve make"
+      assert running["preview"] == "log me in"
       assert running["waiting"] == true
       assert is_binary(running["lastActivityAt"])
-    end
-  end
-
-  describe "questions" do
-    test "answer_request answers codex's requestUserInput with the answers map", %{
-      conn: conn,
-      dir: dir
-    } do
-      project = create!(conn, dir)
-      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
-
-      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
-        rpc(conn, "start_thread", %{
-          "fields" => ["id", "codexThreadId"],
-          "input" => %{"projectId" => project["id"]}
-        })
-
-      :ok = Longx.Codex.Thread.subscribe(codex_id)
-
-      %{"success" => true} =
-        rpc(conn, "send_message", %{
-          "fields" => ["id"],
-          "input" => %{"threadId" => thread_id, "text" => "ask which db?"}
-        })
-
-      assert_receive {:codex, _, "item/tool/requestUserInput",
-                      %{"requestId" => request_id, "questions" => [%{"id" => "q1"}]}},
-                     10_000
 
       assert %{"success" => true} =
                rpc(conn, "answer_request", %{
                  "input" => %{
                    "threadId" => thread_id,
-                   "requestId" => Integer.to_string(request_id),
-                   "answers" => %{"q1" => %{"answers" => ["sqlite"]}}
+                   "requestId" => request_id,
+                   "answers" => %{"done" => true}
                  }
                })
 
-      assert_receive {:codex, _, "serverRequest/resolved", %{"requestId" => ^request_id}}, 5_000
-      assert_receive {:codex, _, "turn/completed", _}, 10_000
+      assert_receive {:codex, _, "turn/completed", _}, 5_000
+      thread_idle(conn, project["id"], thread_id)
 
-      assert Enum.any?(
-               Longx.Codex.Thread.snapshot(codex_id).items,
-               &(&1["type"] == "agentMessage" and &1["text"] =~ "you said sqlite")
-             )
+      assert %{"success" => true, "data" => %{"threads" => []}} =
+               rpc(conn, "list_running_threads", %{"fields" => ["threads"]})
     end
-  end
 
-  describe "retracting a turn" do
-    test "steer_turn: a message while a turn runs goes into it; nothing running is not_running on threadId",
-         %{conn: conn, dir: dir} do
+    test "set_goal / clear_goal", %{conn: conn, dir: dir} do
       project = create!(conn, dir)
-      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
-
-      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
-        rpc(conn, "start_thread", %{
-          "fields" => ["id", "codexThreadId"],
-          "input" => %{"projectId" => project["id"]}
-        })
-
-      :ok = Longx.Codex.Thread.subscribe(codex_id)
-
-      %{"success" => true} =
-        rpc(conn, "send_message", %{
-          "fields" => ["id"],
-          "input" => %{"threadId" => thread_id, "text" => "stall"}
-        })
-
-      assert_receive {:codex, _, "item/agentMessage/delta", _}, 5_000
-
-      assert %{"success" => true, "data" => %{"codexTurnId" => turn_id}} =
-               rpc(conn, "steer_turn", %{
-                 "fields" => ["codexTurnId"],
-                 "input" => %{"threadId" => thread_id, "text" => "还有这个"}
-               })
-
-      assert is_binary(turn_id)
-
-      assert_receive {:codex, _, "item/completed",
-                      %{
-                        "turnId" => ^turn_id,
-                        "item" => %{"type" => "userMessage", "content" => [%{"text" => "还有这个"}]}
-                      }},
-                     5_000
-
-      {:ok, codex} = Longx.Codex.Pool.connection_for_thread(codex_id)
-      Longx.Codex.Connection.notify(codex, "fake/continue", %{})
-      assert_receive {:codex, _, "turn/completed", %{"turn" => %{"id" => ^turn_id}}}, 5_000
-      # the row settles a moment after the event (the Tracker's git call)
-      assert_eventually(fn ->
-        hd(Longx.Projects.list_turns!(Ash.get!(Longx.Projects.Thread, thread_id))).status !=
-          :in_progress
-      end)
-
-      assert %{
-               "success" => false,
-               "errors" => [%{"fields" => ["threadId"], "message" => "not_running"}]
-             } =
-               rpc(conn, "steer_turn", %{
-                 "fields" => ["codexTurnId"],
-                 "input" => %{"threadId" => thread_id, "text" => "late"}
-               })
-    end
-
-    defp assert_eventually(fun, attempts \\ 200) do
-      cond do
-        fun.() ->
-          :ok
-
-        attempts == 0 ->
-          flunk("condition never held")
-
-        true ->
-          Process.sleep(25)
-          assert_eventually(fun, attempts - 1)
-      end
-    end
-
-    test "retract_turn stops a turn nothing came back for and hands the text back; a turn with output says has_output",
-         %{
-           conn: conn,
-           dir: dir
-         } do
-      project = create!(conn, dir)
-      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
-
-      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
-        rpc(conn, "start_thread", %{
-          "fields" => ["id", "codexThreadId"],
-          "input" => %{"projectId" => project["id"]}
-        })
-
-      :ok = Longx.Codex.Thread.subscribe(codex_id)
-
-      %{"success" => true, "data" => %{"codexTurnId" => turn_id}} =
-        rpc(conn, "send_message", %{
-          "fields" => ["codexTurnId"],
-          "input" => %{"threadId" => thread_id, "text" => "wait"}
-        })
-
-      assert_receive {:codex, _, "item/completed", %{"item" => %{"type" => "userMessage"}}},
-                     10_000
-
-      assert %{"success" => true, "data" => %{"text" => "wait"}} =
-               rpc(conn, "retract_turn", %{
-                 "fields" => ["text"],
-                 "input" => %{"threadId" => thread_id, "codexTurnId" => turn_id}
-               })
-
-      assert %{
-               "success" => false,
-               "errors" => [%{"fields" => ["codexTurnId"], "message" => "not_running"}]
-             } =
-               rpc(conn, "retract_turn", %{
-                 "fields" => ["text"],
-                 "input" => %{"threadId" => thread_id, "codexTurnId" => turn_id}
-               })
-    end
-  end
-
-  describe "goals and skills" do
-    test "set_goal / clear_goal drive codex's goal mode; list_skills names the $-mentionable skills; send_message carries them",
-         %{
-           conn: conn,
-           dir: dir
-         } do
-      project = create!(conn, dir)
-      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
-
-      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
-        rpc(conn, "start_thread", %{
-          "fields" => ["id", "codexThreadId"],
-          "input" => %{"projectId" => project["id"]}
-        })
-
-      :ok = Longx.Codex.Thread.subscribe(codex_id)
+      {thread_id, kernel_id} = start!(conn, project)
+      :ok = ThreadState.subscribe(kernel_id)
 
       assert %{
                "success" => true,
-               "data" => %{"objective" => "ship", "status" => "active", "tokenBudget" => 2000}
+               "data" => %{"objective" => "ship it", "status" => "active", "tokenBudget" => 100}
              } =
                rpc(conn, "set_goal", %{
                  "fields" => ["objective", "status", "tokenBudget", "tokensUsed"],
                  "input" => %{
                    "threadId" => thread_id,
-                   "objective" => "ship",
-                   "tokenBudget" => 2000
+                   "objective" => "ship it",
+                   "tokenBudget" => 100
                  }
                })
 
-      # a change of status alone keeps the budget; a null budget clears it
-      assert %{"success" => true, "data" => %{"status" => "paused", "tokenBudget" => 2000}} =
-               rpc(conn, "set_goal", %{
-                 "fields" => ["status", "tokenBudget"],
-                 "input" => %{"threadId" => thread_id, "status" => "paused"}
-               })
+      assert_receive {:codex, _, "thread/goal/updated", _}, 5_000
 
-      assert %{"success" => true, "data" => %{"tokenBudget" => nil}} =
+      assert %{"success" => true, "data" => %{"status" => "paused"}} =
                rpc(conn, "set_goal", %{
-                 "fields" => ["tokenBudget"],
-                 "input" => %{"threadId" => thread_id, "tokenBudget" => nil}
+                 "fields" => ["status"],
+                 "input" => %{"threadId" => thread_id, "status" => "paused"}
                })
 
       assert %{"success" => true, "data" => %{"cleared" => true}} =
@@ -642,118 +559,19 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"threadId" => thread_id}
                })
 
-      assert %{
-               "success" => true,
-               "data" => [
-                 %{"name" => "review-agent", "path" => _},
-                 %{"name" => "docs", "path" => docs}
-               ]
-             } =
-               rpc(conn, "list_skills", %{
-                 "fields" => ["name", "description", "shortDescription", "path", "enabled"],
-                 "input" => %{"id" => project["id"]}
-               })
-
-      assert %{"success" => true} =
-               rpc(conn, "send_message", %{
-                 "fields" => ["id"],
-                 "input" => %{
-                   "threadId" => thread_id,
-                   "text" => "say hi $docs",
-                   "skills" => [%{"name" => "docs", "path" => docs}]
-                 }
-               })
-
-      assert_receive {:codex, _, "turn/completed", _}, 10_000
-      {:ok, pool_conn} = Longx.Codex.Pool.connection(project["id"])
-
-      assert {:ok,
-              %{
-                "thread" => %{
-                  "lastTurnParams" => %{"input" => [_, %{"type" => "skill", "name" => "docs"}]}
-                }
-              }} =
-               Longx.Codex.Connection.request(pool_conn, "thread/read", %{"threadId" => codex_id})
-    end
-  end
-
-  describe "automatic approval review" do
-    test "approve_review overrides a denied review; an unknown id is an error on review_id", %{
-      conn: conn,
-      dir: dir
-    } do
-      project = create!(conn, dir)
-      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
-
-      %{"success" => true, "data" => %{"id" => thread_id, "codexThreadId" => codex_id}} =
-        rpc(conn, "start_thread", %{
-          "fields" => ["id", "codexThreadId", "autoReview"],
-          "input" => %{"projectId" => project["id"]}
-        })
-
-      :ok = Longx.Codex.Thread.subscribe(codex_id)
-
-      Longx.Codex.ThreadState.ingest(codex_id, "item/autoApprovalReview/completed", %{
-        "threadId" => codex_id,
-        "turnId" => "t1",
-        "reviewId" => "rev-1",
-        "action" => %{
-          "type" => "command",
-          "source" => "unifiedExec",
-          "command" => "ls",
-          "cwd" => dir
-        },
-        "review" => %{"status" => "denied", "riskLevel" => "high", "rationale" => "no"}
-      })
-
-      assert_receive {:codex, _, "item/autoApprovalReview/completed", _}, 5_000
-
-      assert %{"success" => true} =
-               rpc(conn, "approve_review", %{
-                 "input" => %{"threadId" => thread_id, "reviewId" => "rev-1"}
-               })
-
-      assert_receive {:codex, _, "item/autoApprovalReview/userApproved",
-                      %{"reviewId" => "rev-1"}},
-                     5_000
-
-      assert %{"success" => false, "errors" => [%{"fields" => ["reviewId"]}]} =
-               rpc(conn, "approve_review", %{
-                 "input" => %{"threadId" => thread_id, "reviewId" => "rev-9"}
+      assert %{"success" => true, "data" => %{"cleared" => false}} =
+               rpc(conn, "clear_goal", %{
+                 "fields" => ["cleared"],
+                 "input" => %{"threadId" => thread_id}
                })
     end
   end
 
   describe "history" do
-    defp turn_status(conn, thread_id, wanted, attempts \\ 100) do
-      %{"success" => true, "data" => turns} =
-        rpc(conn, "list_turns", %{
-          "fields" => ["id", "status", "commitBefore", "commitAfter"],
-          "input" => %{"threadId" => thread_id}
-        })
-
-      cond do
-        Enum.all?(turns, &(&1["status"] == wanted)) and turns != [] ->
-          turns
-
-        attempts == 0 ->
-          flunk("turns never became #{wanted}: #{inspect(turns)}")
-
-        true ->
-          Process.sleep(50)
-          turn_status(conn, thread_id, wanted, attempts - 1)
-      end
-    end
-
-    test "restore_proposal → restore_files → redo_turn over the wire", %{conn: conn, dir: dir} do
+    test "restore_proposal → restore_files over the wire", %{conn: conn, dir: dir, bypass: bypass} do
+      script!(bypass, [ResponsesFixture.assistant_message("one")])
       project = create!(conn, dir, %{"initGit" => true})
-      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
-
-      %{"success" => true, "data" => %{"id" => thread_id}} =
-        rpc(conn, "start_thread", %{
-          "fields" => ["id"],
-          "input" => %{"projectId" => project["id"]}
-        })
+      {thread_id, _} = start!(conn, project)
 
       %{"success" => true, "data" => %{"id" => turn_id}} =
         rpc(conn, "send_message", %{
@@ -761,7 +579,14 @@ defmodule LongxWeb.ProjectsRpcTest do
           "input" => %{"threadId" => thread_id, "text" => "say one"}
         })
 
-      [%{"commitBefore" => sha}] = turn_status(conn, thread_id, "completed")
+      thread_idle(conn, project["id"], thread_id)
+
+      %{"success" => true, "data" => [%{"commitBefore" => sha, "status" => "completed"}]} =
+        rpc(conn, "list_turns", %{
+          "fields" => ["status", "commitBefore"],
+          "input" => %{"threadId" => thread_id}
+        })
+
       assert is_binary(sha)
 
       # some work after the turn, then the proposal names it
@@ -778,8 +603,7 @@ defmodule LongxWeb.ProjectsRpcTest do
                "dirtyNow" => true,
                "changedFiles" => ["a.txt"],
                "laterTurns" => 0
-             } =
-               proposal
+             } = proposal
 
       # restoring needs confirm, makes the safety commit, puts a.txt back
       assert %{"success" => false} =
@@ -796,60 +620,18 @@ defmodule LongxWeb.ProjectsRpcTest do
 
       assert is_binary(safety) and is_binary(head)
       refute File.exists?(Path.join(dir, "a.txt"))
-
-      # redo from that turn with other text: the old turn is reverted, a new one runs
-      assert %{"success" => true, "data" => %{"id" => new_id, "userText" => "say two"}} =
-               rpc(conn, "redo_turn", %{
-                 "fields" => ["id", "userText", "status"],
-                 "input" => %{"turnId" => turn_id, "text" => "say two", "mode" => "revert"}
-               })
-
-      refute new_id == turn_id
-      turn_status(conn, thread_id, "completed")
-
-      %{"success" => true, "data" => all} =
-        rpc(conn, "list_turns", %{
-          "fields" => ["id", "status"],
-          "input" => %{"threadId" => thread_id, "includeReverted" => true}
-        })
-
-      assert Enum.find(all, &(&1["id"] == turn_id))["status"] == "reverted"
-    end
-  end
-
-  defp thread_idle(conn, project_id, thread_id, attempts \\ 100) do
-    %{"success" => true, "data" => threads} =
-      rpc(conn, "list_threads", %{
-        "fields" => ["id", "status"],
-        "input" => %{"projectId" => project_id}
-      })
-
-    case Enum.find(threads, &(&1["id"] == thread_id)) do
-      %{"status" => "idle"} ->
-        :ok
-
-      _ when attempts > 0 ->
-        Process.sleep(50)
-        thread_idle(conn, project_id, thread_id, attempts - 1)
-
-      other ->
-        flunk("thread never idle: #{inspect(other)}")
     end
   end
 
   describe "delete thread" do
-    test "delete_thread removes the row and its turns; codex's own history is untouched", %{
+    test "delete_thread removes the row and its turns, not while a turn runs", %{
       conn: conn,
-      dir: dir
+      dir: dir,
+      bypass: bypass
     } do
+      script!(bypass, [held(ResponsesFixture.assistant_message("x"))])
       project = create!(conn, dir)
-      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
-
-      %{"success" => true, "data" => %{"id" => thread_id}} =
-        rpc(conn, "start_thread", %{
-          "fields" => ["id"],
-          "input" => %{"projectId" => project["id"]}
-        })
+      {thread_id, _} = start!(conn, project)
 
       %{"success" => true} =
         rpc(conn, "send_message", %{
@@ -857,10 +639,13 @@ defmodule LongxWeb.ProjectsRpcTest do
           "input" => %{"threadId" => thread_id, "text" => "say x"}
         })
 
+      assert_receive {:held, h}, 5_000
+
       # not while the turn runs
-      assert %{"success" => false} =
+      assert %{"success" => false, "errors" => [%{"fields" => ["threadId"]}]} =
                rpc(conn, "delete_thread", %{"input" => %{"threadId" => thread_id}})
 
+      send(h, :go)
       thread_idle(conn, project["id"], thread_id)
 
       assert %{"success" => true} =
@@ -872,24 +657,20 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "input" => %{"projectId" => project["id"]}
                })
 
-      assert Ash.read!(Longx.Projects.Turn) |> Enum.reject(&(&1.thread_id != thread_id)) == []
+      assert Ash.read!(Projects.Turn) |> Enum.reject(&(&1.thread_id != thread_id)) == []
     end
   end
 
   describe "dirty tree" do
     test "send_message on a dirty :ask project is a structured error the UI can act on", %{
       conn: conn,
-      dir: dir
+      dir: dir,
+      bypass: bypass
     } do
+      script!(bypass, [ResponsesFixture.assistant_message("go")])
       project = create!(conn, dir, %{"initGit" => true, "dirtyStart" => "ask"})
-      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project["id"]]) end)
       File.write!(Path.join(dir, "a.txt"), "changed")
-
-      %{"success" => true, "data" => %{"id" => thread_id}} =
-        rpc(conn, "start_thread", %{
-          "fields" => ["id"],
-          "input" => %{"projectId" => project["id"]}
-        })
+      {thread_id, _} = start!(conn, project)
 
       assert %{"success" => false, "errors" => [error]} =
                rpc(conn, "send_message", %{
@@ -906,6 +687,8 @@ defmodule LongxWeb.ProjectsRpcTest do
                  "fields" => ["id"],
                  "input" => %{"threadId" => thread_id, "text" => "go", "dirty" => "ignore"}
                })
+
+      thread_idle(conn, project["id"], thread_id)
     end
   end
 
@@ -952,14 +735,6 @@ defmodule LongxWeb.ProjectsRpcTest do
 
       assert %{"success" => true, "data" => %{"repository" => true}} =
                rpc(conn, "git_info", %{"fields" => ["repository"], "input" => %{"id" => id}})
-    end
-
-    test "sandbox status", %{conn: conn} do
-      assert %{"success" => true, "data" => %{"status" => status, "checkedAt" => at}} =
-               rpc(conn, "sandbox_status", %{"fields" => ["status", "reason", "checkedAt"]})
-
-      assert status in ["ok", "unavailable"]
-      assert is_binary(at)
     end
   end
 end

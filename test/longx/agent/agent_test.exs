@@ -4,7 +4,7 @@ defmodule Longx.AgentTest do
   alias Longx.Agent
   alias Longx.Agent.Transcript
   alias Longx.AI
-  alias Longx.Codex.ThreadState
+  alias Longx.Agent.ThreadState
   alias Longx.Test.ResponsesFixture
 
   setup do

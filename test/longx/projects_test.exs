@@ -24,12 +24,10 @@ defmodule Longx.ProjectsTest do
 
       assert project.root_path == Path.expand(dir)
       assert project.slug == "my-cool-app"
-      assert project.approval_policy == :on_request
-      assert project.sandbox == :workspace_write
-      assert project.tools == []
       assert project.dirty_start == :commit
-      assert project.network_access == false
-      assert project.memory_limit_mb == nil
+      assert project.web_search == true
+      assert project.trust_local_agent == false
+      assert project.agent_settings == nil
       assert project.model_id == nil
       assert project.archived_at == nil
     end
@@ -57,22 +55,14 @@ defmodule Longx.ProjectsTest do
                Projects.create_project(%{name: "again", root_path: dir})
     end
 
-    test "tools must be registered", %{dir: dir} do
-      assert {:error, %Ash.Error.Invalid{} = err} =
-               Projects.create_project(%{name: "x", root_path: dir, tools: ["nope.tool"]})
-
-      assert Exception.message(err) =~ "nope.tool"
-      assert %{tools: ["builtin.echo"]} = create!(dir, %{tools: ["builtin.echo"]})
-    end
-
     test "list / by_slug / update / archive", %{dir: dir} do
       project = create!(dir, %{name: "Listed"})
       assert [%{id: id}] = Projects.list_projects!()
       assert id == project.id
       assert {:ok, %{id: ^id}} = Projects.get_project_by_slug("listed")
 
-      updated = Projects.update_project!(project, %{sandbox: :read_only, dirty_start: :off})
-      assert updated.sandbox == :read_only
+      updated = Projects.update_project!(project, %{web_search: false, dirty_start: :off})
+      assert updated.web_search == false
       assert updated.dirty_start == :off
 
       archived = Projects.archive_project!(project)
@@ -91,156 +81,30 @@ defmodule Longx.ProjectsTest do
     end
   end
 
-  describe "the project's codex (process + CODEX_HOME)" do
-    alias Longx.Codex.Pool
-
-    setup %{dir: dir} do
+  describe "deleting a project" do
+    test "needs confirm, takes the threads and turns with it, never the directory", %{dir: dir} do
       project = create!(dir)
-      home = Pool.home_dir(project.id)
-      on_exit(fn -> Longx.Test.PoolHelpers.stop_pool!([project.id]) && File.rm_rf!(home) end)
-      %{project: project, home: home}
-    end
 
-    defp fake_home!(home) do
-      File.mkdir_p!(Path.join(home, "sessions/2026/09/12"))
-      File.write!(Path.join(home, "config.toml"), "# generated\n")
-      File.write!(Path.join(home, "state_5.sqlite"), String.duplicate("x", 2_048))
-      File.write!(Path.join(home, "thread_history_1.sqlite"), String.duplicate("y", 4_096))
-      File.write!(Path.join(home, "sessions/2026/09/12/rollout-1.jsonl"), "{}\n")
-    end
-
-    test "codex_info/1 describes the home directory and the worker", %{
-      project: project,
-      home: home
-    } do
-      assert %{home: ^home, exists?: false, bytes: 0, files: %{}, worker: :stopped} =
-               Projects.codex_info(project)
-
-      fake_home!(home)
-      {:ok, conn} = Pool.connection(project.id)
-      info = Projects.codex_info(project)
-      assert info.exists?
-      assert info.bytes > 6_000
-      assert info.files["state_5.sqlite"] == 2_048
-      assert info.files["thread_history_1.sqlite"] == 4_096
-      assert %{pid: ^conn, phase: _, started_at: %DateTime{}} = info.worker
-    end
-
-    test "memory_limit_mb caps the project's codex tree", %{project: project} do
-      assert {:error, %Ash.Error.Invalid{}} =
-               Projects.update_project(project, %{memory_limit_mb: 10})
-
-      # (address-space cap; the fake app-server is a BEAM and needs room to map its carrier)
-      project = Projects.update_project!(project, %{memory_limit_mb: 16_384})
-      {:ok, _} = Projects.start_thread(project)
-      assert %{worker: %{memory_limit: 17_179_869_184}} = Projects.codex_info(project)
-    end
-
-    test "stop_codex/2 and restart_codex/1 drive the worker", %{project: project} do
-      {:ok, conn} = Pool.connection(project.id)
-      assert :ok = Projects.stop_codex(project)
-      assert Pool.status(project.id) == :stopped
-
-      assert {:ok, again} = Projects.restart_codex(project)
-      refute again == conn
-      assert %{pid: ^again} = Pool.status(project.id)
-    end
-
-    test "stop_codex/2 refuses while a turn is running unless forced", %{project: project} do
-      {:ok, thread} = Projects.start_thread(project)
-      {:ok, _turn} = Projects.send_message(thread, "stall")
-      assert {:error, {:turn_in_progress, _}} = Projects.stop_codex(project)
-      assert :ok = Projects.stop_codex(project, force: true)
-      assert Pool.status(project.id) == :stopped
-    end
-
-    test "clear_codex_history/1 wipes codex's state and marks the threads unrecoverable", %{
-      project: project,
-      home: home
-    } do
-      fake_home!(home)
-      {:ok, thread} = Projects.start_thread(project)
-
-      File.mkdir_p!(Path.join(home, "memories"))
-      File.write!(Path.join(home, "memories/MEMORY.md"), "# learned\n")
-
-      assert :ok = Projects.clear_codex_history(project)
-      assert Pool.status(project.id) == :stopped
-      refute File.exists?(Path.join(home, "state_5.sqlite"))
-      refute File.exists?(Path.join(home, "sessions"))
-      # the config is ours, it stays; what codex learned about the project is
-      # not "history" — it stays too (reset_codex_home is the wipe)
-      assert File.exists?(Path.join(home, "config.toml"))
-      assert File.exists?(Path.join(home, "memories/MEMORY.md"))
-      assert Ash.get!(Projects.Thread, thread.id).status == :unrecoverable
-    end
-
-    test "clear_codex_memories/1 forgets only what codex learned about the project: the sessions and threads stay",
-         %{project: project, home: home} do
-      fake_home!(home)
-      File.mkdir_p!(Path.join(home, "memories/rollout_summaries"))
-      File.write!(Path.join(home, "memories/MEMORY.md"), "# learned\n")
-      File.write!(Path.join(home, "memories_1.sqlite"), "m")
-      {:ok, thread} = Projects.start_thread(project)
-
-      assert :ok = Projects.clear_codex_memories(project)
-      assert Pool.status(project.id) == :stopped
-      refute File.exists?(Path.join(home, "memories"))
-      refute File.exists?(Path.join(home, "memories_1.sqlite"))
-      assert File.exists?(Path.join(home, "sessions"))
-      assert File.exists?(Path.join(home, "state_5.sqlite"))
-      assert Ash.get!(Projects.Thread, thread.id).status == :idle
-    end
-
-    test "reset_codex_home/1 removes the whole directory; the threads become unrecoverable", %{
-      project: project,
-      home: home
-    } do
-      fake_home!(home)
-      {:ok, thread} = Projects.start_thread(project)
-      assert :ok = Projects.reset_codex_home(project)
-      refute File.exists?(home)
-      assert Pool.status(project.id) == :stopped
-      assert Ash.get!(Projects.Thread, thread.id).status == :unrecoverable
-    end
-
-    test "archiving stops the worker and keeps the home; deleting needs confirm and removes it",
-         %{project: project, home: home} do
-      fake_home!(home)
-      {:ok, _} = Pool.connection(project.id)
-
-      assert {:ok, _} = Projects.archive_project(project)
-      assert Pool.status(project.id) == :stopped
-      assert File.exists?(home)
-
-      # a project with history: its thread and turn rows go with it (they reference
-      # it — SQLite refused the delete as "referenced something that does not exist")
-      {:ok, thread} =
-        Projects.create_thread(%{
-          codex_thread_id: "thr_del_#{System.unique_integer([:positive])}",
+      thread =
+        Projects.create_thread!(%{
           project_id: project.id,
-          cwd: project.root_path,
-          approval_policy: :on_request,
-          sandbox: :workspace_write
+          kernel_thread_id: "native_del_#{System.unique_integer([:positive])}",
+          cwd: dir
         })
 
-      {:ok, _turn} =
-        Projects.create_turn(%{
-          codex_turn_id: "turn_del",
-          thread_id: thread.id,
-          user_text: "hi",
-          started_at: DateTime.utc_now()
-        })
+      Projects.create_turn!(%{
+        kernel_turn_id: "turn_del_#{System.unique_integer([:positive])}",
+        thread_id: thread.id,
+        user_text: "hi",
+        started_at: DateTime.utc_now()
+      })
 
-      assert {:error, %Ash.Error.Invalid{} = err} = Projects.delete_project(project)
-      assert Exception.message(err) =~ "confirm"
+      assert {:error, %Ash.Error.Invalid{}} = Projects.delete_project(project)
       assert :ok = Projects.delete_project(project, confirm: true)
-      refute File.exists?(home)
-      assert {:error, _} = Projects.get_project_by_slug(project.slug)
-      assert Projects.list_threads_for_project!(project.id) == []
-
-      assert Ash.read!(Longx.Projects.Turn) |> Enum.reject(&(&1.codex_turn_id != "turn_del")) ==
-               []
+      assert Projects.list_projects!(include_archived: true) == []
+      assert Ash.read!(Projects.Thread) == []
+      assert Ash.read!(Projects.Turn) == []
+      assert File.dir?(dir)
     end
   end
 
@@ -292,6 +156,23 @@ defmodule Longx.ProjectsTest do
     test "refuses to touch an existing repository", %{dir: dir} do
       :ok = Git.init(dir)
       assert {:error, :already_a_repository} = Projects.init_git(create!(dir))
+    end
+
+    test "no git on the machine: the project is created, git is not, and init_git says why", %{
+      dir: dir
+    } do
+      previous = System.get_env("LONGX_GIT")
+      System.put_env("LONGX_GIT", "/nonexistent/git")
+
+      on_exit(fn ->
+        if previous,
+          do: System.put_env("LONGX_GIT", previous),
+          else: System.delete_env("LONGX_GIT")
+      end)
+
+      project = Projects.create_project!(%{name: "Nogit", root_path: dir, init_git: true})
+      assert %{repository?: false} = Projects.git_info(project)
+      assert {:error, :no_git} = Projects.init_git(project)
     end
 
     test "keeps an existing .gitignore", %{dir: dir} do

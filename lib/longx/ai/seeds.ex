@@ -6,9 +6,8 @@ defmodule Longx.AI.Seeds do
 
   Idempotent, on `Longx.AI.Presets`: the DeepSeek preset (its recommended
   models, no key) as the default model when nothing is the default yet, the
-  OpenAI preset's provider alone, a Tavily row for web search, the agent
-  tools mirrored into the DB. Never touches a key, a window or a level
-  someone chose.
+  OpenAI preset's provider alone, a Tavily row for web search. Never touches
+  a key, a window or a level someone chose.
   """
 
   alias Longx.AI
@@ -25,11 +24,8 @@ defmodule Longx.AI.Seeds do
 
     {:ok, _} = Presets.apply("openai", models: [])
 
-    # Web search for codex's `web.run` tool: Tavily; the key is set in Settings.
+    # Standalone web search: Tavily; the key is set in Settings.
     {:ok, _} = AI.ensure_search_provider()
-
-    # Mirror the registered agent tools into the DB (new tools off).
-    AI.list_tools!()
     :ok
   end
 end

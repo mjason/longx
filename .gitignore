@@ -37,18 +37,12 @@ npm-debug.log
 *.db
 *.db-*
 
+# the dev server's data directory (attachments, the global knowledge; prod uses LONGX_DATA_DIR)
+/data/
 
 # Go shim binaries built by `mix compile` (Mix.Tasks.Compile.Shim)
 /priv/bin/
 
-# Bundled codex-app-server, fetched by `mix codex.fetch` (Longx.Codex.Runtime)
-/priv/codex/
-
-# Local codex-app-server state (Longx.Codex.Home)
-/data/
-
-# Bundled git (dugite-native), fetched by `mix git.fetch` (Longx.Git.Runtime)
-/priv/git/
 # bundled obscura (headless browser), fetched by `mix obscura.fetch`
 /priv/obscura/
 

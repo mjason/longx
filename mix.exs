@@ -37,14 +37,13 @@ defmodule Longx.MixProject do
   end
 
   # Specifies which paths to compile per environment.
-  # `mix release` copies priv following symlinks, which turns the bundled git
-  # (145 builtins linking to one binary) into 700 MB. Recopy the bundles with
-  # their links, and drop the dialyzer PLT — it has no place in a release.
+  # `mix release` copies priv following symlinks; recopy the browser bundle
+  # with its links, and drop the dialyzer PLT — it has no place in a release.
   defp bundles(release) do
     priv = Path.join([release.path, "lib", "longx-#{release.version}", "priv"])
     File.rm_rf!(Path.join(priv, "plts"))
 
-    for dir <- ~w(codex git obscura), src = Path.join("priv", dir), File.dir?(src) do
+    for dir <- ~w(obscura), src = Path.join("priv", dir), File.dir?(src) do
       dst = Path.join(priv, dir)
       File.rm_rf!(dst)
       copy_tree(src, dst)
@@ -127,8 +126,6 @@ defmodule Longx.MixProject do
         "ecto.setup",
         "assets.setup",
         "assets.build",
-        "codex.fetch",
-        "git.fetch",
         "obscura.fetch"
       ],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],

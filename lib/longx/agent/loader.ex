@@ -60,9 +60,7 @@ defmodule Longx.Agent.Loader do
   def global_dir do
     :longx
     |> Application.get_env(__MODULE__, [])
-    |> Keyword.get_lazy(:global_dir, fn ->
-      Path.join(Path.dirname(Longx.Codex.Home.default_dir()), "agent")
-    end)
+    |> Keyword.get_lazy(:global_dir, fn -> Path.expand("data/agent") end)
   end
 
   @doc """

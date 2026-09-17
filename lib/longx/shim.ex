@@ -16,7 +16,7 @@ defmodule Longx.Shim do
   finish with `await_exit/2`: it delivers the exit status, closes streams you
   did not drain, and lets the server stop.
 
-      {:ok, shim} = Longx.Shim.start_link(["codex", "app-server"])
+      {:ok, shim} = Longx.Shim.start_link(["obscura", "serve"])
       :ok = Longx.Shim.write(shim, ~s({"id":1,"method":"initialize"}\\n))
       {:ok, line} = Longx.Shim.read(shim)
       :ok = Longx.Shim.kill(shim)

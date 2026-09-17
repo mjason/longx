@@ -1,17 +1,15 @@
 defmodule Longx.Projects.Tracker do
   @moduledoc """
-  Keeps `Longx.Projects.Thread` / `Turn` rows in step with what codex does,
-  and cleans up after it when it does not.
+  Keeps `Longx.Projects.Thread` / `Turn` rows in step with what the agents
+  do.
 
-  Per thread (subscribed on `track/1`): `turn/completed` records status,
-  time and the git HEAD after the turn; `turn/diff/updated` the diff; the
-  first user message the preview.
-
-  Per project's codex (`"codex:connection"`):
-    * `:down` — every turn still `:in_progress` in that project fails with
-      "codex restarted"; threads that were active become `:disconnected`
-    * `:ready` — `:disconnected` threads are resumed on the new process
-      (→ `:idle`), or marked `:unrecoverable` when codex no longer knows them
+  Per thread (subscribed on `track/1`): `turn/started` for a turn nobody
+  sent through `Projects` (a child's report waking its parent, a goal's
+  continuation) gets a row; `turn/completed` records status, time and the
+  git HEAD after the turn; the first user message the preview; a
+  `subAgentActivity` marks the child's row active / idle (and makes one when
+  the kernel spawned a bare agent); a request the person has to answer
+  (`longx/action/request`) goes to the notify feed.
 
   Stall watchdog: a turn whose thread has produced no event for
   `stall_after` (default 10 minutes; `config :longx, Longx.Projects.Tracker`)
@@ -20,7 +18,6 @@ defmodule Longx.Projects.Tracker do
 
   use GenServer
 
-  alias Longx.Codex.Pool
   alias Longx.Git
   alias Longx.Projects
   alias Longx.Projects.{Thread, Turn}
@@ -33,42 +30,38 @@ defmodule Longx.Projects.Tracker do
 
   defmodule State do
     @moduledoc false
-    # tracked: codex thread id → last event (monotonic ms)
+    # tracked: kernel thread id → last event (monotonic ms)
     defstruct tracked: %{}, interrupted: MapSet.new(), timer: nil
   end
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
-  @doc "Starts following the codex thread's events."
+  @doc "Starts following the thread's events."
   @spec track(String.t()) :: :ok
-  def track(codex_thread_id), do: GenServer.call(__MODULE__, {:track, codex_thread_id})
+  def track(kernel_thread_id), do: GenServer.call(__MODULE__, {:track, kernel_thread_id})
 
   @impl true
-  def init(_opts) do
-    :ok = PubSub.subscribe(Longx.PubSub, "codex:connection")
-    :ok = PubSub.subscribe(Longx.PubSub, "codex:server")
-    {:ok, schedule_tick(%State{})}
-  end
+  def init(_opts), do: {:ok, schedule_tick(%State{})}
 
   @impl true
-  def handle_call({:track, codex_thread_id}, _from, state) do
-    {:reply, :ok, follow(state, codex_thread_id)}
+  def handle_call({:track, kernel_thread_id}, _from, state) do
+    {:reply, :ok, follow(state, kernel_thread_id)}
   end
 
-  defp follow(%State{tracked: tracked} = state, codex_thread_id) do
-    unless Map.has_key?(tracked, codex_thread_id) do
-      :ok = PubSub.subscribe(Longx.PubSub, Longx.Codex.ThreadState.topic(codex_thread_id))
+  defp follow(%State{tracked: tracked} = state, kernel_thread_id) do
+    unless Map.has_key?(tracked, kernel_thread_id) do
+      :ok = PubSub.subscribe(Longx.PubSub, Longx.Agent.ThreadState.topic(kernel_thread_id))
     end
 
     # (re)arm the watchdog with the current settings for the new thread
-    schedule_tick(%State{state | tracked: Map.put(tracked, codex_thread_id, now())})
+    schedule_tick(%State{state | tracked: Map.put(tracked, kernel_thread_id, now())})
   end
 
   @impl true
   def handle_info({:codex, _seq, method, params}, state) do
     state =
       case handle_event(method, params) do
-        {:track, child_codex_id} -> follow(state, child_codex_id)
+        {:track, child_id} -> follow(state, child_id)
         _ -> state
       end
 
@@ -79,45 +72,6 @@ defmodule Longx.Projects.Tracker do
       {:noreply, state}
   end
 
-  # thread-less notifications of a project's codex: files changed under the
-  # watched root, config warnings, deprecation notices
-  def handle_info({:codex_server, project_id, "fs/changed", params}, state)
-      when is_binary(project_id) do
-    Projects.broadcast_files_changed(project_id, List.wrap(params["changedPaths"]))
-    {:noreply, state}
-  end
-
-  def handle_info({:codex_server, project_id, "configWarning", params}, state)
-      when is_binary(project_id) do
-    Projects.broadcast_notice(project_id, %{
-      kind: "configWarning",
-      summary: params["summary"],
-      details: params["details"]
-    })
-
-    {:noreply, state}
-  end
-
-  # a deprecation notice is addressed to Longx (the client), not the person:
-  # logged, so a codex bump that retires something Longx calls is noticed
-  def handle_info({:codex_server, _project_id, "deprecationNotice", params}, state) do
-    Logger.warning("codex deprecation: #{params["summary"]} #{params["details"] || ""}")
-    {:noreply, state}
-  end
-
-  def handle_info({:codex_server, _tag, _method, _params}, state), do: {:noreply, state}
-
-  def handle_info({:codex_connection, project_id, :down}, state) when is_binary(project_id) do
-    codex_down(project_id)
-    {:noreply, state}
-  end
-
-  def handle_info({:codex_connection, project_id, :ready}, state) when is_binary(project_id) do
-    # resuming talks to codex; keep the tracker itself responsive
-    Task.Supervisor.start_child(Longx.Codex.TaskSupervisor, fn -> codex_back(project_id) end)
-    {:noreply, state}
-  end
-
   def handle_info(:tick, state) do
     {:noreply, state |> check_stalls() |> schedule_tick()}
   end
@@ -126,24 +80,24 @@ defmodule Longx.Projects.Tracker do
 
   ## Thread events
 
-  # a turn nobody sent through Projects — codex's goal mode starting the next
-  # one on its own — gets a row like any other
+  # a turn nobody sent through Projects — a child's report waking its parent,
+  # a goal's continuation — gets a row like any other
   defp handle_event("turn/started", %{
-         "threadId" => codex_thread_id,
+         "threadId" => kernel_thread_id,
          "turn" => %{"id" => turn_id}
        }) do
-    with {:error, _} <- Projects.get_turn_by_codex_id(turn_id),
-         {:ok, %Thread{} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id) do
+    with {:error, _} <- Projects.get_turn_by_kernel_id(turn_id),
+         {:ok, %Thread{} = thread} <- Projects.get_thread_by_kernel_id(kernel_thread_id) do
       Projects.record_external_turn(thread, turn_id)
     end
   end
 
   defp handle_event("turn/completed", %{
-         "threadId" => codex_thread_id,
+         "threadId" => kernel_thread_id,
          "turn" => %{"id" => turn_id} = turn
        }) do
-    with {:ok, %Turn{} = row} <- Projects.get_turn_by_codex_id(turn_id),
-         {:ok, %Thread{} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id) do
+    with {:ok, %Turn{} = row} <- Projects.get_turn_by_kernel_id(turn_id),
+         {:ok, %Thread{} = thread} <- Projects.get_thread_by_kernel_id(kernel_thread_id) do
       # a retract marks its row reverted before the interrupt that ends the
       # turn: that row is out of the history already, its ending is no news
       if row.status != :reverted do
@@ -165,167 +119,73 @@ defmodule Longx.Projects.Tracker do
     end
   end
 
-  # a request the person has to answer: an approval, a permission, a
-  # question — the phone's reason to buzz
-  defp handle_event(method, %{"threadId" => codex_thread_id, "requestId" => _} = params)
-       when method in ~w(item/commandExecution/requestApproval item/fileChange/requestApproval item/permissions/requestApproval item/tool/requestUserInput item/mcpServer/elicitation longx/action/request) do
-    with {:ok, %Thread{} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id) do
-      title =
-        cond do
-          method == "longx/action/request" -> "等待你操作"
-          method in ~w(item/tool/requestUserInput item/mcpServer/elicitation) -> "等待回答"
-          true -> "等待审批"
-        end
-
+  # a request the person has to answer (a tool's ask) — the phone's reason to buzz
+  defp handle_event(
+         "longx/action/request",
+         %{"threadId" => kernel_thread_id, "requestId" => _} = params
+       ) do
+    with {:ok, %Thread{} = thread} <- Projects.get_thread_by_kernel_id(kernel_thread_id) do
       Projects.notify(thread, "approval",
-        title: title,
-        body: request_summary(method, params, thread)
+        title: "等待你操作",
+        body: request_summary(params, thread)
       )
     end
   end
 
-  defp handle_event("turn/diff/updated", %{
-         "threadId" => codex_thread_id,
-         "turnId" => turn_id,
-         "diff" => diff
-       }) do
-    with {:ok, %Turn{} = row} <- Projects.get_turn_by_codex_id(turn_id),
-         {:ok, %Thread{} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id) do
-      Projects.set_turn_diff!(row, %{diff: diff})
-      Projects.broadcast_changed(thread.project_id)
-    end
-  end
-
   defp handle_event("item/completed", %{
-         "threadId" => codex_thread_id,
+         "threadId" => kernel_thread_id,
          "item" => %{"type" => "userMessage"} = item
        }) do
-    with {:ok, %Thread{preview: nil} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id),
+    with {:ok, %Thread{preview: nil} = thread} <-
+           Projects.get_thread_by_kernel_id(kernel_thread_id),
          text when is_binary(text) <- user_text(item) do
       Projects.touch_thread!(thread, %{preview: String.slice(text, 0, 200)})
       Projects.broadcast_changed(thread.project_id)
     end
   end
 
-  # codex names a thread from its first exchange; that fills an empty title
-  # only — a title the person chose (rename) is theirs
-  defp handle_event("thread/name/updated", %{
-         "threadId" => codex_thread_id,
-         "threadName" => name
-       })
-       when is_binary(name) and name != "" do
-    with {:ok, %Thread{title: nil} = thread} <- Projects.get_thread_by_codex_id(codex_thread_id) do
-      Projects.touch_thread!(thread, %{title: String.slice(name, 0, 200)})
-      Projects.broadcast_changed(thread.project_id)
-    end
-  end
-
-  # a sub-agent codex spawned inside a tracked thread: a row of its own under
-  # the parent (same project / cwd; codex sends no thread/started for it), its
-  # topic followed from now on so its turns get the same treatment
+  # a child agent of a tracked thread: `Projects.spawn_native_agent/4` made its
+  # row already; a bare spawn (a strategy plug in a test) gets one here. Its
+  # topic is followed from now on so its turns get the same treatment.
   defp handle_event("item/completed", %{
-         "threadId" => parent_codex_id,
+         "threadId" => parent_id,
          "item" => %{
            "type" => "subAgentActivity",
-           "agentThreadId" => child_codex_id,
+           "agentThreadId" => child_id,
            "agentPath" => path,
            "kind" => kind
          }
        }) do
-    with {:ok, %Thread{} = parent} <- Projects.get_thread_by_codex_id(parent_codex_id) do
+    with {:ok, %Thread{} = parent} <- Projects.get_thread_by_kernel_id(parent_id) do
       child =
-        case Projects.get_thread_by_codex_id(child_codex_id) do
+        case Projects.get_thread_by_kernel_id(child_id) do
           {:ok, %Thread{} = child} ->
             child
 
           {:error, _} ->
             Projects.create_thread!(%{
-              codex_thread_id: child_codex_id,
+              kernel_thread_id: child_id,
               project_id: parent.project_id,
               parent_thread_id: parent.id,
               agent_path: path,
               title: path |> String.split("/") |> List.last(),
               cwd: parent.cwd,
               model_slug: parent.model_slug,
-              approval_policy: parent.approval_policy,
-              sandbox: parent.sandbox,
-              network_access: parent.network_access,
               web_search: parent.web_search,
-              multi_agent: parent.multi_agent,
-              auto_review: parent.auto_review,
-              tools: parent.tools,
               status: :active
             })
         end
 
-      # 全部放行 covers the children too: their approvals are their own requests
-      Longx.Codex.ThreadState.Store.set_auto_accept(
-        child.codex_thread_id,
-        parent.approval_policy == :auto_accept
-      )
-
       status = if kind in ["started", "interacted"], do: :active, else: :idle
       Projects.touch_thread!(child, %{status: status, last_activity_at: DateTime.utc_now()})
       Projects.broadcast_changed(parent.project_id)
-      {:track, child_codex_id}
+      {:track, child_id}
     else
       _ -> :ok
     end
   end
 
   defp handle_event(_method, _params), do: :ok
-
-  ## Codex lifecycle
-
-  defp codex_down(project_id) do
-    now = DateTime.utc_now()
-
-    for turn <- Projects.list_turns_in_progress!(project_id) do
-      Projects.complete_turn!(turn, %{
-        status: :failed,
-        completed_at: now,
-        error: "codex restarted while this turn was running"
-      })
-
-      with {:ok, %Thread{parent_thread_id: nil} = thread} <- Ash.get(Thread, turn.thread_id) do
-        Projects.notify(thread, "turn_failed", title: "出错了", body: "codex 退出了，这一轮没有完成")
-      end
-    end
-
-    # idle threads need nothing now: they are resumed lazily on their next
-    # message (Longx.Projects.send_message/3)
-    for thread <- Projects.list_threads_with_status!(project_id, :active) do
-      Projects.touch_thread!(thread, %{status: :disconnected})
-    end
-
-    Projects.broadcast_changed(project_id)
-  rescue
-    e -> Logger.error("projects tracker: codex down cleanup failed: #{Exception.message(e)}")
-  end
-
-  defp codex_back(project_id) do
-    with {:ok, conn} <- Pool.connection(project_id) do
-      watch_root(project_id, conn)
-
-      for thread <- Projects.list_threads_with_status!(project_id, :disconnected) do
-        case Projects.resume_thread(thread, conn) do
-          {:ok, _} ->
-            Projects.touch_thread!(thread, %{status: :idle})
-
-          {:error, reason} ->
-            Logger.warning(
-              "projects tracker: thread #{thread.codex_thread_id} could not be resumed: #{inspect(reason)}"
-            )
-
-            Projects.touch_thread!(thread, %{status: :unrecoverable})
-        end
-      end
-
-      Projects.broadcast_changed(project_id)
-    end
-  rescue
-    e -> Logger.error("projects tracker: resume after restart failed: #{Exception.message(e)}")
-  end
 
   ## Stall watchdog
 
@@ -334,10 +194,10 @@ defmodule Longx.Projects.Tracker do
     cutoff = now() - stall_after
 
     stalled =
-      for {codex_thread_id, last} <- tracked,
+      for {kernel_thread_id, last} <- tracked,
           last < cutoff,
-          not MapSet.member?(interrupted, codex_thread_id),
-          {:ok, %Thread{} = thread} <- [Projects.get_thread_by_codex_id(codex_thread_id)],
+          not MapSet.member?(interrupted, kernel_thread_id),
+          {:ok, %Thread{} = thread} <- [Projects.get_thread_by_kernel_id(kernel_thread_id)],
           turn <- running_turn(thread),
           do: {thread, turn}
 
@@ -352,9 +212,9 @@ defmodule Longx.Projects.Tracker do
           error: "no progress for #{div(stall_after, 1000)} seconds; interrupted"
         })
 
-        Projects.interrupt_turn(thread, turn.codex_turn_id)
+        Projects.interrupt_turn(thread, turn.kernel_turn_id)
         Projects.broadcast_changed(thread.project_id)
-        MapSet.put(acc, thread.codex_thread_id)
+        MapSet.put(acc, thread.kernel_thread_id)
       end)
 
     %State{state | interrupted: interrupted}
@@ -371,15 +231,15 @@ defmodule Longx.Projects.Tracker do
   # any event on a thread is progress; a turn ending clears its interrupt mark
   defp touch(state, _method, nil), do: state
 
-  defp touch(%State{tracked: tracked, interrupted: interrupted} = state, method, codex_thread_id) do
+  defp touch(%State{tracked: tracked, interrupted: interrupted} = state, method, kernel_thread_id) do
     interrupted =
       if method == "turn/completed",
-        do: MapSet.delete(interrupted, codex_thread_id),
+        do: MapSet.delete(interrupted, kernel_thread_id),
         else: interrupted
 
     %State{
       state
-      | tracked: Map.replace(tracked, codex_thread_id, now()),
+      | tracked: Map.replace(tracked, kernel_thread_id, now()),
         interrupted: interrupted
     }
   end
@@ -407,44 +267,14 @@ defmodule Longx.Projects.Tracker do
 
   defp notify_turn_end(_thread, _status, _error), do: :ok
 
-  defp request_summary("item/commandExecution/requestApproval", %{"command" => cmd}, _thread)
-       when is_binary(cmd),
-       do: cmd
+  defp request_summary(%{"title" => title}, _thread) when is_binary(title) and title != "",
+    do: title
 
-  defp request_summary("item/fileChange/requestApproval", _params, _thread), do: "修改文件"
-
-  defp request_summary("longx/action/request", %{"title" => title}, _thread)
-       when is_binary(title), do: title
-
-  defp request_summary("item/permissions/requestApproval", params, _thread),
-    do: params["reason"] || "申请权限"
-
-  defp request_summary(_method, _params, thread), do: Projects.thread_label(thread)
+  defp request_summary(_params, thread), do: Projects.thread_label(thread)
 
   defp turn_status("completed"), do: :completed
   defp turn_status("interrupted"), do: :interrupted
   defp turn_status(_), do: :failed
-
-  # codex watches the project root for us (fs/watch → fs/changed): the file
-  # tree and git status refresh on a change instead of polling
-  defp watch_root(project_id, conn) do
-    case Ash.get(Longx.Projects.Project, project_id) do
-      {:ok, %{root_path: root}} ->
-        case Longx.Codex.Connection.request(conn, "fs/watch", %{
-               "watchId" => project_id,
-               "path" => root
-             }) do
-          {:ok, _} ->
-            :ok
-
-          {:error, reason} ->
-            Logger.debug("projects tracker: fs/watch refused: #{inspect(reason)}")
-        end
-
-      _ ->
-        :ok
-    end
-  end
 
   defp user_text(%{"content" => content}) when is_list(content) do
     content |> Enum.filter(&(&1["type"] == "text")) |> Enum.map_join(" ", & &1["text"])

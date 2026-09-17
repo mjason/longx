@@ -9,7 +9,6 @@ defmodule Longx.AITest do
     Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.SearchProvider, :destroy, %{}, authorize?: false)
-    Ash.bulk_destroy!(AI.Tool, :destroy, %{}, authorize?: false)
     :ok
   end
 
@@ -442,141 +441,6 @@ defmodule Longx.AITest do
     end
   end
 
-  describe "agent tools (which registered tools a thread may get)" do
-    test "list_tools/0 mirrors the registry into the DB: every tool present, new ones disabled unless the tool asks otherwise" do
-      tools = AI.list_tools!()
-      names = Enum.map(tools, &{&1.namespace, &1.name})
-
-      assert {"builtin", "echo"} in names
-      assert {"builtin", "thread_status"} in names
-      assert {"test", "echo"} in names
-      # no shipped tool declares enabled_by_default? any more
-      assert Enum.all?(tools, &(not &1.enabled))
-
-      # description comes from the code, not the DB
-      assert Enum.find(tools, &(&1.name == "thread_status")).description =~ "thread"
-    end
-
-    test "nothing is enabled by default, so nothing is injected until a switch is on" do
-      assert AI.enabled_tool_names() == []
-    end
-
-    test "enable/disable by qualified name, kept across syncs" do
-      assert {:ok, %{enabled: true}} = AI.enable_tool("builtin.thread_status")
-      assert "builtin.thread_status" in AI.enabled_tool_names()
-
-      # a re-sync (list) must not flip it back
-      AI.list_tools!()
-      assert "builtin.thread_status" in AI.enabled_tool_names()
-
-      assert {:ok, %{enabled: false}} = AI.disable_tool("builtin.thread_status")
-      refute "builtin.thread_status" in AI.enabled_tool_names()
-    end
-
-    test "enabling an unregistered tool is an error" do
-      assert {:error, :unknown_tool} = AI.enable_tool("nope.nothing")
-    end
-
-    test "a tool removed from the code disappears from the list" do
-      AI.create_tool!(%{namespace: "gone", name: "tool"})
-      refute Enum.any?(AI.list_tools!(), &(&1.namespace == "gone"))
-    end
-  end
-
-  describe "web_search_mode/0" do
-    test ":standalone even when nothing is configured — open fetches pages without a provider" do
-      assert AI.web_search_mode() == :standalone
-    end
-
-    test ":standalone when the search provider has no key (search_query is told so at call time)" do
-      keyless = AI.create_search_provider!(%{name: "K", slug: "k-#{uniq()}", kind: :tavily})
-      AI.make_default_search_provider!(keyless)
-      assert AI.web_search_mode() == :standalone
-    end
-
-    test ":standalone when a search provider with a key is the default" do
-      sp =
-        AI.create_search_provider!(%{
-          name: "T",
-          slug: "t-#{uniq()}",
-          kind: :tavily,
-          api_key: "tvly"
-        })
-
-      AI.make_default_search_provider!(sp)
-      assert AI.web_search_mode() == :standalone
-    end
-
-    test ":hosted when the default model's provider natively supports web search, even with Tavily configured" do
-      sp =
-        AI.create_search_provider!(%{
-          name: "T",
-          slug: "t-#{uniq()}",
-          kind: :tavily,
-          api_key: "tvly"
-        })
-
-      AI.make_default_search_provider!(sp)
-
-      openai = create_provider!(%{slug: "openai-#{uniq()}", supports_hosted_web_search: true})
-      AI.make_default_model!(create_model!(openai))
-
-      assert AI.web_search_mode() == :hosted
-    end
-
-    test "the model can override its provider: a Bailian model without agent capabilities searches through Longx, a capable one through Bailian" do
-      bailian = create_provider!(%{slug: "bailian-#{uniq()}", supports_hosted_web_search: true})
-
-      # kimi-k2.x on Bailian: the web_search tool is refused ("Agent capabilities are not enabled")
-      kimi = create_model!(bailian, %{upstream_id: "kimi-k2.7-code", hosted_web_search: false})
-      qwen = create_model!(bailian, %{upstream_id: "qwen3.8-max"})
-      assert AI.web_search_mode(kimi) == :standalone
-      assert AI.web_search_mode(qwen) == :hosted
-      # and the other way round: one model on an otherwise plain provider
-      plain = create_provider!(%{slug: "plain-#{uniq()}", supports_hosted_web_search: false})
-      assert AI.web_search_mode(create_model!(plain, %{hosted_web_search: true})) == :hosted
-      assert AI.web_search_mode(create_model!(plain)) == :standalone
-    end
-
-    test "a hosted-capable provider without a key falls back to what is left" do
-      openai =
-        create_provider!(%{
-          slug: "openai-#{uniq()}",
-          supports_hosted_web_search: true,
-          api_key: nil
-        })
-
-      AI.make_default_model!(create_model!(openai))
-      assert AI.web_search_mode() == :standalone
-    end
-  end
-
-  describe "web_search_mode/1 (per model, for the thread being started)" do
-    test "follows the model's provider, not the global default" do
-      sp =
-        AI.create_search_provider!(%{
-          name: "T",
-          slug: "t-#{uniq()}",
-          kind: :tavily,
-          api_key: "tvly"
-        })
-
-      AI.make_default_search_provider!(sp)
-
-      deepseek = create_provider!(%{slug: "deepseek-#{uniq()}"})
-      AI.make_default_model!(create_model!(deepseek, %{slug: "ds-#{uniq()}"}))
-      openai = create_provider!(%{slug: "openai-#{uniq()}", supports_hosted_web_search: true})
-      gpt = create_model!(openai, %{slug: "gpt-#{uniq()}"})
-
-      assert AI.web_search_mode() == :standalone
-      assert AI.web_search_mode(nil) == :standalone
-      assert AI.web_search_mode("longx") == :standalone
-      assert AI.web_search_mode(gpt.slug) == :hosted
-      # unknown model: nothing hosted to rely on, whatever is left applies
-      assert AI.web_search_mode("nope") == :standalone
-    end
-  end
-
   describe "thread_options/1 and turn_options/1 (what codex gets for a model)" do
     test "the default model contributes its settings but no model name (codex's placeholder stays)" do
       provider = create_provider!()
@@ -912,53 +776,6 @@ defmodule Longx.AITest do
 
       assert {:error, {:unknown_model, "nope"}} = AI.resolve_target("nope")
       assert {:ok, %AI.Target{model: "a-default"}} = AI.resolve_target(nil)
-    end
-  end
-
-  describe "the reviewer model (codex's automatic approval review on a model of its own)" do
-    test "set_review_model/2 names a model and a level it offers; review_model/0 reads it back; nil clears it" do
-      provider = create_provider!(%{api_key: "sk-a"})
-      main = create_model!(provider, %{upstream_id: "main", slug: "main"})
-      AI.make_default_model!(main)
-
-      cheap =
-        create_model!(provider, %{
-          upstream_id: "cheap",
-          slug: "cheap",
-          reasoning_levels: ["low", "high"],
-          reasoning_effort: "high"
-        })
-
-      assert AI.review_model() == nil
-
-      assert :ok = AI.set_review_model("cheap", "high")
-      assert %{model: %AI.Model{slug: "cheap"}, effort: "high"} = AI.review_model()
-
-      # no level: codex's own rule applies (low when offered, else the model's default)
-      assert :ok = AI.set_review_model("cheap", nil)
-      assert %{model: %AI.Model{slug: "cheap"}, effort: nil} = AI.review_model()
-
-      assert {:error, {:unknown_effort, "max"}} = AI.set_review_model("cheap", "max")
-      assert {:error, {:unknown_model, "nope"}} = AI.set_review_model("nope", nil)
-
-      assert :ok = AI.set_review_model(nil, nil)
-      assert AI.review_model() == nil
-
-      # a deleted model is no reviewer any more
-      assert :ok = AI.set_review_model("cheap", "low")
-      Ash.destroy!(cheap, action: :delete)
-      assert AI.review_model() == nil
-    end
-
-    test "resolve_target/1: `longx-review` is the reviewer model, the default model when none is set" do
-      provider = create_provider!(%{api_key: "sk-a"})
-      main = create_model!(provider, %{upstream_id: "main", slug: "main"})
-      AI.make_default_model!(main)
-      create_model!(provider, %{upstream_id: "cheap", slug: "cheap"})
-
-      assert {:ok, %AI.Target{model: "main"}} = AI.resolve_target("longx-review")
-      :ok = AI.set_review_model("cheap", nil)
-      assert {:ok, %AI.Target{model: "cheap"}} = AI.resolve_target("longx-review")
     end
   end
 

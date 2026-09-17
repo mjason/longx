@@ -7,9 +7,6 @@ defmodule Longx.Application do
 
   @impl true
   def start(_type, _args) do
-    # One gateway token per boot; handed to codex-app-server when it is spawned.
-    Longx.AI.Gateway.Token.generate!()
-
     children = [
       LongxWeb.Telemetry,
       Longx.Vault,
@@ -23,51 +20,34 @@ defmodule Longx.Application do
       ),
       {DNSCluster, query: Application.get_env(:longx, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Longx.PubSub},
-      # reference-id memory for codex web search (Longx.AI.Search)
-      Longx.AI.Search.Refs,
       # per-provider in-flight counters (Provider.max_concurrent_requests)
       Longx.AI.Gateway.Limiter,
       Longx.AI.Gateway.Log,
-      # per-thread materialised codex state (Longx.Codex.ThreadState); the ETS
-      # store outlives the per-thread writer processes
-      Longx.Codex.ThreadState.Store,
-      {Registry, keys: :unique, name: Longx.Codex.ThreadRegistry},
-      {DynamicSupervisor, name: Longx.Codex.ThreadState.Supervisor, strategy: :one_for_one},
-      # the native agent kernel: one Longx.Agent per thread, its tasks
+      # per-thread materialised view (Longx.Agent.ThreadState); the ETS store
+      # outlives the per-thread writer processes
+      Longx.Agent.ThreadState.Store,
+      {Registry, keys: :unique, name: Longx.Agent.ThreadRegistry},
+      {DynamicSupervisor, name: Longx.Agent.ThreadState.Supervisor, strategy: :one_for_one},
+      # the agent kernel: one Longx.Agent per thread, its tasks
       {Registry, keys: :unique, name: Longx.Agent.Registry},
       {Task.Supervisor, name: Longx.Agent.TaskSupervisor},
       Longx.Agent.Loader.Cache,
       Longx.Agent.Specs,
       {DynamicSupervisor, name: Longx.Agent.Supervisor, strategy: :one_for_one},
-      # dynamic tool calls and other async work for the codex connection
-      {Task.Supervisor, name: Longx.Codex.TaskSupervisor},
-      # the exec-server's slow requests (reads that wait, walks) run off the socket
-      {Task.Supervisor, name: Longx.Exec.TaskSupervisor},
-      # keeps project thread/turn rows in step with codex events
+      # keeps project thread/turn rows in step with the agents' events
       Longx.Projects.Tracker,
-      # rows a previous boot left running: no codex survives the BEAM
+      # rows a previous boot left running: no agent survives the BEAM
       Supervisor.child_spec({Task, fn -> Longx.Projects.settle_after_restart() end},
         id: :settle_after_restart,
         restart: :temporary
       ),
       # Start to serve requests, typically the last entry
       LongxWeb.Endpoint,
-      # one codex per project, started lazily (needs the endpoint's port for
-      # its gateway URL, hence after it)
-      {Registry, keys: :unique, name: Longx.Codex.Registry},
-      Longx.Codex.Pool,
       # permits for the headless browser (Longx.Browser)
       Longx.Browser.Pool,
-      # retires idle codex processes that got old or fat; publishes their numbers
-      Longx.Codex.Recycler,
       # new releases on GitHub, and the upgrade itself (Longx.Upgrade)
       {Task.Supervisor, name: Longx.Upgrade.TaskSupervisor},
-      Longx.Upgrade,
-      # is codex's command sandbox going to work here? (result cached, shown in the UI)
-      Supervisor.child_spec({Task, &Longx.Codex.Sandbox.probe/0},
-        id: :sandbox_probe,
-        restart: :temporary
-      )
+      Longx.Upgrade
     ]
 
     # See https://elixir.hexdocs.pm/Supervisor.html

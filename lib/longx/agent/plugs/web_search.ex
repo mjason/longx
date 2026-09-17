@@ -54,22 +54,17 @@ defmodule Longx.Agent.Plugs.WebSearch do
   defp resolve(:auto, model), do: AI.web_search_mode(model)
   defp resolve(mode, _model), do: mode
 
-  def web_search(%{"query" => query} = args, ctx) do
+  def web_search(%{"query" => query} = args, _ctx) do
     target =
       case AI.resolve_search_target() do
         {:ok, target} -> target
         {:error, _} -> nil
       end
 
-    q =
-      %{"q" => query}
-      |> put_if("recency", args["recency_days"])
-      |> put_if("domains", args["domains"])
-
     {:ok, %{output: output, results: results}} =
-      Search.run(
-        %{"id" => ctx.thread_id || "agent", "commands" => %{"search_query" => [q]}},
-        target
+      Search.search(target, query,
+        recency_days: args["recency_days"],
+        domains: args["domains"]
       )
 
     {:ok, output,
@@ -78,7 +73,4 @@ defmodule Longx.Agent.Plugs.WebSearch do
          Enum.map(results, &%{"title" => &1.title, "url" => &1.url, "snippet" => &1.snippet})
      }}
   end
-
-  defp put_if(map, _key, nil), do: map
-  defp put_if(map, key, value), do: Map.put(map, key, value)
 end

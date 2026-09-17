@@ -62,10 +62,9 @@ config :longx, LongxWeb.Vite,
 # configured to run both http and https servers on
 # different ports.
 
-# Where the bundled codex-app-server keeps its state (see Longx.Codex.Home)
+# Runtime data of the dev box: attachments and the agent's global knowledge
 config :longx, Longx.Projects.Attachments, dir: Path.expand("../data/attachments", __DIR__)
-
-config :longx, Longx.Codex.Home, dir: Path.expand("../data/codex_home", __DIR__)
+config :longx, Longx.Agent.Loader, global_dir: Path.expand("../data/agent", __DIR__)
 
 # Enable dev routes for dashboard and mailbox
 config :longx, dev_routes: true

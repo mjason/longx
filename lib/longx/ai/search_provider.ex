@@ -1,7 +1,7 @@
 defmodule Longx.AI.SearchProvider do
   @moduledoc """
-  A web-search backend for codex's standalone `web.run` tool (served by our
-  `/ai/v1/alpha/search`, see `Longx.AI.Search`). The API key is encrypted at
+  A web-search backend for the kernel's standalone `web_search` tool
+  (`Longx.AI.Search`). The API key is encrypted at
   rest like `Longx.AI.Provider`'s. Only Tavily for now; `kind` is an enum so
   Brave & co. can follow without a migration.
   """

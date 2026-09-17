@@ -4,7 +4,6 @@
 #   curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install.sh | sh
 #   curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install.sh | sh -s -- 0.2.0
 #   sh install.sh --rollback        # put the previous version back
-#   sh install.sh --fix-sandbox     # only the AppArmor profile for the sandbox (Ubuntu ≥ 24.04)
 #
 # Puts the program in $LONGX_HOME/app (default ~/.longx), the data in
 # $LONGX_HOME/data, and runs it as a systemd --user service on $LONGX_PORT
@@ -13,7 +12,6 @@
 #
 #   LONGX_HOME=~/.longx   LONGX_PORT=7788   LONGX_NO_SERVICE=1 (just install, don't run)
 #   LONGX_TARBALL=/path/to/longx-x.y.z-linux-<arch>.tar.gz (install a local build)
-#   LONGX_NO_SUDO=1 (never ask for sudo: print the AppArmor step instead of doing it)
 set -eu
 
 REPO="mjason/longx"
@@ -47,90 +45,6 @@ stop_service() {
   fi
 }
 
-# codex sandboxes commands with bubblewrap — a system `bwrap` on PATH when
-# its --help lists --perms (codex prefers it), the bundled one otherwise. It
-# needs a user namespace with capabilities, which Ubuntu ≥ 24.04 refuses to
-# programs without an AppArmor profile (kernel.apparmor_restrict_unprivileged_userns=1:
-# "bwrap: setting up uid map: Permission denied"). So, like Ubuntu does for
-# Chrome and bazel, give the bwrap codex runs a profile — the one root step,
-# done with sudo when allowed, printed otherwise. The bundled path is a glob
-# over every version and app.old; the system binary gets its own stanza
-# unless a profile already attaches to it.
-PROFILE=/etc/apparmor.d/longx-bwrap
-
-bundled_bwrap() { ls "$APP"/lib/longx-*/priv/codex/*/codex-resources/bwrap 2>/dev/null | head -n 1; }
-
-# the bwrap codex will run (linux-sandbox/src/launcher.rs: preferred_bwrap_launcher)
-codex_bwrap() {
-  sys="$(command -v bwrap 2>/dev/null || true)"
-  if [ -n "$sys" ] && "$sys" --help 2>&1 | grep -q -- '--perms'; then echo "$sys"; else bundled_bwrap; fi
-}
-
-sandbox_works() {
-  b="$(codex_bwrap)"
-  [ -n "$b" ] && "$b" --ro-bind / / --dev /dev --proc /proc --unshare-user --unshare-pid --unshare-ipc /bin/true >/dev/null 2>&1
-}
-
-apparmor_restricted() {
-  [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ] && command -v apparmor_parser >/dev/null 2>&1
-}
-
-profile_text() {
-  cat <<PROFILE
-abi <abi/4.0>,
-include <tunables/global>
-
-profile longx-bwrap $HOME_DIR/app*/lib/longx-*/priv/codex/*/codex-resources/bwrap flags=(unconfined) {
-  userns,
-}
-PROFILE
-  b="$(codex_bwrap)"
-  case "$b" in
-    "$HOME_DIR"/*) ;;
-    "") ;;
-    *)
-      # a system bwrap: its own stanza, unless some profile already claims it
-      if ! grep -rls "$b" /etc/apparmor.d/ 2>/dev/null | grep -qv "^$PROFILE\$"; then
-        cat <<PROFILE
-
-profile longx-system-bwrap $b flags=(unconfined) {
-  userns,
-}
-PROFILE
-      fi
-      ;;
-  esac
-}
-
-fix_sandbox() {
-  if sandbox_works; then
-    say "沙箱可用（bubblewrap 正常：$(codex_bwrap)）。"
-    return 0
-  fi
-  if ! apparmor_restricted; then
-    say "沙箱不可用，但不是 AppArmor 的限制——看「设置 → 沙箱与权限」里的原因。"
-    return 0
-  fi
-  say "Ubuntu 的 AppArmor 不让普通程序建用户命名空间（kernel.apparmor_restrict_unprivileged_userns=1），"
-  say "codex 的沙箱需要给它用的 bwrap（$(codex_bwrap)）一条 AppArmor 配置（$PROFILE，只做一次，升级后仍有效）。"
-  if [ -n "${LONGX_NO_SUDO:-}" ] || ! command -v sudo >/dev/null 2>&1; then
-    say "自己用 root 执行："
-    say "  cat > $PROFILE <<'EOF'"; profile_text; say "EOF"
-    say "  apparmor_parser -r $PROFILE"
-    return 0
-  fi
-  say "需要 sudo："
-  if profile_text | sudo tee "$PROFILE" >/dev/null && sudo apparmor_parser -r "$PROFILE"; then
-    if sandbox_works; then
-      say "已加上 AppArmor 配置，沙箱可用。"
-    else
-      say "配置已加上，但沙箱还是不行——看「设置 → 沙箱与权限」里的原因。"
-    fi
-  else
-    say "没能加上配置（sudo 失败？）。之后可以再跑：sh install.sh --fix-sandbox"
-  fi
-}
-
 arch() {
   case "$(uname -m)" in
     x86_64 | amd64) echo x86_64 ;;
@@ -160,8 +74,7 @@ rollback() {
 
 case "${1:-}" in
   --rollback) rollback ;;
-  --fix-sandbox) [ -d "$APP" ] || die "还没安装（$APP 不存在）"; fix_sandbox; exit 0 ;;
-  -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
+  -h | --help) sed -n '2,14p' "$0"; exit 0 ;;
 esac
 
 [ "$(uname -s)" = Linux ] || die "只支持 Linux"
@@ -211,7 +124,6 @@ if [ -d "$APP" ]; then
 fi
 mv "$APP.new" "$APP"
 say "已安装 $(longx_bin version) 到 $APP"
-fix_sandbox
 
 # ---- the service ----------------------------------------------------------------
 if [ -n "${LONGX_NO_SERVICE:-}" ]; then

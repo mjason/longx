@@ -3,7 +3,7 @@
 
 import * as RpcHooks from "./core/rpcHooks";
 
-import type { AshRpcError, ConditionalPaginatedResultMixed, InferResult, ModelFilterInput, ModelResourceSchema, ModelSortField, ProjectFilterInput, ProjectResourceSchema, ProjectSortField, ProviderFilterInput, ProviderResourceSchema, ProviderSortField, SearchProviderFilterInput, SearchProviderResourceSchema, SearchProviderSortField, SortString, ThreadFilterInput, ThreadResourceSchema, ThreadSortField, ToolResourceSchema, TurnFilterInput, TurnResourceSchema, TurnSortField, UUID, UUIDv7, UnifiedFieldSelection, UtcDateTimeUsec, ValidationResult } from "./ash_types";
+import type { AshRpcError, ConditionalPaginatedResultMixed, InferResult, ModelFilterInput, ModelResourceSchema, ModelSortField, ProjectFilterInput, ProjectResourceSchema, ProjectSortField, ProviderFilterInput, ProviderResourceSchema, ProviderSortField, SearchProviderFilterInput, SearchProviderResourceSchema, SearchProviderSortField, SortString, ThreadFilterInput, ThreadResourceSchema, ThreadSortField, TurnFilterInput, TurnResourceSchema, TurnSortField, UUID, UUIDv7, UnifiedFieldSelection, ValidationResult } from "./ash_types";
 export type * from "./ash_types";
 
 // RPC Action Hook Context Type
@@ -741,72 +741,6 @@ export async function validateListModels(
 }
 
 
-export type ReviewSettingsFields = UnifiedFieldSelection<{modelSlug: string | null, effort: string | null, __type: "TypedMap", __primitiveFields: "modelSlug" | "effort"}>[];
-
-export type InferReviewSettingsResult<
-  Fields extends ReviewSettingsFields | undefined,
-> = InferResult<{modelSlug: string | null, effort: string | null, __type: "TypedMap", __primitiveFields: "modelSlug" | "effort"}, Fields>;
-
-export type ReviewSettingsResult<Fields extends ReviewSettingsFields | undefined = undefined> = | { success: true; data: InferReviewSettingsResult<Fields>; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Model
- *
- * @ashActionType :action
- */
-export async function reviewSettings<Fields extends ReviewSettingsFields | undefined = undefined>(
-  config: {
-  tenant?: string;
-  hookCtx?: ActionHookContext;
-  fields: Fields;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ReviewSettingsResult<Fields extends undefined ? [] : Fields>> {
-  const payload = {
-    action: "review_settings",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    ...(config.fields !== undefined && { fields: config.fields })
-  };
-
-  return executeActionRpcRequest<ReviewSettingsResult<Fields extends undefined ? [] : Fields>>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Model
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateReviewSettings(
-  config: {
-  tenant?: string;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "review_settings",
-    ...(config.tenant !== undefined && { tenant: config.tenant })
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
 export type SetModelAliasInput = {
   name: string;
   models: Array<string>;
@@ -871,75 +805,6 @@ export async function validateSetModelAlias(
 ): Promise<ValidationResult> {
   const payload = {
     action: "set_model_alias",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
-export type SetReviewModelInput = {
-  modelSlug?: string | null;
-  effort?: string | null;
-};
-
-export type InferSetReviewModelResult = {};
-
-export type SetReviewModelResult = | { success: true; data: InferSetReviewModelResult; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Model
- *
- * @ashActionType :action
- */
-export async function setReviewModel(
-  config: {
-  tenant?: string;
-  input?: SetReviewModelInput;
-  hookCtx?: ActionHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<SetReviewModelResult> {
-  const payload = {
-    action: "set_review_model",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeActionRpcRequest<SetReviewModelResult>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Model
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateSetReviewModel(
-  config: {
-  tenant?: string;
-  input?: SetReviewModelInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "set_review_model",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };
@@ -1767,150 +1632,6 @@ export async function validateUpdateSearchProvider(
 }
 
 
-export type ListToolsFields = UnifiedFieldSelection<{id: UUID, namespace: string, name: string, qualifiedName: string, description: string, inputSchema: Record<string, any>, enabled: boolean, __type: "TypedMap", __primitiveFields: "id" | "namespace" | "name" | "qualifiedName" | "description" | "inputSchema" | "enabled"}>[];
-
-export type InferListToolsResult<
-  Fields extends ListToolsFields | undefined,
-> = Array<InferResult<{id: UUID, namespace: string, name: string, qualifiedName: string, description: string, inputSchema: Record<string, any>, enabled: boolean, __type: "TypedMap", __primitiveFields: "id" | "namespace" | "name" | "qualifiedName" | "description" | "inputSchema" | "enabled"}, Fields>>;
-
-export type ListToolsResult<Fields extends ListToolsFields | undefined = undefined> = | { success: true; data: InferListToolsResult<Fields>; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Tool
- *
- * @ashActionType :action
- */
-export async function listTools<Fields extends ListToolsFields | undefined = undefined>(
-  config: {
-  tenant?: string;
-  hookCtx?: ActionHookContext;
-  fields: Fields;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ListToolsResult<Fields extends undefined ? [] : Fields>> {
-  const payload = {
-    action: "list_tools",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    ...(config.fields !== undefined && { fields: config.fields })
-  };
-
-  return executeActionRpcRequest<ListToolsResult<Fields extends undefined ? [] : Fields>>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Tool
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateListTools(
-  config: {
-  tenant?: string;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "list_tools",
-    ...(config.tenant !== undefined && { tenant: config.tenant })
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
-export type SetToolEnabledInput = {
-  enabled?: boolean;
-};
-
-export type SetToolEnabledFields = UnifiedFieldSelection<ToolResourceSchema>[];
-
-export type InferSetToolEnabledResult<
-  Fields extends SetToolEnabledFields | undefined,
-> = InferResult<ToolResourceSchema, Fields>;
-
-export type SetToolEnabledResult<Fields extends SetToolEnabledFields | undefined = undefined> = | { success: true; data: InferSetToolEnabledResult<Fields>; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Update an existing Tool
- *
- * @ashActionType :update
- */
-export async function setToolEnabled<Fields extends SetToolEnabledFields | undefined = undefined>(
-  config: {
-  tenant?: string;
-  identity: UUIDv7;
-  input?: SetToolEnabledInput;
-  hookCtx?: ActionHookContext;
-  fields?: Fields;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<SetToolEnabledResult<Fields extends undefined ? [] : Fields>> {
-  const payload = {
-    action: "set_tool_enabled",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    identity: config.identity,
-    input: config.input,
-    ...(config.fields !== undefined && { fields: config.fields })
-  };
-
-  return executeActionRpcRequest<SetToolEnabledResult<Fields extends undefined ? [] : Fields>>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Update an existing Tool
- *
- * @ashActionType :update
- * @validation true
- */
-export async function validateSetToolEnabled(
-  config: {
-  tenant?: string;
-  identity: UUIDv7 | string;
-  input?: SetToolEnabledInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "set_tool_enabled",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    identity: config.identity,
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
 export type CreateEntryInput = {
   projectId: UUID;
   path: string;
@@ -2638,233 +2359,13 @@ export async function validateGetProject(
 }
 
 
-export type ClearCodexHistoryInput = {
-  id: UUID;
-};
-
-export type InferClearCodexHistoryResult = {};
-
-export type ClearCodexHistoryResult = | { success: true; data: InferClearCodexHistoryResult; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Project
- *
- * @ashActionType :action
- */
-export async function clearCodexHistory(
-  config: {
-  tenant?: string;
-  input: ClearCodexHistoryInput;
-  hookCtx?: ActionHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ClearCodexHistoryResult> {
-  const payload = {
-    action: "clear_codex_history",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeActionRpcRequest<ClearCodexHistoryResult>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Project
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateClearCodexHistory(
-  config: {
-  tenant?: string;
-  input: ClearCodexHistoryInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "clear_codex_history",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
-export type ClearCodexMemoriesInput = {
-  id: UUID;
-};
-
-export type InferClearCodexMemoriesResult = {};
-
-export type ClearCodexMemoriesResult = | { success: true; data: InferClearCodexMemoriesResult; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Project
- *
- * @ashActionType :action
- */
-export async function clearCodexMemories(
-  config: {
-  tenant?: string;
-  input: ClearCodexMemoriesInput;
-  hookCtx?: ActionHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ClearCodexMemoriesResult> {
-  const payload = {
-    action: "clear_codex_memories",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeActionRpcRequest<ClearCodexMemoriesResult>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Project
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateClearCodexMemories(
-  config: {
-  tenant?: string;
-  input: ClearCodexMemoriesInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "clear_codex_memories",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
-export type CodexInfoInput = {
-  id: UUID;
-};
-
-export type CodexInfoFields = UnifiedFieldSelection<{home: string, exists: boolean, bytes: number, files: Record<string, any>, worker: Record<string, any> | null, stale: Array<string>, __type: "TypedMap", __primitiveFields: "home" | "exists" | "bytes" | "files" | "worker" | "stale"}>[];
-
-export type InferCodexInfoResult<
-  Fields extends CodexInfoFields | undefined,
-> = InferResult<{home: string, exists: boolean, bytes: number, files: Record<string, any>, worker: Record<string, any> | null, stale: Array<string>, __type: "TypedMap", __primitiveFields: "home" | "exists" | "bytes" | "files" | "worker" | "stale"}, Fields>;
-
-export type CodexInfoResult<Fields extends CodexInfoFields | undefined = undefined> = | { success: true; data: InferCodexInfoResult<Fields>; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Project
- *
- * @ashActionType :action
- */
-export async function codexInfo<Fields extends CodexInfoFields | undefined = undefined>(
-  config: {
-  tenant?: string;
-  input: CodexInfoInput;
-  hookCtx?: ActionHookContext;
-  fields: Fields;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<CodexInfoResult<Fields extends undefined ? [] : Fields>> {
-  const payload = {
-    action: "codex_info",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input,
-    ...(config.fields !== undefined && { fields: config.fields })
-  };
-
-  return executeActionRpcRequest<CodexInfoResult<Fields extends undefined ? [] : Fields>>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Project
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateCodexInfo(
-  config: {
-  tenant?: string;
-  input: CodexInfoInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "codex_info",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
 export type CreateProjectInput = {
   name: string;
   description?: string | null;
   rootPath: string;
-  approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted";
-  sandbox?: "danger_full_access" | "read_only" | "workspace_write";
-  tools?: Array<string>;
   dirtyStart?: "ask" | "commit" | "off";
-  networkAccess?: boolean;
-  writableRoots?: Array<string>;
-  passthroughPaths?: Array<string>;
   webSearch?: boolean;
-  multiAgent?: boolean;
-  autoReview?: boolean;
-  memoryLimitMb?: number | null;
   modelId?: UUID | null;
-  engine?: "codex" | "native";
   trustLocalAgent?: boolean;
   agentSettings?: Record<string, any> | null;
   initGit?: boolean | null;
@@ -3158,80 +2659,6 @@ export async function validateInitGit(
 }
 
 
-export type ListSkillsInput = {
-  id: UUID;
-};
-
-export type ListSkillsFields = UnifiedFieldSelection<{name: string, description: string, shortDescription: string | null, path: string | null, enabled: boolean, __type: "TypedMap", __primitiveFields: "name" | "description" | "shortDescription" | "path" | "enabled"}>[];
-
-export type InferListSkillsResult<
-  Fields extends ListSkillsFields | undefined,
-> = Array<InferResult<{name: string, description: string, shortDescription: string | null, path: string | null, enabled: boolean, __type: "TypedMap", __primitiveFields: "name" | "description" | "shortDescription" | "path" | "enabled"}, Fields>>;
-
-export type ListSkillsResult<Fields extends ListSkillsFields | undefined = undefined> = | { success: true; data: InferListSkillsResult<Fields>; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Project
- *
- * @ashActionType :action
- */
-export async function listSkills<Fields extends ListSkillsFields | undefined = undefined>(
-  config: {
-  tenant?: string;
-  input: ListSkillsInput;
-  hookCtx?: ActionHookContext;
-  fields: Fields;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ListSkillsResult<Fields extends undefined ? [] : Fields>> {
-  const payload = {
-    action: "list_skills",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input,
-    ...(config.fields !== undefined && { fields: config.fields })
-  };
-
-  return executeActionRpcRequest<ListSkillsResult<Fields extends undefined ? [] : Fields>>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Project
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateListSkills(
-  config: {
-  tenant?: string;
-  input: ListSkillsInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "list_skills",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
 export type PromoteLocalInput = {
   id: UUID;
   path: string;
@@ -3410,142 +2837,6 @@ export async function validateListAllProjects(
 }
 
 
-export type ResetCodexHomeInput = {
-  id: UUID;
-};
-
-export type InferResetCodexHomeResult = {};
-
-export type ResetCodexHomeResult = | { success: true; data: InferResetCodexHomeResult; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Project
- *
- * @ashActionType :action
- */
-export async function resetCodexHome(
-  config: {
-  tenant?: string;
-  input: ResetCodexHomeInput;
-  hookCtx?: ActionHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ResetCodexHomeResult> {
-  const payload = {
-    action: "reset_codex_home",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeActionRpcRequest<ResetCodexHomeResult>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Project
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateResetCodexHome(
-  config: {
-  tenant?: string;
-  input: ResetCodexHomeInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "reset_codex_home",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
-export type RestartCodexInput = {
-  id: UUID;
-};
-
-export type InferRestartCodexResult = {};
-
-export type RestartCodexResult = | { success: true; data: InferRestartCodexResult; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Project
- *
- * @ashActionType :action
- */
-export async function restartCodex(
-  config: {
-  tenant?: string;
-  input: RestartCodexInput;
-  hookCtx?: ActionHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<RestartCodexResult> {
-  const payload = {
-    action: "restart_codex",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeActionRpcRequest<RestartCodexResult>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Project
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateRestartCodex(
-  config: {
-  tenant?: string;
-  input: RestartCodexInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "restart_codex",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
 export type SearchFilesInput = {
   id: UUID;
   query: string;
@@ -3621,92 +2912,13 @@ export async function validateSearchFiles(
 }
 
 
-export type StopCodexInput = {
-  id: UUID;
-  force?: boolean | null;
-};
-
-export type InferStopCodexResult = {};
-
-export type StopCodexResult = | { success: true; data: InferStopCodexResult; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Project
- *
- * @ashActionType :action
- */
-export async function stopCodex(
-  config: {
-  tenant?: string;
-  input: StopCodexInput;
-  hookCtx?: ActionHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<StopCodexResult> {
-  const payload = {
-    action: "stop_codex",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeActionRpcRequest<StopCodexResult>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Project
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateStopCodex(
-  config: {
-  tenant?: string;
-  input: StopCodexInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "stop_codex",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
 export type UpdateProjectInput = {
   name?: string;
   slug?: string;
   description?: string | null;
-  approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted";
-  sandbox?: "danger_full_access" | "read_only" | "workspace_write";
-  tools?: Array<string>;
   dirtyStart?: "ask" | "commit" | "off";
-  networkAccess?: boolean;
-  writableRoots?: Array<string>;
-  passthroughPaths?: Array<string>;
   webSearch?: boolean;
-  multiAgent?: boolean;
-  autoReview?: boolean;
-  memoryLimitMb?: number | null;
   modelId?: UUID | null;
-  engine?: "codex" | "native";
   trustLocalAgent?: boolean;
   agentSettings?: Record<string, any> | null;
 };
@@ -5219,75 +4431,6 @@ export async function validateAnswerRequest(
 }
 
 
-export type ApproveReviewInput = {
-  threadId: UUID;
-  reviewId: string;
-};
-
-export type InferApproveReviewResult = {};
-
-export type ApproveReviewResult = | { success: true; data: InferApproveReviewResult; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Thread
- *
- * @ashActionType :action
- */
-export async function approveReview(
-  config: {
-  tenant?: string;
-  input: ApproveReviewInput;
-  hookCtx?: ActionHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ApproveReviewResult> {
-  const payload = {
-    action: "approve_review",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeActionRpcRequest<ApproveReviewResult>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Thread
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateApproveReview(
-  config: {
-  tenant?: string;
-  input: ApproveReviewInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "approve_review",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
 export type ArchiveThreadFields = UnifiedFieldSelection<ThreadResourceSchema>[];
 
 export type InferArchiveThreadResult<
@@ -5720,7 +4863,7 @@ export async function validateListThreads(
 
 export type InterruptTurnInput = {
   threadId: UUID;
-  codexTurnId: string;
+  kernelTurnId: string;
 };
 
 export type InferInterruptTurnResult = {};
@@ -5931,79 +5074,9 @@ export async function validateRenameThread(
 }
 
 
-export type RespondInput = {
-  threadId: UUID;
-  requestId: string;
-  decision: "accept" | "accept_for_session" | "cancel" | "decline";
-};
-
-export type InferRespondResult = {};
-
-export type RespondResult = | { success: true; data: InferRespondResult; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Thread
- *
- * @ashActionType :action
- */
-export async function respond(
-  config: {
-  tenant?: string;
-  input: RespondInput;
-  hookCtx?: ActionHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<RespondResult> {
-  const payload = {
-    action: "respond",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeActionRpcRequest<RespondResult>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Thread
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateRespond(
-  config: {
-  tenant?: string;
-  input: RespondInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "respond",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
 export type RetractTurnInput = {
   threadId: UUID;
-  codexTurnId: string;
+  kernelTurnId: string;
 };
 
 export type RetractTurnFields = UnifiedFieldSelection<{text: string, __type: "TypedMap", __primitiveFields: "text"}>[];
@@ -6076,82 +5149,6 @@ export async function validateRetractTurn(
 }
 
 
-export type ReviewThreadInput = {
-  threadId: UUID;
-  target: "base_branch" | "commit" | "custom" | "uncommitted";
-  value?: string | null;
-};
-
-export type ReviewThreadFields = UnifiedFieldSelection<TurnResourceSchema>[];
-
-export type InferReviewThreadResult<
-  Fields extends ReviewThreadFields | undefined,
-> = InferResult<TurnResourceSchema, Fields>;
-
-export type ReviewThreadResult<Fields extends ReviewThreadFields | undefined = undefined> = | { success: true; data: InferReviewThreadResult<Fields>; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Thread
- *
- * @ashActionType :action
- */
-export async function reviewThread<Fields extends ReviewThreadFields | undefined = undefined>(
-  config: {
-  tenant?: string;
-  input: ReviewThreadInput;
-  hookCtx?: ActionHookContext;
-  fields: Fields;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ReviewThreadResult<Fields extends undefined ? [] : Fields>> {
-  const payload = {
-    action: "review_thread",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input,
-    ...(config.fields !== undefined && { fields: config.fields })
-  };
-
-  return executeActionRpcRequest<ReviewThreadResult<Fields extends undefined ? [] : Fields>>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Thread
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateReviewThread(
-  config: {
-  tenant?: string;
-  input: ReviewThreadInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "review_thread",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
 export type SendMessageInput = {
   threadId: UUID;
   text: string;
@@ -6159,10 +5156,6 @@ export type SendMessageInput = {
   model?: string | null;
   effort?: string | null;
   dirty?: "commit" | "ignore" | null;
-  sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
-  approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted" | null;
-  networkAccess?: boolean | null;
-  skills?: Array<Record<string, any>> | null;
 };
 
 export type SendMessageFields = UnifiedFieldSelection<TurnResourceSchema>[];
@@ -6316,13 +5309,7 @@ export type StartThreadInput = {
   projectId: UUID;
   model?: string | null;
   effort?: string | null;
-  tools?: Array<string> | null;
-  approvalPolicy?: "auto_accept" | "never" | "on_request" | "untrusted" | null;
-  sandbox?: "danger_full_access" | "read_only" | "workspace_write" | null;
-  networkAccess?: boolean | null;
   webSearch?: boolean | null;
-  multiAgent?: boolean | null;
-  autoReview?: boolean | null;
 };
 
 export type StartThreadFields = UnifiedFieldSelection<ThreadResourceSchema>[];
@@ -6401,11 +5388,11 @@ export type SteerTurnInput = {
   images?: Array<string> | null;
 };
 
-export type SteerTurnFields = UnifiedFieldSelection<{codexTurnId: string, __type: "TypedMap", __primitiveFields: "codexTurnId"}>[];
+export type SteerTurnFields = UnifiedFieldSelection<{kernelTurnId: string, __type: "TypedMap", __primitiveFields: "kernelTurnId"}>[];
 
 export type InferSteerTurnResult<
   Fields extends SteerTurnFields | undefined,
-> = InferResult<{codexTurnId: string, __type: "TypedMap", __primitiveFields: "codexTurnId"}, Fields>;
+> = InferResult<{kernelTurnId: string, __type: "TypedMap", __primitiveFields: "kernelTurnId"}, Fields>;
 
 export type SteerTurnResult<Fields extends SteerTurnFields | undefined = undefined> = | { success: true; data: InferSteerTurnResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -6615,85 +5602,6 @@ export async function validateListTurns(
 ): Promise<ValidationResult> {
   const payload = {
     action: "list_turns",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
-export type RedoTurnInput = {
-  turnId: UUID;
-  text?: string | null;
-  model?: string | null;
-  effort?: string | null;
-  mode?: "fork" | "revert" | null;
-  restoreFiles?: boolean | null;
-};
-
-export type RedoTurnFields = UnifiedFieldSelection<TurnResourceSchema>[];
-
-export type InferRedoTurnResult<
-  Fields extends RedoTurnFields | undefined,
-> = InferResult<TurnResourceSchema, Fields>;
-
-export type RedoTurnResult<Fields extends RedoTurnFields | undefined = undefined> = | { success: true; data: InferRedoTurnResult<Fields>; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Turn
- *
- * @ashActionType :action
- */
-export async function redoTurn<Fields extends RedoTurnFields | undefined = undefined>(
-  config: {
-  tenant?: string;
-  input: RedoTurnInput;
-  hookCtx?: ActionHookContext;
-  fields: Fields;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<RedoTurnResult<Fields extends undefined ? [] : Fields>> {
-  const payload = {
-    action: "redo_turn",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    input: config.input,
-    ...(config.fields !== undefined && { fields: config.fields })
-  };
-
-  return executeActionRpcRequest<RedoTurnResult<Fields extends undefined ? [] : Fields>>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Turn
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateRedoTurn(
-  config: {
-  tenant?: string;
-  input: RedoTurnInput;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "redo_turn",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };
@@ -7690,72 +6598,6 @@ export async function validateKnowledgeWrite(
 }
 
 
-export type ListCodexProcessesFields = UnifiedFieldSelection<{processes: Array<Record<string, any>>, idleAfterMs: number | null, __type: "TypedMap", __primitiveFields: "processes" | "idleAfterMs"}>[];
-
-export type InferListCodexProcessesResult<
-  Fields extends ListCodexProcessesFields | undefined,
-> = InferResult<{processes: Array<Record<string, any>>, idleAfterMs: number | null, __type: "TypedMap", __primitiveFields: "processes" | "idleAfterMs"}, Fields>;
-
-export type ListCodexProcessesResult<Fields extends ListCodexProcessesFields | undefined = undefined> = | { success: true; data: InferListCodexProcessesResult<Fields>; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Status
- *
- * @ashActionType :action
- */
-export async function listCodexProcesses<Fields extends ListCodexProcessesFields | undefined = undefined>(
-  config: {
-  tenant?: string;
-  hookCtx?: ActionHookContext;
-  fields: Fields;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ListCodexProcessesResult<Fields extends undefined ? [] : Fields>> {
-  const payload = {
-    action: "list_codex_processes",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    ...(config.fields !== undefined && { fields: config.fields })
-  };
-
-  return executeActionRpcRequest<ListCodexProcessesResult<Fields extends undefined ? [] : Fields>>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Status
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateListCodexProcesses(
-  config: {
-  tenant?: string;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "list_codex_processes",
-    ...(config.tenant !== undefined && { tenant: config.tenant })
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
 export type ListDirectoryInput = {
   path?: string | null;
   showHidden?: boolean | null;
@@ -7831,72 +6673,6 @@ export async function validateListDirectory(
 }
 
 
-export type ProbeSandboxFields = UnifiedFieldSelection<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, presets: Array<Record<string, any>>, platform: "darwin" | "linux" | "windows", home: string | null, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "presets" | "platform" | "home" | "checkedAt"}>[];
-
-export type InferProbeSandboxResult<
-  Fields extends ProbeSandboxFields | undefined,
-> = InferResult<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, presets: Array<Record<string, any>>, platform: "darwin" | "linux" | "windows", home: string | null, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "presets" | "platform" | "home" | "checkedAt"}, Fields>;
-
-export type ProbeSandboxResult<Fields extends ProbeSandboxFields | undefined = undefined> = | { success: true; data: InferProbeSandboxResult<Fields>; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Status
- *
- * @ashActionType :action
- */
-export async function probeSandbox<Fields extends ProbeSandboxFields | undefined = undefined>(
-  config: {
-  tenant?: string;
-  hookCtx?: ActionHookContext;
-  fields: Fields;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ProbeSandboxResult<Fields extends undefined ? [] : Fields>> {
-  const payload = {
-    action: "probe_sandbox",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    ...(config.fields !== undefined && { fields: config.fields })
-  };
-
-  return executeActionRpcRequest<ProbeSandboxResult<Fields extends undefined ? [] : Fields>>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Status
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateProbeSandbox(
-  config: {
-  tenant?: string;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "probe_sandbox",
-    ...(config.tenant !== undefined && { tenant: config.tenant })
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
 export type PublicUrlFields = UnifiedFieldSelection<{url: string, setting: string | null, __type: "TypedMap", __primitiveFields: "url" | "setting"}>[];
 
 export type InferPublicUrlResult<
@@ -7953,72 +6729,6 @@ export async function validatePublicUrl(
 ): Promise<ValidationResult> {
   const payload = {
     action: "public_url",
-    ...(config.tenant !== undefined && { tenant: config.tenant })
-  };
-
-  return executeValidationRpcRequest<ValidationResult>(
-    payload,
-    config
-  );
-}
-
-
-export type SandboxStatusFields = UnifiedFieldSelection<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, presets: Array<Record<string, any>>, platform: "darwin" | "linux" | "windows", home: string | null, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "presets" | "platform" | "home" | "checkedAt"}>[];
-
-export type InferSandboxStatusResult<
-  Fields extends SandboxStatusFields | undefined,
-> = InferResult<{status: "no_net_isolation" | "ok" | "unavailable", reason: string | null, bwrap: string | null, gpu: boolean, presets: Array<Record<string, any>>, platform: "darwin" | "linux" | "windows", home: string | null, checkedAt: UtcDateTimeUsec, __type: "TypedMap", __primitiveFields: "status" | "reason" | "bwrap" | "gpu" | "presets" | "platform" | "home" | "checkedAt"}, Fields>;
-
-export type SandboxStatusResult<Fields extends SandboxStatusFields | undefined = undefined> = | { success: true; data: InferSandboxStatusResult<Fields>; }
-| { success: false; errors: AshRpcError[]; }
-
-;
-
-/**
- * Execute generic action on Status
- *
- * @ashActionType :action
- */
-export async function sandboxStatus<Fields extends SandboxStatusFields | undefined = undefined>(
-  config: {
-  tenant?: string;
-  hookCtx?: ActionHookContext;
-  fields: Fields;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<SandboxStatusResult<Fields extends undefined ? [] : Fields>> {
-  const payload = {
-    action: "sandbox_status",
-    ...(config.tenant !== undefined && { tenant: config.tenant }),
-    ...(config.fields !== undefined && { fields: config.fields })
-  };
-
-  return executeActionRpcRequest<SandboxStatusResult<Fields extends undefined ? [] : Fields>>(
-    payload,
-    config
-  );
-}
-
-
-/**
- * Validate: Execute generic action on Status
- *
- * @ashActionType :action
- * @validation true
- */
-export async function validateSandboxStatus(
-  config: {
-  tenant?: string;
-  hookCtx?: ValidationHookContext;
-  headers?: Record<string, string>;
-  fetchOptions?: RequestInit;
-  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-}
-): Promise<ValidationResult> {
-  const payload = {
-    action: "sandbox_status",
     ...(config.tenant !== undefined && { tenant: config.tenant })
   };
 

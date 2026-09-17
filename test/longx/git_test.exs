@@ -1,6 +1,6 @@
 defmodule Longx.GitTest do
   # real git processes on temp repos; independent, so async is fine
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Longx.Git
 
@@ -13,11 +13,26 @@ defmodule Longx.GitTest do
 
   defp write!(dir, name, content), do: File.write!(Path.join(dir, name), content)
 
-  test "the bundled git is what runs" do
-    assert {:ok, exe} = Longx.Git.Runtime.executable()
-    assert Git.executable() == exe
-    assert Git.version() =~ ~r/^2\.53\.0/
-    assert Git.lfs_version() =~ ~r/^git-lfs\/3\./
+  test "the system git is what runs; LONGX_GIT overrides" do
+    assert {:ok, exe} = Git.executable()
+    assert exe == System.find_executable("git")
+    assert Git.available?()
+    assert Git.version() =~ ~r/^\d+\.\d+/
+  end
+
+  test "no git on the machine: nothing raises, every operation says so, a directory is no repository",
+       %{dir: dir} do
+    System.put_env("LONGX_GIT", "/nonexistent/git")
+    on_exit(fn -> System.delete_env("LONGX_GIT") end)
+
+    refute Git.available?()
+    assert {:error, :no_git} = Git.executable()
+    assert {:error, :no_git} = Git.run(["--version"])
+    refute Git.repository?(dir)
+    assert {:error, :not_a_repository} = Git.toplevel(dir)
+    assert {:error, :no_git} = Git.init(dir)
+    assert {:error, :no_git} = Git.commit_all(dir, "x")
+    assert %{clean?: true, changes: []} = Git.status(dir)
   end
 
   describe "run/2" do

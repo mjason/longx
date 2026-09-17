@@ -38,7 +38,7 @@ defmodule Longx.Agent.SettingsTest do
 
   test "a project's overrides sit on the global ones", %{dir: dir} do
     {:ok, _} = Settings.put_global(%{max_children: 6})
-    project = Projects.create_project!(%{name: "S", root_path: dir, engine: :native})
+    project = Projects.create_project!(%{name: "S", root_path: dir})
     assert %{max_children: 6, max_depth: 2} = Settings.for_project(project)
 
     {:ok, project} =
@@ -102,7 +102,6 @@ defmodule Longx.Agent.SettingsTest do
       Projects.create_project!(%{
         name: "P",
         root_path: dir,
-        engine: :native,
         trust_local_agent: true
       })
 

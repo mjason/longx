@@ -14,20 +14,12 @@ defmodule Longx.System.SettingTest do
     assert {:error, _} = System.get_setting("probe")
   end
 
-  test "the review model can be changed, not only set once" do
-    model = Longx.AI.default_model!()
-    assert :ok = Longx.AI.set_review_model(model.slug, nil)
-    assert %{model: %{slug: slug}} = Longx.AI.review_model()
-    assert slug == model.slug
-    # a second choice replaces the first
-    other = Longx.AI.list_models!() |> Enum.find(&(&1.slug != model.slug))
-
-    if other do
-      assert :ok = Longx.AI.set_review_model(other.slug, nil)
-      assert %{model: %{slug: slug2}} = Longx.AI.review_model()
-      assert slug2 == other.slug
-    end
-
-    assert :ok = Longx.AI.set_review_model(nil, nil)
+  test "a setting the page edits can be changed, not only set once (the GitHub token)" do
+    assert :ok = Longx.Upgrade.set_github_token("ghp_one")
+    assert Longx.Upgrade.github_token() == "ghp_one"
+    assert :ok = Longx.Upgrade.set_github_token("ghp_two")
+    assert Longx.Upgrade.github_token() == "ghp_two"
+    assert :ok = Longx.Upgrade.set_github_token(nil)
+    assert Longx.Upgrade.github_token() == nil
   end
 end

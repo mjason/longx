@@ -1,9 +1,9 @@
-defmodule Longx.Codex.ThreadState.Store do
+defmodule Longx.Agent.ThreadState.Store do
   @moduledoc """
   ETS-backed storage for the materialised state of codex threads.
 
   Three public tables owned by this (long-lived) process, so the data
-  outlives the per-thread `Longx.Codex.ThreadState` writer and readers never
+  outlives the per-thread `Longx.Agent.ThreadState` writer and readers never
   copy through a GenServer:
 
     * `meta`     — `{thread_id, %{seq, order, thread, turn, status, token_usage, plan}}`
@@ -29,8 +29,10 @@ defmodule Longx.Codex.ThreadState.Store do
     status: nil,
     token_usage: nil,
     plan: nil,
-    # codex's goal mode: the thread's goal (objective, status, budget, usage) or nil
-    goal: nil
+    # goal mode: the thread's goal (objective, status, budget, usage) or nil
+    goal: nil,
+    # an event's writes are in progress (see `event/2`)
+    folding: false
   }
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -65,31 +67,36 @@ defmodule Longx.Codex.ThreadState.Store do
     :ok
   end
 
-  @doc "Whether Longx answers every approval request of the thread itself (approval policy 全部放行)."
-  @spec auto_accept?(String.t()) :: boolean
-  def auto_accept?(thread_id) do
-    case :ets.lookup(@meta, {thread_id, :auto_accept}) do
-      [{_, flag}] -> flag
-      [] -> false
+  @doc """
+  Runs one event's writes as a unit the snapshot can see whole: the seq is
+  allocated with the meta marked `folding` first, `fun` writes, the mark is
+  cleared. `snapshot/1` retries while the mark is set or the seq moved under
+  it, so a reader never sees an event's items with the seq before it (a
+  duplicate on the client) or the seq without its items (a lost event).
+  Returns the seq.
+  """
+  @spec event(String.t(), (-> any)) :: pos_integer
+  def event(thread_id, fun) do
+    %{seq: previous} = meta(thread_id)
+    seq = previous + 1
+    put_meta(thread_id, %{seq: seq, folding: true})
+
+    try do
+      fun.()
+      seq
+    rescue
+      # an event the store cannot fold consumes no seq (the writer logs it)
+      e ->
+        put_meta(thread_id, %{seq: previous})
+        reraise e, __STACKTRACE__
+    after
+      put_meta(thread_id, %{folding: false})
     end
   end
 
-  # its own key, not a field of the meta map: `Thread.start` / `send` set it
-  # from the caller while the writer folds `thread/started` / `turn/started`
-  # into the map, and two processes read-merge-writing one map lost the flag
-  @spec set_auto_accept(String.t(), boolean) :: :ok
-  def set_auto_accept(thread_id, flag) when is_boolean(flag) do
-    :ets.insert(@meta, {{thread_id, :auto_accept}, flag})
-    :ok
-  end
-
-  @doc "Allocates the next event sequence number for the thread."
+  @doc "Allocates the next event sequence number for the thread (an event with no writes)."
   @spec next_seq(String.t()) :: pos_integer
-  def next_seq(thread_id) do
-    seq = meta(thread_id).seq + 1
-    put_meta(thread_id, %{seq: seq})
-    seq
-  end
+  def next_seq(thread_id), do: event(thread_id, fn -> :ok end)
 
   defp next_order(thread_id) do
     order = meta(thread_id).order + 1
@@ -216,7 +223,7 @@ defmodule Longx.Codex.ThreadState.Store do
         plan: Map.take(params, ["turnId", "explanation", "plan"]) |> Map.put("plan", plan)
       })
 
-  # codex's goal mode: one goal per thread, replaced whole on every update
+  # goal mode: one goal per thread, replaced whole on every update
   def fold(t, "thread/goal/updated", %{"goal" => goal}), do: put_meta(t, %{goal: goal})
   def fold(t, "thread/goal/cleared", _params), do: put_meta(t, %{goal: nil})
 
@@ -243,23 +250,6 @@ defmodule Longx.Codex.ThreadState.Store do
 
   def fold(t, "item/plan/delta", %{"itemId" => id, "delta" => d}), do: append(t, id, "text", d)
 
-  # codex's automatic approval review (Guardian): no item of its own on the
-  # wire, so one is made here, keyed by the review id — started, then
-  # completed (the verdict replaces it); `userApproved` is Longx's own mark
-  # once the person overrode a denial (Thread.approve_denied_review/3).
-  def fold(t, "item/autoApprovalReview/started", %{"reviewId" => id} = params),
-    do: put_item(t, review_item(id, params))
-
-  def fold(t, "item/autoApprovalReview/completed", %{"reviewId" => id} = params),
-    do: put_item(t, review_item(id, params))
-
-  def fold(t, "item/autoApprovalReview/userApproved", %{"reviewId" => id}) do
-    case get_item(t, id) do
-      nil -> :ok
-      item -> put_item(t, Map.put(item, "userApproved", true))
-    end
-  end
-
   def fold(_t, _method, _params), do: :ok
 
   @doc "Seeds the view from a `thread/read` (`includeTurns: true`) result."
@@ -279,27 +269,37 @@ defmodule Longx.Codex.ThreadState.Store do
   ## whole-thread views
 
   @spec snapshot(String.t()) :: map
-  def snapshot(thread_id) do
+  def snapshot(thread_id), do: snapshot(thread_id, 100)
+
+  # a seqlock read: the meta before and after the items must agree and no
+  # event may be mid-write; the writer is one process, so a retry is rare
+  defp snapshot(thread_id, tries) do
+    before = meta(thread_id)
+    items = items(thread_id)
+    requests = requests(thread_id)
     meta = meta(thread_id)
 
-    %{
-      seq: meta.seq,
-      thread_id: thread_id,
-      thread: meta.thread,
-      turn: meta.turn,
-      status: meta.status,
-      token_usage: meta.token_usage,
-      plan: meta.plan,
-      goal: meta.goal,
-      items: items(thread_id),
-      pending_requests: requests(thread_id)
-    }
+    if (before.folding or meta.folding or before.seq != meta.seq) and tries > 0 do
+      snapshot(thread_id, tries - 1)
+    else
+      %{
+        seq: meta.seq,
+        thread_id: thread_id,
+        thread: meta.thread,
+        turn: meta.turn,
+        status: meta.status,
+        token_usage: meta.token_usage,
+        plan: meta.plan,
+        goal: meta.goal,
+        items: items,
+        pending_requests: requests
+      }
+    end
   end
 
   @spec delete(String.t()) :: :ok
   def delete(thread_id) do
     :ets.delete(@meta, thread_id)
-    :ets.delete(@meta, {thread_id, :auto_accept})
     :ets.match_delete(@items, {{thread_id, :_}, :_, :_})
     :ets.match_delete(@requests, {{thread_id, :_}, :_, :_, :_})
     :ok
@@ -307,12 +307,4 @@ defmodule Longx.Codex.ThreadState.Store do
 
   defp with_turn(item, %{"turnId" => turn_id}), do: Map.put_new(item, "turnId", turn_id)
   defp with_turn(item, _), do: item
-
-  @review_fields ~w(turnId targetItemId action review decisionSource startedAtMs completedAtMs)
-
-  defp review_item(id, params),
-    do:
-      params
-      |> Map.take(@review_fields)
-      |> Map.merge(%{"id" => id, "type" => "autoApprovalReview"})
 end

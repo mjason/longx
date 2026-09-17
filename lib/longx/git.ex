@@ -1,16 +1,17 @@
 defmodule Longx.Git do
   @moduledoc """
-  Repository operations, all performed by the bundled git
-  (`Longx.Git.Runtime`) so they behave exactly like the user's own git:
+  Repository operations, performed by the machine's own git (the first `git`
+  on PATH; `LONGX_GIT` overrides) so they behave exactly like the user's:
   hooks run, LFS filters apply, the user's config and credential helpers are
   honoured. Every function takes the repository (or working tree) directory.
+  A machine without git is not an error to raise about: `available?/0` says
+  so, every operation answers `{:error, :no_git}`, a directory is no
+  repository, and the callers go on without bookmarks or commits.
 
   Commands run through `Longx.Shim` — stdout and stderr come back
   separately and a hung command is killed with its process tree.
   """
 
-  alias Longx.Git.Runtime
-  alias Longx.Platform
   alias Longx.Shim
 
   defmodule Error do
@@ -46,49 +47,62 @@ defmodule Longx.Git do
 
   ## Running git
 
-  @doc "The bundled git binary. Raises if `mix git.fetch` has not run."
-  @spec executable() :: Path.t()
+  @doc "The git binary: `LONGX_GIT` when set (and a file), else the first `git` on PATH."
+  @spec executable() :: {:ok, Path.t()} | {:error, :no_git}
   def executable do
-    case Runtime.executable() do
-      {:ok, exe} -> exe
-      {:error, :not_installed} -> raise "bundled git is not installed; run `mix git.fetch`"
+    case System.get_env("LONGX_GIT") do
+      nil ->
+        case System.find_executable("git") do
+          nil -> {:error, :no_git}
+          exe -> {:ok, exe}
+        end
+
+      path ->
+        if File.regular?(path), do: {:ok, path}, else: {:error, :no_git}
     end
   end
+
+  @doc "Whether this machine has git at all."
+  @spec available?() :: boolean
+  def available?, do: match?({:ok, _}, executable())
 
   @doc """
   Runs `git args` in `opts[:cd]`. `{:ok, %{status: 0, stdout, stderr}}` on
   success, `{:error, %Longx.Git.Error{}}` on a non-zero exit, `{:error, :timeout}`
-  when `opts[:timeout]` (default 60 s) passes. Extra `env:` entries are added
-  to the bundle's environment.
+  when `opts[:timeout]` (default 60 s) passes, `{:error, :no_git}` without
+  git. Never a prompt (`GIT_TERMINAL_PROMPT=0`), C-locale output; extra
+  `env:` entries are added.
   """
   @spec run([String.t()], keyword) ::
           {:ok, %{status: 0, stdout: binary, stderr: binary}} | {:error, Error.t() | term}
   def run(args, opts \\ []) do
-    env =
-      Runtime.env(Runtime.root(), Platform.current(), System.get_env()) ++
-        Keyword.get(opts, :env, [])
+    with {:ok, exe} <- executable() do
+      env = [{"GIT_TERMINAL_PROMPT", "0"}, {"LC_ALL", "C"}] ++ Keyword.get(opts, :env, [])
 
-    shim_opts = [
-      env: env,
-      cd: Keyword.get(opts, :cd),
-      timeout: Keyword.get(opts, :timeout, 60_000)
-    ]
+      shim_opts = [
+        env: env,
+        cd: Keyword.get(opts, :cd),
+        timeout: Keyword.get(opts, :timeout, 60_000)
+      ]
 
-    case Shim.run([executable() | args], shim_opts) do
-      {:ok, %{status: 0} = result} ->
-        {:ok, result}
+      case Shim.run([exe | args], shim_opts) do
+        {:ok, %{status: 0} = result} ->
+          {:ok, result}
 
-      {:ok, %{status: status, stdout: out, stderr: err}} ->
-        {:error, %Error{args: args, status: status, stdout: out, stderr: err}}
+        {:ok, %{status: status, stdout: out, stderr: err}} ->
+          {:error, %Error{args: args, status: status, stdout: out, stderr: err}}
 
-      {:error, _} = error ->
-        error
+        {:error, _} = error ->
+          error
+      end
     end
   end
 
+  # no git: empty output, so a status is "clean", a log empty, a version blank
   defp stdout!(args, opts) do
     case run(args, opts) do
       {:ok, %{stdout: out}} -> out
+      {:error, :no_git} -> ""
       {:error, %Error{} = error} -> raise error
       {:error, reason} -> raise "git #{Enum.join(args, " ")} failed: #{inspect(reason)}"
     end

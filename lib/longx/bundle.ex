@@ -2,7 +2,7 @@ defmodule Longx.Bundle do
   @moduledoc """
   Fetches a pinned upstream archive (`.tar.gz`, or `.zip` for Windows
   builds), verifies its sha256, unpacks it and swaps it into place atomically. Shared by the bundled runtimes
-  (`Longx.Codex.Runtime`, `Longx.Git.Runtime`); nothing here knows what is
+  (`Longx.Browser.Runtime`); nothing here knows what is
   inside the archive beyond an optional `:verify` step run on the unpacked
   tree before it goes live.
   """

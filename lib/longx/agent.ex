@@ -15,7 +15,7 @@ defmodule Longx.Agent do
   Everything the person sees is the codex event vocabulary
   (`turn/started`, `item/started`, `item/agentMessage/delta`,
   `item/completed`, `thread/tokenUsage/updated`, `turn/completed`, …) fed
-  to `Longx.Codex.ThreadState`, so the channel, the store and the whole
+  to `Longx.Agent.ThreadState`, so the channel, the store and the whole
   React side are the same for both engines. The history is
   `Longx.Agent.Transcript`: a restart reloads it, replays the view and
   continues; nothing else remembers the conversation.
@@ -28,7 +28,7 @@ defmodule Longx.Agent do
   require Logger
 
   alias Longx.Agent.{Context, Step, Tool, Transcript}
-  alias Longx.Codex.ThreadState
+  alias Longx.Agent.ThreadState
 
   @registry Longx.Agent.Registry
   @supervisor Longx.Agent.Supervisor

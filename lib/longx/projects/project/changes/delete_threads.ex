@@ -3,8 +3,8 @@ defmodule Longx.Projects.Project.Changes.DeleteThreads do
   Deleting a project takes its thread and turn rows with it. They reference
   the project (foreign keys, no cascade in the schema), so without this the
   delete of any project that had a conversation failed with SQLite's
-  "referenced something that does not exist". Codex's own copy of the
-  conversations goes with the home (`ResetCodexHome`).
+  "referenced something that does not exist". Each thread's agent is stopped
+  and its transcript deleted with it.
   """
   use Ash.Resource.Change
   require Ash.Query
@@ -21,8 +21,7 @@ defmodule Longx.Projects.Project.Changes.DeleteThreads do
 
       thread_ids = Enum.map(threads, & &1.id)
 
-      # a native thread's history is Longx's own log; its agent goes too
-      for %{codex_thread_id: "native_" <> _ = id} <- threads do
+      for %{kernel_thread_id: id} <- threads do
         Longx.Agent.stop(id)
         Longx.Agent.Transcript.delete!(id)
       end

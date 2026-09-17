@@ -7,7 +7,7 @@ defmodule Longx.Browser.Runtime do
   Pinned to one upstream release with a per-target sha256 (upstream publishes
   no checksums, so they were computed once when pinning and are verified on
   every fetch), downloaded by `mix obscura.fetch` into `priv/obscura/<target>/`
-  — the same scheme as `Longx.Codex.Runtime` / `Longx.Git.Runtime`. Archives
+  Archives
   hold `obscura` and `obscura-worker` at the root (both needed, same
   directory); Linux builds want glibc ≥ 2.35. The default variant (with
   rendering, no stealth) is the one bundled: screenshots need rendering, the

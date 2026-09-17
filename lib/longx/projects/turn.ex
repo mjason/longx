@@ -3,8 +3,7 @@ defmodule Longx.Projects.Turn do
   One turn of a project thread with its git bookmarks: the commit the
   working tree was at when the turn started (`commit_before`, after any
   dirty-start commit) and when it finished (`commit_after`). Those are what
-  "go back to before turn N" restores to. Codex's per-turn diff is kept for
-  display.
+  "go back to before turn N" restores to.
   """
 
   use Ash.Resource,
@@ -76,33 +75,11 @@ defmodule Longx.Projects.Turn do
       end
     end
 
-    # this turn again — other text and/or model; :revert drops it and what
-    # followed from the conversation, :fork starts a sibling thread before it
-    action :redo_turn, :struct do
-      constraints instance_of: __MODULE__
-      argument :turn_id, :uuid, allow_nil?: false
-      argument :text, :string
-      argument :model, :string
-      argument :effort, :string
-      argument :mode, :atom, constraints: [one_of: [:revert, :fork]]
-      argument :restore_files, :boolean
-
-      run fn input, _ ->
-        opts =
-          input.arguments
-          |> Map.take([:text, :model, :effort, :mode, :restore_files])
-          |> Enum.reject(fn {_, v} -> is_nil(v) end)
-
-        with {:ok, turn} <- Ash.get(__MODULE__, input.arguments.turn_id),
-             do: turn |> Longx.Projects.redo_turn(opts) |> Longx.Projects.Thread.model_errors()
-      end
-    end
-
     create :create do
       primary? true
 
       accept [
-        :codex_turn_id,
+        :kernel_turn_id,
         :thread_id,
         :user_text,
         :model_slug,
@@ -135,10 +112,10 @@ defmodule Longx.Projects.Turn do
       change set_attribute(:status, :reverted)
     end
 
-    read :by_codex_id do
-      argument :codex_turn_id, :string, allow_nil?: false
+    read :by_kernel_id do
+      argument :kernel_turn_id, :string, allow_nil?: false
       get? true
-      filter expr(codex_turn_id == ^arg(:codex_turn_id))
+      filter expr(kernel_turn_id == ^arg(:kernel_turn_id))
     end
 
     read :for_thread do
@@ -156,10 +133,10 @@ defmodule Longx.Projects.Turn do
   attributes do
     uuid_v7_primary_key :id
 
-    attribute :codex_turn_id, :string, allow_nil?: false, public?: true
+    attribute :kernel_turn_id, :string, allow_nil?: false, public?: true
     attribute :user_text, :string, public?: true
     attribute :model_slug, :string, public?: true
-    # the reasoning level in force for this turn (nil: codex's default)
+    # the reasoning level in force for this turn
     attribute :reasoning_effort, :string, public?: true
 
     attribute :status, :atom do
@@ -189,6 +166,6 @@ defmodule Longx.Projects.Turn do
   end
 
   identities do
-    identity :unique_codex_turn_id, [:codex_turn_id]
+    identity :unique_kernel_turn_id, [:kernel_turn_id]
   end
 end

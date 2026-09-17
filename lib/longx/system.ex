@@ -1,13 +1,10 @@
 defmodule Longx.System do
-  @moduledoc "Node-level facts the SPA asks for: sandbox availability, the version and its upgrade; plus the encrypted settings store."
+  @moduledoc "Node-level facts the SPA asks for: the version and its upgrade, the knowledge, the kernel settings; plus the encrypted settings store."
 
   use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
 
   typescript_rpc do
     resource Longx.System.Status do
-      rpc_action :sandbox_status, :sandbox
-      rpc_action :probe_sandbox, :probe_sandbox
-      rpc_action :list_codex_processes, :list_codex_processes
       rpc_action :list_directory, :list_directory
       rpc_action :create_directory, :create_directory
       rpc_action :knowledge_docs, :knowledge_docs
@@ -34,7 +31,6 @@ defmodule Longx.System do
 
   resources do
     resource Longx.System.Status do
-      define :sandbox_status, action: :sandbox
       define :list_directory, action: :list_directory
       define :create_directory, action: :create_directory
     end

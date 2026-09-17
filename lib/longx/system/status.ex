@@ -48,28 +48,6 @@ defmodule Longx.System.Status do
   ]
 
   actions do
-    # Settings → codex 进程: every codex process running right now, across
-    # projects — what it costs (the tree's RSS, uptime, turns) and when it
-    # was last used, which is what the idle reaper (Longx.Codex.Recycler)
-    # goes by; `idle_after_ms` is that limit (null: never). Entries are
-    # untyped maps (arrays of typed maps are not selectable in ash_typescript
-    # 0.18); the shape is typed client-side.
-    action :list_codex_processes, :map do
-      constraints fields: [
-                    processes: [type: {:array, :map}, allow_nil?: false],
-                    idle_after_ms: [type: :integer]
-                  ]
-
-      run fn _input, _ ->
-        {:ok,
-         %{
-           # an untyped map crosses the wire as is: camelCase it here
-           processes: Enum.map(Longx.Projects.running_codex(), &camelize/1),
-           idle_after_ms: Longx.Codex.Recycler.idle_after_ms()
-         }}
-      end
-    end
-
     # The directory picker: subdirectories of `path` (home when omitted),
     # each flagged when it is a git repository. Files are never listed;
     # dot-directories only with `show_hidden`. Paths must be absolute.
@@ -310,63 +288,6 @@ defmodule Longx.System.Status do
       end
     end
 
-    # Longx.Codex.Sandbox.report/0 for the UI's banner
-    action :sandbox, :map do
-      constraints fields: [
-                    status: [
-                      type: :atom,
-                      allow_nil?: false,
-                      constraints: [one_of: [:ok, :no_net_isolation, :unavailable]]
-                    ],
-                    reason: [type: :string],
-                    bwrap: [type: :string],
-                    gpu: [type: :boolean, allow_nil?: false],
-                    # host paths worth letting into the sandbox here (id, label, paths, danger);
-                    # arrays of typed maps are untyped in ash_typescript 0.18 → typed client-side
-                    presets: [type: {:array, :map}, allow_nil?: false],
-                    platform: [
-                      type: :atom,
-                      allow_nil?: false,
-                      constraints: [one_of: [:linux, :darwin, :windows]]
-                    ],
-                    # the server user's home: the chat shortens sandbox-denied paths under it to ~
-                    home: [type: :string],
-                    checked_at: [type: :utc_datetime_usec, allow_nil?: false]
-                  ]
-
-      run fn _input, _ -> {:ok, sandbox_report(Longx.Codex.Sandbox.report())} end
-    end
-
-    # the same report after running the probe again (the settings page's "重新检测")
-    action :probe_sandbox, :map do
-      constraints fields: [
-                    status: [
-                      type: :atom,
-                      allow_nil?: false,
-                      constraints: [one_of: [:ok, :no_net_isolation, :unavailable]]
-                    ],
-                    reason: [type: :string],
-                    bwrap: [type: :string],
-                    gpu: [type: :boolean, allow_nil?: false],
-                    # host paths worth letting into the sandbox here (id, label, paths, danger);
-                    # arrays of typed maps are untyped in ash_typescript 0.18 → typed client-side
-                    presets: [type: {:array, :map}, allow_nil?: false],
-                    platform: [
-                      type: :atom,
-                      allow_nil?: false,
-                      constraints: [one_of: [:linux, :darwin, :windows]]
-                    ],
-                    # the server user's home: the chat shortens sandbox-denied paths under it to ~
-                    home: [type: :string],
-                    checked_at: [type: :utc_datetime_usec, allow_nil?: false]
-                  ]
-
-      run fn _input, _ ->
-        Longx.Codex.Sandbox.probe()
-        {:ok, sandbox_report(Longx.Codex.Sandbox.report())}
-      end
-    end
-
     # Longx.Upgrade — the version, the last release check, the stage of an
     # upgrade in progress; one shape for the four actions
     action :upgrade_status, :map do
@@ -481,22 +402,6 @@ defmodule Longx.System.Status do
       has_github_token: st.github_token?
     }
   end
-
-  defp sandbox_report(report),
-    do: %{
-      status: report.status,
-      reason: reason(report.reason),
-      bwrap: report.bwrap,
-      gpu: report.gpu,
-      presets: Longx.Codex.Sandbox.presets(),
-      platform: report.platform,
-      home: System.user_home(),
-      checked_at: report.checked_at
-    }
-
-  defp reason(nil), do: nil
-  defp reason({kind, message}), do: "#{kind}: #{message}"
-  defp reason(other), do: to_string(other)
 
   defp camelize(map) do
     Map.new(map, fn {key, value} ->

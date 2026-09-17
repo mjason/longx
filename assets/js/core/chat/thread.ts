@@ -1,4 +1,4 @@
-// The client half of Longx.Codex.ThreadState: a snapshot (with `seq`) and
+// The client half of Longx.Agent.ThreadState: a snapshot (with `seq`) and
 // the events after it, folded with the same rules as the server's Store so
 // both sides agree on what a thread looks like. Pure; DOM-free.
 

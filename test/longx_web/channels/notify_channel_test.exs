@@ -1,6 +1,6 @@
 defmodule LongxWeb.NotifyChannelTest do
   # `notify` — one feed of what the person should hear about across projects:
-  # a turn waiting on them, a turn done or failed, a codex that died mid-turn.
+  # a turn waiting on them, a turn done or failed.
   # The Android shell's foreground service joins it and raises notifications.
   use LongxWeb.ChannelCase, async: false
 
@@ -27,10 +27,8 @@ defmodule LongxWeb.NotifyChannelTest do
     thread =
       Projects.create_thread!(%{
         project_id: project.id,
-        codex_thread_id: "thr_nc",
+        kernel_thread_id: "native_nc",
         cwd: dir,
-        sandbox: :workspace_write,
-        approval_policy: :on_request,
         status: :active
       })
 

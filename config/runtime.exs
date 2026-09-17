@@ -50,14 +50,14 @@ end
 
 if config_env() == :prod do
   # A self-hosted release needs one thing: where to keep its state. The
-  # database, codex's home and the two secrets live under LONGX_DATA_DIR;
+  # database, the agent's global knowledge and the two secrets live under LONGX_DATA_DIR;
   # the secrets are generated on first boot and kept in files there, unless
   # given as environment variables.
   data_dir =
     System.get_env("LONGX_DATA_DIR") ||
       raise """
       environment variable LONGX_DATA_DIR is missing.
-      It holds the database, the bundled codex-app-server's state and the
+      It holds the database, the agent's global knowledge, attachments and the
       generated secrets, e.g. /var/lib/longx
       """
 
@@ -97,8 +97,8 @@ if config_env() == :prod do
 
   config :longx, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
-  config :longx, Longx.Codex.Home, dir: Path.join(data_dir, "codex_home")
   config :longx, Longx.Projects.Attachments, dir: Path.join(data_dir, "attachments")
+  config :longx, Longx.Agent.Loader, global_dir: Path.join(data_dir, "agent")
 
   # PORT only applies to prod; dev (7798) and test (4002) are fixed in their config files.
   port = String.to_integer(System.get_env("PORT") || "7788")

@@ -2,14 +2,14 @@ defmodule Longx.Notify do
   @moduledoc """
   One feed of what the person should hear about, across projects — what a
   phone raises a notification for: a turn waiting on them (an approval, a
-  question), a turn done or failed, a codex that died mid-turn.
+  question), a turn done or failed.
 
   Events are plain maps with one shape whatever the delivery:
 
       %{kind, title, body, url, project_id, thread_id, at}
 
-  `kind` is `"approval"` | `"turn_completed"` | `"turn_failed"` |
-  `"codex_down"`; `url` is a path into the SPA (`/p/<slug>/t/<thread id>`),
+  `kind` is `"approval"` | `"turn_completed"` | `"turn_failed"`; `url` is
+  a path into the SPA (`/p/<slug>/t/<thread id>`),
   the client prefixes its own server address. Delivery today is the
   `notify` channel (`LongxWeb.NotifyChannel`) on every live socket — the
   Android shell's foreground service, a desktop page; APNs for iOS is the
@@ -19,7 +19,7 @@ defmodule Longx.Notify do
   alias Phoenix.PubSub
 
   @topic "notify"
-  @kinds ~w(approval turn_completed turn_failed codex_down)
+  @kinds ~w(approval turn_completed turn_failed)
 
   @type event :: %{
           kind: String.t(),

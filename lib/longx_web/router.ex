@@ -27,13 +27,6 @@ defmodule LongxWeb.Router do
     plug :accepts, ["json"]
   end
 
-  # OpenAI-compatible surface the bundled codex-app-server talks to. No
-  # `:accepts` here: codex sends `Accept: text/event-stream` and the gateway
-  # decides the response format itself.
-  pipeline :ai_gateway do
-    plug LongxWeb.Plugs.GatewayAuth
-  end
-
   scope "/", LongxWeb do
     pipe_through :browser
 
@@ -43,24 +36,9 @@ defmodule LongxWeb.Router do
     post "/attachments/:project_id", AttachmentController, :create
   end
 
-  scope "/ai/v1", LongxWeb.AI do
-    pipe_through :ai_gateway
-
-    post "/responses", ResponsesController, :create
-    # codex standalone web search (`web.run` tool) — see Longx.AI.Search
-    post "/alpha/search", SearchController, :create
-  end
-
-  # codex's exec-server: its commands and file operations come in here (the
-  # `url` in each home's environments.toml) — a bare route, the token is in
-  # the URL and the controller upgrades to a WebSocket.
   # a third party sending the browser back after a login a tool asked for
   scope "/callback", LongxWeb do
     get "/:id", CallbackController, :show
-  end
-
-  scope "/exec", LongxWeb do
-    get "/:project_id", ExecController, :connect
   end
 
   # Other scopes may use custom stacks.
