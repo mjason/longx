@@ -76,6 +76,19 @@ defmodule Longx.Agent.PlugsTest do
       assert Enum.join(collect_out([])) =~ dir
     end
 
+    test "commands see the person's shell environment, not the BEAM's", %{ctx: ctx} do
+      assert {:ok, output, %{"exitCode" => 0}} =
+               Tool.call(
+                 tool!(Shell, "exec_command"),
+                 %{"cmd" => "echo \"$PATH\"; echo \"$HOME\"", "login" => false},
+                 ctx
+               )
+
+      [path, home | _] = String.split(output, "\n")
+      assert path == Longx.Agent.ShellEnv.env()["PATH"]
+      assert home == System.get_env("HOME")
+    end
+
     test "a non-zero exit is reported, not an error", %{ctx: ctx} do
       assert {:ok, output, %{"exitCode" => 3}} =
                Tool.call(tool!(Shell, "exec_command"), %{"cmd" => "echo boom; exit 3"}, ctx)
@@ -88,7 +101,8 @@ defmodule Longx.Agent.PlugsTest do
       assert {:error, message} =
                Tool.call(
                  tool!(Shell, "exec_command"),
-                 %{"cmd" => "echo start; sleep 10", "timeout_ms" => 300},
+                 # no login shell: its start-up must not eat the budget before "start" prints
+                 %{"cmd" => "echo start; sleep 10", "timeout_ms" => 800, "login" => false},
                  ctx
                )
 

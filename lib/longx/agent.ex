@@ -76,7 +76,9 @@ defmodule Longx.Agent do
               # the provider refused the last request for its length: compact, retry once
               context_overflow: false,
               # a tool (new_context_window) or the person (/compact) asked for one
-              compact_requested: false
+              compact_requested: false,
+              # images tools attached in this step (view_image), added after its outputs
+              pending_images: []
   end
 
   # a turn-end plug may continue a turn this many times before it ends anyway
@@ -957,8 +959,14 @@ defmodule Longx.Agent do
 
     input = %{"type" => output_type(call), "call_id" => call["call_id"], "output" => text}
     state = %{append(state, :function_call_output, input, ui) | tasks: tasks}
-    # an image a tool attached (view_image) follows the result as a user message
-    state = attach_image(state, extra["image"])
+    # an image a tool attached (view_image) is queued: it goes in as a user
+    # message once every call of the step has answered — a message between two
+    # function outputs makes the provider refuse the request
+    state =
+      if is_binary(extra["image"]),
+        do: %{state | pending_images: state.pending_images ++ [extra["image"]]},
+        else: state
+
     # a tool asked for a new context window (new_context_window)
     state = if extra["compact"] == true, do: %{state | compact_requested: true}, else: state
 
@@ -971,22 +979,23 @@ defmodule Longx.Agent do
   defp output_type(%{"type" => "custom_tool_call"}), do: "custom_tool_call_output"
   defp output_type(_call), do: "function_call_output"
 
-  defp attach_image(state, url) when is_binary(url) do
+  defp attach_images(%State{pending_images: []} = state), do: state
+
+  defp attach_images(%State{pending_images: urls} = state) do
     input = %{
       "type" => "message",
       "role" => "user",
-      "content" => [%{"type" => "input_image", "image_url" => url, "detail" => "auto"}]
+      "content" =>
+        Enum.map(urls, &%{"type" => "input_image", "image_url" => &1, "detail" => "auto"})
     }
 
-    append(state, :user_message, input, nil)
+    %{append(state, :user_message, input, nil) | pending_images: []}
   end
 
-  defp attach_image(state, _none), do: state
-
-  # every tool answered: the next step (GenServer.call has no continue from here)
+  # every tool answered: the images, then the next step (GenServer.call has no continue from here)
   defp continue_step(state) do
     Kernel.send(self(), :next_step)
-    %{state | phase: :step}
+    %{attach_images(state) | phase: :step}
   end
 
   ## Turn end
@@ -1007,7 +1016,8 @@ defmodule Longx.Agent do
         steers: [],
         compacting: nil,
         context_overflow: false,
-        compact_requested: false
+        compact_requested: false,
+        pending_images: []
     }
   end
 

@@ -245,6 +245,82 @@ defmodule Longx.AgentTest do
     assert kinds == [:user_message, :function_call, :function_call_output, :agent_message]
   end
 
+  # two calls in one response, as a model makes them in parallel
+  defp two_calls(a, b) do
+    resp = %{id: "resp_2", object: "response", created_at: 1, model: "fake-model", output: []}
+
+    items =
+      for {{name, args}, i} <- Enum.with_index([a, b]) do
+        %{
+          id: "fc_#{i}_#{System.unique_integer([:positive])}",
+          type: "function_call",
+          call_id: "call_#{i}_#{System.unique_integer([:positive])}",
+          name: name,
+          arguments: Jason.encode!(args),
+          status: "completed"
+        }
+      end
+
+    ([%{type: "response.created", response: Map.put(resp, :status, "in_progress")}] ++
+       Enum.flat_map(Enum.with_index(items), fn {item, i} ->
+         [
+           %{
+             type: "response.output_item.added",
+             output_index: i,
+             item: %{item | arguments: "", status: "in_progress"}
+           },
+           %{type: "response.output_item.done", output_index: i, item: item}
+         ]
+       end) ++
+       [
+         %{
+           type: "response.completed",
+           response:
+             Map.merge(resp, %{
+               status: "completed",
+               output: items,
+               usage: %{input_tokens: 3, output_tokens: 2, total_tokens: 5}
+             })
+         }
+       ])
+    |> Enum.with_index()
+    |> Enum.map(fn {event, seq} ->
+      "event: #{event.type}\ndata: #{Jason.encode!(Map.put(event, :sequence_number, seq))}\n\n"
+    end)
+  end
+
+  test "an image attached by a tool goes in after every output of the step, never between them",
+       %{bypass: bypass, thread_id: id, dir: dir} do
+    File.write!(Path.join(dir, "shot.png"), <<0x89, ?P, ?N, ?G, 13, 10, 26, 10>>)
+
+    script!(bypass, [
+      two_calls(
+        {"view_image", %{"path" => "shot.png"}},
+        {"exec_command", %{"cmd" => "sleep 0.2; echo later"}}
+      ),
+      ResponsesFixture.assistant_message("seen")
+    ])
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "look")
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+    assert_receive {:request, _first}
+    assert_receive {:request, second}
+
+    assert [
+             %{"role" => "user"},
+             %{"type" => "function_call"},
+             %{"type" => "function_call"},
+             %{"type" => "function_call_output"},
+             %{"type" => "function_call_output"},
+             %{
+               "role" => "user",
+               "content" => [
+                 %{"type" => "input_image", "image_url" => "data:image/png;base64," <> _}
+               ]
+             }
+           ] = second["input"]
+  end
+
   test "a custom tool call (OpenAI's freeform apply_patch) is applied and answered in kind", %{
     bypass: bypass,
     thread_id: id,

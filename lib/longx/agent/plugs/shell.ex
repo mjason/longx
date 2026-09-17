@@ -1,8 +1,9 @@
 defmodule Longx.Agent.Plugs.Shell do
   @moduledoc """
   codex's `exec_command`: a shell command run in the working directory
-  through `Longx.Shim` — output streamed to the UI as it comes, the whole
-  tree killed at the timeout. The parameters are codex's (`cmd`,
+  through `Longx.Shim`, in the person's own shell with the environment
+  of their interactive login shell (`Longx.Agent.ShellEnv`) — output
+  streamed to the UI as it comes, the whole tree killed at the timeout. The parameters are codex's (`cmd`,
   `workdir`, `tty`, `yield_time_ms`, `max_output_tokens`, `shell`, `login`)
   so models tuned for codex call it the same way; the difference is that
   a command runs to completion here (up to `timeout_ms`, default 2 min,
@@ -18,6 +19,7 @@ defmodule Longx.Agent.Plugs.Shell do
 
   use Longx.Agent.Plug
 
+  alias Longx.Agent.ShellEnv
   alias Longx.Shim
 
   @default_timeout 120_000
@@ -47,7 +49,7 @@ defmodule Longx.Agent.Plugs.Shell do
           :integer,
           "Kill the command after this many milliseconds (default 120000, max 1800000)."
 
-    param :shell, :string, "Shell binary to launch. Defaults to bash."
+    param :shell, :string, "Shell binary to launch. Defaults to the user's default shell."
 
     param :login,
           :boolean,
@@ -57,14 +59,22 @@ defmodule Longx.Agent.Plugs.Shell do
   def exec_command(%{"cmd" => command} = args, ctx) do
     timeout = args["timeout_ms"] |> timeout()
     cwd = workdir(args["workdir"], ctx)
-    shell = if is_binary(args["shell"]) and args["shell"] != "", do: args["shell"], else: "bash"
+
+    shell =
+      if is_binary(args["shell"]) and args["shell"] != "",
+        do: args["shell"],
+        else: ShellEnv.shell()
+
     flag = if args["login"] == false, do: "-c", else: "-lc"
     tty? = args["tty"] == true
     max_bytes = output_cap(args["max_output_tokens"])
     started = System.monotonic_time(:millisecond)
 
+    # the person's own shell environment (a snapshot of their interactive login
+    # shell), nothing of the BEAM's: Go, brew, nvm are where their .zshrc put them
     opts =
-      [cd: cwd, env: [{"TERM", "dumb"}]] ++ if(tty?, do: [pty: true], else: [stderr: :stream])
+      [cd: cwd, env: ShellEnv.env_list(), env_clear: true] ++
+        if(tty?, do: [pty: true], else: [stderr: :stream])
 
     case Shim.start_link([shell, flag, command], opts) do
       {:ok, shim} ->
