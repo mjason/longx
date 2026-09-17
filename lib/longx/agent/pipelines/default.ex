@@ -24,6 +24,8 @@ defmodule Longx.Agent.Pipelines.Default do
         plug Longx.Agent.Plugs.Patch
         plug Longx.Agent.Plugs.ViewImage
         plug Longx.Agent.Plugs.Knowledge
+        plug Longx.Agent.Plugs.WebSearch
+        plug Longx.Agent.Plugs.Browser
         plug Longx.Agent.Plugs.Request
       end
     end

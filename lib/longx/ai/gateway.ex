@@ -69,6 +69,7 @@ defmodule Longx.AI.Gateway do
         input |> sanitize_reasoning(target.kind) |> translate_agent_messages(target.kind)
       )
       |> drop_hosted_search(target)
+      |> drop_hosted_calls(target)
       |> put_max_output_tokens(target)
       |> dump_request()
 
@@ -111,6 +112,18 @@ defmodule Longx.AI.Gateway do
 
   defp put_max_output_tokens(body, %Target{max_output_tokens: max}),
     do: Map.put_new(body, "max_output_tokens", max)
+
+  # a `web_search_call` item is the searching provider's own: replayed to
+  # another it is an unknown item type (the model's message that followed
+  # carries what it found)
+  @hosted_call_items ["web_search_call"]
+
+  defp drop_hosted_calls(body, %Target{hosted_web_search?: true}), do: body
+
+  defp drop_hosted_calls(%{"input" => input} = body, _target) when is_list(input),
+    do: Map.put(body, "input", Enum.reject(input, &(&1["type"] in @hosted_call_items)))
+
+  defp drop_hosted_calls(body, _target), do: body
 
   defp drop_hosted_search(body, %Target{hosted_web_search?: true}), do: body
 

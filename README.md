@@ -384,6 +384,11 @@ front matter 里 `always: true` 的每轮都进 prompt，其余只进一行索�
 `knowledge_search` / `knowledge_write` 三个工具读写。skill 就是一篇"怎么做 X"的知识，AGENTS.md
 不在出厂管道里（要兼容的项目自己 `plug AgentsMd`）。
 
+**联网**是两个 plug：`WebSearch` 看模型——provider 自己会搜的（OpenAI、百炼上的 Qwen 3.5+ 等）就发
+codex 那个 `web_search` 工具、由 provider 侧搜和读，回来的 `web_search_call` 和引用在聊天里显示成搜索行；
+其他模型给一个 `web_search` 函数走 Tavily。`Browser` 给所有模型一个 `web_fetch`，用内置的 obscura 渲染网页
+转 markdown——provider 自己会搜也读不了你指定的 URL。会话的联网开关只管搜索。
+
 **上下文压缩照 codex 的做法**：`Compaction` plug 决定什么时候压（超过窗口 90%、provider 报上下文
 超长、模型调 `new_context_window`、你敲 `/compact`），内核在 task 里让模型写一份交接摘要，
 新的上下文 = 你说过的话原文 + 摘要，UI 上一个压缩标记。

@@ -20,7 +20,7 @@ defmodule Longx.Agent.Plugs.Request do
         "model" => step.model || "longx",
         "instructions" => prompt(step),
         "input" => step.transcript,
-        "tools" => Enum.map(tools, &Tool.to_responses/1),
+        "tools" => Enum.map(tools, &Tool.to_responses/1) ++ step.raw_tools,
         # the grammar-constrained forms, for a provider that runs them
         # (Longx.Agent.Model swaps them in for OpenAI, drops them otherwise)
         "x-longx-custom-tools" => tools |> Enum.map(&Tool.to_custom/1) |> Enum.reject(&is_nil/1),

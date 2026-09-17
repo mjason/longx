@@ -68,6 +68,8 @@ defmodule Longx.Agent.LoaderTest do
              Patch,
              Longx.Agent.Plugs.ViewImage,
              Longx.Agent.Plugs.Knowledge,
+             Longx.Agent.Plugs.WebSearch,
+             Longx.Agent.Plugs.Browser,
              Longx.Agent.Plugs.Prompt,
              Longx.Agent.Plugs.Local,
              Request

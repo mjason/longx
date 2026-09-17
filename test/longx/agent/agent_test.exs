@@ -179,7 +179,7 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "You are"
 
     assert Enum.map(body["tools"], & &1["name"]) |> Enum.sort() ==
-             ~w(apply_patch exec_command knowledge_read knowledge_search knowledge_write view_image)
+             ~w(apply_patch exec_command knowledge_read knowledge_search knowledge_write view_image web_fetch web_search)
 
     refute Map.has_key?(body, "x-longx-custom-tools")
 
@@ -814,6 +814,130 @@ defmodule Longx.AgentTest do
     assert {:ok, text} = Longx.Agent.Tool.call(remaining, %{}, ctx)
     assert text =~ "200"
     assert {:ok, _, %{"compact" => true}} = Longx.Agent.Tool.call(fresh, %{}, ctx)
+  end
+
+  # a hosted search as OpenAI / 百炼 stream it: the call, then a message citing sources
+  defp hosted_search_stream(query, url) do
+    resp = %{id: "resp_ws", object: "response", created_at: 1, model: "fake-model", output: []}
+
+    ws = %{
+      id: "ws_1",
+      type: "web_search_call",
+      status: "completed",
+      action: %{type: "search", query: query}
+    }
+
+    msg_id = "msg_ws"
+
+    message = %{
+      id: msg_id,
+      type: "message",
+      status: "completed",
+      role: "assistant",
+      content: [
+        %{
+          type: "output_text",
+          text: "found it",
+          annotations: [
+            %{type: "url_citation", url: url, title: "The page", start_index: 0, end_index: 8}
+          ]
+        }
+      ]
+    }
+
+    [
+      %{type: "response.created", response: Map.put(resp, :status, "in_progress")},
+      %{type: "response.output_item.added", output_index: 0, item: %{ws | status: "in_progress"}},
+      %{type: "response.output_item.done", output_index: 0, item: ws},
+      %{
+        type: "response.output_item.added",
+        output_index: 1,
+        item: %{message | content: [], status: "in_progress"}
+      },
+      %{
+        type: "response.output_text.delta",
+        item_id: msg_id,
+        output_index: 1,
+        content_index: 0,
+        delta: "found it"
+      },
+      %{type: "response.output_item.done", output_index: 1, item: message},
+      %{
+        type: "response.completed",
+        response:
+          Map.merge(resp, %{
+            status: "completed",
+            output: [ws, message],
+            usage: %{input_tokens: 3, output_tokens: 2, total_tokens: 5}
+          })
+      }
+    ]
+    |> Enum.with_index()
+    |> Enum.map(fn {event, seq} ->
+      "event: #{event.type}\ndata: #{Jason.encode!(Map.put(event, :sequence_number, seq))}\n\n"
+    end)
+  end
+
+  test "hosted web search: the provider's tool goes out, its call shows as a search row with the cited sources",
+       %{bypass: bypass, thread_id: id, model: model} do
+    provider = Ash.load!(model, :provider).provider
+    AI.update_provider!(provider, %{supports_hosted_web_search: true})
+    script!(bypass, [hosted_search_stream("elixir 1.19", "https://elixir-lang.org/blog")])
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "what's new in elixir?")
+
+    assert %{
+             "item" => %{
+               "type" => "webSearch",
+               "id" => ws,
+               "query" => "elixir 1.19",
+               "action" => %{"type" => "search"}
+             }
+           } =
+             await_item_started("webSearch")
+
+    assert %{"item" => %{"id" => ^ws, "status" => "completed"}} = await_item_completed(ws)
+
+    assert %{
+             "item" => %{
+               "id" => ^ws,
+               "results" => [%{"url" => "https://elixir-lang.org/blog", "title" => "The page"}]
+             }
+           } =
+             await_item_completed(ws)
+
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+    assert_receive {:request, first}
+
+    assert [%{"type" => "web_search", "external_web_access" => true}] =
+             Enum.filter(first["tools"], &(&1["type"] == "web_search"))
+
+    refute "web_search" in Enum.map(first["tools"], & &1["name"])
+    assert "web_fetch" in Enum.map(first["tools"], & &1["name"])
+    assert :hosted_call in Enum.map(Transcript.items!(id), & &1.kind)
+  end
+
+  test "the thread's search switch off mounts nothing; reading pages stays", %{
+    bypass: bypass,
+    dir: dir
+  } do
+    id = "nosearch-#{System.unique_integer([:positive])}"
+    :ok = ThreadState.subscribe(id)
+
+    on_exit(fn ->
+      Agent.stop(id)
+      ThreadState.stop(id)
+      ThreadState.Store.delete(id)
+    end)
+
+    {:ok, _} = Agent.ensure(thread_id: id, cwd: dir, web_search: false)
+    script!(bypass, [ResponsesFixture.assistant_message("quiet")])
+    {:ok, _} = Agent.send(id, "hi")
+    await_turn_end()
+    assert_receive {:request, body}
+    refute "web_search" in Enum.map(body["tools"], & &1["name"])
+    refute Enum.any?(body["tools"], &(&1["type"] == "web_search"))
+    assert "web_fetch" in Enum.map(body["tools"], & &1["name"])
   end
 
   defmodule Budget do

@@ -5,7 +5,8 @@ defmodule Longx.Agent.Tool do
   schema for the arguments, the function that runs it (`{module, fun}`,
   called with the decoded arguments and a `Longx.Agent.Context`), how the
   UI shows a call (`show`: `:command` as a command row, `:file_change` as
-  a file change, `:tool` as a generic tool row) and a timeout.
+  a file change, `:web_search` as a search / page row, `:tool` as a
+  generic tool row) and a timeout.
 
   `call/3` validates the arguments against the schema first — the model
   gets the schema's complaint back and can fix the call.
@@ -13,7 +14,7 @@ defmodule Longx.Agent.Tool do
 
   alias Longx.Agent.Context
 
-  @type show :: :command | :file_change | :tool
+  @type show :: :command | :file_change | :tool | :web_search
   @type outcome :: {:ok, String.t()} | {:ok, String.t(), map} | {:error, String.t()}
 
   @type t :: %__MODULE__{

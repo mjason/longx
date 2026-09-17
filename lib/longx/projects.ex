@@ -209,6 +209,7 @@ defmodule Longx.Projects do
              cwd: project.root_path,
              model: model_slug,
              effort: effort,
+             web_search: Keyword.get(opts, :web_search, project.web_search),
              trust: trust_fun(project.id)
            ),
          {:ok, thread} <-
@@ -292,6 +293,7 @@ defmodule Longx.Projects do
       cwd: thread.cwd,
       model: thread.model_slug,
       effort: thread.reasoning_effort,
+      web_search: thread.web_search,
       trust: trust_fun(thread.project_id)
     )
   end

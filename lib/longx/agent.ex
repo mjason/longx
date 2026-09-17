@@ -47,6 +47,10 @@ defmodule Longx.Agent do
               pipeline: nil,
               # whether the project's own .longx/ may be loaded (read per turn)
               trust: nil,
+              # the thread's 联网搜索 switch (a plug reads it from the step's assigns)
+              web_search: true,
+              # the last web search of the step: citations in the message land on it
+              last_search: nil,
               seq: 0,
               # Responses input items, oldest first (the model's context)
               transcript: [],
@@ -172,6 +176,7 @@ defmodule Longx.Agent do
       effort: Keyword.get(opts, :effort),
       pipeline: Keyword.get(opts, :pipeline) || configured_pipeline(),
       trust: Keyword.get(opts, :trust, fn -> false end),
+      web_search: Keyword.get(opts, :web_search, true),
       seq: items |> Enum.map(& &1.seq) |> Enum.max(fn -> 0 end),
       transcript: Transcript.input(items)
     }
@@ -319,7 +324,8 @@ defmodule Longx.Agent do
          tools: tools,
          model_task: %{task: task, ref: ref},
          items: %{},
-         calls: []
+         calls: [],
+         last_search: nil
      }}
   end
 
@@ -338,6 +344,7 @@ defmodule Longx.Agent do
         context_window: state.context_window,
         assigns: %{
           trust: state.trust,
+          web_search: state.web_search,
           context_overflow: state.context_overflow,
           compact_requested: state.compact_requested
         }
@@ -536,6 +543,13 @@ defmodule Longx.Agent do
      put_item(state, id, %{ui: ui_id, kind: kind, text: "", summary: %{}, content: %{}})}
   end
 
+  # a call the provider runs on its side (hosted web search): a webSearch row
+  defp model_event({:item_added, %{"id" => id, "type" => "web_search_call"} = item}, state) do
+    ui = hosted_search_ui(new_id("item"), state.turn_id, item, "inProgress")
+    emit(state, "item/started", %{"item" => ui, "turnId" => state.turn_id})
+    {:noreply, put_item(%{state | last_search: ui}, id, %{ui: ui["id"], kind: :hosted_call})}
+  end
+
   defp model_event({:item_added, _item}, state), do: {:noreply, state}
 
   defp model_event({:text_delta, id, delta}, state) do
@@ -597,6 +611,7 @@ defmodule Longx.Agent do
 
     state =
       state
+      |> cite(item)
       |> append(:agent_message, item, ui)
       |> drop_item(id)
 
@@ -613,6 +628,11 @@ defmodule Longx.Agent do
     }
 
     {:noreply, state |> append(:reasoning, item, ui) |> drop_item(id)}
+  end
+
+  defp model_event({:item_done, %{"type" => "web_search_call", "id" => id} = item}, state) do
+    ui = hosted_search_ui(ui_id(state, id), state.turn_id, item, "completed")
+    {:noreply, %{(state |> append(:hosted_call, item, ui) |> drop_item(id)) | last_search: ui}}
   end
 
   defp model_event({:item_done, %{"type" => type} = item}, state)
@@ -651,6 +671,53 @@ defmodule Longx.Agent do
       {:noreply, state |> close_open_items() |> end_turn("failed", message)}
     end
   end
+
+  # the sources a hosted search found arrive as the message's url_citation
+  # annotations: they become the results of the last search row of the step
+  defp cite(%State{last_search: %{} = search} = state, %{"content" => content})
+       when is_list(content) do
+    results =
+      for %{"annotations" => annotations} <- content,
+          %{"type" => "url_citation", "url" => url} = a <- List.wrap(annotations),
+          uniq: true,
+          do: %{"title" => a["title"] || url, "url" => url}
+
+    if results == [] do
+      state
+    else
+      ui = Map.put(search, "results", results)
+      emit(state, "item/completed", %{"item" => ui, "turnId" => state.turn_id})
+      %{state | last_search: nil}
+    end
+  end
+
+  defp cite(state, _item), do: state
+
+  defp hosted_search_ui(id, turn_id, %{"action" => action} = item, status) when is_map(action) do
+    camel =
+      case action["type"] do
+        "open_page" -> "openPage"
+        "find_in_page" -> "findInPage"
+        other -> other || "search"
+      end
+
+    query =
+      action["query"] || action["url"] || action["pattern"] ||
+        action["queries"] |> List.wrap() |> Enum.join(" / ")
+
+    %{
+      "id" => id,
+      "type" => "webSearch",
+      "turnId" => turn_id,
+      "query" => query,
+      "action" => Map.put(action, "type", camel),
+      "status" => item["status"] || status,
+      "results" => []
+    }
+  end
+
+  defp hosted_search_ui(id, turn_id, item, status),
+    do: hosted_search_ui(id, turn_id, Map.put(item, "action", %{"type" => "search"}), status)
 
   @overflow ~r/context length|context_length|maximum context|too many tokens|token limit|exceeds .*context|prompt is too long|context window/i
   defp overflow?(message), do: is_binary(message) and Regex.match?(@overflow, message)
@@ -1120,6 +1187,23 @@ defmodule Longx.Agent do
     }
   end
 
+  defp started_ui(%Tool{show: :web_search}, name, id, args, state) do
+    open? = name == "web_fetch" or (is_map(args) and is_binary(args["url"]))
+
+    %{
+      "id" => id,
+      "type" => "webSearch",
+      "turnId" => state.turn_id,
+      "query" => arg(args, if(open?, do: "url", else: "query")),
+      "action" =>
+        if(open?,
+          do: %{"type" => "openPage", "url" => arg(args, "url")},
+          else: %{"type" => "search", "query" => arg(args, "query")}
+        ),
+      "status" => "inProgress"
+    }
+  end
+
   defp started_ui(tool, name, id, args, state) do
     %{
       "id" => id,
@@ -1166,6 +1250,25 @@ defmodule Longx.Agent do
       "output" => text
     }
     |> Map.merge(Map.take(extra, ["changes"]))
+  end
+
+  defp completed_ui(
+         %Tool{show: :web_search},
+         id,
+         turn_id,
+         ok?,
+         _text,
+         _streamed,
+         _duration,
+         extra
+       ) do
+    %{
+      "id" => id,
+      "type" => "webSearch",
+      "turnId" => turn_id,
+      "status" => if(ok?, do: "completed", else: "failed"),
+      "results" => List.wrap(extra["results"])
+    }
   end
 
   defp completed_ui(%Tool{} = tool, id, turn_id, ok?, text, _streamed, duration, _extra) do

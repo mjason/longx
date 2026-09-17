@@ -60,7 +60,8 @@ defmodule Longx.Agent.Item do
                     :reasoning,
                     :function_call,
                     :function_call_output,
-                    :compaction
+                    :compaction,
+                    :hosted_call
                   ]
     end
 

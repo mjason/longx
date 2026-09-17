@@ -257,4 +257,30 @@ defmodule Longx.AI.GatewayTest do
       assert {:error, :invalid_request} = Gateway.prepare("nope", @target)
     end
   end
+
+  test "a provider's own web_search_call items are dropped for a target that does not search" do
+    body = %{
+      "model" => "longx",
+      "input" => [
+        %{"type" => "message", "role" => "user", "content" => "hi"},
+        %{
+          "type" => "web_search_call",
+          "id" => "ws_1",
+          "status" => "completed",
+          "action" => %{"type" => "search", "query" => "x"}
+        },
+        %{
+          "type" => "message",
+          "role" => "assistant",
+          "content" => [%{"type" => "output_text", "text" => "found"}]
+        }
+      ]
+    }
+
+    {:ok, up} = Gateway.prepare(body, @target)
+    assert Enum.map(up.body["input"], & &1["type"]) == ["message", "message"]
+
+    {:ok, up} = Gateway.prepare(body, %{@target | hosted_web_search?: true})
+    assert Enum.map(up.body["input"], & &1["type"]) == ["message", "web_search_call", "message"]
+  end
 end

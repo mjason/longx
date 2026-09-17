@@ -43,6 +43,7 @@ defmodule Longx.Agent.Step do
           instructions: [String.t()],
           skills: %{String.t() => skill},
           tools: %{String.t() => Tool.t()},
+          raw_tools: [map],
           request: map | nil,
           phase: phase,
           calls: [call],
@@ -64,6 +65,7 @@ defmodule Longx.Agent.Step do
             instructions: [],
             skills: %{},
             tools: %{},
+            raw_tools: [],
             request: nil,
             phase: :request,
             calls: [],
@@ -114,6 +116,11 @@ defmodule Longx.Agent.Step do
   @spec tools(t, [Tool.t()]) :: t
   def tools(%__MODULE__{} = step, list) when is_list(list),
     do: Enum.reduce(list, step, &tool(&2, &1))
+
+  @doc "Adds a tool the provider itself runs (`%{\"type\" => \"web_search\"}`), passed to the request as is."
+  @spec raw_tool(t, map) :: t
+  def raw_tool(%__MODULE__{raw_tools: raw} = step, %{"type" => _} = tool),
+    do: %{step | raw_tools: Enum.reject(raw, &(&1["type"] == tool["type"])) ++ [tool]}
 
   @doc "Stops the pipeline: the model is not called and the turn ends with `reason`."
   @spec halt(t, term) :: t

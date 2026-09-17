@@ -496,7 +496,7 @@ React Native client planned on the same core code.
   - **Descriptions: `Longx.Agent.Config`**, data evaluated before anything runs, the
     same format in three layers (`Longx.Agent.Loader`): the shipped default
     (`Longx.Agent.Pipelines.Default.config/0` — Environment, Base, Shell, Patch,
-    ViewImage, Knowledge, Request), the person's `<data>/agent/agent.exs` (`config
+    ViewImage, Knowledge, WebSearch, Browser, Request), the person's `<data>/agent/agent.exs` (`config
     :longx, Longx.Agent.Loader, global_dir:`), the project's `<root>/.longx/agent.exs`.
     `import Longx.Agent.Config; agent do version 1; extends :default; model "…", effort:
     "…"; prompt "…"; plug Deploy, after: Shell; options Shell, timeout_ms: …; drop Base end`
@@ -536,6 +536,24 @@ React Native client planned on the same core code.
     and where. AGENTS.md is **not** read here — `Plugs.AgentsMd` still exists but is out
     of the shipped pipeline; a project that wants it adds `plug AgentsMd`. Skills are
     docs (a how-to is a doc), no loader of their own.
+  - **Web search and reading pages** are two plugs. `Plugs.WebSearch` (`mode:` `:auto` /
+    `:hosted` / `:standalone` / `:off`): *hosted* when the model's provider searches on
+    its side (`Longx.AI.web_search_mode/1` — OpenAI, 百炼 Qwen 3.5+ / DeepSeek-v4 /
+    glm-5.2; the model dialog's 联网搜索) — the request carries codex's `{"type":
+    "web_search", "external_web_access": true}` through `Step.raw_tool/2` (provider-run
+    tools go into `"tools"` as they are) and no function; the kernel turns the provider's
+    `web_search_call` output items (codex's `action`: `search` with `query` / `queries`,
+    `open_page` with `url`, `find_in_page` with `pattern`) into `webSearch` rows and hangs
+    the following message's `url_citation` annotations on the last one as `results`; the
+    item is kept in the transcript (`:hosted_call`) and `Gateway.prepare` drops
+    `web_search_call` items for a target that does not search (an unknown item type
+    there) — *standalone* for every other model: `web_search(query, recency_days,
+    domains)` over `Longx.AI.Search` (Tavily; no provider → said inside the result). The
+    thread's 联网搜索 switch reaches the kernel as `web_search:` → `assigns.web_search`;
+    `false` mounts nothing. `Plugs.Browser` is `web_fetch(url, format, selector)` in every
+    mode — obscura through `Longx.Tools.Builtin.BrowserFetch`, markdown by default — since
+    a provider that searches still cannot read the URL the person named. Both show as
+    `webSearch` rows (`show: :web_search`: `search` / `openPage` actions, `results`).
   - **Compaction, codex's shape** (`Plugs.Compaction`, policy; the kernel, execution):
     the plug asks (`Step.compact/2`) when the context after the last step passed `at:`
     (0.9, codex's 90 %) of the window, when the provider refused the request for its
@@ -575,7 +593,8 @@ React Native client planned on the same core code.
     settings show the definition (`settings` `AgentSection`, `useAgentDefinition`) with
     the trust switch, in place of codex's skills list.
   - Tests: `test/longx/agent/` (`pipeline_test` the DSL and phases, `config_test`,
-    `loader_test` (namespaces, reload, notices, trust), `knowledge_test`, `patch_test`,
+    `loader_test` (namespaces, reload, notices, trust), `knowledge_test`,
+    `web_search_test` (Tavily by Bypass, the fake obscura), `patch_test`,
     `sse_test`, `plugs_test` runs real bash, `transcript_test`, `model_test` and
     `agent_test` with Bypass as the model — a held reply for steer / interrupt / retract,
     `Bypass.pass/1` after a reply the interrupt cut off, a restart rebuild, effects, the
