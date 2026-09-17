@@ -17,6 +17,26 @@ export const failed = (message: string, fields: string[] = []) => ({
   ],
 });
 
+export const dependencyTool = (name: string, extra: Record<string, unknown> = {}) => ({
+  name,
+  command: name,
+  found: true,
+  path: `/usr/bin/${name}`,
+  version: "1.0.0",
+  install: { apt: name, brew: name, winget: null },
+  ...extra,
+});
+
+/** every tool found: the strip shows nothing */
+export const dependencyReport = (extra: Record<string, unknown> = {}) => ({
+  os: "linux",
+  missing: 0,
+  installCommand: null,
+  tools: ["ripgrep", "fd-find", "fzf", "bat", "jq", "tree", "git", "gh", "git-delta"].map((n) => dependencyTool(n)),
+  checkedAt: "2026-09-18T00:00:00Z",
+  ...extra,
+});
+
 export const agentSettingsData = () => ({
   maxDepth: 2,
   maxChildren: 4,
@@ -135,6 +155,8 @@ export function rpcMock() {
     agentSettings: vi.fn(async () => ok(agentSettingsData())),
     setAgentSettings: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok({ ...agentSettingsData(), ...input })),
     publicUrl: vi.fn(async () => ok({ url: "http://192.168.2.129:7788", setting: null })),
+    dependencies: vi.fn(async () => ok(dependencyReport())),
+    checkDependencies: vi.fn(async () => ok(dependencyReport())),
     setPublicUrl: vi.fn(async ({ input }: { input: { url: string } }) => ok({ url: input.url || "http://192.168.2.129:7788", setting: input.url || null })),
     listProviders: vi.fn(async () => ok([provider(1), provider(2)])),
     createProvider: vi.fn(

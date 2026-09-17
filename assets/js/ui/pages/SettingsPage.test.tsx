@@ -10,6 +10,8 @@ vi.mock("@/core/socket", async () =>
 );
 import {
   setAgentSettings,
+  dependencies,
+  checkDependencies,
   setPublicUrl,
   knowledgeDelete,
   knowledgeWrite,
@@ -29,7 +31,7 @@ import {
   upgradeCheck,
   upgradeStatus,
 } from "@/ash_rpc";
-import { model, upgradeIdle } from "@/ui/test-mocks";
+import { dependencyReport, dependencyTool, model, upgradeIdle } from "@/ui/test-mocks";
 import { page } from "@/core/upgrade";
 import { within } from "@testing-library/react";
 
@@ -428,6 +430,35 @@ describe("SettingsPage", () => {
     await waitFor(() =>
       expect(knowledgeWrite).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ path: "global/tools/deploy.md", content: expect.stringContaining("title: deploy") }) })),
     );
+  });
+
+  test("dependencies: every tool with its version, the missing ones with one install line, and a recheck", async () => {
+    setViewport(1280);
+    vi.mocked(dependencies).mockResolvedValueOnce(
+      ok(dependencyReport({
+        missing: 2,
+        installCommand: "sudo apt install fd-find git-delta",
+        tools: [
+          dependencyTool("ripgrep", { command: "rg", version: "14.1.0" }),
+          dependencyTool("fd-find", { found: false, path: null, version: null }),
+          dependencyTool("git-delta", { command: "delta", found: false, path: null, version: null }),
+        ],
+      })) as never,
+    );
+    const user = userEvent.setup();
+    renderAt("/settings/dependencies");
+    const section = await screen.findByTestId("section-dependencies");
+    expect(section).toHaveTextContent("缺少 2 个依赖");
+    expect(within(section).getByTestId("dependencies-install")).toHaveTextContent("sudo apt install fd-find git-delta");
+    const rows = within(within(section).getByTestId("dependencies-list")).getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("ripgrep");
+    expect(rows[0]).toHaveTextContent("rg");
+    expect(rows[0]).toHaveTextContent("14.1.0");
+    expect(rows[1]).toHaveTextContent("未安装");
+    await user.click(within(section).getByRole("button", { name: /重新检测/ }));
+    await waitFor(() => expect(checkDependencies).toHaveBeenCalled());
+    // the recheck's answer replaces the report: everything found now
+    await waitFor(() => expect(section).toHaveTextContent("依赖齐全"));
   });
 
   test("agent kernel: the outside address a login returns to is shown with what is in force, and saved", async () => {

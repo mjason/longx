@@ -1,6 +1,7 @@
-import { ArrowUpCircle, GitBranch } from "lucide-react";
+import { AlertTriangle, ArrowUpCircle, GitBranch } from "lucide-react";
 import { Link } from "react-router";
 import { shortSha } from "@/core/format";
+import { useDependencies } from "@/core/dependencies";
 import { useGitInfo } from "@/core/projects";
 import { useUpgradeStatus } from "@/core/upgrade";
 import { t } from "@/ui/strings";
@@ -12,6 +13,7 @@ const item = (extra = "") => `flex shrink-0 items-center gap-1 whitespace-nowrap
 export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
   const git = useGitInfo(ctx.id);
   const upgrade = useUpgradeStatus({ poll: false });
+  const deps = useDependencies();
 
   return (
     // every item stays on one line: a narrow phone scrolls the strip sideways
@@ -20,6 +22,11 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
         <GitBranch className="size-3" /> {git.data ? (git.data.repository ? shortSha(git.data.head) : "no git") : "…"}
         {git.data?.repository && !git.data.clean ? <span className="text-warning">·{git.data.changes}</span> : null}
       </span>
+      {deps.data && deps.data.missing > 0 ? (
+        <Link to="/settings/dependencies" className={item("text-warning hover:underline")} title={t.dependenciesPage.hint}>
+          <AlertTriangle className="size-3" /> {t.dependenciesPage.missing(deps.data.missing)}
+        </Link>
+      ) : null}
       {upgrade.data?.available && upgrade.data.latest ? (
         <Link to="/settings/update" className={item("text-primary hover:underline")} title={t.updatePage.hint}>
           <ArrowUpCircle className="size-3" /> {t.updatePage.newVersion(upgrade.data.latest)}

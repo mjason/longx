@@ -7,8 +7,8 @@ import { channel, ok } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { startThread, upgradeStatus } from "@/ash_rpc";
-import { upgradeIdle } from "@/ui/test-mocks";
+import { dependencies, startThread, upgradeStatus } from "@/ash_rpc";
+import { dependencyReport, upgradeIdle } from "@/ui/test-mocks";
 
 describe("ProjectWindow", () => {
   beforeEach(() => {
@@ -58,6 +58,20 @@ describe("ProjectWindow", () => {
     expect(screen.getByTestId("status-strip")).toHaveTextContent("372bb036");
     // no process to report on: the strip is HEAD and, when there is one, an update
     expect(screen.getByTestId("status-strip")).not.toHaveTextContent("codex");
+  });
+
+  test("missing dependencies are an amber count in the status bar, linking to the dependencies page", async () => {
+    setViewport(1280);
+    vi.mocked(dependencies).mockResolvedValue(ok(dependencyReport({ missing: 3, installCommand: "sudo apt install fzf bat jq" })) as never);
+    try {
+      const user = userEvent.setup();
+      const { router } = renderAt("/p/app-1/t/t1");
+      const strip = await screen.findByTestId("status-strip");
+      await user.click(await within(strip).findByRole("link", { name: /缺少 3 个依赖/ }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/settings/dependencies"));
+    } finally {
+      vi.mocked(dependencies).mockResolvedValue(ok(dependencyReport()) as never);
+    }
   });
 
   test("a new release is a hint in the status bar, linking to the update page", async () => {

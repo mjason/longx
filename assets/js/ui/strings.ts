@@ -419,6 +419,7 @@ export const t = {
   // settings
   settingsSections: {
     models: "模型与 Provider",
+    dependencies: "系统依赖",
     knowledge: "知识",
     agent: "Agent 内核",
     update: "版本与更新",
@@ -482,6 +483,15 @@ export const t = {
     browserUnavailable: "这台 Longx 没有装浏览器。",
     privateNetwork: "允许访问私网 / 局域网地址",
     privateNetworkHint: "默认拒绝 127.0.0.1、192.168.x.x 这类地址（防 SSRF）。在 fake-ip 的网络环境里（VPN 把所有域名解析到私网地址），不打开这个开关所有页面都打不开；obscura 只有这一个全有全无的开关。",
+  },
+  dependenciesPage: {
+    hint: "agent 在 shell 里干活依赖这些命令行工具（搜索、找文件、看 diff、调 GitHub）。Longx 只检测，不代装：缺的用下面这一行自己装上，再点重新检测。",
+    missing: (n: number) => `缺少 ${n} 个依赖`,
+    allFound: "依赖齐全",
+    recheck: "重新检测",
+    installHint: (os: string) => (os === "darwin" ? "macOS 用 Homebrew 装：" : os === "windows" ? "Windows 用 winget 装：" : "Debian / Ubuntu 用 apt 装（其他发行版换成自己的包管理器）："),
+    versionUnknown: "版本未知",
+    notFound: "未安装",
   },
   knowledgePage: {
     hint: "agent 的知识：markdown 文件，按主题分目录（<主题>/<名字>.md），front matter 里 always: true 的每轮都进 prompt，其余按主题折成一行索引，agent 按需读。这里是你自己的全局知识——全局层面只有它，没有全局的 agent、plug 或技能——对所有项目生效；机器上有 git 时每次保存是一个提交，没有 git 就只是文件。项目的知识在仓库的 .longx/shared/knowledge/（进 git）和 .longx/local/knowledge/（本机，agent 默认写这里）。Longx 出厂的那批只读。",

@@ -5895,6 +5895,72 @@ export async function validateBrowserSettings(
 }
 
 
+export type CheckDependenciesFields = UnifiedFieldSelection<{os: string, missing: number, installCommand: string | null, tools: Array<Record<string, any>>, checkedAt: string, __type: "TypedMap", __primitiveFields: "os" | "missing" | "installCommand" | "tools" | "checkedAt"}>[];
+
+export type InferCheckDependenciesResult<
+  Fields extends CheckDependenciesFields | undefined,
+> = InferResult<{os: string, missing: number, installCommand: string | null, tools: Array<Record<string, any>>, checkedAt: string, __type: "TypedMap", __primitiveFields: "os" | "missing" | "installCommand" | "tools" | "checkedAt"}, Fields>;
+
+export type CheckDependenciesResult<Fields extends CheckDependenciesFields | undefined = undefined> = | { success: true; data: InferCheckDependenciesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function checkDependencies<Fields extends CheckDependenciesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<CheckDependenciesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "check_dependencies",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<CheckDependenciesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateCheckDependencies(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "check_dependencies",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type CreateDirectoryInput = {
   parent: string;
   name: string;
@@ -5961,6 +6027,72 @@ export async function validateCreateDirectory(
     action: "create_directory",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type DependenciesFields = UnifiedFieldSelection<{os: string, missing: number, installCommand: string | null, tools: Array<Record<string, any>>, checkedAt: string, __type: "TypedMap", __primitiveFields: "os" | "missing" | "installCommand" | "tools" | "checkedAt"}>[];
+
+export type InferDependenciesResult<
+  Fields extends DependenciesFields | undefined,
+> = InferResult<{os: string, missing: number, installCommand: string | null, tools: Array<Record<string, any>>, checkedAt: string, __type: "TypedMap", __primitiveFields: "os" | "missing" | "installCommand" | "tools" | "checkedAt"}, Fields>;
+
+export type DependenciesResult<Fields extends DependenciesFields | undefined = undefined> = | { success: true; data: InferDependenciesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function dependencies<Fields extends DependenciesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DependenciesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "dependencies",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<DependenciesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateDependencies(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "dependencies",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
   };
 
   return executeValidationRpcRequest<ValidationResult>(

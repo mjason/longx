@@ -1244,6 +1244,16 @@ React Native client planned on the same core code.
     flagged, hidden on request, roots home and `/`; arrays of typed maps are untyped in
     ash_typescript 0.18's field selection, so entries are typed client-side) and
     `create_directory` (one name under an existing parent — the picker's "新建目录").
+  - **System dependencies — `Longx.System.Dependencies`**: the command-line tools the
+    agent's shell work leans on (`rg`, `fd`/`fdfind`, `fzf`, `bat`/`batcat`, `jq`, `tree`,
+    `git`, `gh`, `delta`) looked up on PATH under each spelling, `--version` through the
+    shim with a 2 s cap (a hanging tool is found, version unknown), the one install line
+    for the platform (`sudo apt install …` / `brew install …` / `winget install --id …`),
+    cached ten minutes (`report/1`, `force: true`). Detection only, Longx installs
+    nothing. RPC `dependencies` / `check_dependencies` on `Longx.System.Status`
+    (`tools` untyped on the wire); Settings → 系统依赖 (`settings/DependenciesSection`,
+    hooks in `core/dependencies.ts`); the status strip shows an amber "缺少 N 个依赖"
+    link when anything is missing. Tests use a fake PATH of stub scripts.
   - `LongxWeb.Actor` is the single place an actor comes from (RPC conn, socket params) —
     `nil` today; AshAuthentication plugs in there later without touching the client.
   - **RPC** = ash_typescript: domains `Longx.Projects`, `Longx.AI`, `Longx.System` declare

@@ -10,6 +10,15 @@ defmodule Longx.System.Status do
     type_name "SystemStatus"
   end
 
+  @dependency_fields [
+    os: [type: :string, allow_nil?: false],
+    missing: [type: :integer, allow_nil?: false],
+    install_command: [type: :string],
+    # untyped: an array of typed maps cannot be selected into by ash_typescript 0.18
+    tools: [type: {:array, :map}, allow_nil?: false],
+    checked_at: [type: :string, allow_nil?: false]
+  ]
+
   @browser_fields [
     allow_private_network: [type: :boolean, allow_nil?: false],
     available: [type: :boolean, allow_nil?: false]
@@ -210,6 +219,20 @@ defmodule Longx.System.Status do
       end
     end
 
+    # the command-line tools the agent leans on: what is missing and how to install it
+    action :dependencies, :map do
+      constraints fields: @dependency_fields
+      run fn _input, _ -> {:ok, dependency_report(Longx.System.Dependencies.report())} end
+    end
+
+    action :check_dependencies, :map do
+      constraints fields: @dependency_fields
+
+      run fn _input, _ ->
+        {:ok, dependency_report(Longx.System.Dependencies.report(force: true))}
+      end
+    end
+
     # the address a login sends the person back to (Longx.System.public_url/0)
     action :public_url, :map do
       constraints fields: [
@@ -363,6 +386,30 @@ defmodule Longx.System.Status do
       {<<String.downcase(<<first>>)::binary, rest::binary>>,
        if(is_map(value), do: camelize(value), else: value)}
     end)
+  end
+
+  defp dependency_report(report) do
+    %{
+      os: report.os,
+      missing: report.missing,
+      install_command: report.install_command,
+      checked_at: DateTime.to_iso8601(report.checked_at),
+      tools:
+        Enum.map(report.tools, fn tool ->
+          %{
+            "name" => tool.name,
+            "command" => tool.command,
+            "found" => tool.found,
+            "path" => tool.path,
+            "version" => tool.version,
+            "install" => %{
+              "apt" => tool.install.apt,
+              "brew" => tool.install.brew,
+              "winget" => tool.install.winget
+            }
+          }
+        end)
+    }
   end
 
   defp argument_error(field, message) do

@@ -14,6 +14,8 @@ defmodule Longx.System do
       rpc_action :agent_settings, :agent_settings
       rpc_action :set_agent_settings, :set_agent_settings
       rpc_action :public_url, :public_url
+      rpc_action :dependencies, :dependencies
+      rpc_action :check_dependencies, :check_dependencies
       rpc_action :set_public_url, :set_public_url
       rpc_action :upgrade_status, :upgrade_status
       rpc_action :upgrade_check, :upgrade_check
