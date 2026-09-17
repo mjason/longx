@@ -18,7 +18,17 @@
     tool: 4,
     param: 3,
     param: 4,
-    instructions: 1
+    instructions: 1,
+    # the agent description (Longx.Agent.Config)
+    agent: 1,
+    version: 1,
+    extends: 1,
+    model: 1,
+    model: 2,
+    prompt: 1,
+    pipeline: 1,
+    options: 2,
+    drop: 1
   ],
   subdirectories: ["priv/*/migrations"],
   plugins: [Spark.Formatter, Phoenix.LiveView.HTMLFormatter],

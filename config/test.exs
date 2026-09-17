@@ -74,3 +74,6 @@ config :longx, Longx.Upgrade, tick: nil
 
 # the agent kernel retries a failed model call at once in tests
 config :longx, Longx.Agent.Model, retry_ms: [10, 10]
+
+# no global agent layer in tests (a test that wants one points this at its own directory)
+config :longx, Longx.Agent.Loader, global_dir: Path.expand("../data/agent_test_none", __DIR__)

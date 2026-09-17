@@ -234,6 +234,56 @@ defmodule Longx.Projects.NativeEngineTest do
     assert Longx.Codex.Pool.running() == []
   end
 
+  test "the project's own agent definition is loaded only once trusted; the settings page sees it",
+       %{bypass: bypass, project: project, dir: dir} do
+    File.mkdir_p!(Path.join(dir, ".longx/plugs"))
+
+    File.write!(Path.join(dir, ".longx/plugs/deploy.exs"), """
+    defmodule Deploy do
+      use Longx.Agent.Plug
+      tool :deploy, "ships it" do
+        param :env, :string, "target", required: true
+      end
+      def deploy(_args, _ctx), do: {:ok, "ok"}
+    end
+    """)
+
+    File.write!(
+      Path.join(dir, ".longx/agent.exs"),
+      "import Longx.Agent.Config\nagent do\n  plug Deploy\nend\n"
+    )
+
+    definition = Projects.agent_definition(project)
+
+    assert %{
+             present: true,
+             trusted: false,
+             files: [".longx/agent.exs", ".longx/plugs/deploy.exs"]
+           } = definition
+
+    refute Enum.any?(definition.plugs, &(&1 =~ "Deploy"))
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("a"),
+      ResponsesFixture.assistant_message("b")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, turn} = Projects.send_message(thread, "hi")
+    assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
+    assert_receive {:request, body}
+    refute "deploy" in Enum.map(body["tools"], & &1["name"])
+
+    project = Projects.update_project!(project, %{trust_local_agent: true})
+    assert %{trusted: true} = definition = Projects.agent_definition(project)
+    assert Enum.any?(definition.plugs, &(&1 =~ "Deploy"))
+
+    {:ok, turn} = Projects.send_message(thread, "again")
+    assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
+    assert_receive {:request, body}
+    assert "deploy" in Enum.map(body["tools"], & &1["name"])
+  end
+
   test "what the kernel does not do yet is refused, not attempted", %{project: project} do
     {:ok, thread} = Projects.start_thread(project)
     assert {:error, :not_supported} = Projects.compact_thread(thread)

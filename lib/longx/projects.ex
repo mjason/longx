@@ -24,6 +24,7 @@ defmodule Longx.Projects do
       rpc_action :git_info, :git_info
       rpc_action :search_files, :search_files
       rpc_action :list_skills, :list_skills
+      rpc_action :agent_definition, :agent_definition
       rpc_action :init_git, :init_git
       rpc_action :codex_info, :codex_info
       rpc_action :stop_codex, :stop_codex
@@ -207,7 +208,8 @@ defmodule Longx.Projects do
              project_id: project.id,
              cwd: project.root_path,
              model: model_slug,
-             effort: effort
+             effort: effort,
+             trust: trust_fun(project.id)
            ),
          {:ok, thread} <-
            create_thread(%{
@@ -230,6 +232,42 @@ defmodule Longx.Projects do
     end
   end
 
+  @doc "Whether the project lets the native kernel load its own `.longx/` agent definition."
+  @spec trust_local_agent?(String.t()) :: boolean
+  def trust_local_agent?(project_id) do
+    case Ash.get(Project, project_id) do
+      {:ok, %Project{trust_local_agent: trusted}} -> trusted
+      _ -> false
+    end
+  end
+
+  @doc "The native kernel's layered agent definition for a project (the settings page)."
+  @spec agent_definition(Project.t()) :: map
+  def agent_definition(%Project{} = project) do
+    loaded =
+      Longx.Agent.Loader.load(project.root_path,
+        tag: project.id,
+        trusted: project.trust_local_agent
+      )
+
+    %{
+      present: loaded.present?,
+      trusted: project.trust_local_agent,
+      dir: Path.join(project.root_path, ".longx"),
+      model: loaded.model,
+      effort: loaded.effort,
+      plugs: Enum.map(loaded.plugs, fn {module, _opts} -> inspect(module) end),
+      files: project_files(loaded.layers, project.root_path),
+      errors: Enum.map(loaded.errors, & &1.message)
+    }
+  end
+
+  defp project_files(layers, root) do
+    for %{name: :project, files: files} <- layers,
+        {path, _} <- files,
+        do: Path.relative_to(path, root)
+  end
+
   @doc "Whether the thread runs on the native kernel (its id says so)."
   @spec native?(Thread.t()) :: boolean
   def native?(%Thread{codex_thread_id: "native_" <> _}), do: true
@@ -242,9 +280,13 @@ defmodule Longx.Projects do
       project_id: thread.project_id,
       cwd: thread.cwd,
       model: thread.model_slug,
-      effort: thread.reasoning_effort
+      effort: thread.reasoning_effort,
+      trust: trust_fun(thread.project_id)
     )
   end
+
+  # read at every turn: the switch in the settings applies without a restart
+  defp trust_fun(project_id), do: fn -> trust_local_agent?(project_id) end
 
   defp start_codex_thread(%Project{} = project, opts) do
     model_slug = Keyword.get(opts, :model) || (project.model && project.model.slug)

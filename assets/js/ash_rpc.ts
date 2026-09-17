@@ -2212,6 +2212,80 @@ export async function validateListProjects(
 }
 
 
+export type AgentDefinitionInput = {
+  id: UUID;
+};
+
+export type AgentDefinitionFields = UnifiedFieldSelection<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, errors: Array<string>, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "errors"}>[];
+
+export type InferAgentDefinitionResult<
+  Fields extends AgentDefinitionFields | undefined,
+> = InferResult<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, errors: Array<string>, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "errors"}, Fields>;
+
+export type AgentDefinitionResult<Fields extends AgentDefinitionFields | undefined = undefined> = | { success: true; data: InferAgentDefinitionResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Project
+ *
+ * @ashActionType :action
+ */
+export async function agentDefinition<Fields extends AgentDefinitionFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: AgentDefinitionInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<AgentDefinitionResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "agent_definition",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<AgentDefinitionResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Project
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateAgentDefinition(
+  config: {
+  tenant?: string;
+  input: AgentDefinitionInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "agent_definition",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ArchiveProjectFields = UnifiedFieldSelection<ProjectResourceSchema>[];
 
 export type InferArchiveProjectResult<
@@ -2583,6 +2657,7 @@ export type CreateProjectInput = {
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
   engine?: "codex" | "native";
+  trustLocalAgent?: boolean;
   initGit?: boolean | null;
 };
 
@@ -3349,6 +3424,7 @@ export type UpdateProjectInput = {
   memoryLimitMb?: number | null;
   modelId?: UUID | null;
   engine?: "codex" | "native";
+  trustLocalAgent?: boolean;
 };
 
 export type UpdateProjectFields = UnifiedFieldSelection<ProjectResourceSchema>[];

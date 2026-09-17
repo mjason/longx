@@ -539,6 +539,63 @@ defmodule Longx.AgentTest do
     assert length(collect_requests([])) == 3
   end
 
+  test "with no pipeline given the layered definition is loaded per step; a trusted .longx shapes the prompt and the tools; a broken file becomes a notice",
+       %{bypass: bypass, dir: dir} do
+    File.mkdir_p!(Path.join(dir, ".longx/plugs"))
+
+    File.write!(Path.join(dir, ".longx/plugs/deploy.exs"), """
+    defmodule Deploy do
+      use Longx.Agent.Plug
+      tool :deploy, "ships it" do
+        param :env, :string, "target", required: true
+      end
+      def deploy(%{"env" => env}, _ctx), do: {:ok, "shipped to " <> env}
+    end
+    """)
+
+    File.write!(Path.join(dir, ".longx/agent.exs"), """
+    import Longx.Agent.Config
+    agent do
+      prompt "SECRET_MARK: always say hello"
+      plug Deploy
+    end
+    """)
+
+    id = "local-#{System.unique_integer([:positive])}"
+    :ok = ThreadState.subscribe(id)
+
+    on_exit(fn ->
+      Agent.stop(id)
+      ThreadState.stop(id)
+      ThreadState.Store.delete(id)
+    end)
+
+    {:ok, _} = Agent.ensure(thread_id: id, cwd: dir, project_id: "p-local", trust: fn -> true end)
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("hi"),
+      ResponsesFixture.assistant_message("hi again")
+    ])
+
+    {:ok, _} = Agent.send(id, "one")
+    assert %{"status" => "completed"} = await_turn_end()
+    assert_receive {:request, body}
+    assert body["instructions"] =~ "SECRET_MARK"
+    assert body["instructions"] =~ "Your own definition"
+    assert "deploy" in Enum.map(body["tools"], & &1["name"])
+
+    # the agent breaks its own plug: the next turn still runs, with a notice up front
+    File.write!(Path.join(dir, ".longx/plugs/deploy.exs"), "defmodule Deploy do\n  oops(\n")
+    File.touch!(Path.join(dir, ".longx/plugs/deploy.exs"), System.os_time(:second) + 5)
+
+    {:ok, _} = Agent.send(id, "two")
+    assert %{"status" => "completed"} = await_turn_end()
+    assert_receive {:request, body}
+    assert body["instructions"] =~ "⚠"
+    assert body["instructions"] =~ "deploy.exs"
+    refute "deploy" in Enum.map(body["tools"], & &1["name"])
+  end
+
   defmodule Budget do
     use Longx.Agent.Plug
     def call(step, _), do: Step.halt(step, "budget spent")

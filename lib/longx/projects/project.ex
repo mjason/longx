@@ -92,7 +92,8 @@ defmodule Longx.Projects.Project do
         :global_memory,
         :memory_limit_mb,
         :model_id,
-        :engine
+        :engine,
+        :trust_local_agent
       ]
 
       change Changes.NormalizeRootPath
@@ -123,7 +124,8 @@ defmodule Longx.Projects.Project do
         :global_memory,
         :memory_limit_mb,
         :model_id,
-        :engine
+        :engine,
+        :trust_local_agent
       ]
 
       validate Validations.ToolsAreRegistered
@@ -166,6 +168,27 @@ defmodule Longx.Projects.Project do
     end
 
     # the skills codex finds for the project: what the composer offers as `$name`
+    # the native kernel's layered agent definition for this project, for the
+    # settings page: the resolved plugs, the layers with their files, errors
+    action :agent_definition, :map do
+      constraints fields: [
+                    present: [type: :boolean, allow_nil?: false],
+                    trusted: [type: :boolean, allow_nil?: false],
+                    dir: [type: :string, allow_nil?: false],
+                    model: [type: :string],
+                    effort: [type: :string],
+                    plugs: [type: {:array, :string}, allow_nil?: false],
+                    files: [type: {:array, :string}, allow_nil?: false],
+                    errors: [type: {:array, :string}, allow_nil?: false]
+                  ]
+
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input), do: {:ok, Longx.Projects.agent_definition(project)}
+      end
+    end
+
     action :list_skills, {:array, :map} do
       constraints items: [
                     fields: [
@@ -343,6 +366,11 @@ defmodule Longx.Projects.Project do
     # which kernel runs the project's threads: the bundled codex app-server
     # (`:codex`) or Longx's own agent kernel (`:native`, `Longx.Agent`) — an
     # experiment that runs unsandboxed on the person's machine
+    # whether the native kernel may load the project's own agent definition
+    # (`.longx/agent.exs`, `.longx/plugs/*.exs` — code that runs in Longx as
+    # the person; off until the person looked at it)
+    attribute :trust_local_agent, :boolean, allow_nil?: false, default: false, public?: true
+
     attribute :engine, :atom do
       allow_nil? false
       default :codex

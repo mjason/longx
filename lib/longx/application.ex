@@ -36,6 +36,7 @@ defmodule Longx.Application do
       # the native agent kernel: one Longx.Agent per thread, its tasks
       {Registry, keys: :unique, name: Longx.Agent.Registry},
       {Task.Supervisor, name: Longx.Agent.TaskSupervisor},
+      Longx.Agent.Loader.Cache,
       {DynamicSupervisor, name: Longx.Agent.Supervisor, strategy: :one_for_one},
       # dynamic tool calls and other async work for the codex connection
       {Task.Supervisor, name: Longx.Codex.TaskSupervisor},

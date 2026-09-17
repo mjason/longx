@@ -27,7 +27,7 @@ defmodule Longx.Agent do
 
   require Logger
 
-  alias Longx.Agent.{Context, Pipelines, Step, Tool, Transcript}
+  alias Longx.Agent.{Context, Step, Tool, Transcript}
   alias Longx.Codex.ThreadState
 
   @registry Longx.Agent.Registry
@@ -43,7 +43,10 @@ defmodule Longx.Agent do
               cwd: nil,
               model: nil,
               effort: nil,
+              # a pipeline module (tests) or nil: the loader's layered description
               pipeline: nil,
+              # whether the project's own .longx/ may be loaded (read per turn)
+              trust: nil,
               seq: 0,
               # Responses input items, oldest first (the model's context)
               transcript: [],
@@ -153,6 +156,7 @@ defmodule Longx.Agent do
       model: Keyword.get(opts, :model),
       effort: Keyword.get(opts, :effort),
       pipeline: Keyword.get(opts, :pipeline) || configured_pipeline(),
+      trust: Keyword.get(opts, :trust, fn -> false end),
       seq: items |> Enum.map(& &1.seq) |> Enum.max(fn -> 0 end),
       transcript: Transcript.input(items)
     }
@@ -162,8 +166,9 @@ defmodule Longx.Agent do
     {:ok, state}
   end
 
+  # nil = the loader (the shipped, the person's and the project's descriptions)
   defp configured_pipeline,
-    do: :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:pipeline, Pipelines.Default)
+    do: :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:pipeline)
 
   # a view nobody built yet (a boot, a store wiped) is rebuilt from the log,
   # synchronously — the way a codex resume seeds it (`thread/read` shape)
@@ -298,15 +303,38 @@ defmodule Longx.Agent do
         transcript: state.transcript,
         phase: phase,
         usage: %{last: state.usage_last, total: state.usage_total},
-        context_window: state.context_window
+        context_window: state.context_window,
+        assigns: %{trust: state.trust}
       ] ++ extra
     )
   end
 
-  defp run_pipeline(pipeline, step) do
+  defp run_pipeline(nil, step), do: run_pipeline({:loaded, load_definition(step)}, step)
+
+  defp run_pipeline({:loaded, loaded}, step) do
+    # the description's model and level stand where the person chose none;
+    # its notices (a file that failed to load, an old format) lead the prompt
+    step = %{
+      step
+      | model: step.model || loaded.model,
+        effort: step.effort || (step.model == nil && loaded.effort) || nil,
+        instructions: Enum.map(loaded.notices, &("⚠ " <> &1)) ++ step.instructions
+    }
+
+    {:ok, Longx.Agent.Pipeline.run(step, loaded.plugs)}
+  rescue
+    e -> {:error, "pipeline failed: " <> Exception.message(e)}
+  end
+
+  defp run_pipeline(pipeline, step) when is_atom(pipeline) do
     {:ok, pipeline.run(step)}
   rescue
     e -> {:error, "pipeline failed: " <> Exception.message(e)}
+  end
+
+  defp load_definition(%Step{cwd: cwd, project_id: project_id, assigns: assigns}) do
+    trusted? = (assigns[:trust] || fn -> false end).()
+    Longx.Agent.Loader.load(cwd, tag: project_id || "adhoc", trusted: trusted?)
   end
 
   # the model answered: the response phase may add calls of its own or halt
