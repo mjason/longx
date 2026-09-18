@@ -41,9 +41,7 @@ defmodule Longx.Projects.Project do
     max_children: [type: :integer],
     idle_minutes: [type: :integer],
     child_model: [type: :string],
-    child_effort: [type: :string],
-    reviewer_model: [type: :string],
-    reviewer_effort: [type: :string]
+    child_effort: [type: :string]
   ]
 
   actions do

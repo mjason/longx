@@ -6,7 +6,7 @@ defmodule Longx.AI.Aliases do
   to an ordered chain of model slugs: the first is the one to use, the
   rest are fallbacks when it fails (quota gone, auth refused, upstream
   down). A description (`model "ultra"`), a child's default model, the
-  reviewer model, the composer — all may name a tier or alias, or still a
+  the composer — all may name a tier or alias, or still a
   concrete slug; `Longx.AI` resolves them (`resolve_targets/1`). A tier
   left unmapped means the default model. One `Longx.System.Setting`
   (`model_aliases`, JSON); the settings page edits it.

@@ -5,8 +5,9 @@ defmodule Longx.Agent.Definition.Settings do
   but from the database: how deep a team may nest (`max_depth`), how
   many children an agent may have at once (`max_children`), how long an
   idle agent stays (`idle_minutes`), the model a child runs on when its
-  role names none (`child_model` / `child_effort`) and the model the
-  `reviewer` role always runs on (`reviewer_model` / `reviewer_effort`).
+  role names none (`child_model` / `child_effort`).
+  No role ships with the kernel, so no role has a fixed model here: a role's
+  model is its own declaration.
 
   The global values are one `Longx.System.Setting` (`agent_kernel`, JSON);
   a project's `agent_settings` map overrides what it sets. `for_project/1`
@@ -20,18 +21,14 @@ defmodule Longx.Agent.Definition.Settings do
     :max_children,
     :idle_minutes,
     :child_model,
-    :child_effort,
-    :reviewer_model,
-    :reviewer_effort
+    :child_effort
   ]
   @defaults %{
     max_depth: 2,
     max_children: 4,
     idle_minutes: 30,
     child_model: nil,
-    child_effort: nil,
-    reviewer_model: nil,
-    reviewer_effort: nil
+    child_effort: nil
   }
 
   @type t :: %{
@@ -39,9 +36,7 @@ defmodule Longx.Agent.Definition.Settings do
           max_children: pos_integer,
           idle_minutes: pos_integer,
           child_model: String.t() | nil,
-          child_effort: String.t() | nil,
-          reviewer_model: String.t() | nil,
-          reviewer_effort: String.t() | nil
+          child_effort: String.t() | nil
         }
 
   @spec fields() :: [atom]
@@ -156,8 +151,8 @@ defmodule Longx.Agent.Definition.Settings do
       else: {:error, "must be a whole number of at least 1"}
   end
 
-  defp check(field, slug, attrs) when field in [:child_model, :reviewer_model] do
-    effort = Map.get(attrs, if(field == :child_model, do: :child_effort, else: :reviewer_effort))
+  defp check(:child_model, slug, attrs) do
+    effort = Map.get(attrs, :child_effort)
 
     with {:ok, _} <- Longx.AI.thread_options(slug),
          :ok <- Longx.AI.check_effort(slug, effort) do
@@ -169,9 +164,9 @@ defmodule Longx.Agent.Definition.Settings do
     end
   end
 
-  defp check(field, _effort, attrs) when field in [:child_effort, :reviewer_effort] do
+  defp check(:child_effort, _effort, attrs) do
     # a level without a model means nothing; with one it was checked above
-    if Map.get(attrs, if(field == :child_effort, do: :child_model, else: :reviewer_model)),
+    if Map.get(attrs, :child_model),
       do: :ok,
       else: {:error, "a level needs a model"}
   end

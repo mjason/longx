@@ -15,8 +15,6 @@ export type AgentSettingsForm = {
   idleMinutes: string;
   childModel: string;
   childEffort: string;
-  reviewerModel: string;
-  reviewerEffort: string;
 };
 
 export const emptyAgentSettingsForm: AgentSettingsForm = {
@@ -25,8 +23,6 @@ export const emptyAgentSettingsForm: AgentSettingsForm = {
   idleMinutes: "",
   childModel: "",
   childEffort: "",
-  reviewerModel: "",
-  reviewerEffort: "",
 };
 
 /** The form as the RPC wants it: numbers, nulls for the empty. */
@@ -39,8 +35,6 @@ export function agentSettingsInput(form: AgentSettingsForm) {
     idleMinutes: num(form.idleMinutes),
     childModel: str(form.childModel),
     childEffort: str(form.childEffort),
-    reviewerModel: str(form.reviewerModel),
-    reviewerEffort: str(form.reviewerEffort),
   };
 }
 
@@ -52,8 +46,6 @@ export function agentSettingsForm(values: Partial<Record<keyof AgentSettingsForm
     idleMinutes: one(values.idleMinutes),
     childModel: one(values.childModel),
     childEffort: one(values.childEffort),
-    reviewerModel: one(values.reviewerModel),
-    reviewerEffort: one(values.reviewerEffort),
   };
 }
 
@@ -85,7 +77,7 @@ export function AgentSettingsFields({
       {hint ? <span className="text-muted-foreground text-xs">{hint}</span> : null}
     </div>
   );
-  const modelPick = (key: "childModel" | "reviewerModel", effortKey: "childEffort" | "reviewerEffort", label: string, hint: string) => {
+  const modelPick = (key: "childModel", effortKey: "childEffort", label: string, hint: string) => {
     const slug = value[key] || inherited?.[key] || "";
     const chosen = models.find((m) => m.slug === slug);
     const levels = chosen?.reasoningLevels ?? [];
@@ -127,9 +119,7 @@ export function AgentSettingsFields({
       {number("maxDepth", s.maxDepth, s.maxDepthHint)}
       {number("maxChildren", s.maxChildren)}
       {number("idleMinutes", s.idleMinutes, s.idleMinutesHint)}
-      <div />
       {modelPick("childModel", "childEffort", s.childModel, s.childModelHint)}
-      {modelPick("reviewerModel", "reviewerEffort", s.reviewerModel, s.reviewerModelHint)}
     </div>
   );
 }

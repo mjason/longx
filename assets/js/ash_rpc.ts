@@ -2789,11 +2789,11 @@ export type AgentDefinitionInput = {
   id: UUID;
 };
 
-export type AgentDefinitionFields = UnifiedFieldSelection<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, localFiles: Array<string>, agents: Array<Record<string, any>>, settings: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}, overrides: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}, errors: Array<string>, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "localFiles" | "agents" | "errors"}>[];
+export type AgentDefinitionFields = UnifiedFieldSelection<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, localFiles: Array<string>, agents: Array<Record<string, any>>, settings: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort"}, overrides: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort"}, errors: Array<string>, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "localFiles" | "agents" | "errors"}>[];
 
 export type InferAgentDefinitionResult<
   Fields extends AgentDefinitionFields | undefined,
-> = InferResult<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, localFiles: Array<string>, agents: Array<Record<string, any>>, settings: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}, overrides: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}, errors: Array<string>, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "localFiles" | "agents" | "errors"}, Fields>;
+> = InferResult<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, localFiles: Array<string>, agents: Array<Record<string, any>>, settings: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort"}, overrides: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort"}, errors: Array<string>, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "localFiles" | "agents" | "errors"}, Fields>;
 
 export type AgentDefinitionResult<Fields extends AgentDefinitionFields | undefined = undefined> = | { success: true; data: InferAgentDefinitionResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -6406,11 +6406,11 @@ export async function validateRestoreProposal(
 }
 
 
-export type AgentSettingsFields = UnifiedFieldSelection<{maxDepth: number, maxChildren: number, idleMinutes: number, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}>[];
+export type AgentSettingsFields = UnifiedFieldSelection<{maxDepth: number, maxChildren: number, idleMinutes: number, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort"}>[];
 
 export type InferAgentSettingsResult<
   Fields extends AgentSettingsFields | undefined,
-> = InferResult<{maxDepth: number, maxChildren: number, idleMinutes: number, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}, Fields>;
+> = InferResult<{maxDepth: number, maxChildren: number, idleMinutes: number, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort"}, Fields>;
 
 export type AgentSettingsResult<Fields extends AgentSettingsFields | undefined = undefined> = | { success: true; data: InferAgentSettingsResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -7375,15 +7375,13 @@ export type SetAgentSettingsInput = {
   idleMinutes?: number | null;
   childModel?: string | null;
   childEffort?: string | null;
-  reviewerModel?: string | null;
-  reviewerEffort?: string | null;
 };
 
-export type SetAgentSettingsFields = UnifiedFieldSelection<{maxDepth: number, maxChildren: number, idleMinutes: number, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}>[];
+export type SetAgentSettingsFields = UnifiedFieldSelection<{maxDepth: number, maxChildren: number, idleMinutes: number, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort"}>[];
 
 export type InferSetAgentSettingsResult<
   Fields extends SetAgentSettingsFields | undefined,
-> = InferResult<{maxDepth: number, maxChildren: number, idleMinutes: number, childModel: string | null, childEffort: string | null, reviewerModel: string | null, reviewerEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort" | "reviewerModel" | "reviewerEffort"}, Fields>;
+> = InferResult<{maxDepth: number, maxChildren: number, idleMinutes: number, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "childModel" | "childEffort"}, Fields>;
 
 export type SetAgentSettingsResult<Fields extends SetAgentSettingsFields | undefined = undefined> = | { success: true; data: InferSetAgentSettingsResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }

@@ -66,9 +66,7 @@ defmodule Longx.System.Status do
     max_children: [type: :integer, allow_nil?: false],
     idle_minutes: [type: :integer, allow_nil?: false],
     child_model: [type: :string],
-    child_effort: [type: :string],
-    reviewer_model: [type: :string],
-    reviewer_effort: [type: :string]
+    child_effort: [type: :string]
   ]
 
   actions do
@@ -214,8 +212,6 @@ defmodule Longx.System.Status do
       argument :idle_minutes, :integer
       argument :child_model, :string
       argument :child_effort, :string
-      argument :reviewer_model, :string
-      argument :reviewer_effort, :string
 
       run fn input, _ ->
         # an argument absent stays as it was; one given as null clears it

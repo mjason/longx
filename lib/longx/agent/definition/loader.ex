@@ -64,7 +64,7 @@ defmodule Longx.Agent.Definition.Loader do
   (whether the project's own `.longx/` may be loaded), `agent:` (a role
   name: that agent's description on top of the project's), `settings:`
   (a `Longx.Agent.Definition.Settings` map — the settings page's layer, applied last:
-  the Agents plug's limits, the default child model, the reviewer model),
+  the Agents plug's limits, the default child model),
   `overrides:` (a `Longx.Agent.Config` applied after everything).
   """
   @spec load(Path.t(), keyword) :: loaded
@@ -175,8 +175,7 @@ defmodule Longx.Agent.Definition.Loader do
   defp plug?(module), do: Code.ensure_loaded?(module) and function_exported?(module, :call, 2)
 
   # the settings page as a description: limits on the Agents plug; a child
-  # with no model of its own runs on the default child model; the reviewer
-  # role always on the reviewer model
+  # with no model of its own runs on the default child model
   defp settings_layer(nil, _role, _model), do: []
 
   defp settings_layer(settings, role, declared_model) do
@@ -185,16 +184,9 @@ defmodule Longx.Agent.Definition.Loader do
        [max_depth: settings.max_depth, max_children: settings.max_children]}
 
     {model, effort} =
-      cond do
-        role == "reviewer" and settings.reviewer_model ->
-          {settings.reviewer_model, settings.reviewer_effort}
-
-        role != nil and declared_model == nil and settings.child_model ->
-          {settings.child_model, settings.child_effort}
-
-        true ->
-          {nil, nil}
-      end
+      if role != nil and declared_model == nil and settings.child_model,
+        do: {settings.child_model, settings.child_effort},
+        else: {nil, nil}
 
     [%Config{ops: [limits], model: model, effort: effort}]
   end

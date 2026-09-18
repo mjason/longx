@@ -273,7 +273,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `agent.exs`; gitignored via `Layout.ensure_ignored/1`; **always loaded**: it is what
     the agent wrote on this machine) → the settings layer (`Longx.Agent.Definition.
     Settings`: `max_depth` 2, `max_children` 4, `idle_minutes` 30, `child_model` /
-    `child_effort`, the reviewer model — global in `Longx.System.Setting`, overridden per
+    `child_effort` — global in `Longx.System.Setting`, overridden per
     project by `Project.agent_settings`). **No global code layer**: no global agents, plugs
     or skills; the only thing shared across projects is the global knowledge. A layer is
     `agent.exs` + `plugs/**/*.exs` + `agents/<name>/agent.exs`; every `defmodule` of a layer

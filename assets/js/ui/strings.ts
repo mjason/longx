@@ -511,7 +511,7 @@ export const t = {
     newVersion: (v: string) => `新版本 ${v}`,
   },
   agentKernel: {
-    hint: "内核的团队参数：agent 能派多深、同时几个、闲多久自己退出，孩子默认跑哪个模型，reviewer 角色固定跑哪个模型。这些是每个 agent 描述最上面的一层，项目设置里可以覆盖。",
+    hint: "内核的团队参数：agent 能派多深、同时几个、闲多久自己退出，孩子默认跑哪个模型。这些是每个 agent 描述最上面的一层，项目设置里可以覆盖。",
     maxDepth: "派出深度上限",
     maxDepthHint: "主 agent 是 0 层；到了上限的 agent 不能再派。",
     maxChildren: "同时存活的子 agent",
@@ -519,8 +519,6 @@ export const t = {
     idleMinutesHint: "退出后下一条消息会从记录里毫秒级拉起来，不丢状态。",
     childModel: "子 agent 默认模型",
     childModelHint: "角色声明里没写模型时用；写了的以声明为准。",
-    reviewerModel: "reviewer 模型",
-    reviewerModelHint: "reviewer 角色固定跑这个模型。",
     inherit: "沿用",
     sameAsThread: "和主 agent 一样",
     effortAuto: "模型默认档位",

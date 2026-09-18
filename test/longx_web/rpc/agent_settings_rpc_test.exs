@@ -28,9 +28,7 @@ defmodule LongxWeb.AgentSettingsRpcTest do
     "maxChildren",
     "idleMinutes",
     "childModel",
-    "childEffort",
-    "reviewerModel",
-    "reviewerEffort"
+    "childEffort"
   ]
 
   test "read and write the settings; a bad value is an error on its field", %{conn: conn} do

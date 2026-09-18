@@ -20,10 +20,13 @@ defmodule Longx.Agent.Definition.SettingsTest do
              max_depth: 2,
              max_children: 4,
              idle_minutes: 30,
-             child_model: nil,
-             reviewer_model: nil
+             child_model: nil
            } =
              Settings.global()
+
+    # no reviewer role ships with the kernel, so no reviewer model either
+    refute :reviewer_model in Settings.fields()
+    refute Map.has_key?(Settings.defaults(), :reviewer_model)
 
     assert {:ok, %{max_depth: 3, idle_minutes: 5}} =
              Settings.put_global(%{max_depth: 3, idle_minutes: 5})
@@ -49,7 +52,7 @@ defmodule Longx.Agent.Definition.SettingsTest do
     assert Settings.idle_ms(Settings.for_project(project)) == 60_000
   end
 
-  test "the loader turns the settings into the topmost layer: limits on the Agents plug, default child and reviewer models",
+  test "the loader turns the settings into the topmost layer: limits on the Agents plug, the default child model",
        %{dir: dir, tag: tag} do
     # the project declares the roles; Longx ships none
     for role <- ["coder", "reviewer"] do
@@ -66,8 +69,7 @@ defmodule Longx.Agent.Definition.SettingsTest do
       | max_depth: 3,
         max_children: 1,
         child_model: "kid",
-        reviewer_model: "judge",
-        reviewer_effort: "high"
+        child_effort: "high"
     }
 
     main = Loader.load(dir, tag: tag, trusted: true, settings: settings)
@@ -80,9 +82,9 @@ defmodule Longx.Agent.Definition.SettingsTest do
     coder = Loader.load(dir, tag: tag, trusted: true, settings: settings, agent: "coder")
     assert coder.model == "kid"
 
-    # the reviewer role runs on the reviewer model, level included
+    # a role named reviewer is a role like any other: the child model, level included
     reviewer = Loader.load(dir, tag: tag, trusted: true, settings: settings, agent: "reviewer")
-    assert reviewer.model == "judge" and reviewer.effort == "high"
+    assert reviewer.model == "kid" and reviewer.effort == "high"
 
     # a role that declares its model keeps it
     File.mkdir_p!(Path.join(dir, ".longx/shared/agents/picky"))

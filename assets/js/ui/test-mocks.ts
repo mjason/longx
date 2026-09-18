@@ -69,8 +69,6 @@ export const agentSettingsData = () => ({
   idleMinutes: 30,
   childModel: null,
   childEffort: null,
-  reviewerModel: null,
-  reviewerEffort: null,
 });
 
 export const agentDefinitionData = (extra: Record<string, unknown> = {}) => ({
