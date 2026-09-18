@@ -48,6 +48,7 @@ import {
 } from "@assistant-ui/react";
 import {
   ArrowDownIcon,
+  BotIcon,
   ArrowUpIcon,
   CheckIcon,
   ChevronLeftIcon,
@@ -577,6 +578,11 @@ const UserImagePart: ImageMessagePartComponent = (part) => (
 
 const UserMessage: FC = () => {
   const { UserText } = useContext(ThreadComponentsContext);
+  // Longx: a message from another agent (a sub-agent's report, a teammate's
+  // question) is a user message for the model, not for the person: it sits
+  // on the left under the agent's name, its markdown rendered
+  const from = useAuiState((s) => s.message.metadata.custom?.["from"]);
+  if (typeof from === "string" && from !== "") return <AgentMessage from={from} />;
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
@@ -600,6 +606,23 @@ const UserMessage: FC = () => {
     </MessagePrimitive.Root>
   );
 };
+
+const AgentMessage: FC<{ from: string }> = ({ from }) => (
+  <MessagePrimitive.Root
+    data-slot="aui_agent-message-root"
+    data-role="user"
+    data-testid="agent-message"
+    className="fade-in slide-in-from-bottom-1 animate-in px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+  >
+    <div className="text-muted-foreground mb-1 flex items-center gap-1.5 text-xs">
+      <BotIcon className="size-3.5" />
+      <span className="font-mono">{t.agentMessageFrom(from)}</span>
+    </div>
+    <div className="aui-agent-message-content border-border/60 bg-muted/40 text-foreground rounded-xl border px-4 py-2 leading-relaxed wrap-break-word">
+      <MessagePrimitive.Parts components={{ Text: MarkdownText, File: UserFilePart, Image: UserImagePart }} />
+    </div>
+  </MessagePrimitive.Root>
+);
 
 const EditComposer: FC = () => {
   return (

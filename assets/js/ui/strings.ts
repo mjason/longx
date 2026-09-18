@@ -348,6 +348,7 @@ export const t = {
     tokens: (used: string, budget: string | null) => (budget ? `${used} / ${budget}` : used),
   },
   modelRerouted: (from: string, to: string) => `模型已切换：${from} → ${to}`,
+  agentMessageFrom: (name: string) => `agent ${name}`,
   modelReroutedReason: {} as Record<string, string>,
   // chat: tools
   agentAsks: "agent 有问题要问",

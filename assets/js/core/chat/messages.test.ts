@@ -30,6 +30,21 @@ describe("toMessages", () => {
     expect(msgs[1]!.status).toEqual({ type: "complete", reason: "stop" });
   });
 
+  test("a message from another agent: its name in the metadata, the [agent name] prefix (for the model) stripped", () => {
+    const msgs = toMessages(
+      view({
+        items: [
+          { id: "u1", type: "userMessage", turnId: "t1", from: "researcher", content: [{ type: "text", text: "[agent researcher] **done**\n\n- a\n- b" }] },
+          { id: "u2", type: "userMessage", turnId: "t1", content: [{ type: "text", text: "[agent researcher] typed by the person, kept" }] },
+        ],
+      }),
+    );
+    expect(msgs[0]!.metadata).toMatchObject({ custom: { from: "researcher" } });
+    expect(msgs[0]!.content).toEqual([{ type: "text", text: "**done**\n\n- a\n- b" }]);
+    expect(msgs[1]!.metadata?.custom?.["from"]).toBeUndefined();
+    expect(msgs[1]!.content).toEqual([{ type: "text", text: "[agent researcher] typed by the person, kept" }]);
+  });
+
   test("the turn in flight is running; a streaming command has no result yet", () => {
     const msgs = toMessages(
       view({

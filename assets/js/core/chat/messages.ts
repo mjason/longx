@@ -105,10 +105,14 @@ export function toMessages(
   for (const item of view.items) {
     if (item.type === "userMessage") {
       flush();
+      const from = typeof item["from"] === "string" && item["from"] !== "" ? item["from"] : null;
       out.push({
         id: item.id,
         role: "user",
-        content: [{ type: "text", text: userText(item) }, ...userImages(item)],
+        // another agent's words: the `[agent name] ` prefix is for the model
+        // (the Responses API has no agent role); the UI shows the name itself
+        content: [{ type: "text", text: from ? stripAgentPrefix(userText(item), from) : userText(item) }, ...userImages(item)],
+        ...(from ? { metadata: { custom: { from } } } : {}),
       });
       continue;
     }
@@ -314,6 +318,11 @@ function joined(value: unknown): string {
   if (Array.isArray(value))
     return value.filter((v) => typeof v === "string" && v).join("\n\n");
   return "";
+}
+
+function stripAgentPrefix(text: string, from: string): string {
+  const prefix = `[agent ${from}] `;
+  return text.startsWith(prefix) ? text.slice(prefix.length) : text;
 }
 
 export function userText(item: ThreadItem): string {

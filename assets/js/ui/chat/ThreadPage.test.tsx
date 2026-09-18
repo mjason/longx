@@ -573,6 +573,25 @@ describe("ThreadPage", () => {
     await waitFor(() => expect(screen.queryByTestId("message-queue")).not.toBeInTheDocument());
   });
 
+  test("another agent's message is not a bubble of the person's: its name as a label, its markdown rendered", async () => {
+    await open();
+    act(() =>
+      channel.deliver("event", {
+        seq: 4,
+        method: "item/completed",
+        params: {
+          turnId: "turn_2",
+          item: { id: "u9", type: "userMessage", turnId: "turn_2", from: "researcher", content: [{ type: "text", text: "[agent researcher] **冒烟测试通过**\n\n- 未做研究\n- 未写报告" }] },
+        },
+      }),
+    );
+    const message = await screen.findByTestId("agent-message");
+    expect(within(message).getByText("agent researcher")).toBeInTheDocument();
+    expect(within(message).getByText("冒烟测试通过").tagName).toBe("STRONG");
+    expect(within(message).getAllByRole("listitem")).toHaveLength(2);
+    expect(message).not.toHaveTextContent("[agent researcher]");
+  });
+
   test("a sub-agent joins its own thread: its conversation nests under the parent, its ask is answered there", async () => {
     const user = userEvent.setup();
     await open();

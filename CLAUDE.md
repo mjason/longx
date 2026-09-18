@@ -653,7 +653,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     assistant-ui `ThreadMessageLike`: one assistant message per turn, split at each steered
     user message; `metadata.timing`; agentMessage → text, reasoning → reasoning,
     commandExecution / fileChange / webSearch / action / subagent → tool-call parts;
-    `"from"` on an agent's message; a sub-agent's activities folded into one `subagent`
+    `"from"` on an agent's message → `metadata.custom.from`, the `[agent name] ` prefix (for the model) stripped, and `thread.aui`'s `AgentMessage` draws it left-aligned under the name with `MarkdownText` (a report is markdown; the person's bubble is plain text); a sub-agent's activities folded into one `subagent`
     part whose `messages` is the child's own conversation), `adapter.ts` (`buildAdapter` →
     `ExternalStoreAdapter`: `onNew` → `steerTurn` while `runningTurnId(view)`, else `sendMessage`
     (a `dirty_tree` error asks `onDirtyTree`); `/goal <objective>` typed past the popover
