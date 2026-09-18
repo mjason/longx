@@ -5829,11 +5829,11 @@ export async function validateAgentSettings(
 }
 
 
-export type BrowserInstallFields = UnifiedFieldSelection<{stage: string, received: number, total: number | null, error: string | null, version: string, target: string | null, path: string | null, __type: "TypedMap", __primitiveFields: "stage" | "received" | "total" | "error" | "version" | "target" | "path"}>[];
+export type BrowserInstallFields = UnifiedFieldSelection<{stage: string, received: number, total: number | null, error: string | null, version: string, latest: string, target: string | null, path: string | null, source: string | null, installedVersion: string | null, upgradable: boolean, __type: "TypedMap", __primitiveFields: "stage" | "received" | "total" | "error" | "version" | "latest" | "target" | "path" | "source" | "installedVersion" | "upgradable"}>[];
 
 export type InferBrowserInstallResult<
   Fields extends BrowserInstallFields | undefined,
-> = InferResult<{stage: string, received: number, total: number | null, error: string | null, version: string, target: string | null, path: string | null, __type: "TypedMap", __primitiveFields: "stage" | "received" | "total" | "error" | "version" | "target" | "path"}, Fields>;
+> = InferResult<{stage: string, received: number, total: number | null, error: string | null, version: string, latest: string, target: string | null, path: string | null, source: string | null, installedVersion: string | null, upgradable: boolean, __type: "TypedMap", __primitiveFields: "stage" | "received" | "total" | "error" | "version" | "latest" | "target" | "path" | "source" | "installedVersion" | "upgradable"}, Fields>;
 
 export type BrowserInstallResult<Fields extends BrowserInstallFields | undefined = undefined> = | { success: true; data: InferBrowserInstallResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -5961,11 +5961,11 @@ export async function validateBrowserSettings(
 }
 
 
-export type BrowserStatusFields = UnifiedFieldSelection<{stage: string, received: number, total: number | null, error: string | null, version: string, target: string | null, path: string | null, __type: "TypedMap", __primitiveFields: "stage" | "received" | "total" | "error" | "version" | "target" | "path"}>[];
+export type BrowserStatusFields = UnifiedFieldSelection<{stage: string, received: number, total: number | null, error: string | null, version: string, latest: string, target: string | null, path: string | null, source: string | null, installedVersion: string | null, upgradable: boolean, __type: "TypedMap", __primitiveFields: "stage" | "received" | "total" | "error" | "version" | "latest" | "target" | "path" | "source" | "installedVersion" | "upgradable"}>[];
 
 export type InferBrowserStatusResult<
   Fields extends BrowserStatusFields | undefined,
-> = InferResult<{stage: string, received: number, total: number | null, error: string | null, version: string, target: string | null, path: string | null, __type: "TypedMap", __primitiveFields: "stage" | "received" | "total" | "error" | "version" | "target" | "path"}, Fields>;
+> = InferResult<{stage: string, received: number, total: number | null, error: string | null, version: string, latest: string, target: string | null, path: string | null, source: string | null, installedVersion: string | null, upgradable: boolean, __type: "TypedMap", __primitiveFields: "stage" | "received" | "total" | "error" | "version" | "latest" | "target" | "path" | "source" | "installedVersion" | "upgradable"}, Fields>;
 
 export type BrowserStatusResult<Fields extends BrowserStatusFields | undefined = undefined> = | { success: true; data: InferBrowserStatusResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }

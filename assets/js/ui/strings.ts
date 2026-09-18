@@ -487,6 +487,13 @@ export const t = {
     browserUnavailable: "这个平台没有 obscura 的构建，web_fetch 不可用。",
     browserNotInstalled: (version: string) => `尚未下载（obscura ${version}，约 60 MB）。`,
     browserInstalled: (path: string) => `已安装：${path}`,
+    browserSystem: (path: string, version: string | null) =>
+      `系统已安装${version ? `（obscura ${version}）` : ""}，不再下载：${path}`,
+    browserEnv: (path: string, version: string | null) =>
+      `由 LONGX_OBSCURA 指定${version ? `（obscura ${version}）` : ""}：${path}`,
+    browserUpgradable: (from: string | null, to: string) =>
+      `可升级到 ${to}${from ? `（当前 ${from}）` : ""}，约 60 MB。`,
+    browserUpgrade: "升级",
     browserFailed: (error: string) => `下载失败：${error}`,
     browserDownload: "下载",
     browserRetry: "重试",

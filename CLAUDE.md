@@ -439,7 +439,18 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   `failed` broadcast as `{:browser_install, status}`; the first `Browser.fetch/2`
   auto-installs; RPC `browser_status` / `browser_install` / `browser_settings` /
   `set_browser_private_network`; the card in Settings → Agent 内核 and the status strip
-  draw the bar (`DownloadBar`, shared with the upgrade). `LONGX_OBSCURA` overrides.
+  draw the bar (`DownloadBar`, shared with the upgrade). **Resolution order**
+  (`Runtime.resolve/2` → `{:ok, :env | :system | :downloaded, path}`): `LONGX_OBSCURA`,
+  then an `obscura` on PATH (a Docker image that ships one never downloads; `config
+  :longx, Longx.Browser, system_path:` / `path:` replace PATH — the test config sets it
+  empty so the box's own never leaks into the suite), then the download — the pinned
+  version, else the newest older `<dir>/<version>/` so the browser keeps working right
+  after a Longx upgrade. The status carries `source`, `installed_version` (a download's
+  directory, or `--version` through the shim, 2 s, cached 10 min), `latest` (the pin)
+  and `upgradable`; `install/0` downloads nothing for an env / system binary and, for an
+  older download, installs the pin and `Runtime.prune_old/2` removes the old version
+  dirs — the card's 升级 button. In a container: put `obscura` on PATH in the image or
+  mount `data/obscura`.
   - `Longx.Browser.fetch(url, format: :html | :markdown | :text, timeout:, wait_until:,
     selector:, wait:, max_bytes:)` — **one short-lived `obscura fetch` process per page**
     under `Longx.Shim.run/2` (killed with its tree at the deadline, `oom_score_adj` 600),

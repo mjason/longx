@@ -6,7 +6,9 @@
 #   /fail        → obscura's navigation error on stderr, exit 1
 #   /big         → 1 MB of html
 # Anything else is served like /page. Flags are echoed to stderr as
-# "args: ..." so tests can assert what was passed.
+# "args: ..." so tests can assert what was passed. `--version` prints what
+# the real one prints (the system-binary detection reads it).
+if [ "$1" = "--version" ]; then echo "obscura 0.2.2"; exit 0; fi
 echo "args: $*" >&2
 echo "env: OBSCURA_ALLOW_PRIVATE_NETWORK=${OBSCURA_ALLOW_PRIVATE_NETWORK:-}" >&2
 url=""

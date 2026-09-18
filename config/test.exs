@@ -40,6 +40,9 @@ config :longx, Longx.Projects.Attachments, dir: Path.expand("../data/attachments
 config :longx, Longx.Browser,
   executable: "/nonexistent/obscura",
   dir: Path.join(System.tmp_dir!(), "longx-obscura-test"),
+  # an obscura on the box's PATH must never leak into the suite (tests that
+  # want one give `path:` or set this to their own directory)
+  system_path: "",
   queue_timeout: 1_000
 
 # Print only warnings and errors during test

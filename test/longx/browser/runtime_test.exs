@@ -131,7 +131,79 @@ defmodule Longx.Browser.RuntimeTest do
       System.put_env("LONGX_OBSCURA", "/opt/obscura/obscura")
       on_exit(fn -> System.delete_env("LONGX_OBSCURA") end)
       assert {:ok, "/opt/obscura/obscura"} = Runtime.executable("x86_64-linux", dir: ctx.dir)
+      assert {:ok, :env, "/opt/obscura/obscura"} = Runtime.resolve("x86_64-linux", dir: ctx.dir)
     end
+  end
+
+  describe "resolution order" do
+    setup do
+      root =
+        Path.join(System.tmp_dir!(), "longx-obscura-res-#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(root)
+      on_exit(fn -> File.rm_rf!(root) end)
+      %{root: root, dir: Path.join(root, "install")}
+    end
+
+    test "an obscura on PATH is used before any download; a download is used when PATH has none",
+         ctx do
+      bin = Path.join(ctx.root, "bin")
+      system = fake_binary(Path.join(bin, "obscura"))
+      assert {:ok, :system, ^system} = Runtime.resolve("x86_64-linux", dir: ctx.dir, path: bin)
+      assert {:ok, ^system} = Runtime.executable("x86_64-linux", dir: ctx.dir, path: bin)
+
+      # nothing on PATH, nothing downloaded: not installed
+      assert {:error, :not_installed} =
+               Runtime.resolve("x86_64-linux", dir: ctx.dir, path: Path.join(ctx.root, "empty"))
+
+      downloaded = fake_binary(Path.join([ctx.dir, Runtime.version(), "x86_64-linux", "obscura"]))
+
+      assert {:ok, :downloaded, ^downloaded} =
+               Runtime.resolve("x86_64-linux", dir: ctx.dir, path: Path.join(ctx.root, "empty"))
+
+      # PATH still wins over the download
+      assert {:ok, :system, ^system} = Runtime.resolve("x86_64-linux", dir: ctx.dir, path: bin)
+    end
+
+    test "the newest older download stands in when the pinned version is not there yet (after a Longx upgrade)",
+         ctx do
+      old = fake_binary(Path.join([ctx.dir, "0.2.1", "x86_64-linux", "obscura"]))
+      _older = fake_binary(Path.join([ctx.dir, "0.1.9", "x86_64-linux", "obscura"]))
+      # a version directory without the binary does not count
+      File.mkdir_p!(Path.join([ctx.dir, "0.2.9", "x86_64-linux"]))
+
+      assert Runtime.installed_versions("x86_64-linux", dir: ctx.dir) == ["0.2.1", "0.1.9"]
+      assert Runtime.installed_version("x86_64-linux", dir: ctx.dir) == "0.2.1"
+      refute Runtime.installed?("x86_64-linux", dir: ctx.dir)
+      assert {:ok, :downloaded, ^old} = Runtime.resolve("x86_64-linux", dir: ctx.dir, path: "")
+
+      # the pinned version installed: it is the one, and the old ones can go
+      current = fake_binary(Path.join([ctx.dir, Runtime.version(), "x86_64-linux", "obscura"]))
+      assert Runtime.installed_version("x86_64-linux", dir: ctx.dir) == Runtime.version()
+
+      assert {:ok, :downloaded, ^current} =
+               Runtime.resolve("x86_64-linux", dir: ctx.dir, path: "")
+
+      assert :ok = Runtime.prune_old("x86_64-linux", dir: ctx.dir)
+      refute File.exists?(Path.join(ctx.dir, "0.2.1"))
+      refute File.exists?(Path.join(ctx.dir, "0.1.9"))
+      assert File.regular?(current)
+    end
+
+    test "the version of a binary is what --version prints (nil when it says nothing usable)",
+         ctx do
+      bin = fake_binary(Path.join(ctx.root, "obscura"), "obscura 0.3.0")
+      assert Runtime.version_of(bin) == "0.3.0"
+      mute = fake_binary(Path.join(ctx.root, "mute"), "")
+      assert Runtime.version_of(mute) == nil
+    end
+  end
+
+  defp fake_binary(path, says \\ "obscura 0.2.2") do
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "#!/bin/sh\necho #{says}\n")
+    File.chmod!(path, 0o755)
+    path
   end
 
   defp sha(path),

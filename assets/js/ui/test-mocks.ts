@@ -100,8 +100,12 @@ export const browserIdle = {
   total: null as number | null,
   error: null as string | null,
   version: "0.2.2",
+  latest: "0.2.2",
   target: "x86_64-linux",
   path: null as string | null,
+  source: null as "env" | "system" | "downloaded" | null,
+  installedVersion: null as string | null,
+  upgradable: false,
 };
 
 export const upgradeIdle = {
