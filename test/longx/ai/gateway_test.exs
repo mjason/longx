@@ -81,8 +81,8 @@ defmodule Longx.AI.GatewayTest do
     test "non-OpenAI target: every encrypted_content is stripped, including OpenAI's" do
       {:ok, up} = Gateway.prepare(with_input([@openai_item, @deepseek_item]), @target)
       assert Enum.all?(up.body["input"], &(not Map.has_key?(&1, "encrypted_content")))
-      # readable reasoning stays
-      assert Enum.any?(up.body["input"], &(&1["id"] == "rs_abc" and &1["summary"] != []))
+      # readable reasoning stays (its id does not: 百炼 would refuse an rs_ id)
+      assert Enum.any?(up.body["input"], &(&1["summary"] == @openai_item["summary"]))
     end
 
     test "a reasoning item left with nothing readable is dropped entirely" do
@@ -172,6 +172,75 @@ defmodule Longx.AI.GatewayTest do
       stripped = Gateway.strip_all_encrypted(body)
       assert Enum.all?(stripped["input"], &(not Map.has_key?(&1, "encrypted_content")))
       assert length(stripped["input"]) == 2
+    end
+  end
+
+  describe "prepare/2 item ids — a provider only ever gets ids it can read" do
+    @ids_input [
+      %{
+        "type" => "message",
+        "role" => "assistant",
+        "id" => "ff1a7b42-0a32-45e2-ab9a-88df74315fb1",
+        "content" => [%{"type" => "output_text", "text" => "deepseek said"}]
+      },
+      %{
+        "type" => "message",
+        "role" => "assistant",
+        "id" => "msg_165c58d2-dec4-4202-a44a-3d256f7f7ff1",
+        "content" => [%{"type" => "output_text", "text" => "qwen said"}]
+      },
+      %{
+        "type" => "message",
+        "role" => "assistant",
+        "id" => "msg_67c9a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        "content" => [%{"type" => "output_text", "text" => "openai said"}]
+      },
+      %{
+        "type" => "function_call",
+        "id" => "fc_67c9a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        "call_id" => "call_1",
+        "name" => "ping",
+        "arguments" => "{}"
+      },
+      %{
+        "type" => "function_call",
+        "id" => "bef933f7-4d8a-4f6e-9c1d-2a3b4c5d6e7f",
+        "call_id" => "call_2",
+        "name" => "ping",
+        "arguments" => "{}"
+      },
+      %{"type" => "function_call_output", "call_id" => "call_2", "output" => "pong"}
+    ]
+
+    # 百炼 answers 400 "message id must be a string starting with msg_" to a
+    # DeepSeek uuid; DeepSeek and 百炼 both take an item without an id
+    test "non-OpenAI target: every item id goes, whoever produced it" do
+      {:ok, up} = Gateway.prepare(with_input(@ids_input), @target)
+      assert length(up.body["input"]) == 6
+      refute Enum.any?(up.body["input"], &Map.has_key?(&1, "id"))
+
+      assert Enum.map(up.body["input"], & &1["call_id"]) == [
+               nil,
+               nil,
+               nil,
+               "call_1",
+               "call_2",
+               "call_2"
+             ]
+    end
+
+    test "OpenAI target: only its own msg_/fc_/rs_ ids stay — a uuid, or 百炼's msg_<uuid>, is dropped" do
+      {:ok, up} = Gateway.prepare(with_input(@ids_input ++ [@openai_item]), openai())
+
+      assert Enum.map(up.body["input"], & &1["id"]) == [
+               nil,
+               nil,
+               "msg_67c9a1b2c3d4e5f60718293a4b5c6d7e8f90",
+               "fc_67c9a1b2c3d4e5f60718293a4b5c6d7e8f90",
+               nil,
+               nil,
+               "rs_abc"
+             ]
     end
   end
 

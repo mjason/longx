@@ -63,7 +63,12 @@ defmodule Longx.AI.Gateway do
       |> Map.put("stream", true)
       |> Map.put(
         "input",
-        input |> sanitize_reasoning(target.kind) |> translate_agent_messages(target.kind)
+        input
+        |> sanitize_reasoning(target.kind)
+        |> sanitize_ids(target.kind)
+        |> translate_agent_messages(target.kind)
+        |> sanitize_reasoning(target.kind)
+        |> translate_agent_messages(target.kind)
       )
       |> drop_hosted_search(target)
       |> drop_hosted_calls(target)
@@ -189,6 +194,40 @@ defmodule Longx.AI.Gateway do
 
   defp readable?(text) when is_binary(text), do: text != ""
   defp readable?(_), do: false
+
+  ## Item ids: a reference only the producer can resolve
+
+  # An input item's `id` names the provider's own stored copy of it. DeepSeek
+  # writes bare uuids and takes anything back; 百炼 writes `msg_<uuid>` on every
+  # kind and refuses a *message* whose id lacks the `msg_` prefix (a thread that
+  # ran on DeepSeek and switched to qwen failed every turn with 400); OpenAI
+  # writes `msg_` / `fc_` / `rs_` + hex and looks the id up. Both third parties
+  # take an item without an id, so a target other than OpenAI gets none, and
+  # OpenAI gets only ids of its own shape (a prefix and no dashes — 百炼's
+  # `msg_<uuid>` is not one of its). Verified live on DeepSeek and 百炼.
+  @openai_id_prefixes ["msg_", "fc_", "rs_", "ws_", "ctc_", "amsg_"]
+
+  @spec sanitize_ids([map], :openai | :openai_compatible) :: [map]
+  def sanitize_ids(input, :openai_compatible), do: Enum.map(input, &Map.delete(&1, "id"))
+
+  def sanitize_ids(input, :openai) do
+    Enum.map(input, fn
+      %{"id" => id} = item when is_binary(id) ->
+        if openai_id?(id), do: item, else: Map.delete(item, "id")
+
+      item ->
+        item
+    end)
+  end
+
+  defp openai_id?(id) do
+    Enum.any?(@openai_id_prefixes, fn prefix ->
+      case id do
+        ^prefix <> rest -> rest != "" and not String.contains?(rest, "-")
+        _ -> false
+      end
+    end)
+  end
 
   @doc "The degraded form of a request: no encrypted reasoning at all, not even the target's own."
   @spec strip_all_encrypted(map) :: map
