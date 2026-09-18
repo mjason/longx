@@ -215,7 +215,7 @@ export function ComposerTrailing() {
         <ModelSelectorContent
           align="end"
           searchable={rows.length > 6}
-          className="w-72"
+          className="w-80 max-w-[calc(100vw-2rem)]"
         >
           {rows.length > 6 ? (
             <ModelSelectorSearch placeholder={t.searchModels} />

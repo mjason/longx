@@ -646,13 +646,15 @@ function ModelSelectorEffort({
       }}
       {...props}
     >
-      <span className="text-muted-foreground text-xs">{label}</span>
+      {/* Longx: the label never wraps (a two-character label broke into two lines
+          next to five levels); the levels wrap instead */}
+      <span className="text-muted-foreground shrink-0 text-xs whitespace-nowrap">{label}</span>
       <RadioGroupPrimitive.Root
         value={effort ?? ""}
         onValueChange={setEffort}
         orientation="horizontal"
         aria-label={typeof label === "string" ? label : "Reasoning effort"}
-        className="flex items-center gap-0.5"
+        className="flex flex-wrap items-center justify-end gap-0.5"
       >
         {efforts.map((option) => (
           <RadioGroupPrimitive.Item
