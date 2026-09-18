@@ -226,6 +226,7 @@ defmodule Longx.AI do
              else: model.hosted_web_search
            ),
          kind: provider.kind,
+         reasoning_summary: model.reasoning_summary,
          request_timeout_ms: provider.request_timeout_ms,
          max_concurrent_requests: provider.max_concurrent_requests,
          max_output_tokens: model.max_output_tokens

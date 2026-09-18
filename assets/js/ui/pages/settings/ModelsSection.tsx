@@ -1009,7 +1009,7 @@ function ModelDialog({
                   />
                 </Field>
               )}
-              <Field id="md-summary" label={s.reasoningSummary}>
+              <Field id="md-summary" label={s.reasoningSummary} hint={s.reasoningSummaryHint}>
                 <Select
                   value={form.reasoningSummary}
                   onValueChange={(v) => set("reasoningSummary", v)}

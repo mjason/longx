@@ -108,6 +108,31 @@ defmodule Longx.Agent.PlugsTest do
       inner = %{"$type" => "Button", "label" => "ok"}
       assert Present.normalize(%{"spec" => inner}) == inner
       assert Present.normalize(%{"tree" => Jason.encode!(inner)}) == inner
+      # a component's text under the wrong prop (an Alert once drew as an empty
+      # pill: its words were in `text`, the vocabulary reads `title` / `description`)
+      assert %{"$type" => "Alert", "description" => "watch out", "tone" => "warning"} =
+               Present.normalize(%{
+                 "$type" => "Alert",
+                 "text" => "watch out",
+                 "tone" => "warning"
+               })
+
+      assert %{"$type" => "Alert", "title" => "T", "description" => "D"} =
+               Present.normalize(%{"$type" => "Alert", "title" => "T", "message" => "D"})
+
+      assert %{"$type" => "Text", "value" => "hi"} =
+               Present.normalize(%{"$type" => "Text", "text" => "hi"})
+
+      assert %{"$type" => "Header", "text" => "hi"} =
+               Present.normalize(%{"$type" => "Header", "value" => "hi"})
+
+      assert %{"$type" => "Markdown", "value" => "# hi"} =
+               Present.normalize(%{"$type" => "Markdown", "content" => "# hi"})
+
+      # the right prop present: the others are left as they are
+      assert %{"$type" => "Text", "value" => "v", "text" => "t"} =
+               Present.normalize(%{"$type" => "Text", "value" => "v", "text" => "t"})
+
       # a Text whose value happens to look like JSON stays text
       text = %{"$type" => "Text", "value" => ~s({"not": "a tree"})}
       assert Present.normalize(text) == text

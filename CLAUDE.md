@@ -372,7 +372,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `Tool.call/3` and by `Calls.arguments_of/2`, so the UI item sees it too): nested arrays
     a model sent as JSON strings under the structural keys (`children`, `rows`, `columns`,
     `options`, …) are decoded and a tree handed over under one key (`spec`) unwrapped —
-    百炼 and DeepSeek slip like that, and a card once showed its children as raw text.
+    百炼 and DeepSeek slip like that, and a card once showed its children as raw text; a
+    component's words under a prop the vocabulary does not read (`Alert.text`,
+    `Text.text`, `Header.value` …) are moved to the one it reads — an Alert once drew as an
+    empty pill.
     `Context.present(ctx, tree)` (→ `Agent.present/2`, a cast; `Kernel.Calls.present/2`
     appends a completed `longx.present` item as an `:activity` row, `context?: false`,
     never model input) or `"present" => tree` in the result's meta. Tests:
@@ -474,7 +477,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `delete_model_alias`; `model_choices/0` is what the agent is told.
   - `Longx.AI.Gateway.prepare/2` shapes a Responses request for its target: the
     placeholder `longx` swapped for the `upstream_id`, `stream: true`, `max_output_tokens`
-    from the row, the hosted `web_search` tool kept only for a provider that searches.
+    from the row, the row's `reasoning_summary` on the request's `reasoning` block (the
+    kernel sends `auto`; `none` drops the key — only OpenAI's hidden-reasoning models read
+    it, the model dialog says so), the hosted `web_search` tool kept only for a provider that searches.
     **Reasoning items never cross providers**: an `:openai` target keeps only its own
     `rs_`-prefixed items intact; every other target gets **no** `encrypted_content`;
     readable `summary` / `reasoning_text` stay; an empty item is dropped. Degraded path: an

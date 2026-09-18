@@ -234,6 +234,19 @@ describe("SettingsPage", () => {
     expect(within(md).getByRole("button", { name: "max2", pressed: true })).toBeInTheDocument();
   });
 
+  test("models: the reasoning summary says what it is for — OpenAI's hidden reasoning; other providers ignore it", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/models");
+    const glm = await screen.findByTestId("provider-p2");
+    await user.click(within(glm).getByRole("button", { name: "添加模型" }));
+    const md = await screen.findByRole("dialog");
+    expect(within(md).getByText("推理摘要")).toBeInTheDocument();
+    expect(md).toHaveTextContent(/OpenAI/);
+    expect(md).toHaveTextContent(/思考过程/);
+    expect(md).toHaveTextContent(/忽略/);
+  });
+
   test("models: check, make default, delete (with a confirm)", async () => {
     setViewport(1280);
     const user = userEvent.setup();

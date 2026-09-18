@@ -128,15 +128,44 @@ defmodule Longx.Agent.Plugs.Present do
 
   def normalize(other), do: normalize_node(other)
 
-  defp normalize_node(map) when is_map(map) do
+  # a component's words under a prop the vocabulary does not read (an Alert
+  # once drew as an empty pill with its text in `text`): moved to the one it
+  # reads when that one is absent
+  @prop_aliases %{
+    "Alert" => {"description", ~w(text value message content)},
+    "Text" => {"value", ~w(text content message)},
+    "Caption" => {"value", ~w(text content)},
+    "Badge" => {"value", ~w(text label content)},
+    "Markdown" => {"value", ~w(text content markdown)},
+    "Header" => {"text", ~w(value title content)}
+  }
+
+  defp normalize_node(%{"$type" => type} = map) when is_map_key(@prop_aliases, type) do
+    {wanted, aliases} = @prop_aliases[type]
+
+    map =
+      if is_binary(map[wanted]) do
+        map
+      else
+        case Enum.find(aliases, &is_binary(map[&1])) do
+          nil -> map
+          from -> map |> Map.put(wanted, map[from]) |> Map.delete(from)
+        end
+      end
+
+    normalize_props(map)
+  end
+
+  defp normalize_node(map) when is_map(map), do: normalize_props(map)
+  defp normalize_node(list) when is_list(list), do: Enum.map(list, &normalize_node/1)
+  defp normalize_node(other), do: other
+
+  defp normalize_props(map) do
     Map.new(map, fn
       {key, value} when key in @structural -> {key, value |> decode_if_json() |> normalize_node()}
       {key, value} -> {key, normalize_node(value)}
     end)
   end
-
-  defp normalize_node(list) when is_list(list), do: Enum.map(list, &normalize_node/1)
-  defp normalize_node(other), do: other
 
   defp decode_if_json(text) when is_binary(text) do
     case String.trim(text) do

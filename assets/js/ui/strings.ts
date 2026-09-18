@@ -683,11 +683,13 @@ export const t = {
     image: "图片",
     levels: "档",
     reasoningSummaries: {
-      auto: "自动",
+      auto: "自动（由 OpenAI 决定长短）",
       concise: "简短",
       detailed: "详细",
-      none: "不要",
+      none: "不要摘要",
     } as Record<string, string>,
+    reasoningSummaryHint:
+      "只对 OpenAI 这类隐藏推理过程的模型有意义：请它随回答附一段思考摘要，显示在「思考过程」里。DeepSeek、百炼、星火等直接输出思考内容，这一项会被忽略。留「—」等于自动。",
     maxOutputTokens: "输出上限",
     default: "默认",
     makeDefault: "设为默认",

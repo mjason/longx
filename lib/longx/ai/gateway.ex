@@ -73,6 +73,7 @@ defmodule Longx.AI.Gateway do
       |> drop_hosted_search(target)
       |> drop_hosted_calls(target)
       |> put_max_output_tokens(target)
+      |> put_reasoning_summary(target)
       |> dump_request()
 
     {:ok,
@@ -126,6 +127,22 @@ defmodule Longx.AI.Gateway do
     do: Map.put(body, "input", Enum.reject(input, &(&1["type"] in @hosted_call_items)))
 
   defp drop_hosted_calls(body, _target), do: body
+
+  # the row's reasoning summary on the request's reasoning block (the kernel
+  # sends `auto`): `none` drops the key — OpenAI's way to ask for no summary
+  defp put_reasoning_summary(%{"reasoning" => %{} = reasoning} = body, %Target{
+         reasoning_summary: choice
+       })
+       when choice in [:auto, :concise, :detailed] do
+    Map.put(body, "reasoning", Map.put(reasoning, "summary", Atom.to_string(choice)))
+  end
+
+  defp put_reasoning_summary(%{"reasoning" => %{} = reasoning} = body, %Target{
+         reasoning_summary: :none
+       }),
+       do: Map.put(body, "reasoning", Map.delete(reasoning, "summary"))
+
+  defp put_reasoning_summary(body, _target), do: body
 
   defp drop_hosted_search(body, %Target{hosted_web_search?: true}), do: body
 

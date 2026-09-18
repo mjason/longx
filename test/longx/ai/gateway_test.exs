@@ -286,6 +286,27 @@ defmodule Longx.AI.GatewayTest do
       assert up.body["tools"] == body["tools"]
     end
 
+    test "the model's reasoning summary is applied: the row's choice replaces the kernel's auto, none drops the summary, unset leaves it" do
+      body = Map.put(@codex_body, "reasoning", %{"effort" => "high", "summary" => "auto"})
+      {:ok, up} = Gateway.prepare(body, @target)
+      assert up.body["reasoning"] == %{"effort" => "high", "summary" => "auto"}
+
+      {:ok, up} = Gateway.prepare(body, %Target{@target | reasoning_summary: :detailed})
+      assert up.body["reasoning"] == %{"effort" => "high", "summary" => "detailed"}
+
+      {:ok, up} = Gateway.prepare(body, %Target{@target | reasoning_summary: :none})
+      assert up.body["reasoning"] == %{"effort" => "high"}
+
+      # a request without a reasoning block is left alone
+      {:ok, up} =
+        Gateway.prepare(Map.delete(@codex_body, "reasoning"), %Target{
+          @target
+          | reasoning_summary: :detailed
+        })
+
+      refute Map.has_key?(up.body, "reasoning")
+    end
+
     test "the model's max_output_tokens is applied unless codex set one" do
       {:ok, up} = Gateway.prepare(@codex_body, @target)
       refute Map.has_key?(up.body, "max_output_tokens")
