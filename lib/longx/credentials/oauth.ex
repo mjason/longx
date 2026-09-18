@@ -205,15 +205,19 @@ defmodule Longx.Credentials.OAuth do
   defp ensure_client(_cred, _redirect),
     do: {:error, "no client id: enter one, or a registration URL the server offers"}
 
-  # A client the server refuses outright (an authorize probe answering 400 —
-  # a client registered elsewhere, with another redirect URI, is the usual
-  # case: an agent once registered one by hand and handed over the id) is
-  # replaced by one Longx registers itself, at the row's registration URL or
-  # the one the server's RFC 8414 metadata names. No way to register, or a
-  # probe that fails for another reason: the login goes on as it is.
+  # A client Longx cannot vouch for is replaced by one it registers itself
+  # when the server registers clients (the row's registration URL, else the
+  # `registration_endpoint` of the server's RFC 8414 metadata): a *public*
+  # client (no secret) whose row carries no registration URL was registered
+  # by someone else — an agent once registered one by hand with a loopback
+  # redirect URI and handed over the id; COROS only rejects that after the
+  # IdP login, with the ticket, so no probe can see it — and a client the
+  # authorize endpoint refuses outright (a probe answering 400). A
+  # confidential client (a secret from the provider's console) is used as it
+  # is; no way to register: the login goes on as it is.
   defp accepted_client(%Credential{} = cred, redirect) do
-    case probe_authorize(cred, redirect) do
-      :rejected ->
+    cond do
+      foreign_public_client?(cred) or probe_authorize(cred, redirect) == :rejected ->
         case registration_url(cred) do
           nil ->
             {:ok, cred}
@@ -227,8 +231,20 @@ defmodule Longx.Credentials.OAuth do
             end
         end
 
-      _ ->
+      true ->
         {:ok, cred}
+    end
+  end
+
+  defp foreign_public_client?(%Credential{client_id: id, registration_url: reg} = cred) do
+    is_binary(id) and id != "" and (is_nil(reg) or reg == "") and
+      not confidential?(cred)
+  end
+
+  defp confidential?(%Credential{} = cred) do
+    case Credentials.reveal(cred) do
+      {:ok, %{client_secret: secret}} -> is_binary(secret) and secret != ""
+      _ -> false
     end
   end
 

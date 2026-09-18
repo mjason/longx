@@ -72,6 +72,10 @@ defmodule LongxWeb.CredentialsRpcTest do
     bypass = Bypass.open()
     # a login probes the authorize endpoint first (a rejected client is replaced)
     Bypass.stub(bypass, "GET", "/authorize", &Plug.Conn.send_resp(&1, 302, ""))
+
+    for path <- ["/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"],
+        do: Bypass.stub(bypass, "GET", path, &Plug.Conn.send_resp(&1, 404, ""))
+
     base = "http://localhost:#{bypass.port}"
 
     assert %{"success" => true, "data" => %{"uri" => uri}} =

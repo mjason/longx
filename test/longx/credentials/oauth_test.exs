@@ -16,6 +16,10 @@ defmodule Longx.Credentials.OAuthTest do
     # a login starts with a probe of the authorize endpoint (a rejected client is
     # replaced): the default answer is "fine", a test overrides it
     Bypass.stub(bypass, "GET", "/authorize", &Plug.Conn.send_resp(&1, 302, ""))
+    # a public client without a registration URL was not registered by Longx: the
+    # server's metadata is asked for a registration endpoint; none here by default
+    for path <- ["/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"],
+        do: Bypass.stub(bypass, "GET", path, &Plug.Conn.send_resp(&1, 404, ""))
 
     {:ok, cred} =
       Credentials.create_oauth2(%{
@@ -173,12 +177,18 @@ defmodule Longx.Credentials.OAuthTest do
     assert message =~ "client"
   end
 
-  test "a client the server rejects (another redirect URI) is replaced: the authorize probe answers 400, Longx registers itself at the metadata's registration endpoint and logs in with the new client",
-       %{bypass: bypass, base: base, cred: cred} do
-    # no registration_url on the row: RFC 8414 metadata names it
-    Bypass.expect(bypass, "GET", "/.well-known/oauth-authorization-server", fn conn ->
-      json!(conn, 200, %{issuer: base, registration_endpoint: base <> "/register"})
-    end)
+  test "a client the server rejects (another redirect URI) is replaced: the authorize probe answers 400, Longx registers itself again at the row's registration URL",
+       %{bypass: bypass, base: base} do
+    # registered by Longx once (registration_url on the row), rejected since
+    {:ok, cred} =
+      Credentials.create_oauth2(%{
+        name: "reg",
+        allowed_hosts: ["localhost"],
+        authorize_url: base <> "/authorize",
+        token_url: base <> "/token",
+        client_id: "old-id",
+        registration_url: base <> "/register"
+      })
 
     Bypass.expect(bypass, "GET", "/authorize", fn conn ->
       case conn.query_params["client_id"] do
@@ -200,28 +210,54 @@ defmodule Longx.Credentials.OAuthTest do
 
     assert {:ok, %{url: url}} = OAuth.begin_login(cred, [])
     assert URI.decode_query(URI.parse(url).query)["client_id"] == "fresh-id"
-    assert {:ok, %{client_id: "fresh-id", registration_url: reg}} = Credentials.fetch("oa")
-    assert reg == base <> "/register"
+    assert {:ok, %{client_id: "fresh-id"}} = Credentials.fetch("reg")
   end
 
   test "a 400 from the authorize endpoint with no way to register keeps the row and the URL as they are",
        %{bypass: bypass, cred: cred} do
-    Bypass.expect(
-      bypass,
-      "GET",
-      "/.well-known/oauth-authorization-server",
-      &Plug.Conn.send_resp(&1, 404, "")
-    )
-
-    Bypass.stub(
-      bypass,
-      "GET",
-      "/.well-known/openid-configuration",
-      &Plug.Conn.send_resp(&1, 404, "")
-    )
-
-    Bypass.expect(bypass, "GET", "/authorize", &Plug.Conn.send_resp(&1, 400, "bad client"))
+    Bypass.stub(bypass, "GET", "/authorize", &Plug.Conn.send_resp(&1, 400, "bad client"))
     assert {:ok, %{url: url}} = OAuth.begin_login(cred, [])
     assert URI.decode_query(URI.parse(url).query)["client_id"] == "cid"
+  end
+
+  test "a public client Longx did not register (a client id by hand, no secret, no registration URL) is replaced before the first login when the server registers clients",
+       %{bypass: bypass, base: base, cred: cred} do
+    Bypass.expect(bypass, "GET", "/.well-known/oauth-authorization-server", fn conn ->
+      json!(conn, 200, %{issuer: base, registration_endpoint: base <> "/register"})
+    end)
+
+    Bypass.expect_once(bypass, "POST", "/register", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      assert Jason.decode!(body)["redirect_uris"] == [OAuth.redirect_uri(nil)]
+      json!(conn, 201, %{client_id: "longx-id"})
+    end)
+
+    # the authorize endpoint answers 302 to the IdP for any client: no 400 to probe
+    assert {:ok, %{url: url}} = OAuth.begin_login(cred, [])
+    assert URI.decode_query(URI.parse(url).query)["client_id"] == "longx-id"
+    assert {:ok, %{client_id: "longx-id", registration_url: reg}} = Credentials.fetch("oa")
+    assert reg == base <> "/register"
+
+    # registered by Longx now: the next login keeps it (Bypass expected one registration)
+    {:ok, registered} = Credentials.fetch("oa")
+    assert {:ok, %{url: url2}} = OAuth.begin_login(registered, [])
+    assert URI.decode_query(URI.parse(url2).query)["client_id"] == "longx-id"
+  end
+
+  test "a confidential client (a secret from the provider's console) is used as it is: no discovery, no registration",
+       %{bypass: _bypass, base: base} do
+    {:ok, cred} =
+      Credentials.create_oauth2(%{
+        name: "conf",
+        allowed_hosts: ["localhost"],
+        authorize_url: base <> "/authorize",
+        token_url: base <> "/token",
+        client_id: "console-id",
+        client_secret: "console-secret"
+      })
+
+    # no metadata stub: a fetch would fail the test as an unexpected request
+    assert {:ok, %{url: url}} = OAuth.begin_login(cred, [])
+    assert URI.decode_query(URI.parse(url).query)["client_id"] == "console-id"
   end
 end
