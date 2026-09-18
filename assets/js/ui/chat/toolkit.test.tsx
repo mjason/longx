@@ -58,6 +58,22 @@ describe("CommandExecutionTool", () => {
     expect(screen.getByText("exit 0")).toBeInTheDocument();
   });
 
+  test("hovering the (truncated) command chip shows the whole command and its directory in a floating card", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    const long = "cd /home/mj/dev/python/jbt_lab && rm -rf .patchtest_tmp /tmp/patchtest && rm -f /home/mj/dev/python/jbt_lab/.longx/local/knowledge/x.md && echo ok";
+    render(
+      <CommandExecutionTool
+        {...part({ args: { command: long, cwd: "/home/mj/dev/python/jbt_lab" }, status: { type: "complete" }, result: { status: "completed", exitCode: 0, output: "ok", durationMs: 10 } })}
+      />,
+    );
+    const chip = screen.getByTestId("tool-call-query");
+    expect(chip).not.toHaveAttribute("title");
+    await user.hover(chip);
+    const card = await screen.findByRole("tooltip");
+    expect(card).toHaveTextContent(long);
+    expect(card).toHaveTextContent("/home/mj/dev/python/jbt_lab");
+  });
+
   test("a declined command says so instead of an exit code", () => {
     render(
       <CommandExecutionTool

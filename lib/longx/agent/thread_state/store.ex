@@ -26,6 +26,8 @@ defmodule Longx.Agent.ThreadState.Store do
     order: 0,
     thread: nil,
     turn: nil,
+    # every turn seen, by id (its stamps, status and usage): the per-turn badge
+    turns: %{},
     status: nil,
     token_usage: nil,
     # goal mode: the thread's goal (objective, status, budget, usage) or nil
@@ -60,6 +62,15 @@ defmodule Longx.Agent.ThreadState.Store do
       [] -> @empty_meta
     end
   end
+
+  defp put_turn(thread_id, %{"id" => id} = turn) do
+    turns =
+      Map.merge(meta(thread_id).turns, %{id => Map.merge(meta(thread_id).turns[id] || %{}, turn)})
+
+    put_meta(thread_id, %{turn: turn, turns: turns})
+  end
+
+  defp put_turn(thread_id, turn), do: put_meta(thread_id, %{turn: turn})
 
   defp put_meta(thread_id, changes) do
     :ets.insert(@meta, {thread_id, Map.merge(meta(thread_id), changes)})
@@ -201,6 +212,8 @@ defmodule Longx.Agent.ThreadState.Store do
     |> Enum.each(fn {key, _order, item} ->
       if MapSet.member?(turn_ids, item["turnId"]), do: :ets.delete(@items, key)
     end)
+
+    put_meta(thread_id, %{turns: Map.drop(meta(thread_id).turns, MapSet.to_list(turn_ids))})
   end
 
   ## folding notifications
@@ -208,8 +221,8 @@ defmodule Longx.Agent.ThreadState.Store do
   @doc "Applies one event (codex's vocabulary) to the thread's stored view."
   @spec fold(String.t(), String.t(), map) :: :ok
   def fold(t, "thread/started", %{"thread" => thread}), do: put_meta(t, %{thread: thread})
-  def fold(t, "turn/started", %{"turn" => turn}), do: put_meta(t, %{turn: turn})
-  def fold(t, "turn/completed", %{"turn" => turn}), do: put_meta(t, %{turn: turn})
+  def fold(t, "turn/started", %{"turn" => turn}), do: put_turn(t, turn)
+  def fold(t, "turn/completed", %{"turn" => turn}), do: put_turn(t, turn)
   def fold(t, "thread/status/changed", %{"status" => status}), do: put_meta(t, %{status: status})
 
   def fold(t, "thread/tokenUsage/updated", %{"tokenUsage" => usage}),
@@ -277,6 +290,7 @@ defmodule Longx.Agent.ThreadState.Store do
         thread_id: thread_id,
         thread: meta.thread,
         turn: meta.turn,
+        turns: meta.turns,
         status: meta.status,
         token_usage: meta.token_usage,
         goal: meta.goal,

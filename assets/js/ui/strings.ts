@@ -360,6 +360,7 @@ export const t = {
   deny: "拒绝",
   declined: "已拒绝",
   runningCommand: "正在运行",
+  commandCwd: "目录",
   ranCommand: "运行了",
   command: "命令",
   commandFailed: "命令没有跑起来",

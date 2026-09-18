@@ -144,10 +144,30 @@ describe("toMessages", () => {
     expect((ps[1] as { timing: { completedAt?: number } }).timing.completedAt).toBeUndefined();
     expect(msgs[0]!.metadata?.timing).toMatchObject({ streamStartTime: 1_700_000_000_000, totalStreamTime: 12_000, tokenCount: 240, toolCallCount: 2 });
 
-    // a running turn has no total yet; an older turn gets no token count (usage is per last turn)
+    // a running turn has no total yet
     const running = toMessages(view({ turn: { id: "t11", status: "inProgress", startedAt: 1_700_000_100 }, tokenUsage: { last: { outputTokens: 9 } }, items: [{ id: "a11", type: "agentMessage", turnId: "t11", text: "hi" }] }));
     expect(running[0]!.metadata?.timing).toMatchObject({ streamStartTime: 1_700_000_100_000 });
     expect(running[0]!.metadata?.timing?.totalStreamTime).toBeUndefined();
+
+    // every turn the view kept has its own stamps and usage (the kernel puts them on
+    // turn/completed): an older turn's badge is not the last turn's numbers
+    const two = toMessages(
+      view({
+        turn: { id: "t13", status: "completed", startedAt: 1_700_000_200, completedAt: 1_700_000_203, usage: { inputTokens: 50, outputTokens: 5, totalTokens: 55 } },
+        turns: {
+          t12: { id: "t12", status: "completed", startedAt: 1_700_000_000, completedAt: 1_700_000_010, usage: { inputTokens: 1000, cachedInputTokens: 400, outputTokens: 80, reasoningOutputTokens: 30, totalTokens: 1080 } },
+          t13: { id: "t13", status: "completed", startedAt: 1_700_000_200, completedAt: 1_700_000_203, usage: { inputTokens: 50, outputTokens: 5, totalTokens: 55 } },
+        },
+        tokenUsage: { last: { outputTokens: 5 } },
+        items: [
+          { id: "a12", type: "agentMessage", turnId: "t12", text: "first" },
+          { id: "a13", type: "agentMessage", turnId: "t13", text: "second" },
+        ],
+      }),
+    );
+    expect(two[0]!.metadata?.timing).toMatchObject({ totalStreamTime: 10_000, tokenCount: 80 });
+    expect(two[0]!.metadata?.custom).toMatchObject({ usage: { inputTokens: 1000, cachedInputTokens: 400, outputTokens: 80, reasoningOutputTokens: 30 } });
+    expect(two[1]!.metadata?.timing).toMatchObject({ totalStreamTime: 3_000, tokenCount: 5 });
   });
 
   test("a tool's ask (Context.ask) is a standalone action part on the last message, answered through extras", () => {

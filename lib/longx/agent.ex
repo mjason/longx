@@ -467,11 +467,20 @@ defmodule Longx.Agent do
           effort: Keyword.get(opts, :effort, state.effort),
           reply_to: Keyword.get(opts, :reply_to),
           usage_total: %{},
+          turn_started_at: System.system_time(:millisecond),
           continues: 0,
           steps: 0,
           turn_state: %{}
       }
-      |> tap(&emit(&1, "turn/started", %{"turn" => %{"id" => turn_id, "status" => "inProgress"}}))
+      |> tap(
+        &emit(&1, "turn/started", %{
+          "turn" => %{
+            "id" => turn_id,
+            "status" => "inProgress",
+            "startedAt" => &1.turn_started_at / 1000
+          }
+        })
+      )
       |> Team.with_activity(Keyword.get(opts, :activity))
       |> append_user(text, Keyword.get(opts, :images, []), from)
 
@@ -993,7 +1002,16 @@ defmodule Longx.Agent do
   ## Turn end
 
   defp end_turn(%State{} = state, status, error) do
-    turn = %{"id" => state.turn_id, "status" => status}
+    # the turn's stamps and its own token usage (`usage_total` is reset per
+    # turn): what the UI's per-turn badge shows, for every turn kept in the view
+    turn = %{
+      "id" => state.turn_id,
+      "status" => status,
+      "startedAt" => state.turn_started_at && state.turn_started_at / 1000,
+      "completedAt" => System.system_time(:millisecond) / 1000,
+      "usage" => state.usage_total
+    }
+
     turn = if error, do: Map.put(turn, "error", %{"message" => error}), else: turn
     # the asks go first: whoever hears the turn end must not find a request
     # still waiting (both are casts to the same ThreadState, folded in order)

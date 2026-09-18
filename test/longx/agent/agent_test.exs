@@ -192,7 +192,8 @@ defmodule Longx.AgentTest do
 
     assert {:ok, %{turn_id: turn_id, steered: false}} = Agent.send(id, "hi")
 
-    assert %{"turn" => %{"id" => ^turn_id, "status" => "inProgress"}} = await("turn/started")
+    assert %{"turn" => %{"id" => ^turn_id, "status" => "inProgress", "startedAt" => _}} =
+             await("turn/started")
 
     assert %{"item" => %{"type" => "userMessage", "turnId" => ^turn_id} = um} =
              await("item/completed")
@@ -208,8 +209,23 @@ defmodule Longx.AgentTest do
     assert %{"tokenUsage" => %{"modelContextWindow" => 64_000, "last" => %{"inputTokens" => 12}}} =
              await("thread/tokenUsage/updated")
 
-    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+    # the turn carries its own stamps and its own token usage (the UI's per-turn
+    # badge; the thread-level tokenUsage is only ever the last one)
+    assert %{
+             "id" => ^turn_id,
+             "status" => "completed",
+             "startedAt" => started,
+             "completedAt" => completed,
+             "usage" => usage
+           } =
+             await_turn_end()
+
+    assert is_number(started) and is_number(completed) and completed >= started
+    assert %{"inputTokens" => 12, "outputTokens" => _, "totalTokens" => _} = usage
     assert Agent.status(id) == :idle
+    # the view keeps every turn, not only the last
+    assert %{^turn_id => %{"status" => "completed", "usage" => ^usage}} =
+             ThreadState.snapshot(id).turns
 
     assert_receive {:request, body}
     assert body["instructions"] =~ "You are"

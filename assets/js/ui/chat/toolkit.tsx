@@ -98,6 +98,7 @@ function ToolRow({
   label,
   activeLabel,
   query,
+  queryDetail,
   running,
   failed,
   children,
@@ -106,6 +107,7 @@ function ToolRow({
   label: string;
   activeLabel: string;
   query: string;
+  queryDetail?: ReactNode;
   running: boolean;
   failed: boolean;
   children: ReactNode;
@@ -118,6 +120,7 @@ function ToolRow({
         label={label}
         activeLabel={activeLabel}
         query={query}
+        queryDetail={queryDetail}
         running={running}
         failed={failed}
         open={open ?? (running || failed)}
@@ -148,6 +151,17 @@ export const CommandExecutionTool: ToolCallMessagePartComponent<
       label={t.ranCommand}
       activeLabel={t.runningCommand}
       query={command}
+      queryDetail={
+        // the whole command, wrapped, and where it ran — the row truncates it
+        <div className="flex max-w-[min(40rem,88vw)] flex-col gap-1.5">
+          <pre className="text-foreground/85 max-h-64 overflow-y-auto font-mono text-xs break-all whitespace-pre-wrap">{command}</pre>
+          {p.args.cwd ? (
+            <p className="text-muted-foreground font-mono text-[11px] break-all">
+              {t.commandCwd}: {p.args.cwd}
+            </p>
+          ) : null}
+        </div>
+      }
       running={running}
       failed={failed}
       testId="tool-command"

@@ -474,12 +474,22 @@ describe("ThreadPage", () => {
           status: "completed",
           startedAt: 1_700_000_000,
           completedAt: 1_700_000_007,
+          usage: { inputTokens: 56_500, cachedInputTokens: 11_300, outputTokens: 628, reasoningOutputTokens: 279, totalTokens: 57_128 },
         },
       }),
     );
-    expect(
-      await screen.findByRole("button", { name: "这一轮的耗时" }),
-    ).toHaveTextContent("7");
+    const badge = await screen.findByRole("button", { name: "这一轮的耗时" });
+    expect(badge).toHaveTextContent("7");
+    // the turn's tokens on the badge, the breakdown a hover away
+    expect(badge).toHaveTextContent("57.1k");
+    await userEvent.hover(badge);
+    const popover = await screen.findByRole("tooltip");
+    expect(popover).toHaveTextContent("输入");
+    expect(popover).toHaveTextContent("56.5k");
+    expect(popover).toHaveTextContent("缓存命中");
+    expect(popover).toHaveTextContent("11.3k");
+    expect(popover).toHaveTextContent("思考");
+    expect(popover).toHaveTextContent("279");
 
     act(() =>
       channel.deliver("event", {

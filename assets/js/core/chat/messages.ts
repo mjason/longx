@@ -86,7 +86,7 @@ export function toMessages(
     if (current && current.parts.length) {
       const n = current.turnId ? (segments.get(current.turnId) ?? 0) : 0;
       if (current.turnId) segments.set(current.turnId, n + 1);
-      const timing = timingFor(view, current.turnId, current.parts);
+      const timed = timingFor(view, current.turnId, current.parts);
       out.push({
         id: current.turnId
           ? n === 0
@@ -96,7 +96,9 @@ export function toMessages(
         role: "assistant",
         content: current.parts,
         status: statusFor(view, current.turnId, running),
-        ...(timing ? { metadata: { timing } } : {}),
+        ...(timed
+          ? { metadata: { timing: timed.timing, ...(timed.usage ? { custom: { usage: timed.usage } } : {}) } }
+          : {}),
       });
     }
     current = null;
@@ -228,39 +230,62 @@ function attachPending(
   }
 }
 
-// assistant-ui's MessageTiming from the turn (epoch seconds) and the last
-// turn's token usage; older turns keep only what the turn row knows.
+// assistant-ui's MessageTiming from the message's own turn (the kernel stamps
+// every turn with epoch seconds and its own token usage; the view keeps them
+// all), so an older turn's badge shows that turn's numbers
+export type TurnUsage = {
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+  reasoningOutputTokens?: number;
+  totalTokens?: number;
+};
+
+function turnOf(view: ThreadView, turnId: string | undefined): Record<string, unknown> | undefined {
+  if (!turnId) return undefined;
+  const kept = view.turns[turnId];
+  const current = view.turn && view.turn["id"] === turnId ? view.turn : undefined;
+  return kept && current ? { ...kept, ...current } : (kept ?? current);
+}
+
+function usageOf(view: ThreadView, turn: Record<string, unknown>): TurnUsage | undefined {
+  if (turn["usage"] && typeof turn["usage"] === "object") return turn["usage"] as TurnUsage;
+  // the running (or last, before the kernel stamped usage on turns) turn: the thread's last usage
+  if (view.turn && view.turn["id"] === turn["id"]) return (view.tokenUsage?.["last"] as TurnUsage | undefined) ?? undefined;
+  return undefined;
+}
+
 function timingFor(
   view: ThreadView,
   turnId: string | undefined,
   parts: Part[],
-): MessageTiming | undefined {
-  const turn = view.turn;
-  if (!turn || turn["id"] !== turnId || typeof turn["startedAt"] !== "number")
-    return undefined;
+): { timing: MessageTiming; usage?: TurnUsage } | undefined {
+  const turn = turnOf(view, turnId);
+  if (!turn || typeof turn["startedAt"] !== "number") return undefined;
   const startedAt = (turn["startedAt"] as number) * 1000;
   const completedAt =
     typeof turn["completedAt"] === "number"
       ? (turn["completedAt"] as number) * 1000
       : undefined;
-  const last =
-    (view.tokenUsage?.["last"] as { outputTokens?: number } | undefined) ??
-    undefined;
+  const usage = usageOf(view, turn);
   const tokenCount =
-    completedAt !== undefined && typeof last?.outputTokens === "number"
-      ? last.outputTokens
+    completedAt !== undefined && typeof usage?.outputTokens === "number"
+      ? usage.outputTokens
       : undefined;
   const totalStreamTime =
     completedAt !== undefined ? completedAt - startedAt : undefined;
   return {
-    streamStartTime: startedAt,
-    ...(totalStreamTime !== undefined ? { totalStreamTime } : {}),
-    ...(tokenCount !== undefined ? { tokenCount } : {}),
-    ...(tokenCount !== undefined && totalStreamTime
-      ? { tokensPerSecond: (tokenCount * 1000) / totalStreamTime }
-      : {}),
-    totalChunks: parts.length,
-    toolCallCount: parts.filter((p) => p.type === "tool-call").length,
+    timing: {
+      streamStartTime: startedAt,
+      ...(totalStreamTime !== undefined ? { totalStreamTime } : {}),
+      ...(tokenCount !== undefined ? { tokenCount } : {}),
+      ...(tokenCount !== undefined && totalStreamTime
+        ? { tokensPerSecond: (tokenCount * 1000) / totalStreamTime }
+        : {}),
+      totalChunks: parts.length,
+      toolCallCount: parts.filter((p) => p.type === "tool-call").length,
+    },
+    ...(usage && completedAt !== undefined ? { usage } : {}),
   };
 }
 

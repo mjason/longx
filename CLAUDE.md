@@ -219,7 +219,11 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   - **Events keep codex's vocabulary** (`turn/started`, `item/started`,
     `item/agentMessage/delta`, `item/reasoning/summaryTextDelta`,
     `item/commandExecution/outputDelta`, `item/completed`, `thread/tokenUsage/updated`,
-    `turn/completed`, `thread/goal/updated`, a `contextCompaction` marker,
+    `turn/completed` — **the turn carries `startedAt` / `completedAt` (epoch seconds) and
+    its own `usage`** (the turn's token totals; the Store keeps every turn under `turns`,
+    the client's `timingFor` reads the message's own turn, so every assistant message has
+    a badge with the duration and the tokens and a popover with 输入 / 缓存命中 / 输出 /
+    思考) —, `thread/goal/updated`, a `contextCompaction` marker,
     `longx/action/request` for an ask), fed to `Longx.Agent.ThreadState.ingest/3`. A
     tool's `show` decides the item: `:command` → `commandExecution`, `:file_change` →
     `fileChange` (a unified `diff` per change), `:tool` → `dynamicToolCall`,

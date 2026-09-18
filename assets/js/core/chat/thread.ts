@@ -38,6 +38,8 @@ export type ThreadSnapshot = {
   turn: Record<string, unknown> | null;
   status: Record<string, unknown> | null;
   token_usage: Record<string, unknown> | null;
+  // every turn the store kept, by id (stamps, status, the turn's own usage)
+  turns?: Record<string, Record<string, unknown>>;
   items: ThreadItem[];
   pending_requests: PendingRequest[];
   goal?: ThreadGoal | null;
@@ -54,6 +56,7 @@ export type ThreadView = {
   threadId: string;
   thread: Record<string, unknown> | null;
   turn: Record<string, unknown> | null;
+  turns: Record<string, Record<string, unknown>>;
   status: Record<string, unknown> | null;
   tokenUsage: Record<string, unknown> | null;
   items: ThreadItem[];
@@ -67,6 +70,7 @@ export function fromSnapshot(s: ThreadSnapshot): ThreadView {
     threadId: s.thread_id,
     thread: s.thread,
     turn: s.turn,
+    turns: s.turns ?? {},
     status: s.status,
     tokenUsage: s.token_usage,
     items: s.items,
@@ -81,6 +85,7 @@ export function emptyView(threadId: string): ThreadView {
     threadId,
     thread: null,
     turn: null,
+    turns: {},
     status: null,
     tokenUsage: null,
     items: [],
@@ -130,8 +135,15 @@ function fold(
     case "thread/started":
       return { ...view, thread: params["thread"] as Record<string, unknown> };
     case "turn/started":
-    case "turn/completed":
-      return { ...view, turn: params["turn"] as Record<string, unknown> };
+    case "turn/completed": {
+      const turn = params["turn"] as Record<string, unknown>;
+      const id = typeof turn?.["id"] === "string" ? (turn["id"] as string) : null;
+      return {
+        ...view,
+        turn,
+        turns: id ? { ...view.turns, [id]: { ...(view.turns[id] ?? {}), ...turn } } : view.turns,
+      };
+    }
     case "thread/status/changed":
       return { ...view, status: params["status"] as Record<string, unknown> };
     case "thread/tokenUsage/updated":
@@ -177,6 +189,7 @@ function fold(
       return {
         ...view,
         items: view.items.filter((i) => !i.turnId || !dropped.has(i.turnId)),
+        turns: Object.fromEntries(Object.entries(view.turns).filter(([id]) => !dropped.has(id))),
       };
     }
     case "serverRequest/resolved": {

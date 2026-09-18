@@ -37,6 +37,7 @@ defmodule Longx.Agent.ThreadState do
           thread_id: String.t(),
           thread: map | nil,
           turn: map | nil,
+          turns: %{optional(String.t()) => map},
           status: map | nil,
           token_usage: map | nil,
           goal: map | nil,

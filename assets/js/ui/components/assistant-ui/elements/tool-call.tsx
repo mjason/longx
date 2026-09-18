@@ -8,6 +8,7 @@ import {
   CollapsibleTrigger,
 } from "@/ui/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/ui/components/ui/tooltip";
 import {
   collapsePanel,
   field,
@@ -23,6 +24,9 @@ export interface ToolCallProps {
   label: string;
   activeLabel: string;
   query: string;
+  // Longx: what the chip shows on hover — the whole query (it is truncated in
+  // the row) and whatever the caller adds (a command's directory)
+  queryDetail?: ReactNode;
   request?: string;
   result?: string;
   running: boolean;
@@ -37,6 +41,7 @@ export function ToolCall({
   label,
   activeLabel,
   query,
+  queryDetail,
   request = "",
   result = "",
   running,
@@ -64,15 +69,32 @@ export function ToolCall({
           </ShimmerLabel>
           <>{label}</>
         </SwapLabel>
-        <span
-          className={cn(
-            mono,
-            "bg-foreground/[0.06] text-foreground/70 min-w-0 truncate rounded-md px-1.5 py-0.5",
-          )}
-          title={query}
-        >
-          {query}
-        </span>
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className={cn(
+                  mono,
+                  "bg-foreground/[0.06] text-foreground/70 min-w-0 truncate rounded-md px-1.5 py-0.5",
+                )}
+                data-testid="tool-call-query"
+              >
+                {query}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              align="start"
+              sideOffset={6}
+              arrow={false}
+              className="bg-popover text-popover-foreground max-w-[min(40rem,90vw)] border px-3 py-2 text-start"
+            >
+              {queryDetail ?? (
+                <pre className={cn(mono, "text-foreground/80 max-h-64 overflow-y-auto font-mono text-xs break-all whitespace-pre-wrap")}>{query}</pre>
+              )}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <span className="ms-auto flex w-4 shrink-0 items-center justify-end">
           {!running && !failed && (
             <CheckIcon className="fade-in zoom-in-90 animate-in size-3.5 text-emerald-500 duration-200" />

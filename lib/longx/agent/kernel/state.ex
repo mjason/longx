@@ -38,6 +38,8 @@ defmodule Longx.Agent.Kernel.State do
             steers: [],
             usage_total: %{},
             usage_last: nil,
+            # when the turn began (epoch ms) — the turn's stamps for the UI's badge
+            turn_started_at: nil,
             context_window: nil,
             # continuations a turn-end plug asked for in this turn (capped)
             continues: 0,

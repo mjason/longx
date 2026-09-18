@@ -1,6 +1,6 @@
 "use client";
 
-import { useMessageTiming } from "@assistant-ui/react";
+import { useAuiState, useMessageTiming } from "@assistant-ui/react";
 import { t } from "@/ui/strings";
 import {
   Tooltip,
@@ -9,6 +9,8 @@ import {
   TooltipTrigger,
 } from "@/ui/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { formatTokens } from "@/core/format";
+import type { TurnUsage } from "@/core/chat/messages";
 import type { FC } from "react";
 
 const formatTimingMs = (ms: number | undefined): string => {
@@ -42,7 +44,15 @@ export const MessageTiming: FC<{
   side?: "top" | "right" | "bottom" | "left";
 }> = ({ className, side = "right" }) => {
   const timing = useMessageTiming();
+  // Longx: the turn's own token usage (the kernel stamps every turn)
+  const usage = useAuiState((s) => s.message.metadata.custom?.["usage"] as TurnUsage | undefined);
   if (timing?.totalStreamTime === undefined) return null;
+  const usageRows: [string, number | undefined][] = [
+    [t.context.input, usage?.inputTokens],
+    [t.context.cachedInput, usage?.cachedInputTokens],
+    [t.context.output, usage?.outputTokens],
+    [t.context.reasoning, usage?.reasoningOutputTokens],
+  ];
 
   return (
     <TooltipProvider>
@@ -58,6 +68,9 @@ export const MessageTiming: FC<{
             )}
           >
             {formatTimingMs(timing.totalStreamTime)}
+            {typeof usage?.totalTokens === "number" && usage.totalTokens > 0 ? (
+              <span className="text-muted-foreground/70 ms-1.5">· {formatTokens(usage.totalTokens)} tok</span>
+            ) : null}
           </button>
         </TooltipTrigger>
         <TooltipContent
@@ -96,6 +109,19 @@ export const MessageTiming: FC<{
                 {timing.totalChunks}
               </span>
             </div>
+            {usage ? (
+              <>
+                <div className="bg-border my-0.5 h-px" />
+                {usageRows.map(([label, value]) =>
+                  typeof value === "number" ? (
+                    <div key={label} className="flex items-center justify-between gap-4">
+                      <span className="text-muted-foreground">{label}</span>
+                      <span className="font-mono tabular-nums">{formatTokens(value)}</span>
+                    </div>
+                  ) : null,
+                )}
+              </>
+            ) : null}
           </div>
         </TooltipContent>
       </Tooltip>
