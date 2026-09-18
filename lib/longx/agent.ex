@@ -995,9 +995,11 @@ defmodule Longx.Agent do
   defp end_turn(%State{} = state, status, error) do
     turn = %{"id" => state.turn_id, "status" => status}
     turn = if error, do: Map.put(turn, "error", %{"message" => error}), else: turn
+    # the asks go first: whoever hears the turn end must not find a request
+    # still waiting (both are casts to the same ThreadState, folded in order)
+    state = Asks.cancel_asks(state)
     emit(state, "turn/completed", %{"turn" => turn})
     Team.report_to_parent(state, status, error)
-    state = Asks.cancel_asks(state)
 
     state = touch(schedule_idle(state))
 
