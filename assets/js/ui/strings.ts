@@ -536,10 +536,11 @@ export const t = {
     save: "保存",
     saved: "已保存",
     publicUrl: "外部访问地址",
-    publicUrlHint: (effective: string) => `第三方登录跳回来时用的地址（回调是 <地址>/callback/…）。留空则用你浏览器连上来的地址；现在生效的是 ${effective}。`,
+    publicUrlHint: (effective: string) =>
+      `第三方登录跳回来时用的地址（回调是 <地址>/callback/…）。留空则用环境变量 LONGX_PUBLIC_URL（容器里在 compose 里设一次），再没有就用你浏览器连上来的地址；现在生效的是 ${effective}。OAuth 提供方只接受 https 或 127.0.0.1 的回调：这里是 https 时登录后直接回到 Longx，否则用 Longx 自己的回环地址、浏览器在别的机器上时要把地址贴回来。`,
     publicUrlSaved: "已保存",
     browserTitle: "内置浏览器（obscura）",
-    browserHint: "web_fetch 工具用它渲染网页。不随 Longx 打包：第一次用到时自动下载到数据目录，也可以在这里先下好。",
+    browserHint: "web_fetch 工具用它渲染网页。不随 Longx 打包：第一次用到时自动下载到数据目录，也可以在这里先下好。容器镜像自带 obscura 时，用环境变量 LONGX_OBSCURA 指向那个二进制，就不会下载。",
     browserUnavailable: "这个平台没有 obscura 的构建，web_fetch 不可用。",
     browserNotInstalled: (version: string) => `尚未下载（obscura ${version}，约 60 MB）。`,
     browserInstalled: (path: string) => `已安装：${path}`,

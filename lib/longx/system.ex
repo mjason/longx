@@ -54,7 +54,16 @@ defmodule Longx.System do
   def public_url do
     case get_setting(@public_url_key) do
       {:ok, %{value: url}} when is_binary(url) and url != "" -> url
-      _ -> LongxWeb.Origins.last() || LongxWeb.Endpoint.url()
+      _ -> env_public_url() || LongxWeb.Origins.last() || LongxWeb.Endpoint.url()
+    end
+  end
+
+  # a container sets the address once, in its environment (a compose file),
+  # instead of in the settings page
+  defp env_public_url do
+    case System.get_env("LONGX_PUBLIC_URL") do
+      url when is_binary(url) and url != "" -> url |> String.trim() |> String.trim_trailing("/")
+      _ -> nil
     end
   end
 

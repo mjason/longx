@@ -59,7 +59,8 @@ loginctl enable-linger "$USER"                               # 服务器：不�
 手动启动就是 `LONGX_DATA_DIR=~/.longx/data PORT=7788 ~/.longx/app/bin/longx start`；`PHX_HOST` 是生成链接用的主机名
 （默认 `localhost`）；`SECRET_KEY_BASE` / `LONGX_CLOAK_KEY` 可以代替数据目录里自动生成的密钥文件。
 `data/cloak_key` 加密 provider 的 API key，**丢了就读不回来**——备份 `~/.longx/data` 时一起备份。
-要 TLS 就在前面放一个反向代理（Caddy / nginx），Longx 自己只说 http。
+要 TLS 就在前面放一个反向代理（Caddy / nginx），Longx 自己只说 http。容器里还有两个变量：`LONGX_PUBLIC_URL`
+是外部访问地址（第三方登录回跳用；设置页里填了以设置页为准），`LONGX_OBSCURA` 指向镜像自带的无头浏览器二进制。
 
 ### 升级
 
@@ -387,6 +388,7 @@ mix precommit                     # 提交前：编译零警告、格式、Go �
 ## 了解更多
 
 * [Ash](https://hexdocs.pm/ash) · [Phoenix](https://hexdocs.pm/phoenix) · [assistant-ui](https://www.assistant-ui.com)
+* 内核的设计模式（现在是什么样、为什么、怎么往里加东西）：`docs/agent-kernel-design.md`
 * 内核设计的来龙去脉：`docs/agent-kernel-plan.md`
 
 MIT 许可，见 `LICENSE`。

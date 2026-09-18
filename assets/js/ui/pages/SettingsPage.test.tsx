@@ -518,6 +518,10 @@ describe("SettingsPage", () => {
     renderAt("/settings/agent");
     const card = await screen.findByTestId("public-url");
     expect(card).toHaveTextContent("http://192.168.2.129:7788");
+    // a container sets it once in its environment instead
+    expect(card).toHaveTextContent("LONGX_PUBLIC_URL");
+    // and ships its own obscura the same way
+    expect(await screen.findByTestId("browser-settings")).toHaveTextContent("LONGX_OBSCURA");
     const input = within(card).getByLabelText("外部访问地址") as HTMLInputElement;
     expect(input.placeholder).toBe("http://192.168.2.129:7788");
     await user.type(input, "https://longx.example");

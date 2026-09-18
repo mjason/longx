@@ -22,4 +22,16 @@ defmodule Longx.System.PublicUrlTest do
     assert {:ok, nil} = System.set_public_url("")
     assert System.public_url() == "http://192.168.2.129:7788"
   end
+
+  test "LONGX_PUBLIC_URL (a container's compose file) stands where the setting is empty, under the setting when both exist" do
+    Elixir.System.put_env("LONGX_PUBLIC_URL", "https://longx.example:8443/")
+    on_exit(fn -> Elixir.System.delete_env("LONGX_PUBLIC_URL") end)
+    LongxWeb.Origins.remember(%URI{scheme: "http", host: "192.168.2.129", port: 7788})
+    # the environment wins over the browser's origin and the endpoint, without a trailing slash
+    assert System.public_url() == "https://longx.example:8443"
+    assert System.public_url_setting() == nil
+    # the saved setting still wins over the environment
+    assert {:ok, _} = System.set_public_url("https://other.example")
+    assert System.public_url() == "https://other.example"
+  end
 end

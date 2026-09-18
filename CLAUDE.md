@@ -333,7 +333,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     Tracker notifies); `Agent.respond/3` (RPC `answer_request`) or a third party hitting
     `GET /callback/:id` (`LongxWeb.CallbackController`, `Longx.Agent.Registry {:ask, id}`)
     hands the answer to the waiting tool. The callback base is `Longx.System.public_url/0`:
-    the `public_url` setting, else the address the last browser connected from
+    the `public_url` setting, else `LONGX_PUBLIC_URL` (a container's compose file), else the address the last browser connected from
     (`LongxWeb.Origins.last/0`, from the socket's `connect_info: [:uri]`), else
     `Endpoint.url()` — never a port opened on the server for a browser elsewhere.
   - **Cards — `Plugs.Present`** (in the shipped pipeline after ViewImage): `present`
