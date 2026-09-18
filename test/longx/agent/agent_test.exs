@@ -215,7 +215,7 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "You are"
 
     assert Enum.map(body["tools"], & &1["name"]) |> Enum.sort() ==
-             ~w(apply_patch create_goal exec_command get_context_remaining get_goal knowledge_read knowledge_search knowledge_write new_context_window update_goal view_image web_fetch web_search)
+             ~w(apply_patch create_goal exec_command get_context_remaining get_goal knowledge_read knowledge_search knowledge_write new_context_window present prompt_user update_goal view_image web_fetch web_search)
 
     refute Map.has_key?(body, "x-longx-custom-tools")
 
@@ -794,6 +794,142 @@ defmodule Longx.AgentTest do
 
     assert reason =~ "quota"
     assert %{"status" => "completed"} = await_turn_end()
+  end
+
+  defmodule Progress do
+    use Longx.Agent.Plug
+
+    tool :scan, "scans the tree" do
+    end
+
+    # a plug's own card, without the model: Context.present mid-tool, and the
+    # result's "present" key as the same thing after
+    def scan(_args, ctx) do
+      :ok = Context.present(ctx, %{"$type" => "Fact", "label" => "scanned", "value" => "3"})
+      {:ok, "3 files", %{"present" => %{"$type" => "Text", "value" => "done"}}}
+    end
+  end
+
+  defmodule PresentingPipeline do
+    use Longx.Agent.Pipeline
+    plug Longx.Agent.Plugs.Present
+    plug Progress
+    plug Longx.Agent.Plugs.Request
+  end
+
+  @tree %{
+    "$type" => "Card",
+    "title" => "Q3",
+    "children" => [%{"$type" => "Fact", "label" => "Bookings", "value" => "1.2M"}]
+  }
+
+  test "present: the model's tree is the item the person sees; the model only reads that it was shown",
+       %{bypass: bypass, dir: dir} do
+    id =
+      agent!("present-#{System.unique_integer([:positive])}", dir, pipeline: PresentingPipeline)
+
+    route!(bypass, fn body ->
+      if List.last(body["input"])["type"] == "function_call_output",
+        do: ResponsesFixture.assistant_message("there it is"),
+        else: ResponsesFixture.function_call("present", nil, @tree)
+    end)
+
+    {:ok, _} = Agent.send(id, "show q3")
+
+    assert %{"namespace" => "longx", "tool" => "present", "arguments" => @tree, "success" => true} =
+             await_tool_item("present")
+
+    assert %{"status" => "completed"} = await_turn_end()
+    last = List.last(collect_requests([]))
+
+    assert Enum.any?(
+             last["input"],
+             &(&1["type"] == "function_call_output" and &1["output"] == "shown to the user")
+           )
+  end
+
+  test "prompt_user: the ask carries the tree; the person's action answers the tool; a dismissal is an error the model reads",
+       %{bypass: bypass, dir: dir} do
+    id = agent!("prompt-#{System.unique_integer([:positive])}", dir, pipeline: PresentingPipeline)
+
+    form = %{
+      "$type" => "Card",
+      "title" => "Which one?",
+      "asForm" => true,
+      "confirm" => %{"label" => "Go", "$action" => %{"type" => "pick"}},
+      "children" => [
+        %{
+          "$type" => "Select",
+          "name" => "env",
+          "options" => [%{"label" => "A", "value" => "a"}, %{"label" => "B", "value" => "b"}]
+        }
+      ]
+    }
+
+    route!(bypass, fn body ->
+      if List.last(body["input"])["type"] == "function_call_output",
+        do: ResponsesFixture.assistant_message("noted"),
+        else: ResponsesFixture.function_call("prompt_user", nil, form)
+    end)
+
+    {:ok, _} = Agent.send(id, "ask me")
+    assert %{"requestId" => rid, "spec" => ^form} = await("longx/action/request")
+
+    assert %{"tool" => "prompt_user", "status" => "inProgress"} =
+             await_tool_item("prompt_user", "item/started")
+
+    action = %{"type" => "pick", "$input" => %{"env" => "b"}}
+    assert :ok = Agent.respond(id, rid, %{"action" => action})
+    assert %{"status" => "completed"} = await_turn_end()
+    last = List.last(collect_requests([]))
+
+    assert Enum.any?(
+             last["input"],
+             &(&1["type"] == "function_call_output" and &1["output"] == Jason.encode!(action))
+           )
+
+    # dismissed: the model is told, and goes on
+    {:ok, _} = Agent.send(id, "again")
+    assert %{"requestId" => rid2} = await("longx/action/request")
+    assert :ok = Agent.respond(id, rid2, %{"cancelled" => true})
+    assert %{"status" => "completed"} = await_turn_end()
+    last = List.last(collect_requests([]))
+
+    assert Enum.any?(
+             last["input"],
+             &(&1["type"] == "function_call_output" and &1["output"] =~ "dismissed")
+           )
+  end
+
+  test "Context.present: a plug's own card shows on the thread and is never in the model's context",
+       %{bypass: bypass, dir: dir} do
+    id =
+      agent!("ctx-present-#{System.unique_integer([:positive])}", dir,
+        pipeline: PresentingPipeline
+      )
+
+    route!(bypass, fn body ->
+      if List.last(body["input"])["type"] == "function_call_output",
+        do: ResponsesFixture.assistant_message("done"),
+        else: ResponsesFixture.function_call("scan", nil, %{})
+    end)
+
+    {:ok, _} = Agent.send(id, "scan")
+
+    # the card pushed mid-tool, then the one from the result — both completed longx.present items
+    assert %{"arguments" => %{"$type" => "Fact", "label" => "scanned"}} =
+             await_tool_item("present")
+
+    assert %{"arguments" => %{"$type" => "Text", "value" => "done"}} = await_tool_item("present")
+    assert %{"status" => "completed"} = await_turn_end()
+
+    items = Transcript.items!(id)
+    assert Enum.count(items, &(&1.kind == :activity)) == 2
+    refute Enum.any?(Transcript.input(items), &is_map_key(&1, "$type"))
+    # the view keeps them, the model never saw one
+    last = List.last(collect_requests([]))
+    refute Enum.any?(last["input"], &is_map_key(&1, "$type"))
+    assert Enum.count(ThreadState.snapshot(id).items, &(&1["tool"] == "present")) == 2
   end
 
   defmodule Login do
@@ -1784,6 +1920,16 @@ defmodule Longx.AgentTest do
       {:thread, _, "item/started", %{"item" => %{"type" => ^type}} = params} -> params
     after
       5_000 -> flunk("no item/started #{type}")
+    end
+  end
+
+  # the next completed (or started) dynamicToolCall item of `tool`
+  defp await_tool_item(tool, method \\ "item/completed", timeout \\ 5_000) do
+    receive do
+      {:thread, _, ^method, %{"item" => %{"type" => "dynamicToolCall", "tool" => ^tool} = item}} ->
+        item
+    after
+      timeout -> flunk("no #{method} of #{tool}")
     end
   end
 

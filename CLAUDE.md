@@ -330,6 +330,29 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     the `public_url` setting, else the address the last browser connected from
     (`LongxWeb.Origins.last/0`, from the socket's `connect_info: [:uri]`), else
     `Endpoint.url()` — never a port opened on the server for a browser elsewhere.
+  - **Cards — `Plugs.Present`** (in the shipped pipeline after ViewImage): `present`
+    draws a generative UI tree from assistant-ui's component vocabulary
+    (`@assistant-ui/react-generative-ui`: Card, Row, Col, Fact, Table, Chart, Markdown,
+    Alert, Badge, ListView, Image, Button, Select, Input, Form, … — `$type` + props +
+    `children`), `prompt_user` draws one and waits for what the person fires in it. **The
+    schema is generated, never written**: `assets/scripts/present-schema.mjs` →
+    `priv/agent/present.json` (`npm run present-schema`; precommit runs `--check`) from
+    the same library the client renders with, so the model can only name what the page
+    draws; `Tool.declare` / the `tool` macro take `schema:` for it. The item the person
+    sees is the call itself (`dynamicToolCall`, namespace `longx`, `arguments` = the
+    tree; toolkit `longx.present` → `PresentTool` over `elements/generative-ui.tsx`'s
+    `GenerativeTree` — the registry's styled library with fenced code through shiki;
+    styles in `css/generative-ui.css`, the registry's `generative-ui-style` item on our
+    tokens); the model reads only "shown to the user". `prompt_user` is an ask with
+    `spec:` (`Context.ask(ctx, spec: tree)` → `longx/action/request` carries `spec`;
+    `ActionTool` draws the tree with a `dispatch` whose action — `$action` plus
+    `$input` or the form's values — answers as `%{"action" => payload}`; the tool returns
+    it as JSON, a cancel as "dismissed"). **A plug pushes a card without the model**:
+    `Context.present(ctx, tree)` (→ `Agent.present/2`, a cast; `Kernel.Calls.present/2`
+    appends a completed `longx.present` item as an `:activity` row, `context?: false`,
+    never model input) or `"present" => tree` in the result's meta. Tests:
+    `plugs_test` (schema, namespace, refusals), `agent_test` (present / prompt_user /
+    Context.present end to end), `toolkit.test` (the tree, the spec form's dispatch).
   - **Web search and reading pages** are two plugs. `Plugs.WebSearch` (`mode:` `:auto` /
     `:hosted` / `:standalone` / `:off`): *hosted* when the model's provider searches on its
     side (`Longx.AI.web_search_mode/1` — OpenAI, 百炼 Qwen 3.5+ / DeepSeek-v4 / glm-5.2; the
@@ -439,7 +462,18 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   `failed` broadcast as `{:browser_install, status}`; the first `Browser.fetch/2`
   auto-installs; RPC `browser_status` / `browser_install` / `browser_settings` /
   `set_browser_private_network`; the card in Settings → Agent 内核 and the status strip
-  draw the bar (`DownloadBar`, shared with the upgrade). `LONGX_OBSCURA` overrides.
+  draw the bar (`DownloadBar`, shared with the upgrade). **Resolution order**
+  (`Runtime.resolve/2` → `{:ok, :env | :system | :downloaded, path}`): `LONGX_OBSCURA`,
+  then an `obscura` on PATH (a Docker image that ships one never downloads; `config
+  :longx, Longx.Browser, system_path:` / `path:` replace PATH — the test config sets it
+  empty so the box's own never leaks into the suite), then the download — the pinned
+  version, else the newest older `<dir>/<version>/` so the browser keeps working right
+  after a Longx upgrade. The status carries `source`, `installed_version` (a download's
+  directory, or `--version` through the shim, 2 s, cached 10 min), `latest` (the pin)
+  and `upgradable`; `install/0` downloads nothing for an env / system binary and, for an
+  older download, installs the pin and `Runtime.prune_old/2` removes the old version
+  dirs — the card's 升级 button. In a container: put `obscura` on PATH in the image or
+  mount `data/obscura`.
   - `Longx.Browser.fetch(url, format: :html | :markdown | :text, timeout:, wait_until:,
     selector:, wait:, max_bytes:)` — **one short-lived `obscura fetch` process per page**
     under `Longx.Shim.run/2` (killed with its tree at the deadline, `oom_score_adj` 600),

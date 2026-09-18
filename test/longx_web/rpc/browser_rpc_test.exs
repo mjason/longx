@@ -34,4 +34,18 @@ defmodule LongxWeb.BrowserRpcTest do
                "input" => %{"enabled" => false}
              })
   end
+
+  test "browser_status says where the browser comes from and whether the download can be upgraded",
+       %{conn: conn} do
+    assert %{"success" => true, "data" => data} =
+             rpc(conn, "browser_status", %{
+               "fields" => ["stage", "source", "installedVersion", "latest", "upgradable", "path"]
+             })
+
+    assert is_binary(data["stage"])
+    assert data["latest"] == Longx.Browser.Runtime.version()
+    assert is_boolean(data["upgradable"])
+    assert data["source"] in [nil, "env", "system", "downloaded"]
+    assert is_nil(data["installedVersion"]) or is_binary(data["installedVersion"])
+  end
 end

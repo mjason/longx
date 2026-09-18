@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, SubagentTool, WebSearchTool, parseDiff, treeOf } from "./toolkit";
+import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, PresentTool, SubagentTool, WebSearchTool, parseDiff, treeOf } from "./toolkit";
 
 const answerAction = vi.fn(async () => {});
 
@@ -101,6 +101,40 @@ describe("FileChangeTool", () => {
   });
 });
 
+describe("PresentTool", () => {
+  test("draws the model's tree from the vocabulary: a card with facts, a table, markdown with a code fence", () => {
+    render(
+      <PresentTool
+        {...part({
+          toolName: "longx.present",
+          status: { type: "complete" },
+          args: {
+            $type: "Card",
+            title: "Q3 收入",
+            children: [
+              { $type: "Row", children: [{ $type: "Fact", label: "Bookings", value: "$1.2M" }, { $type: "Fact", label: "Growth", value: "+18%" }] },
+              { $type: "Table", columns: [{ label: "名称" }, { label: "数量" }], rows: [["a", 1], ["b", 2]] },
+              { $type: "Markdown", value: "```elixir\nIO.puts(1)\n```" },
+            ],
+          },
+          result: { success: true, contentItems: [{ type: "inputText", text: "shown to the user" }] },
+        })}
+      />,
+    );
+    expect(screen.getByText("Q3 收入")).toBeInTheDocument();
+    expect(screen.getByText("Bookings")).toBeInTheDocument();
+    expect(screen.getByText("$1.2M")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "名称" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "b" })).toBeInTheDocument();
+    expect(screen.getByText("IO.puts(1)")).toBeInTheDocument();
+  });
+
+  test("an unknown component draws nothing but does not crash; a streaming call shows a placeholder", () => {
+    render(<PresentTool {...part({ toolName: "longx.present", status: { type: "running" }, args: { $type: "Rocket" } })} />);
+    expect(screen.getByTestId("tool-present")).toBeInTheDocument();
+  });
+});
+
 describe("ActionTool", () => {
   test("a tool's ask: the link, the fields, answered through the runtime's extras; 取消 answers too", () => {
     answerAction.mockClear();
@@ -130,6 +164,58 @@ describe("ActionTool", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "已完成" }));
     expect(answerAction).toHaveBeenCalledWith("4", { done: true });
+  });
+
+  test("an ask that carries a generative tree draws it; what the person fires answers as the action", () => {
+    answerAction.mockClear();
+    render(
+      <ActionAnswerContext.Provider value={answerAction}>
+        <ActionTool
+          {...part({
+            toolName: "action",
+            toolCallId: "call_5:ask",
+            status: { type: "requires-action", reason: "interrupt" },
+            args: {
+              requestId: "5",
+              title: "选一个环境",
+              text: "",
+              url: null,
+              fields: [],
+              spec: {
+                $type: "Card",
+                title: "选一个环境",
+                asForm: true,
+                confirm: { label: "就这个", $action: { type: "pick" } },
+                cancel: { label: "算了", $action: { type: "dismiss" } },
+                children: [{ $type: "Select", name: "env", options: [{ label: "预发", value: "staging" }, { label: "生产", value: "prod" }] }],
+              },
+            },
+          })}
+        />
+      </ActionAnswerContext.Provider>,
+    );
+    // the vocabulary's form, not the elicitation fields
+    expect(screen.queryByRole("button", { name: "已完成" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "prod" } });
+    fireEvent.click(screen.getByRole("button", { name: "就这个" }));
+    expect(answerAction).toHaveBeenCalledWith("5", { action: { type: "pick", $input: { env: "prod" } } });
+
+    // a cancel is the person's answer too — the model reads that they dismissed it
+    answerAction.mockClear();
+    render(
+      <ActionAnswerContext.Provider value={answerAction}>
+        <ActionTool
+          {...part({
+            toolName: "action",
+            toolCallId: "call_6:ask",
+            status: { type: "requires-action", reason: "interrupt" },
+            args: { requestId: "6", title: "", text: "", url: null, fields: [], spec: { $type: "Button", label: "继续", $action: { type: "go" } } },
+          })}
+        />
+      </ActionAnswerContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "继续" }));
+    expect(answerAction).toHaveBeenCalledWith("6", { action: { type: "go" } });
   });
 });
 

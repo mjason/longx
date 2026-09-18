@@ -30,8 +30,13 @@ defmodule Longx.System.Status do
     total: [type: :integer],
     error: [type: :string],
     version: [type: :string, allow_nil?: false],
+    latest: [type: :string, allow_nil?: false],
     target: [type: :string],
-    path: [type: :string]
+    path: [type: :string],
+    # where the binary in use comes from: env | system | downloaded (nil: none)
+    source: [type: :string],
+    installed_version: [type: :string],
+    upgradable: [type: :boolean, allow_nil?: false]
   ]
 
   @upgrade_fields [
@@ -384,7 +389,7 @@ defmodule Longx.System.Status do
 
   defp browser_status do
     st = Longx.Browser.Installer.status()
-    %{st | stage: Atom.to_string(st.stage)}
+    %{st | stage: Atom.to_string(st.stage), source: st.source && Atom.to_string(st.source)}
   end
 
   defp browser_settings do

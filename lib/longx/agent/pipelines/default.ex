@@ -2,7 +2,7 @@ defmodule Longx.Agent.Pipelines.Default do
   @moduledoc """
   The shipped agent description — the base every layer builds on
   (`Longx.Agent.Definition.Loader`): the environment, the base prompt, codex's tool
-  set (`exec_command`, `apply_patch`, `view_image`), the knowledge, the web,
+  set (`exec_command`, `apply_patch`, `view_image`), the cards (`present`), the knowledge, the web,
   the team and the request. In
   the same format as a project's `.longx/agent.exs`, only compiled in.
   """
@@ -23,6 +23,7 @@ defmodule Longx.Agent.Pipelines.Default do
         plug Longx.Agent.Plugs.Shell
         plug Longx.Agent.Plugs.Patch
         plug Longx.Agent.Plugs.ViewImage
+        plug Longx.Agent.Plugs.Present
         plug Longx.Agent.Plugs.Knowledge
         plug Longx.Agent.Plugs.WebSearch
         plug Longx.Agent.Plugs.Browser

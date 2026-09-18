@@ -427,6 +427,35 @@ describe("SettingsPage", () => {
     }
   });
 
+  test("agent kernel: an obscura on the machine is used as it is (no download offered); an older download offers an upgrade", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    vi.mocked(browserStatus).mockResolvedValue(
+      ok({ ...browserIdle, stage: "installed", source: "system", path: "/usr/local/bin/obscura", installedVersion: "0.2.1", upgradable: false }) as never,
+    );
+    try {
+      const { unmount } = renderAt("/settings/agent");
+      const card = await screen.findByTestId("browser-settings");
+      expect(await within(card).findByText(/系统已安装/)).toBeInTheDocument();
+      expect(card).toHaveTextContent("/usr/local/bin/obscura");
+      expect(card).toHaveTextContent("0.2.1");
+      expect(within(card).queryByRole("button", { name: /下载|升级|重试/ })).not.toBeInTheDocument();
+      unmount();
+
+      // a download behind the pin: the card names the new version and offers the upgrade
+      vi.mocked(browserStatus).mockResolvedValue(
+        ok({ ...browserIdle, stage: "installed", source: "downloaded", path: "/data/obscura/0.2.1/x86_64-linux/obscura", installedVersion: "0.2.1", latest: "0.2.2", upgradable: true }) as never,
+      );
+      renderAt("/settings/agent");
+      const card2 = await screen.findByTestId("browser-settings");
+      expect(await within(card2).findByText(/可升级到 0\.2\.2/)).toBeInTheDocument();
+      await user.click(within(card2).getByRole("button", { name: /升级/ }));
+      await waitFor(() => expect(browserInstall).toHaveBeenCalled());
+    } finally {
+      vi.mocked(browserStatus).mockResolvedValue(ok({ ...browserIdle, stage: "installed", path: "/data/obscura/0.2.2/x86_64-linux/obscura" }) as never);
+    }
+  });
+
   test("knowledge: the global docs are listed and edited, a shipped doc opens read-only, a new doc gets a template", async () => {
     setViewport(1280);
     const user = userEvent.setup();

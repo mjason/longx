@@ -44,14 +44,18 @@ defmodule Longx.Agent.Tool do
   @type param_type ::
           :string | :integer | :number | :boolean | {:enum, [String.t()]} | {:array, param_type}
 
-  @doc "Builds a tool from a `tool` declaration: the params become the JSON schema."
+  @doc """
+  Builds a tool from a `tool` declaration: the params become the JSON
+  schema — or `schema:` is one already (a vocabulary generated elsewhere,
+  like `present`'s).
+  """
   @spec declare(module, atom, String.t(), [param], keyword) :: t
   def declare(module, name, description, params, opts) do
     %__MODULE__{
       name: Atom.to_string(name),
       namespace: Keyword.get(opts, :namespace, namespace_of(module)),
       description: description,
-      schema: schema(params),
+      schema: Keyword.get(opts, :schema) || schema(params),
       fun: {module, name},
       show: Keyword.get(opts, :show, :tool),
       timeout: Keyword.get(opts, :timeout, 60_000),
