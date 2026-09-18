@@ -1,0 +1,4 @@
+# the image is built from a release tarball: nothing of the source tree goes in
+*
+!Dockerfile
+!longx-*-linux-*.tar.gz

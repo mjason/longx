@@ -101,6 +101,39 @@ sh install.sh --rollback        # 或 curl -fsSL …/install.sh | sh -s -- --rol
 发布由 `.github/workflows/release.yml` 完成：打 `v*` 标签就在 x86_64 和 arm64 的 runner 上各自原生构建并挂到
 GitHub Release。
 
+## Docker
+
+每个版本同时发布镜像 `ghcr.io/mjason/longx:<版本>`（`latest` 指向最新版；linux x86_64 和 arm64 多架构）。
+仓库里的 `docker-compose.yml` 可以直接用：
+
+```sh
+mkdir longx && cd longx
+curl -fsSLO https://raw.githubusercontent.com/mjason/longx/main/docker-compose.yml
+mkdir workspace          # 你的项目放这里（容器里是 /workspace）
+docker compose up -d     # 打开 http://<主机>:7788
+docker compose pull && docker compose up -d   # 升级
+```
+
+三处数据持久化：`longx-data` 卷（数据库、首次启动生成的密钥、全局知识、附件、按需下载的浏览器）、
+`longx-home` 卷（agent 的家目录：它用 `uv` / `pip` / `npm -g` 装的东西、`~/.local/bin`、git 配置、SSH 密钥——
+容器重建后都还在）、以及挂载进 `/workspace` 的项目目录。镜像里预装了 git、ripgrep、fd、jq、tree、bat、fzf、
+Python 3（带 `uv` 和 pip）、Node.js 22（npm）和 C 编译工具链，agent 以 `longx` 用户（uid 1000）运行，
+不是 root：bind 挂载的目录要能被 uid 1000 写。要装系统包，做一个派生镜像：
+
+```dockerfile
+FROM ghcr.io/mjason/longx:latest
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends golang && rm -rf /var/lib/apt/lists/*
+USER longx
+```
+
+环境变量：`LONGX_PUBLIC_URL`（外部访问地址，第三方登录回跳用；https 的话登录直接回到 Longx）、`PHX_HOST`、
+`SECRET_KEY_BASE` / `LONGX_CLOAK_KEY`（不设则生成到 /data）、`LONGX_OBSCURA`（派生镜像自带浏览器时指过去）。
+容器里的「版本与更新」页只检查版本，升级就是换镜像。GPU：compose 里有一段注释掉的 NVIDIA 配置。
+
+自己构建镜像：`docker build --build-arg TARBALL=longx-<版本>-linux-x86_64.tar.gz -t longx .`（tarball 是 Releases 里的，
+镜像不编译任何东西，基于 ubuntu:24.04，和构建 tarball 的 runner 同一套 glibc）。
+
 ## 系统依赖
 
 agent 靠一组命令行工具干活，Longx **只检测、只提醒，不代装**：`rg`（ripgrep）、`fd`（Debian 上叫 `fdfind`）、`fzf`、

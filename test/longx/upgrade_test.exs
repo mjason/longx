@@ -262,6 +262,18 @@ defmodule Longx.UpgradeTest do
       assert File.read!(Path.join(app, "bin/longx")) =~ "longx 0.0.1"
     end
 
+    test "inside a container (LONGX_CONTAINER, set by the image) nothing is installable: the upgrade is a new image; the status says so",
+         %{app: app} do
+      Elixir.System.put_env("LONGX_CONTAINER", "1")
+      on_exit(fn -> Elixir.System.delete_env("LONGX_CONTAINER") end)
+      # the app dir is there, so only the container flag holds this back
+      assert File.regular?(Path.join(app, "bin/longx"))
+      refute Upgrade.installed?()
+      assert %{installed: false, container: true} = Upgrade.status()
+      assert {:error, message} = Upgrade.apply()
+      assert message =~ "镜像"
+    end
+
     test "without a way to restart the swap still happens and the status says so", %{
       bypass: bypass,
       root: root,

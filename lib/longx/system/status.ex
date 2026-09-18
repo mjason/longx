@@ -42,6 +42,8 @@ defmodule Longx.System.Status do
   @upgrade_fields [
     current: [type: :string, allow_nil?: false],
     installed: [type: :boolean, allow_nil?: false],
+    # the Docker image: an upgrade is a new image, the page says so
+    container: [type: :boolean, allow_nil?: false],
     latest: [type: :string],
     available: [type: :boolean, allow_nil?: false],
     notes_url: [type: :string],
@@ -402,6 +404,7 @@ defmodule Longx.System.Status do
     %{
       current: Longx.Upgrade.current_version(),
       installed: st.installed,
+      container: st.container,
       latest: check[:latest],
       available: check[:available] || false,
       notes_url: check[:notes_url],

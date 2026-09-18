@@ -1,0 +1,46 @@
+# Longx in a container.
+#
+#   docker compose up -d           # then open http://<host>:7788
+#   docker compose pull && docker compose up -d   # upgrade
+#
+# Three places persist: the data volume (database, secrets, knowledge,
+# attachments, the downloaded browser), the agent's home (what it installs
+# with uv / npm -g / pip, git config, SSH keys) and your projects, mounted
+# under /workspace — create a project in Longx by picking a directory there.
+services:
+  longx:
+    image: ghcr.io/mjason/longx:latest
+    restart: unless-stopped
+    ports:
+      - "7788:7788"
+    environment:
+      # the address the browser reaches Longx by — OAuth2 logins send the
+      # browser back to <LONGX_PUBLIC_URL>/callback/…; an https one (a TLS
+      # proxy in front) makes logins land straight on Longx, a plain-http one
+      # falls back to a loopback redirect the person pastes back
+      LONGX_PUBLIC_URL: http://localhost:7788
+      # PHX_HOST: longx.example.com
+      # fixed secrets instead of the ones generated into /data on first boot:
+      # SECRET_KEY_BASE: …
+      # LONGX_CLOAK_KEY: …
+      # a headless browser shipped in a derived image instead of the download:
+      # LONGX_OBSCURA: /usr/local/bin/obscura
+    volumes:
+      - longx-data:/data
+      - longx-home:/home/longx
+      # your projects (the directory the agent works in); add more lines for
+      # more places. A bind mount is owned by your host user: uid 1000 inside
+      # the container must be able to write it
+      - ./workspace:/workspace
+    # for a GPU (an NVIDIA box with the container toolkit installed):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  longx-data:
+  longx-home:

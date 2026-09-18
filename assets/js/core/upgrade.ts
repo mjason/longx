@@ -28,6 +28,8 @@ export type UpgradeStage =
 export type UpgradeStatus = {
   current: string;
   installed: boolean;
+  // the Docker image: an upgrade is a new image, not a swap here
+  container: boolean;
   latest: string | null;
   available: boolean;
   notesUrl: string | null;
@@ -44,6 +46,7 @@ export type UpgradeStatus = {
 export const upgradeFields = [
   "current",
   "installed",
+  "container",
   "latest",
   "available",
   "notesUrl",

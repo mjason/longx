@@ -525,6 +525,13 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(section).toHaveTextContent("依赖齐全"));
   });
 
+  test("update: inside the Docker image the page says the upgrade is a new image", async () => {
+    setViewport(1280);
+    vi.mocked(upgradeStatus).mockResolvedValueOnce(ok({ ...upgradeIdle, installed: false, container: true }) as never);
+    renderAt("/settings/update");
+    expect(await screen.findByText(/docker compose pull/)).toBeInTheDocument();
+  });
+
   test("agent kernel: the outside address a login returns to is shown with what is in force, and saved", async () => {
     setViewport(1280);
     const user = userEvent.setup();

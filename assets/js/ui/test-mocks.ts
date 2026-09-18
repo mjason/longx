@@ -135,6 +135,7 @@ export const browserIdle = {
 export const upgradeIdle = {
   current: "0.1.0",
   installed: true,
+  container: false,
   latest: null as string | null,
   available: false,
   notesUrl: null as string | null,

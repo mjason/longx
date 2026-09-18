@@ -77,7 +77,10 @@ defmodule Longx.Upgrade do
   def install(env \\ System.get_env()) do
     app = config(:app_dir) || env["RELEASE_ROOT"]
 
-    if is_binary(app) and app != "" and File.regular?(Path.join(app, "bin/longx")) do
+    # a container (the image sets LONGX_CONTAINER): the program directory is
+    # the image's, an upgrade is a new image — never a swap in place
+    if not container?(env) and is_binary(app) and app != "" and
+         File.regular?(Path.join(app, "bin/longx")) do
       %{
         app: Path.expand(app),
         home: Path.dirname(Path.expand(app)),
@@ -87,6 +90,10 @@ defmodule Longx.Upgrade do
   end
 
   def installed?, do: install() != nil
+
+  @doc "Whether this Longx runs from the Docker image (`LONGX_CONTAINER` in its environment)."
+  @spec container?(map) :: boolean
+  def container?(env \\ System.get_env()), do: env["LONGX_CONTAINER"] not in [nil, ""]
 
   # ---- the GitHub token ---------------------------------------------------
 
@@ -215,7 +222,11 @@ defmodule Longx.Upgrade do
   @doc "Everything the settings page shows: version, the last check, the stage of an upgrade."
   def status do
     GenServer.call(__MODULE__, :status)
-    |> Map.merge(%{installed: installed?(), github_token?: github_token?()})
+    |> Map.merge(%{
+      installed: installed?(),
+      container: container?(),
+      github_token?: github_token?()
+    })
   end
 
   @doc "Forget the cached check and the stage (tests)."
@@ -239,9 +250,10 @@ defmodule Longx.Upgrade do
   end
 
   defp ensure_install do
-    case install() do
-      nil -> {:error, "只有用 install.sh 安装的版本能在这里升级（开发环境请用 git）"}
-      install -> {:ok, install}
+    case {install(), container?()} do
+      {nil, true} -> {:error, "容器里的 Longx 用新镜像升级（docker compose pull && docker compose up -d）"}
+      {nil, false} -> {:error, "只有用 install.sh 安装的版本能在这里升级（开发环境请用 git）"}
+      {install, _} -> {:ok, install}
     end
   end
 

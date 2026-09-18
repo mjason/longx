@@ -10,9 +10,9 @@ defmodule Longx.Application do
     children = [
       LongxWeb.Telemetry,
       Longx.Vault,
+      # the migrations first, on one connection of their own (Longx.Migrator says why)
+      {Longx.Migrator, skip: skip_migrations?()},
       Longx.Repo,
-      {Ecto.Migrator,
-       repos: Application.fetch_env!(:longx, :ecto_repos), skip: skip_migrations?()},
       # the search provider row the settings page edits (a release seeds nothing)
       Supervisor.child_spec({Task, fn -> {:ok, _} = Longx.AI.ensure_search_provider() end},
         id: :search_provider_row,

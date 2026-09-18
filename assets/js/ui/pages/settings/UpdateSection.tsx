@@ -79,7 +79,7 @@ function Version() {
           <RefreshCw className={`size-4 ${actions.check.isPending ? "animate-spin" : ""}`} /> {actions.check.isPending ? s.checking : s.check}
         </Button>
       </div>
-      {!st.installed ? <p className="text-muted-foreground text-xs">{s.notInstalled}</p> : null}
+      {!st.installed ? <p className="text-muted-foreground text-xs">{st.container ? s.inContainer : s.notInstalled}</p> : null}
       {busy && st.stage === "downloading" && st.progress ? (
         <DownloadBar label={s.stages[st.stage] ?? st.stage} received={st.progress.received} total={st.progress.total} />
       ) : busy ? (

@@ -802,6 +802,25 @@ Key patterns:
 
 ## Releases
 
+**Docker.** `Dockerfile` builds the runtime image from a release tarball on `ubuntu:24.04`
+(the runners' glibc; nothing compiled) with git, ripgrep, fd, jq, tree, bat, fzf, Python 3
++ uv + pip, Node 22 + npm and build-essential; the agent runs as `longx` (uid 1000), `tini`
+is PID 1, `/data` and `/home/longx` are volumes (data; what the agent installs at user
+level — `npm_config_prefix` and `UV_TOOL_BIN_DIR` point into the home), `/workspace` the
+projects, `HEALTHCHECK` on `GET /health` (`LongxWeb.HealthController`, plain text, the
+version in `x-longx-version`). `LONGX_CONTAINER=1` makes `Longx.Upgrade.install/1` nil and
+`status.container` true: the update page says an upgrade is a new image. `release.yml`
+pushes `ghcr.io/<repo>:<version>-<arch>` per arch and an `image` job stitches
+`<version>` + `latest` with `docker buildx imagetools create`. `docker-compose.yml` is the
+shipped setup (`LONGX_PUBLIC_URL`, the three mounts, an NVIDIA block commented out).
+**Boot migrations run on one connection** — `Longx.Migrator`, a child before `Longx.Repo`,
+starts a dynamic repo instance (`Longx.Migrator.Repo`, `pool_size: 1`, a plain pool) and
+stops it: SQLite checks a `DROP COLUMN` against the connection's cached schema at parse
+time, and on the app's pool the `drop gpu_passthrough` migration landed on a connection
+that had never seen the add — 0.2.4 could not boot on an empty data dir
+(`migrator_test`: a fresh database migrates from nothing).
+
+
 `MIX_ENV=prod mix assets.build && MIX_ENV=prod mix release` builds a self-contained
 release (Erlang runtime, the Go shim, the built SPA); `mix.exs`'s release steps `trim_priv/1`
 (drops `priv/plts`) and `prune_old_versions/1` (removes any other `lib/longx-<version>/` —

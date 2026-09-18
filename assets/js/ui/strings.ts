@@ -496,6 +496,7 @@ export const t = {
     version: (v: string) => `Longx ${v}`,
     hint: "从 GitHub Releases（mjason/longx）检查新版本，点一下就下载、校验、替换程序目录并重启服务。数据目录不动，升级前会先把数据库快照存到 backups。",
     notInstalled: "这个实例不是用 install.sh 安装的（没有 RELEASE_ROOT），只能检查版本，不能在这里升级。",
+    inContainer: "这个实例跑在 Docker 镜像里：升级就是换新镜像——docker compose pull && docker compose up -d；数据在 /data 卷里，不动。",
     neverChecked: "还没检查过",
     checkedAt: (at: string) => `${at}检查过`,
     upToDate: "已经是最新版本",

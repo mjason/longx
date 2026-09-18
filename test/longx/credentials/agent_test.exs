@@ -11,7 +11,7 @@ defmodule Longx.Credentials.AgentTest do
   alias Longx.Agent.ThreadState
   alias Longx.AI
   alias Longx.Credentials
-  alias Longx.Credentials.{Credential, OAuth}
+  alias Longx.Credentials.Credential
   alias Longx.Test.ResponsesFixture
 
   defmodule Pipeline do
