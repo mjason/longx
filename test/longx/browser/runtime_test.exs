@@ -145,24 +145,28 @@ defmodule Longx.Browser.RuntimeTest do
       %{root: root, dir: Path.join(root, "install")}
     end
 
-    test "an obscura on PATH is used before any download; a download is used when PATH has none",
+    test "an obscura on PATH is ignored: only LONGX_OBSCURA or our own download runs (a version we pinned)",
          ctx do
       bin = Path.join(ctx.root, "bin")
-      system = fake_binary(Path.join(bin, "obscura"))
-      assert {:ok, :system, ^system} = Runtime.resolve("x86_64-linux", dir: ctx.dir, path: bin)
-      assert {:ok, ^system} = Runtime.executable("x86_64-linux", dir: ctx.dir, path: bin)
+      _system = fake_binary(Path.join(bin, "obscura"))
+      previous = System.get_env("PATH")
+      System.put_env("PATH", bin <> ":" <> (previous || ""))
 
-      # nothing on PATH, nothing downloaded: not installed
-      assert {:error, :not_installed} =
-               Runtime.resolve("x86_64-linux", dir: ctx.dir, path: Path.join(ctx.root, "empty"))
+      on_exit(fn ->
+        if previous, do: System.put_env("PATH", previous), else: System.delete_env("PATH")
+      end)
+
+      # the test config blanks the old PATH lookup; name the directory outright too
+      browser = Application.get_env(:longx, Longx.Browser, [])
+      Application.put_env(:longx, Longx.Browser, Keyword.put(browser, :system_path, bin))
+      on_exit(fn -> Application.put_env(:longx, Longx.Browser, browser) end)
+
+      # nothing downloaded: not installed, whatever PATH holds
+      assert {:error, :not_installed} = Runtime.resolve("x86_64-linux", dir: ctx.dir)
 
       downloaded = fake_binary(Path.join([ctx.dir, Runtime.version(), "x86_64-linux", "obscura"]))
-
-      assert {:ok, :downloaded, ^downloaded} =
-               Runtime.resolve("x86_64-linux", dir: ctx.dir, path: Path.join(ctx.root, "empty"))
-
-      # PATH still wins over the download
-      assert {:ok, :system, ^system} = Runtime.resolve("x86_64-linux", dir: ctx.dir, path: bin)
+      assert {:ok, :downloaded, ^downloaded} = Runtime.resolve("x86_64-linux", dir: ctx.dir)
+      assert {:ok, ^downloaded} = Runtime.executable("x86_64-linux", dir: ctx.dir)
     end
 
     test "the newest older download stands in when the pinned version is not there yet (after a Longx upgrade)",

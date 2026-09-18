@@ -24,9 +24,10 @@ Tavily 一行，不读环境变量）；`:live` 测试自己读 `DEEPSEEK_API_KE
 
 [Releases](https://github.com/mjason/longx/releases) 里的 `longx-<版本>-linux-<架构>.tar.gz` 是完整包：
 Erlang 运行时、Go 中间件和构建好的前端都在里面，**不需要**装 Erlang / Elixir / Node / Go。
-无头浏览器（obscura）不在包里：先找 PATH 上的 `obscura`（有就直接用，不下载——Docker 镜像里装一个即可），
-没有才在 agent 第一次调用 `web_fetch` 时自动下载到 `$LONGX_DATA_DIR/obscura`（设置 → Agent 内核 里有进度条，
-也可以先手动下载；Longx 升级后旧版本继续可用，卡片上一键升级）。容器里也可以直接挂载 `data/obscura`。
+无头浏览器（obscura）不在包里：agent 第一次调用 `web_fetch` 时自动下载我们钉死并校验过的版本到
+`$LONGX_DATA_DIR/obscura`（设置 → Agent 内核 里有进度条，也可以先手动下载；Longx 升级后旧版本继续可用，
+卡片上一键升级）。系统里装的 `obscura` 不会被使用——只跑我们校验过的版本；容器里挂载 `data/obscura`，
+或者用 `LONGX_OBSCURA` 指向镜像里自带的二进制。
 
 **要求**：Linux x86_64 或 arm64，glibc ≥ 2.39（Ubuntu 24.04、Debian 13 及更新的发行版；包在 `ubuntu-24.04`
 runner 上构建）。机器上要有 `git`（项目的轮次书签、全局知识的版本控制都靠它；没有也能跑，只是这些功能退化）。
@@ -270,9 +271,10 @@ html（图表、报表、可交互页面，沙箱 iframe，不同源）或一个
 搜索行；其他模型给一个 `web_search` 函数走 Tavily。`Browser` 给所有模型一个 `web_fetch`，用 obscura 渲染网页转
 markdown——provider 自己会搜也读不了你指定的 URL。会话的联网开关只管搜索。
 
-obscura（`h4ckf0r0day/obscura`，Rust + V8）**先找系统的，再按需下载**：`LONGX_OBSCURA` → PATH 上的 `obscura`
-（容器镜像里装一个就永远不下载）→ 下载到数据目录（开发 `data/obscura`，生产 `$LONGX_DATA_DIR/obscura`，
-按 `<版本>/<平台>/` 存放；Longx 升级后旧下载继续可用，设置里显示「可升级」一键换成新版并清掉旧的）。第一次
+obscura（`h4ckf0r0day/obscura`，Rust + V8）**只跑我们钉死的版本，按需下载**：`LONGX_OBSCURA`（容器镜像自带时指过去）
+→ 下载到数据目录（开发 `data/obscura`，生产 `$LONGX_DATA_DIR/obscura`，按 `<版本>/<平台>/` 存放；
+Longx 升级后旧下载继续可用，设置里显示「可升级」一键换成新版并清掉旧的）。PATH 上的 `obscura` 不会被拿来用，
+没有版本校验的二进制不进内核。第一次
 `web_fetch` 触发下载，设置 → Agent 内核 的卡片和状态栏都有进度条，下载中工具会告诉模型「正在下载 N%」。
 一页一个进程，到期连进程树一起杀；许可池限并发；默认拒绝内网地址（设置里可以放开）。
 

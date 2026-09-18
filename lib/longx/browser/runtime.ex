@@ -85,16 +85,14 @@ defmodule Longx.Browser.Runtime do
 
   ## Resolution
 
-  @type source :: :env | :system | :downloaded
+  @type source :: :env | :downloaded
 
   @doc """
-  What runs, in this order: `LONGX_OBSCURA` (`:env`), an `obscura` on PATH
-  (`:system` — a container image that ships one never downloads), the
-  download (`:downloaded`: the pinned version, else the newest older one so
-  the browser keeps working right after a Longx upgrade). `path:` names the
-  directories to search instead of PATH (`config :longx, Longx.Browser,
-  system_path:` does the same; the test config sets it empty so the box's
-  own obscura never leaks into the suite).
+  What runs, in this order: `LONGX_OBSCURA` (`:env` — a container image
+  that ships its own binary points here), then our download (`:downloaded`:
+  the pinned version, else the newest older one so the browser keeps working
+  right after a Longx upgrade). An `obscura` on PATH is never picked up: we
+  only run a version we pinned and checked.
   """
   @spec resolve(target | nil, keyword) :: {:ok, source, Path.t()} | {:error, :not_installed}
   def resolve(target \\ current_target(), opts \\ []) do
@@ -102,7 +100,6 @@ defmodule Longx.Browser.Runtime do
 
     cond do
       is_binary(env) and env != "" -> {:ok, :env, env}
-      (path = system_executable(opts)) != nil -> {:ok, :system, path}
       is_nil(target) -> {:error, :not_installed}
       (path = downloaded(target, opts)) != nil -> {:ok, :downloaded, path}
       true -> {:error, :not_installed}
@@ -116,20 +113,6 @@ defmodule Longx.Browser.Runtime do
       {:ok, _source, path} -> {:ok, path}
       {:error, _} = error -> error
     end
-  end
-
-  @doc "An `obscura` on PATH (or on `path:` / `system_path`), nil when none."
-  @spec system_executable(keyword) :: Path.t() | nil
-  def system_executable(opts \\ []) do
-    name = Path.basename(executable_path(".", Platform.current()))
-
-    opts
-    |> Keyword.get(:path)
-    |> Kernel.||(config(:system_path))
-    |> Kernel.||(System.get_env("PATH") || "")
-    |> String.split(path_separator(), trim: true)
-    |> Enum.map(&Path.join(&1, name))
-    |> Enum.find(&executable_file?/1)
   end
 
   # the pinned version when installed, else the newest older download
@@ -235,24 +218,6 @@ defmodule Longx.Browser.Runtime do
       _ -> nil
     end
   end
-
-  # a regular file that may be executed (any exec bit; Windows has none to check)
-  defp executable_file?(path) do
-    case {File.stat(path), Platform.current()} do
-      {{:ok, %File.Stat{type: :regular}}, {:windows, _}} -> true
-      {{:ok, %File.Stat{type: :regular, mode: mode}}, _} -> Bitwise.band(mode, 0o111) != 0
-      _ -> false
-    end
-  end
-
-  defp path_separator do
-    case Platform.current() do
-      {:windows, _} -> ";"
-      _ -> ":"
-    end
-  end
-
-  defp config(key), do: :longx |> Application.get_env(Longx.Browser, []) |> Keyword.get(key)
 
   @doc """
   Downloads (or copies), verifies and unpacks the archive for `target`; see

@@ -106,13 +106,19 @@ defmodule Longx.Browser.InstallerTest do
     assert :verifying in stages and :extracting in stages
   end
 
-  test "an obscura on PATH is used as it is: the status names it, install/0 downloads nothing",
+  test "an obscura on PATH changes nothing: the status is idle until our own download is there",
        %{root: root} do
     bin = Path.join(root, "bin")
     system = Path.join(bin, "obscura")
     File.mkdir_p!(bin)
     File.cp!(Path.expand("../../support/fake_obscura.sh", __DIR__), system)
     File.chmod!(system, 0o755)
+    previous = System.get_env("PATH")
+    System.put_env("PATH", bin <> ":" <> (previous || ""))
+
+    on_exit(fn ->
+      if previous, do: System.put_env("PATH", previous), else: System.delete_env("PATH")
+    end)
 
     Application.put_env(
       :longx,
@@ -120,21 +126,10 @@ defmodule Longx.Browser.InstallerTest do
       Keyword.put(Application.get_env(:longx, Longx.Browser), :system_path, bin)
     )
 
-    assert %{
-             stage: :installed,
-             source: :system,
-             path: ^system,
-             upgradable: false,
-             latest: "0.2.2"
-           } =
-             status = Installer.status()
+    assert %{stage: :idle, source: nil, path: nil, upgradable: false, latest: "0.2.2"} =
+             Installer.status()
 
-    assert is_binary(status.installed_version)
-    # nothing to download (Bypass would fail the test on an unexpected request)
-    assert :ok = Installer.install()
-    assert %{stage: :installed, source: :system} = Installer.status()
-    assert Browser.available?()
-    refute_receive {:browser_install, %{stage: :downloading}}, 200
+    refute Browser.available?()
   end
 
   test "an older download is upgradable: install/0 brings the pinned version and removes the old one",

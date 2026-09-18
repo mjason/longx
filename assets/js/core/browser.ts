@@ -28,7 +28,7 @@ export type BrowserStatus = {
   upgradable: boolean;
 };
 
-export type BrowserSource = "env" | "system" | "downloaded";
+export type BrowserSource = "env" | "downloaded";
 
 export const browserFields = [
   "stage",

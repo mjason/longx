@@ -33,7 +33,7 @@ defmodule Longx.System.Status do
     latest: [type: :string, allow_nil?: false],
     target: [type: :string],
     path: [type: :string],
-    # where the binary in use comes from: env | system | downloaded (nil: none)
+    # where the binary in use comes from: env | downloaded (nil: none)
     source: [type: :string],
     installed_version: [type: :string],
     upgradable: [type: :boolean, allow_nil?: false]

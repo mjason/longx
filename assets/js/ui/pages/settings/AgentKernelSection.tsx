@@ -72,9 +72,6 @@ function BrowserCard() {
             <p className="text-warning text-xs">{s.browserUnavailable}</p>
           ) : browserBusy(st.stage) ? (
             <DownloadBar label={s.browserStages[st.stage] ?? st.stage} received={st.received} total={st.total} />
-          ) : installed && st.source === "system" ? (
-            // the machine's own obscura (a container image that ships one): nothing to download
-            <p className="text-muted-foreground font-mono text-xs break-all">{s.browserSystem(st.path ?? "", st.installedVersion)}</p>
           ) : installed && st.source === "env" ? (
             <p className="text-muted-foreground font-mono text-xs break-all">{s.browserEnv(st.path ?? "", st.installedVersion)}</p>
           ) : installed && st.upgradable ? (

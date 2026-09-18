@@ -127,7 +127,7 @@ export const browserIdle = {
   latest: "0.2.2",
   target: "x86_64-linux",
   path: null as string | null,
-  source: null as "env" | "system" | "downloaded" | null,
+  source: null as "env" | "downloaded" | null,
   installedVersion: null as string | null,
   upgradable: false,
 };

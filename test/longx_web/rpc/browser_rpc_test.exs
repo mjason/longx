@@ -45,7 +45,7 @@ defmodule LongxWeb.BrowserRpcTest do
     assert is_binary(data["stage"])
     assert data["latest"] == Longx.Browser.Runtime.version()
     assert is_boolean(data["upgradable"])
-    assert data["source"] in [nil, "env", "system", "downloaded"]
+    assert data["source"] in [nil, "env", "downloaded"]
     assert is_nil(data["installedVersion"]) or is_binary(data["installedVersion"])
   end
 end

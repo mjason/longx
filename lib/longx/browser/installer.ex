@@ -78,10 +78,10 @@ defmodule Longx.Browser.Installer do
         {:reply, {:error, :unsupported_platform}, state}
 
       target ->
-        # nothing to download when the binary is the machine's (LONGX_OBSCURA,
-        # PATH) or the pinned version is already here; an older download is
-        # replaced by the pinned one — the upgrade
-        if match?({:ok, s, _} when s in [:env, :system], Runtime.resolve(target)) or
+        # nothing to download when the binary is the person's own (LONGX_OBSCURA)
+        # or the pinned version is already here; an older download is replaced
+        # by the pinned one — the upgrade
+        if match?({:ok, :env, _}, Runtime.resolve(target)) or
              Runtime.installed?(target) do
           {:reply, :ok, stage(%{state | task: nil}, :installed)}
         else
