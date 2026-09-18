@@ -160,6 +160,32 @@ defmodule Longx.Credentials.AgentTest do
              Credentials.reveal("svc")
   end
 
+  test "credential_create for an OAuth2 public client: the client secret field is optional, left empty it stores none",
+       %{model: model, id: id} do
+    route!(model, fn body ->
+      if List.last(body["input"])["type"] == "function_call_output",
+        do: ResponsesFixture.assistant_message("saved"),
+        else:
+          ResponsesFixture.function_call("credential_create", nil, %{
+            "name" => "coros",
+            "kind" => "oauth2",
+            "allowed_hosts" => ["mcpcn.coros.com"],
+            "authorize_url" => "https://mcpcn.coros.com/oauth2/authorize",
+            "token_url" => "https://mcpcn.coros.com/oauth2/token",
+            "client_id" => "47c53db0"
+          })
+    end)
+
+    {:ok, _} = Agent.send(id, "create the coros credential")
+
+    assert %{"requestId" => rid, "fields" => [field]} = await("longx/action/request")
+    assert %{"id" => "client_secret", "secret" => true, "required" => false} = field
+
+    assert :ok = Agent.respond(id, rid, %{"client_secret" => ""})
+    assert %{"status" => "completed"} = await_turn_end()
+    assert {:ok, %{client_id: "47c53db0", client_secret: nil}} = Credentials.reveal("coros")
+  end
+
   ## helpers (the agent test's, in short)
 
   defp sse(conn, chunks) do

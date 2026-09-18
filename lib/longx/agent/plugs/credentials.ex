@@ -232,6 +232,12 @@ defmodule Longx.Agent.Plugs.Credentials do
   def credential_rotate(_args, _ctx),
     do: {:error, "credential_rotate needs the credential's name"}
 
+  # an empty answer to an optional field (a public OAuth2 client) is no secret
+  defp blank_to_nil(value) when is_binary(value),
+    do: if(String.trim(value) == "", do: nil, else: value)
+
+  defp blank_to_nil(value), do: value
+
   defp rotate_field(%{kind: :api_key}),
     do: {:ok, %{id: "secret", label: "API Key / Token", secret: true}}
 
@@ -284,7 +290,8 @@ defmodule Longx.Agent.Plugs.Credentials do
         {:ok, nil}
 
       present?(args["client_id"]) ->
-        {:ok, %{id: "client_secret", label: "Client Secret（公开客户端留空）", secret: true}}
+        {:ok,
+         %{id: "client_secret", label: "Client Secret（公开客户端留空）", secret: true, required: false}}
 
       true ->
         {:error,
@@ -392,7 +399,7 @@ defmodule Longx.Agent.Plugs.Credentials do
         client_id: args["client_id"],
         registration_url: args["registration_url"]
       }
-      |> put_if(:client_secret, field && answer[field.id])
+      |> put_if(:client_secret, field && blank_to_nil(answer[field.id]))
       |> put_if(:header, args["header"])
       |> put_if(:scheme, args["scheme"])
     )

@@ -420,7 +420,7 @@ type ActionArgs = {
   text?: string;
   url?: string | null;
   /** `secret`: typed masked — a key the person enters for a credential, never shown back */
-  fields?: { id: string; label: string; secret?: boolean }[];
+  fields?: { id: string; label: string; secret?: boolean; required?: boolean }[];
   /** a generative tree (prompt_user): drawn instead of the fields, answered by what the person fires */
   spec?: unknown;
 };
@@ -565,7 +565,8 @@ export const ActionTool: ToolCallMessagePartComponent<ActionArgs, unknown> = (
     label: f.label,
     value: values[f.id] ?? "",
     kind: "text",
-    required: true,
+    // required unless the ask said otherwise (a public OAuth2 client's secret is left empty)
+    required: f.required !== false,
     ...(f.secret ? { secret: true } : {}),
   }));
   const pending = p.status.type === "requires-action" && state === "request";

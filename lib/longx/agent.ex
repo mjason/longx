@@ -362,6 +362,13 @@ defmodule Longx.Agent do
           Enum.map(request.fields, fn f ->
             %{"id" => to_string(f[:id] || f["id"]), "label" => f[:label] || f["label"] || ""}
             |> then(&if(f[:secret] || f["secret"], do: Map.put(&1, "secret", true), else: &1))
+            # required unless said otherwise (a public OAuth2 client has no secret to type)
+            |> then(
+              &if(Map.get(f, :required, Map.get(f, "required", true)) == false,
+                do: Map.put(&1, "required", false),
+                else: &1
+              )
+            )
           end),
         "callbackUrl" => callback
       }

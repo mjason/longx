@@ -43,7 +43,8 @@ defmodule Longx.Agent.Context do
   and the answer is `%{"query" => params}` — the code, the state — when the
   browser arrives there. **Never listen on a local port for that**: the
   person may be on another machine. `fields:` is `[%{id: "code", label:
-  "验证码"}]` for values to type; `spec:` is a generative UI tree (the
+  "验证码"}]` for values to type (`secret: true` masks the input, `required:
+  false` lets it stay empty); `spec:` is a generative UI tree (the
   `present` vocabulary — a form, a choice) drawn instead of the fields,
   answered as `%{"action" => payload}` with what the person fired
   (`$action` plus `$input`, or a form's values); `timeout:` in ms (10

@@ -136,6 +136,25 @@ describe("PresentTool", () => {
 });
 
 describe("ActionTool", () => {
+  test("an optional field (required: false) may stay empty: 发送 is enabled and the empty value is sent", () => {
+    answerAction.mockClear();
+    render(
+      <ActionAnswerContext.Provider value={answerAction}>
+        <ActionTool
+          {...part({
+            toolName: "action",
+            toolCallId: "call_3b:ask",
+            status: { type: "requires-action", reason: "interrupt" },
+            args: { requestId: "3b", title: "输入凭证 coros 的密钥", text: "", url: null, fields: [{ id: "client_secret", label: "Client Secret（公开客户端留空）", secret: true, required: false }] },
+          })}
+        />
+      </ActionAnswerContext.Provider>,
+    );
+    expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    expect(answerAction).toHaveBeenCalledWith("3b", { client_secret: "" });
+  });
+
   test("a tool's ask: the link, the fields, answered through the runtime's extras; 取消 answers too", () => {
     answerAction.mockClear();
     render(
