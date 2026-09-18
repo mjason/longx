@@ -38,7 +38,7 @@ defmodule Longx.Agent.Kernel.Asks do
     if ask.timer, do: Process.cancel_timer(ask.timer)
     if ask.callback?, do: forget(id)
     ThreadState.resolve_request(thread_id, id)
-    GenServer.reply(ask.from, reply)
+    :gen_statem.reply(ask.from, reply)
     true
   end
 

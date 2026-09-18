@@ -6,11 +6,19 @@ defmodule Longx.Agent do
   runs the thread's pipeline (`Longx.Agent.Pipeline`, pure — the prompt,
   the tools, the request), the model call streams from a task
   (`Longx.Agent.Model`) as messages, tool calls run as tasks and answer as
-  messages, and `handle_continue(:step)` recurses until the model answers
+  messages, and an internal `:step` event recurses until the model answers
   without calling a tool. A message while a turn runs is a *steer*: shown
   at once, handed to the model at the next step (and a step is added when
   the model stopped before seeing it). Interrupt kills the tasks — a tool's
   shim tree dies with its task — and ends the turn.
+
+  The process is a `:gen_statem` with two states, `:idle` and `:running`
+  (the finer phase — step, streaming, dispatching, compacting — is data),
+  because the mailbox is the delivery mechanism between agents and OTP's
+  *postpone* is how a message waits for the right moment: a message sent
+  with `deliver: :idle` while a turn runs stays in the mailbox and is
+  handed back the moment the agent is idle, without a queue of our own.
+  The idle exit is the `:idle` state's timeout.
 
   Everything the person sees is the codex event vocabulary
   (`turn/started`, `item/started`, `item/agentMessage/delta`,
@@ -23,7 +31,7 @@ defmodule Longx.Agent do
   No sandbox, no approvals: commands run on the machine as the person.
   """
 
-  use GenServer
+  @behaviour :gen_statem
 
   require Logger
 
@@ -82,33 +90,34 @@ defmodule Longx.Agent do
   """
   @spec spawn(String.t(), String.t(), String.t(), keyword) :: {:ok, String.t()} | {:error, term}
   def spawn(parent_id, name, task, opts \\ []),
-    do: GenServer.call(via(parent_id), {:spawn, name, task, opts})
+    do: call(parent_id, {:spawn, name, task, opts})
 
   @doc "A card for the person from a tool (`Context.present/2`): shown on the thread, never model input."
   @spec present(String.t(), map) :: :ok
   def present(thread_id, tree) when is_map(tree),
-    do: GenServer.cast(via(thread_id), {:present, tree})
+    do: :gen_statem.cast(via(thread_id), {:present, tree})
 
   @doc "Notes that the parent spoke to a child (the child's row in the parent's view shows it)."
   @spec interacted(String.t(), String.t()) :: :ok
-  def interacted(parent_id, child_id), do: GenServer.cast(via(parent_id), {:interacted, child_id})
+  def interacted(parent_id, child_id),
+    do: :gen_statem.cast(via(parent_id), {:interacted, child_id})
 
   @doc false
   # a tool (in its task) asks the person; the reply comes when they answer
-  def ask(thread_id, request), do: GenServer.call(via(thread_id), {:ask, request}, :infinity)
+  def ask(thread_id, request), do: call(thread_id, {:ask, request}, :infinity)
 
   @doc "The person's answer to an open ask (`Context.ask/2`); `{:error, :unknown}` when none waits."
   @spec respond(String.t(), String.t(), map) :: :ok | {:error, :unknown}
   def respond(thread_id, request_id, answer) when is_map(answer) do
     case whereis(thread_id) do
       nil -> {:error, :unknown}
-      _pid -> GenServer.call(via(thread_id), {:respond, request_id, answer})
+      _pid -> call(thread_id, {:respond, request_id, answer})
     end
   end
 
   @doc "Who spawned the agent, its name, its phase and its children."
   @spec info(String.t()) :: map
-  def info(thread_id), do: GenServer.call(via(thread_id), :info)
+  def info(thread_id), do: call(thread_id, :info)
 
   @doc """
   The agent's team, in the order it was made: every agent it spawned, with
@@ -125,12 +134,12 @@ defmodule Longx.Agent do
             task: String.t() | nil
           }
         ]
-  def children(thread_id), do: GenServer.call(via(thread_id), :children)
+  def children(thread_id), do: call(thread_id, :children)
 
   @doc "Takes a child out of the parent's team (`close_agent`); stopping it is the caller's."
   @spec forget_child(String.t(), String.t()) :: :ok
   def forget_child(parent_id, child_id),
-    do: GenServer.call(via(parent_id), {:forget_child, child_id})
+    do: call(parent_id, {:forget_child, child_id})
 
   @spec whereis(String.t()) :: pid | nil
   def whereis(thread_id), do: GenServer.whereis(via(thread_id))
@@ -147,8 +156,8 @@ defmodule Longx.Agent do
         # returned. Then a normal stop: the callback in flight finishes first —
         # the supervisor's kill left SQLite's connection mid-transaction
         try do
-          for %{id: child} <- GenServer.call(pid, :children, 5_000), do: stop(child)
-          GenServer.stop(pid, :normal, 15_000)
+          for %{id: child} <- :gen_statem.call(pid, :children, 5_000), do: stop(child)
+          :gen_statem.stop(pid, :normal, 15_000)
         catch
           :exit, _ -> :ok
         end
@@ -163,32 +172,41 @@ defmodule Longx.Agent do
   as `[agent name] …`) and `reply_to:` (its thread id — the answer of the
   turn this starts goes to it instead of the parent). Answers
   `{:ok, %{turn_id, steered}}`.
+
+  `deliver: :idle` never steers: the message waits in the agent's mailbox
+  while a turn runs (OTP's postpone) and starts a turn of its own once the
+  agent is idle — a watch's wake-up, a teammate's word that can wait. It
+  answers `:ok` at once.
   """
-  @spec send(String.t(), String.t(), keyword) :: {:ok, %{turn_id: String.t(), steered: boolean}}
+  @spec send(String.t(), String.t(), keyword) ::
+          {:ok, %{turn_id: String.t(), steered: boolean}} | :ok | {:error, :unknown}
   def send(thread_id, text, opts \\ []) do
     # an agent that left comes back for a message (from the person or another agent)
     with {:ok, _pid} <- ensure_alive(thread_id) do
-      GenServer.call(via(thread_id), {:send, text, opts})
+      case Keyword.get(opts, :deliver, :now) do
+        :idle -> :gen_statem.cast(via(thread_id), {:deliver, text, opts})
+        :now -> call(thread_id, {:send, text, opts})
+      end
     end
   end
 
   @doc "Stops the running turn (its items end as they are)."
   @spec interrupt(String.t()) :: :ok | {:error, :not_running}
-  def interrupt(thread_id), do: GenServer.call(via(thread_id), :interrupt, 15_000)
+  def interrupt(thread_id), do: call(thread_id, :interrupt, 15_000)
 
   @doc "Stops the running turn and drops it from the transcript and the view (`thread/reverted`)."
   @spec retract(String.t(), String.t()) :: :ok | {:error, :not_running}
-  def retract(thread_id, turn_id), do: GenServer.call(via(thread_id), {:retract, turn_id}, 15_000)
+  def retract(thread_id, turn_id), do: call(thread_id, {:retract, turn_id}, 15_000)
 
   @doc """
   Folds the context (`/compact`): at once when the thread is idle, before
   the next step when a turn runs. Nothing to fold is fine.
   """
   @spec compact(String.t()) :: :ok
-  def compact(thread_id), do: GenServer.call(via(thread_id), :compact)
+  def compact(thread_id), do: call(thread_id, :compact)
 
   @spec status(String.t()) :: :idle | {:running, String.t()}
-  def status(thread_id), do: GenServer.call(via(thread_id), :status)
+  def status(thread_id), do: call(thread_id, :status)
 
   @doc """
   Sets or changes the thread's goal (`"objective"`, `"status"`,
@@ -198,23 +216,23 @@ defmodule Longx.Agent do
   @spec set_goal(String.t(), map) :: {:ok, map} | {:error, term}
   def set_goal(thread_id, attrs) when is_map(attrs) do
     with {:ok, _pid} <- ensure_alive(thread_id),
-         do: GenServer.call(via(thread_id), {:set_goal, attrs})
+         do: call(thread_id, {:set_goal, attrs})
   end
 
   @spec get_goal(String.t()) :: {:ok, map | nil} | {:error, term}
   def get_goal(thread_id) do
-    with {:ok, _pid} <- ensure_alive(thread_id), do: GenServer.call(via(thread_id), :get_goal)
+    with {:ok, _pid} <- ensure_alive(thread_id), do: call(thread_id, :get_goal)
   end
 
   @doc "Drops the goal (`thread/goal/cleared`); whether there was one."
   @spec clear_goal(String.t()) :: {:ok, boolean} | {:error, term}
   def clear_goal(thread_id) do
-    with {:ok, _pid} <- ensure_alive(thread_id), do: GenServer.call(via(thread_id), :clear_goal)
+    with {:ok, _pid} <- ensure_alive(thread_id), do: call(thread_id, :clear_goal)
   end
 
   def start_link(opts) do
     thread_id = Keyword.fetch!(opts, :thread_id)
-    GenServer.start_link(__MODULE__, opts, name: via(thread_id))
+    :gen_statem.start_link(via(thread_id), __MODULE__, opts, [])
   end
 
   def child_spec(opts) do
@@ -227,9 +245,16 @@ defmodule Longx.Agent do
 
   defp via(thread_id), do: {:via, Registry, {@registry, thread_id}}
 
+  # gen_statem's own default is to wait for ever; a stuck agent must not hang its callers
+  defp call(thread_id, request, timeout \\ 5_000),
+    do: :gen_statem.call(via(thread_id), request, timeout)
+
   ## Server
 
-  @impl true
+  @impl :gen_statem
+  def callback_mode, do: [:handle_event_function, :state_enter]
+
+  @impl :gen_statem
   def init(opts) do
     thread_id = Keyword.fetch!(opts, :thread_id)
     items = Transcript.items!(thread_id)
@@ -268,7 +293,7 @@ defmodule Longx.Agent do
       Process.monitor(pid)
     end
 
-    {:ok, schedule_idle(state)}
+    {:ok, :idle, state}
   end
 
   @default_idle_ms 30 * 60_000
@@ -276,12 +301,77 @@ defmodule Longx.Agent do
   defp configured_idle_ms,
     do: :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:idle_ms, @default_idle_ms)
 
-  defp schedule_idle(%State{idle_ms: nil} = state), do: state
+  ## The state machine
 
-  defp schedule_idle(%State{idle_ms: ms} = state) do
-    Process.send_after(self(), :idle_check, ms)
-    state
+  # the two states, from the kernel's phase: what the mailbox needs to know
+  defp state_of(%State{phase: :idle}), do: :idle
+  defp state_of(%State{}), do: :running
+
+  @impl :gen_statem
+  # idle: the exit timer runs from here (a state change cancels it; an idle
+  # activity — a goal set, a steer taken back — re-enters and restarts it)
+  def handle_event(:enter, _old, :idle, %State{idle_ms: ms}) when is_integer(ms),
+    do: {:keep_state_and_data, [{:state_timeout, ms, :leave}]}
+
+  def handle_event(:enter, _old, _state, _data), do: :keep_state_and_data
+
+  # idle for long enough: leave; a message brings the agent back (Specs)
+  def handle_event(:state_timeout, :leave, :idle, data), do: {:stop, :normal, data}
+
+  # a message that waits for the agent to be idle: OTP keeps it in the
+  # mailbox and hands it back the moment the state changes to idle
+  def handle_event(:cast, {:deliver, _text, _opts}, :running, _data),
+    do: {:keep_state_and_data, :postpone}
+
+  def handle_event(:cast, {:deliver, text, opts}, :idle, data) do
+    {_turn_id, data} = start_turn(data, text, opts)
+    {:next_state, :running, data, [{:next_event, :internal, :step}]}
   end
+
+  def handle_event({:call, from}, request, state, data),
+    do: data |> on_call(request, from) |> transition(state, data, from)
+
+  def handle_event(:cast, request, state, data),
+    do: data |> on_cast(request) |> transition(state, data, nil)
+
+  def handle_event(:info, message, state, data),
+    do: data |> on_info(message) |> transition(state, data, nil)
+
+  def handle_event(:internal, :step, state, data),
+    do: data |> on_step() |> transition(state, data, nil)
+
+  # the handlers answer in GenServer's shapes; the state machine reads the
+  # next state off the data and turns `{:continue, :step}` into an event
+  defp transition({:reply, reply, data}, state, before, from),
+    do: transition({:noreply, data}, state, before, from, [{:reply, from, reply}])
+
+  defp transition({:reply, reply, data, continue}, state, before, from),
+    do: transition({:noreply, data, continue}, state, before, from, [{:reply, from, reply}])
+
+  defp transition(result, state, before, from), do: transition(result, state, before, from, [])
+
+  defp transition({:noreply, data, {:continue, :step}}, state, before, from, actions),
+    do:
+      transition(
+        {:noreply, data},
+        state,
+        before,
+        from,
+        actions ++ [{:next_event, :internal, :step}]
+      )
+
+  defp transition({:noreply, data}, state, before, _from, actions) do
+    next = state_of(data)
+
+    cond do
+      next != state -> {:next_state, next, data, actions}
+      next == :idle and data.last_active != before.last_active -> {:repeat_state, data, actions}
+      true -> {:keep_state, data, actions}
+    end
+  end
+
+  defp transition({:stop, reason, data}, _state, _before, _from, _actions),
+    do: {:stop, reason, data}
 
   # nil = the loader (the shipped, the person's and the project's descriptions)
   defp configured_pipeline,
@@ -305,24 +395,23 @@ defmodule Longx.Agent do
     :ok
   end
 
-  @impl true
-  def handle_call({:send, text, opts}, _from, %State{phase: :idle} = state) do
+  defp on_call(%State{phase: :idle} = state, {:send, text, opts}, _from) do
     {turn_id, state} = start_turn(state, text, opts)
     {:reply, {:ok, %{turn_id: turn_id, steered: false}}, state, {:continue, :step}}
   end
 
-  def handle_call({:send, text, opts}, _from, %State{turn_id: turn_id} = state) do
+  defp on_call(%State{turn_id: turn_id} = state, {:send, text, opts}, _from) do
     {:reply, {:ok, %{turn_id: turn_id, steered: true}}, queue_steer(state, text, opts)}
   end
 
-  def handle_call({:spawn, name, task, opts}, _from, state) do
+  defp on_call(state, {:spawn, name, task, opts}, _from) do
     case Team.spawn_child(state, name, task, opts) do
       {:ok, child_id, state} -> {:reply, {:ok, child_id}, state}
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 
-  def handle_call(:info, _from, state) do
+  defp on_call(state, :info, _from) do
     {:reply,
      %{
        parent: state.parent,
@@ -332,12 +421,12 @@ defmodule Longx.Agent do
      }, state}
   end
 
-  def handle_call(:children, _from, state), do: {:reply, Team.children_list(state), state}
+  defp on_call(state, :children, _from), do: {:reply, Team.children_list(state), state}
 
-  def handle_call({:forget_child, child_id}, _from, state),
+  defp on_call(state, {:forget_child, child_id}, _from),
     do: {:reply, :ok, Team.forget(state, child_id)}
 
-  def handle_call({:ask, request}, from, %State{} = state) do
+  defp on_call(%State{} = state, {:ask, request}, from) do
     id = "ask_" <> Ash.UUID.generate()
 
     callback =
@@ -381,7 +470,7 @@ defmodule Longx.Agent do
     {:noreply, %{state | asks: Map.put(state.asks, id, ask)}}
   end
 
-  def handle_call({:respond, id, answer}, _from, %State{asks: asks} = state) do
+  defp on_call(%State{asks: asks} = state, {:respond, id, answer}, _from) do
     case Map.pop(asks, id) do
       {nil, _} ->
         {:reply, {:error, :unknown}, state}
@@ -393,27 +482,27 @@ defmodule Longx.Agent do
     end
   end
 
-  def handle_call({:set_goal, attrs}, _from, state) do
+  defp on_call(state, {:set_goal, attrs}, _from) do
     state = Goal.update_goal(touch(state), attrs)
     {:reply, {:ok, state.goal}, state}
   end
 
-  def handle_call(:get_goal, _from, state), do: {:reply, {:ok, state.goal}, state}
+  defp on_call(state, :get_goal, _from), do: {:reply, {:ok, state.goal}, state}
 
-  def handle_call(:clear_goal, _from, %State{goal: goal} = state) do
+  defp on_call(%State{goal: goal} = state, :clear_goal, _from) do
     if goal, do: emit(state, "thread/goal/cleared", %{})
     {:reply, {:ok, goal != nil}, %{state | goal: nil}}
   end
 
-  def handle_call(:interrupt, _from, %State{phase: :idle} = state),
+  defp on_call(%State{phase: :idle} = state, :interrupt, _from),
     do: {:reply, {:error, :not_running}, state}
 
-  def handle_call(:interrupt, _from, state) do
+  defp on_call(state, :interrupt, _from) do
     {:reply, :ok, state |> stop_work() |> end_turn("interrupted", nil)}
   end
 
-  def handle_call({:retract, turn_id}, _from, %State{phase: phase, turn_id: turn_id} = state)
-      when phase != :idle do
+  defp on_call(%State{phase: phase, turn_id: turn_id} = state, {:retract, turn_id}, _from)
+       when phase != :idle do
     state = stop_work(state, close_items: false)
     Transcript.truncate!(state.thread_id, turn_id)
     ThreadState.drop_turns(state.thread_id, [turn_id])
@@ -423,27 +512,26 @@ defmodule Longx.Agent do
     {:reply, :ok, end_turn(state, "interrupted", nil)}
   end
 
-  def handle_call({:retract, _turn_id}, _from, state), do: {:reply, {:error, :not_running}, state}
+  defp on_call(state, {:retract, _turn_id}, _from), do: {:reply, {:error, :not_running}, state}
 
-  def handle_call(:compact, _from, %State{phase: :idle, transcript: []} = state),
+  defp on_call(%State{phase: :idle, transcript: []} = state, :compact, _from),
     do: {:reply, :ok, state}
 
-  def handle_call(:compact, _from, %State{phase: :idle} = state),
+  defp on_call(%State{phase: :idle} = state, :compact, _from),
     do: {:reply, :ok, Compaction.start_compaction(state, state.model)}
 
-  def handle_call(:compact, _from, state), do: {:reply, :ok, %{state | compact_requested: true}}
+  defp on_call(state, :compact, _from), do: {:reply, :ok, %{state | compact_requested: true}}
 
-  def handle_call(:status, _from, %State{phase: :idle} = state), do: {:reply, :idle, state}
+  defp on_call(%State{phase: :idle} = state, :status, _from), do: {:reply, :idle, state}
 
-  def handle_call(:status, _from, %State{turn_id: id} = state),
+  defp on_call(%State{turn_id: id} = state, :status, _from),
     do: {:reply, {:running, id}, state}
 
-  @impl true
-  def handle_cast({:present, tree}, state), do: {:noreply, Calls.present(state, tree)}
+  defp on_cast(state, {:present, tree}), do: {:noreply, Calls.present(state, tree)}
 
   # a child spoken to again (by this agent or a teammate): working again,
   # under whatever pid `send/3` revived it with
-  def handle_cast({:interacted, child_id}, %State{children: children} = state) do
+  defp on_cast(%State{children: children} = state, {:interacted, child_id}) do
     case Map.get(children, child_id) do
       %{name: name} ->
         {:noreply, state |> Team.rewatch(child_id) |> Team.activity(child_id, name, "interacted")}
@@ -520,8 +608,7 @@ defmodule Longx.Agent do
   # in the transcript as a UI-only item so a rebuilt view has it
   ## The loop
 
-  @impl true
-  def handle_continue(:step, %State{steps: steps} = state) do
+  defp on_step(%State{steps: steps} = state) do
     if steps >= max_steps() do
       {:noreply, end_turn(state, "failed", "the turn ran #{steps} steps; stopped (max_steps)")}
     else
@@ -781,54 +868,47 @@ defmodule Longx.Agent do
 
   # the chain moved on to its next model (a quota gone, a key refused, an
   # upstream down): the person hears it the way codex's reroute is heard
-  @impl true
-  def handle_info(
-        {:model, ref, {:fallback, from, to, reason}},
-        %State{model_task: %{ref: ref}} = state
-      ) do
+  defp on_info(
+         %State{model_task: %{ref: ref}} = state,
+         {:model, ref, {:fallback, from, to, reason}}
+       ) do
     emit(state, "model/rerouted", %{"fromModel" => from, "toModel" => to, "reason" => reason})
     {:noreply, state}
   end
 
-  def handle_info(
-        {:model, ref, event},
-        %State{phase: :compacting, model_task: %{ref: ref}} = state
-      ),
-      do: compaction_event(event, state)
+  defp on_info(%State{phase: :compacting, model_task: %{ref: ref}} = state, {:model, ref, event}),
+    do: compaction_event(event, state)
 
-  def handle_info(
-        {:model, ref, event},
-        %State{phase: :streaming, model_task: %{ref: ref}} = state
-      ),
-      do: model_event(event, state)
+  defp on_info(%State{phase: :streaming, model_task: %{ref: ref}} = state, {:model, ref, event}),
+    do: model_event(event, state)
 
-  def handle_info({:model, _ref, _event}, state), do: {:noreply, state}
+  defp on_info(state, {:model, _ref, _event}), do: {:noreply, state}
 
   # a task's reply (async_nolink) — the tool tasks carry their outcome here
-  def handle_info({ref, outcome}, %State{tasks: tasks} = state) when is_map_key(tasks, ref) do
+  defp on_info(%State{tasks: tasks} = state, {ref, outcome}) when is_map_key(tasks, ref) do
     Process.demonitor(ref, [:flush])
     {:noreply, Calls.finish_call(state, ref, outcome)}
   end
 
-  def handle_info({ref, _reply}, %State{model_task: %{task: %Task{ref: ref}}} = state) do
+  defp on_info(%State{model_task: %{task: %Task{ref: ref}}} = state, {ref, _reply}) do
     Process.demonitor(ref, [:flush])
     {:noreply, state}
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, reason}, %State{tasks: tasks} = state)
-      when is_map_key(tasks, ref) do
+  defp on_info(%State{tasks: tasks} = state, {:DOWN, ref, :process, _pid, reason})
+       when is_map_key(tasks, ref) do
     {:noreply, Calls.finish_call(state, ref, {:error, "the tool crashed: #{describe(reason)}"})}
   end
 
-  def handle_info(
-        {:DOWN, ref, :process, _pid, reason},
-        %State{phase: phase, model_task: %{task: %Task{ref: ref}}} = state
-      )
-      when phase in [:streaming, :compacting] do
+  defp on_info(
+         %State{phase: phase, model_task: %{task: %Task{ref: ref}}} = state,
+         {:DOWN, ref, :process, _pid, reason}
+       )
+       when phase in [:streaming, :compacting] do
     {:noreply, end_turn(state, "failed", "the model call crashed: #{describe(reason)}")}
   end
 
-  def handle_info({:tool_output, item_id, text}, state) do
+  defp on_info(state, {:tool_output, item_id, text}) do
     case Enum.find(state.tasks, fn {_ref, t} -> t.item_id == item_id end) do
       {ref, %{tool: %Tool{show: show}} = task} ->
         emit(state, UI.delta_method(show), %{
@@ -845,8 +925,8 @@ defmodule Longx.Agent do
     end
   end
 
-  def handle_info({:tool_timeout, ref}, %State{tasks: tasks} = state)
-      when is_map_key(tasks, ref) do
+  defp on_info(%State{tasks: tasks} = state, {:tool_timeout, ref})
+       when is_map_key(tasks, ref) do
     %{tool: tool} = tasks[ref]
     Task.Supervisor.terminate_child(@tasks, tasks[ref].pid)
 
@@ -854,11 +934,11 @@ defmodule Longx.Agent do
      Calls.finish_call(state, ref, {:error, "the tool did not finish within #{tool.timeout} ms"})}
   end
 
-  def handle_info(:next_step, %State{phase: :step} = state),
+  defp on_info(%State{phase: :step} = state, :next_step),
     do: {:noreply, state, {:continue, :step}}
 
   # another agent (a child reporting back) speaks: into the mailbox, like the person
-  def handle_info({:agent_message, from, text}, state) do
+  defp on_info(state, {:agent_message, from, text}) do
     case Enum.find(state.children, fn {_id, c} -> c.name == from end) do
       {id, _} -> deliver(Team.mark(state, id, :done), text, from, {id, from, "completed"})
       nil -> deliver(state, text, from, nil)
@@ -869,7 +949,7 @@ defmodule Longx.Agent do
   # its transcript is kept and a message brings it back —; a crash is news
   # for the model, the child a failed member it may ask again or close. The
   # parent gone takes this agent along.
-  def handle_info({:DOWN, ref, :process, pid, reason}, state) do
+  defp on_info(state, {:DOWN, ref, :process, pid, reason}) do
     case Enum.find(state.children, fn {_id, c} -> c.ref == ref end) do
       {id, %{name: name, status: status}} ->
         # :noproc — a monitor set on a process that had just left (a revived
@@ -893,7 +973,7 @@ defmodule Longx.Agent do
     end
   end
 
-  def handle_info({:ask_timeout, id}, %State{asks: asks} = state) do
+  defp on_info(%State{asks: asks} = state, {:ask_timeout, id}) do
     case Map.pop(asks, id) do
       {nil, _} ->
         {:noreply, state}
@@ -904,17 +984,7 @@ defmodule Longx.Agent do
     end
   end
 
-  # idle for long enough: leave; a message brings the agent back (Specs)
-  def handle_info(:idle_check, %State{phase: :idle, idle_ms: ms, last_active: at} = state)
-      when is_integer(ms) do
-    if System.monotonic_time(:millisecond) - at >= ms,
-      do: {:stop, :normal, state},
-      else: {:noreply, schedule_idle(state)}
-  end
-
-  def handle_info(:idle_check, state), do: {:noreply, schedule_idle(state)}
-
-  def handle_info(_other, state), do: {:noreply, state}
+  defp on_info(state, _other), do: {:noreply, state}
 
   defp exit_text(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp exit_text(reason), do: describe(reason)
@@ -1019,7 +1089,7 @@ defmodule Longx.Agent do
     emit(state, "turn/completed", %{"turn" => turn})
     Team.report_to_parent(state, status, error)
 
-    state = touch(schedule_idle(state))
+    state = touch(state)
 
     %{
       state

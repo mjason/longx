@@ -446,6 +446,53 @@ defmodule Longx.AgentTest do
     assert [%{"type" => "text", "text" => "one"}] = last_agent_text(id) |> Enum.take(1)
   end
 
+  test "a message to be delivered when idle waits in the mailbox while a turn runs and starts a turn of its own after it",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("one")),
+      ResponsesFixture.assistant_message("two")
+    ])
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "first")
+    assert_receive {:thread, _, "turn/started", %{"turn" => %{"id" => ^turn_id}}}, 5_000
+    assert_receive {:held, handler}, 5_000
+
+    # not a steer: the running turn never sees it
+    assert :ok = Agent.send(id, "later", deliver: :idle, from: "watch-x")
+    assert {:running, ^turn_id} = Agent.status(id)
+
+    refute_receive {:thread, _, "item/completed",
+                    %{
+                      "item" => %{
+                        "type" => "userMessage",
+                        "content" => [%{"text" => "[agent" <> _}]
+                      }
+                    }},
+                   200
+
+    send(handler, :go)
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+
+    # the postponed message comes out of the mailbox as the next turn
+    assert_receive {:thread, _, "turn/started", %{"turn" => %{"id" => second}}}, 5_000
+    assert second != turn_id
+    assert %{"from" => "watch-x"} = await_user_message("[agent watch-x] later")
+    assert %{"id" => ^second, "status" => "completed"} = await_turn_end()
+
+    assert_receive {:request, first}
+    assert_receive {:request, body}
+    texts = for %{"role" => "user", "content" => [%{"text" => t}]} <- first["input"], do: t
+    assert texts == ["first"]
+    texts = for %{"role" => "user", "content" => [%{"text" => t}]} <- body["input"], do: t
+    assert texts == ["first", "[agent watch-x] later"]
+
+    # idle: delivered at once, a turn like any other
+    script!(bypass, [ResponsesFixture.assistant_message("three")])
+    assert :ok = Agent.send(id, "now", deliver: :idle, from: "watch-x")
+    await_user_message("[agent watch-x] now")
+    assert %{"status" => "completed"} = await_turn_end()
+  end
+
   test "interrupt ends the turn at once; the late reply is ignored; the thread goes on", %{
     bypass: bypass,
     thread_id: id
