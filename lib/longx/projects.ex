@@ -988,17 +988,25 @@ defmodule Longx.Projects do
     thread = Ash.get!(Thread, thread.id)
 
     with :ok <- refuse_while_running(thread) do
-      Ash.bulk_destroy!(Ash.Query.filter(Turn, thread_id == ^thread.id), :destroy, %{},
-        authorize?: false
-      )
-
-      Longx.Agent.stop(thread.kernel_thread_id)
-      Longx.Agent.Transcript.delete!(thread.kernel_thread_id)
-
-      Ash.destroy!(thread)
+      # the sub-agents first: their rows point at this one, and their
+      # processes stop with the parent anyway
+      for child <- list_subagents!(thread.id), do: delete_rows(child)
+      delete_rows(thread)
       broadcast_changed(thread.project_id)
       :ok
     end
+  end
+
+  # the thread's turns, its agent, its transcript, its row
+  defp delete_rows(%Thread{} = thread) do
+    Ash.bulk_destroy!(Ash.Query.filter(Turn, thread_id == ^thread.id), :destroy, %{},
+      authorize?: false
+    )
+
+    Longx.Agent.stop(thread.kernel_thread_id)
+    Longx.Agent.Kernel.Specs.delete(thread.kernel_thread_id)
+    Longx.Agent.Transcript.delete!(thread.kernel_thread_id)
+    Ash.destroy!(thread)
   end
 
   defp refuse_while_running(%Thread{status: :active}), do: {:error, :turn_in_progress}

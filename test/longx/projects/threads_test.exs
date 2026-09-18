@@ -479,6 +479,31 @@ defmodule Longx.Projects.ThreadsTest do
            end)
   end
 
+  test "deleting a thread takes its sub-agents' rows, turns and transcripts with it", %{
+    bypass: bypass,
+    project: project
+  } do
+    script!(bypass, [
+      ResponsesFixture.assistant_message("REPORT: done"),
+      ResponsesFixture.assistant_message("thanks")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    assert {:ok, child_id} = Agent.spawn(thread.kernel_thread_id, "researcher", "look it up")
+    assert [%Thread{kernel_thread_id: ^child_id} = child] = Projects.list_subagents!(thread.id)
+
+    assert_eventually_ok(fn ->
+      thread!(child.id).status == :idle and thread!(thread.id).status == :idle
+    end)
+
+    assert :ok = Projects.delete_thread(thread!(thread.id))
+    assert {:error, _} = Ash.get(Thread, thread.id)
+    assert {:error, _} = Ash.get(Thread, child.id)
+    assert [] = Projects.list_turns!(child)
+    assert [] = Transcript.items!(child_id)
+    assert Agent.whereis(child_id) == nil
+  end
+
   test "session_named/3 finds the session with that handle or starts one", %{project: project} do
     assert {:ok, %Thread{handle: "watch-deploy", title: "⏰ deploy"} = thread} =
              Projects.session_named(project, "watch-deploy", title: "⏰ deploy")

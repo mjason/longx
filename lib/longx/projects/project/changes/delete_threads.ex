@@ -30,7 +30,17 @@ defmodule Longx.Projects.Project.Changes.DeleteThreads do
       |> Ash.Query.filter(thread_id in ^thread_ids)
       |> Ash.bulk_destroy!(:destroy, %{}, authorize?: false)
 
+      # the sub-agents' rows first: they point at their parents'
       Longx.Projects.Thread
+      |> Ash.Query.filter(project_id == ^project_id and not is_nil(parent_thread_id))
+      |> Ash.bulk_destroy!(:destroy, %{}, authorize?: false)
+
+      Longx.Projects.Thread
+      |> Ash.Query.filter(project_id == ^project_id)
+      |> Ash.bulk_destroy!(:destroy, %{}, authorize?: false)
+
+      # the watches' state rows (their files stay with the working directory)
+      Longx.Watches.Watch
       |> Ash.Query.filter(project_id == ^project_id)
       |> Ash.bulk_destroy!(:destroy, %{}, authorize?: false)
 

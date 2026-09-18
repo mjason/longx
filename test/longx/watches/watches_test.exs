@@ -175,6 +175,16 @@ defmodule Longx.WatchesTest do
     assert [%Watch{name: "backup", layer: :local}] = Watches.list_for_project!(project.id)
   end
 
+  test "deleting the project takes its watch rows with it (the files stay in the working directory)",
+       %{dir: dir, project: project} do
+    path = write!(dir, "health", @health)
+    :ok = Watches.reconcile_project(project)
+    assert [_] = Watches.list_for_project!(project.id)
+    assert :ok = Projects.delete_project(project, confirm: true)
+    assert [] = Ash.read!(Watch)
+    assert File.exists?(path)
+  end
+
   test "a run: the script's send wakes the session by address once idle, the state is kept, the row records the run; the budget stops a second send",
        %{bypass: bypass, dir: dir, project: project} do
     model!(bypass, [
