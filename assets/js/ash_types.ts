@@ -309,7 +309,7 @@ export type ThreadAttributesOnlySchema = {
 // Turn Schema
 export type TurnResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "commitAfter" | "commitBefore" | "completedAt" | "diff" | "dirtyStart" | "error" | "id" | "insertedAt" | "kernelTurnId" | "modelSlug" | "reasoningEffort" | "startedAt" | "status" | "threadId" | "updatedAt" | "userText";
+  __primitiveFields: "commitAfter" | "commitBefore" | "completedAt" | "diff" | "dirtyStart" | "error" | "id" | "insertedAt" | "kernelTurnId" | "modelSlug" | "reasoningEffort" | "startedAt" | "status" | "threadId" | "updatedAt" | "usage" | "userText";
   commitAfter: string | null;
   commitBefore: string | null;
   completedAt: UtcDateTimeUsec | null;
@@ -325,6 +325,7 @@ export type TurnResourceSchema = {
   status: "completed" | "failed" | "in_progress" | "interrupted" | "reverted";
   threadId: UUID;
   updatedAt: UtcDateTimeUsec;
+  usage: Record<string, any> | null;
   userText: string | null;
   thread: { __type: "Relationship"; __resource: ThreadResourceSchema; };
 };
@@ -333,7 +334,7 @@ export type TurnResourceSchema = {
 
 export type TurnAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "commitAfter" | "commitBefore" | "completedAt" | "diff" | "dirtyStart" | "error" | "id" | "insertedAt" | "kernelTurnId" | "modelSlug" | "reasoningEffort" | "startedAt" | "status" | "threadId" | "updatedAt" | "userText";
+  __primitiveFields: "commitAfter" | "commitBefore" | "completedAt" | "diff" | "dirtyStart" | "error" | "id" | "insertedAt" | "kernelTurnId" | "modelSlug" | "reasoningEffort" | "startedAt" | "status" | "threadId" | "updatedAt" | "usage" | "userText";
   commitAfter: string | null;
   commitBefore: string | null;
   completedAt: UtcDateTimeUsec | null;
@@ -349,6 +350,7 @@ export type TurnAttributesOnlySchema = {
   status: "completed" | "failed" | "in_progress" | "interrupted" | "reverted";
   threadId: UUID;
   updatedAt: UtcDateTimeUsec;
+  usage: Record<string, any> | null;
   userText: string | null;
 };
 
@@ -1568,6 +1570,17 @@ export type TurnFilterInput = {
     greaterThanOrEqual?: UtcDateTimeUsec;
   };
 
+  usage?: {
+    isNil?: boolean;
+    eq?: Record<string, any>;
+    notEq?: Record<string, any>;
+    in?: Array<Record<string, any>>;
+    lessThan?: Record<string, any>;
+    greaterThan?: Record<string, any>;
+    lessThanOrEqual?: Record<string, any>;
+    greaterThanOrEqual?: Record<string, any>;
+  };
+
   userText?: {
     isNil?: boolean;
     eq?: string;
@@ -1616,7 +1629,7 @@ export type ProjectFilterField = (typeof projectFilterFields)[number];
 export const threadFilterFields = ["agentPath", "cwd", "id", "insertedAt", "kernelThreadId", "lastActivityAt", "modelSlug", "parentThreadId", "preview", "projectId", "reasoningEffort", "status", "title", "updatedAt", "webSearch", "parentThread", "project"] as const;
 export type ThreadFilterField = (typeof threadFilterFields)[number];
 
-export const turnFilterFields = ["commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "userText", "thread"] as const;
+export const turnFilterFields = ["commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "usage", "userText", "thread"] as const;
 export type TurnFilterField = (typeof turnFilterFields)[number];
 
 
@@ -1642,7 +1655,7 @@ export type ProjectSortField = (typeof projectSortFields)[number];
 export const threadSortFields = ["agentPath", "cwd", "id", "insertedAt", "kernelThreadId", "lastActivityAt", "modelSlug", "parentThreadId", "preview", "projectId", "reasoningEffort", "status", "title", "updatedAt", "webSearch"] as const;
 export type ThreadSortField = (typeof threadSortFields)[number];
 
-export const turnSortFields = ["commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "userText"] as const;
+export const turnSortFields = ["commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "usage", "userText"] as const;
 export type TurnSortField = (typeof turnSortFields)[number];
 
 

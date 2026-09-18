@@ -151,6 +151,8 @@ defmodule Longx.Projects.ThreadsTest do
     assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
     turn = turn!(turn.id)
     assert turn.commit_after == turn.commit_before
+    # the turn's own token usage lands on the row (the badge survives a restart)
+    assert %{"inputTokens" => 12, "outputTokens" => _, "totalTokens" => _} = turn.usage
     assert thread!(thread.id).status == :idle
     assert thread!(thread.id).preview == "hello"
 
@@ -215,7 +217,22 @@ defmodule Longx.Projects.ThreadsTest do
     assert {:ok, id} = Projects.host_thread(thread.kernel_thread_id)
     assert id == thread.kernel_thread_id
     assert Agent.whereis(id)
-    assert length(ThreadState.snapshot(id).items) == 2
+    snapshot = ThreadState.snapshot(id)
+    assert length(snapshot.items) == 2
+    # the turns come back from the rows: stamps and usage for every past turn's badge
+    kernel_turn = turn.kernel_turn_id
+
+    assert %{
+             ^kernel_turn => %{
+               "status" => "completed",
+               "startedAt" => started,
+               "completedAt" => completed,
+               "usage" => %{"inputTokens" => 12}
+             }
+           } =
+             snapshot.turns
+
+    assert is_number(started) and is_number(completed) and completed >= started
 
     assert :ok = Projects.delete_thread(thread)
     assert Transcript.items!(id) == []

@@ -803,12 +803,37 @@ defmodule Longx.Projects do
         {:ok, kernel_thread_id}
 
       {:ok, %Thread{kernel_thread_id: id} = thread} ->
-        with {:ok, _pid} <- ensure_agent(thread), :ok <- Tracker.track(id), do: {:ok, id}
+        with {:ok, _pid} <- ensure_agent(thread),
+             :ok <- seed_turns(thread),
+             :ok <- Tracker.track(id),
+             do: {:ok, id}
 
       {:error, _} ->
         {:error, :unknown_thread}
     end
   end
+
+  # the view's turns (stamps, status, usage — the per-turn badge) come from the
+  # rows: the store's copy lives in ETS and a restart rebuilt only the items
+  defp seed_turns(%Thread{kernel_thread_id: id} = thread) do
+    turns =
+      for %Turn{status: status} = turn <- list_turns!(thread), status != :reverted, into: %{} do
+        {turn.kernel_turn_id,
+         %{
+           "id" => turn.kernel_turn_id,
+           "status" => Atom.to_string(status),
+           "startedAt" => epoch(turn.started_at),
+           "completedAt" => epoch(turn.completed_at),
+           "usage" => turn.usage
+         }
+         |> Map.reject(fn {_k, v} -> is_nil(v) end)}
+      end
+
+    Longx.Agent.ThreadState.seed_turns(id, turns)
+  end
+
+  defp epoch(nil), do: nil
+  defp epoch(%DateTime{} = at), do: DateTime.to_unix(at, :microsecond) / 1_000_000
 
   defp ensure_usable(%Thread{status: :unrecoverable}), do: {:error, :thread_unrecoverable}
   defp ensure_usable(%Thread{status: :archived}), do: {:error, :thread_archived}

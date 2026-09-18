@@ -63,6 +63,16 @@ defmodule Longx.Agent.ThreadState.Store do
     end
   end
 
+  @doc "The rows' turns under the store's own (what the store saw since is newer)."
+  @spec seed_turns(String.t(), %{optional(String.t()) => map}) :: :ok
+  def seed_turns(thread_id, turns) when is_map(turns) do
+    kept = meta(thread_id).turns
+
+    put_meta(thread_id, %{
+      turns: Map.merge(turns, kept, fn _id, row, seen -> Map.merge(row, seen) end)
+    })
+  end
+
   defp put_turn(thread_id, %{"id" => id} = turn) do
     turns =
       Map.merge(meta(thread_id).turns, %{id => Map.merge(meta(thread_id).turns[id] || %{}, turn)})

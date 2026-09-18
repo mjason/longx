@@ -221,9 +221,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `item/commandExecution/outputDelta`, `item/completed`, `thread/tokenUsage/updated`,
     `turn/completed` — **the turn carries `startedAt` / `completedAt` (epoch seconds) and
     its own `usage`** (the turn's token totals; the Store keeps every turn under `turns`,
-    the client's `timingFor` reads the message's own turn, so every assistant message has
-    a badge with the duration and the tokens and a popover with 输入 / 缓存命中 / 输出 /
-    思考) —, `thread/goal/updated`, a `contextCompaction` marker,
+    the Tracker writes the usage onto the `Turn` row (`usage` map column), and
+    `Projects.host_thread/1` seeds the store's turns from the rows through
+    `ThreadState.seed_turns/2` — a restart rebuilds only the items from the transcript —
+    so the client's `timingFor`, reading the message's own turn, gives every assistant
+    message a badge with the duration and the tokens and a popover with 输入 / 缓存命中 /
+    输出 / 思考, restarts included) —, `thread/goal/updated`, a `contextCompaction` marker,
     `longx/action/request` for an ask), fed to `Longx.Agent.ThreadState.ingest/3`. A
     tool's `show` decides the item: `:command` → `commandExecution`, `:file_change` →
     `fileChange` (a unified `diff` per change), `:tool` → `dynamicToolCall`,

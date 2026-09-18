@@ -108,7 +108,8 @@ defmodule Longx.Projects.Tracker do
           status: status,
           completed_at: DateTime.utc_now(),
           commit_after: head(thread.cwd),
-          error: error
+          error: error,
+          usage: if(is_map(turn["usage"]), do: turn["usage"], else: row.usage)
         })
 
         notify_turn_end(thread, status, error)

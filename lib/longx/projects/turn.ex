@@ -91,7 +91,7 @@ defmodule Longx.Projects.Turn do
     end
 
     update :complete do
-      accept [:status, :completed_at, :commit_after, :error]
+      accept [:status, :completed_at, :commit_after, :error, :usage]
     end
 
     update :set_diff do
@@ -157,6 +157,9 @@ defmodule Longx.Projects.Turn do
 
     attribute :diff, :string, public?: true
     attribute :error, :string, public?: true
+    # the turn's own token usage (inputTokens, cachedInputTokens, outputTokens,
+    # reasoningOutputTokens, totalTokens) — the per-turn badge, kept across restarts
+    attribute :usage, :map, public?: true
 
     timestamps public?: true
   end

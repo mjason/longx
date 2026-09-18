@@ -90,6 +90,15 @@ defmodule Longx.Agent.ThreadState do
   @spec resolve_request(String.t(), term) :: :ok
   def resolve_request(thread_id, id), do: GenServer.cast(via(thread_id), {:resolve_request, id})
 
+  @doc """
+  The turns as the rows remember them (stamps, status, usage), under what
+  the store already holds — a thread hosted again after a restart gets its
+  past turns' badges back. No event: the snapshot after it carries them.
+  """
+  @spec seed_turns(String.t(), %{optional(String.t()) => map}) :: :ok
+  def seed_turns(_thread_id, turns) when map_size(turns) == 0, do: :ok
+  def seed_turns(thread_id, turns), do: GenServer.call(via(thread_id), {:seed_turns, turns})
+
   @spec backfill(String.t(), map) :: :ok
   def backfill(thread_id, thread_read_result),
     do: GenServer.call(via(thread_id), {:backfill, thread_read_result})
@@ -169,6 +178,11 @@ defmodule Longx.Agent.ThreadState do
   @impl true
   # a backfill means the agent was started again from its transcript: nothing
   # it was asked before can be answered any more
+  def handle_call({:seed_turns, turns}, _from, thread_id) do
+    Store.seed_turns(thread_id, turns)
+    {:reply, :ok, thread_id}
+  end
+
   def handle_call({:backfill, result}, _from, thread_id) do
     for %{id: id} <- Store.requests(thread_id) do
       Store.delete_request(thread_id, id)
