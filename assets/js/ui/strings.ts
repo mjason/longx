@@ -456,6 +456,11 @@ export const t = {
     delete: "删除",
     deleteConfirm: (name: string) => `删除凭证「${name}」？用它的工具会失效。`,
     created: "凭证已保存",
+    updated: "已更新",
+    edit: "编辑",
+    editTitle: (name: string) => `编辑凭证 ${name}`,
+    keepSecret: "留空则保持现在的值",
+    clientByRegistration: "登录时由 Longx 注册",
     // the forms
     name: "名字",
     nameHint: "小写短名（coros、github…），agent 用它指代这个凭证",

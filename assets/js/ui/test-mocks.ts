@@ -195,7 +195,7 @@ export function rpcMock() {
     publicUrl: vi.fn(async () => ok({ url: "http://192.168.2.129:7788", setting: null })),
     dependencies: vi.fn(async () => ok(dependencyReport())),
     checkDependencies: vi.fn(async () => ok(dependencyReport())),
-    listCredentials: vi.fn(async () => ok([credential("svc"), credential("coros", { kind: "oauth2", status: "needs_login", hasSecret: false })])),
+    listCredentials: vi.fn(async () => ok([credential("svc"), credential("coros", { kind: "oauth2", status: "needs_login", hasSecret: false, clientId: "47c53db0", allowedHosts: ["mcp.coros.com", "mcpcn.coros.com"], authorizeUrl: "https://mcpcn.coros.com/oauth2/authorize", tokenUrl: "https://mcpcn.coros.com/oauth2/token", scopes: "openid mcp.tools" })])),
     createCredentialApiKey: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok(credential(String(input["name"]), input as never))),
     createCredentialOauth2: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok(credential(String(input["name"]), { kind: "oauth2", status: "needs_login", ...(input as object) } as never))),
     updateCredential: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok(credential("svc", input as never))),

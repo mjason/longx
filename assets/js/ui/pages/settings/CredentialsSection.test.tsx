@@ -11,6 +11,7 @@ import {
   credentialLoginUrl,
   deleteCredential,
   refreshCredential,
+  updateCredential,
 } from "@/ash_rpc";
 
 describe("Settings → 凭证", () => {
@@ -103,5 +104,48 @@ describe("Settings → 凭证", () => {
     await user.click(within(svc).getByRole("button", { name: /删除/ }));
     await user.click(await screen.findByRole("button", { name: "删除" }));
     await waitFor(() => expect(deleteCredential).toHaveBeenCalledWith(expect.objectContaining({ identity: "cred-svc" })));
+  });
+
+  test("编辑 opens the form filled from the row (the name fixed, the secret empty = keep); saving sends the edited fields, a new secret only when typed", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings/credentials");
+    const coros = await screen.findByTestId("credential-coros");
+    // the row shows what the agent may have got wrong: the client id, the URLs
+    expect(coros).toHaveTextContent("47c53db0");
+    await user.click(within(coros).getByRole("button", { name: /编辑/ }));
+    const form = await screen.findByTestId("credential-form");
+    expect(within(form).getByRole("textbox", { name: "名字" })).toHaveValue("coros");
+    expect(within(form).getByRole("textbox", { name: "名字" })).toBeDisabled();
+    expect(within(form).getByRole("textbox", { name: "允许发送到的主机" })).toHaveValue("mcp.coros.com\nmcpcn.coros.com");
+    expect(within(form).getByRole("textbox", { name: "Client ID" })).toHaveValue("47c53db0");
+    expect(within(form).getByLabelText(/Client Secret/)).toHaveValue("");
+    // fix the hosts and the client id, leave the secret alone
+    await user.clear(within(form).getByRole("textbox", { name: "允许发送到的主机" }));
+    await user.type(within(form).getByRole("textbox", { name: "允许发送到的主机" }), "mcpcn.coros.com");
+    await user.clear(within(form).getByRole("textbox", { name: "Client ID" }));
+    await user.type(within(form).getByRole("textbox", { name: "Client ID" }), "fresh-id");
+    await user.click(within(form).getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(updateCredential).toHaveBeenCalledWith(
+        expect.objectContaining({
+          identity: "cred-coros",
+          input: expect.objectContaining({ allowedHosts: ["mcpcn.coros.com"], clientId: "fresh-id" }),
+        }),
+      ),
+    );
+    const sent = vi.mocked(updateCredential).mock.calls[0]![0] as { input: Record<string, unknown> };
+    expect(sent.input).not.toHaveProperty("clientSecret");
+    expect(sent.input).not.toHaveProperty("name");
+
+    // an API key: typing a new key sends it
+    vi.mocked(updateCredential).mockClear();
+    const svc = screen.getByTestId("credential-svc");
+    await user.click(within(svc).getByRole("button", { name: /编辑/ }));
+    const form2 = await screen.findByTestId("credential-form");
+    await user.type(within(form2).getByLabelText("API Key / Token"), "sk-new");
+    await user.click(within(form2).getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(updateCredential).toHaveBeenCalledWith(expect.objectContaining({ identity: "cred-svc", input: expect.objectContaining({ secret: "sk-new" }) })),
+    );
   });
 });
