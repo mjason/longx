@@ -230,6 +230,16 @@ end
 不要在服务器本机开端口等浏览器，人往往在另一台机器上。外部访问地址在设置 → Agent 内核里填，不填就用你浏览器连上来的地址。
 终端输出里的 URL 可以点。
 
+### 凭证：API Key 和 OAuth2 令牌
+
+agent 要调的带鉴权的 API（含 HTTP 上的 MCP 服务）用**凭证**：设置 → 凭证里添加一个 API Key（名字、允许发送到的主机、
+值），或一个 OAuth2 客户端（授权地址、令牌地址、client id / secret；MCP 服务常支持动态注册，填注册地址就不用 client id），
+「登录」在浏览器里完成，回调地址是 Longx 自己的 `<外部访问地址>/callback/credentials`（提供方那边就登记这个）。值加密存
+在数据库里，模型永远看不到：它只知道凭证的名字，用 `http_request(credential, url, …)` 让 Longx 代发——值只发给允许的主机，
+不跟随跳转，回来的内容里值会被抹成 `[redacted:名字]`；快过期的 OAuth2 令牌由后台（Oban，每 5 分钟）自动刷新。agent 也能自
+己声明一个凭证（`credential_create`）并发起登录（`credential_login`）：密钥由你在线程上的遮罩输入框里填，不经过模型。
+plug 自己的 Elixir 代码同样走 `Longx.Credentials.request/4`。
+
 ### 卡片：表格、指标、图表、表单
 
 模型有 `present` 工具：从固定的组件词表（assistant-ui 的 generative UI：Card、Row、Fact、Table、Chart、Markdown、

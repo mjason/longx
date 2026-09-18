@@ -419,7 +419,8 @@ type ActionArgs = {
   title?: string;
   text?: string;
   url?: string | null;
-  fields?: { id: string; label: string }[];
+  /** `secret`: typed masked — a key the person enters for a credential, never shown back */
+  fields?: { id: string; label: string; secret?: boolean }[];
   /** a generative tree (prompt_user): drawn instead of the fields, answered by what the person fires */
   spec?: unknown;
 };
@@ -565,6 +566,7 @@ export const ActionTool: ToolCallMessagePartComponent<ActionArgs, unknown> = (
     value: values[f.id] ?? "",
     kind: "text",
     required: true,
+    ...(f.secret ? { secret: true } : {}),
   }));
   const pending = p.status.type === "requires-action" && state === "request";
   const answer = (

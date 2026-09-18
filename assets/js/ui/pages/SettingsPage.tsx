@@ -10,10 +10,11 @@ import { ModelsSection } from "./settings/ModelsSection";
 import { KnowledgeSection } from "./settings/KnowledgeSection";
 import { AgentKernelSection } from "./settings/AgentKernelSection";
 import { DependenciesSection } from "./settings/DependenciesSection";
+import { CredentialsSection } from "./settings/CredentialsSection";
 import { RequestsSection } from "./settings/RequestsSection";
 import { UpdateSection } from "./settings/UpdateSection";
 
-const SECTIONS = ["models", "dependencies", "knowledge", "agent", "update", "requests", "appearance"] as const;
+const SECTIONS = ["models", "dependencies", "knowledge", "agent", "credentials", "update", "requests", "appearance"] as const;
 type Section = (typeof SECTIONS)[number];
 
 /**
@@ -85,6 +86,8 @@ function SectionBody({ section }: { section: Section }) {
       return <KnowledgeSection />;
     case "agent":
       return <AgentKernelSection />;
+    case "credentials":
+      return <CredentialsSection />;
     case "update":
       return <UpdateSection />;
     case "requests":

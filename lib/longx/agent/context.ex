@@ -58,6 +58,9 @@ defmodule Longx.Agent.Context do
       url: Keyword.get(opts, :url),
       fields: Keyword.get(opts, :fields, []),
       spec: Keyword.get(opts, :spec),
+      # extra data on the request for whoever settles it from outside (a
+      # credential login's state — Longx.Credentials.OAuth answers the ask itself)
+      meta: Keyword.get(opts, :meta),
       callback?: Keyword.get(opts, :callback, false),
       timeout: Keyword.get(opts, :timeout, 600_000),
       item_id: item_id

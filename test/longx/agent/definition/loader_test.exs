@@ -71,6 +71,7 @@ defmodule Longx.Agent.Definition.LoaderTest do
              Longx.Agent.Plugs.Knowledge,
              Longx.Agent.Plugs.WebSearch,
              Longx.Agent.Plugs.Browser,
+             Longx.Agent.Plugs.Credentials,
              Longx.Agent.Plugs.Agents,
              Longx.Agent.Plugs.Goal,
              Longx.Agent.Plugs.Compaction,

@@ -132,6 +132,65 @@ export type SearchProviderAttributesOnlySchema = {
 };
 
 
+// Credential Schema
+export type CredentialResourceSchema = {
+  __type: "Resource";
+  __primitiveFields: "allowedHosts" | "authorizeUrl" | "clientId" | "expiresAt" | "extraParams" | "hasAccessToken" | "hasClientSecret" | "hasRefreshToken" | "hasSecret" | "header" | "id" | "insertedAt" | "kind" | "label" | "lastError" | "lastErrorAt" | "name" | "pkce" | "refreshedAt" | "registrationUrl" | "scheme" | "scopes" | "status" | "tokenUrl" | "updatedAt";
+  allowedHosts: Array<string>;
+  authorizeUrl: string | null;
+  clientId: string | null;
+  expiresAt: UtcDateTimeUsec | null;
+  extraParams: Record<string, any>;
+  hasAccessToken: boolean | null;
+  hasClientSecret: boolean | null;
+  hasRefreshToken: boolean | null;
+  hasSecret: boolean | null;
+  header: string;
+  id: UUIDv7;
+  insertedAt: UtcDateTimeUsec;
+  kind: "api_key" | "oauth2";
+  label: string | null;
+  lastError: string | null;
+  lastErrorAt: UtcDateTimeUsec | null;
+  name: string;
+  pkce: boolean;
+  refreshedAt: UtcDateTimeUsec | null;
+  registrationUrl: string | null;
+  scheme: string;
+  scopes: string | null;
+  status: "error" | "expired" | "needs_login" | "ready" | null;
+  tokenUrl: string | null;
+  updatedAt: UtcDateTimeUsec;
+};
+
+
+
+export type CredentialAttributesOnlySchema = {
+  __type: "Resource";
+  __primitiveFields: "allowedHosts" | "authorizeUrl" | "clientId" | "expiresAt" | "extraParams" | "header" | "id" | "insertedAt" | "kind" | "label" | "lastError" | "lastErrorAt" | "name" | "pkce" | "refreshedAt" | "registrationUrl" | "scheme" | "scopes" | "tokenUrl" | "updatedAt";
+  allowedHosts: Array<string>;
+  authorizeUrl: string | null;
+  clientId: string | null;
+  expiresAt: UtcDateTimeUsec | null;
+  extraParams: Record<string, any>;
+  header: string;
+  id: UUIDv7;
+  insertedAt: UtcDateTimeUsec;
+  kind: "api_key" | "oauth2";
+  label: string | null;
+  lastError: string | null;
+  lastErrorAt: UtcDateTimeUsec | null;
+  name: string;
+  pkce: boolean;
+  refreshedAt: UtcDateTimeUsec | null;
+  registrationUrl: string | null;
+  scheme: string;
+  scopes: string | null;
+  tokenUrl: string | null;
+  updatedAt: UtcDateTimeUsec;
+};
+
+
 // ProjectFiles Schema
 export type ProjectFilesResourceSchema = {
   __type: "Resource";
@@ -705,6 +764,285 @@ export type SearchProviderFilterInput = {
 
 
 };
+export type CredentialFilterInput = {
+  and?: Array<CredentialFilterInput>;
+  or?: Array<CredentialFilterInput>;
+  not?: Array<CredentialFilterInput>;
+
+  allowedHosts?: {
+    eq?: Array<string>;
+    notEq?: Array<string>;
+    in?: Array<Array<string>>;
+    has?: string;
+  };
+
+  authorizeUrl?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  clientId?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  expiresAt?: {
+    isNil?: boolean;
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  extraParams?: {
+    eq?: Record<string, any>;
+    notEq?: Record<string, any>;
+    in?: Array<Record<string, any>>;
+    lessThan?: Record<string, any>;
+    greaterThan?: Record<string, any>;
+    lessThanOrEqual?: Record<string, any>;
+    greaterThanOrEqual?: Record<string, any>;
+  };
+
+  hasAccessToken?: {
+    isNil?: boolean;
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
+  };
+
+  hasClientSecret?: {
+    isNil?: boolean;
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
+  };
+
+  hasRefreshToken?: {
+    isNil?: boolean;
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
+  };
+
+  hasSecret?: {
+    isNil?: boolean;
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
+  };
+
+  header?: {
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  id?: {
+    eq?: UUIDv7;
+    notEq?: UUIDv7;
+    in?: Array<UUIDv7>;
+    lessThan?: UUIDv7;
+    greaterThan?: UUIDv7;
+    lessThanOrEqual?: UUIDv7;
+    greaterThanOrEqual?: UUIDv7;
+  };
+
+  insertedAt?: {
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  kind?: {
+    eq?: "api_key" | "oauth2";
+    notEq?: "api_key" | "oauth2";
+    in?: Array<"api_key" | "oauth2">;
+    lessThan?: "api_key" | "oauth2";
+    greaterThan?: "api_key" | "oauth2";
+    lessThanOrEqual?: "api_key" | "oauth2";
+    greaterThanOrEqual?: "api_key" | "oauth2";
+  };
+
+  label?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  lastError?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  lastErrorAt?: {
+    isNil?: boolean;
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  name?: {
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  pkce?: {
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
+  };
+
+  refreshedAt?: {
+    isNil?: boolean;
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  registrationUrl?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  scheme?: {
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  scopes?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  status?: {
+    isNil?: boolean;
+    eq?: "error" | "expired" | "needs_login" | "ready";
+    notEq?: "error" | "expired" | "needs_login" | "ready";
+    in?: Array<"error" | "expired" | "needs_login" | "ready">;
+    lessThan?: "error" | "expired" | "needs_login" | "ready";
+    greaterThan?: "error" | "expired" | "needs_login" | "ready";
+    lessThanOrEqual?: "error" | "expired" | "needs_login" | "ready";
+    greaterThanOrEqual?: "error" | "expired" | "needs_login" | "ready";
+  };
+
+  tokenUrl?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  updatedAt?: {
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+
+};
 export type ProjectFilesFilterInput = {
   and?: Array<ProjectFilesFilterInput>;
   or?: Array<ProjectFilesFilterInput>;
@@ -1267,6 +1605,9 @@ export type ProviderFilterField = (typeof providerFilterFields)[number];
 export const searchProviderFilterFields = ["baseUrl", "default", "hasApiKey", "id", "kind", "name", "slug"] as const;
 export type SearchProviderFilterField = (typeof searchProviderFilterFields)[number];
 
+export const credentialFilterFields = ["allowedHosts", "authorizeUrl", "clientId", "expiresAt", "extraParams", "hasAccessToken", "hasClientSecret", "hasRefreshToken", "hasSecret", "header", "id", "insertedAt", "kind", "label", "lastError", "lastErrorAt", "name", "pkce", "refreshedAt", "registrationUrl", "scheme", "scopes", "status", "tokenUrl", "updatedAt"] as const;
+export type CredentialFilterField = (typeof credentialFilterFields)[number];
+
 
 export const projectFilterFields = ["agentSettings", "archivedAt", "description", "dirtyStart", "id", "insertedAt", "modelId", "name", "rootPath", "slug", "trustLocalAgent", "updatedAt", "webSearch", "model"] as const;
 export type ProjectFilterField = (typeof projectFilterFields)[number];
@@ -1289,6 +1630,9 @@ export type ProviderSortField = (typeof providerSortFields)[number];
 
 export const searchProviderSortFields = ["baseUrl", "default", "hasApiKey", "id", "kind", "name", "slug"] as const;
 export type SearchProviderSortField = (typeof searchProviderSortFields)[number];
+
+export const credentialSortFields = ["allowedHosts", "authorizeUrl", "clientId", "expiresAt", "extraParams", "hasAccessToken", "hasClientSecret", "hasRefreshToken", "hasSecret", "header", "id", "insertedAt", "kind", "label", "lastError", "lastErrorAt", "name", "pkce", "refreshedAt", "registrationUrl", "scheme", "scopes", "status", "tokenUrl", "updatedAt"] as const;
+export type CredentialSortField = (typeof credentialSortFields)[number];
 
 
 export const projectSortFields = ["agentSettings", "archivedAt", "description", "dirtyStart", "id", "insertedAt", "modelId", "name", "rootPath", "slug", "trustLocalAgent", "updatedAt", "webSearch"] as const;

@@ -469,6 +469,52 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     DeepSeek `https://api.deepseek.com/v1`, GLM `https://open.bigmodel.cn/api/v1`, Bailian
     Token Plan `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`.
     Adding a provider = a DB row, no code.
+- **Credentials — `lib/longx/credentials/`**, Ash domain `Longx.Credentials`: the API keys
+  and OAuth2 tokens the agent's tools need, **never seen by the model**.
+  `Longx.Credentials.Credential` (`credentials`): `name` (a slug, the placeholder the agent
+  uses), `kind` `:api_key` | `:oauth2`, `header` / `scheme` (`authorization` / `Bearer`;
+  `""` = the raw value), **`allowed_hosts` (required, non-empty — the boundary against
+  exfiltration)**, the ciphertext columns `secret` / `access_token` / `refresh_token` /
+  `client_secret` (AshCloak + `Longx.Vault`, `decrypt_by_default([])`, loaded only by
+  `Credentials.reveal/1`), the OAuth2 client (`client_id`, `authorize_url`, `token_url`,
+  `registration_url`, `scopes`, `pkce`, `extra_params`), `expires_at` / `refreshed_at` /
+  `last_error`, and the calculated `status` (`ready` | `expired` | `needs_login` |
+  `error`). **The one way a credential is used is `Credentials.request/4`**
+  (`Credentials.Http`): the value injected into the row's header — or wherever
+  `{{credential:NAME}}` stands in the URL, headers or body —, refused for a host outside
+  `allowed_hosts`, redirects not followed, an access token within 60 s of expiry refreshed
+  first, and the answer (status, headers, body) **scrubbed** of every secret value
+  (`[redacted:NAME]`). `Credentials.OAuth`: `begin_login/2` (PKCE S256 + state kept in
+  `Credentials.Logins`, ETS in the tree, 15 min; RFC 7591 `register/2` first when the row
+  has a `registration_url` and no client id), `complete/2` (`GET
+  /callback/credentials?code&state` — **one stable redirect URI per instance**,
+  `OAuth.redirect_uri/1` = the browser's origin or `Longx.System.public_url/0` +
+  `/callback/credentials`, the one to register at the provider; the ask of an agent's
+  `credential_login` is answered by it through the request's `meta.login` state, so the
+  person presses nothing after the browser came back), `refresh/1` (the refresh_token
+  grant; a refresh token in the answer replaces the old one; an error lands on the row).
+  **Oban** (`Oban.Engines.Lite` on `Longx.Repo`, `Oban.Notifiers.PG`, queue `credentials`,
+  `Oban.Plugins.Cron` every 5 min, `Pruner`; `config :longx, Oban`; migration
+  `add_oban.exs` from `Oban.Migration`; `testing: :manual` in tests with `Oban.Testing`):
+  `Credentials.RefreshWorker` sweeps `Credentials.expiring/1` (10 min ahead, with a refresh
+  token) into one unique job per credential. **The agent side — `Plugs.Credentials`** (in
+  the shipped pipeline after Browser, namespace `longx`): `credentials_list` (names,
+  kinds, statuses, hosts, expiry), `http_request(credential, url, method, headers, body,
+  timeout_ms)` (through `request/4`; the body clipped head and tail; MCP servers over HTTP
+  are JSON-RPC POSTs through it), `credential_login` (an ask with the authorize URL and
+  `meta: %{"login" => state}`), `credential_create` (the key / client secret typed by the
+  person into the ask's **`secret: true` field**, masked in the elicitation form, stored
+  by the tool). RPC on the resource: `list_credentials`, `create_credential_api_key`,
+  `create_credential_oauth2`, `update_credential`, `delete_credential`,
+  `credential_login_url` (`id`, `origin`), `refresh_credential`, `credential_redirect_uri`
+  (`test/longx_web/rpc/credentials_rpc_test`); Settings → 凭证
+  (`settings/CredentialsSection`, `core/credentials.ts`: the list, add API key / OAuth2,
+  登录 opens the URL in a new tab and the list polls until the browser comes back, 立即刷新,
+  delete behind a confirm, the redirect URI to register). A plug's own Elixir code calls
+  `Longx.Credentials.request/4` directly (`writing-plugs.md`). Tests:
+  `test/longx/credentials/` (resource, `http`, `oauth`, `refresh_worker`, `plug`,
+  `agent` — the login and the typed key end to end with Bypass as the model and as the
+  provider), `callback_controller_test`.
 - **The headless browser is obscura, downloaded on first use** (`h4ckf0r0day/obscura`,
   Rust + embedded V8, Apache-2.0; nothing in `priv/`, no mix task, no release step).
   `Longx.Browser.Runtime` pins the version (five targets; sha256s computed once when

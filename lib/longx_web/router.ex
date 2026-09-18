@@ -38,6 +38,8 @@ defmodule LongxWeb.Router do
 
   # a third party sending the browser back after a login a tool asked for
   scope "/callback", LongxWeb do
+    # the stable redirect URI of OAuth2 credentials (Longx.Credentials.OAuth)
+    get "/credentials", CallbackController, :credentials
     get "/:id", CallbackController, :show
   end
 

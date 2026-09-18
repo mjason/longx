@@ -37,6 +37,32 @@ export const dependencyReport = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
+/** a credential row as the wire lists it: never a value, only "has one" */
+export const credential = (name: string, extra: Record<string, unknown> = {}) => ({
+  id: `cred-${name}`,
+  name,
+  label: null,
+  kind: "api_key",
+  header: "authorization",
+  scheme: "Bearer",
+  allowedHosts: ["api.example.com"],
+  clientId: null,
+  authorizeUrl: null,
+  tokenUrl: null,
+  registrationUrl: null,
+  scopes: null,
+  pkce: true,
+  expiresAt: null,
+  refreshedAt: null,
+  lastError: null,
+  status: "ready",
+  hasSecret: true,
+  hasAccessToken: false,
+  hasRefreshToken: false,
+  hasClientSecret: false,
+  ...extra,
+});
+
 export const agentSettingsData = () => ({
   maxDepth: 2,
   maxChildren: 4,
@@ -171,6 +197,14 @@ export function rpcMock() {
     publicUrl: vi.fn(async () => ok({ url: "http://192.168.2.129:7788", setting: null })),
     dependencies: vi.fn(async () => ok(dependencyReport())),
     checkDependencies: vi.fn(async () => ok(dependencyReport())),
+    listCredentials: vi.fn(async () => ok([credential("svc"), credential("coros", { kind: "oauth2", status: "needs_login", hasSecret: false })])),
+    createCredentialApiKey: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok(credential(String(input["name"]), input as never))),
+    createCredentialOauth2: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok(credential(String(input["name"]), { kind: "oauth2", status: "needs_login", ...(input as object) } as never))),
+    updateCredential: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok(credential("svc", input as never))),
+    deleteCredential: vi.fn(async () => ok(null)),
+    credentialLoginUrl: vi.fn(async () => ok({ url: "https://auth.example/authorize?state=s1", redirectUri: "http://localhost:3000/callback/credentials" })),
+    refreshCredential: vi.fn(async () => ok(credential("coros", { kind: "oauth2", status: "ready", hasAccessToken: true, hasRefreshToken: true }))),
+    credentialRedirectUri: vi.fn(async () => ok({ uri: "http://localhost:3000/callback/credentials" })),
     setPublicUrl: vi.fn(async ({ input }: { input: { url: string } }) => ok({ url: input.url || "http://192.168.2.129:7788", setting: input.url || null })),
     listProviders: vi.fn(async () => ok([provider(1), provider(2)])),
     createProvider: vi.fn(

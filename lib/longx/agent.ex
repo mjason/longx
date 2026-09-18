@@ -361,10 +361,12 @@ defmodule Longx.Agent do
         "fields" =>
           Enum.map(request.fields, fn f ->
             %{"id" => to_string(f[:id] || f["id"]), "label" => f[:label] || f["label"] || ""}
+            |> then(&if(f[:secret] || f["secret"], do: Map.put(&1, "secret", true), else: &1))
           end),
         "callbackUrl" => callback
       }
       |> then(&if(is_map(request[:spec]), do: Map.put(&1, "spec", request.spec), else: &1))
+      |> then(&if(is_map(request[:meta]), do: Map.put(&1, "meta", request.meta), else: &1))
 
     ThreadState.put_request(state.thread_id, id, "longx/action/request", params)
     timer = request.timeout && Process.send_after(self(), {:ask_timeout, id}, request.timeout)
