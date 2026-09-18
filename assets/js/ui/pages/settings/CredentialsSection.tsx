@@ -237,6 +237,8 @@ type Form = {
   clientId: string;
   clientSecret: string;
   pkce: boolean;
+  // editing: drop the stored client secret (the client is public)
+  clearClientSecret: boolean;
 };
 
 const EMPTY: Form = {
@@ -253,6 +255,7 @@ const EMPTY: Form = {
   clientId: "",
   clientSecret: "",
   pkce: true,
+  clearClientSecret: false,
 };
 
 function formOf(c: Credential): Form {
@@ -312,7 +315,7 @@ function CredentialDialog(props: { kind: "api_key" | "oauth2"; onClose: () => vo
                   scopes: form.scopes,
                   clientId: form.clientId,
                   pkce: form.pkce,
-                  ...(form.clientSecret ? { clientSecret: form.clientSecret } : {}),
+                  ...(form.clearClientSecret ? { clientSecret: null } : form.clientSecret ? { clientSecret: form.clientSecret } : {}),
                 }),
           },
         });
@@ -384,7 +387,20 @@ function CredentialDialog(props: { kind: "api_key" | "oauth2"; onClose: () => vo
                   <Input value={form.clientId} onChange={set("clientId")} aria-label={s.clientId} />
                 </Field>
                 <Field label={s.clientSecret} hint={existing && existing.hasClientSecret ? s.keepSecret : undefined}>
-                  <Input type="password" value={form.clientSecret} onChange={set("clientSecret")} aria-label={s.clientSecret} autoComplete="off" />
+                  {existing?.hasClientSecret ? (
+                    <div className="flex items-center justify-between py-1">
+                      <Label htmlFor="credential-clear-secret" className="text-muted-foreground text-xs font-normal">
+                        {s.clearClientSecret}
+                      </Label>
+                      <Switch
+                        id="credential-clear-secret"
+                        aria-label={s.clearClientSecret}
+                        checked={form.clearClientSecret}
+                        onCheckedChange={(v) => setForm((f) => ({ ...f, clearClientSecret: v, clientSecret: v ? "" : f.clientSecret }))}
+                      />
+                    </div>
+                  ) : null}
+                  <Input type="password" value={form.clientSecret} disabled={form.clearClientSecret} onChange={set("clientSecret")} aria-label={s.clientSecret} autoComplete="off" />
                 </Field>
                 <Field label={s.registrationUrl} hint={s.registrationHint}>
                   <Input value={form.registrationUrl} onChange={set("registrationUrl")} aria-label={s.registrationUrl} />

@@ -95,7 +95,8 @@ export type Oauth2Input = {
   pkce?: boolean;
 };
 
-export type CredentialUpdate = Partial<Omit<ApiKeyInput, "name"> & Omit<Oauth2Input, "name">>;
+// an edit: a null client secret clears the stored one (the client is public)
+export type CredentialUpdate = Partial<Omit<ApiKeyInput, "name"> & Omit<Oauth2Input, "name" | "clientSecret">> & { clientSecret?: string | null };
 
 /** The hosts a person typed, one per line or comma: hostnames (a pasted URL keeps its host). */
 export function splitHosts(text: string): string[] {

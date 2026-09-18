@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt } from "@/ui/test-utils";
+import { credential, ok } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
@@ -11,6 +12,7 @@ import {
   credentialLoginUrl,
   deleteCredential,
   credentialCompleteUrl,
+  listCredentials,
   refreshCredential,
   updateCredential,
 } from "@/ash_rpc";
@@ -137,6 +139,10 @@ describe("Settings → 凭证", () => {
     await user.type(within(form).getByRole("textbox", { name: "允许发送到的主机" }), "mcpcn.coros.com");
     await user.clear(within(form).getByRole("textbox", { name: "Client ID" }));
     await user.type(within(form).getByRole("textbox", { name: "Client ID" }), "fresh-id");
+    // the list refetched after the save says the row now holds a client secret
+    vi.mocked(listCredentials).mockResolvedValueOnce(
+      ok([credential("svc"), credential("coros", { kind: "oauth2", status: "needs_login", hasSecret: false, hasClientSecret: true, clientId: "fresh-id" })]) as never,
+    );
     await user.click(within(form).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(updateCredential).toHaveBeenCalledWith(
@@ -149,6 +155,17 @@ describe("Settings → 凭证", () => {
     const sent = vi.mocked(updateCredential).mock.calls[0]![0] as { input: Record<string, unknown> };
     expect(sent.input).not.toHaveProperty("clientSecret");
     expect(sent.input).not.toHaveProperty("name");
+
+    // a stored client secret can be cleared (a public client): the switch sends null
+    vi.mocked(updateCredential).mockClear();
+    await waitFor(() => expect(screen.getByTestId("credential-coros")).toHaveTextContent("fresh-id"));
+    await user.click(within(screen.getByTestId("credential-coros")).getByRole("button", { name: /编辑/ }));
+    const form3 = await screen.findByTestId("credential-form");
+    await user.click(within(form3).getByRole("switch", { name: /清除/ }));
+    await user.click(within(form3).getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(updateCredential).toHaveBeenCalledWith(expect.objectContaining({ identity: "cred-coros", input: expect.objectContaining({ clientSecret: null }) })),
+    );
 
     // an API key: typing a new key sends it
     vi.mocked(updateCredential).mockClear();

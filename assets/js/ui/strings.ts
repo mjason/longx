@@ -465,6 +465,7 @@ export const t = {
     edit: "编辑",
     editTitle: (name: string) => `编辑凭证 ${name}`,
     keepSecret: "留空则保持现在的值",
+    clearClientSecret: "清除现有 Client Secret（公开客户端，登录时由 Longx 注册）",
     clientByRegistration: "登录时由 Longx 注册",
     // the forms
     name: "名字",
