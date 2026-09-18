@@ -691,7 +691,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     shrink-0`. **The centre is an editor area** (`ui/workbench/Workbench`, state in
     `core/workbench.ts`): the chat tab first and always, files and diffs from the tools;
     `EditorTab` = `ui/editor/CodeEditor` (CodeMirror 6, lazy languages + Elixir, our tokens
-    as the theme, ⌘S), `DiffTab` = `ui/editor/DiffView` (`@codemirror/merge`, side by side
+    as the theme, ⌘S; **a markdown file opens rendered** — `ui/editor/MarkdownPreview`,
+    react-markdown + remark-gfm with the chat's markdown classes and shiki — 编辑 / 预览
+    toggle in the tab's bar, the editor straight away when `show_file` named a line), `DiffTab` = `ui/editor/DiffView` (`@codemirror/merge`, side by side
     or unified, collapsed unchanged stretches). `components/CommandPalette` (⌘K),
     `components/DownloadBar` (browser and upgrade), `ThemeToggle`, `Logo`; `strings.ts`
     (all UI copy, zh-CN); `core/theme.ts` follows the OS by default; `core/viewport.ts`

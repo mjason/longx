@@ -1,7 +1,7 @@
 // One open file: CodeMirror over the file's content, a draft while typing,
 // save with the button or ⌘S. Binary or over-large files are shown as
 // such rather than mangled; a phone wraps lines.
-import { Save, Undo2 } from "lucide-react";
+import { Eye, Pencil, Save, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useViewport } from "@/core/viewport";
@@ -10,6 +10,7 @@ import { useFileContent, useSaveFile } from "@/core/workspace";
 import { Button } from "@/ui/components/ui/button";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { CodeEditor } from "@/ui/editor/CodeEditor";
+import { isMarkdownPath, MarkdownPreview } from "@/ui/editor/MarkdownPreview";
 import { t } from "@/ui/strings";
 
 export function EditorTab({ projectId, path, line }: { projectId: string; path: string; line?: number }) {
@@ -21,6 +22,11 @@ export function EditorTab({ projectId, path, line }: { projectId: string; path: 
   // null = showing what is on disk; a string = the draft being edited
   const [draft, setDraft] = useState<string | null>(null);
   const dirty = draft !== null && draft !== file.data?.content;
+  // a markdown file opens rendered (a README, a report) — the editor on
+  // request, or straight away when a line was asked for (show_file)
+  const markdown = isMarkdownPath(path);
+  const [mode, setMode] = useState<"preview" | "edit">(markdown && line === undefined ? "preview" : "edit");
+  const previewing = markdown && mode === "preview" && !dirty;
 
   useEffect(() => {
     workbench.markDirty(key, dirty);
@@ -57,6 +63,11 @@ export function EditorTab({ projectId, path, line }: { projectId: string; path: 
       <div className="bg-sidebar border-sidebar-border flex h-9 shrink-0 items-center gap-2 border-b px-3 text-xs">
         <span className="text-muted-foreground min-w-0 flex-1 truncate font-mono">{path}</span>
         {readOnly ? <span className="text-warning">{t.truncatedFile(Math.round(file.data.size / 1024))}</span> : null}
+        {markdown ? (
+          <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => setMode(previewing ? "edit" : "preview")} disabled={dirty && !previewing}>
+            {previewing ? <Pencil /> : <Eye />} {previewing ? t.editFile : t.previewFile}
+          </Button>
+        ) : null}
         {dirty ? (
           <>
             <span className="text-warning">●</span>
@@ -65,12 +76,18 @@ export function EditorTab({ projectId, path, line }: { projectId: string; path: 
             </Button>
           </>
         ) : null}
-        <Button size="sm" className="h-7 px-2" disabled={!dirty || save.isPending} onClick={doSave} data-testid="save-file">
-          <Save /> {save.isPending ? t.saving : t.saveFile}
-        </Button>
+        {previewing ? null : (
+          <Button size="sm" className="h-7 px-2" disabled={!dirty || save.isPending} onClick={doSave} data-testid="save-file">
+            <Save /> {save.isPending ? t.saving : t.saveFile}
+          </Button>
+        )}
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <CodeEditor path={path} value={draft ?? file.data.content ?? ""} onChange={setDraft} onSave={doSave} readOnly={readOnly} wrap={viewport === "phone"} line={line} className="h-full" />
+      <div className={previewing ? "min-h-0 flex-1 overflow-y-auto" : "min-h-0 flex-1 overflow-hidden"}>
+        {previewing ? (
+          <MarkdownPreview source={file.data.content ?? ""} />
+        ) : (
+          <CodeEditor path={path} value={draft ?? file.data.content ?? ""} onChange={setDraft} onSave={doSave} readOnly={readOnly} wrap={viewport === "phone"} line={line} className="h-full" />
+        )}
       </div>
     </div>
   );

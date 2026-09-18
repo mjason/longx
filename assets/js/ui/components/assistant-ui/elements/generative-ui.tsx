@@ -22,7 +22,7 @@ import { SyntaxHighlighter } from "@/ui/components/assistant-ui/elements/shiki-h
 const markdownBase = defaultGenerativeUILibrary.Markdown!;
 
 // a fenced block goes through shiki; inline code stays a <code>
-const markdownComponents: Components = {
+export const markdownComponents: Components = {
   code: ({ className, children, ...rest }: ComponentPropsWithoutRef<"code">) => {
     const language = /language-(\w+)/.exec(className ?? "")?.[1];
     const code = String(children ?? "").replace(/\n$/, "");

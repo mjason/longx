@@ -64,11 +64,31 @@ describe("FilesTool", () => {
     expect(screen.getByTestId("chat-area")).toBeVisible();
   });
 
+  test("a markdown file opens rendered, not in the editor; 编辑 switches to the editor and 预览 back", async () => {
+    vi.mocked(readFile).mockResolvedValue(ok({ path: "README.md", content: "# Title\n\nSome **bold** text.\n", size: 26, binary: false, truncated: false }) as never);
+    const { user, panel } = await openFiles();
+    await user.click(within(panel).getByRole("treeitem", { name: /README/ }));
+    const editor = await screen.findByTestId("editor-tab");
+    const preview = await within(editor).findByTestId("markdown-preview");
+    expect(within(preview).getByRole("heading", { level: 1 })).toHaveTextContent("Title");
+    expect(within(preview).getByText("bold").tagName).toBe("STRONG");
+    expect(editor.querySelector(".cm-content")).toBeNull();
+    // no save button while reading; 编辑 opens the editor with the source
+    expect(screen.queryByTestId("save-file")).not.toBeInTheDocument();
+    await user.click(within(editor).getByRole("button", { name: "编辑" }));
+    await waitFor(() => expect(editor.querySelector(".cm-content")).toHaveTextContent("# Title"));
+    expect(screen.getByTestId("save-file")).toBeInTheDocument();
+    await user.click(within(editor).getByRole("button", { name: "预览" }));
+    await within(editor).findByTestId("markdown-preview");
+  });
+
   test("editing marks the tab; save writes the file (⌘S too)", async () => {
     const { user, panel } = await openFiles();
     vi.mocked(readFile).mockResolvedValue(ok({ path: "README.md", content: "# hi\n", size: 5, binary: false, truncated: false }) as never);
     await user.click(within(panel).getByRole("treeitem", { name: /README/ }));
     const editor = await screen.findByTestId("editor-tab");
+    // a markdown file opens rendered; the editor is a click away
+    await user.click(await within(editor).findByRole("button", { name: "编辑" }));
     const content = await waitFor(() => {
       const c = editor.querySelector(".cm-content");
       expect(c).toHaveTextContent("hi");
@@ -116,6 +136,8 @@ describe("FilesTool", () => {
     vi.mocked(readFile).mockResolvedValue(ok({ path: "README.md", content: "# hi\n", size: 5, binary: false, truncated: false }) as never);
     await user.click(within(panel).getByRole("treeitem", { name: /README/ }));
     const editor = await screen.findByTestId("editor-tab");
+    // a markdown file opens rendered; the editor is a click away
+    await user.click(await within(editor).findByRole("button", { name: "编辑" }));
     const content = await waitFor(() => {
       const c = editor.querySelector(".cm-content");
       expect(c).toHaveTextContent("hi");
@@ -135,6 +157,7 @@ describe("FilesTool", () => {
     const { user, panel } = await openFiles(390);
     await user.click(within(panel).getByRole("treeitem", { name: /README/ }));
     const editor = await screen.findByTestId("editor-tab");
+    await user.click(await within(editor).findByRole("button", { name: "编辑" }));
     await waitFor(() => expect(editor.querySelector(".cm-lineWrapping")).not.toBeNull());
   });
 });

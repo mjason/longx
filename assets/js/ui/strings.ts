@@ -104,6 +104,8 @@ export const t = {
   unsavedChanges: "有未保存的改动",
   saveFile: "保存",
   saving: "保存中…",
+  editFile: "编辑",
+  previewFile: "预览",
   savedFile: "已保存",
   binaryFile: "二进制文件，不能在这里查看。",
   truncatedFile: (kb: number) =>
