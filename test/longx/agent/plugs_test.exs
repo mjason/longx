@@ -68,6 +68,58 @@ defmodule Longx.Agent.PlugsTest do
                Tool.call(tool!(Present, "present"), %{"$type" => "Rocket"}, ctx)
     end
 
+    test "a tree the model serialised badly is normalised before validation: children / rows as a JSON string, the whole tree under a key",
+         %{ctx: ctx} do
+      # 百炼 / DeepSeek send nested arrays as strings now and then — the card
+      # then showed its children as one raw JSON text
+      stringly = %{
+        "$type" => "Card",
+        "title" => "凭证",
+        "children" =>
+          Jason.encode!([
+            %{"$type" => "Text", "value" => "hi"},
+            %{
+              "$type" => "Table",
+              "columns" => Jason.encode!([%{"label" => "k"}]),
+              "rows" => Jason.encode!([["a"]])
+            }
+          ])
+      }
+
+      assert %{
+               "children" => [
+                 %{"$type" => "Text"},
+                 %{"$type" => "Table", "columns" => [%{"label" => "k"}], "rows" => [["a"]]}
+               ]
+             } =
+               Present.normalize(stringly)
+
+      # the tool sees the normalised tree (Tool.call and the kernel's arguments_of both apply it)
+      tool = tool!(Present, "present")
+      assert {:ok, "shown to the user"} = Tool.call(tool, stringly, ctx)
+
+      assert %{"children" => [_, _]} =
+               Longx.Agent.Kernel.Calls.arguments_of(
+                 %{"arguments" => Jason.encode!(stringly)},
+                 tool
+               )
+
+      # the whole tree wrapped in a key, or serialised as one string
+      inner = %{"$type" => "Button", "label" => "ok"}
+      assert Present.normalize(%{"spec" => inner}) == inner
+      assert Present.normalize(%{"tree" => Jason.encode!(inner)}) == inner
+      # a Text whose value happens to look like JSON stays text
+      text = %{"$type" => "Text", "value" => ~s({"not": "a tree"})}
+      assert Present.normalize(text) == text
+      # a proper tree is untouched
+      tree = %{
+        "$type" => "Card",
+        "children" => [%{"$type" => "Fact", "label" => "a", "value" => "1"}]
+      }
+
+      assert Present.normalize(tree) == tree
+    end
+
     test "prompt_user outside an agent cannot ask", %{ctx: ctx} do
       assert {:error, "no agent" <> _} =
                Tool.call(

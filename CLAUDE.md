@@ -354,6 +354,11 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `ActionTool` draws the tree with a `dispatch` whose action — `$action` plus
     `$input` or the form's values — answers as `%{"action" => payload}`; the tool returns
     it as JSON, a cancel as "dismissed"). **A plug pushes a card without the model**:
+    **`Present.normalize/1`** is the tools' `prepare:` (a `Tool` option applied by
+    `Tool.call/3` and by `Calls.arguments_of/2`, so the UI item sees it too): nested arrays
+    a model sent as JSON strings under the structural keys (`children`, `rows`, `columns`,
+    `options`, …) are decoded and a tree handed over under one key (`spec`) unwrapped —
+    百炼 and DeepSeek slip like that, and a card once showed its children as raw text.
     `Context.present(ctx, tree)` (→ `Agent.present/2`, a cast; `Kernel.Calls.present/2`
     appends a completed `longx.present` item as an `:activity` row, `context?: false`,
     never model input) or `"present" => tree` in the result's meta. Tests:

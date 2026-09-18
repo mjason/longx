@@ -78,7 +78,12 @@ defmodule Longx.Agent.Kernel.Calls do
   def arguments_of(%{"type" => "custom_tool_call", "input" => input}, _tool),
     do: %{"input" => input}
 
-  def arguments_of(call, _tool), do: decode_arguments(call["arguments"])
+  def arguments_of(call, tool) do
+    case decode_arguments(call["arguments"]) do
+      {:error, _} = error -> error
+      arguments -> Tool.prepare(tool, arguments)
+    end
+  end
 
   def decode_arguments(nil), do: %{}
   def decode_arguments(map) when is_map(map), do: map

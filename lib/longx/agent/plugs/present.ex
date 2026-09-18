@@ -48,12 +48,14 @@ defmodule Longx.Agent.Plugs.Present do
 
   tool :present, @vocabulary["present"]["description"],
     namespace: "longx",
-    schema: @vocabulary["present"]["parameters"] do
+    schema: @vocabulary["present"]["parameters"],
+    prepare: &__MODULE__.normalize/1 do
   end
 
   tool :prompt_user, @vocabulary["prompt_user"]["description"],
     namespace: "longx",
     schema: @vocabulary["prompt_user"]["parameters"],
+    prepare: &__MODULE__.normalize/1,
     timeout: @ask_timeout + 5_000 do
   end
 
@@ -101,6 +103,55 @@ defmodule Longx.Agent.Plugs.Present do
   def components, do: @vocabulary["components"]
 
   def present(_tree, _ctx), do: {:ok, "shown to the user"}
+
+  # the keys whose values are structure, never prose: a JSON string there is
+  # a model's serialisation slip (百炼 and DeepSeek send nested arrays as
+  # strings now and then — a card once showed its children as raw JSON)
+  @structural ~w(children rows columns options data items series fields steps actions confirm cancel $action)
+
+  @doc """
+  A tree as the model meant it: nested arrays / objects sent as JSON
+  strings decoded (for the structural keys only — a Text whose value looks
+  like JSON stays text), and a tree handed over under a single key
+  (`spec`, `tree`) or as one string unwrapped. Applied before validation
+  and before the UI item is made.
+  """
+  @spec normalize(term) :: term
+  def normalize(%{"$type" => _} = node), do: normalize_node(node)
+
+  def normalize(map) when is_map(map) and map_size(map) == 1 do
+    case map |> Map.values() |> hd() |> decode_if_json() do
+      %{"$type" => _} = node -> normalize_node(node)
+      _ -> normalize_node(map)
+    end
+  end
+
+  def normalize(other), do: normalize_node(other)
+
+  defp normalize_node(map) when is_map(map) do
+    Map.new(map, fn
+      {key, value} when key in @structural -> {key, value |> decode_if_json() |> normalize_node()}
+      {key, value} -> {key, normalize_node(value)}
+    end)
+  end
+
+  defp normalize_node(list) when is_list(list), do: Enum.map(list, &normalize_node/1)
+  defp normalize_node(other), do: other
+
+  defp decode_if_json(text) when is_binary(text) do
+    case String.trim(text) do
+      <<c, _::binary>> = trimmed when c in [?[, ?{] ->
+        case Jason.decode(trimmed) do
+          {:ok, decoded} when is_map(decoded) or is_list(decoded) -> decoded
+          _ -> text
+        end
+
+      _ ->
+        text
+    end
+  end
+
+  defp decode_if_json(other), do: other
 
   def prompt_user(tree, ctx) do
     case Context.ask(ctx, title: title_of(tree), spec: tree, timeout: @ask_timeout) do

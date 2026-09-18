@@ -25,7 +25,8 @@ defmodule Longx.Agent.Tool do
           fun: {module, atom} | (map, Context.t() -> outcome),
           show: show,
           timeout: pos_integer,
-          freeform: %{syntax: String.t(), definition: String.t(), param: String.t()} | nil
+          freeform: %{syntax: String.t(), definition: String.t(), param: String.t()} | nil,
+          prepare: (map -> map) | nil
         }
 
   @enforce_keys [:name, :description, :fun]
@@ -38,7 +39,10 @@ defmodule Longx.Agent.Tool do
             timeout: 60_000,
             # a grammar-constrained *custom* tool for providers that run them
             # (OpenAI): the model sends raw text, which lands in `param`
-            freeform: nil
+            freeform: nil,
+            # the arguments straightened before validation and before the UI
+            # item is made (a nested array a model sent as a JSON string)
+            prepare: nil
 
   @type param :: {atom, param_type, String.t() | nil, keyword}
   @type param_type ::
@@ -65,9 +69,18 @@ defmodule Longx.Agent.Tool do
       fun: {module, name},
       show: Keyword.get(opts, :show, :tool),
       timeout: Keyword.get(opts, :timeout, 60_000),
-      freeform: Keyword.get(opts, :freeform)
+      freeform: Keyword.get(opts, :freeform),
+      prepare: Keyword.get(opts, :prepare)
     }
   end
+
+  @doc "The arguments as the tool wants them: `prepare:` applied when the tool has one."
+  @spec prepare(t | nil, map) :: map
+  def prepare(%__MODULE__{prepare: fun}, arguments)
+      when is_function(fun, 1) and is_map(arguments),
+      do: fun.(arguments)
+
+  def prepare(_tool, arguments), do: arguments
 
   @doc "The plug module's last segment, lower-cased: `Plugs.Shell` → `\"shell\"`."
   @spec namespace_of(module) :: String.t()
@@ -115,6 +128,8 @@ defmodule Longx.Agent.Tool do
   """
   @spec call(t, map, Context.t() | map) :: outcome
   def call(%__MODULE__{} = tool, arguments, context) when is_map(arguments) do
+    arguments = prepare(tool, arguments)
+
     case validate(tool.schema, arguments) do
       :ok -> apply_fun(tool.fun, arguments, context)
       {:error, message} -> {:error, message}
