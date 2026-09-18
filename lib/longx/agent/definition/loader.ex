@@ -162,7 +162,7 @@ defmodule Longx.Agent.Definition.Loader do
       model: last(configs, & &1.model),
       effort: last(configs, & &1.effort),
       errors: errors,
-      notices: notices(errors, configs),
+      notices: notices(errors, configs) ++ Enum.flat_map(layers, &Map.get(&1, :warnings, [])),
       present?: File.dir?(project_dir),
       trusted?: trusted?,
       layers: layers,
@@ -350,6 +350,9 @@ defmodule Longx.Agent.Definition.Loader do
 
     sources = Enum.reverse(sources)
 
+    # things the kernel does now, still done by hand in a plug: a notice, not an error
+    warnings = Enum.flat_map(plug_files, &Longx.Agent.Definition.Lint.check(&1, File.read!(&1)))
+
     # names of the modules this layer defines — the ones from files that fail
     # to parse today keep their mapping from the last good build, so the
     # description's references stay stable (the plug is then reported missing)
@@ -402,6 +405,7 @@ defmodule Longx.Agent.Definition.Loader do
       own: own,
       defined: defined,
       extra_defined: extra_defined,
+      warnings: warnings,
       config: config,
       roles: roles,
       errors: Enum.reverse(errors)

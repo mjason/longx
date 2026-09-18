@@ -283,7 +283,13 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     load leaves the layer below in force and becomes a **notice** in front of the model
     (`⚠ … failed to load …`), as does an outdated version, a plug nobody defines, and a
     description naming a model Longx does not have (the default runs instead —
-    `description_model/3`). `Layout.promote/2` (`Projects.promote_local/2`, RPC
+    `description_model/3`). **`Definition.Lint`** reads every plug file of a layer and turns a
+    plug that does secrets by hand (listens on a port for an OAuth redirect, keeps tokens
+    in a file, reads `*KEY*` from the environment) into a notice pointing at
+    `Longx.Credentials` — the plug still runs; the Local and Knowledge prompts say the
+    shipped guidance takes precedence over a local doc or tool that contradicts it (an
+    agent once wrote a loopback-OAuth plug plus a doc calling it the only way, and every
+    later session followed the doc). `Layout.promote/2` (`Projects.promote_local/2`, RPC
     `promote_local`) moves a local file into `shared/`. `Projects.agent_definition/1` (RPC
     `agent_definition`) lists the files, the resolved plugs, the notices and the
     description's model (`definitionModel`, what the composer shows). `Longx.Agent` loads

@@ -250,6 +250,9 @@ defmodule Longx.Agent.PlugsTest do
       assert text =~ "{:ok, text, meta}"
       assert text =~ "When to write one"
       assert text =~ "prompt_file"
+
+      # what Longx ships wins over what the agent wrote earlier: a stale local doc or tool is fixed, not followed
+      assert text =~ "precedence"
       refute text =~ "not trusted"
 
       untrusted =

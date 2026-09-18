@@ -84,6 +84,8 @@ defmodule Longx.Agent.KnowledgeTest do
     assert text =~ "deploy.sh, never kubectl by hand"
     refute text =~ "Use ./deploy.sh staging"
     assert text =~ "longx/writing-plugs.md"
+    # the shipped docs and plug guidance win over a local doc that contradicts them
+    assert text =~ "precedence"
 
     assert Map.keys(step.tools) |> Enum.sort() == [
              "knowledge_read",

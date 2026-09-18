@@ -128,6 +128,58 @@ defmodule Longx.Agent.Definition.LoaderTest do
     assert third.plugs == second.plugs
   end
 
+  test "a plug that handles secrets itself — a port for an OAuth redirect, tokens in a file, keys from the environment — is a notice pointing at Longx.Credentials, not an error",
+       %{root: root, tag: tag} do
+    write!(
+      root,
+      ".longx/local/plugs/coros.exs",
+      """
+      defmodule CorosMcp do
+        use Longx.Agent.Plug
+
+        tool :coros_login, "logs in" do
+        end
+
+        def coros_login(_args, _ctx) do
+          {:ok, socket} = :gen_tcp.listen(8765, [:binary])
+          File.write!(".longx/local/coros-mcp/oauth.json", "{}")
+          _key = System.get_env("COROS_API_KEY")
+          :gen_tcp.close(socket)
+          {:ok, "ok"}
+        end
+      end
+      """
+    )
+
+    write!(
+      root,
+      ".longx/local/agent.exs",
+      "import Longx.Agent.Config\nagent do\n  plug CorosMcp\nend\n"
+    )
+
+    loaded = Loader.load(root, tag: tag, trusted: true)
+    assert loaded.errors == []
+    assert Enum.any?(names(loaded.plugs), &(inspect(&1) =~ "CorosMcp"))
+    assert [notice] = Enum.filter(loaded.notices, &(&1 =~ "coros.exs"))
+    assert notice =~ "Longx.Credentials"
+    assert notice =~ "listens on a port"
+    assert notice =~ "tokens in a file"
+    assert notice =~ "key from the environment"
+    assert notice =~ "credential_login"
+    assert notice =~ "knowledge"
+    # the cached layer keeps the notice
+    assert Loader.load(root, tag: tag, trusted: true).notices == loaded.notices
+
+    # a plug with none of it gets no notice
+    write!(
+      root,
+      ".longx/local/plugs/coros.exs",
+      "defmodule CorosMcp do\n  use Longx.Agent.Plug\nend\n"
+    )
+
+    refute Enum.any?(Loader.load(root, tag: tag, trusted: true).notices, &(&1 =~ "coros.exs"))
+  end
+
   test "a broken file is a notice for the model, not a dead agent", %{root: root, tag: tag} do
     write!(
       root,
