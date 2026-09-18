@@ -44,6 +44,8 @@ export function ProjectSettingsPage() {
 type Project = NonNullable<ReturnType<typeof useProject>["data"]>;
 
 function SettingsForm({ project, slug }: { project: Project; slug: string }) {
+  // the .longx files, for the watches card to point at shared ones the trust switch keeps off
+  const definitionFiles = useAgentDefinition(project.id);
   const client = useQueryClient();
   const navigate = useNavigate();
   const models = useModels();
@@ -173,7 +175,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
 
       <AgentSection projectId={project.id} trusted={form.trustLocalAgent} onTrust={(v) => set("trustLocalAgent", v)} overrides={form.agentOverrides} onOverrides={(v) => set("agentOverrides", v)} />
 
-      <ProjectWatches projectId={project.id} rootPath={project.rootPath} />
+      <ProjectWatches projectId={project.id} rootPath={project.rootPath} trusted={form.trustLocalAgent} sharedFiles={definitionFiles.data?.files ?? []} />
 
       <section className="space-y-3">
         <h2 className="text-destructive text-lg font-medium">{t.dangerZone}</h2>

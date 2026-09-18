@@ -491,7 +491,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     points at the project page); the project channel pushes `"watches"` on any change.
     UI: Settings → 监控与定时 (`WatchesSection`, every project's watches, running first,
     RPC `list_all_watches`), the project settings card (`ProjectWatches`: state, last
-    output, 试跑 dialog, switch, delete — RPC `list_watches` / `switch_watch` /
+    output, 试跑 dialog, switch, delete, 提升到 shared for a local one through
+    `promote_local`, and a hint naming the `shared/watches/` files an untrusted project
+    keeps off — RPC `list_watches` / `switch_watch` /
     `dry_run_watch` / `delete_watch`), the Agents tool window's session directory
     (`SessionDirectory`: addresses, states, the handle field — RPC `directory`,
     `set_thread_handle`). Tests: `test/longx/agent/watch_test`,

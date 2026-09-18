@@ -154,6 +154,27 @@ defmodule Longx.WatchesTest do
     assert [%Watch{name: "health"}] = Watches.list_for_project!(project.id)
   end
 
+  test "a shared watch is a row only once the project is trusted; a local one of the same name stands in for it",
+       %{dir: dir, project: project} do
+    File.mkdir_p!(Path.join(dir, ".longx/shared/watches"))
+
+    File.write!(
+      Path.join(dir, ".longx/shared/watches/backup.exs"),
+      String.replace(@health, "Health", "Backup")
+    )
+
+    :ok = Watches.reconcile_project(project)
+    assert [] = Watches.list_for_project!(project.id)
+
+    {:ok, trusted} = Projects.update_project(project, %{trust_local_agent: true})
+    :ok = Watches.reconcile_project(trusted)
+    assert [%Watch{name: "backup", layer: :project}] = Watches.list_for_project!(project.id)
+
+    write!(dir, "backup", String.replace(@health, "Health", "Backup"))
+    :ok = Watches.reconcile_project(trusted)
+    assert [%Watch{name: "backup", layer: :local}] = Watches.list_for_project!(project.id)
+  end
+
   test "a run: the script's send wakes the session by address once idle, the state is kept, the row records the run; the budget stops a second send",
        %{bypass: bypass, dir: dir, project: project} do
     model!(bypass, [

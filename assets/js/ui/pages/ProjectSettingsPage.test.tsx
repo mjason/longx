@@ -129,6 +129,24 @@ describe("ProjectSettingsPage", () => {
     expect(deleteWatch).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "w-nightly" } }));
   });
 
+  test("a local watch can be promoted to shared; shared watches of an untrusted project are pointed out", async () => {
+    vi.mocked(agentDefinition).mockResolvedValue(
+      ok(agentDefinitionData({ present: true, trusted: false, files: [".longx/shared/watches/nightly_backup.exs", ".longx/agent.exs"] })) as never,
+    );
+    try {
+      const user = userEvent.setup();
+      renderAt("/p/app-1/settings");
+      const card = await screen.findByTestId("project-watches");
+      const rows = await within(card).findAllByTestId("watch-row");
+      await user.click(within(rows[0]!).getByRole("button", { name: "提升到 shared" }));
+      await waitFor(() => expect(promoteLocal).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "id-1", path: "watches/health.exs" } })));
+      // shared/watches/ has a file the trust switch keeps from running
+      expect(within(card).getByTestId("shared-watches-untrusted")).toHaveTextContent("nightly_backup.exs");
+    } finally {
+      vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData()) as never);
+    }
+  });
+
   test("deleting the project asks for its name, then removes it and leaves", async () => {
     const user = userEvent.setup();
     const { router } = renderAt("/p/app-1/settings");

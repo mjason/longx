@@ -741,7 +741,10 @@ export const t = {
   watches: {
     title: "监控与定时",
     hint: "定时任务是项目里的脚本文件（.longx/local/watches/<名字>.exs），由 agent 或你来写；Longx 每分钟检查一次到期的，跑完把结果记在这里。脚本自己决定检查什么、把消息发给哪个会话。",
-    projectHint: "这个项目的定时任务。改脚本直接改文件；这里能开关、试跑、删除。",
+    projectHint: "这个项目的定时任务。改脚本直接改文件；这里能开关、试跑、删除。本机（local/）的只在这台机器上跑；提升到 shared/ 就进 git，团队的每台机器打开信任开关后都会跑。",
+    promote: "提升到 shared",
+    promoted: (path: string) => `已移到 ${path}`,
+    sharedUntrusted: (names: string) => `shared/watches/ 里有 ${names}，但这个项目还没打开「信任并加载 .longx/ 里的定义」，它们不会运行。`,
     none: "还没有定时任务",
     allNone: "所有项目都还没有定时任务",
     columns: { name: "名字", project: "项目", schedule: "计划", state: "状态", last: "上次", next: "下次", counts: "次数" },

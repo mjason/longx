@@ -128,6 +128,7 @@ defmodule Longx.Watches.PlugTest do
     assert_receive {:request, first}
     assert first["instructions"] =~ "# Watches"
     assert first["instructions"] =~ ".longx/local/watches/<name>.exs"
+    assert first["instructions"] =~ ".longx/shared/watches/<name>.exs"
     assert first["instructions"] =~ "wait_until"
     assert Enum.any?(first["tools"], &(&1["name"] == "watch_list"))
 

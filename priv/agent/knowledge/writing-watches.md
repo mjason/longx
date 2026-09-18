@@ -49,6 +49,10 @@ end
 
 Never `sleep` or poll inside a turn to wait for time to pass: write the watch, say when you will look again, end the turn.
 
+## Local or shared
+
+`local/watches/` is this machine's: yours, gitignored, always loaded — the right place for a loop's `wait_until`, a check that only makes sense here, a draft. `shared/watches/` is the project's: in git, on every machine that clones it, loaded only where the person turned on the project's trust switch (it is code that runs without a model, like a plug). A watch the team should have — the service's health check, the nightly backup, the deploy webhook — belongs there: write it in `local/` first and run it, then the person promotes it (the settings page's 提升到 shared), or write it straight into `shared/watches/` when they asked for a shared one. A local file of the same name stands in for the shared one on this machine.
+
 ## After writing it
 
 The file loads by itself within a minute (or at once when you call a watch tool); a broken head or a compile error comes back as a `⚠` notice naming the file. **Run `watch_run(name)` once** — a dry run: what it logged, what it would send, its result — before leaving it. `watch_list` shows every watch with its schedule, next and last run, last output, state and errors; `watch_enable(name, false)` keeps one without running it. A `once` watch is consumed (file removed) when it ran; an expired one stays, marked expired, until deleted. Deleting the file deletes the watch.

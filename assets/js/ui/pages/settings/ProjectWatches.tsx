@@ -1,8 +1,10 @@
 // A project's watches on its settings page (Longx.Watches): each with its
 // schedule, state, last run and output; a switch, a dry run (what the
 // script would log and send, in a dialog) and delete (the file goes).
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
+import { usePromoteLocal } from "@/core/agent";
 import { useWatchActions, useWatches, type DryRun, type Watch } from "@/core/watches";
 import { Button } from "@/ui/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
@@ -19,9 +21,33 @@ function relative(path: string, root: string): string {
   return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
-export function ProjectWatches({ projectId, rootPath }: { projectId: string; rootPath: string }) {
+export function ProjectWatches({
+  projectId,
+  rootPath,
+  trusted,
+  sharedFiles,
+}: {
+  projectId: string;
+  rootPath: string;
+  /** the project's trust switch: shared/watches/ runs only with it on */
+  trusted: boolean;
+  /** the project's .longx files (agent_definition), to point at shared watches the switch keeps off */
+  sharedFiles: string[];
+}) {
   const watches = useWatches(projectId);
   const actions = useWatchActions(projectId);
+  const promote = usePromoteLocal(projectId);
+  const client = useQueryClient();
+  const sharedWatches = sharedFiles.filter((f) => /(^|\/)shared\/watches\/[^/]+\.exs$/.test(f)).map((f) => f.split("/").pop()!);
+
+  const promoteWatch = (watch: Watch) =>
+    promote.mutate(`watches/${watch.name}.exs`, {
+      onSuccess: (r) => {
+        toast.success(s.promoted(r.path));
+        void client.invalidateQueries({ queryKey: ["watches"] });
+      },
+      onError: (e: Error) => toast.error(e.message),
+    });
   const [trying, setTrying] = useState<{ watch: Watch; result: DryRun | null } | null>(null);
 
   const tryRun = async (watch: Watch) => {
@@ -47,6 +73,11 @@ export function ProjectWatches({ projectId, rootPath }: { projectId: string; roo
     <section className="space-y-3" data-testid="project-watches">
       <h2 className="text-lg font-medium">{s.title}</h2>
       <p className="text-muted-foreground text-sm">{s.projectHint}</p>
+      {!trusted && sharedWatches.length > 0 ? (
+        <p className="text-warning text-sm" data-testid="shared-watches-untrusted">
+          {s.sharedUntrusted(sharedWatches.join("、"))}
+        </p>
+      ) : null}
       {watches.isPending ? <Skeleton className="h-16 w-full" /> : null}
       {watches.isError ? <p className="text-destructive text-sm">{watches.error.message}</p> : null}
       {watches.data?.length === 0 ? <p className="text-muted-foreground text-sm">{s.none}</p> : null}
@@ -60,6 +91,11 @@ export function ProjectWatches({ projectId, rootPath }: { projectId: string; roo
                 <span className="text-muted-foreground text-sm">{scheduleText(w)}</span>
                 <span className="text-muted-foreground text-xs">{s.layer[w.layer]}</span>
                 <div className="ml-auto flex items-center gap-2">
+                  {w.layer === "local" ? (
+                    <Button variant="outline" size="sm" onClick={() => promoteWatch(w)} disabled={promote.isPending}>
+                      {s.promote}
+                    </Button>
+                  ) : null}
                   <Button variant="outline" size="sm" onClick={() => tryRun(w)} disabled={!!w.runningSince}>
                     {s.dryRun}
                   </Button>
