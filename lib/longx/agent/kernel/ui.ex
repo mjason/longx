@@ -186,7 +186,9 @@ defmodule Longx.Agent.Kernel.UI do
     }
   end
 
-  def completed_ui(%Tool{} = tool, id, turn_id, ok?, text, _streamed, duration, _extra) do
+  # a plain call; `"details"` in the result's meta is what the client needs
+  # beyond the arguments (a surface's resolved path, a download's size)
+  def completed_ui(%Tool{} = tool, id, turn_id, ok?, text, _streamed, duration, extra) do
     %{
       "id" => id,
       "type" => "dynamicToolCall",
@@ -198,6 +200,7 @@ defmodule Longx.Agent.Kernel.UI do
       "contentItems" => [%{"type" => "inputText", "text" => text}],
       "durationMs" => duration
     }
+    |> Map.merge(Map.take(extra, ["details"]))
   end
 
   @doc "A `longx.present` item already complete: a card pushed by a plug (`Context.present/2`)."

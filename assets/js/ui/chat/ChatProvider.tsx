@@ -6,6 +6,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -17,7 +18,8 @@ import { toast } from "sonner";
 import { t } from "@/ui/strings";
 import { DirtyTreeDialog, type DirtyPrompt } from "./DirtyTreeDialog";
 import { GoalProvider } from "./GoalBar";
-import { ActionAnswerContext, chatConfig, CompactionUI } from "./toolkit";
+import { useWorkbench, type Tab } from "@/core/workbench";
+import { ActionAnswerContext, chatConfig, CompactionUI, SurfaceContext } from "./toolkit";
 
 const ChatContext = createContext<LongxRuntime | null>(null);
 
@@ -74,9 +76,21 @@ export function ChatProvider({
     [],
   );
 
-  // the kernel fell back to another model of the alias chain under the turn: say so
+  // where the agent's surfaces open: the project's workbench (a tab; a sheet on a phone)
+  const workbench = useWorkbench(projectId);
+  const openSurface = workbench.open;
+  const surface = useMemo(() => ({ projectId, open: openSurface }), [projectId, openSurface]);
+
+  // the kernel fell back to another model of the alias chain under the turn: say so;
+  // a surface the agent opened *live* (show_file / show_diff / show_html) opens here —
+  // a replayed item never signals, so a reload leaves the workbench as the person had it
   const onSignal = useCallback(
     (method: string, params: Record<string, unknown>) => {
+      if (method === "item/completed") {
+        const tab = surfaceTab(params["item"] as Record<string, unknown>);
+        if (tab) openSurface(tab);
+        return;
+      }
       if (method === "model/rerouted") {
         const reason =
           t.modelReroutedReason[String(params["reason"])] ??
@@ -90,7 +104,7 @@ export function ChatProvider({
         );
       }
     },
-    [],
+    [openSurface],
   );
 
   // a stop before anything came back: the message's text goes back into the
@@ -130,11 +144,13 @@ export function ChatProvider({
       <AssistantRuntimeProvider runtime={chat.runtime} config={chatConfig}>
         <ComposerBridge composerRef={composerRef} />
         <CompactionUI />
-        <ActionAnswerContext.Provider value={answerAction}>
+        <SurfaceContext.Provider value={surface}>
+      <ActionAnswerContext.Provider value={answerAction}>
           <GoalProvider threadId={chat.thread?.id} goal={chat.view.goal}>
             {children}
           </GoalProvider>
         </ActionAnswerContext.Provider>
+      </SurfaceContext.Provider>
         <DirtyTreeDialog prompt={dirty} />
       </AssistantRuntimeProvider>
     </ChatContext.Provider>
@@ -155,4 +171,26 @@ function ComposerBridge({
     };
   }, [aui, composerRef]);
   return null;
+}
+
+/** The workbench tab a live surface item asks for, null for anything else. */
+function surfaceTab(item: Record<string, unknown> | undefined): Tab | null {
+  if (!item || item["type"] !== "dynamicToolCall" || item["namespace"] !== "longx" || item["success"] !== true) return null;
+  const args = (item["arguments"] ?? {}) as Record<string, unknown>;
+  const details = (item["details"] ?? {}) as Record<string, unknown>;
+  const path = typeof details["path"] === "string" ? details["path"] : null;
+  switch (item["tool"]) {
+    case "show_file":
+      return path ? { kind: "file", path, ...(typeof details["line"] === "number" ? { line: details["line"] } : {}) } : null;
+    case "show_diff":
+      return path ? { kind: "diff", path, sha: typeof details["sha"] === "string" ? details["sha"] : null } : null;
+    case "show_html": {
+      const title = String(details["title"] ?? args["title"] ?? "");
+      if (typeof args["html"] === "string" && args["html"]) return { kind: "artifact", id: String(item["id"]), title, html: args["html"] };
+      if (typeof args["url"] === "string" && args["url"]) return { kind: "artifact", id: String(item["id"]), title, url: args["url"] };
+      return null;
+    }
+    default:
+      return null;
+  }
 }

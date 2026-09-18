@@ -190,7 +190,7 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "You are"
 
     assert Enum.map(body["tools"], & &1["name"]) |> Enum.sort() ==
-             ~w(apply_patch create_goal exec_command get_context_remaining get_goal knowledge_read knowledge_search knowledge_write new_context_window present prompt_user update_goal view_image web_fetch web_search)
+             ~w(apply_patch create_goal exec_command get_context_remaining get_goal knowledge_read knowledge_search knowledge_write new_context_window present prompt_user send_file show_diff show_file show_html update_goal view_image web_fetch web_search)
 
     refute Map.has_key?(body, "x-longx-custom-tools")
 
@@ -820,6 +820,36 @@ defmodule Longx.AgentTest do
     assert Enum.any?(
              last["input"],
              &(&1["type"] == "function_call_output" and &1["output"] == "shown to the user")
+           )
+  end
+
+  test "show_file: the item carries the resolved path in details; the model reads that it opened",
+       %{bypass: bypass, dir: dir} do
+    File.write!(Path.join(dir, "notes.md"), "# notes\n")
+    id = agent!("show-#{System.unique_integer([:positive])}", dir, pipeline: PresentingPipeline)
+
+    route!(bypass, fn body ->
+      if List.last(body["input"])["type"] == "function_call_output",
+        do: ResponsesFixture.assistant_message("opened"),
+        else:
+          ResponsesFixture.function_call("show_file", nil, %{"path" => "./notes.md", "line" => 1})
+    end)
+
+    {:ok, _} = Agent.send(id, "show the notes")
+
+    assert %{
+             "namespace" => "longx",
+             "tool" => "show_file",
+             "success" => true,
+             "details" => %{"path" => "notes.md", "line" => 1}
+           } = await_tool_item("show_file")
+
+    assert %{"status" => "completed"} = await_turn_end()
+    last = List.last(collect_requests([]))
+
+    assert Enum.any?(
+             last["input"],
+             &(&1["type"] == "function_call_output" and &1["output"] =~ "opened notes.md")
            )
   end
 

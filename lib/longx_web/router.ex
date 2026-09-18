@@ -41,6 +41,12 @@ defmodule LongxWeb.Router do
     get "/:id", CallbackController, :show
   end
 
+  # a file of a project for the person (send_file, an inline image); no
+  # `:accepts` — an <img> asks for image/*, a download for anything
+  scope "/files", LongxWeb do
+    get "/:project_id/*path", FileController, :show
+  end
+
   # Other scopes may use custom stacks.
   # scope "/api", LongxWeb do
   #   pipe_through :api

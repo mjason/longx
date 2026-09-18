@@ -22,7 +22,10 @@ import {
   type ToolCallMessagePartComponent,
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
+import { AppWindow, Download, FileCode2, GitCompareArrows } from "lucide-react";
 import { createContext, useContext, useState, type ReactNode } from "react";
+import { formatBytes } from "@/core/format";
+import type { Tab } from "@/core/workbench";
 import { toast } from "sonner";
 import type { ThreadExtras } from "@/core/chat/adapter";
 import {
@@ -82,6 +85,13 @@ type WebSearchResult = { results?: { title?: string; url?: string }[] | null };
 export const ActionAnswerContext = createContext<
   ThreadExtras["answerAction"] | null
 >(null);
+
+/**
+ * Where a surface opens (show_file / show_diff / show_html): the project's
+ * workbench, provided by ChatProvider; null outside a project window, where
+ * the rows still name the thing but cannot open it.
+ */
+export const SurfaceContext = createContext<{ projectId: string; open: (tab: Tab) => void } | null>(null);
 
 /** A ToolCall row that opens itself while the work runs or when it failed, and can be toggled after. */
 function ToolRow({
@@ -414,6 +424,100 @@ type ActionArgs = {
   spec?: unknown;
 };
 
+// ---- surfaces: a file, a diff, a download, an artifact opened for the person
+
+type SurfaceDetails = Record<string, unknown> | undefined;
+function detailsOf(p: ToolCallMessagePartProps): SurfaceDetails {
+  const result = p.result as { details?: unknown } | undefined;
+  return result && typeof result === "object" && result.details && typeof result.details === "object" ? (result.details as Record<string, unknown>) : undefined;
+}
+
+/** One line: an icon, the label, the thing (mono), and 打开 when the window can open it. */
+function SurfaceRow({ icon, label, name, tab, testId, failed, children }: { icon: ReactNode; label: string; name: string; tab: Tab | null; testId: string; failed: boolean; children?: ReactNode }) {
+  const surface = useContext(SurfaceContext);
+  return (
+    <div className="my-1 flex w-full flex-col gap-1.5 text-xs" data-testid={testId}>
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="text-foreground/45 flex size-4 shrink-0 items-center justify-center">{icon}</span>
+        <span className={failed ? "text-destructive shrink-0" : "text-foreground/60 shrink-0"}>{label}</span>
+        <span className={cn(mono, "text-foreground/90 min-w-0 flex-1 truncate")}>{name}</span>
+        {surface && tab ? (
+          <button type="button" className="text-primary hover:bg-primary/10 shrink-0 rounded-md px-2 py-0.5 font-medium" onClick={() => surface.open(tab)}>
+            {t.openSurface}
+          </button>
+        ) : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** `longx.show_file`: the file (and line) opened in the editor; 打开 brings the tab back. */
+export const ShowFileTool: ToolCallMessagePartComponent<{ path?: string; line?: number }, unknown> = (p) => {
+  const details = detailsOf(p);
+  const path = String(details?.["path"] ?? p.args.path ?? "");
+  const line = typeof details?.["line"] === "number" ? (details["line"] as number) : typeof p.args.line === "number" ? p.args.line : undefined;
+  const tab: Tab | null = details ? { kind: "file", path, ...(line ? { line } : {}) } : null;
+  return <SurfaceRow icon={<FileCode2 className="size-3.5" />} label={t.openedFile} name={line ? `${path}:${line}` : path} tab={tab} testId="tool-show-file" failed={p.isError === true} />;
+};
+
+/** `longx.show_diff`: a file's diff — uncommitted, or at one commit. */
+export const ShowDiffTool: ToolCallMessagePartComponent<{ path?: string; sha?: string }, unknown> = (p) => {
+  const details = detailsOf(p);
+  const path = String(details?.["path"] ?? p.args.path ?? "");
+  const sha = typeof details?.["sha"] === "string" ? (details["sha"] as string) : null;
+  const tab: Tab | null = details ? { kind: "diff", path, sha } : null;
+  return <SurfaceRow icon={<GitCompareArrows className="size-3.5" />} label={t.openedDiff} name={sha ? `${path} @ ${sha.slice(0, 7)}` : `${path} · ${t.uncommittedDiff}`} tab={tab} testId="tool-show-diff" failed={p.isError === true} />;
+};
+
+/** The `/files` URL of a sent file: the project root, or `_attachments` for an upload. */
+export function fileUrl(projectId: string, path: string, attachment: boolean, inline = false): string {
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return `/files/${projectId}/${attachment ? "_attachments/" : ""}${encoded}${inline ? "?inline=1" : ""}`;
+}
+
+/** `longx.send_file`: a download card — the name, the size, the link; an image drawn inline. */
+export const SendFileTool: ToolCallMessagePartComponent<{ path?: string; title?: string }, unknown> = (p) => {
+  const surface = useContext(SurfaceContext);
+  const details = detailsOf(p);
+  const name = String(details?.["name"] ?? p.args.path ?? "");
+  const title = typeof details?.["title"] === "string" && details["title"] ? (details["title"] as string) : typeof p.args.title === "string" ? p.args.title : null;
+  const bytes = typeof details?.["bytes"] === "number" ? (details["bytes"] as number) : null;
+  const mime = String(details?.["mime"] ?? "");
+  const attachment = details?.["attachment"] === true;
+  const path = typeof details?.["path"] === "string" ? (details["path"] as string) : null;
+  const href = surface && path ? fileUrl(surface.projectId, path, attachment) : null;
+  return (
+    <div className="border-border/60 my-2 flex w-full max-w-md flex-col gap-2 rounded-xl border p-3 text-xs" data-testid="tool-send-file">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="text-foreground/45 flex size-4 shrink-0 items-center justify-center"><Download className="size-3.5" /></span>
+        <span className={p.isError ? "text-destructive shrink-0" : "text-foreground/60 shrink-0"}>{t.sentFile}</span>
+        {title ? <span className="text-foreground/90 min-w-0 flex-1 truncate font-medium">{title}</span> : null}
+      </div>
+      {href && mime.startsWith("image/") ? <img src={fileUrl(surface!.projectId, path!, attachment, true)} alt={name} className="max-h-72 w-auto self-start rounded-md" /> : null}
+      <div className="flex min-w-0 items-center gap-2">
+        <span className={cn(mono, "text-foreground/90 min-w-0 flex-1 truncate")}>{name}</span>
+        {bytes !== null ? <span className="text-foreground/45 shrink-0">{formatBytes(bytes)}</span> : null}
+        {href ? (
+          <a href={href} download={name} className="text-primary hover:bg-primary/10 shrink-0 rounded-md px-2 py-0.5 font-medium">
+            {t.download}
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
+/** `longx.show_html`: an artifact — html of the model's own, or a URL — opened in the workbench; the row reopens it. */
+export const ShowHtmlTool: ToolCallMessagePartComponent<{ title?: string; html?: string; url?: string }, unknown> = (p) => {
+  const details = detailsOf(p);
+  const title = String(details?.["title"] ?? p.args.title ?? "");
+  const html = typeof p.args.html === "string" && p.args.html ? p.args.html : undefined;
+  const url = typeof p.args.url === "string" && p.args.url ? p.args.url : undefined;
+  const tab: Tab | null = details && (html || url) ? { kind: "artifact", id: p.toolCallId, title, ...(html ? { html } : { url: url! }) } : null;
+  return <SurfaceRow icon={<AppWindow className="size-3.5" />} label={t.openedArtifact} name={url ? `${title} · ${domainOf(url)}` : title} tab={tab} testId="tool-show-html" failed={p.isError === true} />;
+};
+
 // ---- cards: the model's `present` tree (or one a plug pushed with Context.present)
 
 /**
@@ -672,6 +776,10 @@ export const longxToolkit = defineToolkit({
   // the cards (Longx.Agent.Plugs.Present): the tree is the arguments
   "longx.present": { type: "backend", render: PresentTool, display: "standalone" },
   "longx.prompt_user": { type: "backend", render: PromptUserTool, display: "standalone" },
+  "longx.show_file": { type: "backend", render: ShowFileTool, display: "standalone" },
+  "longx.show_diff": { type: "backend", render: ShowDiffTool, display: "standalone" },
+  "longx.send_file": { type: "backend", render: SendFileTool, display: "standalone" },
+  "longx.show_html": { type: "backend", render: ShowHtmlTool, display: "standalone" },
 });
 
 export const chatConfig = AuiConfig({

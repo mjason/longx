@@ -239,6 +239,11 @@ Alert、ListView、Image、Button、Select、Form……）拼一棵树，线程�
 线程上，不占模型上下文。词表的 schema 由 `assets/scripts/present-schema.mjs` 从客户端渲染用的同一个库生成到
 `priv/agent/present.json`，模型只能画页面画得出的东西。
 
+除了卡片，agent 还能为人打开东西：`show_file` / `show_diff` 在工作区开一个编辑器或改动标签页，`send_file` 给一张下载卡
+（项目里的文件或消息附件，由 `GET /files/<项目>/<路径>` 提供），`show_html` 打开一个 artifact——agent 自己写的一页
+html（图表、报表、可交互页面，沙箱 iframe，不同源）或一个网址；手机上是全屏面板。路径都限制在项目内；只有事件实时到达时才
+自动打开，回放历史不会动你的工作区，卡片上的「打开」随时能再开。
+
 ### 知识代替记忆
 
 四个根：`.longx/shared/knowledge/`（项目的，进 git）、`.longx/local/knowledge/`（本机的，agent 默认写这里）、

@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, PresentTool, SubagentTool, WebSearchTool, parseDiff, treeOf } from "./toolkit";
+import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, PresentTool, SendFileTool, ShowDiffTool, ShowFileTool, ShowHtmlTool, SubagentTool, SurfaceContext, WebSearchTool, parseDiff, treeOf } from "./toolkit";
 
 const answerAction = vi.fn(async () => {});
 
@@ -280,5 +280,74 @@ describe("agents", () => {
     const { CompactionView } = await import("./toolkit");
     render(<CompactionView />);
     expect(screen.getByRole("separator")).toHaveTextContent("上下文已压缩");
+  });
+});
+
+describe("surfaces: files and artifacts for the person", () => {
+  const open = vi.fn();
+  const surface = { projectId: "p1", open };
+  const done = (toolName: string, args: Record<string, unknown>, details: Record<string, unknown>) =>
+    part({ toolName, args, status: { type: "complete" }, result: { success: true, contentItems: [], details } });
+
+  test("show_file is a row naming the file and line; 打开 opens the editor tab", () => {
+    render(
+      <SurfaceContext.Provider value={surface}>
+        <ShowFileTool {...done("longx.show_file", { path: "lib/a.ex", line: 12 }, { path: "lib/a.ex", line: 12 })} />
+      </SurfaceContext.Provider>,
+    );
+    expect(screen.getByTestId("tool-show-file")).toHaveTextContent("lib/a.ex:12");
+    fireEvent.click(screen.getByRole("button", { name: "打开" }));
+    expect(open).toHaveBeenCalledWith({ kind: "file", path: "lib/a.ex", line: 12 });
+  });
+
+  test("show_diff opens the diff tab of the file (a commit when one was named)", () => {
+    render(
+      <SurfaceContext.Provider value={surface}>
+        <ShowDiffTool {...done("longx.show_diff", { path: "a.ex", sha: "abc1234" }, { path: "lib/a.ex", sha: "abc1234" })} />
+      </SurfaceContext.Provider>,
+    );
+    expect(screen.getByTestId("tool-show-diff")).toHaveTextContent("lib/a.ex");
+    expect(screen.getByTestId("tool-show-diff")).toHaveTextContent("abc1234");
+    fireEvent.click(screen.getByRole("button", { name: "打开" }));
+    expect(open).toHaveBeenCalledWith({ kind: "diff", path: "lib/a.ex", sha: "abc1234" });
+  });
+
+  test("send_file is a download card: name, size, a link into /files; an image is drawn inline", () => {
+    render(
+      <SurfaceContext.Provider value={surface}>
+        <SendFileTool {...done("longx.send_file", { path: "out/报表.csv" }, { path: "out/报表.csv", name: "报表.csv", bytes: 2048, mime: "text/csv", attachment: false, title: "结果" })} />
+        <SendFileTool {...done("longx.send_file", { path: "/att/x.png" }, { path: "20260918T010203-x.png", name: "x.png", bytes: 10, mime: "image/png", attachment: true, title: null })} />
+      </SurfaceContext.Provider>,
+    );
+    const cards = screen.getAllByTestId("tool-send-file");
+    expect(cards[0]).toHaveTextContent("结果");
+    expect(cards[0]).toHaveTextContent("报表.csv");
+    expect(cards[0]).toHaveTextContent("2.0 KB");
+    const link = within(cards[0]!).getByRole("link", { name: /下载/ });
+    expect(link).toHaveAttribute("href", "/files/p1/out/%E6%8A%A5%E8%A1%A8.csv");
+    expect(link).toHaveAttribute("download");
+    const img = within(cards[1]!).getByRole("img");
+    expect(img).toHaveAttribute("src", "/files/p1/_attachments/20260918T010203-x.png?inline=1");
+  });
+
+  test("show_html is an artifact row: the title, 打开 opens the artifact tab with the html (or the url)", () => {
+    render(
+      <SurfaceContext.Provider value={surface}>
+        <ShowHtmlTool {...done("longx.show_html", { title: "销量图", html: "<h1>hi</h1>" }, { kind: "html", title: "销量图", bytes: 11 })} />
+        <ShowHtmlTool {...done("longx.show_html", { title: "站点", url: "https://example.com/" }, { kind: "url", title: "站点", url: "https://example.com/" })} />
+      </SurfaceContext.Provider>,
+    );
+    const rows = screen.getAllByTestId("tool-show-html");
+    expect(rows[0]).toHaveTextContent("销量图");
+    fireEvent.click(within(rows[0]!).getByRole("button", { name: "打开" }));
+    expect(open).toHaveBeenLastCalledWith({ kind: "artifact", id: "c1", title: "销量图", html: "<h1>hi</h1>" });
+    fireEvent.click(within(rows[1]!).getByRole("button", { name: "打开" }));
+    expect(open).toHaveBeenLastCalledWith({ kind: "artifact", id: "c1", title: "站点", url: "https://example.com/" });
+  });
+
+  test("outside a project window (no surface context) the rows still name the thing, without a button", () => {
+    render(<ShowFileTool {...done("longx.show_file", { path: "a.ex" }, { path: "a.ex", line: null })} />);
+    expect(screen.getByTestId("tool-show-file")).toHaveTextContent("a.ex");
+    expect(screen.queryByRole("button", { name: "打开" })).not.toBeInTheDocument();
   });
 });

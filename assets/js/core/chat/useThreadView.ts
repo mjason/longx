@@ -36,6 +36,17 @@ function describe(reason: unknown): string {
 // events that are a signal for the person rather than state of the view
 const SIGNALS = new Set(["model/rerouted"]);
 
+// a surface the agent opened for the person (show_file / show_diff /
+// show_html): only a *live* item opens it — a snapshot never signals, so a
+// replay after a reload draws the row and leaves the workbench alone
+export const SURFACE_TOOLS = new Set(["show_file", "show_diff", "show_html"]);
+
+export function isSurfaceEvent(event: ThreadEvent): boolean {
+  if (event.method !== "item/completed") return false;
+  const item = event.params["item"] as Record<string, unknown> | undefined;
+  return item?.["type"] === "dynamicToolCall" && item["namespace"] === "longx" && SURFACE_TOOLS.has(String(item["tool"])) && item["success"] === true;
+}
+
 export function useThreadView(
   kernelThreadId: string | undefined,
   onSignal?: (method: string, params: Record<string, unknown>) => void,
@@ -57,7 +68,7 @@ export function useThreadView(
       onEvent: (event) => {
         events.push(event);
         if (event.method === "thread/reverted") void joined.snapshot().catch(() => {});
-        if (SIGNALS.has(event.method)) signal.current?.(event.method, event.params);
+        if (SIGNALS.has(event.method) || isSurfaceEvent(event)) signal.current?.(event.method, event.params);
       },
       onError: (reason) => dispatch({ type: "error", reason }),
     });

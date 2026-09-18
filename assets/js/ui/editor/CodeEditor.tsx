@@ -25,10 +25,12 @@ export type CodeEditorProps = {
   wrap?: boolean;
   /** ⌘S / Ctrl+S */
   onSave?: () => void;
+  /** a line (1-based) to put the cursor on and scroll into view — the agent's show_file */
+  line?: number;
   className?: string;
 };
 
-export function CodeEditor({ path, value, onChange, readOnly = false, wrap = false, onSave, className }: CodeEditorProps) {
+export function CodeEditor({ path, value, onChange, readOnly = false, wrap = false, onSave, line, className }: CodeEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const language = useRef(new Compartment());
@@ -99,6 +101,15 @@ export function CodeEditor({ path, value, onChange, readOnly = false, wrap = fal
   useEffect(() => {
     view.current?.dispatch({ effects: editable.current.reconfigure([EditorView.editable.of(!readOnly), EditorState.readOnly.of(readOnly)]) });
   }, [readOnly]);
+
+  // a line asked for from outside: the cursor there, centred (once the document is in)
+  useEffect(() => {
+    const v = view.current;
+    if (!v || !line || line < 1) return;
+    const n = Math.min(line, v.state.doc.lines);
+    const pos = v.state.doc.line(n).from;
+    v.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: "center" }) });
+  }, [line, value]);
 
   useEffect(() => {
     view.current?.dispatch({ effects: wrapping.current.reconfigure(wrap ? EditorView.lineWrapping : []) });

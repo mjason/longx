@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
+import { _resetWorkbenchForTests } from "@/core/workbench";
 import { agentDefinitionData, channel, failed, model, ok, thread } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
@@ -82,6 +83,7 @@ describe("ThreadPage", () => {
   beforeEach(() => {
     localStorage.clear();
     _resetFrameStoreForTests();
+    _resetWorkbenchForTests();
     channel.reset();
     vi.mocked(sendMessage).mockClear();
     vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
@@ -978,6 +980,67 @@ describe("ThreadPage", () => {
     expect(
       within(screen.getByTestId("chat-area")).getByTestId("tool-command"),
     ).toBeInTheDocument();
+  });
+
+  const surfaceItem = (id: string, tool: string, args: Record<string, unknown>, details: Record<string, unknown>) => ({
+    id,
+    type: "dynamicToolCall",
+    turnId: "turn_2",
+    namespace: "longx",
+    tool,
+    arguments: args,
+    status: "completed",
+    success: true,
+    contentItems: [],
+    durationMs: 3,
+    details,
+  });
+
+  test("a show_file item arriving live opens the file in the workbench; one replayed from the snapshot only draws its row", async () => {
+    // the snapshot holds a show_file of an earlier turn: no tab opens for it
+    const r = renderAt("/p/app-1/t/t1");
+    await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
+    act(() => channel.reply("ok", { ...snapshot, items: [...snapshot.items, surfaceItem("s0", "show_file", { path: "old.ex" }, { path: "old.ex", line: null })] }));
+    await screen.findByText("run the tests");
+    expect(screen.getByTestId("tool-show-file")).toHaveTextContent("old.ex");
+    expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument();
+    // live: the editor tab opens at once
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", { seq: 5, method: "item/completed", params: { turnId: "turn_2", item: surfaceItem("s1", "show_file", { path: "a.ex", line: 3 }, { path: "lib/a.ex", line: 3 }) } });
+    });
+    await waitFor(() => expect(screen.getByTestId("workbench-tabs")).toHaveTextContent("a.ex"));
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("a.ex");
+    r.unmount();
+  });
+
+  test("show_html opens an artifact tab: the html in a sandboxed frame, no same-origin", async () => {
+    await open();
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", { seq: 5, method: "item/completed", params: { turnId: "turn_2", item: surfaceItem("s2", "show_html", { title: "销量图", html: "<h1>hi</h1>" }, { kind: "html", title: "销量图", bytes: 11 }) } });
+    });
+    const frame = await screen.findByTitle("销量图");
+    expect(frame.tagName).toBe("IFRAME");
+    expect(frame).toHaveAttribute("sandbox", "allow-scripts allow-forms");
+    expect(frame).toHaveAttribute("srcdoc", "<h1>hi</h1>");
+    expect(frame).toHaveAttribute("referrerpolicy", "no-referrer");
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("销量图");
+  });
+
+  test("phone: an artifact is a full-screen sheet over the chat, closed with its button", async () => {
+    const user = userEvent.setup();
+    setViewport(390);
+    await open();
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", { seq: 5, method: "item/completed", params: { turnId: "turn_2", item: surfaceItem("s3", "show_html", { title: "销量图", html: "<h1>hi</h1>" }, { kind: "html", title: "销量图", bytes: 11 }) } });
+    });
+    const sheet = await screen.findByTestId("artifact-sheet");
+    expect(within(sheet).getByTitle("销量图")).toHaveAttribute("sandbox", "allow-scripts allow-forms");
+    await user.click(within(sheet).getByRole("button", { name: /关闭/ }));
+    await waitFor(() => expect(screen.queryByTestId("artifact-sheet")).not.toBeInTheDocument());
+    expect(screen.getByTestId("tool-show-html")).toBeInTheDocument();
   });
 
   test("a tool asking the person to act: a card with the link, 等待你操作 in the rail; 已完成 answers the request", async () => {

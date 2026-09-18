@@ -34,3 +34,26 @@ describe("workbench tabs", () => {
     expect(s.tabs.map(tabKey)).toEqual(["chat", "file:c", "diff:c@"]);
   });
 });
+
+describe("artifact tabs", () => {
+  test("an artifact is a tab kind of its own (a native client may open it in a window); keyed by id, closable, untouched by renames", () => {
+    let s: WorkbenchState = openTab(EMPTY_WORKBENCH, { kind: "artifact", id: "i9", title: "报表", html: "<h1>x</h1>" });
+    expect(s.tabs.map(tabKey)).toEqual(["chat", "artifact:i9"]);
+    expect(s.active).toBe("artifact:i9");
+    s = renamePath(s, "a", "b");
+    expect(s.tabs[1]).toEqual({ kind: "artifact", id: "i9", title: "报表", html: "<h1>x</h1>" });
+    expect(closeTab(s, "artifact:i9").tabs.map(tabKey)).toEqual(["chat"]);
+  });
+
+  test("artifacts are not remembered on the device: the html lives in the thread, the row reopens it", async () => {
+    const { createWorkbenchStore } = await import("./workbench");
+    const memory = new Map<string, string>();
+    const storage = { getItem: (k: string) => memory.get(k) ?? null, setItem: (k: string, v: string) => void memory.set(k, v) };
+    const store = createWorkbenchStore(storage, "wb");
+    store.open({ kind: "file", path: "a.ex" });
+    store.open({ kind: "artifact", id: "i9", title: "报表", html: "<h1>x</h1>" });
+    expect(store.get().tabs).toHaveLength(3);
+    const again = createWorkbenchStore(storage, "wb");
+    expect(again.get().tabs.map(tabKey)).toEqual(["chat", "file:a.ex"]);
+  });
+});

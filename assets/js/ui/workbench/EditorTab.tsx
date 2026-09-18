@@ -12,7 +12,7 @@ import { Skeleton } from "@/ui/components/ui/skeleton";
 import { CodeEditor } from "@/ui/editor/CodeEditor";
 import { t } from "@/ui/strings";
 
-export function EditorTab({ projectId, path }: { projectId: string; path: string }) {
+export function EditorTab({ projectId, path, line }: { projectId: string; path: string; line?: number }) {
   const file = useFileContent(projectId, path);
   const save = useSaveFile(projectId);
   const workbench = useWorkbench(projectId);
@@ -70,7 +70,7 @@ export function EditorTab({ projectId, path }: { projectId: string; path: string
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
-        <CodeEditor path={path} value={draft ?? file.data.content ?? ""} onChange={setDraft} onSave={doSave} readOnly={readOnly} wrap={viewport === "phone"} className="h-full" />
+        <CodeEditor path={path} value={draft ?? file.data.content ?? ""} onChange={setDraft} onSave={doSave} readOnly={readOnly} wrap={viewport === "phone"} line={line} className="h-full" />
       </div>
     </div>
   );

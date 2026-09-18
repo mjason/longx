@@ -418,6 +418,8 @@ function toPart(item: ThreadItem): Part | null {
               success: item["success"],
               contentItems: item["contentItems"] ?? [],
               durationMs: item["durationMs"],
+              // what a surface tool resolved (the project-relative path, a download's size)
+              ...(item["details"] !== undefined ? { details: item["details"] } : {}),
             }
           : undefined,
         done && item["success"] === false,

@@ -329,7 +329,25 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     appends a completed `longx.present` item as an `:activity` row, `context?: false`,
     never model input) or `"present" => tree` in the result's meta. Tests:
     `plugs_test` (schema, namespace, refusals), `agent_test` (present / prompt_user /
-    Context.present end to end), `toolkit.test` (the tree, the spec form's dispatch).
+    Context.present end to end), `toolkit.test` (the tree, the spec form's dispatch). **Surfaces** (the same plug): `show_file(path, line)` / `show_diff(path,
+    sha)` open a workbench tab, `send_file(path, title)` a download card
+    (`GET /files/:project_id/*path` — `LongxWeb.FileController`, the path
+    resolved inside the root like `Workspace`, `_attachments/<name>` for an
+    upload, `?inline=1` for an image drawn in the chat; no auth, the single-user
+    boundary of the RPC), `show_html(title, html | url)` an artifact — the
+    workbench tab kind `artifact` (`core/workbench.ts`, plain data so a native
+    client can open it in a window; not remembered on the device — the row
+    reopens it) drawn as an iframe with `sandbox="allow-scripts allow-forms"`,
+    never same-origin, a full-screen sheet on a phone. Every tool checks the
+    path stays inside the project and puts what the client needs on the item
+    as `details` (`UI.completed_ui` merges the result's `"details"`;
+    `messages.ts` passes it in the part's result). **A surface opens only when
+    its item arrives live**: `useThreadView` signals `item/completed` of a
+    `longx` surface tool (`isSurfaceEvent`), `ChatProvider` opens the tab;
+    a snapshot never signals, so a reload leaves the workbench alone and the
+    row's 打开 reopens. Renderers `ShowFileTool` / `ShowDiffTool` /
+    `SendFileTool` / `ShowHtmlTool` read `SurfaceContext` (the project's
+    workbench) and degrade to a plain row without it.
   - **Web search and reading pages** are two plugs. `Plugs.WebSearch` (`mode:` `:auto` /
     `:hosted` / `:standalone` / `:off`): *hosted* when the model's provider searches on its
     side (`Longx.AI.web_search_mode/1` — OpenAI, 百炼 Qwen 3.5+ / DeepSeek-v4 / glm-5.2; the

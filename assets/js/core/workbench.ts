@@ -5,7 +5,14 @@
 // share it.
 import { useSyncExternalStore } from "react";
 
-export type Tab = { kind: "chat" } | { kind: "file"; path: string } | { kind: "diff"; path: string; sha: string | null };
+// Tab kinds are plain data: a native client may open a kind in a window of
+// its own (an artifact in a WebView, a file in its editor) instead of a tab.
+export type Tab =
+  | { kind: "chat" }
+  | { kind: "file"; path: string; line?: number }
+  | { kind: "diff"; path: string; sha: string | null }
+  // an html document the agent wrote (`show_html`), or a URL; drawn in a sandboxed frame
+  | { kind: "artifact"; id: string; title: string; html?: string; url?: string };
 export type WorkbenchState = { tabs: Tab[]; active: string; dirty: string[] };
 
 export const EMPTY_WORKBENCH: WorkbenchState = { tabs: [{ kind: "chat" }], active: "chat", dirty: [] };
@@ -18,12 +25,15 @@ export function tabKey(tab: Tab): string {
       return `file:${tab.path}`;
     case "diff":
       return `diff:${tab.path}@${tab.sha ?? ""}`;
+    case "artifact":
+      return `artifact:${tab.id}`;
   }
 }
 
 export function openTab(state: WorkbenchState, tab: Tab): WorkbenchState {
   const key = tabKey(tab);
-  const tabs = state.tabs.some((t) => tabKey(t) === key) ? state.tabs : [...state.tabs, tab];
+  // the same tab opened again takes the new details (a file at another line)
+  const tabs = state.tabs.some((t) => tabKey(t) === key) ? state.tabs.map((t) => (tabKey(t) === key ? tab : t)) : [...state.tabs, tab];
   return { ...state, tabs, active: key };
 }
 
@@ -48,7 +58,7 @@ export function markDirty(state: WorkbenchState, key: string, dirty: boolean): W
 
 /** A file was renamed / moved: its tabs follow. */
 export function renamePath(state: WorkbenchState, from: string, to: string): WorkbenchState {
-  const move = (tab: Tab): Tab => (tab.kind !== "chat" && tab.path === from ? { ...tab, path: to } : tab);
+  const move = (tab: Tab): Tab => ((tab.kind === "file" || tab.kind === "diff") && tab.path === from ? { ...tab, path: to } : tab);
   const keys = new Map(state.tabs.map((t) => [tabKey(t), tabKey(move(t))]));
   return {
     tabs: state.tabs.map(move),
@@ -91,8 +101,10 @@ export function createWorkbenchStore(storage: Storage | null, key: string): Work
     if (next === state) return;
     state = next;
     try {
-      // dirty flags are not remembered: the content they describe is not either
-      storage?.setItem(key, JSON.stringify({ tabs: state.tabs, active: state.active }));
+      // dirty flags are not remembered: the content they describe is not
+      // either; nor are artifacts — their html lives in the thread, whose row
+      // reopens them (and would not fit the device's storage)
+      storage?.setItem(key, JSON.stringify({ tabs: state.tabs.filter((t) => t.kind !== "artifact"), active: state.active }));
     } catch {
       /* private mode etc. */
     }
