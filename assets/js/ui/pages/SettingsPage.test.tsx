@@ -417,6 +417,21 @@ describe("SettingsPage", () => {
     expect(rows[0]).toHaveTextContent("invalid byte");
   });
 
+  test("watches: every project's watches, the running one first, with project, schedule, state and last run", async () => {
+    setViewport(1280);
+    renderAt("/settings/watches");
+    const rows = await screen.findAllByTestId("watch-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("deploy");
+    expect(rows[0]).toHaveTextContent("App 2");
+    expect(rows[0]).toHaveTextContent("运行中");
+    expect(rows[1]).toHaveTextContent("health");
+    expect(rows[1]).toHaveTextContent("*/5 * * * *");
+    expect(rows[1]).toHaveTextContent("已开启");
+    expect(rows[1]).toHaveTextContent("跑过 3 次，发过 1 条");
+    expect(within(rows[1]!).getByRole("link", { name: /打开项目/ })).toHaveAttribute("href", "/p/app-1/settings");
+  });
+
   test("agent kernel: the built-in browser's private-network switch (a fake-ip network needs it)", async () => {
     setViewport(1280);
     const user = userEvent.setup();

@@ -23,6 +23,8 @@ import {
   startThread,
   type AshRpcError,
   type ListModelsFields,
+  directory,
+  setThreadHandle,
 } from "@/ash_rpc";
 
 export const projectFields = [
@@ -44,6 +46,7 @@ export const threadFields = [
   "id",
   "kernelThreadId",
   "title",
+  "handle",
   "preview",
   "status",
   "modelSlug",
@@ -236,6 +239,47 @@ export function useThreads(id: string | undefined) {
 }
 
 /** One thread by id — a sub-agent's row, which the project list hides, for its own page. */
+/** a session of the project's directory (Longx.Projects.directory/2) */
+export type SessionEntry = {
+  threadId: string;
+  kernelThreadId: string;
+  projectId: string;
+  projectSlug: string | false | null;
+  address: string;
+  handle: string | null;
+  title: string | null;
+  preview: string | null;
+  state: "running" | "waiting" | "idle" | "asleep" | "archived" | "unrecoverable";
+  goal: { objective: string; status: string | null } | null;
+  team: string[];
+  lastActivityAt: string | null;
+};
+
+/** the project's sessions with their live state; refreshed while shown */
+export function useSessions(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["sessions", projectId ?? ""] as const,
+    enabled: !!projectId,
+    refetchInterval: 5_000,
+    queryFn: async () =>
+      unwrap(await directory({ fields: ["sessions"], input: { projectId: projectId! } })).sessions as SessionEntry[],
+  });
+}
+
+/** the person names a session: its handle (null takes it away) */
+export function useSetThreadHandle(projectId: string | undefined) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ threadId, handle }: { threadId: string; handle: string | null }) =>
+      unwrap(await setThreadHandle({ fields: ["id", "handle"], input: { threadId, handle } })),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["sessions", projectId ?? ""] });
+      if (projectId) client.invalidateQueries({ queryKey: queryKeys.threads(projectId) });
+      client.invalidateQueries({ queryKey: ["thread"] });
+    },
+  });
+}
+
 export function useThread(id: string | undefined) {
   return useQuery({
     queryKey: ["thread", id ?? ""] as const,

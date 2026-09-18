@@ -29,6 +29,7 @@ defmodule Longx.Agent.Pipelines.Default do
         plug Longx.Agent.Plugs.Browser
         plug Longx.Agent.Plugs.Credentials
         plug Longx.Agent.Plugs.Agents
+        plug Longx.Agent.Plugs.Watches
         plug Longx.Agent.Plugs.Goal
         plug Longx.Agent.Plugs.Compaction
         plug Longx.Agent.Plugs.Request

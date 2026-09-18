@@ -62,6 +62,7 @@ export function ProjectWindow() {
         client.invalidateQueries({ queryKey: ["subagents"] });
       },
       onFiles: () => invalidateFiles(client, id),
+      onWatches: () => client.invalidateQueries({ queryKey: ["watches"] }),
     });
   }, [client, id]);
 

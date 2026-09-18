@@ -566,11 +566,14 @@ defmodule Longx.Agent do
       }
       |> tap(
         &emit(&1, "turn/started", %{
-          "turn" => %{
-            "id" => turn_id,
-            "status" => "inProgress",
-            "startedAt" => &1.turn_started_at / 1000
-          }
+          "turn" =>
+            %{
+              "id" => turn_id,
+              "status" => "inProgress",
+              "startedAt" => &1.turn_started_at / 1000
+            }
+            # who started it, when not the person: the row names the turn after it
+            |> then(fn turn -> if from, do: Map.put(turn, "from", from), else: turn end)
         })
       )
       |> Team.with_activity(Keyword.get(opts, :activity))

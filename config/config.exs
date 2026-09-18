@@ -84,6 +84,7 @@ config :longx,
     Longx.AI,
     Longx.Projects,
     Longx.System,
+    Longx.Watches,
     Longx.Credentials,
     Longx.Agent.Transcript
   ]
@@ -145,8 +146,13 @@ config :longx, Oban,
   # the Postgres notifier is the default and needs postgrex; one BEAM, so PG
   notifier: Oban.Notifiers.PG,
   repo: Longx.Repo,
-  queues: [credentials: 2],
+  queues: [credentials: 2, watches: 4],
   plugins: [
-    {Oban.Plugins.Cron, crontab: [{"*/5 * * * *", Longx.Credentials.RefreshWorker}]},
+    {Oban.Plugins.Cron,
+     crontab: [
+       {"*/5 * * * *", Longx.Credentials.RefreshWorker},
+       # the watches' clock: files reconciled, due ones queued (Longx.Watches)
+       {"* * * * *", Longx.Watches.Tick}
+     ]},
     {Oban.Plugins.Pruner, max_age: 7 * 24 * 60 * 60}
   ]

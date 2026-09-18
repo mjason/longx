@@ -7,7 +7,7 @@ import { agentDefinitionData, agentSettingsData, channel, ok } from "@/ui/test-m
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { agentDefinition, archiveProject, deleteProject, promoteLocal, updateProject } from "@/ash_rpc";
+import { agentDefinition, archiveProject, deleteProject, deleteWatch, dryRunWatch, promoteLocal, switchWatch, updateProject } from "@/ash_rpc";
 
 describe("ProjectSettingsPage", () => {
   beforeEach(() => {
@@ -99,6 +99,34 @@ describe("ProjectSettingsPage", () => {
     } finally {
       vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData()) as never);
     }
+  });
+
+  test("the project's watches: listed with state and last run; a dry run shows what it would send; switch and delete", async () => {
+    const user = userEvent.setup();
+    renderAt("/p/app-1/settings");
+    const card = await screen.findByTestId("project-watches");
+    const rows = await within(card).findAllByTestId("watch-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("health");
+    expect(rows[0]).toHaveTextContent("已开启");
+    expect(rows[0]).toHaveTextContent("health ok");
+    expect(rows[1]).toHaveTextContent("nightly");
+    expect(rows[1]).toHaveTextContent("无法加载");
+    expect(rows[1]).toHaveTextContent("not an ISO 8601 instant");
+
+    await user.click(within(rows[0]!).getByRole("button", { name: "试跑" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText(/all quiet/)).toBeInTheDocument();
+    expect(within(dialog).getByText("checked")).toBeInTheDocument();
+    expect(dryRunWatch).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "w-health" } }));
+    await user.keyboard("{Escape}");
+
+    await user.click(within(rows[0]!).getByRole("switch"));
+    expect(switchWatch).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "w-health", enabled: false } }));
+
+    vi.spyOn(window, "confirm").mockReturnValueOnce(true);
+    await user.click(within(rows[1]!).getByRole("button", { name: "删除" }));
+    expect(deleteWatch).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "w-nightly" } }));
   });
 
   test("deleting the project asks for its name, then removes it and leaves", async () => {

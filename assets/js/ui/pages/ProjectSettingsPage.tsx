@@ -19,6 +19,7 @@ import { Switch } from "@/ui/components/ui/switch";
 import { Textarea } from "@/ui/components/ui/textarea";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { t } from "@/ui/strings";
+import { ProjectWatches } from "./settings/ProjectWatches";
 
 type Form = Required<Pick<UpdateProjectInput, "name" | "webSearch" | "dirtyStart" | "trustLocalAgent">> & {
   description: string;
@@ -171,6 +172,8 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
       </section>
 
       <AgentSection projectId={project.id} trusted={form.trustLocalAgent} onTrust={(v) => set("trustLocalAgent", v)} overrides={form.agentOverrides} onOverrides={(v) => set("agentOverrides", v)} />
+
+      <ProjectWatches projectId={project.id} rootPath={project.rootPath} />
 
       <section className="space-y-3">
         <h2 className="text-destructive text-lg font-medium">{t.dangerZone}</h2>

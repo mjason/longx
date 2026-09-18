@@ -371,6 +371,35 @@ defmodule Longx.Projects.Thread do
       argument :status, :atom, allow_nil?: false
       filter expr(project_id == ^arg(:project_id) and status == ^arg(:status))
     end
+
+    # the project's sessions with their live state (Longx.Projects.directory/2):
+    # the Agents tool window, the agent's own agents_directory
+    action :directory, :map do
+      constraints fields: [sessions: [type: {:array, :map}, allow_nil?: false]]
+      argument :project_id, :uuid, allow_nil?: false
+      argument :scope, :atom, constraints: [one_of: [:project, :all]]
+
+      run fn input, _ ->
+        rows =
+          Longx.Projects.directory(input.arguments.project_id,
+            scope: input.arguments[:scope] || :project
+          )
+
+        {:ok, %{sessions: Enum.map(rows, &camelize/1)}}
+      end
+    end
+
+    # the person names a session (nil takes the handle away)
+    action :set_handle_action, :struct do
+      constraints instance_of: __MODULE__
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :handle, :string
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             do: Longx.Projects.set_handle(thread, input.arguments[:handle])
+      end
+    end
   end
 
   # what the model-choosing actions answer when the choice is bad: an error
@@ -459,6 +488,7 @@ defmodule Longx.Projects.Thread do
   end
 
   defp wire_value(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp wire_value(%{} = map) when not is_struct(map), do: camelize(map)
   defp wire_value(value), do: value
 
   defp goal_fields(goal) do

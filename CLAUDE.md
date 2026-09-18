@@ -138,8 +138,15 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   `agent/thread_state.ex` + `thread_state/store.ex`, `agent/transcript.ex` +
   `transcript/item.ex`, `context.ex`, `knowledge.ex`, `pipeline.ex`, `plug.ex`, `step.ex`,
   `tool.ex`.
-  - `Longx.Agent` — one GenServer per thread (`Longx.Agent.Registry`, under
-    `Longx.Agent.Supervisor`, `restart: :temporary`), **the loop as OTP recursion**: a step
+  - `Longx.Agent` — one **`:gen_statem`** per thread (`Longx.Agent.Registry`, under
+    `Longx.Agent.Supervisor`, `restart: :temporary`; states `:idle` / `:running` read off
+    the kernel's finer `phase`, `handle_event_function` + `state_enter`; the handlers keep
+    their GenServer shapes as `on_call/on_cast/on_info/on_step` behind one translating
+    `handle_event/4`; the idle exit is the `:idle` state's `state_timeout`; a message sent
+    with `deliver: :idle` while a turn runs is **postponed by OTP in the mailbox** and
+    handed back the moment the agent is idle — no queue of our own; `GenServer.call` /
+    `:gen_statem.call` speak the same protocol, `call/3` in the module caps the wait at
+    5 s), **the loop as OTP recursion**: a step
     runs the pipeline at `:request` (pure: prompt, tools, the request), the model streams
     from a task (`Longx.Agent.Model.run/3`; `Model.prepare/1` — target, gateway shaping, a
     DB read — runs in the kernel process so a killed task never leaves SQLite mid-query) as
@@ -148,10 +155,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     answer as messages, `handle_continue(:step)` recurses until the model answers without a
     call, then the pipeline runs at `:turn_end`. **Never a blocking receive or a
     synchronous model call in a callback**: the mailbox is how steer, interrupt and
-    `/compact` get in. `send/3` (`turn_id:`, `model:`, `effort:`, `images:`, `from:`)
+    `/compact` get in. `send/3` (`turn_id:`, `model:`, `effort:`, `images:`, `from:`,
+    `reply_to:` / `reply_as:` / `hops:`, `deliver: :now | :idle`)
     starts a turn when idle and is a *steer* while one runs (into the context at the next
     step after the tool outputs, and shown then; a step is added when the model had already
-    stopped); `interrupt/1` kills the tasks (a command's shim tree dies with its task) and
+    stopped) — or, with `deliver: :idle`, waits in the mailbox for the turn to end and
+    starts one of its own (answers `:ok`); `interrupt/1` kills the tasks (a command's shim tree dies with its task) and
     ends the turn `interrupted`; `retract/2`; `compact/1`; `status/1`; `respond/3` answers
     an ask; `set_goal/2` / `clear_goal/1`. Guards: `max_steps` per turn (500, `config
     :longx, Longx.Agent, max_steps:`) and 20 continuations. **The process is light and
@@ -208,6 +217,28 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     Prefix stability is what makes a follow-up cheap: nothing in the request varies per
     step but the transcript itself (Environment's date changes daily, the knowledge
     index and the model list only when they do).
+  - **The directory: every session has an address** (`docs/agent-directory-design.md`).
+    A `Thread` may carry a `handle` (a slug, unique per project — `HandleFormat`; the
+    person sets it in the Agents tool window, the agent claims one with `claim_handle`,
+    a watch's own session is `watch-<name>`); `Projects.agent_name/1` is how a session
+    is called: the handle, else the team name, else `~` + the last six characters of
+    its id. `Projects.directory/2` (RPC `directory`) lists the project's root sessions
+    with `address`, `state` (`running` / `waiting` / `idle` / `asleep`, read off ETS and
+    the registry only — it is built inside agent processes for the prompt, so never a
+    call to one), `goal`, `team`; `scope: :all` crosses projects (`<slug>:<handle>`).
+    `Projects.resolve_address/2` and **`Projects.deliver/4`** put a message in another
+    session's mailbox by address (the target woken from its spec or row, tracked;
+    `from_thread:` signs it with the sender's name and routes the answer back with
+    `reply_to:` and `reply_as:` — `Team.report_to_parent` signs a root session's answer
+    with the address the asker used; `hops` cap an exchange at six bounces; `:self` and
+    archived targets refused). `Projects.session_named/3` finds or starts a session by
+    handle. `Plugs.Agents` names this session in the prompt (`# Sessions in this
+    project`, handles / titles / goals only — live state would break the cached
+    prefix), offers `agents_directory` (live state), `send_message(to, message,
+    deliver)` for a team name *or* an address, and `claim_handle` on a root session.
+    The `turn/started` event carries `from` when an agent or a watch started the turn
+    (the Tracker names the row `（定时触发）<name>` / `（agent 消息）`; the list's
+    preview drops the `[agent …] ` prefix).
   - **Effects are what a plug asks the kernel to do**, data on the step interpreted after
     each phase: `Step.enqueue_call/3` (`:response`; a synthetic `function_call` with a
     `longx_` id, run with the model's), `Step.continue/2` (`:turn_end`; another step with
@@ -275,8 +306,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     end` — a description records the **difference** to the layer below (`Config.resolve/2`
     applies the ops; a short name means the shipped plug, `Config.builtin/1`), so a release
     that changes the shipped pipeline (`Longx.Agent.Pipelines.Default.config/0`:
-    Environment, Base, Shell, Patch, ViewImage, Knowledge, WebSearch, Browser, Agents,
-    Goal, Request; a description's `prompt` becomes a `Plugs.Prompt` after them —
+    Environment, Base, Shell, Patch, ViewImage, Present, Knowledge, WebSearch, Browser,
+    Credentials, Agents, Watches, Goal, Compaction, Request; a description's `prompt`
+    becomes a `Plugs.Prompt` after them —
     `Config.with_prompts/2`) reaches every project; an
     explicit `pipeline do … end` replaces the base and freezes it. `version` is the format
     version (`current_version/0`, `outdated?/1` → a notice). The DSL words are paren-free in
@@ -425,6 +457,46 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     (`summary_prefix.md` + the summary as a user message), emits the `contextCompaction`
     marker, reloads the context and continues the step. A failed summary: the step goes on
     without folding, or fails the turn when the provider had refused the length.
+  - **Watches — scripts Oban runs, sessions' mailboxes as the outlet** (`Longx.Watches`,
+    `Longx.Agent.Watch`, `docs/watches-design.md`). A watch is a file
+    `.longx/local/watches/<name>.exs` (or `shared/watches/`, behind the trust switch):
+    a module `use Longx.Agent.Watch` whose head is data (`every` cron in the machine's
+    local time / `once` instant / `webhook true`; `expires`, `max_runs`, `timeout` 30 s,
+    `budget` 6 sends per hour) and whose `run/1` does the rest with the imported helpers
+    (`shell/3` bash in the project root as the person, `http/3`, `credential_request/4`,
+    `knowledge_read/2`, `log/2`, **`send/4`** to an address or `:self` — the session
+    `watch-<name>`, started when there is none), answering `{:ok, state}` (the next
+    run's `ctx.state`) or `{:error, why}`; `Watch.definition/1` reads the head,
+    `Watch.run/2` runs it in the calling process (a collector Agent records sends and
+    log; `deliver: :dry` for a dry run). **No policy in the runtime**: what changed,
+    whom to tell, is the script's `if`. The definition loader compiles `watches/` with
+    the plugs (`loaded.watches`; a bad head is an error naming the file → a notice);
+    `Longx.Watches.Watch` rows (table `watches`, unique per project and name) are the
+    state — `Watches.reconcile_project/1` upserts / resyncs / drops rows from the files
+    (a broken file: `disabled_reason: :load_error`), `run/2` (in
+    `Longx.Watches.TaskSupervisor`, the script's timeout, `running_since` while it
+    runs, the sends through `Projects.deliver/4` with `deliver: :idle` and the hour's
+    budget — over it the row is off and the person told —, then `state` / `last_*` /
+    counts / `next_due_at`; a `once` consumed with its file; expiry) and `dry_run/1`,
+    `set_switch/2`, `delete/1` (file then row), `overview/0`, `settle_after_restart/0`
+    (a boot clears `running_since`). The clock is plain Oban like the credential
+    refresh: `Longx.Watches.Tick` every minute (reconcile every active project, queue a
+    `Watches.Runner` per due row, unique per watch), queue `watches`; `POST
+    /hooks/:token` (`LongxWeb.HooksController`, the body as `ctx.payload`) queues a
+    webhook watch's run. `Plugs.Watches` (shipped, inside a project): `watch_list`,
+    `watch_run` (dry), `watch_enable`, `wait_until` (writes a once / cron watch that
+    sends the message back to this session — the loop's "sleep"), `notify`; the
+    prompt teaches the file and says never to sleep in a turn; the knowledge
+    `longx/writing-watches.md`. `Longx.Notify` kind `watch` (`Projects.notify_project/3`
+    points at the project page); the project channel pushes `"watches"` on any change.
+    UI: Settings → 监控与定时 (`WatchesSection`, every project's watches, running first,
+    RPC `list_all_watches`), the project settings card (`ProjectWatches`: state, last
+    output, 试跑 dialog, switch, delete — RPC `list_watches` / `switch_watch` /
+    `dry_run_watch` / `delete_watch`), the Agents tool window's session directory
+    (`SessionDirectory`: addresses, states, the handle field — RPC `directory`,
+    `set_thread_handle`). Tests: `test/longx/agent/watch_test`,
+    `test/longx/watches/{watches,plug}_test`, `hooks_controller_test`,
+    `watches_rpc_test`, the loader's watches test.
   - **Goal mode** (`Plugs.Goal`, `Kernel.Goal`): `create_goal` / `update_goal` / `get_goal`;
     with the goal `active` the `:turn_end` phase continues the turn with a step naming the
     objective until the model marks it `complete` / `blocked`, the token budget is spent

@@ -55,7 +55,10 @@ defmodule Longx.Agent.Definition.Loader do
           trusted?: boolean,
           agents: [%{name: String.t(), summary: String.t(), layer: atom}],
           allowed: [String.t()] | nil,
-          agent: String.t() | nil
+          agent: String.t() | nil,
+          watches: [
+            %{name: String.t(), module: module, path: String.t(), layer: atom, definition: map}
+          ]
         }
 
   @doc """
@@ -168,8 +171,18 @@ defmodule Longx.Agent.Definition.Loader do
       layers: layers,
       agents: roles |> Map.values() |> Enum.sort_by(& &1.name),
       allowed: last(configs, & &1.agents),
-      agent: role
+      agent: role,
+      watches: watches(layers)
     }
+  end
+
+  # every layer's watches, a local one standing in for a shared one of the same name
+  defp watches(layers) do
+    layers
+    |> Enum.flat_map(&Map.get(&1, :watches, []))
+    |> Enum.reduce(%{}, fn watch, acc -> Map.put(acc, watch.name, watch) end)
+    |> Map.values()
+    |> Enum.sort_by(& &1.name)
   end
 
   defp plug?(module), do: Code.ensure_loaded?(module) and function_exported?(module, :call, 2)
@@ -307,6 +320,10 @@ defmodule Longx.Agent.Definition.Loader do
   def agent_dirs(:project, dir), do: [Path.join(dir, "agents"), Path.join(dir, "shared/agents")]
   def agent_dirs(_name, dir), do: [Path.join(dir, "agents")]
 
+  # where a layer keeps its watches (`Longx.Agent.Watch` modules, one per file)
+  defp watch_dirs(:project, dir), do: [Path.join(dir, "shared/watches")]
+  defp watch_dirs(_name, dir), do: [Path.join(dir, "watches")]
+
   # every code file of the layer with its mtime (the cache key)
   defp files(name, dir) do
     if File.dir?(dir) do
@@ -321,7 +338,9 @@ defmodule Longx.Agent.Definition.Loader do
             Path.wildcard(Path.join(agents, "*/plugs/**/*.exs"))
         end)
 
-      (descriptions ++ plugs ++ roles)
+      watches = Enum.flat_map(watch_dirs(name, dir), &Path.wildcard(Path.join(&1, "*.exs")))
+
+      (descriptions ++ plugs ++ roles ++ watches)
       |> Enum.filter(&File.regular?/1)
       |> Enum.sort()
       # mtime and size: a rewrite within the same second still counts when the size moved
@@ -375,6 +394,19 @@ defmodule Longx.Agent.Definition.Loader do
 
     purge(previous, modules)
 
+    # the watches: one module per file under watches/, its head read now so a
+    # bad schedule is an error naming the file (the module is then not a watch)
+    {watches, errors} =
+      files
+      |> Enum.filter(fn {path, _} -> watch_file?(name, dir, path) end)
+      |> Enum.reduce({[], errors}, fn {path, _}, {acc, errs} ->
+        case watch_of(path, sources, modules, name) do
+          {:ok, watch} -> {[watch | acc], errs}
+          {:error, message} -> {acc, [%{layer: name, file: path, message: message} | errs]}
+          :skip -> {acc, errs}
+        end
+      end)
+
     {config, errors} =
       case Enum.find(files, fn {path, _} -> path == Path.join(dir, "agent.exs") end) do
         nil -> {nil, errors}
@@ -408,8 +440,56 @@ defmodule Longx.Agent.Definition.Loader do
       warnings: warnings,
       config: config,
       roles: roles,
+      watches: Enum.reverse(watches),
       errors: Enum.reverse(errors)
     }
+  end
+
+  defp watch_file?(name, dir, path),
+    do: Enum.any?(watch_dirs(name, dir), &String.starts_with?(path, &1 <> "/"))
+
+  # the module the file defined (its renamed name), checked as a watch
+  defp watch_of(path, sources, modules, layer) do
+    case List.keyfind(sources, path, 0) do
+      # the file did not parse: reported already
+      nil ->
+        :skip
+
+      {_, ast} ->
+        case defined_modules(ast) do
+          [parts | _] ->
+            suffix = Module.concat(parts)
+
+            case Enum.find(
+                   modules,
+                   &String.ends_with?(Atom.to_string(&1), "." <> inspect(suffix))
+                 ) do
+              # the file did not compile: reported already
+              nil ->
+                :skip
+
+              module ->
+                case Longx.Agent.Watch.definition(module) do
+                  {:ok, definition} ->
+                    {:ok,
+                     %{
+                       name: Path.basename(path, ".exs"),
+                       module: module,
+                       path: path,
+                       layer: layer,
+                       definition: definition
+                     }}
+
+                  {:error, message} ->
+                    {:error, "#{path}: #{message}"}
+                end
+            end
+
+          [] ->
+            {:error,
+             "#{path}: a watch file defines one module (defmodule … do use Longx.Agent.Watch …)"}
+        end
+    end
   end
 
   defp parse(path) do

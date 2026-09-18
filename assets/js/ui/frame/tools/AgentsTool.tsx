@@ -5,6 +5,7 @@ import { BackgroundInbox, type BackgroundRun } from "@/ui/components/assistant-u
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { t } from "@/ui/strings";
 import type { ProjectContext } from "../ProjectWindow";
+import { SessionDirectory } from "./SessionDirectory";
 
 // a sub-agent thread's status as a background run: still working, done
 // (its thread can be opened), or gone
@@ -20,6 +21,15 @@ function stateOf(status: string): BackgroundRun["state"] {
  * like any thread, with its full conversation.
  */
 export function AgentsTool({ ctx }: { ctx: ProjectContext }) {
+  return (
+    <div className="flex flex-col gap-4" data-testid="agents-tool">
+      <Subagents ctx={ctx} />
+      <SessionDirectory projectId={ctx.id} slug={ctx.slug} />
+    </div>
+  );
+}
+
+function Subagents({ ctx }: { ctx: ProjectContext }) {
   const { threadId } = useParams();
   const navigate = useNavigate();
   const subagents = useSubagents(threadId);
@@ -38,7 +48,7 @@ export function AgentsTool({ ctx }: { ctx: ProjectContext }) {
   }));
 
   return (
-    <div className="flex flex-col gap-2" data-testid="agents-tool">
+    <div className="flex flex-col gap-2">
       <BackgroundInbox runs={runs} title={t.subagentsTitle} countLabel={t.subagentsCount} onCollect={(id) => navigate(`/p/${ctx.slug}/t/${id}`)} className="max-w-none" />
       <p className="text-muted-foreground text-xs">{t.subagentsHint}</p>
     </div>

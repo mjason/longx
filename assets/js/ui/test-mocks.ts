@@ -118,6 +118,47 @@ export const thread = (n: number) => ({
   insertedAt: "2026-09-12T00:00:00Z",
 });
 
+export const watch = (name: string, extra: Record<string, unknown> = {}) => ({
+  id: `w-${name}`,
+  name,
+  path: `/srv/app/.longx/local/watches/${name}.exs`,
+  layer: "local",
+  kind: "cron",
+  cron: "*/5 * * * *",
+  at: null,
+  enabled: true,
+  disabledReason: null,
+  loadError: null,
+  nextDueAt: "2026-09-19T00:05:00Z",
+  runningSince: null,
+  lastRunAt: "2026-09-19T00:00:00Z",
+  lastDurationMs: 120,
+  lastError: null,
+  lastOutput: "health ok",
+  lastSentTo: "main",
+  runs: 3,
+  sends: 1,
+  webhookToken: null,
+  state: { status: "ok" },
+  ...extra,
+});
+
+export const session = (n: number, extra: Record<string, unknown> = {}) => ({
+  threadId: `t${n}`,
+  kernelThreadId: `thr_${n}`,
+  projectId: "p1",
+  projectSlug: null,
+  address: `~t${n}`,
+  handle: null,
+  title: null,
+  preview: `thread ${n}`,
+  state: "idle",
+  goal: null,
+  team: [],
+  lastActivityAt: "2026-09-12T00:00:00Z",
+  ...extra,
+});
+
 export const browserIdle = {
   stage: "idle",
   received: 0,
@@ -376,6 +417,16 @@ export function rpcMock() {
       ok({ safetyCommit: null, head: "aaaa1111" }),
     ),
     renameThread: vi.fn(async () => ok(thread(1))),
+    setThreadHandle: vi.fn(async ({ input }: { input: { threadId: string; handle: string | null } }) => ok({ id: input.threadId, handle: input.handle })),
+    directory: vi.fn(async () => ok({ sessions: [session(1, { handle: "main", address: "main", title: "值班", state: "running" }), session(2)] })),
+    listWatches: vi.fn(async () => ok([watch("health"), watch("nightly", { kind: "once", cron: null, at: "2026-09-20T00:00:00Z", enabled: false, disabledReason: "load_error", loadError: "once: not an ISO 8601 instant", lastRunAt: null })])),
+    listAllWatches: vi.fn(async () => ok({ watches: [
+      { ...watch("deploy", { runningSince: "2026-09-19T00:00:00Z" }), projectId: "p2", projectName: "App 2", projectSlug: "app-2" },
+      { ...watch("health"), projectId: "p1", projectName: "App 1", projectSlug: "app-1" },
+    ] })),
+    switchWatch: vi.fn(async ({ input }: { input: { id: string; enabled: boolean } }) => ok(watch("health", { id: input.id, enabled: input.enabled, disabledReason: input.enabled ? null : "by_person" }))),
+    dryRunWatch: vi.fn(async () => ok({ ok: true, result: "{:ok, %{status: :ok}}", log: ["checked"], sends: ['"main": all quiet'] })),
+    deleteWatch: vi.fn(async () => ok(true)),
     archiveThread: vi.fn(async () => ok(thread(1))),
     startThread: vi.fn(async () => ok(thread(2))),
     createDirectory: vi.fn(

@@ -43,6 +43,8 @@ defmodule Longx.Projects do
       rpc_action :set_goal, :set_goal
       rpc_action :clear_goal, :clear_goal
       rpc_action :rename_thread, :rename
+      rpc_action :set_thread_handle, :set_handle_action
+      rpc_action :directory, :directory
       rpc_action :archive_thread, :archive
       rpc_action :delete_thread, :delete_thread
     end
@@ -736,6 +738,25 @@ defmodule Longx.Projects do
     })
   end
 
+  @doc "A `Longx.Notify` event about a project as a whole (a watch's news): the page it points at is the project's."
+  @spec notify_project(String.t(), String.t(), keyword) :: :ok
+  def notify_project(project_id, kind, opts) do
+    case Ash.get(Project, project_id) do
+      {:ok, %Project{slug: slug, name: name}} ->
+        Longx.Notify.push(%{
+          kind: kind,
+          title: Keyword.fetch!(opts, :title),
+          body: Keyword.get(opts, :body) || name,
+          url: "/p/#{slug}",
+          project_id: project_id,
+          thread_id: nil
+        })
+
+      {:error, _} ->
+        :ok
+    end
+  end
+
   @doc "How a thread is named to the person: its title, else its first message, else the project."
   @spec thread_label(Thread.t()) :: String.t()
   def thread_label(%Thread{title: title}) when is_binary(title) and title != "", do: title
@@ -794,13 +815,14 @@ defmodule Longx.Projects do
   it: nobody chose) — so the history, the restore points and the welcome
   page see it.
   """
-  @spec record_external_turn(Thread.t(), String.t()) :: {:ok, Turn.t()} | {:error, term}
-  def record_external_turn(%Thread{} = thread, kernel_turn_id) do
+  @spec record_external_turn(Thread.t(), String.t(), keyword) :: {:ok, Turn.t()} | {:error, term}
+  def record_external_turn(%Thread{} = thread, kernel_turn_id, opts \\ []) do
     goal = Longx.Agent.ThreadState.Store.meta(thread.kernel_thread_id).goal
 
     text =
-      case goal do
-        %{"objective" => objective} when is_binary(objective) -> "（目标续跑）" <> objective
+      case {Keyword.get(opts, :from), goal} do
+        {"watch-" <> name, _} -> "（定时触发）" <> name
+        {_, %{"objective" => objective}} when is_binary(objective) -> "（目标续跑）" <> objective
         _ -> "（agent 消息）"
       end
 

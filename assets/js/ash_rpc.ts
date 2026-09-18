@@ -3,7 +3,7 @@
 
 import * as RpcHooks from "./core/rpcHooks";
 
-import type { AshRpcError, ConditionalPaginatedResultMixed, CredentialFilterInput, CredentialResourceSchema, CredentialSortField, InferResult, ModelFilterInput, ModelResourceSchema, ModelSortField, ProjectFilterInput, ProjectResourceSchema, ProjectSortField, ProviderFilterInput, ProviderResourceSchema, ProviderSortField, SearchProviderFilterInput, SearchProviderResourceSchema, SearchProviderSortField, SortString, ThreadFilterInput, ThreadResourceSchema, ThreadSortField, TurnFilterInput, TurnResourceSchema, TurnSortField, UUID, UUIDv7, UnifiedFieldSelection, ValidationResult } from "./ash_types";
+import type { AshRpcError, ConditionalPaginatedResultMixed, CredentialFilterInput, CredentialResourceSchema, CredentialSortField, InferResult, ModelFilterInput, ModelResourceSchema, ModelSortField, ProjectFilterInput, ProjectResourceSchema, ProjectSortField, ProviderFilterInput, ProviderResourceSchema, ProviderSortField, SearchProviderFilterInput, SearchProviderResourceSchema, SearchProviderSortField, SortString, ThreadFilterInput, ThreadResourceSchema, ThreadSortField, TurnFilterInput, TurnResourceSchema, TurnSortField, UUID, UUIDv7, UnifiedFieldSelection, ValidationResult, WatchFilterInput, WatchResourceSchema, WatchSortField } from "./ash_types";
 export type * from "./ash_types";
 
 // RPC Action Hook Context Type
@@ -5501,6 +5501,81 @@ export async function validateDeleteThread(
 }
 
 
+export type DirectoryInput = {
+  projectId: UUID;
+  scope?: "all" | "project" | null;
+};
+
+export type DirectoryFields = UnifiedFieldSelection<{sessions: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "sessions"}>[];
+
+export type InferDirectoryResult<
+  Fields extends DirectoryFields | undefined,
+> = InferResult<{sessions: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "sessions"}, Fields>;
+
+export type DirectoryResult<Fields extends DirectoryFields | undefined = undefined> = | { success: true; data: InferDirectoryResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function directory<Fields extends DirectoryFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: DirectoryInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DirectoryResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "directory",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<DirectoryResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateDirectory(
+  config: {
+  tenant?: string;
+  input: DirectoryInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "directory",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ListThreadsInput = {
   projectId: UUID;
 };
@@ -6011,6 +6086,81 @@ export async function validateSetGoal(
 ): Promise<ValidationResult> {
   const payload = {
     action: "set_goal",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetThreadHandleInput = {
+  threadId: UUID;
+  handle?: string | null;
+};
+
+export type SetThreadHandleFields = UnifiedFieldSelection<ThreadResourceSchema>[];
+
+export type InferSetThreadHandleResult<
+  Fields extends SetThreadHandleFields | undefined,
+> = InferResult<ThreadResourceSchema, Fields>;
+
+export type SetThreadHandleResult<Fields extends SetThreadHandleFields | undefined = undefined> = | { success: true; data: InferSetThreadHandleResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function setThreadHandle<Fields extends SetThreadHandleFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SetThreadHandleInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetThreadHandleResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_thread_handle",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetThreadHandleResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetThreadHandle(
+  config: {
+  tenant?: string;
+  input: SetThreadHandleInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_thread_handle",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };
@@ -7998,6 +8148,366 @@ export async function validateUpgradeStatus(
   const payload = {
     action: "upgrade_status",
     ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type DeleteWatchInput = {
+  id: UUID;
+};
+
+export type InferDeleteWatchResult = boolean;
+
+export type DeleteWatchResult = | { success: true; data: InferDeleteWatchResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Watch
+ *
+ * @ashActionType :action
+ */
+export async function deleteWatch(
+  config: {
+  tenant?: string;
+  input: DeleteWatchInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DeleteWatchResult> {
+  const payload = {
+    action: "delete_watch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<DeleteWatchResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Watch
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateDeleteWatch(
+  config: {
+  tenant?: string;
+  input: DeleteWatchInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "delete_watch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type DryRunWatchInput = {
+  id: UUID;
+};
+
+export type DryRunWatchFields = UnifiedFieldSelection<{ok: boolean, result: string, log: Array<string>, sends: Array<string>, __type: "TypedMap", __primitiveFields: "ok" | "result" | "log" | "sends"}>[];
+
+export type InferDryRunWatchResult<
+  Fields extends DryRunWatchFields | undefined,
+> = InferResult<{ok: boolean, result: string, log: Array<string>, sends: Array<string>, __type: "TypedMap", __primitiveFields: "ok" | "result" | "log" | "sends"}, Fields>;
+
+export type DryRunWatchResult<Fields extends DryRunWatchFields | undefined = undefined> = | { success: true; data: InferDryRunWatchResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Watch
+ *
+ * @ashActionType :action
+ */
+export async function dryRunWatch<Fields extends DryRunWatchFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: DryRunWatchInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DryRunWatchResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "dry_run_watch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<DryRunWatchResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Watch
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateDryRunWatch(
+  config: {
+  tenant?: string;
+  input: DryRunWatchInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "dry_run_watch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ListWatchesInput = {
+  projectId: UUID;
+};
+
+export type ListWatchesFields = UnifiedFieldSelection<WatchResourceSchema>[];
+export type InferListWatchesResult<
+  Fields extends ListWatchesFields,
+> = Array<InferResult<WatchResourceSchema, Fields>>;
+
+export type ListWatchesResult<Fields extends ListWatchesFields> = | { success: true; data: InferListWatchesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Read Watch records
+ *
+ * @ashActionType :read
+ */
+export async function listWatches<Fields extends ListWatchesFields>(
+  config: {
+  tenant?: string;
+  input: ListWatchesInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  filter?: WatchFilterInput;
+  sort?: SortString<WatchSortField> | SortString<WatchSortField>[];
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListWatchesResult<Fields>> {
+  const payload = {
+    action: "list_watches",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields }),
+    ...(config.filter && { filter: config.filter }),
+    ...(config.sort && { sort: Array.isArray(config.sort) ? config.sort.join(",") : config.sort })
+  };
+
+  return executeActionRpcRequest<ListWatchesResult<Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Read Watch records
+ *
+ * @ashActionType :read
+ * @validation true
+ */
+export async function validateListWatches(
+  config: {
+  tenant?: string;
+  input: ListWatchesInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_watches",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ListAllWatchesFields = UnifiedFieldSelection<{watches: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "watches"}>[];
+
+export type InferListAllWatchesResult<
+  Fields extends ListAllWatchesFields | undefined,
+> = InferResult<{watches: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "watches"}, Fields>;
+
+export type ListAllWatchesResult<Fields extends ListAllWatchesFields | undefined = undefined> = | { success: true; data: InferListAllWatchesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Watch
+ *
+ * @ashActionType :action
+ */
+export async function listAllWatches<Fields extends ListAllWatchesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListAllWatchesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "list_all_watches",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ListAllWatchesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Watch
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateListAllWatches(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_all_watches",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SwitchWatchInput = {
+  id: UUID;
+  enabled: boolean;
+};
+
+export type SwitchWatchFields = UnifiedFieldSelection<WatchResourceSchema>[];
+
+export type InferSwitchWatchResult<
+  Fields extends SwitchWatchFields | undefined,
+> = InferResult<WatchResourceSchema, Fields>;
+
+export type SwitchWatchResult<Fields extends SwitchWatchFields | undefined = undefined> = | { success: true; data: InferSwitchWatchResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Watch
+ *
+ * @ashActionType :action
+ */
+export async function switchWatch<Fields extends SwitchWatchFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SwitchWatchInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SwitchWatchResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "switch_watch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SwitchWatchResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Watch
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSwitchWatch(
+  config: {
+  tenant?: string;
+  input: SwitchWatchInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "switch_watch",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
   };
 
   return executeValidationRpcRequest<ValidationResult>(

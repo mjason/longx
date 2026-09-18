@@ -13,8 +13,9 @@ import { DependenciesSection } from "./settings/DependenciesSection";
 import { CredentialsSection } from "./settings/CredentialsSection";
 import { RequestsSection } from "./settings/RequestsSection";
 import { UpdateSection } from "./settings/UpdateSection";
+import { WatchesSection } from "./settings/WatchesSection";
 
-const SECTIONS = ["models", "dependencies", "knowledge", "agent", "credentials", "update", "requests", "appearance"] as const;
+const SECTIONS = ["models", "dependencies", "knowledge", "agent", "credentials", "watches", "update", "requests", "appearance"] as const;
 type Section = (typeof SECTIONS)[number];
 
 /**
@@ -92,6 +93,8 @@ function SectionBody({ section }: { section: Section }) {
       return <UpdateSection />;
     case "requests":
       return <RequestsSection />;
+    case "watches":
+      return <WatchesSection />;
     case "appearance":
       return <Appearance />;
   }

@@ -73,6 +73,7 @@ defmodule Longx.Agent.Definition.LoaderTest do
              Longx.Agent.Plugs.Browser,
              Longx.Agent.Plugs.Credentials,
              Longx.Agent.Plugs.Agents,
+             Longx.Agent.Plugs.Watches,
              Longx.Agent.Plugs.Goal,
              Longx.Agent.Plugs.Compaction,
              Longx.Agent.Plugs.Prompt,
@@ -178,6 +179,55 @@ defmodule Longx.Agent.Definition.LoaderTest do
     )
 
     refute Enum.any?(Loader.load(root, tag: tag, trusted: true).notices, &(&1 =~ "coros.exs"))
+  end
+
+  test "watches are files of a layer: shared behind the trust switch, local always; a bad head is a notice, the file named",
+       %{root: root, tag: tag} do
+    write!(root, ".longx/shared/watches/health.exs", """
+    defmodule Health do
+      use Longx.Agent.Watch
+      every "*/5 * * * *"
+      def run(ctx), do: {:ok, %{ran: ctx.name}}
+    end
+    """)
+
+    write!(root, ".longx/local/watches/nightly.exs", """
+    defmodule Nightly do
+      use Longx.Agent.Watch
+      once "2030-01-01T08:00:00+08:00"
+      def run(_ctx), do: {:ok, %{}}
+    end
+    """)
+
+    write!(root, ".longx/local/watches/broken.exs", """
+    defmodule Broken do
+      use Longx.Agent.Watch
+      every "every five minutes"
+      def run(_ctx), do: {:ok, %{}}
+    end
+    """)
+
+    loaded = Loader.load(root, tag: tag, trusted: true)
+
+    assert [%{name: "health", layer: :project}, %{name: "nightly", layer: :local}] =
+             Enum.sort_by(loaded.watches, & &1.name)
+
+    [health, nightly] = Enum.sort_by(loaded.watches, & &1.name)
+    assert health.path =~ "shared/watches/health.exs"
+    assert health.definition.kind == :cron
+    assert nightly.definition.kind == :once
+    assert Longx.Agent.Watch.watch?(health.module)
+
+    assert %{result: {:ok, %{ran: "health"}}} =
+             Longx.Agent.Watch.run(health.module, %{name: "health"})
+
+    # the broken one is a notice naming the file, and not a watch
+    assert Enum.any?(loaded.notices, &(&1 =~ "broken.exs" and &1 =~ "cron"))
+    refute Enum.any?(loaded.watches, &(&1.name == "broken"))
+
+    # untrusted: the shared watch is not loaded, the local ones are
+    untrusted = Loader.load(root, tag: tag, trusted: false)
+    assert [%{name: "nightly"}] = untrusted.watches
   end
 
   test "a broken file is a notice for the model, not a dead agent", %{root: root, tag: tag} do

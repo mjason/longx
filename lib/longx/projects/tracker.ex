@@ -84,11 +84,11 @@ defmodule Longx.Projects.Tracker do
   # a goal's continuation — gets a row like any other
   defp handle_event("turn/started", %{
          "threadId" => kernel_thread_id,
-         "turn" => %{"id" => turn_id}
+         "turn" => %{"id" => turn_id} = turn
        }) do
     with {:error, _} <- Projects.get_turn_by_kernel_id(turn_id),
          {:ok, %Thread{} = thread} <- Projects.get_thread_by_kernel_id(kernel_thread_id) do
-      Projects.record_external_turn(thread, turn_id)
+      Projects.record_external_turn(thread, turn_id, from: turn["from"])
     end
   end
 
@@ -140,6 +140,9 @@ defmodule Longx.Projects.Tracker do
     with {:ok, %Thread{preview: nil} = thread} <-
            Projects.get_thread_by_kernel_id(kernel_thread_id),
          text when is_binary(text) <- user_text(item) do
+      # a message from another agent or a watch carries its `[agent name] ` prefix
+      # for the model; the list shows the words
+      text = Regex.replace(~r/^\[agent [^\]]+\] /, text, "")
       Projects.touch_thread!(thread, %{preview: String.slice(text, 0, 200)})
       Projects.broadcast_changed(thread.project_id)
     end

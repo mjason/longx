@@ -371,6 +371,81 @@ export type SystemStatusAttributesOnlySchema = {
 };
 
 
+// Watch Schema
+export type WatchResourceSchema = {
+  __type: "Resource";
+  __primitiveFields: "at" | "budgetPerHour" | "cron" | "disabledReason" | "enabled" | "expiresAt" | "hourStartedAt" | "id" | "insertedAt" | "kind" | "lastDurationMs" | "lastError" | "lastOutput" | "lastRunAt" | "lastSentTo" | "layer" | "loadError" | "maxRuns" | "name" | "nextDueAt" | "path" | "projectId" | "runningSince" | "runs" | "sends" | "sendsThisHour" | "state" | "timeoutMs" | "updatedAt" | "webhookToken";
+  at: UtcDateTimeUsec | null;
+  budgetPerHour: number;
+  cron: string | null;
+  disabledReason: "budget" | "by_person" | "done" | "expired" | "load_error" | null;
+  enabled: boolean;
+  expiresAt: UtcDateTimeUsec | null;
+  hourStartedAt: UtcDateTimeUsec | null;
+  id: UUIDv7;
+  insertedAt: UtcDateTimeUsec;
+  kind: "cron" | "once" | "webhook";
+  lastDurationMs: number | null;
+  lastError: string | null;
+  lastOutput: string | null;
+  lastRunAt: UtcDateTimeUsec | null;
+  lastSentTo: string | null;
+  layer: "local" | "project";
+  loadError: string | null;
+  maxRuns: number | null;
+  name: string;
+  nextDueAt: UtcDateTimeUsec | null;
+  path: string;
+  projectId: UUID;
+  runningSince: UtcDateTimeUsec | null;
+  runs: number;
+  sends: number;
+  sendsThisHour: number;
+  state: Record<string, any>;
+  timeoutMs: number;
+  updatedAt: UtcDateTimeUsec;
+  webhookToken: string | null;
+  project: { __type: "Relationship"; __resource: ProjectResourceSchema; };
+};
+
+
+
+export type WatchAttributesOnlySchema = {
+  __type: "Resource";
+  __primitiveFields: "at" | "budgetPerHour" | "cron" | "disabledReason" | "enabled" | "expiresAt" | "hourStartedAt" | "id" | "insertedAt" | "kind" | "lastDurationMs" | "lastError" | "lastOutput" | "lastRunAt" | "lastSentTo" | "layer" | "loadError" | "maxRuns" | "name" | "nextDueAt" | "path" | "projectId" | "runningSince" | "runs" | "sends" | "sendsThisHour" | "state" | "timeoutMs" | "updatedAt" | "webhookToken";
+  at: UtcDateTimeUsec | null;
+  budgetPerHour: number;
+  cron: string | null;
+  disabledReason: "budget" | "by_person" | "done" | "expired" | "load_error" | null;
+  enabled: boolean;
+  expiresAt: UtcDateTimeUsec | null;
+  hourStartedAt: UtcDateTimeUsec | null;
+  id: UUIDv7;
+  insertedAt: UtcDateTimeUsec;
+  kind: "cron" | "once" | "webhook";
+  lastDurationMs: number | null;
+  lastError: string | null;
+  lastOutput: string | null;
+  lastRunAt: UtcDateTimeUsec | null;
+  lastSentTo: string | null;
+  layer: "local" | "project";
+  loadError: string | null;
+  maxRuns: number | null;
+  name: string;
+  nextDueAt: UtcDateTimeUsec | null;
+  path: string;
+  projectId: UUID;
+  runningSince: UtcDateTimeUsec | null;
+  runs: number;
+  sends: number;
+  sendsThisHour: number;
+  state: Record<string, any>;
+  timeoutMs: number;
+  updatedAt: UtcDateTimeUsec;
+  webhookToken: string | null;
+};
+
+
 export type ModelFilterInput = {
   and?: Array<ModelFilterInput>;
   or?: Array<ModelFilterInput>;
@@ -1622,6 +1697,349 @@ export type SystemStatusFilterInput = {
 
 
 };
+export type WatchFilterInput = {
+  and?: Array<WatchFilterInput>;
+  or?: Array<WatchFilterInput>;
+  not?: Array<WatchFilterInput>;
+
+  at?: {
+    isNil?: boolean;
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  budgetPerHour?: {
+    eq?: number;
+    notEq?: number;
+    in?: Array<number>;
+    lessThan?: number;
+    greaterThan?: number;
+    lessThanOrEqual?: number;
+    greaterThanOrEqual?: number;
+  };
+
+  cron?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  disabledReason?: {
+    isNil?: boolean;
+    eq?: "budget" | "by_person" | "done" | "expired" | "load_error";
+    notEq?: "budget" | "by_person" | "done" | "expired" | "load_error";
+    in?: Array<"budget" | "by_person" | "done" | "expired" | "load_error">;
+    lessThan?: "budget" | "by_person" | "done" | "expired" | "load_error";
+    greaterThan?: "budget" | "by_person" | "done" | "expired" | "load_error";
+    lessThanOrEqual?: "budget" | "by_person" | "done" | "expired" | "load_error";
+    greaterThanOrEqual?: "budget" | "by_person" | "done" | "expired" | "load_error";
+  };
+
+  enabled?: {
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
+  };
+
+  expiresAt?: {
+    isNil?: boolean;
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  hourStartedAt?: {
+    isNil?: boolean;
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  id?: {
+    eq?: UUIDv7;
+    notEq?: UUIDv7;
+    in?: Array<UUIDv7>;
+    lessThan?: UUIDv7;
+    greaterThan?: UUIDv7;
+    lessThanOrEqual?: UUIDv7;
+    greaterThanOrEqual?: UUIDv7;
+  };
+
+  insertedAt?: {
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  kind?: {
+    eq?: "cron" | "once" | "webhook";
+    notEq?: "cron" | "once" | "webhook";
+    in?: Array<"cron" | "once" | "webhook">;
+    lessThan?: "cron" | "once" | "webhook";
+    greaterThan?: "cron" | "once" | "webhook";
+    lessThanOrEqual?: "cron" | "once" | "webhook";
+    greaterThanOrEqual?: "cron" | "once" | "webhook";
+  };
+
+  lastDurationMs?: {
+    isNil?: boolean;
+    eq?: number;
+    notEq?: number;
+    in?: Array<number>;
+    lessThan?: number;
+    greaterThan?: number;
+    lessThanOrEqual?: number;
+    greaterThanOrEqual?: number;
+  };
+
+  lastError?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  lastOutput?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  lastRunAt?: {
+    isNil?: boolean;
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  lastSentTo?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  layer?: {
+    eq?: "local" | "project";
+    notEq?: "local" | "project";
+    in?: Array<"local" | "project">;
+    lessThan?: "local" | "project";
+    greaterThan?: "local" | "project";
+    lessThanOrEqual?: "local" | "project";
+    greaterThanOrEqual?: "local" | "project";
+  };
+
+  loadError?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  maxRuns?: {
+    isNil?: boolean;
+    eq?: number;
+    notEq?: number;
+    in?: Array<number>;
+    lessThan?: number;
+    greaterThan?: number;
+    lessThanOrEqual?: number;
+    greaterThanOrEqual?: number;
+  };
+
+  name?: {
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  nextDueAt?: {
+    isNil?: boolean;
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  path?: {
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  projectId?: {
+    eq?: UUID;
+    notEq?: UUID;
+    in?: Array<UUID>;
+    lessThan?: UUID;
+    greaterThan?: UUID;
+    lessThanOrEqual?: UUID;
+    greaterThanOrEqual?: UUID;
+  };
+
+  runningSince?: {
+    isNil?: boolean;
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  runs?: {
+    eq?: number;
+    notEq?: number;
+    in?: Array<number>;
+    lessThan?: number;
+    greaterThan?: number;
+    lessThanOrEqual?: number;
+    greaterThanOrEqual?: number;
+  };
+
+  sends?: {
+    eq?: number;
+    notEq?: number;
+    in?: Array<number>;
+    lessThan?: number;
+    greaterThan?: number;
+    lessThanOrEqual?: number;
+    greaterThanOrEqual?: number;
+  };
+
+  sendsThisHour?: {
+    eq?: number;
+    notEq?: number;
+    in?: Array<number>;
+    lessThan?: number;
+    greaterThan?: number;
+    lessThanOrEqual?: number;
+    greaterThanOrEqual?: number;
+  };
+
+  state?: {
+    eq?: Record<string, any>;
+    notEq?: Record<string, any>;
+    in?: Array<Record<string, any>>;
+    lessThan?: Record<string, any>;
+    greaterThan?: Record<string, any>;
+    lessThanOrEqual?: Record<string, any>;
+    greaterThanOrEqual?: Record<string, any>;
+  };
+
+  timeoutMs?: {
+    eq?: number;
+    notEq?: number;
+    in?: Array<number>;
+    lessThan?: number;
+    greaterThan?: number;
+    lessThanOrEqual?: number;
+    greaterThanOrEqual?: number;
+  };
+
+  updatedAt?: {
+    eq?: UtcDateTimeUsec;
+    notEq?: UtcDateTimeUsec;
+    in?: Array<UtcDateTimeUsec>;
+    lessThan?: UtcDateTimeUsec;
+    greaterThan?: UtcDateTimeUsec;
+    lessThanOrEqual?: UtcDateTimeUsec;
+    greaterThanOrEqual?: UtcDateTimeUsec;
+  };
+
+  webhookToken?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  project?: ProjectFilterInput;
+
+};
 
 
 export const modelFilterFields = ["contextWindow", "default", "hostedWebSearch", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId", "provider"] as const;
@@ -1649,6 +2067,9 @@ export const turnFilterFields = ["commitAfter", "commitBefore", "completedAt", "
 export type TurnFilterField = (typeof turnFilterFields)[number];
 
 
+export const watchFilterFields = ["at", "budgetPerHour", "cron", "disabledReason", "enabled", "expiresAt", "hourStartedAt", "id", "insertedAt", "kind", "lastDurationMs", "lastError", "lastOutput", "lastRunAt", "lastSentTo", "layer", "loadError", "maxRuns", "name", "nextDueAt", "path", "projectId", "runningSince", "runs", "sends", "sendsThisHour", "state", "timeoutMs", "updatedAt", "webhookToken", "project"] as const;
+export type WatchFilterField = (typeof watchFilterFields)[number];
+
 
 export const modelSortFields = ["contextWindow", "default", "hostedWebSearch", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId"] as const;
 export type ModelSortField = (typeof modelSortFields)[number];
@@ -1674,6 +2095,9 @@ export type ThreadSortField = (typeof threadSortFields)[number];
 export const turnSortFields = ["commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "usage", "userText"] as const;
 export type TurnSortField = (typeof turnSortFields)[number];
 
+
+export const watchSortFields = ["at", "budgetPerHour", "cron", "disabledReason", "enabled", "expiresAt", "hourStartedAt", "id", "insertedAt", "kind", "lastDurationMs", "lastError", "lastOutput", "lastRunAt", "lastSentTo", "layer", "loadError", "maxRuns", "name", "nextDueAt", "path", "projectId", "runningSince", "runs", "sends", "sendsThisHour", "state", "timeoutMs", "updatedAt", "webhookToken"] as const;
+export type WatchSortField = (typeof watchSortFields)[number];
 
 
 // Utility Types

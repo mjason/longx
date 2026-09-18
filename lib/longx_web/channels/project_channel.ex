@@ -30,6 +30,12 @@ defmodule LongxWeb.ProjectChannel do
   end
 
   # files changed under the project root: the tree and git status are stale
+  # the project's watches changed (a run started or ended, a file came or went): refetch
+  def handle_info({:watches_changed, _id}, socket) do
+    push(socket, "watches", %{})
+    {:noreply, socket}
+  end
+
   def handle_info({:files_changed, _id, paths}, socket) do
     push(socket, "files", %{paths: paths})
     {:noreply, socket}

@@ -40,9 +40,16 @@ defmodule Longx.Application do
       Longx.Projects.Tracker,
       # OAuth2 logins in flight (Longx.Credentials), and the token refresh jobs (Oban)
       Longx.Credentials.Logins,
+      # the watches' scripts run here, one task per run (Longx.Watches)
+      {Task.Supervisor, name: Longx.Watches.TaskSupervisor},
       {Oban, Application.fetch_env!(:longx, Oban)},
-      # rows a previous boot left running: no agent survives the BEAM
-      Supervisor.child_spec({Task, fn -> Longx.Projects.settle_after_restart() end},
+      # rows a previous boot left running: no agent survives the BEAM, nor a watch's run
+      Supervisor.child_spec(
+        {Task,
+         fn ->
+           Longx.Projects.settle_after_restart()
+           Longx.Watches.settle_after_restart()
+         end},
         id: :settle_after_restart,
         restart: :temporary
       ),

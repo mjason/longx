@@ -8,7 +8,7 @@ defmodule Longx.Notify do
 
       %{kind, title, body, url, project_id, thread_id, at}
 
-  `kind` is `"approval"` | `"turn_completed"` | `"turn_failed"`; `url` is
+  `kind` is `"approval"` | `"turn_completed"` | `"turn_failed"` | `"watch"`; `url` is
   a path into the SPA (`/p/<slug>/t/<thread id>`),
   the client prefixes its own server address. Delivery today is the
   `notify` channel (`LongxWeb.NotifyChannel`) on every live socket — the
@@ -19,7 +19,7 @@ defmodule Longx.Notify do
   alias Phoenix.PubSub
 
   @topic "notify"
-  @kinds ~w(approval turn_completed turn_failed)
+  @kinds ~w(approval turn_completed turn_failed watch)
 
   @type event :: %{
           kind: String.t(),

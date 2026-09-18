@@ -8,10 +8,11 @@ The project's agent definition lives in `.longx/`, in two trees:
   shared/              # in git — reviewed, for the team
     agents/<name>/     # declared agents (roles): agent.exs + prompt.md (+ plugs/, knowledge/)
     plugs/*.exs
+    watches/*.exs      # scheduled scripts (Longx.Agent.Watch) — the knowledge on watches
     knowledge/<topic>/*.md
   local/               # gitignored — this machine, this person, your drafts
     agent.exs          # optional: a local override (another model, an extra plug)
-    agents/  plugs/  knowledge/
+    agents/  plugs/  watches/  knowledge/
 ```
 
 Write new things to `local/` by default; `shared/` is for what a person reviewed. A local declaration of the same name replaces the shared one; both apply on top of the shipped defaults. There is nothing global but knowledge: an agent, a plug, a skill lives in a project.

@@ -20,8 +20,9 @@ describe("joinProjectChannel", () => {
     const { socket, channel, handlers } = fakeSocket();
     const onChanged = vi.fn();
     const onFiles = vi.fn();
+    const onWatches = vi.fn();
 
-    const leave = joinProjectChannel(socket as never, "abc", { onChanged, onFiles });
+    const leave = joinProjectChannel(socket as never, "abc", { onChanged, onFiles, onWatches });
 
     expect(socket.channel).toHaveBeenCalledWith("project:abc", {});
     expect(channel.join).toHaveBeenCalled();
@@ -31,7 +32,10 @@ describe("joinProjectChannel", () => {
     // a change under the root
     handlers["files"]!({ paths: ["/p/a.txt"] });
     expect(onFiles).toHaveBeenCalledWith(["/p/a.txt"]);
-    expect(Object.keys(handlers).sort()).toEqual(["changed", "files"]);
+    // the watches changed (a run began or ended): refetch
+    handlers["watches"]!({});
+    expect(onWatches).toHaveBeenCalledTimes(1);
+    expect(Object.keys(handlers).sort()).toEqual(["changed", "files", "watches"]);
 
     leave();
     expect(channel.leave).toHaveBeenCalled();

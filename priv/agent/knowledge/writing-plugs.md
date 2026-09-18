@@ -12,10 +12,11 @@ The project's agent definition lives in `.longx/`, in two trees:
   shared/              # in git — reviewed, for the team
     agents/<name>/     # declared agents (roles): agent.exs + prompt.md (+ plugs/, knowledge/)
     plugs/*.exs
+    watches/*.exs      # scheduled scripts (Longx.Agent.Watch) — see the knowledge on watches
     knowledge/<topic>/*.md
   local/               # gitignored — this machine, this person, your drafts
     agent.exs          # optional: a local override (another model, an extra plug)
-    agents/  plugs/  knowledge/
+    agents/  plugs/  watches/  knowledge/
 ```
 
 Write new things to `local/` by default; `shared/` is for what a person reviewed. A local declaration of the same name replaces the shared one; both apply on top of the shipped defaults. There is nothing global but knowledge: an agent, a plug, a skill lives in a project.
@@ -37,7 +38,7 @@ agent do
 end
 ```
 
-The shipped pipeline: `Environment`, `Base`, `Shell` (exec_command), `Patch` (apply_patch), `ViewImage`, `Knowledge`, `WebSearch`, `Browser` (web_fetch), `Agents` (spawn_agent / send_message / close_agent), `Goal` (create_goal / update_goal / get_goal), `Compaction` (get_context_remaining / new_context_window; folds the context at 90 % of the window), `Request` (all under `Longx.Agent.Plugs`).
+The shipped pipeline: `Environment`, `Base`, `Shell` (exec_command), `Patch` (apply_patch), `ViewImage`, `Knowledge`, `WebSearch`, `Browser` (web_fetch), `Agents` (spawn_agent / send_message / close_agent / agents_directory / claim_handle), `Watches` (watch_list / watch_run / watch_enable / wait_until / notify), `Goal` (create_goal / update_goal / get_goal), `Compaction` (get_context_remaining / new_context_window; folds the context at 90 % of the window), `Request` (all under `Longx.Agent.Plugs`).
 
 **Declared agents (roles)** — `shared/agents/<name>/agent.exs` (or `local/agents/<name>/`) is a description of its own, applied on top of the project's when that agent is spawned:
 

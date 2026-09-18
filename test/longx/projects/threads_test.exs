@@ -355,6 +355,9 @@ defmodule Longx.Projects.ThreadsTest do
       match?([%Turn{status: :completed, user_text: "（agent 消息）"}], Projects.list_turns!(main))
     end)
 
+    # the list shows the words, not the prefix the model reads
+    assert_eventually_ok(fn -> thread!(main.id).preview == "what is the answer?" end)
+
     assert %{items: items} = ThreadState.snapshot(main.kernel_thread_id)
 
     assert Enum.any?(items, fn item ->

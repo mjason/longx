@@ -39,6 +39,9 @@ defmodule LongxWeb.Router do
   # a container's healthcheck, a proxy's probe: plain text, no session
   get "/health", LongxWeb.HealthController, :show
 
+  # a webhook watch's trigger (Longx.Watches): the token is the secret, the body the payload
+  post "/hooks/:token", LongxWeb.HooksController, :create
+
   # a third party sending the browser back after a login a tool asked for
   scope "/callback", LongxWeb do
     # the stable redirect URI of OAuth2 credentials (Longx.Credentials.OAuth)
