@@ -52,8 +52,12 @@ defmodule Longx.Agent.Kernel.State do
             # images tools attached in this step (view_image), added after its outputs
             pending_images: [],
             # this agent's place in a team: who spawned it, what it is called,
-            # who it spawned (child thread id → %{name, pid, ref})
+            # who it spawned (child thread id → %{name, pid, ref, status, role, task, n};
+            # a child stays a member after its turn — done, idle, failed — until closed)
             parent: nil,
+            # who the answer of the running turn goes to (the parent by default): a
+            # teammate that asked gets it in its own mailbox
+            reply_to: nil,
             name: nil,
             # the declared role this agent runs as (its description on top of the project's)
             role: nil,

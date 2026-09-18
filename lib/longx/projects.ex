@@ -277,25 +277,52 @@ defmodule Longx.Projects do
 
   # (re)starts the thread's agent with what the row knows — a sub-agent's row
   # knows its parent and its name (the last segment of its path)
-  defp ensure_agent(%Thread{} = thread) do
-    Longx.Agent.ensure(
-      [
-        thread_id: thread.kernel_thread_id,
-        project_id: thread.project_id,
-        cwd: thread.cwd,
-        model: thread.model_slug,
-        effort: thread.reasoning_effort,
-        web_search: thread.web_search,
-        trust: trust_fun(thread.project_id),
-        settings: settings_fun(thread.project_id),
-        models: &Longx.AI.model_choices/0,
-        idle_ms:
-          Longx.Agent.Definition.Settings.idle_ms(
-            Longx.Agent.Definition.Settings.for_project_id(thread.project_id)
-          ),
-        spawner: &__MODULE__.spawn_native_agent/4
-      ] ++ team_opts(thread)
-    )
+  # the agent of a row, from what the row says; a parent's children get their
+  # specs registered first (after a restart the specs are gone, the rows not),
+  # so its team is listed again and a follow-up revives a child from its row
+  defp ensure_agent(%Thread{} = thread, extra \\ []) do
+    register_team_specs(thread)
+    Longx.Agent.ensure(agent_opts(thread) ++ extra)
+  end
+
+  defp register_team_specs(%Thread{parent_thread_id: nil, id: id}) do
+    for child <- list_subagents!(id),
+        Longx.Agent.Kernel.Specs.get(child.kernel_thread_id) == nil do
+      task =
+        case list_turns!(child) do
+          [%Turn{user_text: text} | _] -> text
+          _ -> nil
+        end
+
+      Longx.Agent.Kernel.Specs.put(
+        child.kernel_thread_id,
+        agent_opts(child) ++
+          [task: task, spawned_at: DateTime.to_unix(child.inserted_at, :microsecond)]
+      )
+    end
+
+    :ok
+  end
+
+  defp register_team_specs(_child), do: :ok
+
+  defp agent_opts(%Thread{} = thread) do
+    [
+      thread_id: thread.kernel_thread_id,
+      project_id: thread.project_id,
+      cwd: thread.cwd,
+      model: thread.model_slug,
+      effort: thread.reasoning_effort,
+      web_search: thread.web_search,
+      trust: trust_fun(thread.project_id),
+      settings: settings_fun(thread.project_id),
+      models: &Longx.AI.model_choices/0,
+      idle_ms:
+        Longx.Agent.Definition.Settings.idle_ms(
+          Longx.Agent.Definition.Settings.for_project_id(thread.project_id)
+        ),
+      spawner: &__MODULE__.spawn_native_agent/4
+    ] ++ team_opts(thread)
   end
 
   # read at every turn, like the trust switch
@@ -369,7 +396,11 @@ defmodule Longx.Projects do
              web_search: parent.web_search,
              status: :active
            }),
-         {:ok, _pid} <- ensure_agent(child),
+         {:ok, _pid} <-
+           ensure_agent(child,
+             task: String.slice(task, 0, 200),
+             spawned_at: System.os_time(:microsecond)
+           ),
          :ok <- Tracker.track(child_id),
          {:ok, _turn} <-
            create_turn(%{

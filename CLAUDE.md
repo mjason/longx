@@ -171,20 +171,43 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     prefixed `[agent <name>] `** (the Responses API has no agent role every provider reads)
     with `"from"` on the UI item. `subAgentActivity` items (started / interacted /
     completed / interrupted; `Agent.interacted/2`) are `:activity` transcript items — UI
-    only, `append(…, context?: false)`, never in the model's context. The parent monitors
-    its children (an abnormal exit is a message "[agent X] exited: reason"); a child
-    monitors its parent and stops with it. **Depth guard**: a spawn past `max_depth`
+    only, `append(…, context?: false)`, never in the model's context. **A finished child
+    stays in the team** (`children/1`: `id`, `name`, `status` working / done / failed,
+    `role`, `task`, in the order made): its transcript is kept, so a follow-up
+    `send/3` (`from:` the asker's name, `reply_to:` its thread id) continues it on the
+    same prefix — the provider caches it, a fresh spawn would start from nothing — and
+    the answer of the turn a message starts goes to `reply_to`, the parent otherwise.
+    A child's idle exit (`:normal`, `:noproc`) keeps it a member with `pid` nil; `send/3`
+    revives it through `Specs` and `Agent.interacted/2` re-monitors the new process; a
+    crash marks it `failed` and is a message "[agent X] exited: reason"; only
+    `forget_child/2` (the `close_agent` tool, which also stops it and deletes its spec)
+    removes one. `max_children` counts working members. The team survives the parent
+    leaving idle: `init` rebuilds it from `Specs.children_of/1` (specs carry `parent:`,
+    `task:`, `spawned_at:`), and after a BEAM restart `Projects.ensure_agent` registers
+    the children's specs from their rows (`register_team_specs/1`) before starting the
+    parent, so `host_thread/1` lists the team again and a follow-up revives a child from
+    its row. Siblings — the parent's other children, read from `Specs`, never a call to
+    the parent (it may be calling this agent) — are `step.assigns.siblings`; a child may
+    `send_message` one and gets its answer itself. A child monitors its parent but goes
+    on when it leaves idle or crashes (the child's report brings it back from its spec);
+    it stops with the parent only when the parent's spec is gone for good (`Agent.stop`
+    stops the children first anyway). **Depth guard**: a spawn past `max_depth`
     (settings; `config :longx, Longx.Agent, max_depth:` 2) answers `{:error, :too_deep}` —
     a strategy plug inherited by every child recursed for ever without it. How a child is
     made is the `spawner:` function the agent was `ensure`d with
     (`Longx.Projects.spawn_native_agent/4`: a Thread row under the parent, the task as its
-    first Turn row). `step.assigns` carries `parent`, `name`, `children`; **`step.state`**
-    (`Step.put_state/3`) is a map kept across the phases and steps of one turn.
-    `Plugs.Agents` offers `spawn_agent` / `send_message` / `close_agent` over the **declared
-    roles** (`.longx/shared/agents/<name>/agent.exs`, `local/agents/<name>/`); with none
-    declared the tools are absent and the prompt teaches the model to declare one
-    (`local/agents/<name>/agent.exs` + `prompt.md`) — **Longx ships no roles**: they grow in
-    the project and are promoted to `shared/`.
+    first Turn row). `step.assigns` carries `parent`, `name`, `children`, `siblings`;
+    **`step.state`** (`Step.put_state/3`) is a map kept across the phases and steps of
+    one turn. `Plugs.Agents` offers `spawn_agent` / `send_message` (every member and
+    sibling) / `close_agent` (own members) over the **declared roles**
+    (`.longx/shared/agents/<name>/agent.exs`, `local/agents/<name>/`); the prompt lists
+    the team with status, role and task and says to ask a finished agent again rather
+    than spawn anew; with no role declared the spawn tool is absent and the prompt
+    teaches the model to declare one (`local/agents/<name>/agent.exs` + `prompt.md`) —
+    **Longx ships no roles**: they grow in the project and are promoted to `shared/`.
+    Prefix stability is what makes a follow-up cheap: nothing in the request varies per
+    step but the transcript itself (Environment's date changes daily, the knowledge
+    index and the model list only when they do).
   - **Effects are what a plug asks the kernel to do**, data on the step interpreted after
     each phase: `Step.enqueue_call/3` (`:response`; a synthetic `function_call` with a
     `longx_` id, run with the model's), `Step.continue/2` (`:turn_end`; another step with

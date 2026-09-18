@@ -49,7 +49,7 @@ agent do
 end
 ```
 
-Longx ships no agents: a project grows its own. When a kind of task keeps being delegated, declare it in `local/agents/<name>/` (the declaration loads at your next step); a local declaration of a name replaces a shared one. `spawn_agent(agent, task)` starts one as a separate process; its final message comes back as a message `[agent <name>] …`. Prefer declaring a role over improvising one in a task.
+Longx ships no agents: a project grows its own. When a kind of task keeps being delegated, declare it in `local/agents/<name>/` (the declaration loads at your next step); a local declaration of a name replaces a shared one. `spawn_agent(agent, task)` starts one as a separate process; its final message comes back as a message `[agent <name>] …`. An agent stays in your team after it reported, with its whole context: `send_message(agent, message)` asks it a follow-up on what it already did and learned (cheaper and better than a fresh spawn — the provider caches the unchanged prefix), redirects one still working, or reaches a teammate (a sibling under the same parent); the answer comes back as a message from it. `close_agent` forgets one for good. Prefer declaring a role over improvising one in a task.
 
 **A custom tool is a plug: two files, then it is there at your next step.** (1) The module in `local/plugs/<name>.exs`; (2) `plug <Module>` in `local/agent.exs` (create it if missing — `import Longx.Agent.Config` + `agent do … end`). Nothing else: no restart, no registration. A file that fails to compile, or a plug the description names but no file defines, comes back to you at the next step as a `⚠` notice with the error — fix it and go on. Look at your tool list at the next step to see the tool.
 

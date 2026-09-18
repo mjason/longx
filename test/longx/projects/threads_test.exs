@@ -339,6 +339,53 @@ defmodule Longx.Projects.ThreadsTest do
     assert %{parent: ^parent_id, name: "researcher"} = Agent.info(child_id)
   end
 
+  test "after a restart the team is rebuilt from the rows: the parent still lists its child and a follow-up reaches it",
+       %{bypass: bypass, project: project} do
+    script!(bypass, [
+      ResponsesFixture.assistant_message("delegating"),
+      ResponsesFixture.assistant_message("REPORT: done"),
+      ResponsesFixture.assistant_message("thanks"),
+      ResponsesFixture.assistant_message("MORE: 42"),
+      ResponsesFixture.assistant_message("noted")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, first} = Projects.send_message(thread, "hi")
+    assert_eventually_ok(fn -> turn!(first.id).status == :completed end)
+    parent_id = thread.kernel_thread_id
+    assert {:ok, child_id} = Agent.spawn(parent_id, "researcher", "look it up")
+
+    assert_eventually_ok(fn ->
+      match?([%Turn{status: :completed}, %Turn{status: :completed}], Projects.list_turns!(thread))
+    end)
+
+    # a BEAM restart: the processes and the specs are gone, the rows remain
+    Agent.stop(parent_id)
+    Longx.Agent.Kernel.Specs.delete(child_id)
+    Longx.Agent.Kernel.Specs.delete(parent_id)
+
+    assert {:ok, ^parent_id} = Projects.host_thread(parent_id)
+
+    assert [%{id: ^child_id, name: "researcher", status: "done", task: "look it up"}] =
+             Agent.children(parent_id)
+
+    # the follow-up revives the child from its row; its answer is a turn of the parent again
+    assert {:ok, %{steered: false}} =
+             Agent.send(child_id, "and more?", from: "main", reply_to: parent_id)
+
+    assert_eventually_ok(fn ->
+      match?(
+        [_, _, %Turn{status: :completed, user_text: "（agent 消息）"}],
+        Projects.list_turns!(thread)
+      )
+    end)
+
+    [child] = Projects.list_subagents!(thread.id)
+
+    assert [%Turn{user_text: "look it up"}, %Turn{status: :completed}] =
+             Projects.list_turns!(child)
+  end
+
   test "a plug of the project asks the person; the answer goes through Projects, the feed hears of it",
        %{
          bypass: bypass,

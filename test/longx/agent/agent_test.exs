@@ -112,7 +112,32 @@ defmodule Longx.AgentTest do
     receive do
       {:thread, _seq, ^method, params} -> params
     after
-      timeout -> flunk("no #{method} event")
+      timeout ->
+        flunk("no #{method} event; got: #{inspect(mailbox_summary(), pretty: true, limit: 60)}")
+    end
+  end
+
+  # what the mailbox held when an await ran out: the events, summarised
+  defp mailbox_summary do
+    {:messages, msgs} = Process.info(self(), :messages)
+
+    for msg <- msgs do
+      case msg do
+        {:thread, _, method, %{"item" => %{"type" => t} = item}} ->
+          {method, t, item["kind"] || item["content"]}
+
+        {:thread, _, method, %{"turn" => turn}} ->
+          {method, turn}
+
+        {:thread, _, method, _} ->
+          method
+
+        {:request, body} ->
+          {:request, last_text(body)}
+
+        other ->
+          other
+      end
     end
   end
 
@@ -1142,6 +1167,15 @@ defmodule Longx.AgentTest do
   defp first_text(%{"input" => [%{"content" => [%{"text" => text} | _]} | _]}), do: text
   defp first_text(_body), do: nil
 
+  defp last_text(%{"input" => input}) when is_list(input) do
+    case List.last(input) do
+      %{"content" => [%{"text" => text} | _]} -> text
+      _ -> nil
+    end
+  end
+
+  defp last_text(_body), do: nil
+
   defp agent!(id, dir, opts) do
     :ok = ThreadState.subscribe(id)
 
@@ -1284,13 +1318,105 @@ defmodule Longx.AgentTest do
              await_user_message_matching(~r/\[agent helper\] .*exited: killed/)
 
     await_turn_end()
-    assert Agent.children(parent) == []
+    # a crashed child is still a member (its transcript is kept): ask it again or close it
+    assert [%{id: ^child, name: "helper", status: "failed"}] = Agent.children(parent)
 
     {:ok, child2} = Agent.spawn(parent, "helper2", "wait", model: nil)
     pid = Agent.whereis(child2)
     ref = Process.monitor(pid)
     :ok = Agent.stop(parent)
     assert_receive {:DOWN, ^ref, :process, ^pid, _}, 5_000
+  end
+
+  test "a finished child stays in the team: a follow-up continues its transcript, it comes back after an idle exit, the team survives the parent leaving; close removes it",
+       %{bypass: bypass, dir: dir} do
+    parent = agent!("keep-#{System.unique_integer([:positive])}", dir, name: "main", idle_ms: 200)
+
+    route!(bypass, fn body ->
+      case last_text(body) do
+        "task one" -> ResponsesFixture.assistant_message("ANSWER ONE")
+        "[agent main] and then?" -> ResponsesFixture.assistant_message("MORE")
+        _ -> ResponsesFixture.assistant_message("ok")
+      end
+    end)
+
+    {:ok, child} = Agent.spawn(parent, "helper", "task one", model: nil, role: "helper")
+    # the report wakes the parent; the child is done, not gone
+    await("turn/started")
+    await_turn_end()
+
+    assert [%{id: ^child, name: "helper", status: "done", role: "helper", task: "task one"}] =
+             Agent.children(parent)
+
+    # the child leaves idle (it inherits idle_ms) and is still a member
+    await_gone(child)
+    assert [%{status: "done"}] = Agent.children(parent)
+
+    # a follow-up: the child is back with its whole transcript; its answer comes to the asker
+    :ok = ThreadState.subscribe(child)
+    drain_activities()
+
+    assert {:ok, %{steered: false}} =
+             Agent.send(child, "and then?", from: "main", reply_to: parent)
+
+    assert %{"turn" => %{"id" => woke}} = await_on(parent, "turn/started")
+    assert %{"turnId" => ^woke, "from" => "helper"} = await_user_message("[agent helper] MORE")
+    await_on(parent, "turn/completed")
+
+    follow_up =
+      collect_requests([])
+      |> Enum.find(&(first_text(&1) == "task one" and length(&1["input"]) > 1))
+
+    texts = for %{"content" => c} <- follow_up["input"], %{"text" => t} <- c, do: t
+    assert "task one" in texts
+    assert "ANSWER ONE" in texts
+    assert "[agent main] and then?" in texts
+
+    # the parent leaves idle too and forgets nothing: the team is rebuilt from the specs
+    await_gone(parent)
+    assert {:ok, _} = Agent.ensure_alive(parent)
+
+    assert [%{id: ^child, name: "helper", status: "done", task: "task one"}] =
+             Agent.children(parent)
+
+    # closed: gone from the team
+    :ok = Agent.forget_child(parent, child)
+    Agent.stop(child)
+    assert Agent.children(parent) == []
+  end
+
+  test "teammates: a child asks a sibling and the answer comes back to the asker; the parent's team lists both as done",
+       %{bypass: bypass, dir: dir} do
+    parent = agent!("sib-#{System.unique_integer([:positive])}", dir, name: "main")
+
+    route!(bypass, fn body ->
+      case last_text(body) do
+        "[agent alpha] what did you find?" -> ResponsesFixture.assistant_message("BETA SAYS 7")
+        _ -> ResponsesFixture.assistant_message("done")
+      end
+    end)
+
+    {:ok, alpha} = Agent.spawn(parent, "alpha", "a", model: nil)
+    await("turn/started")
+    await_turn_end()
+    {:ok, beta} = Agent.spawn(parent, "beta", "b", model: nil)
+    await("turn/started")
+    await_turn_end()
+
+    assert [%{name: "alpha", status: "done"}, %{name: "beta", status: "done"}] =
+             Agent.children(parent)
+
+    :ok = ThreadState.subscribe(alpha)
+    :ok = ThreadState.subscribe(beta)
+    drain_activities()
+    assert {:ok, _} = Agent.send(beta, "what did you find?", from: "alpha", reply_to: alpha)
+    # beta's answer is a message in alpha's mailbox, not the parent's
+    assert %{"turn" => %{"id" => t}} = await_on(alpha, "turn/started")
+    assert %{"turnId" => ^t, "from" => "beta"} = await_user_message("[agent beta] BETA SAYS 7")
+    assert %{"turn" => %{"id" => ^t}} = await_on(alpha, "turn/completed")
+    # ... and alpha's answer to it goes to its parent, as any of its reports
+    await_on(parent, "turn/started")
+    await_on(parent, "turn/completed")
   end
 
   test "an idle agent leaves after idle_ms and comes back on demand from its transcript", %{
@@ -1394,6 +1520,74 @@ defmodule Longx.AgentTest do
     assert %{name: "helper-2"} = Agent.info(b)
     # the children may not have reached the model before the test ends
     Bypass.pass(bypass)
+  end
+
+  test "the Agents plug: send_message asks a finished agent again on its kept context; the parent sees the exchange",
+       %{bypass: bypass, dir: dir} do
+    File.mkdir_p!(Path.join(dir, ".longx/local/agents/researcher"))
+
+    File.write!(
+      Path.join(dir, ".longx/local/agents/researcher/agent.exs"),
+      "import Longx.Agent.Config\nagent do\n  summary \"looks things up\"\n  prompt \"Role: researcher\"\n  agents []\nend\n"
+    )
+
+    parent = agent!("again-#{System.unique_integer([:positive])}", dir, trust: fn -> true end)
+
+    route!(bypass, fn body ->
+      case last_text(body) do
+        "go" ->
+          ResponsesFixture.function_call("spawn_agent", nil, %{
+            "agent" => "researcher",
+            "task" => "find X"
+          })
+
+        "find X" ->
+          ResponsesFixture.assistant_message("REPORT X")
+
+        "[agent researcher] REPORT X" ->
+          ResponsesFixture.function_call("send_message", nil, %{
+            "agent" => "researcher",
+            "message" => "which source?"
+          })
+
+        "[agent main] which source?" ->
+          ResponsesFixture.assistant_message("SOURCE Y")
+
+        "[agent researcher] SOURCE Y" ->
+          ResponsesFixture.assistant_message("thanks")
+
+        _ ->
+          ResponsesFixture.assistant_message("ok")
+      end
+    end)
+
+    {:ok, _} = Agent.send(parent, "go")
+    # the report comes back (a steer while the parent still works, a turn of
+    # its own otherwise — Bypass answers fast), the parent asks again, the
+    # follow-up's answer comes back the same way
+    assert %{"from" => "researcher"} = await_user_message("[agent researcher] REPORT X")
+    assert %{"from" => "researcher"} = await_user_message("[agent researcher] SOURCE Y")
+    await_idle(parent)
+
+    assert [%{name: "researcher", status: "done", task: "find X"}] = Agent.children(parent)
+
+    requests = collect_requests([])
+    follow_up = Enum.find(requests, &(last_text(&1) == "[agent main] which source?"))
+    texts = for %{"content" => c} <- follow_up["input"], %{"text" => t} <- c, do: t
+    assert "find X" in texts and "REPORT X" in texts
+
+    # the parent's team listing named the finished agent, and the send_message tool offered it
+    asked = Enum.find(requests, &(last_text(&1) == "[agent researcher] REPORT X"))
+    assert asked["instructions"] =~ "researcher (researcher, done): find X"
+    tool = Enum.find(asked["tools"], &(&1["name"] == "send_message"))
+    assert tool["parameters"]["properties"]["agent"]["enum"] == ["researcher"]
+
+    kinds =
+      ThreadState.snapshot(parent).items
+      |> Enum.filter(&(&1["type"] == "subAgentActivity"))
+      |> Enum.map(& &1["kind"])
+
+    assert kinds == ["started", "completed", "interacted", "completed"]
   end
 
   test "the shipped Agents plug: spawn_agent starts a declared role on its own description, the report comes back",
@@ -1607,7 +1801,10 @@ defmodule Longx.AgentTest do
        %{"item" => %{"type" => "userMessage", "content" => [%{"text" => ^text}]} = item}} ->
         item
     after
-      5_000 -> flunk("no user message #{text}")
+      5_000 ->
+        flunk(
+          "no user message #{text}; got: #{inspect(mailbox_summary(), pretty: true, limit: 60)}"
+        )
     end
   end
 
@@ -1620,6 +1817,24 @@ defmodule Longx.AgentTest do
     after
       5_000 -> flunk("no user message matching #{inspect(regex)}")
     end
+  end
+
+  # the agent's process leaves (idle_ms) — or has left already
+  defp await_gone(thread_id) do
+    case Agent.whereis(thread_id) do
+      nil ->
+        :ok
+
+      pid ->
+        ref = Process.monitor(pid)
+        assert_receive {:DOWN, ^ref, :process, ^pid, _}, 5_000
+    end
+  end
+
+  # turn ends on the thread until it is idle (a report may start one more turn)
+  defp await_idle(thread_id) do
+    await_on(thread_id, "turn/completed")
+    if Agent.status(thread_id) == :idle, do: :ok, else: await_idle(thread_id)
   end
 
   defp await_on(thread_id, method) do
