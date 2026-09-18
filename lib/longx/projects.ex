@@ -99,11 +99,14 @@ defmodule Longx.Projects do
       define :create_thread, action: :create
       define :touch_thread, action: :touch
       define :rename_thread, action: :rename
+      define :set_thread_handle, action: :set_handle
+      define :get_thread_by_handle, action: :by_handle, args: [:project_id, :handle]
       define :archive_thread, action: :archive
       define :get_thread_by_kernel_id, action: :by_kernel_id, args: [:kernel_thread_id]
       define :list_threads_for_project, action: :for_project, args: [:project_id]
       define :list_threads_with_status, action: :with_status, args: [:project_id, :status]
       define :list_active_threads, action: :active_roots
+      define :list_all_root_threads, action: :roots
       define :list_all_active_threads, action: :active
       define :list_subagents, action: :subagents_of, args: [:parent_thread_id]
     end
@@ -152,6 +155,8 @@ defmodule Longx.Projects do
           {:model, String.t()}
           | {:effort, String.t()}
           | {:web_search, boolean}
+          | {:handle, String.t()}
+          | {:title, String.t()}
 
   @doc """
   Starts a thread in the project directory on the agent kernel
@@ -195,11 +200,200 @@ defmodule Longx.Projects do
              cwd: project.root_path,
              model_slug: model_slug,
              reasoning_effort: effort,
-             web_search: web_search
+             web_search: web_search,
+             handle: opts[:handle],
+             title: opts[:title]
            }) do
       :ok = Tracker.track(id)
       broadcast_changed(project.id)
       {:ok, thread}
+    end
+  end
+
+  ## The directory: who is here, how to reach them
+
+  @doc "Gives the session its handle (a slug, unique in the project); nil takes it away."
+  @spec set_handle(Thread.t(), String.t() | nil) :: {:ok, Thread.t()} | {:error, term}
+  def set_handle(%Thread{} = thread, handle) do
+    with {:ok, thread} <- set_thread_handle(thread, %{handle: handle}) do
+      broadcast_changed(thread.project_id)
+      {:ok, thread}
+    end
+  end
+
+  @doc """
+  How other agents call this session: its handle, else its team name (a
+  sub-agent's), else `~` and the last six characters of its id — every
+  session has an address, named or not.
+  """
+  @spec agent_name(Thread.t()) :: String.t()
+  def agent_name(%Thread{handle: handle}) when is_binary(handle) and handle != "", do: handle
+
+  def agent_name(%Thread{agent_path: path}) when is_binary(path) and path != "/root",
+    do: path |> String.split("/", trim: true) |> List.last()
+
+  def agent_name(%Thread{id: id}), do: "~" <> String.slice(id, -6, 6)
+
+  @doc """
+  The sessions of the project (its root threads, not archived) as one table
+  an agent or the page reads: `address`, `handle`, `title`, `preview`,
+  `state` (`:running` a turn in flight | `:waiting` an ask open | `:idle` the
+  process up | `:asleep` the process left, the row stays), `goal`, `team`
+  (its sub-agents' names), `last_activity_at`. `scope: :all` lists every
+  project, the address prefixed `<project slug>:`.
+  """
+  @spec directory(String.t(), keyword) :: [map]
+  def directory(project_id, opts \\ []) do
+    threads =
+      case Keyword.get(opts, :scope, :project) do
+        :all -> list_all_root_threads!(load: :project)
+        _ -> list_threads_for_project!(project_id)
+      end
+
+    for %Thread{} = thread <- threads do
+      name = agent_name(thread)
+      other? = thread.project_id != project_id
+
+      %{
+        thread_id: thread.id,
+        kernel_thread_id: thread.kernel_thread_id,
+        project_id: thread.project_id,
+        project_slug: other? && thread.project.slug,
+        address: if(other?, do: thread.project.slug <> ":" <> name, else: name),
+        handle: thread.handle,
+        title: thread.title,
+        preview: thread.preview,
+        state: session_state(thread),
+        goal: goal_summary(thread.kernel_thread_id),
+        team: thread.id |> list_subagents!() |> Enum.map(&agent_name/1),
+        last_activity_at: thread.last_activity_at
+      }
+    end
+  end
+
+  defp session_state(%Thread{status: :archived}), do: :archived
+  defp session_state(%Thread{status: :unrecoverable}), do: :unrecoverable
+
+  # read off ETS and the registry only: the directory is built inside agent
+  # processes (the Agents plug's prompt), and a call to one would be a call to itself
+  defp session_state(%Thread{kernel_thread_id: id}) do
+    cond do
+      Longx.Agent.ThreadState.Store.requests(id) != [] -> :waiting
+      Longx.Agent.whereis(id) == nil -> :asleep
+      match?(%{"status" => "inProgress"}, Longx.Agent.ThreadState.Store.meta(id).turn) -> :running
+      true -> :idle
+    end
+  end
+
+  defp goal_summary(kernel_thread_id) do
+    case Longx.Agent.ThreadState.Store.meta(kernel_thread_id).goal do
+      %{"objective" => objective} = goal -> %{objective: objective, status: goal["status"]}
+      _ -> nil
+    end
+  end
+
+  @doc """
+  The session an address names, inside `project_id`: a handle, `~<id
+  suffix>`, or `<project slug>:<handle>` for another project's. Archived
+  sessions are not found.
+  """
+  @spec resolve_address(String.t(), String.t()) :: {:ok, Thread.t()} | {:error, :not_found}
+  def resolve_address(project_id, address) when is_binary(address) do
+    found =
+      case String.split(address, ":", parts: 2) do
+        [slug, name] ->
+          case get_project_by_slug(slug) do
+            {:ok, %Project{id: id}} -> find_session(id, name)
+            _ -> nil
+          end
+
+        [name] ->
+          find_session(project_id, name)
+      end
+
+    case found do
+      %Thread{status: status} = thread when status not in [:archived] -> {:ok, thread}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp find_session(project_id, "~" <> suffix) do
+    project_id
+    |> list_threads_for_project!()
+    |> Enum.find(&String.ends_with?(&1.id, suffix))
+  end
+
+  defp find_session(project_id, handle) do
+    case get_thread_by_handle(project_id, handle) do
+      {:ok, thread} -> thread
+      _ -> nil
+    end
+  end
+
+  @doc """
+  A message from one session (or a watch) to another, by address: the
+  target is brought up if it left, tracked, and `Longx.Agent.send/3` puts
+  the text in its mailbox — a steer while it runs (`deliver: :now`, the
+  default) or a turn of its own once idle (`deliver: :idle`). `from_thread:`
+  is the sender's kernel id: the message is signed with its name and the
+  target's answer comes back to it (signed with the target's address);
+  `from:` names a sender that is no session (a watch). `{:error, :self}`
+  to oneself, `{:error, :not_found}` for an address nobody has.
+  """
+  @spec deliver(String.t(), String.t(), String.t(), keyword) ::
+          {:ok, Thread.t()} | {:error, :self | :not_found | term}
+  def deliver(project_id, address, text, opts) when is_binary(text) do
+    with {:ok, %Thread{} = target} <- resolve_address(project_id, address),
+         :ok <- not_self(target, opts[:from_thread]),
+         :ok <- ensure_usable(target),
+         {:ok, send_opts} <- delivery_opts(target, opts),
+         :ok <- wake(target),
+         {:ok, _} <- sent(Longx.Agent.send(target.kernel_thread_id, text, send_opts)) do
+      {:ok, target}
+    end
+  end
+
+  defp not_self(%Thread{kernel_thread_id: id}, id), do: {:error, :self}
+  defp not_self(_target, _from), do: :ok
+
+  defp delivery_opts(target, opts) do
+    base = [deliver: Keyword.get(opts, :deliver, :now), hops: Keyword.get(opts, :hops, 0)]
+
+    case Keyword.get(opts, :from_thread) do
+      nil ->
+        {:ok, [from: Keyword.get(opts, :from, "someone")] ++ base}
+
+      sender_id ->
+        with {:ok, sender} <- get_thread_by_kernel_id(sender_id) do
+          {:ok,
+           [from: agent_name(sender), reply_to: sender_id, reply_as: agent_name(target)] ++ base}
+        end
+    end
+  end
+
+  defp sent(:ok), do: {:ok, :postponed}
+  defp sent(other), do: other
+
+  # the agent up (from its spec or its row), the view's turns seeded, the Tracker on it
+  defp wake(%Thread{kernel_thread_id: id} = thread) do
+    with {:ok, _pid} <- ensure_agent(thread),
+         :ok <- seed_turns(thread),
+         do: Tracker.track(id)
+  end
+
+  @doc """
+  The session with that handle, started with `title:` (and the project's
+  defaults) when there is none — a watch's own session, a role's standing
+  one.
+  """
+  @spec session_named(Project.t(), String.t(), keyword) :: {:ok, Thread.t()} | {:error, term}
+  def session_named(%Project{id: project_id} = project, handle, opts \\ []) do
+    case get_thread_by_handle(project_id, handle) do
+      {:ok, %Thread{status: status} = thread} when status not in [:archived, :unrecoverable] ->
+        {:ok, thread}
+
+      _ ->
+        start_thread(project, Keyword.take(opts, [:title, :model, :effort]) ++ [handle: handle])
     end
   end
 

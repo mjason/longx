@@ -84,6 +84,7 @@ defmodule Longx.Projects.ThreadsTest do
 
       case Elixir.Agent.get_and_update(queue, fn [h | t] -> {h, t} end) do
         reply when is_function(reply, 1) -> reply.(conn)
+        reply when is_function(reply, 2) -> reply.(Jason.decode!(body), conn)
         chunks when is_list(chunks) -> sse(conn, chunks)
       end
     end)
@@ -303,6 +304,185 @@ defmodule Longx.Projects.ThreadsTest do
     assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
     assert_receive {:request, body}
     assert "deploy" in Enum.map(body["tools"], & &1["name"])
+  end
+
+  test "the directory: handles name sessions, addresses resolve, a message goes to a session by address and its answer comes back",
+       %{bypass: bypass, project: project} do
+    {:ok, main} = Projects.start_thread(project)
+    {:ok, other} = Projects.start_thread(project)
+
+    # a handle: a slug, unique in the project; ~<id suffix> stands in without one
+    assert {:ok, %Thread{handle: "main"}} = Projects.set_handle(main, "main")
+    assert {:error, _} = Projects.set_handle(other, "main")
+    assert {:error, _} = Projects.set_handle(other, "Not A Slug")
+    assert Projects.agent_name(thread!(main.id)) == "main"
+    assert "~" <> suffix = Projects.agent_name(other)
+    assert String.ends_with?(other.id, suffix) and String.length(suffix) == 6
+
+    # the directory: every root session of the project with its state
+    assert [%{handle: "main", state: :idle} = row, %{handle: nil, state: :idle}] =
+             Projects.directory(project.id) |> Enum.sort_by(&(&1.handle || "zz"))
+
+    assert row.address == "main"
+    assert row.thread_id == main.id
+    assert row.kernel_thread_id == main.kernel_thread_id
+    assert row.team == []
+
+    # addresses: a handle, ~suffix, project:handle; unknown is not found
+    assert {:ok, %Thread{id: id}} = Projects.resolve_address(project.id, "main")
+    assert id == main.id
+    assert {:ok, %Thread{id: id}} = Projects.resolve_address(project.id, "~" <> suffix)
+    assert id == other.id
+    assert {:ok, %Thread{id: id}} = Projects.resolve_address(project.id, "#{project.slug}:main")
+    assert id == main.id
+    assert {:error, :not_found} = Projects.resolve_address(project.id, "nobody")
+
+    # a message by address: a turn on the target, with a row, from the sender's name;
+    # the target's answer comes back into the sender's mailbox as a turn of its own
+    script!(bypass, [
+      ResponsesFixture.assistant_message("main here: 42"),
+      ResponsesFixture.assistant_message("noted")
+    ])
+
+    assert {:ok, %Thread{id: id}} =
+             Projects.deliver(project.id, "main", "what is the answer?",
+               from_thread: other.kernel_thread_id
+             )
+
+    assert id == main.id
+
+    assert_eventually_ok(fn ->
+      match?([%Turn{status: :completed, user_text: "（agent 消息）"}], Projects.list_turns!(main))
+    end)
+
+    assert %{items: items} = ThreadState.snapshot(main.kernel_thread_id)
+
+    assert Enum.any?(items, fn item ->
+             item["type"] == "userMessage" and item["from"] == "~" <> suffix and
+               hd(item["content"])["text"] == "[agent ~#{suffix}] what is the answer?"
+           end)
+
+    assert_eventually_ok(fn ->
+      match?([%Turn{status: :completed}], Projects.list_turns!(other))
+    end)
+
+    assert %{items: items} = ThreadState.snapshot(other.kernel_thread_id)
+
+    assert Enum.any?(items, fn item ->
+             item["type"] == "userMessage" and item["from"] == "main" and
+               hd(item["content"])["text"] == "[agent main] main here: 42"
+           end)
+
+    # to oneself, to nobody, to an archived session: refused
+    assert {:error, :self} =
+             Projects.deliver(project.id, "main", "hi", from_thread: main.kernel_thread_id)
+
+    assert {:error, :not_found} = Projects.deliver(project.id, "ghost", "hi", [])
+    {:ok, _} = Projects.archive_thread(other)
+    assert {:error, :not_found} = Projects.resolve_address(project.id, "~" <> suffix)
+
+    # the directory state follows the process: gone = asleep
+    Agent.stop(main.kernel_thread_id)
+    assert [%{handle: "main", state: :asleep}] = Projects.directory(project.id)
+  end
+
+  test "the Agents plug: the prompt names this session and the others; agents_directory, claim_handle and send_message by address",
+       %{bypass: bypass, project: project} do
+    {:ok, ops} = Projects.start_thread(project, handle: "ops", title: "值班")
+    {:ok, thread} = Projects.start_thread(project)
+
+    by_content = fn body, conn ->
+      texts = for %{"role" => "user", "content" => [%{"text" => t}]} <- body["input"], do: t
+
+      cond do
+        Enum.any?(texts, &(&1 =~ "[agent main] 服务还好吗")) ->
+          sse(conn, ResponsesFixture.assistant_message("all good"))
+
+        Enum.any?(texts, &(&1 =~ "[agent ops] all good")) ->
+          sse(conn, ResponsesFixture.assistant_message("thanks"))
+
+        true ->
+          sse(conn, ResponsesFixture.assistant_message("asked ops"))
+      end
+    end
+
+    script!(bypass, [
+      ResponsesFixture.function_call("agents_directory", nil, %{}),
+      ResponsesFixture.function_call("claim_handle", nil, %{"handle" => "main"}),
+      ResponsesFixture.function_call("send_message", nil, %{
+        "to" => "ops",
+        "message" => "服务还好吗？",
+        "deliver" => "idle"
+      }),
+      # the two sessions' requests race for the queue: the reply reads the request
+      by_content,
+      by_content,
+      by_content
+    ])
+
+    :ok = ThreadState.subscribe(thread.kernel_thread_id)
+    {:ok, turn} = Projects.send_message(thread, "check on ops")
+
+    assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
+
+    assert_receive {:request, first}
+    prompt = first["instructions"]
+    assert prompt =~ "# Sessions in this project"
+    assert prompt =~ "- ops — 值班"
+    assert prompt =~ "Others reach you as `~" <> String.slice(thread.id, -6, 6)
+
+    # the directory tool: both sessions, states, addresses
+    assert_receive {:request, second}
+
+    [%{"output" => directory}] =
+      for %{"type" => "function_call_output"} = o <- second["input"], do: o
+
+    assert directory =~ "ops"
+    assert directory =~ "idle"
+    assert directory =~ "running"
+
+    # claim_handle names this session; the later prompt says so
+    assert_receive {:request, third}
+    assert thread!(thread.id).handle == "main"
+    assert third["instructions"] =~ "You are `main`"
+
+    # send_message by address, delivered when idle: a turn on ops from main, its answer back to main
+    # (the two sessions' requests race: pick main's by its content)
+    assert_receive {:request, %{"input" => input}}
+                   when is_list(input) and length(input) > 5,
+                   5_000
+
+    assert Enum.any?(input, fn
+             %{"type" => "function_call_output", "output" => out} -> out =~ "delivered to ops"
+             _ -> false
+           end)
+
+    assert_eventually_ok(fn ->
+      match?([%Turn{status: :completed, user_text: "（agent 消息）"}], Projects.list_turns!(ops))
+    end)
+
+    assert_eventually_ok(fn ->
+      match?(
+        [_, %Turn{status: :completed, user_text: "（agent 消息）"}],
+        Projects.list_turns!(thread)
+      )
+    end)
+
+    assert %{items: items} = ThreadState.snapshot(thread.kernel_thread_id)
+
+    assert Enum.any?(items, fn item ->
+             item["type"] == "userMessage" and item["from"] == "ops" and
+               hd(item["content"])["text"] == "[agent ops] all good"
+           end)
+  end
+
+  test "session_named/3 finds the session with that handle or starts one", %{project: project} do
+    assert {:ok, %Thread{handle: "watch-deploy", title: "⏰ deploy"} = thread} =
+             Projects.session_named(project, "watch-deploy", title: "⏰ deploy")
+
+    assert {:ok, %Thread{id: id}} = Projects.session_named(project, "watch-deploy", title: "x")
+    assert id == thread.id
+    assert [_] = Projects.list_threads!(project)
   end
 
   test "a child agent is a thread row under its parent; its report is a turn of the parent", %{

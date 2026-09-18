@@ -5,6 +5,8 @@ defmodule Longx.Agent.Kernel.Team do
   alias Longx.Agent.Kernel.State
   import Longx.Agent.Kernel.State
 
+  @max_hops 6
+
   def with_activity(state, nil), do: state
   def with_activity(state, {child_id, name, kind}), do: activity(state, child_id, name, kind)
 
@@ -237,8 +239,11 @@ defmodule Longx.Agent.Kernel.Team do
   # started the turn — a teammate that asked (`reply_to`), else the parent
   def report_to_parent(%State{parent: nil, reply_to: nil}, _status, _error), do: :ok
 
+  # an exchange that bounced too often ends here: no answer to the answer
+  def report_to_parent(%State{hops: hops}, _status, _error) when hops >= @max_hops, do: :ok
+
   def report_to_parent(
-        %State{parent: parent, reply_to: reply_to, name: name} = state,
+        %State{parent: parent, reply_to: reply_to, hops: hops} = state,
         status,
         error
       ) do
@@ -248,6 +253,7 @@ defmodule Longx.Agent.Kernel.Team do
         other -> "#{other}: #{error || "no details"}"
       end
 
+    name = state.reply_as || state.name
     target = reply_to || parent
 
     case Longx.Agent.whereis(target) do
@@ -259,7 +265,7 @@ defmodule Longx.Agent.Kernel.Team do
         # task, since a GenServer.call from inside this callback could meet the
         # asker calling us (its stop asks children first) and wait 15 s for nothing
         Task.Supervisor.start_child(Longx.Agent.TaskSupervisor, fn ->
-          Longx.Agent.send(target, report, from: name)
+          Longx.Agent.send(target, report, from: name, hops: hops + 1)
         end)
     end
 

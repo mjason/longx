@@ -19,6 +19,17 @@ defmodule Longx.Agent.Plugs.Agents do
   narrowed by the description's `agents [...]` → `assigns.allowed`);
   `max_depth:` (2) and `max_children:` (4, *working* at once) are the
   limits — at the limit `spawn_agent` is not offered and the prompt says why.
+
+  **Beyond the team: the project's directory.** Inside a project (a
+  `project_id` on the step) the prompt names this session's address and
+  lists the other sessions (`Longx.Projects.directory/2` — handles, titles,
+  goals; nothing that changes per step, so the prefix stays cacheable),
+  `agents_directory` answers with their live state, `send_message` takes an
+  address as well as a team name (a handle, `~<id suffix>`,
+  `<project>:<handle>`; `deliver: "idle"` waits for the target to be idle
+  instead of steering), and a root session may `claim_handle` to be found.
+  Delivery is `Longx.Projects.deliver/4`: the answer of the turn a message
+  starts comes back here as a message from the target.
   """
 
   use Longx.Agent.Plug
@@ -39,14 +50,80 @@ defmodule Longx.Agent.Plugs.Agents do
     working = Enum.count(children, &(Map.get(&1, :status, "working") == "working"))
 
     spawn? = roles != [] and depth < opts[:max_depth] and working < opts[:max_children]
+    directory = directory(step)
 
     step
     |> Step.instructions(instructions(roles, children, siblings, depth, spawn?, opts))
+    |> Step.instructions(sessions_instructions(directory))
     |> maybe(spawn?, &Step.tool(&1, spawn_tool(roles)))
-    |> maybe(children != [] or siblings != [], &Step.tools(&1, team_tools(children, siblings)))
+    |> maybe(
+      children != [] or siblings != [] or directory != nil,
+      &Step.tools(&1, team_tools(children, siblings, directory))
+    )
+    |> maybe(directory != nil, &Step.tool(&1, directory_tool()))
+    |> maybe(directory != nil and is_nil(assigns[:parent]), &Step.tool(&1, handle_tool()))
   end
 
   def call(step, _opts), do: step
+
+  # the project's sessions, this one marked — nil outside a project (tests, ad hoc)
+  defp directory(%Step{project_id: nil}), do: nil
+
+  defp directory(%Step{project_id: project_id, thread_id: thread_id}) do
+    rows = Longx.Projects.directory(project_id)
+
+    case Enum.find(rows, &(&1.kernel_thread_id == thread_id)) do
+      nil -> nil
+      me -> %{me: me, others: Enum.reject(rows, &(&1.kernel_thread_id == thread_id))}
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp sessions_instructions(nil), do: nil
+
+  defp sessions_instructions(%{me: me, others: others}) do
+    you =
+      case me.handle do
+        nil ->
+          "Others reach you as `#{me.address}`; if you are meant to be found — a standing duty, a long task others will ask about — `claim_handle` a short name."
+
+        handle ->
+          "You are `#{handle}`."
+      end
+
+    listing =
+      case others do
+        [] ->
+          "No other session in this project right now."
+
+        _ ->
+          "The other sessions of this project (`agents_directory` tells their live state):
+" <>
+            Enum.map_join(Enum.take(others, 20), "
+", &session_line/1)
+      end
+
+    """
+    # Sessions in this project
+
+    Every conversation in this project is a session with an address, and sessions talk through their mailboxes: `send_message(to, message)` with an address instead of a team name reaches any of them — a handle, `~` and the last six characters of its id, or `<project>:<handle>` for another project's. The message starts a turn there (or steers one in flight; `deliver: "idle"` waits for it to be idle instead) and **its answer comes back to you as a message from it** — never wait or poll. Before starting long-running work others may care about, look at the directory: a session already on duty is asked, not duplicated.
+
+    #{you} #{listing}
+    """
+  end
+
+  defp session_line(%{address: address} = row) do
+    label = row.title || row.preview || "(untitled)"
+
+    goal =
+      case row.goal do
+        %{objective: objective} -> " — goal: #{objective}"
+        _ -> ""
+      end
+
+    "- #{address} — #{label}#{goal}"
+  end
 
   defp maybe(step, true, fun), do: fun.(step)
   defp maybe(step, false, _fun), do: step
@@ -155,18 +232,34 @@ defmodule Longx.Agent.Plugs.Agents do
 
   # the team as tools: every member can be messaged (a finished one keeps
   # its context and answers on it), only this agent's own can be closed
-  defp team_tools(children, siblings) do
+  defp team_tools(children, siblings, directory) do
     names = Enum.map(children ++ siblings, & &1.name)
     own = Enum.map(children, & &1.name)
+
+    to =
+      case directory do
+        nil ->
+          {:agent, {:enum, names}, "Which agent", required: true}
+
+        _ ->
+          {:to, :string,
+           "A member of your team by name" <>
+             if(names == [], do: "", else: " (#{Enum.join(names, ", ")})") <>
+             ", or any session of the project by address: its handle, ~<id suffix>, or <project>:<handle>",
+           required: true}
+      end
 
     send =
       Tool.declare(
         __MODULE__,
         :send_message,
-        "Sends a message to a member of your team. An agent keeps everything it did and learned, so a follow-up question to a finished one continues where it stopped; one still working takes it as more context or a redirection. Its answer comes back as a message from it.",
+        "Sends a message to a member of your team or to another session by address. An agent keeps everything it did and learned, so a follow-up question to a finished one continues where it stopped; one still working takes it as more context or a redirection. Its answer comes back as a message from it.",
         [
-          {:agent, {:enum, names}, "Which agent", required: true},
-          {:message, :string, "What to tell or ask it", required: true}
+          to,
+          {:message, :string, "What to tell or ask it", required: true},
+          {:deliver, {:enum, ["now", "idle"]},
+           "now (default): a session at work is steered at once; idle: the message waits in its mailbox until it is idle and starts a turn then",
+           []}
         ],
         timeout: 30_000
       )
@@ -181,6 +274,26 @@ defmodule Longx.Agent.Plugs.Agents do
       )
 
     if own == [], do: [send], else: [send, close]
+  end
+
+  defp directory_tool do
+    Tool.declare(
+      __MODULE__,
+      :agents_directory,
+      "The sessions of this project (or of every project) with their address, state (running / waiting on the person / idle / asleep), goal and team.",
+      [{:scope, {:enum, ["project", "all"]}, "project (default) or all projects", []}],
+      timeout: 15_000
+    )
+  end
+
+  defp handle_tool do
+    Tool.declare(
+      __MODULE__,
+      :claim_handle,
+      "Names this session for others: a short slug (lowercase letters, digits, dashes) unique in the project, the address others use in send_message.",
+      [{:handle, :string, "The handle, e.g. main, ops, deploy-watch", required: true}],
+      timeout: 15_000
+    )
   end
 
   ## The tools
@@ -201,14 +314,91 @@ defmodule Longx.Agent.Plugs.Agents do
   # a member of the team — one of this agent's own, else a sibling; the
   # answer of the turn it starts comes back here (`reply_to`); the member's
   # parent hears of the exchange (and watches the member's new process)
-  def send_message(%{"agent" => name, "message" => text}, ctx) do
-    with {:ok, id, parent} <- teammate(ctx.thread_id, name),
-         {:ok, _} <-
-           Longx.Agent.send(id, text, from: own_name(ctx.thread_id), reply_to: ctx.thread_id) do
-      Longx.Agent.interacted(parent, id)
-      {:ok, "delivered to #{name}; its answer will arrive as a message from it"}
+  def send_message(%{"agent" => name} = args, ctx),
+    do: send_message(args |> Map.delete("agent") |> Map.put("to", name), ctx)
+
+  def send_message(%{"to" => name, "message" => text} = args, ctx) do
+    case teammate(ctx.thread_id, name) do
+      {:ok, id, parent} ->
+        with {:ok, _} <-
+               Longx.Agent.send(id, text, from: own_name(ctx.thread_id), reply_to: ctx.thread_id) do
+          Longx.Agent.interacted(parent, id)
+          {:ok, "delivered to #{name}; its answer will arrive as a message from it"}
+        end
+
+      {:error, team_error} ->
+        send_by_address(name, text, args["deliver"], team_error, ctx)
     end
   end
+
+  defp send_by_address(_address, _text, _deliver, team_error, %{project_id: nil}),
+    do: {:error, team_error}
+
+  defp send_by_address(address, text, deliver, _team_error, ctx) do
+    deliver = if deliver == "idle", do: :idle, else: :now
+
+    case Longx.Projects.deliver(ctx.project_id, address, text,
+           from_thread: ctx.thread_id,
+           deliver: deliver
+         ) do
+      {:ok, _thread} ->
+        how = if deliver == :idle, do: " (it takes it once idle)", else: ""
+
+        {:ok,
+         "delivered to #{address}#{how}; its answer will arrive as a message from it — carry on, do not wait"}
+
+      {:error, :not_found} ->
+        {:error, "no session at #{address}; agents_directory lists the addresses"}
+
+      {:error, :self} ->
+        {:error, "that is your own address"}
+
+      {:error, reason} ->
+        {:error, "could not deliver to #{address}: #{inspect(reason)}"}
+    end
+  end
+
+  def agents_directory(args, %{project_id: project_id}) when is_binary(project_id) do
+    scope = if args["scope"] == "all", do: :all, else: :project
+    rows = Longx.Projects.directory(project_id, scope: scope)
+
+    if rows == [] do
+      {:ok, "no session in this project"}
+    else
+      {:ok,
+       Enum.map_join(rows, "\n", fn row ->
+         label = row.title || row.preview || "(untitled)"
+         team = if row.team == [], do: "", else: " team: #{Enum.join(row.team, ", ")};"
+
+         goal =
+           case row.goal do
+             %{objective: o, status: st} -> " goal (#{st}): #{o};"
+             _ -> ""
+           end
+
+         "- #{row.address} [#{row.state}] — #{label};#{team}#{goal}" <>
+           if(row.last_activity_at, do: " last active #{row.last_activity_at}", else: "")
+       end)}
+    end
+  end
+
+  def agents_directory(_args, _ctx), do: {:error, "not inside a project"}
+
+  def claim_handle(%{"handle" => handle}, %{project_id: project_id, thread_id: thread_id})
+      when is_binary(project_id) do
+    with {:ok, thread} <- Longx.Projects.get_thread_by_kernel_id(thread_id),
+         {:ok, _} <- Longx.Projects.set_handle(thread, handle) do
+      {:ok, "you are now `#{handle}`; others reach you with send_message(\"#{handle}\", …)"}
+    else
+      {:error, %Ash.Error.Invalid{} = error} ->
+        {:error, "refused: " <> Exception.message(error)}
+
+      {:error, reason} ->
+        {:error, "could not claim #{handle}: #{inspect(reason)}"}
+    end
+  end
+
+  def claim_handle(_args, _ctx), do: {:error, "not inside a project"}
 
   def close_agent(%{"agent" => name}, ctx) do
     with {:ok, id} <- child(ctx.thread_id, name) do

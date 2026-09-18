@@ -268,8 +268,11 @@ defmodule Longx.Projects.Thread do
         :parent_thread_id,
         :agent_path,
         :title,
+        :handle,
         :status
       ]
+
+      validate {Longx.Projects.Thread.HandleFormat, []}
     end
 
     update :touch do
@@ -285,6 +288,14 @@ defmodule Longx.Projects.Thread do
 
     update :rename do
       accept [:title]
+    end
+
+    # the session's handle: the address other agents (and the person) use;
+    # nil takes it away
+    update :set_handle do
+      accept [:handle]
+      require_atomic? false
+      validate {Longx.Projects.Thread.HandleFormat, []}
     end
 
     update :archive do
@@ -304,6 +315,13 @@ defmodule Longx.Projects.Thread do
       filter expr(kernel_thread_id == ^arg(:kernel_thread_id))
     end
 
+    read :by_handle do
+      argument :project_id, :uuid, allow_nil?: false
+      argument :handle, :string, allow_nil?: false
+      get? true
+      filter expr(project_id == ^arg(:project_id) and handle == ^arg(:handle))
+    end
+
     read :for_project do
       argument :project_id, :uuid, allow_nil?: false
 
@@ -320,6 +338,12 @@ defmodule Longx.Projects.Thread do
       argument :parent_thread_id, :uuid, allow_nil?: false
       filter expr(parent_thread_id == ^arg(:parent_thread_id))
       prepare build(sort: [inserted_at: :asc])
+    end
+
+    # every project's root sessions (the directory across projects)
+    read :roots do
+      filter expr(status != :archived and is_nil(parent_thread_id))
+      prepare build(sort: [last_activity_at: :desc_nils_last, inserted_at: :desc])
     end
 
     read :active_roots do
@@ -380,6 +404,9 @@ defmodule Longx.Projects.Thread do
     attribute :kernel_thread_id, :string, allow_nil?: false, public?: true
     attribute :title, :string, public?: true
     attribute :preview, :string, public?: true
+    # the session's address for other agents: a slug, unique in the project
+    # (a session without one is addressed as ~<the last six characters of its id>)
+    attribute :handle, :string, public?: true
 
     # working directory the agent was given (the project root, or a worktree later)
     attribute :cwd, :string, allow_nil?: false, public?: true
@@ -420,6 +447,7 @@ defmodule Longx.Projects.Thread do
 
   identities do
     identity :unique_kernel_thread_id, [:kernel_thread_id]
+    identity :unique_handle_in_project, [:project_id, :handle]
   end
 
   # an untyped map crosses the wire as is: camelCase it here (dates as ISO strings)

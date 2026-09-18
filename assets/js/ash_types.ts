@@ -263,9 +263,10 @@ export type ProjectRepoAttributesOnlySchema = {
 // Thread Schema
 export type ThreadResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "agentPath" | "cwd" | "id" | "insertedAt" | "kernelThreadId" | "lastActivityAt" | "modelSlug" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "status" | "title" | "updatedAt" | "webSearch";
+  __primitiveFields: "agentPath" | "cwd" | "handle" | "id" | "insertedAt" | "kernelThreadId" | "lastActivityAt" | "modelSlug" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "status" | "title" | "updatedAt" | "webSearch";
   agentPath: string | null;
   cwd: string;
+  handle: string | null;
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   kernelThreadId: string;
@@ -287,9 +288,10 @@ export type ThreadResourceSchema = {
 
 export type ThreadAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "agentPath" | "cwd" | "id" | "insertedAt" | "kernelThreadId" | "lastActivityAt" | "modelSlug" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "status" | "title" | "updatedAt" | "webSearch";
+  __primitiveFields: "agentPath" | "cwd" | "handle" | "id" | "insertedAt" | "kernelThreadId" | "lastActivityAt" | "modelSlug" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "status" | "title" | "updatedAt" | "webSearch";
   agentPath: string | null;
   cwd: string;
+  handle: string | null;
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   kernelThreadId: string;
@@ -1239,6 +1241,20 @@ export type ThreadFilterInput = {
     stringStartsWith?: string;
   };
 
+  handle?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
   id?: {
     eq?: UUIDv7;
     notEq?: UUIDv7;
@@ -1626,7 +1642,7 @@ export const projectFilterFields = ["agentSettings", "archivedAt", "description"
 export type ProjectFilterField = (typeof projectFilterFields)[number];
 
 
-export const threadFilterFields = ["agentPath", "cwd", "id", "insertedAt", "kernelThreadId", "lastActivityAt", "modelSlug", "parentThreadId", "preview", "projectId", "reasoningEffort", "status", "title", "updatedAt", "webSearch", "parentThread", "project"] as const;
+export const threadFilterFields = ["agentPath", "cwd", "handle", "id", "insertedAt", "kernelThreadId", "lastActivityAt", "modelSlug", "parentThreadId", "preview", "projectId", "reasoningEffort", "status", "title", "updatedAt", "webSearch", "parentThread", "project"] as const;
 export type ThreadFilterField = (typeof threadFilterFields)[number];
 
 export const turnFilterFields = ["commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "usage", "userText", "thread"] as const;
@@ -1652,7 +1668,7 @@ export const projectSortFields = ["agentSettings", "archivedAt", "description", 
 export type ProjectSortField = (typeof projectSortFields)[number];
 
 
-export const threadSortFields = ["agentPath", "cwd", "id", "insertedAt", "kernelThreadId", "lastActivityAt", "modelSlug", "parentThreadId", "preview", "projectId", "reasoningEffort", "status", "title", "updatedAt", "webSearch"] as const;
+export const threadSortFields = ["agentPath", "cwd", "handle", "id", "insertedAt", "kernelThreadId", "lastActivityAt", "modelSlug", "parentThreadId", "preview", "projectId", "reasoningEffort", "status", "title", "updatedAt", "webSearch"] as const;
 export type ThreadSortField = (typeof threadSortFields)[number];
 
 export const turnSortFields = ["commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "usage", "userText"] as const;

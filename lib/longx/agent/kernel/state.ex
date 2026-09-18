@@ -60,6 +60,12 @@ defmodule Longx.Agent.Kernel.State do
             # who the answer of the running turn goes to (the parent by default): a
             # teammate that asked gets it in its own mailbox
             reply_to: nil,
+            # the name the answer is signed with for `reply_to` (a root session has
+            # no team name: the asker gives the address it used); nil = `name`
+            reply_as: nil,
+            # answers of answers: how many times this exchange bounced (a report
+            # past `max_hops` is not sent back, so two agents never ping-pong)
+            hops: 0,
             name: nil,
             # the declared role this agent runs as (its description on top of the project's)
             role: nil,

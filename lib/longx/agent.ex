@@ -170,7 +170,9 @@ defmodule Longx.Agent do
   `effort:` set the level for this and later turns; `images:` are data
   urls. From another agent: `from:` (its name — the text is shown and sent
   as `[agent name] …`) and `reply_to:` (its thread id — the answer of the
-  turn this starts goes to it instead of the parent). Answers
+  turn this starts goes to it instead of the parent, signed `reply_as:`
+  when this agent has no team name; `hops:` counts the bounces of an
+  exchange, and an answer past six is not sent back). Answers
   `{:ok, %{turn_id, steered}}`.
 
   `deliver: :idle` never steers: the message waits in the agent's mailbox
@@ -554,6 +556,8 @@ defmodule Longx.Agent do
           model: Keyword.get(opts, :model, state.model),
           effort: Keyword.get(opts, :effort, state.effort),
           reply_to: Keyword.get(opts, :reply_to),
+          reply_as: Keyword.get(opts, :reply_as),
+          hops: Keyword.get(opts, :hops, 0),
           usage_total: %{},
           turn_started_at: System.system_time(:millisecond),
           continues: 0,
@@ -1096,6 +1100,8 @@ defmodule Longx.Agent do
       | phase: :idle,
         turn_id: nil,
         reply_to: nil,
+        reply_as: nil,
+        hops: 0,
         model_task: nil,
         items: %{},
         calls: [],
