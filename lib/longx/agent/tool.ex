@@ -42,7 +42,13 @@ defmodule Longx.Agent.Tool do
 
   @type param :: {atom, param_type, String.t() | nil, keyword}
   @type param_type ::
-          :string | :integer | :number | :boolean | {:enum, [String.t()]} | {:array, param_type}
+          :string
+          | :integer
+          | :number
+          | :boolean
+          | :map
+          | {:enum, [String.t()]}
+          | {:array, param_type}
 
   @doc """
   Builds a tool from a `tool` declaration: the params become the JSON
@@ -92,6 +98,10 @@ defmodule Longx.Agent.Tool do
   defp type_schema(:integer), do: %{"type" => "integer"}
   defp type_schema(:number), do: %{"type" => "number"}
   defp type_schema(:boolean), do: %{"type" => "boolean"}
+
+  defp type_schema(:map),
+    do: %{"type" => "object", "additionalProperties" => %{"type" => "string"}}
+
   defp type_schema({:enum, values}), do: %{"type" => "string", "enum" => values}
   defp type_schema({:array, type}), do: %{"type" => "array", "items" => type_schema(type)}
 

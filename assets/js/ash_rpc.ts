@@ -3,7 +3,7 @@
 
 import * as RpcHooks from "./core/rpcHooks";
 
-import type { AshRpcError, ConditionalPaginatedResultMixed, InferResult, ModelFilterInput, ModelResourceSchema, ModelSortField, ProjectFilterInput, ProjectResourceSchema, ProjectSortField, ProviderFilterInput, ProviderResourceSchema, ProviderSortField, SearchProviderFilterInput, SearchProviderResourceSchema, SearchProviderSortField, SortString, ThreadFilterInput, ThreadResourceSchema, ThreadSortField, TurnFilterInput, TurnResourceSchema, TurnSortField, UUID, UUIDv7, UnifiedFieldSelection, ValidationResult } from "./ash_types";
+import type { AshRpcError, ConditionalPaginatedResultMixed, CredentialFilterInput, CredentialResourceSchema, CredentialSortField, InferResult, ModelFilterInput, ModelResourceSchema, ModelSortField, ProjectFilterInput, ProjectResourceSchema, ProjectSortField, ProviderFilterInput, ProviderResourceSchema, ProviderSortField, SearchProviderFilterInput, SearchProviderResourceSchema, SearchProviderSortField, SortString, ThreadFilterInput, ThreadResourceSchema, ThreadSortField, TurnFilterInput, TurnResourceSchema, TurnSortField, UUID, UUIDv7, UnifiedFieldSelection, ValidationResult } from "./ash_types";
 export type * from "./ash_types";
 
 // RPC Action Hook Context Type
@@ -1620,6 +1620,649 @@ export async function validateUpdateSearchProvider(
 ): Promise<ValidationResult> {
   const payload = {
     action: "update_search_provider",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    identity: config.identity,
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type CreateCredentialApiKeyInput = {
+  name: string;
+  label?: string | null;
+  header?: string;
+  scheme?: string;
+  allowedHosts?: Array<string>;
+  secret?: string | null;
+};
+
+export type CreateCredentialApiKeyFields = UnifiedFieldSelection<CredentialResourceSchema>[];
+
+export type InferCreateCredentialApiKeyResult<
+  Fields extends CreateCredentialApiKeyFields | undefined,
+> = InferResult<CredentialResourceSchema, Fields>;
+
+export type CreateCredentialApiKeyResult<Fields extends CreateCredentialApiKeyFields | undefined = undefined> = | { success: true; data: InferCreateCredentialApiKeyResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Create a new Credential
+ *
+ * @ashActionType :create
+ */
+export async function createCredentialApiKey<Fields extends CreateCredentialApiKeyFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: CreateCredentialApiKeyInput;
+  hookCtx?: ActionHookContext;
+  fields?: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<CreateCredentialApiKeyResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "create_credential_api_key",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<CreateCredentialApiKeyResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Create a new Credential
+ *
+ * @ashActionType :create
+ * @validation true
+ */
+export async function validateCreateCredentialApiKey(
+  config: {
+  tenant?: string;
+  input: CreateCredentialApiKeyInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "create_credential_api_key",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type CreateCredentialOauth2Input = {
+  name: string;
+  label?: string | null;
+  header?: string;
+  scheme?: string;
+  allowedHosts?: Array<string>;
+  clientId?: string | null;
+  authorizeUrl?: string | null;
+  tokenUrl?: string | null;
+  registrationUrl?: string | null;
+  scopes?: string | null;
+  pkce?: boolean;
+  extraParams?: Record<string, any>;
+  clientSecret?: string | null;
+};
+
+export type CreateCredentialOauth2Fields = UnifiedFieldSelection<CredentialResourceSchema>[];
+
+export type InferCreateCredentialOauth2Result<
+  Fields extends CreateCredentialOauth2Fields | undefined,
+> = InferResult<CredentialResourceSchema, Fields>;
+
+export type CreateCredentialOauth2Result<Fields extends CreateCredentialOauth2Fields | undefined = undefined> = | { success: true; data: InferCreateCredentialOauth2Result<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Create a new Credential
+ *
+ * @ashActionType :create
+ */
+export async function createCredentialOauth2<Fields extends CreateCredentialOauth2Fields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: CreateCredentialOauth2Input;
+  hookCtx?: ActionHookContext;
+  fields?: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<CreateCredentialOauth2Result<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "create_credential_oauth2",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<CreateCredentialOauth2Result<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Create a new Credential
+ *
+ * @ashActionType :create
+ * @validation true
+ */
+export async function validateCreateCredentialOauth2(
+  config: {
+  tenant?: string;
+  input: CreateCredentialOauth2Input;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "create_credential_oauth2",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type DeleteCredentialResult = | { success: true; data: {}; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Delete a Credential
+ *
+ * @ashActionType :destroy
+ */
+export async function deleteCredential(
+  config: {
+  tenant?: string;
+  identity: UUIDv7;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DeleteCredentialResult> {
+  const payload = {
+    action: "delete_credential",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    identity: config.identity
+  };
+
+  return executeActionRpcRequest<DeleteCredentialResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Delete a Credential
+ *
+ * @ashActionType :destroy
+ * @validation true
+ */
+export async function validateDeleteCredential(
+  config: {
+  tenant?: string;
+  identity: UUIDv7 | string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "delete_credential",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    identity: config.identity
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type CredentialLoginUrlInput = {
+  id: UUID;
+  origin?: string | null;
+};
+
+export type CredentialLoginUrlFields = UnifiedFieldSelection<{url: string, redirectUri: string, __type: "TypedMap", __primitiveFields: "url" | "redirectUri"}>[];
+
+export type InferCredentialLoginUrlResult<
+  Fields extends CredentialLoginUrlFields | undefined,
+> = InferResult<{url: string, redirectUri: string, __type: "TypedMap", __primitiveFields: "url" | "redirectUri"}, Fields>;
+
+export type CredentialLoginUrlResult<Fields extends CredentialLoginUrlFields | undefined = undefined> = | { success: true; data: InferCredentialLoginUrlResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Credential
+ *
+ * @ashActionType :action
+ */
+export async function credentialLoginUrl<Fields extends CredentialLoginUrlFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: CredentialLoginUrlInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<CredentialLoginUrlResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "credential_login_url",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<CredentialLoginUrlResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Credential
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateCredentialLoginUrl(
+  config: {
+  tenant?: string;
+  input: CredentialLoginUrlInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "credential_login_url",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ListCredentialsFields = UnifiedFieldSelection<CredentialResourceSchema>[];
+
+
+export type InferListCredentialsResult<
+  Fields extends ListCredentialsFields | undefined,
+  Page extends ListCredentialsConfig["page"] = undefined
+> = ConditionalPaginatedResultMixed<Page, Array<InferResult<CredentialResourceSchema, Fields>>, {
+  results: Array<InferResult<CredentialResourceSchema, Fields>>;
+  hasMore: boolean;
+  limit: number;
+  offset: number;
+  count?: number | null;
+  type: "offset";
+}, {
+  results: Array<InferResult<CredentialResourceSchema, Fields>>;
+  hasMore: boolean;
+  limit: number;
+  after: string | null;
+  before: string | null;
+  previousPage: string | null;
+  nextPage: string | null;
+  count?: number | null;
+  type: "keyset";
+}>;
+
+export type ListCredentialsConfig = {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: ListCredentialsFields;
+  filter?: CredentialFilterInput;
+  sort?: SortString<CredentialSortField> | SortString<CredentialSortField>[];
+  page?: (
+    {
+      limit?: number;
+      offset?: number;
+      count?: boolean;
+    } | {
+      limit?: number;
+      after?: string;
+      before?: string;
+    }
+  );
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+};
+
+export type ListCredentialsResult<Fields extends ListCredentialsFields, Page extends ListCredentialsConfig["page"] = undefined> = | { success: true; data: InferListCredentialsResult<Fields, Page>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Read Credential records
+ *
+ * @ashActionType :read
+ */
+export async function listCredentials<Fields extends ListCredentialsFields, Config extends ListCredentialsConfig = ListCredentialsConfig>(
+  config: Config & { fields: Fields }
+): Promise<ListCredentialsResult<Fields, Config["page"]>> {
+  const payload = {
+    action: "list_credentials",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields }),
+    ...(config.filter && { filter: config.filter }),
+    ...(config.sort && { sort: Array.isArray(config.sort) ? config.sort.join(",") : config.sort }),
+    ...(config.page && { page: config.page })
+  };
+
+  return executeActionRpcRequest<ListCredentialsResult<Fields, Config["page"]>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Read Credential records
+ *
+ * @ashActionType :read
+ * @validation true
+ */
+export async function validateListCredentials(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_credentials",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type CredentialRedirectUriInput = {
+  origin?: string | null;
+};
+
+export type CredentialRedirectUriFields = UnifiedFieldSelection<{uri: string, __type: "TypedMap", __primitiveFields: "uri"}>[];
+
+export type InferCredentialRedirectUriResult<
+  Fields extends CredentialRedirectUriFields | undefined,
+> = InferResult<{uri: string, __type: "TypedMap", __primitiveFields: "uri"}, Fields>;
+
+export type CredentialRedirectUriResult<Fields extends CredentialRedirectUriFields | undefined = undefined> = | { success: true; data: InferCredentialRedirectUriResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Credential
+ *
+ * @ashActionType :action
+ */
+export async function credentialRedirectUri<Fields extends CredentialRedirectUriFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input?: CredentialRedirectUriInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<CredentialRedirectUriResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "credential_redirect_uri",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<CredentialRedirectUriResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Credential
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateCredentialRedirectUri(
+  config: {
+  tenant?: string;
+  input?: CredentialRedirectUriInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "credential_redirect_uri",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type RefreshCredentialInput = {
+  id: UUID;
+};
+
+export type RefreshCredentialFields = UnifiedFieldSelection<CredentialResourceSchema>[];
+
+export type InferRefreshCredentialResult<
+  Fields extends RefreshCredentialFields | undefined,
+> = InferResult<CredentialResourceSchema, Fields>;
+
+export type RefreshCredentialResult<Fields extends RefreshCredentialFields | undefined = undefined> = | { success: true; data: InferRefreshCredentialResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Credential
+ *
+ * @ashActionType :action
+ */
+export async function refreshCredential<Fields extends RefreshCredentialFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: RefreshCredentialInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<RefreshCredentialResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "refresh_credential",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<RefreshCredentialResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Credential
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateRefreshCredential(
+  config: {
+  tenant?: string;
+  input: RefreshCredentialInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "refresh_credential",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type UpdateCredentialInput = {
+  label?: string | null;
+  header?: string;
+  scheme?: string;
+  allowedHosts?: Array<string>;
+  clientId?: string | null;
+  authorizeUrl?: string | null;
+  tokenUrl?: string | null;
+  registrationUrl?: string | null;
+  scopes?: string | null;
+  pkce?: boolean;
+  extraParams?: Record<string, any>;
+  clientSecret?: string | null;
+  secret?: string | null;
+};
+
+export type UpdateCredentialFields = UnifiedFieldSelection<CredentialResourceSchema>[];
+
+export type InferUpdateCredentialResult<
+  Fields extends UpdateCredentialFields | undefined,
+> = InferResult<CredentialResourceSchema, Fields>;
+
+export type UpdateCredentialResult<Fields extends UpdateCredentialFields | undefined = undefined> = | { success: true; data: InferUpdateCredentialResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Update an existing Credential
+ *
+ * @ashActionType :update
+ */
+export async function updateCredential<Fields extends UpdateCredentialFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  identity: UUIDv7;
+  input?: UpdateCredentialInput;
+  hookCtx?: ActionHookContext;
+  fields?: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<UpdateCredentialResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "update_credential",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    identity: config.identity,
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<UpdateCredentialResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Update an existing Credential
+ *
+ * @ashActionType :update
+ * @validation true
+ */
+export async function validateUpdateCredential(
+  config: {
+  tenant?: string;
+  identity: UUIDv7 | string;
+  input?: UpdateCredentialInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "update_credential",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     identity: config.identity,
     input: config.input

@@ -80,7 +80,13 @@ config :spark,
 config :longx,
   ecto_repos: [Longx.Repo],
   generators: [timestamp_type: :utc_datetime],
-  ash_domains: [Longx.AI, Longx.Projects, Longx.System, Longx.Agent.Transcript]
+  ash_domains: [
+    Longx.AI,
+    Longx.Projects,
+    Longx.System,
+    Longx.Credentials,
+    Longx.Agent.Transcript
+  ]
 
 # Configure the endpoint
 config :longx, LongxWeb.Endpoint,
@@ -131,3 +137,16 @@ import_config "#{config_env()}.exs"
 
 # Self-upgrade from GitHub releases (Longx.Upgrade): where to look, how often
 config :longx, Longx.Upgrade, repo: "mjason/longx", tick: :timer.hours(6)
+
+# Background jobs on the SQLite database (Oban's Lite engine): the OAuth2
+# token refresh (Longx.Credentials.RefreshWorker) every five minutes
+config :longx, Oban,
+  engine: Oban.Engines.Lite,
+  # the Postgres notifier is the default and needs postgrex; one BEAM, so PG
+  notifier: Oban.Notifiers.PG,
+  repo: Longx.Repo,
+  queues: [credentials: 2],
+  plugins: [
+    {Oban.Plugins.Cron, crontab: [{"*/5 * * * *", Longx.Credentials.RefreshWorker}]},
+    {Oban.Plugins.Pruner, max_age: 7 * 24 * 60 * 60}
+  ]

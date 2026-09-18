@@ -36,6 +36,9 @@ defmodule Longx.Application do
       {DynamicSupervisor, name: Longx.Agent.Supervisor, strategy: :one_for_one},
       # keeps project thread/turn rows in step with the agents' events
       Longx.Projects.Tracker,
+      # OAuth2 logins in flight (Longx.Credentials), and the token refresh jobs (Oban)
+      Longx.Credentials.Logins,
+      {Oban, Application.fetch_env!(:longx, Oban)},
       # rows a previous boot left running: no agent survives the BEAM
       Supervisor.child_spec({Task, fn -> Longx.Projects.settle_after_restart() end},
         id: :settle_after_restart,

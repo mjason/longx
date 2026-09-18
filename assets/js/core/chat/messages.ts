@@ -139,7 +139,7 @@ export function toMessages(
           : null,
       fields:
         (request.params["fields"] as
-          { id: string; label: string }[] | undefined) ?? [],
+          { id: string; label: string; secret?: boolean }[] | undefined) ?? [],
       // a generative tree (prompt_user, Context.ask spec:) drawn instead of the fields
       ...(request.params["spec"] !== undefined && request.params["spec"] !== null
         ? { spec: request.params["spec"] }
