@@ -13,6 +13,9 @@ defmodule Longx.Credentials.OAuthTest do
     Ash.bulk_destroy!(Credential, :destroy, %{}, authorize?: false)
     bypass = Bypass.open()
     base = "http://localhost:#{bypass.port}"
+    # a login starts with a probe of the authorize endpoint (a rejected client is
+    # replaced): the default answer is "fine", a test overrides it
+    Bypass.stub(bypass, "GET", "/authorize", &Plug.Conn.send_resp(&1, 302, ""))
 
     {:ok, cred} =
       Credentials.create_oauth2(%{
@@ -168,5 +171,57 @@ defmodule Longx.Credentials.OAuthTest do
 
     assert {:error, message} = OAuth.begin_login(bare, [])
     assert message =~ "client"
+  end
+
+  test "a client the server rejects (another redirect URI) is replaced: the authorize probe answers 400, Longx registers itself at the metadata's registration endpoint and logs in with the new client",
+       %{bypass: bypass, base: base, cred: cred} do
+    # no registration_url on the row: RFC 8414 metadata names it
+    Bypass.expect(bypass, "GET", "/.well-known/oauth-authorization-server", fn conn ->
+      json!(conn, 200, %{issuer: base, registration_endpoint: base <> "/register"})
+    end)
+
+    Bypass.expect(bypass, "GET", "/authorize", fn conn ->
+      case conn.query_params["client_id"] do
+        "fresh-id" ->
+          conn
+          |> Plug.Conn.put_resp_header("location", "https://idp.example/login")
+          |> Plug.Conn.send_resp(302, "")
+
+        _ ->
+          Plug.Conn.send_resp(conn, 400, "Whitelabel Error Page")
+      end
+    end)
+
+    Bypass.expect_once(bypass, "POST", "/register", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      assert Jason.decode!(body)["redirect_uris"] == [OAuth.redirect_uri(nil)]
+      json!(conn, 201, %{client_id: "fresh-id"})
+    end)
+
+    assert {:ok, %{url: url}} = OAuth.begin_login(cred, [])
+    assert URI.decode_query(URI.parse(url).query)["client_id"] == "fresh-id"
+    assert {:ok, %{client_id: "fresh-id", registration_url: reg}} = Credentials.fetch("oa")
+    assert reg == base <> "/register"
+  end
+
+  test "a 400 from the authorize endpoint with no way to register keeps the row and the URL as they are",
+       %{bypass: bypass, cred: cred} do
+    Bypass.expect(
+      bypass,
+      "GET",
+      "/.well-known/oauth-authorization-server",
+      &Plug.Conn.send_resp(&1, 404, "")
+    )
+
+    Bypass.stub(
+      bypass,
+      "GET",
+      "/.well-known/openid-configuration",
+      &Plug.Conn.send_resp(&1, 404, "")
+    )
+
+    Bypass.expect(bypass, "GET", "/authorize", &Plug.Conn.send_resp(&1, 400, "bad client"))
+    assert {:ok, %{url: url}} = OAuth.begin_login(cred, [])
+    assert URI.decode_query(URI.parse(url).query)["client_id"] == "cid"
   end
 end

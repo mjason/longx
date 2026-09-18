@@ -48,7 +48,8 @@ defmodule Longx.Credentials.OAuth do
 
     with :ok <- oauth2?(cred),
          :ok <- present(cred.authorize_url, "no authorize URL"),
-         {:ok, cred} <- ensure_client(cred, redirect) do
+         {:ok, cred} <- ensure_client(cred, redirect),
+         {:ok, cred} <- accepted_client(cred, redirect) do
       state = random(24)
       verifier = if cred.pkce, do: random(32)
 
@@ -203,6 +204,74 @@ defmodule Longx.Credentials.OAuth do
 
   defp ensure_client(_cred, _redirect),
     do: {:error, "no client id: enter one, or a registration URL the server offers"}
+
+  # A client the server refuses outright (an authorize probe answering 400 —
+  # a client registered elsewhere, with another redirect URI, is the usual
+  # case: an agent once registered one by hand and handed over the id) is
+  # replaced by one Longx registers itself, at the row's registration URL or
+  # the one the server's RFC 8414 metadata names. No way to register, or a
+  # probe that fails for another reason: the login goes on as it is.
+  defp accepted_client(%Credential{} = cred, redirect) do
+    case probe_authorize(cred, redirect) do
+      :rejected ->
+        case registration_url(cred) do
+          nil ->
+            {:ok, cred}
+
+          url ->
+            with {:ok, cred} <- Credentials.update_credential(cred, %{registration_url: url}),
+                 {:ok, cred} <- register(cred, redirect) do
+              {:ok, cred}
+            else
+              _ -> {:ok, cred}
+            end
+        end
+
+      _ ->
+        {:ok, cred}
+    end
+  end
+
+  defp probe_authorize(%Credential{} = cred, redirect) do
+    query = %{
+      "response_type" => "code",
+      "client_id" => cred.client_id,
+      "redirect_uri" => redirect,
+      "state" => "probe"
+    }
+
+    case Req.get(with_query(cred.authorize_url, query),
+           redirect: false,
+           retry: false,
+           receive_timeout: 10_000
+         ) do
+      {:ok, %{status: 400}} -> :rejected
+      _ -> :ok
+    end
+  end
+
+  defp registration_url(%Credential{registration_url: url}) when is_binary(url) and url != "",
+    do: url
+
+  defp registration_url(%Credential{authorize_url: authorize}) do
+    # the origin as a string (a %URI{} built by hand trips dialyzer's opaque check)
+    %URI{scheme: scheme, host: host, port: port} = URI.parse(authorize)
+    default_port = URI.default_port(scheme || "https")
+    origin = "#{scheme}://#{host}#{if port && port != default_port, do: ":#{port}", else: ""}"
+
+    Enum.find_value(
+      ["/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"],
+      fn path ->
+        case Req.get(origin <> path, retry: false, receive_timeout: 10_000) do
+          {:ok, %{status: 200, body: %{"registration_endpoint" => url}}} when is_binary(url) ->
+            url
+
+          _ ->
+            nil
+        end
+      end
+    )
+  end
 
   defp oauth2?(%Credential{kind: :oauth2}), do: :ok
   defp oauth2?(_), do: {:error, "not an OAuth2 credential"}

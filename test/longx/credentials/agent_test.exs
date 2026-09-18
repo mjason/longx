@@ -33,6 +33,8 @@ defmodule Longx.Credentials.AgentTest do
 
     model_bypass = Bypass.open()
     oauth = Bypass.open()
+    # a login probes the authorize endpoint first (a rejected client is replaced)
+    Bypass.stub(oauth, "GET", "/authorize", &Plug.Conn.send_resp(&1, 302, ""))
     n = System.unique_integer([:positive])
 
     provider =

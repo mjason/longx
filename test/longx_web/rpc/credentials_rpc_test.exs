@@ -70,6 +70,8 @@ defmodule LongxWeb.CredentialsRpcTest do
     conn: conn
   } do
     bypass = Bypass.open()
+    # a login probes the authorize endpoint first (a rejected client is replaced)
+    Bypass.stub(bypass, "GET", "/authorize", &Plug.Conn.send_resp(&1, 302, ""))
     base = "http://localhost:#{bypass.port}"
 
     assert %{"success" => true, "data" => %{"uri" => uri}} =

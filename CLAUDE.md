@@ -508,7 +508,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   kinds, statuses, hosts, expiry), `http_request(credential, url, method, headers, body,
   timeout_ms)` (through `request/4`; the body clipped head and tail; MCP servers over HTTP
   are JSON-RPC POSTs through it), `credential_login` (an ask with the authorize URL and
-  `meta: %{"login" => state}`), `credential_create` / `credential_rotate` (`secret_from:` `env:NAME` / `file:PATH` / `file:PATH#KEY` copies a key already on the machine into the store without the model seeing it; else the key / client secret typed by the
+  `meta: %{"login" => state}`; the login starts with a GET probe of the authorize URL: a
+  400 is a client the server rejects — one registered by hand with another redirect URI —
+  and Longx registers itself instead, at the row's `registration_url` or the
+  `registration_endpoint` in the server's RFC 8414 metadata), `credential_create` / `credential_rotate` (`secret_from:` `env:NAME` / `file:PATH` / `file:PATH#KEY` copies a key already on the machine into the store without the model seeing it; else the key / client secret typed by the
   person into the ask's **`secret: true` field**, masked in the elicitation form, stored
   by the tool). RPC on the resource: `list_credentials`, `create_credential_api_key`,
   `create_credential_oauth2`, `update_credential`, `delete_credential`,

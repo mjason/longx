@@ -544,6 +544,35 @@ describe("ThreadPage", () => {
     expect(steerTurn).toHaveBeenCalledTimes(1);
   });
 
+  test("after a stop the queue holds its messages; 插入 then sends one as a new turn instead of into the dead turn", async () => {
+    const user = userEvent.setup();
+    await open();
+    act(() => channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } }));
+    act(() =>
+      channel.deliver("event", {
+        seq: 5,
+        method: "item/started",
+        params: { turnId: "turn_2", item: { id: "c2", type: "commandExecution", command: "sleep 30", cwd: "/p", status: "inProgress" } },
+      }),
+    );
+    const input = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(input, "and then this{Enter}");
+    expect(await screen.findByTestId("message-queue")).toHaveTextContent("and then this");
+    // stop: the turn ends interrupted; assistant-ui pauses the queue, the message stays
+    await user.click(screen.getByRole("button", { name: /停止/ }));
+    await waitFor(() => expect(interruptTurn).toHaveBeenCalled());
+    act(() => channel.deliver("event", { seq: 6, method: "turn/completed", params: { turn: { id: "turn_2", status: "interrupted" } } }));
+    expect(screen.getByTestId("message-queue")).toHaveTextContent("and then this");
+    expect(sendMessage).not.toHaveBeenCalled();
+    // 插入 on a turn that is over: not_running from the server, so it goes out as a new turn
+    vi.mocked(steerTurn).mockResolvedValueOnce(failed("not_running", ["threadId"]) as never);
+    await user.click(within(screen.getByTestId("message-queue")).getByRole("button", { name: "插入" }));
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "and then this" }) })),
+    );
+    await waitFor(() => expect(screen.queryByTestId("message-queue")).not.toBeInTheDocument());
+  });
+
   test("a sub-agent joins its own thread: its conversation nests under the parent, its ask is answered there", async () => {
     const user = userEvent.setup();
     await open();

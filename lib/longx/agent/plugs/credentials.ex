@@ -58,7 +58,7 @@ defmodule Longx.Agent.Plugs.Credentials do
   end
 
   tool :credential_create,
-       "Declares a new credential. The key (API key) or client secret (OAuth2) is typed by the person into a masked field — you never see it. Give the hosts it may be sent to.",
+       "Declares a new credential. The key (API key) or client secret (OAuth2) comes from the machine (secret_from) or is typed by the person into a masked field — you never see it. Give the hosts it may be sent to. OAuth2: never register a client yourself (its redirect URI would not be Longx's) — give registration_url, or a client_id the person got from the provider's console.",
        namespace: @namespace,
        timeout: 600_000 do
     param :name, :string, "A short lowercase slug (coros, github, …)", required: true

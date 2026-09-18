@@ -11,7 +11,7 @@ import {
 } from "@assistant-ui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { archiveThread, deleteThread, renameThread, steerTurn } from "@/ash_rpc";
+import { archiveThread, deleteThread, renameThread, sendMessage, steerTurn } from "@/ash_rpc";
 import { queryKeys, unwrap, useAgentDefinition, useStartThread, useThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
@@ -222,12 +222,22 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       if (steered.success) {
         queue.adapter.remove(queueItemId);
         void invalidate();
-      } else if (!steered.errors.some((e) => e.message === "not_running")) {
+      } else if (steered.errors.some((e) => e.message === "not_running")) {
+        // the turn is over (a stop pauses assistant-ui's queue, so nothing would go out
+        // by itself): the message goes out as a new turn now, off the queue
+        queue.adapter.remove(queueItemId);
+        unwrap(
+          await sendMessage({
+            fields: ["id"],
+            input: { threadId: thread.id, text, ...(model ? { model } : {}), ...(effort ? { effort } : {}) },
+          }),
+        );
+        void invalidate();
+      } else {
         unwrap(steered);
       }
-      // not_running: the turn ended meanwhile; the queue sends it as a new turn
     },
-    [queue, thread, invalidate],
+    [queue, thread, invalidate, model, effort],
   );
   // what the composer can take: images (to the model as data urls), text
   // files (inlined) and any other file (uploaded to the server, its path in

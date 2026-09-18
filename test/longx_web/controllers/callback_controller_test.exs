@@ -14,6 +14,8 @@ defmodule LongxWeb.CallbackControllerTest do
     setup do
       Ash.bulk_destroy!(Credential, :destroy, %{}, authorize?: false)
       bypass = Bypass.open()
+      # a login probes the authorize endpoint first (a rejected client is replaced)
+      Bypass.stub(bypass, "GET", "/authorize", &Plug.Conn.send_resp(&1, 302, ""))
       base = "http://localhost:#{bypass.port}"
 
       {:ok, cred} =
