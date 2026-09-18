@@ -122,7 +122,16 @@ defmodule Longx.Agent.PlugsTest do
       refute Map.has_key?(deep.tools, "spawn_agent")
       assert Enum.join(deep.instructions, "\n") =~ "cannot spawn"
 
-      kids = for i <- 1..4, do: %{id: "c#{i}", name: "researcher-#{i}"}
+      kids =
+        for i <- 1..4,
+            do: %{
+              id: "c#{i}",
+              name: "researcher-#{i}",
+              status: "working",
+              role: "researcher",
+              task: "t#{i}"
+            }
+
       full = Agents.call(team_step(%{children: kids}), Agents.init(max_children: 4))
       refute Map.has_key?(full.tools, "spawn_agent")
       # the live children can still be spoken to and closed
@@ -141,6 +150,46 @@ defmodule Longx.Agent.PlugsTest do
       assert text =~ "prompt_file"
       # a child at the depth limit is not told to declare anyone
       assert Agents.call(team_step(%{agents: [], depth: 2}), Agents.init([])).instructions == []
+    end
+
+    test "the team persists: finished children and siblings can be messaged; only working ones count against the limit" do
+      kids = [
+        %{id: "c1", name: "researcher", status: "done", role: "researcher", task: "find X"},
+        %{
+          id: "c2",
+          name: "reviewer",
+          status: "working",
+          role: "reviewer",
+          task: "review the patch"
+        }
+      ]
+
+      sibs = [%{id: "s1", name: "writer", role: "writer", task: "write the post"}]
+
+      step =
+        Agents.call(
+          team_step(%{children: kids, siblings: sibs, name: "planner"}),
+          Agents.init(max_children: 2)
+        )
+
+      # one of two is working: room for another
+      assert Map.has_key?(step.tools, "spawn_agent")
+
+      assert step.tools["send_message"].schema["properties"]["agent"]["enum"] ==
+               ["researcher", "reviewer", "writer"]
+
+      assert step.tools["send_message"].description =~ "keeps"
+
+      assert step.tools["close_agent"].schema["properties"]["agent"]["enum"] == [
+               "researcher",
+               "reviewer"
+             ]
+
+      text = Enum.join(step.instructions, "\n")
+      assert text =~ "researcher (researcher, done): find X"
+      assert text =~ "reviewer (reviewer, working): review the patch"
+      assert text =~ "writer (writer): write the post"
+      assert text =~ "ask it again"
     end
 
     test "with no children there is nobody to message or close" do

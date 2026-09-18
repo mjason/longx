@@ -27,6 +27,15 @@ defmodule Longx.Agent.Kernel.Specs do
   @spec delete(String.t()) :: :ok
   def delete(thread_id), do: GenServer.call(__MODULE__, {:delete, thread_id})
 
+  @doc "The specs of the agents spawned under `parent_id`, oldest first — a parent's team, rebuilt after it left."
+  @spec children_of(String.t()) :: [{String.t(), keyword}]
+  def children_of(parent_id) do
+    @table
+    |> :ets.tab2list()
+    |> Enum.filter(fn {_id, opts} -> Keyword.get(opts, :parent) == parent_id end)
+    |> Enum.sort_by(fn {_id, opts} -> Keyword.get(opts, :spawned_at, 0) end)
+  end
+
   @impl true
   def init(_opts) do
     :ets.new(@table, [:named_table, :set, :protected, read_concurrency: true])

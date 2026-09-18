@@ -110,9 +110,27 @@ defmodule Longx.Agent do
   @spec info(String.t()) :: map
   def info(thread_id), do: GenServer.call(via(thread_id), :info)
 
-  @doc "The agent's live children."
-  @spec children(String.t()) :: [%{id: String.t(), name: String.t()}]
+  @doc """
+  The agent's team, in the order it was made: every agent it spawned, with
+  `status` `"working"` / `"done"` / `"failed"` — a finished one stays a
+  member (its transcript is kept; `send/3` continues it) until
+  `forget_child/2`.
+  """
+  @spec children(String.t()) :: [
+          %{
+            id: String.t(),
+            name: String.t(),
+            status: String.t(),
+            role: String.t() | nil,
+            task: String.t() | nil
+          }
+        ]
   def children(thread_id), do: GenServer.call(via(thread_id), :children)
+
+  @doc "Takes a child out of the parent's team (`close_agent`); stopping it is the caller's."
+  @spec forget_child(String.t(), String.t()) :: :ok
+  def forget_child(parent_id, child_id),
+    do: GenServer.call(via(parent_id), {:forget_child, child_id})
 
   @spec whereis(String.t()) :: pid | nil
   def whereis(thread_id), do: GenServer.whereis(via(thread_id))
@@ -141,7 +159,10 @@ defmodule Longx.Agent do
   A user message: a new turn when the thread is idle (`turn_id:` names it,
   else one is made), a steer into the running one otherwise. `model:` /
   `effort:` set the level for this and later turns; `images:` are data
-  urls. Answers `{:ok, %{turn_id, steered}}`.
+  urls. From another agent: `from:` (its name — the text is shown and sent
+  as `[agent name] …`) and `reply_to:` (its thread id — the answer of the
+  turn this starts goes to it instead of the parent). Answers
+  `{:ok, %{turn_id, steered}}`.
   """
   @spec send(String.t(), String.t(), keyword) :: {:ok, %{turn_id: String.t(), steered: boolean}}
   def send(thread_id, text, opts \\ []) do
@@ -240,6 +261,8 @@ defmodule Longx.Agent do
 
     {:ok, _} = ThreadState.ensure(thread_id)
     replay(state, items)
+    # the team it spawned before it left, from the specs
+    state = Team.restore_children(state)
     # a child goes when its parent goes
     with parent when is_binary(parent) <- state.parent, pid when is_pid(pid) <- whereis(parent) do
       Process.monitor(pid)
@@ -310,6 +333,9 @@ defmodule Longx.Agent do
   end
 
   def handle_call(:children, _from, state), do: {:reply, Team.children_list(state), state}
+
+  def handle_call({:forget_child, child_id}, _from, state),
+    do: {:reply, :ok, Team.forget(state, child_id)}
 
   def handle_call({:ask, request}, from, %State{} = state) do
     id = "ask_" <> Ash.UUID.generate()
@@ -406,10 +432,15 @@ defmodule Longx.Agent do
   @impl true
   def handle_cast({:present, tree}, state), do: {:noreply, Calls.present(state, tree)}
 
+  # a child spoken to again (by this agent or a teammate): working again,
+  # under whatever pid `send/3` revived it with
   def handle_cast({:interacted, child_id}, %State{children: children} = state) do
     case Map.get(children, child_id) do
-      %{name: name} -> {:noreply, Team.activity(state, child_id, name, "interacted")}
-      nil -> {:noreply, state}
+      %{name: name} ->
+        {:noreply, state |> Team.rewatch(child_id) |> Team.activity(child_id, name, "interacted")}
+
+      nil ->
+        {:noreply, state}
     end
   end
 
@@ -425,6 +456,7 @@ defmodule Longx.Agent do
           phase: :step,
           model: Keyword.get(opts, :model, state.model),
           effort: Keyword.get(opts, :effort, state.effort),
+          reply_to: Keyword.get(opts, :reply_to),
           usage_total: %{},
           continues: 0,
           steps: 0,
@@ -563,6 +595,7 @@ defmodule Longx.Agent do
           role: state.role,
           depth: state.depth,
           children: Team.children_list(state),
+          siblings: Team.siblings(state),
           goal: state.goal
         },
         state: state.turn_state,
@@ -808,30 +841,37 @@ defmodule Longx.Agent do
 
   # another agent (a child reporting back) speaks: into the mailbox, like the person
   def handle_info({:agent_message, from, text}, state) do
-    activity =
-      case Enum.find(state.children, fn {_id, c} -> c.name == from end) do
-        {id, _} -> {id, from, "completed"}
-        nil -> nil
-      end
-
-    deliver(state, text, from, activity)
+    case Enum.find(state.children, fn {_id, c} -> c.name == from end) do
+      {id, _} -> deliver(Team.mark(state, id, :done), text, from, {id, from, "completed"})
+      nil -> deliver(state, text, from, nil)
+    end
   end
 
-  # a child left: `:normal` is nothing to say, a crash is news for the model;
-  # the parent gone takes this agent along
+  # a child's process left: idle or stopped (`:normal`) it stays a member —
+  # its transcript is kept and a message brings it back —; a crash is news
+  # for the model, the child a failed member it may ask again or close. The
+  # parent gone takes this agent along.
   def handle_info({:DOWN, ref, :process, pid, reason}, state) do
     case Enum.find(state.children, fn {_id, c} -> c.ref == ref end) do
-      {id, %{name: name}} ->
-        state = %{state | children: Map.delete(state.children, id)}
-
-        if reason in [:normal, :shutdown] or match?({:shutdown, _}, reason),
-          do: {:noreply, state},
-          else: deliver(state, "exited: #{exit_text(reason)}", name, {id, name, "interrupted"})
+      {id, %{name: name, status: status}} ->
+        # :noproc — a monitor set on a process that had just left (a revived
+        # parent watching a child that went idle meanwhile) — is a normal leave
+        if reason in [:normal, :shutdown, :noproc] or match?({:shutdown, _}, reason) do
+          {:noreply, Team.mark(state, id, if(status == :working, do: :done, else: status), nil)}
+        else
+          state = Team.mark(state, id, :failed, nil)
+          deliver(state, "exited: #{exit_text(reason)}", name, {id, name, "interrupted"})
+        end
 
       nil ->
-        if state.parent && whereis(state.parent) in [nil, pid],
-          do: {:stop, :normal, stop_turn(state)},
-          else: {:noreply, state}
+        # the parent's process left: idle (it comes back for this agent's
+        # report) or crashed (likewise, from its spec) — the child goes on;
+        # only a parent forgotten for good (its spec deleted: closed, the
+        # thread deleted) takes it along
+        if state.parent && whereis(state.parent) in [nil, pid] &&
+             Longx.Agent.Kernel.Specs.get(state.parent) == nil,
+           do: {:stop, :normal, stop_turn(state)},
+           else: {:noreply, state}
     end
   end
 
@@ -956,6 +996,7 @@ defmodule Longx.Agent do
       state
       | phase: :idle,
         turn_id: nil,
+        reply_to: nil,
         model_task: nil,
         items: %{},
         calls: [],
