@@ -112,11 +112,13 @@ defmodule Longx.Agent.Kernel.Calls do
     if timer, do: Process.cancel_timer(timer)
     duration = System.monotonic_time(:millisecond) - started
 
+    # every tool's words scrubbed of bytes that are not UTF-8 once, here: the
+    # text goes into the transcript (the model's JSON request) and the view
     {text, ok?, extra} =
       case outcome do
-        {:ok, text} -> {text, true, %{}}
-        {:ok, text, extra} when is_map(extra) -> {text, true, extra}
-        {:error, message} -> {"Error: " <> message, false, %{}}
+        {:ok, text} -> {Longx.Agent.Text.utf8(text), true, %{}}
+        {:ok, text, extra} when is_map(extra) -> {Longx.Agent.Text.utf8(text), true, extra}
+        {:error, message} -> {"Error: " <> Longx.Agent.Text.utf8(message), false, %{}}
         other -> {"Error: " <> inspect(other), false, %{}}
       end
 

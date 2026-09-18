@@ -155,7 +155,7 @@ defmodule Longx.Agent.Plugs.Shell do
     do: %{acc | output: [out, data], size: size + byte_size(data)}
 
   defp show(%{emitted: emitted} = acc, ctx, data) when emitted < @emit_cap do
-    Context.emit(ctx, data)
+    Context.emit(ctx, Longx.Agent.Text.utf8(data))
     %{acc | emitted: emitted + byte_size(data)}
   end
 
@@ -170,14 +170,18 @@ defmodule Longx.Agent.Plugs.Shell do
   defp text(%{output: out, size: size}, max_bytes) do
     whole = IO.iodata_to_binary(out)
 
+    # scrubbed after the clip: the cut may fall inside a multibyte character,
+    # and the output may not have been UTF-8 to begin with
     if size > max_bytes do
       half = div(max_bytes, 2)
 
-      binary_part(whole, 0, half) <>
-        "\n\n[... #{size - max_bytes} bytes omitted ...]\n\n" <>
-        binary_part(whole, size - half, half)
+      Longx.Agent.Text.utf8(
+        binary_part(whole, 0, half) <>
+          "\n\n[... #{size - max_bytes} bytes omitted ...]\n\n" <>
+          binary_part(whole, size - half, half)
+      )
     else
-      whole
+      Longx.Agent.Text.utf8(whole)
     end
   end
 

@@ -23,7 +23,7 @@ defmodule Longx.Agent.Plugs.Credentials do
   instructions """
   # Credentials
 
-  Longx keeps API keys and OAuth2 tokens for you, encrypted; you never see a value. To call an authenticated API — an HTTP API, an MCP server over HTTP (JSON-RPC POSTs) — use `http_request` with the credential's name instead of curl: the service layer puts the value in the right header (or wherever `{{credential:NAME}}` stands in the URL, headers or body), refuses hosts the credential is not allowed for, refreshes an expired token first, and hands you the answer with the value redacted. `credentials_list` says what exists and whether it is ready. A credential that `needs_login` (OAuth2) is logged in with `credential_login`: the person does it in their browser, you wait. To add one, call `credential_create` — a key that is already on this machine (an environment variable, a .env or config file) is copied with `secret_from` (env:NAME, file:PATH, file:PATH#KEY) without you seeing it; otherwise the person types it into a masked field on the thread. `credential_rotate` replaces a key the same way. Never ask the person to paste a key into the chat, never print a secret with a command, never put one in a file or a message.
+  Longx keeps API keys and OAuth2 tokens for you, encrypted; you never see a value. `http_request` is only for a request that needs a credential — an authenticated API, an MCP server over HTTP (JSON-RPC POSTs); plain HTTP (a public page, an unauthenticated API, a download) stays with curl via exec_command or `web_fetch`, which follow redirects and keep the whole body. With a credential, use `http_request` with its name instead of curl: the service layer puts the value in the right header (or wherever `{{credential:NAME}}` stands in the URL, headers or body), refuses hosts the credential is not allowed for, refreshes an expired token first, and hands you the answer with the value redacted. `credentials_list` says what exists and whether it is ready. A credential that `needs_login` (OAuth2) is logged in with `credential_login`: the person does it in their browser, you wait. To add one, call `credential_create` — a key that is already on this machine (an environment variable, a .env or config file) is copied with `secret_from` (env:NAME, file:PATH, file:PATH#KEY) without you seeing it; otherwise the person types it into a masked field on the thread. `credential_rotate` replaces a key the same way. Never ask the person to paste a key into the chat, never print a secret with a command, never put one in a file or a message.
   """
 
   tool :credentials_list,
@@ -32,7 +32,7 @@ defmodule Longx.Agent.Plugs.Credentials do
   end
 
   tool :http_request,
-       "An HTTP request with a credential injected by Longx (the value never reaches you). Use it for every authenticated API and for MCP servers over HTTP (a JSON-RPC POST). The host must be one the credential allows.",
+       "An HTTP request with a credential injected by Longx (the value never reaches you). Only for a request that needs a credential — an authenticated API, an MCP server over HTTP (a JSON-RPC POST); a plain page or public API is curl via exec_command or web_fetch. The host must be one the credential allows; redirects are not followed and the body is clipped.",
        namespace: @namespace,
        timeout: 300_000 do
     param :credential, :string, "The credential's name (credentials_list)", required: true

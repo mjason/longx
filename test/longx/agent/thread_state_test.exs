@@ -52,6 +52,57 @@ defmodule Longx.Agent.ThreadStateTest do
              ] = Store.items(t)
     end
 
+    test "bytes that are not UTF-8 never reach the view: a snapshot and every folded event stay JSON-encodable" do
+      # a socket died on every join of a thread whose agent had cat'ed a binary:
+      # the transport could not encode the snapshot and closed, the client
+      # reconnected, and so on — 146 times in five seconds
+      t = new_thread()
+
+      item_started(t, %{
+        "id" => "c1",
+        "type" => "commandExecution",
+        "command" => "cat data.parquet"
+      })
+
+      Store.fold(t, "item/commandExecution/outputDelta", %{
+        "itemId" => "c1",
+        "delta" => <<"PAR1", 0xFF, 0xFE, "x">>
+      })
+
+      item_completed(t, %{
+        "id" => "c1",
+        "type" => "commandExecution",
+        "aggregatedOutput" => <<"PAR1", 0xFF, 0xFE, "x">>,
+        "status" => "completed"
+      })
+
+      assert [%{"aggregatedOutput" => out}] = Store.items(t)
+      assert String.valid?(out)
+      assert out =~ "PAR1"
+      assert out =~ "x"
+      assert {:ok, _} = Jason.encode(Store.snapshot(t))
+
+      # what a boot replays from the transcript goes through the same scrub
+      t2 = new_thread()
+
+      :ok =
+        Store.backfill(t2, %{
+          "thread" => %{
+            "id" => t2,
+            "turns" => [
+              %{
+                "id" => "turn-1",
+                "items" => [%{"id" => "a1", "type" => "agentMessage", "text" => <<"hi", 0xC3>>}]
+              }
+            ]
+          }
+        })
+
+      assert [%{"text" => text}] = Store.items(t2)
+      assert String.valid?(text)
+      assert {:ok, _} = Jason.encode(Store.snapshot(t2))
+    end
+
     test "reasoning as codex sends it: summary/content are lists, deltas name their index" do
       t = new_thread()
       item_started(t, %{"id" => "r1", "type" => "reasoning", "summary" => [], "content" => []})

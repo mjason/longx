@@ -440,6 +440,31 @@ defmodule Longx.Agent.PlugsTest do
   end
 
   describe "Shell.exec_command" do
+    test "output that is not UTF-8 is scrubbed, streamed and stored: the view stays JSON-encodable; a clip never cuts a character",
+         %{dir: dir} do
+      me = self()
+      ctx = %Context{cwd: dir, emit: &send(me, {:out, &1})}
+      tool = tool!(Shell, "exec_command")
+
+      assert {:ok, output, _} = Tool.call(tool, %{"cmd" => ~S|printf 'a\377\376b'|}, ctx)
+      assert String.valid?(output)
+      assert output =~ "a"
+      assert output =~ "b"
+      assert_receive {:out, chunk}
+      assert String.valid?(chunk)
+
+      # a long multibyte output clipped in the middle: both halves valid
+      assert {:ok, clipped, _} =
+               Tool.call(
+                 tool,
+                 %{"cmd" => "yes 中文 | head -c 40000", "max_output_tokens" => 200},
+                 ctx
+               )
+
+      assert String.valid?(clipped)
+      assert clipped =~ "bytes omitted"
+    end
+
     test "runs the command in the cwd and streams its output", %{dir: dir} do
       me = self()
       ctx = %Context{cwd: dir, emit: &send(me, {:out, &1})}

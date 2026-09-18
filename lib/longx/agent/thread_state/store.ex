@@ -17,6 +17,8 @@ defmodule Longx.Agent.ThreadState.Store do
 
   use GenServer
 
+  alias Longx.Agent.Text
+
   @meta __MODULE__.Meta
   @items __MODULE__.Items
   @requests __MODULE__.Requests
@@ -242,26 +244,28 @@ defmodule Longx.Agent.ThreadState.Store do
   def fold(t, "thread/goal/updated", %{"goal" => goal}), do: put_meta(t, %{goal: goal})
   def fold(t, "thread/goal/cleared", _params), do: put_meta(t, %{goal: nil})
 
+  # every item and delta scrubbed of bytes that are not UTF-8 (Longx.Agent.Text
+  # says why): the snapshot and every event must encode to JSON
   def fold(t, "item/started", %{"item" => %{"id" => _} = item} = params),
-    do: put_item(t, with_turn(item, params))
+    do: put_item(t, Text.deep(with_turn(item, params)))
 
   def fold(t, "item/completed", %{"item" => %{"id" => _} = item} = params),
-    do: put_item(t, with_turn(item, params))
+    do: put_item(t, Text.deep(with_turn(item, params)))
 
   def fold(t, "item/agentMessage/delta", %{"itemId" => id, "delta" => d}),
-    do: append(t, id, "text", d)
+    do: append(t, id, "text", Text.utf8(d))
 
   def fold(t, "item/reasoning/summaryTextDelta", %{"itemId" => id, "delta" => d} = p),
-    do: append(t, id, "summary", d, p["summaryIndex"])
+    do: append(t, id, "summary", Text.utf8(d), p["summaryIndex"])
 
   def fold(t, "item/reasoning/textDelta", %{"itemId" => id, "delta" => d} = p),
-    do: append(t, id, "content", d, p["contentIndex"])
+    do: append(t, id, "content", Text.utf8(d), p["contentIndex"])
 
   def fold(t, "item/commandExecution/outputDelta", %{"itemId" => id, "delta" => d}),
-    do: append(t, id, "aggregatedOutput", d)
+    do: append(t, id, "aggregatedOutput", Text.utf8(d))
 
   def fold(t, "item/fileChange/outputDelta", %{"itemId" => id, "delta" => d}),
-    do: append(t, id, "output", d)
+    do: append(t, id, "output", Text.utf8(d))
 
   def fold(_t, _method, _params), do: :ok
 
@@ -271,7 +275,7 @@ defmodule Longx.Agent.ThreadState.Store do
     put_meta(t, %{thread: Map.delete(thread, "turns")})
 
     Enum.each(turns, fn %{"items" => items} = turn ->
-      Enum.each(items, &put_item(t, Map.put(&1, "turnId", turn["id"])))
+      Enum.each(items, &put_item(t, Text.deep(Map.put(&1, "turnId", turn["id"]))))
       put_meta(t, %{turn: Map.delete(turn, "items")})
     end)
   end

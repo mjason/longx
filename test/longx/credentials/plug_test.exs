@@ -31,6 +31,12 @@ defmodule Longx.Credentials.PlugTest do
     text = Enum.join(step.instructions, "\n")
     assert text =~ "http_request"
     assert text =~ "never"
+    # http_request is for requests that need a credential, not for HTTP in general:
+    # a plain page or API goes through curl / web_fetch (no clipping, redirects followed)
+    assert text =~ "only"
+    assert text =~ "curl"
+    assert text =~ "web_fetch"
+    assert tool!("http_request").description =~ "Only"
     assert tool!("http_request").timeout >= 60_000
     assert tool!("credential_login").timeout >= 600_000
   end

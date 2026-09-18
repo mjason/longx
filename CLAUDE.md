@@ -431,6 +431,13 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     or `max_rounds:` (8) continuations happened (then `blocked`, never a loop).
     `Agent.set_goal/2` (RPC `set_goal` / `clear_goal`, the `/goal` command, `GoalBar`)
     sets the same goal; `thread/goal/updated` is the view's `goal`.
+  - **Bytes that are not UTF-8 never reach the view or the transcript** — `Longx.Agent.Text`
+    (`utf8/1`, `deep/1`, U+FFFD per invalid sequence) at three doors: a shell chunk and the
+    clipped result (`Plugs.Shell`; a clip can cut a character), every tool result in
+    `Calls.finish_call` (the transcript is the model's JSON request), every item and delta
+    the Store folds or backfills. A researcher once `cat`ed a parquet: Jason refused the
+    snapshot inside the socket transport, the socket closed, the client rejoined — 146
+    times in five seconds on every page showing that thread.
   - `Longx.Agent.ThreadState` + `.Store`: the Store (in the tree) owns three public ETS
     tables (meta / items / requests) holding every live thread's materialised view; a
     ThreadState (`Longx.Agent.ThreadRegistry` + `ThreadState.Supervisor`, one per live
