@@ -10,6 +10,7 @@ import {
   createCredentialOauth2,
   credentialLoginUrl,
   deleteCredential,
+  credentialCompleteUrl,
   refreshCredential,
   updateCredential,
 } from "@/ash_rpc";
@@ -99,6 +100,18 @@ describe("Settings → 凭证", () => {
     );
     await waitFor(() => expect(open).toHaveBeenCalledWith("https://auth.example/authorize?state=s1", "_blank", "noopener,noreferrer"));
     open.mockRestore();
+    // a loopback redirect: the browser may land on an unreachable 127.0.0.1 page — its
+    // address pasted here completes the login
+    const paste = await within(coros).findByRole("textbox", { name: /地址/ });
+    expect(coros).toHaveTextContent("127.0.0.1");
+    await user.type(paste, "http://127.0.0.1:7798/callback/credentials?code=c&state=s1");
+    await user.click(within(coros).getByRole("button", { name: "完成登录" }));
+    await waitFor(() =>
+      expect(credentialCompleteUrl).toHaveBeenCalledWith(
+        expect.objectContaining({ input: { url: "http://127.0.0.1:7798/callback/credentials?code=c&state=s1" } }),
+      ),
+    );
+    await waitFor(() => expect(within(coros).queryByRole("textbox", { name: /地址/ })).not.toBeInTheDocument());
 
     const svc = screen.getByTestId("credential-svc");
     await user.click(within(svc).getByRole("button", { name: /删除/ }));

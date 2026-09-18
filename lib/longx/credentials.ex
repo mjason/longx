@@ -30,6 +30,7 @@ defmodule Longx.Credentials do
       rpc_action :delete_credential, :destroy
       rpc_action :credential_login_url, :login_url
       rpc_action :refresh_credential, :refresh
+      rpc_action :credential_complete_url, :complete_url
       rpc_action :credential_redirect_uri, :redirect_uri
     end
   end
@@ -62,6 +63,9 @@ defmodule Longx.Credentials do
     |> Ash.Query.load(@list_load)
     |> Ash.read!()
   end
+
+  @doc false
+  def list_load, do: @list_load
 
   @doc "The row by name, with its status (no secrets)."
   @spec fetch(String.t()) :: {:ok, Credential.t()} | {:error, :not_found}

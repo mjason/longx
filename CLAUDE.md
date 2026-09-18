@@ -493,11 +493,18 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   (`[redacted:NAME]`). `Credentials.OAuth`: `begin_login/2` (PKCE S256 + state kept in
   `Credentials.Logins`, ETS in the tree, 15 min; RFC 7591 `register/2` first when the row
   has a `registration_url` and no client id), `complete/2` (`GET
-  /callback/credentials?code&state` — **one stable redirect URI per instance**,
-  `OAuth.redirect_uri/1` = the browser's origin or `Longx.System.public_url/0` +
-  `/callback/credentials`, the one to register at the provider; the ask of an agent's
-  `credential_login` is answered by it through the request's `meta.login` state, so the
-  person presses nothing after the browser came back), `refresh/1` (the refresh_token
+  /callback/credentials?code&state` — **the redirect URI is https or loopback, never a
+  remote http address** (RFC 8252; COROS answers `invalid_redirect_uri: Remote
+  redirect_uri must use https` to a LAN box's `http://192.168…`): `OAuth.redirect_uri/1`
+  is the browser's origin (else `Longx.System.public_url/0`) + `/callback/credentials`
+  when that is https, otherwise Longx's own `http://127.0.0.1:<endpoint port>` — a
+  browser on the Longx machine lands on Longx, one elsewhere lands on an unreachable page
+  and the person pastes its address back: `OAuth.complete_url/1`, RPC
+  `credential_complete_url`, the settings card's paste box after 登录, the agent's login
+  ask carrying a `redirect` field when `loopback?/1`; an https `public_url` behind a TLS
+  proxy is the zero-paste setup. The ask of an agent's `credential_login` is answered by
+  the callback through the request's `meta.login` state, so the person presses nothing
+  when the browser did reach Longx), `refresh/1` (the refresh_token
   grant; a refresh token in the answer replaces the old one; an error lands on the row).
   **Oban** (`Oban.Engines.Lite` on `Longx.Repo`, `Oban.Notifiers.PG`, queue `credentials`,
   `Oban.Plugins.Cron` every 5 min, `Pruner`; `config :longx, Oban`; migration

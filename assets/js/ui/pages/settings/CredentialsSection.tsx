@@ -106,13 +106,28 @@ function CredentialCard({ credential: c, onLoginStarted }: { credential: Credent
   const actions = useCredentialActions();
   const [confirming, setConfirming] = useState(false);
   const [editing, setEditing] = useState(false);
+  // a login on a loopback redirect: the browser may land on an unreachable
+  // 127.0.0.1 page (it runs on another machine) — its address pasted here finishes it
+  const [pasteFor, setPasteFor] = useState<string | null>(null);
+  const [pasted, setPasted] = useState("");
 
   const login = async () => {
     try {
-      const { url } = await actions.loginUrl.mutateAsync({ id: c.id, origin: browserOrigin() });
+      const { url, redirectUri, loopback } = await actions.loginUrl.mutateAsync({ id: c.id, origin: browserOrigin() });
       window.open(url, "_blank", "noopener,noreferrer");
       onLoginStarted();
-      toast.message(s.loginStarted);
+      setPasteFor(loopback ? redirectUri : null);
+      setPasted("");
+      toast.message(loopback ? s.loginStartedLoopback : s.loginStarted);
+    } catch (e) {
+      fail(e);
+    }
+  };
+  const complete = async () => {
+    try {
+      await actions.completeUrl.mutateAsync(pasted.trim());
+      setPasteFor(null);
+      toast.success(s.loggedIn);
     } catch (e) {
       fail(e);
     }
@@ -154,6 +169,17 @@ function CredentialCard({ credential: c, onLoginStarted }: { credential: Credent
         </p>
       )}
       {c.lastError ? <p className="text-destructive mt-1 text-xs">{c.lastError}</p> : null}
+      {pasteFor && c.status !== "ready" ? (
+        <div className="bg-muted/40 mt-2 rounded-md border p-2 text-xs" data-testid="credential-paste">
+          <p className="text-muted-foreground">{s.pasteHint(pasteFor)}</p>
+          <div className="mt-1.5 flex gap-2">
+            <Input value={pasted} onChange={(e) => setPasted(e.target.value)} aria-label={s.pasteLabel} placeholder={pasteFor + "?code=…"} className="font-mono text-xs" />
+            <Button size="sm" disabled={pasted.trim() === "" || actions.completeUrl.isPending} onClick={complete}>
+              {s.completeLogin}
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <div className="mt-2 flex flex-wrap gap-2">
         <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
           <Pencil className="size-4" /> {s.edit}

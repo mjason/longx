@@ -127,7 +127,10 @@ defmodule Longx.Credentials.Credential do
     action :login_url, :map do
       constraints fields: [
                     url: [type: :string, allow_nil?: false],
-                    redirect_uri: [type: :string, allow_nil?: false]
+                    redirect_uri: [type: :string, allow_nil?: false],
+                    # a loopback redirect: a browser on another machine lands on an
+                    # unreachable page and the person pastes its address (complete_url)
+                    loopback: [type: :boolean, allow_nil?: false]
                   ]
 
       argument :id, :uuid, allow_nil?: false
@@ -140,7 +143,12 @@ defmodule Longx.Credentials.Credential do
                Longx.Credentials.OAuth.begin_login(cred,
                  origin: Map.get(input.arguments, :origin)
                ) do
-          {:ok, %{url: url, redirect_uri: redirect}}
+          {:ok,
+           %{
+             url: url,
+             redirect_uri: redirect,
+             loopback: Longx.Credentials.OAuth.loopback?(redirect)
+           }}
         else
           {:error, message} when is_binary(message) ->
             {:error,
@@ -150,6 +158,27 @@ defmodule Longx.Credentials.Credential do
 
           other ->
             other
+        end
+      end
+    end
+
+    # the address the browser was sent to after the login, pasted by the person
+    action :complete_url, :struct do
+      constraints instance_of: __MODULE__
+      argument :url, :string, allow_nil?: false
+
+      run fn input, _ ->
+        case Longx.Credentials.OAuth.complete_url(input.arguments.url) do
+          {:ok, cred} ->
+            Ash.get(__MODULE__, cred.id, load: Longx.Credentials.list_load())
+
+          {:error, message} ->
+            {:error,
+             Ash.Error.Invalid.exception(
+               errors: [
+                 Ash.Error.Changes.InvalidArgument.exception(field: :url, message: message)
+               ]
+             )}
         end
       end
     end

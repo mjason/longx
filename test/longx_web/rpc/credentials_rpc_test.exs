@@ -120,6 +120,41 @@ defmodule LongxWeb.CredentialsRpcTest do
     assert String.starts_with?(url, base <> "/authorize?")
     assert URI.decode_query(URI.parse(url).query)["redirect_uri"] == redirect
 
+    # from a plain-http origin (a LAN box) the redirect is Longx's loopback address, and
+    # the person may paste the address the browser was sent to
+    assert %{
+             "success" => true,
+             "data" => %{"url" => url2, "redirectUri" => loopback, "loopback" => true}
+           } =
+             rpc(conn, "credential_login_url", %{
+               "fields" => ["url", "redirectUri", "loopback"],
+               "input" => %{"id" => created["id"], "origin" => "http://192.168.2.129:7798"}
+             })
+
+    assert loopback == "http://127.0.0.1:4002/callback/credentials"
+    state = URI.decode_query(URI.parse(url2).query)["state"]
+
+    Bypass.expect_once(bypass, "POST", "/token", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.send_resp(
+        200,
+        Jason.encode!(%{access_token: "at", refresh_token: "rt", expires_in: 60})
+      )
+    end)
+
+    assert %{"success" => true, "data" => %{"status" => "ready"}} =
+             rpc(conn, "credential_complete_url", %{
+               "fields" => ["status"],
+               "input" => %{"url" => loopback <> "?code=c&state=" <> state}
+             })
+
+    assert %{"success" => false, "errors" => [%{"fields" => ["url"]} | _]} =
+             rpc(conn, "credential_complete_url", %{
+               "fields" => ["status"],
+               "input" => %{"url" => "https://x/?code=c"}
+             })
+
     # nothing to refresh yet: an error on the id
     assert %{"success" => false, "errors" => [%{"fields" => ["id"]} | _]} =
              rpc(conn, "refresh_credential", %{

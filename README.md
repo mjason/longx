@@ -235,7 +235,10 @@ end
 
 agent 要调的带鉴权的 API（含 HTTP 上的 MCP 服务）用**凭证**：设置 → 凭证里添加一个 API Key（名字、允许发送到的主机、
 值），或一个 OAuth2 客户端（授权地址、令牌地址、client id / secret；MCP 服务常支持动态注册，填注册地址就不用 client id），
-「登录」在浏览器里完成，回调地址是 Longx 自己的 `<外部访问地址>/callback/credentials`（提供方那边就登记这个）。值加密存
+「登录」在浏览器里完成。回调地址：OAuth2 提供方只接受 https 或 127.0.0.1（RFC 8252），所以外部访问地址是 https 时
+回调就是 `<外部访问地址>/callback/credentials`，登录后自动回到 Longx；否则用 Longx 自己的 `http://127.0.0.1:<端口>/callback/credentials`
+——浏览器就在 Longx 这台机器上时同样自动完成，浏览器在别的机器上时登录后会停在一个打不开的 127.0.0.1 地址，把地址栏里的完整
+地址贴回凭证页（或线程上的登录卡片）即可。想省掉粘贴这一步，就给 Longx 配一个 https 域名（TLS 反代）并填到「外部访问地址」。值加密存
 在数据库里，模型永远看不到：它只知道凭证的名字，用 `http_request(credential, url, …)` 让 Longx 代发——值只发给允许的主机，
 不跟随跳转，回来的内容里值会被抹成 `[redacted:名字]`；快过期的 OAuth2 令牌由后台（Oban，每 5 分钟）自动刷新。agent 也能自
 己声明一个凭证（`credential_create`）并发起登录（`credential_login`）：密钥由你在线程上的遮罩输入框里填，不经过模型。

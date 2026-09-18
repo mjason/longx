@@ -260,4 +260,78 @@ defmodule Longx.Credentials.OAuthTest do
     assert {:ok, %{url: url}} = OAuth.begin_login(cred, [])
     assert URI.decode_query(URI.parse(url).query)["client_id"] == "console-id"
   end
+
+  describe "the redirect URI — a provider takes https or loopback (RFC 8252), never a remote http address" do
+    test "an https origin is used as it is; anything else becomes Longx's own loopback address on its port" do
+      assert OAuth.redirect_uri("https://longx.example") ==
+               "https://longx.example/callback/credentials"
+
+      assert OAuth.redirect_uri("https://longx.example:8443/") ==
+               "https://longx.example:8443/callback/credentials"
+
+      # the test endpoint listens on 4002
+      assert OAuth.redirect_uri("http://192.168.2.129:7798") ==
+               "http://127.0.0.1:4002/callback/credentials"
+
+      assert OAuth.redirect_uri(nil) == "http://127.0.0.1:4002/callback/credentials"
+      assert OAuth.loopback?("http://127.0.0.1:4002/callback/credentials")
+      refute OAuth.loopback?("https://longx.example/callback/credentials")
+    end
+
+    test "the redirected URL pasted by the person completes the login (the browser was on another machine)",
+         %{bypass: bypass, cred: cred} do
+      {:ok, %{state: state, redirect_uri: redirect}} = OAuth.begin_login(cred, notify: self())
+      assert OAuth.loopback?(redirect)
+
+      Bypass.expect_once(bypass, "POST", "/token", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert URI.decode_query(body)["code"] == "pasted-code"
+        json!(conn, 200, %{access_token: "at", refresh_token: "rt", expires_in: 1800})
+      end)
+
+      pasted = redirect <> "?code=pasted-code&state=" <> state
+      assert {:ok, %Credential{name: "oa"}} = OAuth.complete_url(pasted)
+      assert_receive {:credential_login, ^state, {:ok, _}}
+      # not a URL of ours, or without a state: said so
+      assert {:error, message} = OAuth.complete_url("https://example.com/?code=x")
+      assert message =~ "state"
+      assert {:error, message} = OAuth.complete_url("not a url at all")
+      assert message =~ "state"
+    end
+
+    test "a registration the provider refuses is the login's error, with the provider's words",
+         %{bypass: bypass, base: base} do
+      {:ok, cred} =
+        Credentials.create_oauth2(%{
+          name: "ref",
+          allowed_hosts: ["localhost"],
+          authorize_url: base <> "/authorize",
+          token_url: base <> "/token",
+          registration_url: base <> "/register"
+        })
+
+      Bypass.expect_once(bypass, "POST", "/register", fn conn ->
+        json!(conn, 400, %{
+          error: "invalid_redirect_uri",
+          error_description: "Remote redirect_uri must use https"
+        })
+      end)
+
+      assert {:error, message} = OAuth.begin_login(cred, [])
+      assert message =~ "Remote redirect_uri must use https"
+
+      # the same for a foreign public client the provider will not re-register
+      Bypass.expect(bypass, "GET", "/.well-known/oauth-authorization-server", fn conn ->
+        json!(conn, 200, %{issuer: base, registration_endpoint: base <> "/register"})
+      end)
+
+      Bypass.expect_once(bypass, "POST", "/register", fn conn ->
+        json!(conn, 400, %{error: "invalid_redirect_uri"})
+      end)
+
+      {:ok, foreign} = Credentials.fetch("oa")
+      assert {:error, message} = OAuth.begin_login(foreign, [])
+      assert message =~ "invalid_redirect_uri"
+    end
+  end
 end

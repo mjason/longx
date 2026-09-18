@@ -132,14 +132,30 @@ defmodule Longx.Agent.Plugs.Credentials do
 
   def http_request(_args, _ctx), do: {:error, "http_request needs credential and url"}
 
+  # a loopback redirect (no https public URL): a browser on the Longx machine
+  # lands on Longx itself; one elsewhere lands on an unreachable 127.0.0.1
+  # page whose address the person pastes back
+  defp login_text(false), do: "在浏览器里完成登录；登录成功后这里会自动继续。"
+
+  defp login_text(true),
+    do:
+      "在浏览器里完成登录。登录后浏览器会跳到 127.0.0.1 的地址：如果浏览器就在运行 Longx 的这台机器上，会自动继续；如果打不开（浏览器在别的机器上），把地址栏里的完整地址粘贴到下面。"
+
+  defp redirect_field,
+    do: %{id: "redirect", label: "登录后浏览器地址栏里的完整地址", required: false}
+
   def credential_login(%{"credential" => name}, ctx) do
     with {:ok, cred} <- fetch(name),
          :ok <- oauth2?(cred),
-         {:ok, %{url: url, state: state}} <- OAuth.begin_login(cred, thread_id: ctx.thread_id) do
+         {:ok, %{url: url, state: state, redirect_uri: redirect}} <-
+           OAuth.begin_login(cred, thread_id: ctx.thread_id) do
+      loopback? = OAuth.loopback?(redirect)
+
       case Context.ask(ctx,
              title: "登录 #{cred.label || cred.name}",
-             text: "在浏览器里完成登录；登录成功后这里会自动继续。",
+             text: login_text(loopback?),
              url: url,
+             fields: if(loopback?, do: [redirect_field()], else: []),
              meta: %{"login" => state},
              timeout: 600_000
            ) do
@@ -148,6 +164,12 @@ defmodule Longx.Agent.Plugs.Credentials do
 
         {:ok, %{"login" => "error", "message" => message}} ->
           {:error, "the login failed: #{message}"}
+
+        {:ok, %{"redirect" => pasted}} when is_binary(pasted) and pasted != "" ->
+          case OAuth.complete_url(pasted) do
+            {:ok, _} -> logged_in(name)
+            {:error, message} -> {:error, "the login did not complete: #{message}"}
+          end
 
         {:ok, _pressed_done} ->
           if_logged_in(name)

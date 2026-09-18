@@ -18,7 +18,16 @@ defmodule Longx.Credentials.OAuth do
 
   @callback_path "/callback/credentials"
 
-  @doc "The redirect URI logins use: the browser's origin when given, else the public URL."
+  @doc """
+  The redirect URI logins use. A provider takes an https address or a
+  loopback one (RFC 8252 — COROS answers `invalid_redirect_uri: Remote
+  redirect_uri must use https` to anything else), never a remote plain-http
+  address like a LAN box: the browser's origin (else the public URL) is
+  used when it is https, otherwise Longx's own `http://127.0.0.1:<port>`.
+  A browser on the Longx machine then lands on Longx directly; one elsewhere
+  lands on an unreachable page and the person pastes its address back
+  (`complete_url/1`).
+  """
   @spec redirect_uri(String.t() | nil) :: String.t()
   def redirect_uri(origin) do
     base =
@@ -31,7 +40,50 @@ defmodule Longx.Credentials.OAuth do
           Longx.System.public_url()
       end
 
-    String.trim_trailing(base, "/") <> @callback_path
+    case URI.parse(base) do
+      %URI{scheme: "https"} -> String.trim_trailing(base, "/") <> @callback_path
+      _ -> "http://127.0.0.1:#{own_port()}" <> @callback_path
+    end
+  end
+
+  @doc "Whether a redirect URI is the loopback one (the person may have to paste the address back)."
+  @spec loopback?(String.t()) :: boolean
+  def loopback?(uri), do: match?(%URI{host: "127.0.0.1"}, URI.parse(uri))
+
+  defp own_port do
+    case LongxWeb.Endpoint.config(:http) do
+      http when is_list(http) -> Keyword.get(http, :port) || 7788
+      _ -> 7788
+    end
+  end
+
+  @doc """
+  The address the browser was sent to, pasted back by the person: its
+  `state` and `code` / `error` complete the login like the callback does.
+  """
+  @spec complete_url(String.t()) :: {:ok, Credential.t()} | {:error, String.t()}
+  def complete_url(url) when is_binary(url) do
+    params =
+      case URI.parse(String.trim(url)) do
+        %URI{query: query} when is_binary(query) -> URI.decode_query(query)
+        _ -> %{}
+      end
+
+    case Map.pop(params, "state") do
+      {state, rest} when is_binary(state) and state != "" ->
+        case complete(state, rest) do
+          {:error, :unknown_state} ->
+            {:error,
+             "no login is waiting for this address (its state is unknown or already used)"}
+
+          other ->
+            other
+        end
+
+      _ ->
+        {:error,
+         "not a redirect address: no state in it — paste the whole address the browser was sent to"}
+    end
   end
 
   @doc """
@@ -223,11 +275,10 @@ defmodule Longx.Credentials.OAuth do
             {:ok, cred}
 
           url ->
-            with {:ok, cred} <- Credentials.update_credential(cred, %{registration_url: url}),
-                 {:ok, cred} <- register(cred, redirect) do
-              {:ok, cred}
-            else
-              _ -> {:ok, cred}
+            # a refused registration is the login's error: the provider's words
+            # (a remote http redirect URI, a scope) are what the person needs
+            with {:ok, cred} <- Credentials.update_credential(cred, %{registration_url: url}) do
+              register(cred, redirect)
             end
         end
 

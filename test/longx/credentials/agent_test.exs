@@ -110,10 +110,17 @@ defmodule Longx.Credentials.AgentTest do
     assert title =~ "oa"
     assert String.starts_with?(url, base <> "/authorize?")
     assert URI.decode_query(URI.parse(url).query)["state"] == state
-    assert [%{id: ^rid}] = ThreadState.snapshot(id).pending_requests
+    assert [%{id: ^rid, params: params}] = ThreadState.snapshot(id).pending_requests
+    # the redirect is loopback here (no https): the ask offers a field for the address the
+    # browser was sent to, for a browser on another machine; the text says so
+    assert [%{"id" => "redirect", "required" => false}] = params["fields"]
+    assert params["text"] =~ "127.0.0.1"
 
-    # the browser comes back (what LongxWeb.CallbackController does with the query)
-    assert {:ok, %Credential{}} = OAuth.complete(state, %{"code" => "the-code", "state" => state})
+    # the person pastes the address (the browser was on another machine)
+    redirect = URI.decode_query(URI.parse(url).query)["redirect_uri"]
+
+    assert :ok =
+             Agent.respond(id, rid, %{"redirect" => redirect <> "?code=the-code&state=" <> state})
 
     assert %{"status" => "completed"} = await_turn_end()
     assert ThreadState.snapshot(id).pending_requests == []

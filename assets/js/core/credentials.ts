@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createCredentialApiKey,
   createCredentialOauth2,
+  credentialCompleteUrl,
   credentialLoginUrl,
   credentialRedirectUri,
   deleteCredential,
@@ -145,11 +146,17 @@ export function useCredentialActions() {
   });
   const loginUrl = useMutation({
     mutationFn: async ({ id, origin }: { id: string; origin: string | null }) =>
-      unwrap(await credentialLoginUrl({ fields: ["url", "redirectUri"], input: origin ? { id, origin } : { id } })),
+      unwrap(await credentialLoginUrl({ fields: ["url", "redirectUri", "loopback"], input: origin ? { id, origin } : { id } })),
+  });
+  // the address the browser was sent to, pasted by the person (a loopback redirect
+  // the browser could not reach because it runs on another machine)
+  const completeUrl = useMutation({
+    mutationFn: async (url: string) => unwrap(await credentialCompleteUrl({ fields, input: { url } })) as Credential,
+    onSuccess: invalidate,
   });
   const refresh = useMutation({
     mutationFn: async (id: string) => unwrap(await refreshCredential({ fields, input: { id } })) as Credential,
     onSuccess: invalidate,
   });
-  return { createApiKey, createOauth2, update, remove, loginUrl, refresh, invalidate };
+  return { createApiKey, createOauth2, update, remove, loginUrl, completeUrl, refresh, invalidate };
 }

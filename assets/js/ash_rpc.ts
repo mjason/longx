@@ -1632,6 +1632,80 @@ export async function validateUpdateSearchProvider(
 }
 
 
+export type CredentialCompleteUrlInput = {
+  url: string;
+};
+
+export type CredentialCompleteUrlFields = UnifiedFieldSelection<CredentialResourceSchema>[];
+
+export type InferCredentialCompleteUrlResult<
+  Fields extends CredentialCompleteUrlFields | undefined,
+> = InferResult<CredentialResourceSchema, Fields>;
+
+export type CredentialCompleteUrlResult<Fields extends CredentialCompleteUrlFields | undefined = undefined> = | { success: true; data: InferCredentialCompleteUrlResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Credential
+ *
+ * @ashActionType :action
+ */
+export async function credentialCompleteUrl<Fields extends CredentialCompleteUrlFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: CredentialCompleteUrlInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<CredentialCompleteUrlResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "credential_complete_url",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<CredentialCompleteUrlResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Credential
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateCredentialCompleteUrl(
+  config: {
+  tenant?: string;
+  input: CredentialCompleteUrlInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "credential_complete_url",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type CreateCredentialApiKeyInput = {
   name: string;
   label?: string | null;
@@ -1864,11 +1938,11 @@ export type CredentialLoginUrlInput = {
   origin?: string | null;
 };
 
-export type CredentialLoginUrlFields = UnifiedFieldSelection<{url: string, redirectUri: string, __type: "TypedMap", __primitiveFields: "url" | "redirectUri"}>[];
+export type CredentialLoginUrlFields = UnifiedFieldSelection<{url: string, redirectUri: string, loopback: boolean, __type: "TypedMap", __primitiveFields: "url" | "redirectUri" | "loopback"}>[];
 
 export type InferCredentialLoginUrlResult<
   Fields extends CredentialLoginUrlFields | undefined,
-> = InferResult<{url: string, redirectUri: string, __type: "TypedMap", __primitiveFields: "url" | "redirectUri"}, Fields>;
+> = InferResult<{url: string, redirectUri: string, loopback: boolean, __type: "TypedMap", __primitiveFields: "url" | "redirectUri" | "loopback"}, Fields>;
 
 export type CredentialLoginUrlResult<Fields extends CredentialLoginUrlFields | undefined = undefined> = | { success: true; data: InferCredentialLoginUrlResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
