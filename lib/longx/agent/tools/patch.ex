@@ -329,8 +329,103 @@ defmodule Longx.Agent.Tools.Patch do
   defp locate(lines, cursor, old, eof?) do
     case find(lines, cursor, old, eof?) do
       {:ok, at} -> {:ok, at}
-      :error -> {:error, "lines to replace not found: #{inspect(hd(old))}"}
+      :error -> {:error, explain_miss(lines, cursor, old)}
     end
+  end
+
+  # The block (context and deleted lines) is matched as a whole, line by
+  # line. An error naming only its first line sent an agent chasing
+  # encodings when that line was in the file and the block broke two lines
+  # later (a blank line left out of the context). So: where the block
+  # starts matching, where it stops, both sides quoted.
+  defp explain_miss(lines, cursor, [first | _] = old) do
+    normalise = &String.trim/1
+
+    starts =
+      for {line, i} <- Enum.with_index(lines),
+          i >= cursor,
+          normalise.(line) == normalise.(first),
+          do: i
+
+    case starts do
+      [] ->
+        nearest = nearest_line(lines, cursor, first)
+
+        "lines to replace not found: the block's first line #{inspect(first)} is nowhere in the file" <>
+          if(nearest,
+            do:
+              " (after line #{cursor + 1}); nearest is line #{nearest.n} #{inspect(nearest.text)}",
+            else: ""
+          ) <>
+          " — every context and deleted line must reproduce the file line by line, blank lines included"
+
+      _ ->
+        # the start that matches the longest prefix of the block
+        {at, matched} =
+          Enum.max_by(starts, fn at ->
+            old
+            |> Enum.with_index()
+            |> Enum.take_while(fn {want, k} ->
+              (line = Enum.at(lines, at + k)) != nil and normalise.(line) == normalise.(want)
+            end)
+            |> length()
+          end)
+          |> then(fn at ->
+            n =
+              old
+              |> Enum.with_index()
+              |> Enum.take_while(fn {want, k} ->
+                (line = Enum.at(lines, at + k)) != nil and normalise.(line) == normalise.(want)
+              end)
+              |> length()
+
+            {at, n}
+          end)
+
+        want = Enum.at(old, matched)
+        have = Enum.at(lines, at + matched)
+
+        detail =
+          cond do
+            have == nil ->
+              "the file ends there"
+
+            String.trim(have) == "" ->
+              "file has #{inspect(have)} (a blank line the patch left out)"
+
+            String.trim(want) == "" ->
+              "file has #{inspect(have)} where the patch has a blank line"
+
+            true ->
+              "file has #{inspect(have)}"
+          end
+
+        "lines to replace not found: the block matches from line #{at + 1} #{inspect(first)} for #{matched} line(s), then at line #{at + matched + 1} expected #{inspect(want)} but #{detail} — every context and deleted line must reproduce the file line by line, blank lines included"
+    end
+  end
+
+  # the file line most like the wanted one (a shared prefix), for the hint
+  defp nearest_line(lines, cursor, want) do
+    w = String.trim(want)
+
+    lines
+    |> Enum.with_index()
+    |> Enum.drop(cursor)
+    |> Enum.map(fn {line, i} -> {common_prefix_length(String.trim(line), w), i, line} end)
+    |> Enum.filter(fn {score, _, _} -> score >= 3 end)
+    |> Enum.max_by(fn {score, _, _} -> score end, fn -> nil end)
+    |> case do
+      nil -> nil
+      {_, i, line} -> %{n: i + 1, text: line}
+    end
+  end
+
+  defp common_prefix_length(a, b) do
+    a
+    |> String.graphemes()
+    |> Enum.zip(String.graphemes(b))
+    |> Enum.take_while(fn {x, y} -> x == y end)
+    |> length()
   end
 
   # exact, then ignoring trailing whitespace, then surrounding whitespace

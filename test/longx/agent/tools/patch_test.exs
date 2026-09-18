@@ -123,6 +123,41 @@ defmodule Longx.Agent.Tools.PatchTest do
       assert File.read!(Path.join(dir, "b.txt")) == "x\nz\n"
     end
 
+    test "a block that diverges after its first line says where and how: the line the file has, the line the patch expected",
+         %{dir: dir} do
+      # the agent's own minimal reproduction (2026-09-18): the blank line between
+      # the heading and the list was left out of the context, and the error named
+      # the heading — which exists — so the agent suspected the encoding
+      File.write!(Path.join(dir, "doc.md"), "# 标题\n\n## 2. 搜集\n\n- abc\n- def\n")
+
+      {:ok, hunks} =
+        Patch.parse(
+          "*** Begin Patch\n*** Update File: doc.md\n@@\n-## 2. 搜集\n+## 2. 盘数据\n - abc\n*** End Patch\n"
+        )
+
+      assert {:error, message} = Patch.apply(hunks, dir)
+      # where the block starts matching, where it stops, both sides quoted, line numbers
+      assert message =~ "doc.md"
+      assert message =~ "line 3"
+      assert message =~ ~s("## 2. 搜集")
+      assert message =~ "line 4"
+      assert message =~ ~s(expected "- abc")
+      assert message =~ ~s(file has "")
+      assert message =~ "blank"
+      assert File.read!(Path.join(dir, "doc.md")) =~ "## 2. 搜集"
+
+      # the first line itself absent: said plainly, with the nearest similar line when there is one
+      {:ok, hunks} =
+        Patch.parse(
+          "*** Begin Patch\n*** Update File: doc.md\n@@\n-## 2. 搜集。\n+x\n*** End Patch\n"
+        )
+
+      assert {:error, message} = Patch.apply(hunks, dir)
+      assert message =~ "doc.md"
+      assert message =~ ~s(first line "## 2. 搜集。" is nowhere in the file)
+      assert message =~ ~s(nearest is line 3 "## 2. 搜集")
+    end
+
     test "trailing whitespace differences still match; an update of a missing file fails before touching anything",
          %{dir: dir} do
       File.write!(Path.join(dir, "w.txt"), "keep  \nold\n")

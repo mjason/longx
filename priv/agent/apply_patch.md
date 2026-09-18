@@ -20,6 +20,7 @@ Then one or more “hunks”, each introduced by @@ (optionally followed by a hu
 Within a hunk each line starts with:
 
 For instructions on [context_before] and [context_after]:
+- Context lines and deleted lines are matched against the file as one block, **line by line, exactly as the file has them** — a blank line in the file is a ` ` line in the patch (never dropped), and a context line is a whole line of the file, never a fragment of a longer line. When unsure, copy the lines from the file (`sed -n 'X,Yp'`) rather than from memory. The error names where the block stops matching.
 - By default, show 3 lines of code immediately above and 3 lines immediately below each change. If a change is within 3 lines of a previous change, do NOT duplicate the first change’s [context_after] lines in the second change’s [context_before] lines.
 - If 3 lines of context is insufficient to uniquely identify the snippet of code within the file, use the @@ operator to indicate the class or function to which the snippet belongs. For instance, we might have:
 @@ class BaseClass

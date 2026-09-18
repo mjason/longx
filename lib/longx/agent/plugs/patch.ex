@@ -23,8 +23,43 @@ defmodule Longx.Agent.Plugs.Patch do
   tool :apply_patch,
        "Edits files with a patch in the apply_patch format (see the instructions): add, delete, update (with optional move) — the whole patch text, `*** Begin Patch` to `*** End Patch`, as `input`.",
        show: :file_change,
-       freeform: %{syntax: "lark", definition: File.read!(@grammar_path), param: "input"} do
+       freeform: %{syntax: "lark", definition: File.read!(@grammar_path), param: "input"},
+       prepare: &__MODULE__.normalize/1 do
     param :input, :string, "The complete patch text", required: true
+  end
+
+  @doc """
+  The patch as the model meant it: under `patch` / `text` / `content` /
+  `diff` instead of `input`, newlines escaped once too often (a text with
+  no real newline and literal `\\n`), or wrapped in a markdown fence —
+  slips seen from third-party models that read as "missing *** End Patch".
+  """
+  @spec normalize(map) :: map
+  def normalize(%{"input" => text} = args) when is_binary(text),
+    do: Map.put(args, "input", text |> unfence() |> unescape_newlines())
+
+  def normalize(args) when is_map(args) do
+    case Enum.find(~w(patch text content diff), &is_binary(args[&1])) do
+      nil -> args
+      key -> args |> Map.delete(key) |> Map.put("input", args[key]) |> normalize()
+    end
+  end
+
+  def normalize(other), do: other
+
+  defp unfence(text) do
+    case Regex.run(~r/\A\s*```[\w-]*\r?\n(.*?)\r?\n?```\s*\z/s, text, capture: :all_but_first) do
+      [inner] -> inner <> "\n"
+      _ -> text
+    end
+  end
+
+  # only when there is no real newline at all: a patch with a `\n` inside a
+  # line (a string literal in an added line) keeps it
+  defp unescape_newlines(text) do
+    if String.contains?(text, "\n") or not String.contains?(text, "\\n"),
+      do: text,
+      else: String.replace(text, "\\n", "\n")
   end
 
   def apply_patch(%{"input" => text}, ctx) do

@@ -497,6 +497,34 @@ defmodule Longx.Agent.PlugsTest do
 
       assert message =~ "nope"
     end
+
+    test "a patch that arrived mangled is straightened before parsing: under another key, newlines as literal \\n, inside a code fence",
+         %{dir: dir, ctx: ctx} do
+      File.write!(Path.join(dir, "a.txt"), "one\ntwo\n")
+      tool = tool!(Patch, "apply_patch")
+      patch = "*** Begin Patch\n*** Update File: a.txt\n@@\n-two\n+2\n*** End Patch\n"
+
+      # the whole patch under `patch` instead of `input`
+      assert %{"input" => ^patch} = Patch.normalize(%{"patch" => patch})
+      # newlines escaped once too often (no real newline in the text)
+      assert %{"input" => ^patch} =
+               Patch.normalize(%{"input" => String.replace(patch, "\n", "\\n")})
+
+      # a markdown fence around it
+      assert %{"input" => "*** Begin Patch\n" <> _ = inner} =
+               Patch.normalize(%{"input" => "```patch\n" <> patch <> "```\n"})
+
+      assert String.trim(inner) == String.trim(patch)
+      # a proper one is untouched, and a real newline inside means no unescaping
+      assert Patch.normalize(%{"input" => patch}) == %{"input" => patch}
+      literal = "*** Begin Patch\n*** Add File: c.txt\n+a\\nb\n*** End Patch\n"
+      assert Patch.normalize(%{"input" => literal}) == %{"input" => literal}
+
+      assert {:ok, "Done!" <> _, _} =
+               Tool.call(tool, %{"patch" => String.replace(patch, "\n", "\\n")}, ctx)
+
+      assert File.read!(Path.join(dir, "a.txt")) == "one\n2\n"
+    end
   end
 
   describe "ViewImage" do

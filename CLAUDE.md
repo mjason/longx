@@ -231,7 +231,14 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     stdout+stderr interleaved, head+tail kept, exit code reported; `Longx.Agent.Tools.
     ShellEnv` builds the environment), `apply_patch` (`Plugs.Patch` over
     `Longx.Agent.Tools.Patch`: codex's patch grammar parsed and applied in Elixir — all
-    hunks matched first, then written; for a provider of `kind: :openai` the same tool as a
+    hunks matched first, then written; **a miss says where the block stops matching** —
+    the context and deleted lines are one block matched line by line, and an error naming
+    only the first line sent an agent chasing encodings when a blank line was missing from
+    its context, so `explain_miss/3` reports the matched prefix, the diverging line on both
+    sides and the nearest line when the first is absent; `Plugs.Patch.normalize/1` is the
+    tool's `prepare:` (the patch under `patch` / `text` / `content` / `diff`, newlines
+    escaped as literal `\n` with no real newline, a markdown fence around it);
+    `priv/agent/apply_patch.md` gained the line-by-line rule; for a provider of `kind: :openai` the same tool as a
     grammar-constrained `custom` tool from `priv/agent/apply_patch.lark`; instructions from
     `priv/agent/apply_patch.md`), `view_image` (an `input_image` user message after the
     result). There is no `read_file` / `list_dir` / `grep_files`: reading is `exec_command`
