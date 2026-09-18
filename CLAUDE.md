@@ -647,8 +647,23 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     / `archive` / `delete_project`, `git_info`, `init_git`, `search_files`,
     `agent_definition`, `promote_local`; Turn: `list_turns`, `restore_proposal`,
     `restore_files`.
-  - **Channels** (`LongxWeb.UserSocket` at `/socket`, `connect_info: [:uri, session]` — the
-    uri feeds `LongxWeb.Origins`): `LongxWeb.ThreadChannel` (`thread:<kernel_thread_id>`,
+  - **Channels** (`LongxWeb.UserSocket` at `/socket`, `connect_info: [:uri]` — the uri feeds
+    `LongxWeb.Origins`; the endpoint had it only on the LiveView socket until 0.2.7, so the
+    browser's address was never remembered). **Nothing a channel sends can kill the
+    socket**: `LongxWeb.Wire.clean/2` makes every reply and push JSON-safe in the channel
+    process (invalid bytes scrubbed, DateTimes to ISO, anything else `inspect`ed; a clean
+    payload is returned as it is) and `LongxWeb.Socket.Serializer` (the endpoint's
+    websocket serializer) turns a leftover encode failure into an error frame
+    (`phx_reply` status error / event `longx/error`) instead of a transport crash — that
+    crash closed the connection for every channel and the client rejoined in a loop. Both
+    record to `Longx.System.Faults` (an ETS ring, in the tree; RPC `recent_faults`; listed
+    under Settings → 请求记录, counted on the status strip as N 个服务端故障). The client
+    has the other half: `core/chat/breaker.ts` — `createJoinBreaker` (one per page, from
+    `socket.ts`'s `joinBreaker()`; a channel whose pending join sees three socket closes
+    is left and its view says 这个会话的视图加载会让连接断开, the other channels keep the
+    connection; a child view is dropped) and `createCloseTracker` (five closes in a
+    minute = status `unstable`: a red banner naming the server, reconnects at 5–10 s
+    instead of phoenix's ladder, calm again after 30 s open). `LongxWeb.ThreadChannel` (`thread:<kernel_thread_id>`,
     join → `Projects.host_thread/1` starts the agent again after a restart) replies with
     the snapshot (`seq`), then pushes `"event"` `%{seq, method, params}`, `"snapshot"` on
     demand. `LongxWeb.ProjectChannel` (`project:<id>`) pushes `"changed"` (rows changed →

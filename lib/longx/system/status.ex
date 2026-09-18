@@ -353,6 +353,32 @@ defmodule Longx.System.Status do
     end
 
     # Settings → 请求记录: the gateway's last requests (Longx.AI.Gateway.Log) —
+    # what went wrong on the server lately (Longx.System.Faults), newest first
+    action :recent_faults, :map do
+      constraints fields: [
+                    faults: [type: {:array, :map}, allow_nil?: false],
+                    recent: [type: :integer, allow_nil?: false]
+                  ]
+
+      run fn _input, _ ->
+        {:ok,
+         %{
+           faults:
+             Longx.System.Faults.recent()
+             |> Enum.map(fn f ->
+               %{
+                 "kind" => Atom.to_string(f.kind),
+                 "where" => f.where,
+                 "detail" => f.detail,
+                 "at" => DateTime.to_iso8601(f.at)
+               }
+             end),
+           recent:
+             Longx.System.Faults.count_since(DateTime.add(DateTime.utc_now(), -3600, :second))
+         }}
+      end
+    end
+
     # what codex asked the provider for, newest first; entries are untyped
     # maps (arrays of typed maps are not selectable in ash_typescript 0.18)
     action :gateway_requests, :map do

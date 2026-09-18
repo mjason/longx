@@ -3,6 +3,7 @@
 // place to look when the level or the model on screen does not match what
 // the provider was asked; refreshed every few seconds while shown.
 import { useQuery } from "@tanstack/react-query";
+import { useFaults } from "@/core/faults";
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { gatewayRequests } from "@/ash_rpc";
@@ -126,6 +127,33 @@ export function RequestsSection() {
                   </div>
                 </dl>
               ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      <FaultsList />
+    </div>
+  );
+}
+
+// what went wrong on the server lately: the serializer, the wire cleaner
+function FaultsList() {
+  const faults = useFaults({ refetchInterval: 15_000 });
+  const f = t.faults;
+  return (
+    <div className="mt-4 flex flex-col gap-2" data-testid="section-faults">
+      <p className="text-sm font-medium">{f.title}</p>
+      <p className="text-muted-foreground text-xs">{f.hint}</p>
+      {!faults.data || faults.data.faults.length === 0 ? (
+        <p className="text-muted-foreground text-sm">{f.none}</p>
+      ) : (
+        <ul className="flex flex-col gap-1 text-xs">
+          {faults.data.faults.map((row, i) => (
+            <li key={i} className="flex flex-wrap items-baseline gap-2" data-testid="fault-row">
+              <span className="text-muted-foreground w-20 shrink-0 font-mono">{timeOf(row.at)}</span>
+              <span className="text-destructive font-mono">{row.kind}</span>
+              {row.where ? <span className="font-mono">{row.where}</span> : null}
+              <span className="text-muted-foreground min-w-0 break-all">{row.detail}</span>
             </li>
           ))}
         </ul>

@@ -11,7 +11,12 @@ defmodule LongxWeb.Endpoint do
     same_site: "Lax"
   ]
 
-  socket "/socket", LongxWeb.UserSocket, websocket: true, longpoll: false
+  # the request uri for LongxWeb.Origins (the address the browser reached
+  # Longx by), and the serializer that answers an encode failure with an
+  # error frame, never a crash of the transport (LongxWeb.Socket.Serializer)
+  socket "/socket", LongxWeb.UserSocket,
+    websocket: [connect_info: [:uri], serializer: [{LongxWeb.Socket.Serializer, "~> 2.0"}]],
+    longpoll: false
 
   socket "/live", Phoenix.LiveView.Socket,
     websocket: [connect_info: [:uri, session: @session_options]],

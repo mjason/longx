@@ -32,6 +32,7 @@ import {
   upgradeApply,
   upgradeCheck,
   upgradeStatus,
+  recentFaults,
 } from "@/ash_rpc";
 import { browserIdle, dependencyReport, dependencyTool, model, upgradeIdle } from "@/ui/test-mocks";
 import { page } from "@/core/upgrade";
@@ -394,6 +395,26 @@ describe("SettingsPage", () => {
     await user.click(within(rows[0]!).getByRole("button", { name: /详情/ }));
     expect(await within(section).findByText(/exec_command, memory/)).toBeInTheDocument();
     expect(within(section).getByText(/思考档位: low · summary auto/)).toBeInTheDocument();
+  });
+
+  test("requests: the server's recent faults are listed under the requests — kind, where, detail", async () => {
+    setViewport(1280);
+    vi.mocked(recentFaults).mockResolvedValueOnce(
+      ok({
+        faults: [
+          { kind: "socket_encode", where: "thread:native_1", detail: "could not encode event: invalid byte", at: "2026-09-18T10:00:00Z" },
+          { kind: "wire_clean", where: "thread:native_2", detail: "a payload held what JSON cannot take; cleaned", at: "2026-09-18T09:59:00Z" },
+        ],
+        recent: 2,
+      }) as never,
+    );
+    renderAt("/settings/requests");
+    const faults = await screen.findByTestId("section-faults");
+    const rows = await within(faults).findAllByTestId("fault-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("socket_encode");
+    expect(rows[0]).toHaveTextContent("thread:native_1");
+    expect(rows[0]).toHaveTextContent("invalid byte");
   });
 
   test("agent kernel: the built-in browser's private-network switch (a fake-ip network needs it)", async () => {

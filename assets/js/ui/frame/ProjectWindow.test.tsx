@@ -38,6 +38,18 @@ describe("ProjectWindow", () => {
     }
   });
 
+  test("the status strip counts the server's faults of the last hour and links to the record", async () => {
+    setViewport(1280);
+    const { recentFaults } = await import("@/ash_rpc");
+    vi.mocked(recentFaults).mockResolvedValue(ok({ faults: [{ kind: "socket_encode", where: "thread:x", detail: "d", at: "2026-09-18T10:00:00Z" }], recent: 3 }) as never);
+    renderAt("/p/app-1/t/t1");
+    const strip = await screen.findByTestId("status-strip");
+    const item = await within(strip).findByRole("link", { name: /服务端故障/ });
+    expect(item).toHaveTextContent("3");
+    expect(item).toHaveAttribute("href", "/settings/requests");
+    vi.mocked(recentFaults).mockResolvedValue(ok({ faults: [], recent: 0 }) as never);
+  });
+
   test("desktop: icon rail + docked panel, ⌘2 switches tools, the status bar is there", async () => {
     setViewport(1280);
     const user = userEvent.setup();

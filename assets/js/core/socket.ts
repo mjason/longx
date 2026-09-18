@@ -2,14 +2,22 @@
 // Status is what the connection banner shows; a phone coming back from the
 // background reconnects here and every channel re-joins on its own.
 import { Socket } from "phoenix";
+import { createCloseTracker, createJoinBreaker, type JoinBreaker } from "@/core/chat/breaker";
 
-export type SocketStatus = "connecting" | "open" | "closed";
+// "unstable": the socket closed too often in the last minute (a join the
+// server could not answer, a flapping network) — the banner says so and the
+// reconnects slow down until it stays open for a while
+export type SocketStatus = "connecting" | "open" | "closed" | "unstable";
 
 type Listener = (status: SocketStatus) => void;
 
 let socket: Socket | null = null;
 const listeners = new Set<Listener>();
 let status: SocketStatus = "connecting";
+const closes = createCloseTracker();
+// one breaker for every channel of the page: a join that keeps killing the
+// socket is given up, the rest keep their connection (threadChannel.ts)
+const breaker: JoinBreaker = createJoinBreaker();
 
 function setStatus(next: SocketStatus) {
   if (next === status) return;
@@ -19,12 +27,22 @@ function setStatus(next: SocketStatus) {
 
 export function getSocket(): Socket {
   if (socket) return socket;
-  socket = new Socket("/socket", { params: {} });
-  socket.onOpen(() => setStatus("open"));
-  socket.onClose(() => setStatus("closed"));
-  socket.onError(() => setStatus("closed"));
+  socket = new Socket("/socket", {
+    params: {},
+    reconnectAfterMs: (tries: number) => closes.reconnectAfterMs(tries, Date.now()),
+  });
+  socket.onOpen(() => {
+    closes.opened(Date.now());
+    setStatus("open");
+  });
+  socket.onClose(() => setStatus(closes.closed(Date.now()) ? "unstable" : "closed"));
+  socket.onError(() => setStatus(closes.unstable(Date.now()) ? "unstable" : "closed"));
   socket.connect();
   return socket;
+}
+
+export function joinBreaker(): JoinBreaker {
+  return breaker;
 }
 
 /** A shell back from the background: a dead connection is torn down and reopened at once, not after the backoff. */

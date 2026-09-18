@@ -26,6 +26,8 @@ export const t = {
   dirty: (n: number) => `${n} 个文件有改动`,
   lfs: "LFS",
   connectionLost: "连接已断开，正在重连…",
+  connectionUnstable: "连接反复断开，可能是服务端故障（看 Longx 的日志）；正在放慢重连。",
+  threadUnstable: "这个会话的视图加载会让连接断开，已停止重试；其余部分不受影响。看 Longx 的日志找原因。",
   notFound: "没有这个页面",
   lastActivity: "最近活动",
   status: {
@@ -714,6 +716,12 @@ export const t = {
       "没有自带搜索的模型由 Longx 代为搜索（web_search 工具）；需要一个搜索服务的密钥。",
     saved: "已保存",
     deleted: "已删除",
+  },
+  faults: {
+    title: "最近的服务端故障",
+    hint: "Longx 自己兜住的问题：发给浏览器的数据编不成 JSON（被替换成错误帧或清洗过）等。只在内存里，重启即清；细节在 Longx 的日志里。",
+    none: "最近没有",
+    strip: (n: number) => `${n} 个服务端故障`,
   },
   requestsPage: {
     hint: (keep: number) => `网关最近 ${keep} 次发给模型的请求：内核实际要了什么模型、思考档位、工具，结果如何。看这里能确认界面上的选择是否真的发出去了。只在内存里，重启即清。`,

@@ -3,7 +3,7 @@
 // hosted by the same server, so the join works like any thread's); ids
 // that disappear leave. A join that fails (the child is gone) yields no view.
 import { useEffect, useReducer, useRef } from "react";
-import { getSocket } from "@/core/socket";
+import { getSocket, joinBreaker } from "@/core/socket";
 import { createBatcher } from "./batch";
 import { applyEvent, fromSnapshot, type ThreadEvent, type ThreadSnapshot, type ThreadView } from "./thread";
 import { joinThreadChannel, type ThreadChannelHandle } from "./threadChannel";
@@ -56,7 +56,10 @@ export function useThreadViews(ids: readonly string[], expand?: (view: ThreadVie
           events.push(event);
           if (event.method === "thread/reverted") void joined.snapshot().catch(() => {});
         },
-      });
+        // a child whose join keeps killing the socket is given up: the parent's
+        // page keeps its connection and shows the child as unavailable
+        onError: () => dispatch({ type: "drop", id }),
+      }, { breaker: joinBreaker() });
       handles.current.set(id, { leave: () => { events.cancel(); joined.leave(); }, snapshot: joined.snapshot });
     }
   }, [key]);

@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { browserBusy, browserPercent, useBrowserStatus } from "@/core/browser";
 import { shortSha } from "@/core/format";
 import { useDependencies } from "@/core/dependencies";
+import { useFaults } from "@/core/faults";
 import { useGitInfo } from "@/core/projects";
 import { useUpgradeStatus } from "@/core/upgrade";
 import { t } from "@/ui/strings";
@@ -15,6 +16,7 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
   const git = useGitInfo(ctx.id);
   const upgrade = useUpgradeStatus({ poll: false });
   const deps = useDependencies();
+  const faults = useFaults();
   const browser = useBrowserStatus();
 
   return (
@@ -27,6 +29,11 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
       {deps.data && deps.data.missing > 0 ? (
         <Link to="/settings/dependencies" className={item("text-warning hover:underline")} title={t.dependenciesPage.hint}>
           <AlertTriangle className="size-3" /> {t.dependenciesPage.missing(deps.data.missing)}
+        </Link>
+      ) : null}
+      {faults.data && faults.data.recent > 0 ? (
+        <Link to="/settings/requests" className={item("text-destructive hover:underline")} title={t.faults.hint}>
+          <AlertTriangle className="size-3" /> {t.faults.strip(faults.data.recent)}
         </Link>
       ) : null}
       {browser.data && browserBusy(browser.data.stage) ? (

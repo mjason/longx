@@ -12,6 +12,7 @@ defmodule LongxWeb.ThreadChannel do
 
   alias Longx.Agent.ThreadState
   alias Longx.Projects
+  alias LongxWeb.Wire
 
   # joining starts the thread's agent again when it left (Projects.host_thread/1)
   @impl true
@@ -19,7 +20,9 @@ defmodule LongxWeb.ThreadChannel do
     case Projects.host_thread(thread_id) do
       {:ok, current_id} ->
         :ok = ThreadState.subscribe(current_id)
-        {:ok, ThreadState.snapshot(current_id), assign(socket, :thread_id, current_id)}
+
+        {:ok, Wire.clean(ThreadState.snapshot(current_id)),
+         assign(socket, :thread_id, current_id)}
 
       {:error, reason} ->
         {:error, %{reason: describe(reason)}}
@@ -31,12 +34,18 @@ defmodule LongxWeb.ThreadChannel do
 
   @impl true
   def handle_in("snapshot", _payload, socket) do
-    {:reply, {:ok, ThreadState.snapshot(socket.assigns.thread_id)}, socket}
+    id = socket.assigns.thread_id
+    {:reply, {:ok, Wire.clean(ThreadState.snapshot(id), "thread:" <> id)}, socket}
   end
 
   @impl true
   def handle_info({:thread, seq, method, params}, socket) do
-    push(socket, "event", %{seq: seq, method: method, params: params})
+    push(socket, "event", %{
+      seq: seq,
+      method: method,
+      params: Wire.clean(params, "thread:" <> socket.assigns.thread_id)
+    })
+
     {:noreply, socket}
   end
 

@@ -1,6 +1,7 @@
 // React glue: the live view of one kernel thread from its channel.
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { getSocket } from "@/core/socket";
+import { getSocket, joinBreaker } from "@/core/socket";
+import { t } from "@/ui/strings";
 import { createBatcher } from "./batch";
 import { applyEvent, emptyView, fromSnapshot, type ThreadEvent, type ThreadSnapshot, type ThreadView } from "./thread";
 import { joinThreadChannel, type ThreadChannelHandle } from "./threadChannel";
@@ -23,7 +24,12 @@ function reduce(state: ThreadViewState, action: Action): ThreadViewState {
 }
 
 function describe(reason: unknown): string {
-  if (reason && typeof reason === "object" && "reason" in reason) return String((reason as { reason: unknown }).reason);
+  if (reason && typeof reason === "object" && "reason" in reason) {
+    const r = (reason as { reason: unknown }).reason;
+    // the join breaker gave this thread up: its join kept taking the socket down
+    if (r === "unstable") return t.threadUnstable;
+    return String(r);
+  }
   return String(reason);
 }
 
@@ -71,7 +77,7 @@ export function useThreadView(
         if (SIGNALS.has(event.method) || isSurfaceEvent(event)) signal.current?.(event.method, event.params);
       },
       onError: (reason) => dispatch({ type: "error", reason }),
-    });
+    }, { breaker: joinBreaker() });
     handle.current = joined;
     return () => {
       handle.current = null;

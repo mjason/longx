@@ -195,6 +195,7 @@ export function rpcMock() {
     setAgentSettings: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok({ ...agentSettingsData(), ...input })),
     publicUrl: vi.fn(async () => ok({ url: "http://192.168.2.129:7788", setting: null })),
     dependencies: vi.fn(async () => ok(dependencyReport())),
+    recentFaults: vi.fn(async () => ok({ faults: [], recent: 0 })),
     checkDependencies: vi.fn(async () => ok(dependencyReport())),
     listCredentials: vi.fn(async () => ok([credential("svc"), credential("coros", { kind: "oauth2", status: "needs_login", hasSecret: false, clientId: "47c53db0", allowedHosts: ["mcp.coros.com", "mcpcn.coros.com"], authorizeUrl: "https://mcpcn.coros.com/oauth2/authorize", tokenUrl: "https://mcpcn.coros.com/oauth2/token", scopes: "openid mcp.tools" })])),
     createCredentialApiKey: vi.fn(async ({ input }: { input: Record<string, unknown> }) => ok(credential(String(input["name"]), input as never))),
@@ -672,6 +673,8 @@ export function socketMock(status: "open" | "closed" = "open") {
     socketStatus: () => status,
     onSocketStatus: () => () => {},
     reconnectSocket: () => {},
+    // the join breaker: the double's socket has no onClose, so nothing trips
+    joinBreaker: () => ({ joinSent: () => {}, joined: () => {}, reset: () => {}, socketClosed: () => [], tripped: () => false }),
     getSocket: () => ({
       channel: (topic: string) => {
         channel.topics.push(topic);

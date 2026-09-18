@@ -38,6 +38,38 @@ defmodule LongxWeb.ThreadChannelTest do
     assert socket.assigns.thread_id == thread_id
   end
 
+  test "a poisoned item (a term JSON cannot take) neither refuses the join nor kills the push: the payloads are cleaned",
+       %{thread_id: thread_id} do
+    # straight into the store, past the folds' own scrub: the worst the view can hold
+    :ok =
+      ThreadState.ingest(thread_id, "item/completed", %{
+        "threadId" => thread_id,
+        "turnId" => "turn_1",
+        "item" => %{
+          "id" => "bad",
+          "type" => "agentMessage",
+          "text" => "x",
+          "extra" => {:tuple, self()}
+        }
+      })
+
+    {:ok, reply, _socket} = join!(thread_id)
+    assert {:ok, _} = Jason.encode(reply)
+    assert [%{"id" => "bad", "extra" => extra}] = reply.items
+    assert is_binary(extra) and extra =~ "tuple"
+
+    :ok =
+      ThreadState.ingest(thread_id, "item/agentMessage/delta", %{
+        "threadId" => thread_id,
+        "itemId" => "bad",
+        "delta" => "more",
+        "oops" => make_ref()
+      })
+
+    assert_push "event", %{method: "item/agentMessage/delta", params: params}
+    assert {:ok, _} = Jason.encode(params)
+  end
+
   test "events stream as `codex` pushes carrying seq/method/params", %{thread_id: thread_id} do
     {:ok, _, _socket} = join!(thread_id)
 

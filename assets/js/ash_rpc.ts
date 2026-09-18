@@ -7443,6 +7443,72 @@ export async function validatePublicUrl(
 }
 
 
+export type RecentFaultsFields = UnifiedFieldSelection<{faults: Array<Record<string, any>>, recent: number, __type: "TypedMap", __primitiveFields: "faults" | "recent"}>[];
+
+export type InferRecentFaultsResult<
+  Fields extends RecentFaultsFields | undefined,
+> = InferResult<{faults: Array<Record<string, any>>, recent: number, __type: "TypedMap", __primitiveFields: "faults" | "recent"}, Fields>;
+
+export type RecentFaultsResult<Fields extends RecentFaultsFields | undefined = undefined> = | { success: true; data: InferRecentFaultsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function recentFaults<Fields extends RecentFaultsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<RecentFaultsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "recent_faults",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<RecentFaultsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateRecentFaults(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "recent_faults",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type SetAgentSettingsInput = {
   maxDepth?: number | null;
   maxChildren?: number | null;

@@ -23,6 +23,8 @@ defmodule Longx.Application do
       # per-provider in-flight counters (Provider.max_concurrent_requests)
       Longx.AI.Gateway.Limiter,
       Longx.AI.Gateway.Log,
+      # the server's recent faults, for the settings page and the status strip
+      Longx.System.Faults,
       # per-thread materialised view (Longx.Agent.ThreadState); the ETS store
       # outlives the per-thread writer processes
       Longx.Agent.ThreadState.Store,
