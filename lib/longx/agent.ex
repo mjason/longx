@@ -84,6 +84,11 @@ defmodule Longx.Agent do
   def spawn(parent_id, name, task, opts \\ []),
     do: GenServer.call(via(parent_id), {:spawn, name, task, opts})
 
+  @doc "A card for the person from a tool (`Context.present/2`): shown on the thread, never model input."
+  @spec present(String.t(), map) :: :ok
+  def present(thread_id, tree) when is_map(tree),
+    do: GenServer.cast(via(thread_id), {:present, tree})
+
   @doc "Notes that the parent spoke to a child (the child's row in the parent's view shows it)."
   @spec interacted(String.t(), String.t()) :: :ok
   def interacted(parent_id, child_id), do: GenServer.cast(via(parent_id), {:interacted, child_id})
@@ -333,6 +338,7 @@ defmodule Longx.Agent do
           end),
         "callbackUrl" => callback
       }
+      |> then(&if(is_map(request[:spec]), do: Map.put(&1, "spec", request.spec), else: &1))
 
     ThreadState.put_request(state.thread_id, id, "longx/action/request", params)
     timer = request.timeout && Process.send_after(self(), {:ask_timeout, id}, request.timeout)
@@ -398,6 +404,8 @@ defmodule Longx.Agent do
     do: {:reply, {:running, id}, state}
 
   @impl true
+  def handle_cast({:present, tree}, state), do: {:noreply, Calls.present(state, tree)}
+
   def handle_cast({:interacted, child_id}, %State{children: children} = state) do
     case Map.get(children, child_id) do
       %{name: name} -> {:noreply, Team.activity(state, child_id, name, "interacted")}

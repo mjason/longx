@@ -237,6 +237,19 @@ describe("multi-agent", () => {
   });
 });
 
+test("an ask that carries a generative tree hands the tree to the action part", () => {
+  const spec = { $type: "Button", label: "继续", $action: { type: "go" } };
+  const msgs = toMessages(
+    view({
+      turn: { id: "t30", status: "inProgress" },
+      items: [{ id: "u30", type: "userMessage", turnId: "t30", content: [{ type: "text", text: "go" }] }],
+      requests: [{ id: 9, method: "longx/action/request", params: { requestId: 9, itemId: "p1", title: "继续？", spec } }],
+    }),
+  );
+  const action = parts(msgs.at(-1)!).find((p) => (p as { toolName?: string }).toolName === "action") as unknown as { args: { spec?: unknown } };
+  expect(action.args.spec).toEqual(spec);
+});
+
 test("a message steered into a running turn splits the turn's assistant message in two, each with an id of its own", () => {
   const view = {
     ...emptyView("thr_1"),

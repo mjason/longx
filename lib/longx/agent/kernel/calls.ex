@@ -142,11 +142,24 @@ defmodule Longx.Agent.Kernel.Calls do
 
     # a tool asked for a new context window (new_context_window)
     state = if extra["compact"] == true, do: %{state | compact_requested: true}, else: state
+    # a card the tool made for the person (Context.present after the fact)
+    state = if is_map(extra["present"]), do: present(state, extra["present"]), else: state
 
     case {state.phase, map_size(tasks)} do
       {:dispatching, 0} -> continue_step(state)
       _ -> state
     end
+  end
+
+  @doc """
+  A card from a tool (`Context.present/2`): a completed `longx.present`
+  item on the thread — the same shape as the model's own `present` call,
+  so the client draws both alike — logged as a UI-only transcript row that
+  is never model input.
+  """
+  def present(%State{} = state, tree) do
+    ui = UI.present_ui(new_id("item"), state.turn_id, tree)
+    append(state, :activity, %{"type" => "longx_present"}, ui, context?: false)
   end
 
   def output_type(%{"type" => "custom_tool_call"}), do: "custom_tool_call_output"

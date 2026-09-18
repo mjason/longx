@@ -22,6 +22,70 @@ defmodule Longx.Agent.PlugsTest do
   defp tool!(module, name),
     do: Enum.find(module.__agent_tools__(), &(&1.name == name)) || flunk("no tool #{name}")
 
+  describe "Present" do
+    alias Longx.Agent.Plugs.Present
+
+    @present Jason.decode!(File.read!(Path.join(:code.priv_dir(:longx), "agent/present.json")))
+
+    test "a tool may be declared with a raw JSON schema" do
+      tool =
+        Tool.declare(__MODULE__, :draw, "draws", [],
+          schema: %{"type" => "object", "properties" => %{"x" => %{"type" => "integer"}}}
+        )
+
+      assert tool.schema == %{
+               "type" => "object",
+               "properties" => %{"x" => %{"type" => "integer"}}
+             }
+
+      assert {:error, "invalid arguments: " <> _} = Tool.validate(tool.schema, %{"x" => "no"})
+    end
+
+    test "present and prompt_user carry the vocabulary's schema from priv/agent/present.json, in the longx namespace" do
+      present = tool!(Present, "present")
+      assert present.namespace == "longx"
+      assert present.schema == @present["present"]["parameters"]
+      assert present.description == @present["present"]["description"]
+      assert "Table" in present.schema["properties"]["$type"]["enum"]
+
+      prompt = tool!(Present, "prompt_user")
+      assert prompt.namespace == "longx"
+      assert prompt.schema == @present["prompt_user"]["parameters"]
+      # the person may take a while: the tool waits as long as the ask does
+      assert prompt.timeout >= 600_000
+    end
+
+    test "present answers the model briefly; the tree itself is what the person sees", %{ctx: ctx} do
+      tree = %{
+        "$type" => "Card",
+        "title" => "Q3",
+        "children" => [%{"$type" => "Fact", "label" => "a", "value" => "1"}]
+      }
+
+      assert {:ok, "shown to the user"} = Tool.call(tool!(Present, "present"), tree, ctx)
+      # an unknown component is refused by the schema before anything shows
+      assert {:error, "invalid arguments: " <> _} =
+               Tool.call(tool!(Present, "present"), %{"$type" => "Rocket"}, ctx)
+    end
+
+    test "prompt_user outside an agent cannot ask", %{ctx: ctx} do
+      assert {:error, "no agent" <> _} =
+               Tool.call(
+                 tool!(Present, "prompt_user"),
+                 %{"$type" => "Button", "label" => "ok"},
+                 ctx
+               )
+    end
+
+    test "the instructions say when to draw instead of writing" do
+      step = Present.call(Step.new(phase: :request), Present.init([]))
+      text = Enum.join(step.instructions, "\n")
+      assert text =~ "present"
+      assert text =~ "prompt_user"
+      assert Map.has_key?(step.tools, "present") and Map.has_key?(step.tools, "prompt_user")
+    end
+  end
+
   describe "Agents" do
     alias Longx.Agent.Plugs.Agents
 

@@ -200,6 +200,22 @@ defmodule Longx.Agent.Kernel.UI do
     }
   end
 
+  @doc "A `longx.present` item already complete: a card pushed by a plug (`Context.present/2`)."
+  def present_ui(id, turn_id, tree) do
+    %{
+      "id" => id,
+      "type" => "dynamicToolCall",
+      "turnId" => turn_id,
+      "namespace" => "longx",
+      "tool" => "present",
+      "arguments" => tree,
+      "status" => "completed",
+      "success" => true,
+      "contentItems" => [],
+      "durationMs" => 0
+    }
+  end
+
   def delta_method(:command), do: "item/commandExecution/outputDelta"
   def delta_method(:file_change), do: "item/fileChange/outputDelta"
   def delta_method(_), do: "item/dynamicToolCall/outputDelta"

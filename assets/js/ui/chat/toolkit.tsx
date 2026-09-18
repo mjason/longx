@@ -43,6 +43,7 @@ import {
   FileTree,
   type FileTreeNode,
 } from "@/ui/components/assistant-ui/elements/file-tree";
+import { GenerativeTree } from "@/ui/components/assistant-ui/elements/generative-ui";
 import { TerminalBlock } from "@/ui/components/assistant-ui/elements/terminal-block";
 import { ToolCall } from "@/ui/components/assistant-ui/elements/tool-call";
 import { ToolError } from "@/ui/components/assistant-ui/elements/tool-error";
@@ -409,6 +410,36 @@ type ActionArgs = {
   text?: string;
   url?: string | null;
   fields?: { id: string; label: string }[];
+  /** a generative tree (prompt_user): drawn instead of the fields, answered by what the person fires */
+  spec?: unknown;
+};
+
+// ---- cards: the model's `present` tree (or one a plug pushed with Context.present)
+
+/**
+ * A `longx.present` call: the arguments are a tree in the vocabulary
+ * (`$type` + props + `children`), drawn as is — the card is the point, so
+ * no row to open. While the call still streams the tree may be partial:
+ * a shimmer says so.
+ */
+export const PresentTool: ToolCallMessagePartComponent<Record<string, unknown>, unknown> = (p) => {
+  const streaming = p.status.type === "running";
+  return (
+    <div className="aui-present my-2 flex flex-col gap-2" data-testid="tool-present">
+      {streaming ? <ShimmerLabel className="text-xs">{t.presentDrawing}</ShimmerLabel> : null}
+      <GenerativeTree tree={p.args} status={streaming ? "streaming" : "done"} />
+    </div>
+  );
+};
+
+/** A `longx.prompt_user` call's own row: the form itself is the ask (ActionTool); this just says the turn waits on it. */
+export const PromptUserTool: ToolCallMessagePartComponent<Record<string, unknown>, unknown> = (p) => {
+  const waiting = p.status.type === "running" || p.status.type === "requires-action";
+  return (
+    <div className="text-muted-foreground flex items-center gap-2 py-1 text-xs" data-testid="tool-prompt-user">
+      {waiting ? <ShimmerLabel>{t.promptUser}</ShimmerLabel> : <span>{p.isError ? t.declined : t.promptAnswered}</span>}
+    </div>
+  );
 };
 
 /**
@@ -443,6 +474,33 @@ export const ActionTool: ToolCallMessagePartComponent<ActionArgs, unknown> = (
       toast.error(error instanceof Error ? error.message : String(error));
     });
   };
+  // a generative tree (prompt_user): the vocabulary's own controls; whatever
+  // the person fires — `$action` with its `$input` or the form's values — is
+  // the answer, a cancel included (the model reads that they dismissed it)
+  if (p.args.spec !== undefined && p.args.spec !== null) {
+    return (
+      <div className="flex flex-col gap-2 py-1" data-testid="tool-action">
+        {p.args.text ? <p className="text-sm">{p.args.text}</p> : null}
+        <GenerativeTree
+          tree={p.args.spec}
+          className={cn(!pending && "pointer-events-none opacity-60")}
+          dispatch={
+            pending
+              ? (action) => {
+                  const dismissed = action.type === "cancel" || action.type === "dismiss";
+                  answer({ action }, dismissed ? "declined" : "accepted");
+                }
+              : undefined
+          }
+        />
+        {!pending ? (
+          <span className="text-muted-foreground text-xs">
+            {state === "declined" ? t.declined : t.answered}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-2 py-1" data-testid="tool-action">
       {p.args.url ? (
@@ -611,6 +669,9 @@ export const longxToolkit = defineToolkit({
   webSearch: { type: "backend", render: WebSearchTool, display: "standalone" },
   action: { type: "backend", render: ActionTool, display: "standalone" },
   subagent: { type: "backend", render: SubagentTool, display: "standalone" },
+  // the cards (Longx.Agent.Plugs.Present): the tree is the arguments
+  "longx.present": { type: "backend", render: PresentTool, display: "standalone" },
+  "longx.prompt_user": { type: "backend", render: PromptUserTool, display: "standalone" },
 });
 
 export const chatConfig = AuiConfig({

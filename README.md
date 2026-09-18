@@ -229,6 +229,15 @@ end
 不要在服务器本机开端口等浏览器，人往往在另一台机器上。外部访问地址在设置 → Agent 内核里填，不填就用你浏览器连上来的地址。
 终端输出里的 URL 可以点。
 
+### 卡片：表格、指标、图表、表单
+
+模型有 `present` 工具：从固定的组件词表（assistant-ui 的 generative UI：Card、Row、Fact、Table、Chart、Markdown、
+Alert、ListView、Image、Button、Select、Form……）拼一棵树，线程里直接画出来——对比表、几个关键数字、趋势图、带高亮的
+代码都比一段文字清楚。`prompt_user` 画一张要人操作的卡（选项、表单）并等答案，人点了什么就回给模型。plug 自己的代码也能
+不经模型推一张卡给人：`Context.present(ctx, tree)`，或在结果的 meta 里带 `"present"`——进度表、扫描结果，随时出现在
+线程上，不占模型上下文。词表的 schema 由 `assets/scripts/present-schema.mjs` 从客户端渲染用的同一个库生成到
+`priv/agent/present.json`，模型只能画页面画得出的东西。
+
 ### 知识代替记忆
 
 四个根：`.longx/shared/knowledge/`（项目的，进 git）、`.longx/local/knowledge/`（本机的，agent 默认写这里）、

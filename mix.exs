@@ -120,6 +120,7 @@ defmodule Longx.MixProject do
         "cmd --cd native/shim go vet ./...",
         "cmd --cd native/shim go test ./...",
         "ash_typescript.codegen --check",
+        "cmd --cd assets npm run present-schema -- --check",
         "cmd --cd assets npm run check",
         "test"
       ],

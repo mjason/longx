@@ -245,6 +245,10 @@ export const t = {
   // status
   turnRunning: "进行中",
   awaitingAction: "等待你操作",
+  presentCard: "卡片",
+  presentDrawing: "正在绘制",
+  promptUser: "等待你选择",
+  promptAnswered: "已选择",
   openLink: "打开链接",
   actionDone: "已完成",
   // chat

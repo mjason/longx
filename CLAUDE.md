@@ -307,6 +307,29 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     the `public_url` setting, else the address the last browser connected from
     (`LongxWeb.Origins.last/0`, from the socket's `connect_info: [:uri]`), else
     `Endpoint.url()` — never a port opened on the server for a browser elsewhere.
+  - **Cards — `Plugs.Present`** (in the shipped pipeline after ViewImage): `present`
+    draws a generative UI tree from assistant-ui's component vocabulary
+    (`@assistant-ui/react-generative-ui`: Card, Row, Col, Fact, Table, Chart, Markdown,
+    Alert, Badge, ListView, Image, Button, Select, Input, Form, … — `$type` + props +
+    `children`), `prompt_user` draws one and waits for what the person fires in it. **The
+    schema is generated, never written**: `assets/scripts/present-schema.mjs` →
+    `priv/agent/present.json` (`npm run present-schema`; precommit runs `--check`) from
+    the same library the client renders with, so the model can only name what the page
+    draws; `Tool.declare` / the `tool` macro take `schema:` for it. The item the person
+    sees is the call itself (`dynamicToolCall`, namespace `longx`, `arguments` = the
+    tree; toolkit `longx.present` → `PresentTool` over `elements/generative-ui.tsx`'s
+    `GenerativeTree` — the registry's styled library with fenced code through shiki;
+    styles in `css/generative-ui.css`, the registry's `generative-ui-style` item on our
+    tokens); the model reads only "shown to the user". `prompt_user` is an ask with
+    `spec:` (`Context.ask(ctx, spec: tree)` → `longx/action/request` carries `spec`;
+    `ActionTool` draws the tree with a `dispatch` whose action — `$action` plus
+    `$input` or the form's values — answers as `%{"action" => payload}`; the tool returns
+    it as JSON, a cancel as "dismissed"). **A plug pushes a card without the model**:
+    `Context.present(ctx, tree)` (→ `Agent.present/2`, a cast; `Kernel.Calls.present/2`
+    appends a completed `longx.present` item as an `:activity` row, `context?: false`,
+    never model input) or `"present" => tree` in the result's meta. Tests:
+    `plugs_test` (schema, namespace, refusals), `agent_test` (present / prompt_user /
+    Context.present end to end), `toolkit.test` (the tree, the spec form's dispatch).
   - **Web search and reading pages** are two plugs. `Plugs.WebSearch` (`mode:` `:auto` /
     `:hosted` / `:standalone` / `:off`): *hosted* when the model's provider searches on its
     side (`Longx.AI.web_search_mode/1` — OpenAI, 百炼 Qwen 3.5+ / DeepSeek-v4 / glm-5.2; the

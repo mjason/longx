@@ -67,6 +67,7 @@ defmodule Longx.Agent.Definition.LoaderTest do
              deploy,
              Patch,
              Longx.Agent.Plugs.ViewImage,
+             Longx.Agent.Plugs.Present,
              Longx.Agent.Plugs.Knowledge,
              Longx.Agent.Plugs.WebSearch,
              Longx.Agent.Plugs.Browser,
