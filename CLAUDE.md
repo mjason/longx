@@ -782,8 +782,12 @@ Key patterns:
 ## Releases
 
 `MIX_ENV=prod mix assets.build && MIX_ENV=prod mix release` builds a self-contained
-release (Erlang runtime, the Go shim, the built SPA); `mix.exs`'s release step `trim_priv/1`
-drops `priv/plts`. Nothing is downloaded at build time: git is the host's, the browser is
+release (Erlang runtime, the Go shim, the built SPA); `mix.exs`'s release steps `trim_priv/1`
+(drops `priv/plts`) and `prune_old_versions/1` (removes any other `lib/longx-<version>/` —
+`mix release --overwrite` replaces only the current version's directory, and CI's cached
+`_build` shipped a stale `longx-0.1.0/` with the then-bundled codex, obscura and git,
+500 MB, in every tarball up to 0.2.1; `release.yml` also `rm -rf _build/prod/rel` first).
+A lean release is ~30 MB compressed. Nothing is downloaded at build time: git is the host's, the browser is
 fetched at runtime. `config/runtime.exs` (prod) needs only `LONGX_DATA_DIR`: the database
 (`longx.db`), the global knowledge (`agent/knowledge`), attachments, the browser (`obscura`)
 and the two secrets live there — `secret_key_base` and `cloak_key` are generated on first

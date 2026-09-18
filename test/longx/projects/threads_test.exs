@@ -323,8 +323,10 @@ defmodule Longx.Projects.ThreadsTest do
       )
     end)
 
-    assert thread!(child.id).status == :idle
-    assert thread!(thread.id).status == :idle
+    # the Tracker idles the thread in a write after the turn row's
+    assert_eventually_ok(fn ->
+      thread!(child.id).status == :idle and thread!(thread.id).status == :idle
+    end)
 
     assert %{items: items} = ThreadState.snapshot(thread.kernel_thread_id)
 

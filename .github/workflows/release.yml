@@ -61,6 +61,8 @@ jobs:
       - run: npm ci --prefix assets
 
       - run: mix assets.build
+      # the cached _build must not hand an older version's lib/ to the tarball
+      - run: rm -rf _build/prod/rel
       - run: mix release --overwrite
 
       - name: Package

@@ -4,7 +4,7 @@ defmodule Longx.MixProject do
   def project do
     [
       app: :longx,
-      version: "0.2.1",
+      version: "0.2.2",
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -14,7 +14,7 @@ defmodule Longx.MixProject do
       listeners: [Phoenix.CodeReloader],
       consolidate_protocols: Mix.env() != :dev,
       usage_rules: usage_rules(),
-      releases: [longx: [steps: [:assemble, &trim_priv/1]]],
+      releases: [longx: [steps: [:assemble, &trim_priv/1, &prune_old_versions/1]]],
       # `mix dialyzer`: mix tasks and test support are part of the app
       dialyzer: [plt_add_apps: [:mix, :ex_unit], plt_file: {:no_warn, "priv/plts/project.plt"}]
     ]
@@ -42,6 +42,21 @@ defmodule Longx.MixProject do
   defp trim_priv(release) do
     priv = Path.join([release.path, "lib", "longx-#{release.version}", "priv"])
     File.rm_rf!(Path.join(priv, "plts"))
+    release
+  end
+
+  # `mix release --overwrite` replaces only the current version's directory:
+  # a cached `_build/prod/rel` (CI caches `_build`) kept `lib/longx-0.1.0/`
+  # — with the then-bundled codex, obscura and git, 500 MB — in every
+  # tarball up to 0.2.1. Nothing in the release refers to another version.
+  defp prune_old_versions(release) do
+    lib = Path.join(release.path, "lib")
+
+    for dir <- Path.wildcard(Path.join(lib, "longx-*")),
+        Path.basename(dir) != "longx-#{release.version}" do
+      File.rm_rf!(dir)
+    end
+
     release
   end
 
