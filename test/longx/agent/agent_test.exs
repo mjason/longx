@@ -215,7 +215,7 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "You are"
 
     assert Enum.map(body["tools"], & &1["name"]) |> Enum.sort() ==
-             ~w(apply_patch create_goal credential_create credential_login credentials_list exec_command get_context_remaining get_goal http_request knowledge_read knowledge_search knowledge_write new_context_window present prompt_user send_file show_diff show_file show_html update_goal view_image web_fetch web_search)
+             ~w(apply_patch create_goal credential_create credential_login credential_rotate credentials_list exec_command get_context_remaining get_goal http_request knowledge_read knowledge_search knowledge_write new_context_window present prompt_user send_file show_diff show_file show_html update_goal view_image web_fetch web_search)
 
     refute Map.has_key?(body, "x-longx-custom-tools")
 

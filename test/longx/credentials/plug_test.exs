@@ -23,7 +23,10 @@ defmodule Longx.Credentials.PlugTest do
   test "the plug mounts four tools in the longx namespace and says how to use them" do
     step = CredPlug.call(%Step{phase: :request}, CredPlug.init([]))
     names = step.tools |> Map.values() |> Enum.map(& &1.name) |> Enum.sort()
-    assert names == ~w(credential_create credential_login credentials_list http_request)
+
+    assert names ==
+             ~w(credential_create credential_login credential_rotate credentials_list http_request)
+
     assert Enum.all?(Map.values(step.tools), &(&1.namespace == "longx"))
     text = Enum.join(step.instructions, "\n")
     assert text =~ "http_request"
@@ -158,5 +161,135 @@ defmodule Longx.Credentials.PlugTest do
 
     assert {:error, message} = CredPlug.credential_login(%{"credential" => "nope"}, ctx)
     assert message =~ "no credential"
+  end
+
+  describe "secret_from: the agent copies a key that is already on the machine, never seeing it" do
+    setup do
+      dir = Path.join(System.tmp_dir!(), "longx-cred-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf!(dir) end)
+      var = "LONGX_TEST_KEY_#{System.unique_integer([:positive])}"
+      System.put_env(var, "sk-from-env")
+      on_exit(fn -> System.delete_env(var) end)
+      %{dir: dir, var: var}
+    end
+
+    test "an environment variable", %{ctx: ctx, var: var} do
+      assert {:ok, text} =
+               CredPlug.credential_create(
+                 %{
+                   "name" => "e",
+                   "kind" => "api_key",
+                   "allowed_hosts" => ["a.example"],
+                   "secret_from" => "env:#{var}"
+                 },
+                 ctx
+               )
+
+      refute text =~ "sk-from-env"
+      assert {:ok, %{secret: "sk-from-env"}} = Credentials.reveal("e")
+    end
+
+    test "a whole file, a KEY=value line (export, quotes), a JSON key", %{ctx: ctx, dir: dir} do
+      File.write!(Path.join(dir, "token.txt"), "sk-whole-file\n")
+
+      File.write!(
+        Path.join(dir, ".env"),
+        "# keys\nexport OTHER=1\nexport API_KEY=\"sk-dotenv\"\n"
+      )
+
+      File.write!(Path.join(dir, "config.json"), ~s({"token": "sk-json", "n": 1}))
+      File.write!(Path.join(dir, "config.yml"), "token: sk-yaml\n")
+
+      for {name, from, value} <- [
+            {"f1", "file:#{dir}/token.txt", "sk-whole-file"},
+            {"f2", "file:#{dir}/.env#API_KEY", "sk-dotenv"},
+            {"f3", "file:#{dir}/config.json#token", "sk-json"},
+            {"f4", "file:#{dir}/config.yml#token", "sk-yaml"}
+          ] do
+        assert {:ok, text} =
+                 CredPlug.credential_create(
+                   %{
+                     "name" => name,
+                     "kind" => "api_key",
+                     "allowed_hosts" => ["a.example"],
+                     "secret_from" => from
+                   },
+                   ctx
+                 )
+
+        refute text =~ value
+        assert {:ok, %{secret: ^value}} = Credentials.reveal(name)
+      end
+    end
+
+    test "a source that has nothing is an error, nothing is created; an oauth2 client secret comes the same way",
+         %{ctx: ctx, dir: dir, var: var} do
+      assert {:error, message} =
+               CredPlug.credential_create(
+                 %{
+                   "name" => "x",
+                   "kind" => "api_key",
+                   "allowed_hosts" => ["a.example"],
+                   "secret_from" => "env:LONGX_NO_SUCH_VAR"
+                 },
+                 ctx
+               )
+
+      assert message =~ "LONGX_NO_SUCH_VAR"
+      File.write!(Path.join(dir, ".env"), "A=1\n")
+
+      assert {:error, message} =
+               CredPlug.credential_create(
+                 %{
+                   "name" => "x",
+                   "kind" => "api_key",
+                   "allowed_hosts" => ["a.example"],
+                   "secret_from" => "file:#{dir}/.env#B"
+                 },
+                 ctx
+               )
+
+      assert message =~ "B"
+      assert Credentials.list() == []
+
+      assert {:ok, _} =
+               CredPlug.credential_create(
+                 %{
+                   "name" => "oa",
+                   "kind" => "oauth2",
+                   "allowed_hosts" => ["mcp.example"],
+                   "authorize_url" => "https://mcp.example/authorize",
+                   "token_url" => "https://mcp.example/token",
+                   "client_id" => "cid",
+                   "secret_from" => "env:#{var}"
+                 },
+                 ctx
+               )
+
+      assert {:ok, %{client_secret: "sk-from-env"}} = Credentials.reveal("oa")
+    end
+
+    test "credential_rotate replaces an API key from the machine", %{ctx: ctx, var: var} do
+      {:ok, _} =
+        Credentials.create_api_key(%{name: "svc", allowed_hosts: ["a.example"], secret: "sk-old"})
+
+      assert {:ok, text} =
+               CredPlug.credential_rotate(
+                 %{"credential" => "svc", "secret_from" => "env:#{var}"},
+                 ctx
+               )
+
+      refute text =~ "sk-from-env"
+      assert {:ok, %{secret: "sk-from-env"}} = Credentials.reveal("svc")
+
+      assert {:error, msg} =
+               CredPlug.credential_rotate(
+                 %{"credential" => "nope", "secret_from" => "env:#{var}"},
+                 ctx
+               )
+
+      assert msg =~ "no credential"
+    end
   end
 end

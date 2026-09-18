@@ -23,7 +23,7 @@ defmodule Longx.Agent.Plugs.Credentials do
   instructions """
   # Credentials
 
-  Longx keeps API keys and OAuth2 tokens for you, encrypted; you never see a value. To call an authenticated API — an HTTP API, an MCP server over HTTP (JSON-RPC POSTs) — use `http_request` with the credential's name instead of curl: the service layer puts the value in the right header (or wherever `{{credential:NAME}}` stands in the URL, headers or body), refuses hosts the credential is not allowed for, refreshes an expired token first, and hands you the answer with the value redacted. `credentials_list` says what exists and whether it is ready. A credential that `needs_login` (OAuth2) is logged in with `credential_login`: the person does it in their browser, you wait. To add one, call `credential_create` — the person types the key into a masked field on the thread; never ask them to paste a key into the chat, never put a secret in a command, a file or a message.
+  Longx keeps API keys and OAuth2 tokens for you, encrypted; you never see a value. To call an authenticated API — an HTTP API, an MCP server over HTTP (JSON-RPC POSTs) — use `http_request` with the credential's name instead of curl: the service layer puts the value in the right header (or wherever `{{credential:NAME}}` stands in the URL, headers or body), refuses hosts the credential is not allowed for, refreshes an expired token first, and hands you the answer with the value redacted. `credentials_list` says what exists and whether it is ready. A credential that `needs_login` (OAuth2) is logged in with `credential_login`: the person does it in their browser, you wait. To add one, call `credential_create` — a key that is already on this machine (an environment variable, a .env or config file) is copied with `secret_from` (env:NAME, file:PATH, file:PATH#KEY) without you seeing it; otherwise the person types it into a masked field on the thread. `credential_rotate` replaces a key the same way. Never ask the person to paste a key into the chat, never print a secret with a command, never put one in a file or a message.
   """
 
   tool :credentials_list,
@@ -81,9 +81,17 @@ defmodule Longx.Agent.Plugs.Credentials do
     param :scopes, :string, "OAuth2: the scopes, space separated"
     param :client_id, :string, "OAuth2: the client id, when the provider gave one"
 
-    param :registration_url,
+    param :secret_from,
           :string,
-          "OAuth2: an RFC 7591 registration endpoint — Longx registers itself, no client id needed"
+          "Where the key / client secret already is on this machine, copied without you seeing it: env:NAME (an environment variable), file:PATH (the whole file, trimmed), file:PATH#KEY (a KEY=value / export KEY=… / KEY: value line, or a JSON key). Without it the person types the value into a masked field."
+  end
+
+  tool :credential_rotate,
+       "Replaces the key (API key) or client secret (OAuth2) of an existing credential: from the machine with secret_from, else the person types the new value into a masked field.",
+       namespace: @namespace,
+       timeout: 600_000 do
+    param :credential, :string, "The credential's name", required: true
+    param :secret_from, :string, "env:NAME, file:PATH or file:PATH#KEY (see credential_create)"
   end
 
   ## the tools
@@ -162,7 +170,7 @@ defmodule Longx.Agent.Plugs.Credentials do
     hosts = List.wrap(args["allowed_hosts"])
 
     with {:ok, secret_field} <- secret_field(kind, args),
-         {:ok, answer} <- ask_secret(ctx, name, secret_field),
+         {:ok, answer} <- obtain_secret(ctx, name, secret_field, args["secret_from"]),
          {:ok, cred} <- create(kind, args, hosts, secret_field, answer) do
       {:ok,
        "credential #{cred.name} created (#{cred.kind}; hosts: #{Enum.join(cred.allowed_hosts, ", ")}; status: #{status_of(cred.name)})" <>
@@ -193,6 +201,42 @@ defmodule Longx.Agent.Plugs.Credentials do
 
   def credential_create(_args, _ctx),
     do: {:error, "credential_create needs name, kind and allowed_hosts"}
+
+  def credential_rotate(%{"credential" => name} = args, ctx) do
+    with {:ok, cred} <- fetch(name),
+         {:ok, field} <- rotate_field(cred),
+         {:ok, answer} <- obtain_secret(ctx, name, field, args["secret_from"]),
+         {:ok, _} <-
+           Credentials.update_credential(cred, %{
+             String.to_existing_atom(field.id) => answer[field.id]
+           }) do
+      {:ok, "credential #{name}: the #{field.label} was replaced"}
+    else
+      {:error, :no_agent} ->
+        {:error, "the person has to type the secret: only inside an agent (or give secret_from)"}
+
+      {:error, :cancelled} ->
+        {:error, "the person cancelled"}
+
+      {:error, :timeout} ->
+        {:error, "no answer within the time"}
+
+      {:error, message} when is_binary(message) ->
+        {:error, message}
+
+      {:error, other} ->
+        {:error, "could not rotate: #{inspect(other)}"}
+    end
+  end
+
+  def credential_rotate(_args, _ctx),
+    do: {:error, "credential_rotate needs the credential's name"}
+
+  defp rotate_field(%{kind: :api_key}),
+    do: {:ok, %{id: "secret", label: "API Key / Token", secret: true}}
+
+  defp rotate_field(%{kind: :oauth2}),
+    do: {:ok, %{id: "client_secret", label: "Client Secret", secret: true}}
 
   ## pieces
 
@@ -250,7 +294,74 @@ defmodule Longx.Agent.Plugs.Credentials do
 
   defp secret_field(kind, _args), do: {:error, "unknown kind #{kind}"}
 
-  defp ask_secret(_ctx, _name, nil), do: {:ok, %{}}
+  # the value: nothing needed, copied from the machine (secret_from), or typed by the person
+  defp obtain_secret(_ctx, _name, nil, _from), do: {:ok, %{}}
+
+  defp obtain_secret(_ctx, _name, field, from) when is_binary(from) and from != "" do
+    with {:ok, value} <- read_secret(from), do: {:ok, %{field.id => value}}
+  end
+
+  defp obtain_secret(ctx, name, field, _from), do: ask_secret(ctx, name, field)
+
+  # env:NAME | file:PATH | file:PATH#KEY — read here, in the tool's task; the
+  # model only ever gets "created" back
+  defp read_secret("env:" <> name) do
+    case System.get_env(name) do
+      value when is_binary(value) and value != "" -> {:ok, String.trim(value)}
+      _ -> {:error, "no environment variable #{name} (or it is empty)"}
+    end
+  end
+
+  defp read_secret("file:" <> rest) do
+    {path, key} =
+      case String.split(rest, "#", parts: 2) do
+        [path, key] -> {path, key}
+        [path] -> {path, nil}
+      end
+
+    path = Path.expand(path)
+
+    case File.read(path) do
+      {:ok, content} -> secret_in(content, key, path)
+      {:error, reason} -> {:error, "cannot read #{path}: #{:file.format_error(reason)}"}
+    end
+  end
+
+  defp read_secret(other),
+    do: {:error, "secret_from must be env:NAME, file:PATH or file:PATH#KEY, got #{other}"}
+
+  defp secret_in(content, nil, path) do
+    case String.trim(content) do
+      "" -> {:error, "#{path} is empty"}
+      value -> {:ok, value}
+    end
+  end
+
+  defp secret_in(content, key, path) do
+    json =
+      case Jason.decode(content) do
+        {:ok, %{} = map} -> map[key]
+        _ -> nil
+      end
+
+    line =
+      Regex.run(~r/^\s*(?:export\s+)?#{Regex.escape(key)}\s*[=:]\s*(.+?)\s*,?\s*$/m, content,
+        capture: :all_but_first
+      )
+
+    cond do
+      is_binary(json) and json != "" -> {:ok, json}
+      match?([_], line) -> {:ok, line |> hd() |> String.trim() |> unquote_value()}
+      true -> {:error, "no #{key} in #{path}"}
+    end
+  end
+
+  defp unquote_value(value) do
+    case value do
+      <<q, rest::binary>> when q in [?", ?'] -> String.trim_trailing(rest, <<q>>)
+      _ -> value
+    end
+  end
 
   defp ask_secret(ctx, name, field) do
     Context.ask(ctx,
