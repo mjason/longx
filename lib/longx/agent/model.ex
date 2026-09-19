@@ -238,6 +238,7 @@ defmodule Longx.Agent.Model do
 
                 case dispatch(events, target, owner, ref, done?) do
                   {:ok, done?} -> {:cont, {:cont, rest, done?}}
+                  {:retry_stream, why} -> {:halt, {:retry_stream, why}}
                   {:failed, why} -> {:halt, {:failed, why}}
                 end
 
@@ -251,6 +252,7 @@ defmodule Longx.Agent.Model do
               {:cont, rest, done?} -> relay(resp, target, owner, ref, rest, done?, timeout)
               {:ended, true} -> {:done, 200}
               {:ended, false} -> {:retry, 200, "the stream ended without a response"}
+              {:retry_stream, why} -> {:retry, 200, why}
               {:failed, why} -> {:failed, 200, why}
             end
 
@@ -269,8 +271,10 @@ defmodule Longx.Agent.Model do
 
   defp dispatch([{type, payload} | rest], target, owner, ref, done?) do
     case event(type, payload, target) do
+      # the provider's own failure: a passing one (a server error, an overload,
+      # "you can retry") is tried again like a 5xx; the rest is final
       {:failed, why} ->
-        {:failed, why}
+        if transient?(payload), do: {:retry_stream, why}, else: {:failed, why}
 
       nil ->
         dispatch(rest, target, owner, ref, done?)
@@ -333,6 +337,18 @@ defmodule Longx.Agent.Model do
     after
       5_000 -> acc
     end
+  end
+
+  # a provider's failure event worth another try: by its type (OpenAI's
+  # server_error / overloaded / rate limit) or by what it says
+  @transient_types ~w(server_error overloaded_error overloaded rate_limit_error rate_limit_exceeded api_error service_unavailable timeout)
+  @transient_words ~r/retry|try again|temporar|overload|server error|internal error|unavailable|timed? ?out/i
+
+  defp transient?(payload) do
+    error = payload["error"] || (payload["response"] && payload["response"]["error"]) || %{}
+    type = (is_map(error) && (error["type"] || error["code"])) || nil
+    message = error_message(payload["response"] || payload)
+    (is_binary(type) and type in @transient_types) or Regex.match?(@transient_words, message)
   end
 
   defp error_message(%{"error" => %{"message" => m}}) when is_binary(m), do: m

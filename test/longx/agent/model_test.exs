@@ -212,6 +212,42 @@ defmodule Longx.Agent.ModelTest do
     assert message =~ "nope"
   end
 
+  test "a provider's own failure event that says to retry (a server error, an overload) is retried like a 5xx; one that does not is final",
+       %{bypass: bypass, model: model} do
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    transient =
+      ~s(event: error\ndata: {"type":"error","error":{"type":"server_error","message":"An error occurred while processing your request. You can retry your request, or contact us through our help center."}}\n\n)
+
+    [created | _] = ResponsesFixture.assistant_message("x")
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      n = Agent.get_and_update(counter, &{&1 + 1, &1 + 1})
+
+      if n == 1,
+        do: sse(conn, [created, transient]),
+        else: sse(conn, ResponsesFixture.assistant_message("fine now"))
+    end)
+
+    ref = make_ref()
+    assert :ok = Model.stream(@request, self(), ref)
+    assert_receive {:model, ^ref, {:restart, why}}, 5_000
+    assert why =~ "retry"
+    assert_receive {:model, ^ref, {:completed, _, _}}, 5_000
+    assert Agent.get(counter, & &1) == 2
+
+    final =
+      ~s(event: error\ndata: {"type":"error","error":{"type":"invalid_request_error","message":"Unsupported parameter: reasoning"}}\n\n)
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn -> sse(conn, [created, final]) end)
+    ref2 = make_ref()
+    assert :ok = Model.stream(@request, self(), ref2)
+    assert_receive {:model, ^ref2, {:failed, {:model_failed, slug, message}}}, 5_000
+    assert slug == model.slug
+    assert message =~ "Unsupported parameter"
+    refute_received {:model, ^ref2, {:restart, _}}
+  end
+
   test "a stream that breaks mid-way is retried on the same model — the owner told to start over — and completes; past the retries the failure is final and structured",
        %{bypass: bypass, model: model} do
     {:ok, counter} = Agent.start_link(fn -> 0 end)

@@ -394,7 +394,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     spent the failure is `{:failed, {:model_failed, slug, message}}`: the turn ends
     `failed` with `error: %{"message", "code" => "model_failed", "model" => slug}` and
     the page offers another model (`ModelFailedBanner`: a pick, 换个模型继续 sends 继续 on
-    it and keeps it for later turns). A 4xx is final. **A call's arguments streaming in
+    it and keeps it for later turns). A provider's own failure event mid-stream
+    (`response.failed`, `error`) is retried the same way when it is passing — by type
+    (`server_error`, `overloaded`, rate limits…) or by its words ("retry", "try again",
+    "temporar", "unavailable"…; `transient?/1`) — and final otherwise. A 4xx is final. **A call's arguments streaming in
     are progress**: `response.function_call_arguments.delta` /
     `custom_tool_call_input.delta` → `{:arguments_delta, id, delta}` → `turn/progress`
     `%{"progress" => %{"kind" => "toolCall", "name", "bytes"} | nil}` (the first bytes at
@@ -911,7 +914,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     levels; the rail shows the description's model when the project pins one —
     `definitionModel`) + the `TurnState` ("waiting" while an ask is pending)),
     `GoalBar`, `TurnBar`, `ReasoningSteps` (the `reasoning-panel` step design over
-    `reasoningSteps.ts`), `SlashCommands` (`/new`, `/compact`, `/goal`, `/git` `/files`
+    `reasoningSteps.ts`; **folded until the reader opens it**, the choice kept — a page
+    unfolding every thought while it streamed was too long; a sub-agent's row is folded
+    the same way, opening by itself only when its child waits on the person —
+    `ToolRow`'s `openWhileRunning`), `SlashCommands` (`/new`, `/compact`, `/goal`, `/git` `/files`
     `/history`, `/settings`, `/init` — over `unstable_useSlashCommandAdapter` and the
     `composer-trigger-popover` element), `FileMentions` (`@` over
     `unstable_useLiveCompletionAdapter` → `search_files`; `directive-text` chips),

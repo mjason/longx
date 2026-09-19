@@ -675,6 +675,8 @@ describe("ThreadPage", () => {
         }),
       );
       const sub = screen.getByTestId("tool-subagent");
+      // folded until opened: the child's whole conversation is too long to unfold by itself
+      await user.click(within(sub).getByRole("button", { name: /researcher|gamma|子 agent/ }));
       expect(sub).toHaveTextContent("deepseek-flash · low");
       // the parent's badge: the model behind the popover
       const badges = screen.getAllByRole("button", { name: /耗时/ });
@@ -716,6 +718,7 @@ describe("ThreadPage", () => {
         }),
       );
       const sub = screen.getByTestId("tool-subagent");
+      await user.click(within(sub).getByRole("button", { name: /beta|子 agent/ }));
       expect(sub).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");
       await user.click(within(sub).getByRole("button", { name: "停止" }));
       await waitFor(() => expect(interruptTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t9", kernelTurnId: "turn_2-beta" } })));
@@ -1071,7 +1074,7 @@ describe("ThreadPage", () => {
     expect(box).toHaveValue("run the tests");
   });
 
-  test("renderers: fenced code highlights with shiki, a mermaid fence is a diagram, reasoning is the step panel — open while it streams, folded after", async () => {
+  test("renderers: fenced code highlights with shiki, a mermaid fence is a diagram, reasoning is the step panel — folded until opened, the choice kept", async () => {
     const r = renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
     act(() =>
@@ -1096,8 +1099,11 @@ describe("ThreadPage", () => {
       }),
     );
     await screen.findByText("draw it");
-    // the turn is running and reasoning is what streams: the panel is open, its steps titled, the trigger shimmering
+    // the turn is running and reasoning is what streams: the panel shimmers but stays
+    // folded (a page unfolding every thought was too long); a click opens its titled steps
     const panel = document.querySelector("[data-slot=reasoning-panel]")!;
+    expect(panel).toHaveAttribute("data-state", "closed");
+    await userEvent.setup().click(within(panel as HTMLElement).getByRole("button"));
     expect(panel).toHaveAttribute("data-state", "open");
     expect(
       within(panel as HTMLElement).getByText("Planning"),
@@ -1126,17 +1132,14 @@ describe("ThreadPage", () => {
         params: { turn: { id: "turn_1", status: "completed" } },
       });
     });
-    // settled, the panel folds under its resting label; a click opens it again
-    await waitFor(() =>
-      expect(
-        document.querySelector("[data-slot=reasoning-panel]"),
-      ).toHaveAttribute("data-state", "closed"),
-    );
+    // settled, the panel shows its resting label and keeps the reader's choice (open); a click folds it
+    await screen.findByRole("button", { name: /思考过程/ });
+    expect(document.querySelector("[data-slot=reasoning-panel]")).toHaveAttribute("data-state", "open");
     await userEvent.click(screen.getByRole("button", { name: /思考过程/ }));
     await waitFor(() =>
       expect(
         document.querySelector("[data-slot=reasoning-panel]"),
-      ).toHaveAttribute("data-state", "open"),
+      ).toHaveAttribute("data-state", "closed"),
     );
     // code goes through the shiki highlighter (plain until tokenised), mermaid through the diagram element
     await waitFor(() =>

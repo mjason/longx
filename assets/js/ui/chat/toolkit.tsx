@@ -115,6 +115,7 @@ function ToolRow({
   failed,
   children,
   testId,
+  openWhileRunning = true,
 }: {
   label: string;
   activeLabel: string;
@@ -124,6 +125,8 @@ function ToolRow({
   failed: boolean;
   children: ReactNode;
   testId: string;
+  /** false: closed even while it runs (a sub-agent's whole conversation is too long to unfold by itself) */
+  openWhileRunning?: boolean;
 }) {
   const [open, setOpen] = useState<boolean | null>(null);
   return (
@@ -135,7 +138,7 @@ function ToolRow({
         queryDetail={queryDetail}
         running={running}
         failed={failed}
-        open={open ?? (running || failed)}
+        open={open ?? ((running && openWhileRunning) || failed)}
         onOpenChange={setOpen}
         className="max-w-none"
       >
@@ -757,6 +760,7 @@ export const SubagentTool: ToolCallMessagePartComponent<
       running={!done}
       failed={failed}
       testId="tool-subagent"
+      openWhileRunning={waiting}
     >
       <div className="flex flex-col gap-2">
         <AgentStatus
