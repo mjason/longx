@@ -40,6 +40,7 @@ defmodule Longx.Projects.Project do
     max_depth: [type: :integer],
     max_children: [type: :integer],
     idle_minutes: [type: :integer],
+    model_retries: [type: :integer],
     child_model: [type: :string],
     child_effort: [type: :string]
   ]

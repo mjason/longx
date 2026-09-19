@@ -216,6 +216,7 @@ defmodule Longx.AI do
       {:ok,
        %Target{
          model: model.upstream_id,
+         slug: model.slug,
          base_url: provider.base_url,
          api_key: api_key,
          context_window: model.context_window,

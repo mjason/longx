@@ -8,6 +8,8 @@ defmodule Longx.AI.Target do
   @enforce_keys [:model, :base_url, :api_key, :context_window]
   defstruct [
     :model,
+    # the row's slug — what the person and the chain call it (the upstream id above is what the provider hears)
+    :slug,
     :base_url,
     :api_key,
     :context_window,
@@ -26,6 +28,7 @@ defmodule Longx.AI.Target do
 
   @type t :: %__MODULE__{
           model: String.t(),
+          slug: String.t() | nil,
           base_url: String.t(),
           api_key: String.t(),
           context_window: pos_integer,

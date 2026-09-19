@@ -40,11 +40,13 @@ defmodule Longx.Agent.Model do
   killed mid-query (an interrupt, a parent stopping) took SQLite's
   connection down with it and the next write anywhere said "Database busy".
   """
-  @spec prepare(map) :: prepared
-  def prepare(request) when is_map(request) do
+  @spec prepare(map, keyword) :: prepared
+  def prepare(request, opts \\ []) when is_map(request) do
+    retries = Keyword.get(opts, :retries)
+
     with {:ok, targets} <- AI.resolve_targets(request["model"]),
          {:ok, entries} <- prepare_each(targets, request) do
-      {:ok, entries}
+      {:ok, Enum.map(entries, &Map.put(&1, :retries, retries))}
     else
       {:error, reason} ->
         Log.begin(request, nil) |> Log.finish(%{status: nil, error: describe(reason)})
@@ -75,17 +77,17 @@ defmodule Longx.Agent.Model do
 
   def run({:error, message}, owner, ref) when is_pid(owner), do: failed(owner, ref, message)
 
-  defp run_chain(%{up: up, target: target, request: request}, rest, owner, ref) do
+  defp run_chain(%{up: up, target: target, request: request} = entry, rest, owner, ref) do
     log = Log.begin(request, %{upstream_id: target.model, provider: target.provider_slug})
 
-    case attempt(up, target, owner, ref, log, retry_ms()) do
+    case attempt(up, target, owner, ref, log, waits(entry[:retries])) do
       :ok ->
         :ok
 
       {:failed, message} ->
         case rest do
           [] ->
-            failed(owner, ref, message)
+            failed(owner, ref, {:model_failed, target.slug || target.model, message})
 
           [next | others] ->
             Logger.warning("agent model: #{message}; falling back to #{next.target.model}")
@@ -116,6 +118,21 @@ defmodule Longx.Agent.Model do
   defp retry_ms,
     do: :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:retry_ms, @default_retry_ms)
 
+  # the waits between attempts: the configured ladder, cut or stretched (its
+  # last rung repeated) to the number of retries the settings allow
+  defp waits(nil), do: retry_ms()
+  defp waits(0), do: []
+
+  defp waits(n) when is_integer(n) and n > 0 do
+    ladder = retry_ms()
+
+    case length(ladder) do
+      0 -> List.duplicate(5_000, n)
+      len when len >= n -> Enum.take(ladder, n)
+      len -> ladder ++ List.duplicate(List.last(ladder), n - len)
+    end
+  end
+
   # one model: `:ok` when its stream ended (well or with the provider's own
   # failure relayed), `{:failed, message}` when the call never got going —
   # what the chain's next model may pick up
@@ -128,8 +145,10 @@ defmodule Longx.Agent.Model do
         Log.finish(log, %{status: status, error: nil})
         :ok
 
-      {{:ok, {:retry, _status, message}}, [wait | rest]} ->
+      {{:ok, {:retry, status, message}}, [wait | rest]} ->
         Logger.info("agent model: #{message}; retrying in #{wait} ms")
+        # a stream that had begun: whatever the owner got of it is to be dropped
+        if status == 200, do: send(owner, {:model, ref, {:restart, message}})
         Process.sleep(wait)
         attempt(up, target, owner, ref, log, rest)
 
@@ -224,18 +243,18 @@ defmodule Longx.Agent.Model do
             |> case do
               {:cont, rest, done?} -> relay(resp, target, owner, ref, rest, done?, timeout)
               {:ended, true} -> {:done, 200}
-              {:ended, false} -> {:failed, 200, "the stream ended without a response"}
+              {:ended, false} -> {:retry, 200, "the stream ended without a response"}
               {:failed, why} -> {:failed, 200, why}
             end
 
           {:error, reason} ->
-            {:failed, 200, "the stream broke: #{inspect(reason)}"}
+            {:retry, 200, "the stream broke: #{inspect(reason)}"}
 
           :unknown ->
             relay(resp, target, owner, ref, buffer, completed?, timeout)
         end
     after
-      timeout -> {:failed, 200, "upstream went silent for #{timeout} ms"}
+      timeout -> {:retry, 200, "upstream went silent for #{timeout} ms"}
     end
   end
 
@@ -266,6 +285,14 @@ defmodule Longx.Agent.Model do
 
   defp event("response.reasoning_text.delta", %{"item_id" => id, "delta" => d} = p, _t),
     do: {:reasoning_text_delta, id, p["content_index"] || 0, d}
+
+  # a call's arguments as they come: progress the kernel shows (a long
+  # patch is minutes of nothing else on the wire)
+  defp event("response.function_call_arguments.delta", %{"item_id" => id, "delta" => d}, _t),
+    do: {:arguments_delta, id, d}
+
+  defp event("response.custom_tool_call_input.delta", %{"item_id" => id, "delta" => d}, _t),
+    do: {:arguments_delta, id, d}
 
   defp event("response.output_item.done", %{"item" => item}, _t), do: {:item_done, item}
 

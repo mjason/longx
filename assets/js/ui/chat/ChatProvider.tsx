@@ -1,6 +1,7 @@
 import { AssistantRuntimeProvider, useAui } from "@assistant-ui/react";
-import { answerRequest } from "@/ash_rpc";
-import { unwrap } from "@/core/projects";
+import { answerRequest, interruptTurn } from "@/ash_rpc";
+import { unwrap, useSubagents } from "@/core/projects";
+import { runningTurnId } from "@/core/chat/thread";
 import {
   createContext,
   useCallback,
@@ -19,7 +20,7 @@ import { t } from "@/ui/strings";
 import { DirtyTreeDialog, type DirtyPrompt } from "./DirtyTreeDialog";
 import { GoalProvider } from "./GoalBar";
 import { useWorkbench, type Tab } from "@/core/workbench";
-import { ActionAnswerContext, chatConfig, CompactionUI, SurfaceContext } from "./toolkit";
+import { ActionAnswerContext, chatConfig, CompactionUI, SubagentContext, SurfaceContext } from "./toolkit";
 
 const ChatContext = createContext<LongxRuntime | null>(null);
 
@@ -139,6 +140,24 @@ export function ChatProvider({
     [rowId],
   );
 
+  // a sub-agent stopped from the parent's page: its row, its running turn
+  const subagentRows = useSubagents(rowId);
+  const subviews = chat.subviews;
+  const rows = subagentRows.data;
+  const subagentContext = useMemo(
+    () => ({
+      views: subviews,
+      stop: async (kernelThreadId: string) => {
+        const row = rows?.find((r) => r.kernelThreadId === kernelThreadId);
+        const view = subviews[kernelThreadId];
+        const turnId = view ? runningTurnId(view) : null;
+        if (!row || !turnId) return;
+        unwrap(await interruptTurn({ input: { threadId: row.id, kernelTurnId: turnId } }));
+      },
+    }),
+    [rows, subviews],
+  );
+
   return (
     <ChatContext.Provider value={chat}>
       <AssistantRuntimeProvider runtime={chat.runtime} config={chatConfig}>
@@ -146,9 +165,11 @@ export function ChatProvider({
         <CompactionUI />
         <SurfaceContext.Provider value={surface}>
       <ActionAnswerContext.Provider value={answerAction}>
+        <SubagentContext.Provider value={subagentContext}>
           <GoalProvider threadId={chat.thread?.id} goal={chat.view.goal}>
             {children}
           </GoalProvider>
+        </SubagentContext.Provider>
         </ActionAnswerContext.Provider>
       </SurfaceContext.Provider>
         <DirtyTreeDialog prompt={dirty} />

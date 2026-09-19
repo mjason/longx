@@ -41,6 +41,7 @@ defmodule Longx.Agent.ThreadState do
           status: map | nil,
           token_usage: map | nil,
           goal: map | nil,
+          progress: map | nil,
           items: [map],
           pending_requests: [map]
         }

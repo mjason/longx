@@ -67,6 +67,7 @@ export const agentSettingsData = () => ({
   maxDepth: 2,
   maxChildren: 4,
   idleMinutes: 30,
+  modelRetries: 3,
   childModel: null,
   childEffort: null,
 });

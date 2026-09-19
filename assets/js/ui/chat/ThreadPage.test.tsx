@@ -27,6 +27,7 @@ import {
   clearGoal,
   getThread,
   listModels,
+  listSubagents,
   listThreads,
   interruptTurn,
   retractTurn,
@@ -274,6 +275,48 @@ describe("ThreadPage", () => {
     expect(screen.getByText("removing…")).toBeInTheDocument();
     // the composer offers stop while the turn runs
     expect(screen.getByRole("button", { name: /停止/ })).toBeInTheDocument();
+  });
+
+  test("the turn bar says what the model is writing — a call's arguments, bytes so far — and a retry after a broken stream", async () => {
+    await open();
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", { seq: 5, method: "turn/progress", params: { turnId: "turn_2", progress: { kind: "toolCall", name: "apply_patch", bytes: 12_800 } } });
+    });
+    const bar = screen.getByTestId("turn-bar");
+    expect(bar).toHaveTextContent("正在写 apply_patch 的参数");
+    expect(bar).toHaveTextContent("13 KB");
+    act(() => {
+      channel.deliver("event", { seq: 6, method: "turn/progress", params: { turnId: "turn_2", progress: { kind: "retry", name: "the stream broke", bytes: 0 } } });
+    });
+    expect(bar).toHaveTextContent("连接中断，正在重试");
+    act(() => {
+      channel.deliver("event", { seq: 7, method: "turn/progress", params: { turnId: "turn_2", progress: null } });
+    });
+    expect(bar).toHaveTextContent("进行中");
+    expect(bar).not.toHaveTextContent("重试");
+  });
+
+  test("a turn that failed because its model gave up offers another model to go on with: the choice sends 继续 on it", async () => {
+    const user = userEvent.setup();
+    await open();
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", {
+        seq: 5,
+        method: "turn/completed",
+        params: { turn: { id: "turn_2", status: "failed", error: { message: "model deepseek-flash failed: the stream broke", code: "model_failed", model: "deepseek-flash" } } },
+      });
+    });
+    const banner = await screen.findByTestId("model-failed");
+    expect(banner).toHaveTextContent("deepseek-flash");
+    expect(banner).toHaveTextContent("the stream broke");
+    await user.click(within(banner).getByRole("combobox"));
+    await user.click(await screen.findByRole("option", { name: /glm-5/ }));
+    await user.click(within(banner).getByRole("button", { name: "换个模型继续" }));
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "继续", model: "glm-5" }) })),
+    );
   });
 
   test("Escape in the composer never stops the turn: an IME user presses it all the time; stop is the button", async () => {
@@ -600,6 +643,44 @@ describe("ThreadPage", () => {
     expect(within(message).getByText("冒烟测试通过").tagName).toBe("STRONG");
     expect(within(message).getAllByRole("listitem")).toHaveLength(2);
     expect(message).not.toHaveTextContent("[agent researcher]");
+  });
+
+  test("a working sub-agent's row says what its model is writing and can be stopped from the parent's page", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listSubagents).mockResolvedValue(ok([{ ...thread(9), id: "t9", kernelThreadId: "thr_1-beta", title: "beta", agentPath: "/root/beta", status: "active" }]) as never);
+    try {
+      await open();
+      const child = "thr_1-beta";
+      act(() => {
+        channel.deliverTo("thread:thr_1", "event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+        channel.deliverTo("thread:thr_1", "event", {
+          seq: 5,
+          method: "item/completed",
+          params: { turnId: "turn_2", item: { id: "act_beta", type: "subAgentActivity", agentPath: "/root/beta", agentThreadId: child, kind: "started" } },
+        });
+        channel.deliverTo("thread:thr_1", "event", { seq: 6, method: "turn/completed", params: { turn: { id: "turn_2", status: "completed" } } });
+      });
+      await waitFor(() => expect(channel.topics).toContain(`thread:${child}`));
+      act(() =>
+        channel.replyTo(`thread:${child}`, "ok", {
+          thread_id: child,
+          seq: 2,
+          thread: null,
+          turn: { id: "turn_2-beta", status: "inProgress" },
+          status: null,
+          token_usage: null,
+          items: [{ id: "m_beta", type: "agentMessage", turnId: "turn_2-beta", text: "writing the note…" }],
+          pending_requests: [],
+          progress: { kind: "toolCall", name: "apply_patch", bytes: 20480 },
+        }),
+      );
+      const sub = screen.getByTestId("tool-subagent");
+      expect(sub).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");
+      await user.click(within(sub).getByRole("button", { name: "停止" }));
+      await waitFor(() => expect(interruptTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t9", kernelTurnId: "turn_2-beta" } })));
+    } finally {
+      vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
+    }
   });
 
   test("a sub-agent joins its own thread: its conversation nests under the parent, its ask is answered there", async () => {

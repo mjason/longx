@@ -48,13 +48,17 @@ defmodule Longx.Projects.Tracker do
     {:reply, :ok, follow(state, kernel_thread_id)}
   end
 
+  # a thread already followed keeps its clock: a page joining it (host_thread
+  # tracks on every join) is not progress — pages kept reopening a stuck
+  # sub-agent and the watchdog never saw ten quiet minutes
   defp follow(%State{tracked: tracked} = state, kernel_thread_id) do
-    unless Map.has_key?(tracked, kernel_thread_id) do
+    if Map.has_key?(tracked, kernel_thread_id) do
+      state
+    else
       :ok = PubSub.subscribe(Longx.PubSub, Longx.Agent.ThreadState.topic(kernel_thread_id))
+      # (re)arm the watchdog with the current settings for the new thread
+      schedule_tick(%State{state | tracked: Map.put(tracked, kernel_thread_id, now())})
     end
-
-    # (re)arm the watchdog with the current settings for the new thread
-    schedule_tick(%State{state | tracked: Map.put(tracked, kernel_thread_id, now())})
   end
 
   @impl true

@@ -15,6 +15,7 @@ export type AgentSettings = {
   maxDepth: number;
   maxChildren: number;
   idleMinutes: number;
+  modelRetries: number;
   childModel: string | null;
   childEffort: string | null;
 };
@@ -22,7 +23,7 @@ export type AgentSettings = {
 /** A project's overrides: every field optional, null = inherit the global value. */
 export type AgentOverrides = Partial<{ [K in keyof AgentSettings]: AgentSettings[K] | null }>;
 
-export const agentSettingsFields = ["maxDepth", "maxChildren", "idleMinutes", "childModel", "childEffort"] as const;
+export const agentSettingsFields = ["maxDepth", "maxChildren", "idleMinutes", "modelRetries", "childModel", "childEffort"] as const;
 
 export const agentKeys = {
   all: ["agent-kernel"] as const,

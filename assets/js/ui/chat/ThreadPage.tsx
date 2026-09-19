@@ -7,6 +7,7 @@ import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 import { FileMentions, FileMentionText } from "./FileMentions";
 import { GoalBar } from "./GoalBar";
+import { ModelFailedBanner } from "./ModelFailedBanner";
 import { ReasoningSteps } from "./ReasoningSteps";
 import { SlashCommands } from "./SlashCommands";
 import { ComposerLeading, ComposerTrailing } from "./TurnBar";
@@ -73,6 +74,7 @@ export function ThreadPage() {
         </Alert>
       ) : null}
       <GoalBar />
+      <ModelFailedBanner />
       <div className="min-h-0 flex-1">
         <Thread components={THREAD_COMPONENTS} autoFocus={false} />
       </div>

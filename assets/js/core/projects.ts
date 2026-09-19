@@ -150,11 +150,12 @@ export type AgentSettingsView = {
   maxDepth: number | null;
   maxChildren: number | null;
   idleMinutes: number | null;
+  modelRetries: number | null;
   childModel: string | null;
   childEffort: string | null;
 };
 
-const agentSettingsViewFields = ["maxDepth", "maxChildren", "idleMinutes", "childModel", "childEffort"] as const;
+const agentSettingsViewFields = ["maxDepth", "maxChildren", "idleMinutes", "modelRetries", "childModel", "childEffort"] as const;
 
 // `agents` is an untyped array on the wire (ash_typescript 0.18 selects nothing inside one)
 const agentDefinitionFields = [

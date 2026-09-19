@@ -504,6 +504,36 @@ defmodule Longx.Projects.ThreadsTest do
     assert Agent.whereis(child_id) == nil
   end
 
+  test "the stall watchdog interrupts a turn with no progress even while pages keep joining the thread",
+       %{bypass: bypass, project: project} do
+    previous = Application.get_env(:longx, Projects.Tracker, [])
+    Application.put_env(:longx, Projects.Tracker, stall_after: 400, tick: 100)
+    on_exit(fn -> Application.put_env(:longx, Projects.Tracker, previous) end)
+
+    script!(bypass, [held(ResponsesFixture.assistant_message("never"))])
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, turn} = Projects.send_message(thread, "hang")
+    assert_receive {:held, _handler}, 5_000
+
+    # pages keep opening the thread (a join → host_thread → track): not progress
+    joiner =
+      Task.async(fn ->
+        for _ <- 1..30 do
+          Process.sleep(100)
+          {:ok, _} = Projects.host_thread(thread.kernel_thread_id)
+        end
+      end)
+
+    # well within the joiner's three seconds
+    assert_eventually_ok(
+      fn -> match?(%Turn{status: :interrupted, error: "no progress" <> _}, turn!(turn.id)) end,
+      30
+    )
+
+    Task.await(joiner, 5_000)
+    Bypass.pass(bypass)
+  end
+
   test "session_named/3 finds the session with that handle or starts one", %{project: project} do
     assert {:ok, %Thread{handle: "watch-deploy", title: "⏰ deploy"} = thread} =
              Projects.session_named(project, "watch-deploy", title: "⏰ deploy")

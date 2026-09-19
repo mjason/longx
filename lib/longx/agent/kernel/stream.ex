@@ -39,7 +39,29 @@ defmodule Longx.Agent.Kernel.Stream do
     put_item(%{state | last_search: ui}, id, %{ui: ui["id"], kind: :hosted_call})
   end
 
+  # a call opened: the model is writing its arguments now — shown as
+  # progress (name, bytes so far) until the call runs, since nothing else
+  # reaches the thread while a long patch streams
+  def fold(state, {:item_added, %{"id" => id, "type" => type} = item})
+      when type in ["function_call", "custom_tool_call"] do
+    name = item["name"] || "tool"
+    progress = %{item: id, name: name, bytes: 0, shown_at: System.monotonic_time(:millisecond)}
+    show_progress(%{state | progress: progress})
+  end
+
   def fold(state, {:item_added, _item}), do: state
+
+  def fold(%State{progress: %{item: id} = progress} = state, {:arguments_delta, id, delta}) do
+    progress = %{progress | bytes: progress.bytes + byte_size(delta)}
+    now = System.monotonic_time(:millisecond)
+
+    # the first bytes at once, then at most one event a second: a hint, not a stream
+    if progress.bytes == byte_size(delta) or now - progress.shown_at >= 1_000,
+      do: show_progress(%{state | progress: %{progress | shown_at: now}}),
+      else: %{state | progress: progress}
+  end
+
+  def fold(state, {:arguments_delta, _id, _delta}), do: state
 
   def fold(state, {:text_delta, id, delta}) do
     with %{ui: ui_id} = item <- state.items[id] do
@@ -120,10 +142,28 @@ defmodule Longx.Agent.Kernel.Stream do
   end
 
   def fold(state, {:item_done, %{"type" => type} = item})
-      when type in ["function_call", "custom_tool_call"],
-      do: %{state | calls: state.calls ++ [item]}
+      when type in ["function_call", "custom_tool_call"] do
+    state = %{state | calls: state.calls ++ [item]}
+    # the call is whole: the progress it was is over (it shows as a call next)
+    if state.progress, do: show_progress(%{state | progress: nil}), else: state
+  end
 
   def fold(state, {:item_done, _item}), do: state
+
+  @doc "Tells the thread what the model is writing (`turn/progress`), or that nothing is (nil)."
+  def show_progress(%State{progress: nil} = state) do
+    emit(state, "turn/progress", %{"turnId" => state.turn_id, "progress" => nil})
+    state
+  end
+
+  def show_progress(%State{progress: %{name: name, bytes: bytes}} = state) do
+    emit(state, "turn/progress", %{
+      "turnId" => state.turn_id,
+      "progress" => %{"kind" => "toolCall", "name" => name, "bytes" => bytes}
+    })
+
+    state
+  end
 
   ## The response is over
 
@@ -156,6 +196,38 @@ defmodule Longx.Agent.Kernel.Stream do
         emit(acc, "item/completed", %{"item" => ui, "turnId" => acc.turn_id})
         drop_item(acc, id)
     end)
+  end
+
+  @doc """
+  The stream broke and the model is asked again: what it had said so far is
+  closed in the view as it stands (the person saw it) but not given to the
+  model — the next stream says it whole — and the calls collected so far go.
+  """
+  def discard_open_items(%State{items: items} = state) do
+    state =
+      Enum.reduce(items, state, fn
+        {id, %{kind: :message, text: text, ui: ui_id}}, acc ->
+          ui = %{"id" => ui_id, "type" => "agentMessage", "turnId" => acc.turn_id, "text" => text}
+          emit(acc, "item/completed", %{"item" => ui, "turnId" => acc.turn_id})
+          drop_item(acc, id)
+
+        {id, %{kind: :reasoning, ui: ui_id, summary: summary, content: content}}, acc ->
+          ui = %{
+            "id" => ui_id,
+            "type" => "reasoning",
+            "turnId" => acc.turn_id,
+            "summary" => ordered(summary),
+            "content" => ordered(content)
+          }
+
+          emit(acc, "item/completed", %{"item" => ui, "turnId" => acc.turn_id})
+          drop_item(acc, id)
+
+        {id, _other}, acc ->
+          drop_item(acc, id)
+      end)
+
+    %{state | calls: [], progress: nil}
   end
 
   def record_usage(state, nil, _window), do: state

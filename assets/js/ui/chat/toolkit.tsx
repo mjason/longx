@@ -28,6 +28,8 @@ import { formatBytes } from "@/core/format";
 import type { Tab } from "@/core/workbench";
 import { toast } from "sonner";
 import type { ThreadExtras } from "@/core/chat/adapter";
+import type { SubViews } from "@/core/chat/messages";
+import { Button } from "@/ui/components/ui/button";
 import {
   AgentStatus,
   type AgentState,
@@ -92,6 +94,16 @@ export const ActionAnswerContext = createContext<
  * the rows still name the thing but cannot open it.
  */
 export const SurfaceContext = createContext<{ projectId: string; open: (tab: Tab) => void } | null>(null);
+
+/**
+ * The sub-agents' live views (by kernel thread id) and a way to stop one —
+ * provided by ChatProvider, so a nested row can say what its child's model
+ * is writing and interrupt it from the parent's page.
+ */
+export const SubagentContext = createContext<{
+  views: SubViews;
+  stop: (kernelThreadId: string) => Promise<void>;
+} | null>(null);
 
 /** A ToolCall row that opens itself while the work runs or when it failed, and can be toggled after. */
 function ToolRow({
@@ -707,11 +719,32 @@ export const SubagentTool: ToolCallMessagePartComponent<
   SubagentResult
 > = (p) => {
   const elapsed = useToolCallElapsed();
+  const subagents = useContext(SubagentContext);
+  const [stopping, setStopping] = useState(false);
   const kind = p.result?.kind ?? p.args.kind;
   const done = kind === "completed" || kind === "interrupted";
   const failed = kind === "interrupted";
   const waiting = !done && p.args.request != null;
   const state: AgentState = done ? "done" : waiting ? "waiting" : "working";
+  // what the child's model is writing right now, from its own view
+  const progress = done ? null : (subagents?.views[p.args.threadId]?.progress ?? null);
+  const working =
+    progress?.kind === "retry"
+      ? t.turnRetrying(progress.name)
+      : progress?.kind === "toolCall"
+        ? t.turnWriting(progress.name, formatBytes(progress.bytes))
+        : (t.subagentState[kind] ?? kind);
+  const stop = async () => {
+    if (!subagents) return;
+    setStopping(true);
+    try {
+      await subagents.stop(p.args.threadId);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setStopping(false);
+    }
+  };
   return (
     <ToolRow
       label={failed ? t.subagentInterrupted : t.subagentDone}
@@ -724,13 +757,15 @@ export const SubagentTool: ToolCallMessagePartComponent<
       <div className="flex flex-col gap-2">
         <AgentStatus
           state={state}
-          label={
-            waiting
-              ? p.args.request?.title || t.subagentNeedsAction
-              : (t.subagentState[kind] ?? kind)
-          }
+          label={waiting ? p.args.request?.title || t.subagentNeedsAction : working}
           elapsed={elapsedLabel(elapsed)}
-          action={null}
+          action={
+            !done && subagents ? (
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={stopping} onClick={() => void stop()}>
+                {t.stopSubagent}
+              </Button>
+            ) : null
+          }
           className="self-start pe-3.5"
         />
         {p.messages?.length ? (

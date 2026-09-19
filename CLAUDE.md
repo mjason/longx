@@ -319,7 +319,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `agent.exs`; gitignored via `Layout.ensure_ignored/1`; **always loaded**: it is what
     the agent wrote on this machine) → the settings layer (`Longx.Agent.Definition.
     Settings`: `max_depth` 2, `max_children` 4, `idle_minutes` 30, `child_model` /
-    `child_effort` — global in `Longx.System.Setting`, overridden per
+    `child_effort`, `model_retries` 3 — global in `Longx.System.Setting`, overridden per
     project by `Project.agent_settings`). **No global code layer**: no global agents, plugs
     or skills; the only thing shared across projects is the global knowledge. A layer is
     `agent.exs` + `plugs/**/*.exs` + `agents/<name>/agent.exs`; every `defmodule` of a layer
@@ -364,9 +364,28 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `quota|exhaust|insufficient|balance|credit|billing|payment|exceeded your` — final, no
     retry), a rejected key or a dead upstream moves to the next target and emits
     `{:fallback, from, to, why}` → `model/rerouted` (a toast "模型已切换"). Other 429 / 5xx /
-    transport errors before anything streamed are retried (`retry_ms:` `[5_000, 15_000,
-    30_000]`; `[10, 10]` in tests); a 4xx is final. The task monitors its owner and dies
-    with it. `Longx.Agent.Model.SSE` parses the stream into `{:item_added | :text_delta |
+    transport errors — and **a stream that breaks, ends without a completion or goes
+    silent past the provider's `request_timeout_ms`** — are retried on the same model
+    (`retry_ms:` `[5_000, 15_000, 30_000]`, `[10, 10]` in tests; how many times is the
+    settings' `model_retries`, 3, global or per project, through `Model.prepare(request,
+    retries:)`; a retry of a stream that had begun tells the kernel `{:restart, why}` —
+    it closes what came in the view, gives none of it to the model, and shows a
+    `turn/progress` of kind `retry`), then the chain's next model, and when the chain is
+    spent the failure is `{:failed, {:model_failed, slug, message}}`: the turn ends
+    `failed` with `error: %{"message", "code" => "model_failed", "model" => slug}` and
+    the page offers another model (`ModelFailedBanner`: a pick, 换个模型继续 sends 继续 on
+    it and keeps it for later turns). A 4xx is final. **A call's arguments streaming in
+    are progress**: `response.function_call_arguments.delta` /
+    `custom_tool_call_input.delta` → `{:arguments_delta, id, delta}` → `turn/progress`
+    `%{"progress" => %{"kind" => "toolCall", "name", "bytes"} | nil}` (the first bytes at
+    once, then once a second; nil when the call is whole), kept as `progress` in the
+    Store's meta and the client view — the turn bar says 正在写 apply_patch 的参数（13 KB）,
+    a sub-agent's row the same for its child (`SubagentContext`, with 停止 to interrupt
+    the child from the parent's page), and the Tracker's stall watchdog counts it as
+    progress: a researcher writing a long note streamed argument bytes for twenty
+    minutes with nothing on the thread, and `follow/2` no longer resets a followed
+    thread's clock when a page joins it (every join had restarted the ten minutes). The
+    task monitors its owner and dies with it. `Longx.Agent.Model.SSE` parses the stream into `{:item_added | :text_delta |
     :reasoning_delta | :reasoning_text_delta | :item_done | :completed | :failed}`. Every
     request goes through `Gateway.prepare/2` (reasoning items sanitised per provider, the
     output cap), a `Limiter` slot and a `Gateway.Log` entry (`request_kind` `agent` /

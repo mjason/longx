@@ -53,6 +53,8 @@ defmodule Longx.Agent.Kernel.State do
             compact_requested: false,
             # images tools attached in this step (view_image), added after its outputs
             pending_images: [],
+            # a call the model is still writing (`turn/progress`): %{item, name, bytes, shown_at}
+            progress: nil,
             # this agent's place in a team: who spawned it, what it is called,
             # who it spawned (child thread id → %{name, pid, ref, status, role, task, n};
             # a child stays a member after its turn — done, idle, failed — until closed)

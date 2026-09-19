@@ -13,6 +13,7 @@ export type AgentSettingsForm = {
   maxDepth: string;
   maxChildren: string;
   idleMinutes: string;
+  modelRetries: string;
   childModel: string;
   childEffort: string;
 };
@@ -21,6 +22,7 @@ export const emptyAgentSettingsForm: AgentSettingsForm = {
   maxDepth: "",
   maxChildren: "",
   idleMinutes: "",
+  modelRetries: "",
   childModel: "",
   childEffort: "",
 };
@@ -33,6 +35,7 @@ export function agentSettingsInput(form: AgentSettingsForm) {
     maxDepth: num(form.maxDepth),
     maxChildren: num(form.maxChildren),
     idleMinutes: num(form.idleMinutes),
+    modelRetries: num(form.modelRetries),
     childModel: str(form.childModel),
     childEffort: str(form.childEffort),
   };
@@ -44,6 +47,7 @@ export function agentSettingsForm(values: Partial<Record<keyof AgentSettingsForm
     maxDepth: one(values.maxDepth),
     maxChildren: one(values.maxChildren),
     idleMinutes: one(values.idleMinutes),
+    modelRetries: one(values.modelRetries),
     childModel: one(values.childModel),
     childEffort: one(values.childEffort),
   };
@@ -70,7 +74,7 @@ export function AgentSettingsFields({
     const v = inherited?.[key];
     return v === null || v === undefined ? undefined : `${s.inherit} ${v}`;
   };
-  const number = (key: "maxDepth" | "maxChildren" | "idleMinutes", label: string, hint?: string) => (
+  const number = (key: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries", label: string, hint?: string) => (
     <div className="flex flex-col gap-1.5">
       <Label htmlFor={`${idPrefix}-${key}`}>{label}</Label>
       <Input id={`${idPrefix}-${key}`} type="number" min={1} inputMode="numeric" value={value[key]} placeholder={placeholder(key)} onChange={(e) => set(key, e.target.value)} className="w-40" />
@@ -119,6 +123,7 @@ export function AgentSettingsFields({
       {number("maxDepth", s.maxDepth, s.maxDepthHint)}
       {number("maxChildren", s.maxChildren)}
       {number("idleMinutes", s.idleMinutes, s.idleMinutesHint)}
+      {number("modelRetries", s.modelRetries, s.modelRetriesHint)}
       {modelPick("childModel", "childEffort", s.childModel, s.childModelHint)}
     </div>
   );

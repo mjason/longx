@@ -94,7 +94,8 @@ defmodule Longx.Agent.ModelTest do
 
     ref = make_ref()
     assert :ok = Model.stream(@request, self(), ref)
-    assert_receive {:model, ^ref, {:failed, message}}, 2_000
+    assert_receive {:model, ^ref, {:failed, {:model_failed, slug, message}}}, 2_000
+    assert slug == model.slug
     assert message =~ "quota has been exhausted"
     assert message =~ "real-model"
     assert message =~ "upstream-"
@@ -152,7 +153,7 @@ defmodule Longx.Agent.ModelTest do
 
     ref2 = make_ref()
     assert :ok = Model.stream(@request, self(), ref2)
-    assert_receive {:model, ^ref2, {:failed, message}}
+    assert_receive {:model, ^ref2, {:failed, {:model_failed, _slug, message}}}
     assert message =~ "bad request here"
     assert message =~ "400"
   end
@@ -209,14 +210,36 @@ defmodule Longx.Agent.ModelTest do
     assert message =~ "nope"
   end
 
-  test "a stream that ends without a completion is a failure", %{bypass: bypass} do
-    Bypass.expect_once(bypass, "POST", "/v1/responses", fn conn ->
-      sse(conn, ["event: response.created\ndata: {\"type\":\"response.created\"}\n\n"])
+  test "a stream that breaks mid-way is retried on the same model — the owner told to start over — and completes; past the retries the failure is final and structured",
+       %{bypass: bypass, model: model} do
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+    [created, added, delta | _] = ResponsesFixture.assistant_message("hello there")
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      n = Agent.get_and_update(counter, &{&1 + 1, &1 + 1})
+      # twice: a few events, then the connection drops
+      if n <= 2,
+        do: sse(conn, [created, added, delta]),
+        else: sse(conn, ResponsesFixture.assistant_message("hello there"))
     end)
 
     ref = make_ref()
     assert :ok = Model.stream(@request, self(), ref)
-    assert_receive {:model, ^ref, {:failed, message}}
+    # the partial output reached the owner, then the word to drop it and wait
+    assert_receive {:model, ^ref, {:text_delta, _, _}}, 5_000
+    assert_receive {:model, ^ref, {:restart, why}}, 5_000
+    assert why =~ "ended"
+    assert_receive {:model, ^ref, {:restart, _}}, 5_000
+    assert_receive {:model, ^ref, {:completed, _, _}}, 5_000
+    assert Agent.get(counter, & &1) == 3
+
+    # every attempt breaks: the failure names the model and is final
+    Agent.update(counter, fn _ -> 0 end)
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn -> sse(conn, [created]) end)
+    ref2 = make_ref()
+    assert :ok = Model.stream(@request, self(), ref2)
+    assert_receive {:model, ^ref2, {:failed, {:model_failed, slug, message}}}, 10_000
+    assert slug == model.slug
     assert message =~ "ended"
   end
 end

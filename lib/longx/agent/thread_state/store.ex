@@ -34,6 +34,8 @@ defmodule Longx.Agent.ThreadState.Store do
     token_usage: nil,
     # goal mode: the thread's goal (objective, status, budget, usage) or nil
     goal: nil,
+    # what the model is writing right now (`turn/progress`): a call's name and bytes, or nil
+    progress: nil,
     # an event's writes are in progress (see `event/2`)
     folding: false
   }
@@ -234,7 +236,13 @@ defmodule Longx.Agent.ThreadState.Store do
   @spec fold(String.t(), String.t(), map) :: :ok
   def fold(t, "thread/started", %{"thread" => thread}), do: put_meta(t, %{thread: thread})
   def fold(t, "turn/started", %{"turn" => turn}), do: put_turn(t, turn)
-  def fold(t, "turn/completed", %{"turn" => turn}), do: put_turn(t, turn)
+
+  def fold(t, "turn/completed", %{"turn" => turn}) do
+    put_meta(t, %{progress: nil})
+    put_turn(t, turn)
+  end
+
+  def fold(t, "turn/progress", %{"progress" => progress}), do: put_meta(t, %{progress: progress})
   def fold(t, "thread/status/changed", %{"status" => status}), do: put_meta(t, %{status: status})
 
   def fold(t, "thread/tokenUsage/updated", %{"tokenUsage" => usage}),
@@ -308,6 +316,7 @@ defmodule Longx.Agent.ThreadState.Store do
         status: meta.status,
         token_usage: meta.token_usage,
         goal: meta.goal,
+        progress: meta.progress,
         items: items,
         pending_requests: requests
       }

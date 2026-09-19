@@ -78,6 +78,18 @@ describe("thread view", () => {
     expect(v.requests).toHaveLength(0);
   });
 
+  test("turn/progress is what the model is writing now; a snapshot carries it; the turn's end clears it", () => {
+    let v = fromSnapshot({ ...snapshot, progress: { kind: "toolCall", name: "apply_patch", bytes: 1024 } });
+    expect(v.progress).toEqual({ kind: "toolCall", name: "apply_patch", bytes: 1024 });
+    v = applyEvent(v, { seq: 11, method: "turn/progress", params: { turnId: "turn_2", progress: { kind: "retry", name: "the stream broke", bytes: 0 } } });
+    expect(v.progress?.kind).toBe("retry");
+    v = applyEvent(v, { seq: 12, method: "turn/progress", params: { turnId: "turn_2", progress: null } });
+    expect(v.progress).toBeNull();
+    v = applyEvent(v, { seq: 13, method: "turn/progress", params: { turnId: "turn_2", progress: { kind: "toolCall", name: "exec_command", bytes: 3 } } });
+    v = applyEvent(v, { seq: 14, method: "turn/completed", params: { turn: { id: "turn_2", status: "completed" } } });
+    expect(v.progress).toBeNull();
+  });
+
   test("thread/reverted drops the named turns' items", () => {
     let v = fromSnapshot(snapshot);
     v = applyEvent(v, { seq: 11, method: "item/completed", params: { turnId: "turn_2", item: { id: "a2", type: "agentMessage", text: "x" } } });

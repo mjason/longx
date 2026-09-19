@@ -1,6 +1,7 @@
 import { Loader2, ShieldAlert } from "lucide-react";
 import { useMemo } from "react";
 import { contextUsage } from "@/core/chat/thread";
+import { formatBytes } from "@/core/format";
 import { useModels } from "@/core/projects";
 import { useModelAliases } from "@/core/ai";
 import { ContextDisplay } from "@/ui/components/assistant-ui/elements/context-display";
@@ -34,7 +35,12 @@ export function ComposerLeading() {
     >
       {state === "running" ? (
         <span className="flex items-center gap-1">
-          <Loader2 className="size-3.5 animate-spin" /> {t.turnRunning}
+          <Loader2 className="size-3.5 animate-spin" />{" "}
+          {view.progress?.kind === "retry"
+            ? t.turnRetrying(view.progress.name)
+            : view.progress?.kind === "toolCall"
+              ? t.turnWriting(view.progress.name, formatBytes(view.progress.bytes))
+              : t.turnRunning}
         </span>
       ) : state === "waiting" ? (
         <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">

@@ -664,7 +664,7 @@ defmodule Longx.Agent do
 
     task =
       Task.Supervisor.async_nolink(@tasks, Longx.Agent.Model, :run, [
-        Longx.Agent.Model.prepare(request),
+        Longx.Agent.Model.prepare(request, retries: model_retries(state)),
         self(),
         ref
       ])
@@ -680,6 +680,14 @@ defmodule Longx.Agent do
          calls: [],
          last_search: nil
      }}
+  end
+
+  # how many more times a broken model call is tried (the settings layer, read per step)
+  defp model_retries(%State{settings: settings}) do
+    case settings && settings.() do
+      %{model_retries: n} when is_integer(n) -> n
+      _ -> Longx.Agent.Definition.Settings.defaults().model_retries
+    end
   end
 
   defp build_step(%State{} = state, phase, extra \\ []) do
@@ -886,6 +894,22 @@ defmodule Longx.Agent do
   defp on_info(%State{phase: :compacting, model_task: %{ref: ref}} = state, {:model, ref, event}),
     do: compaction_event(event, state)
 
+  # the stream broke and the model is being asked again (Longx.Agent.Model's
+  # retries): what came so far is closed in the view, the person sees a retry
+  defp on_info(
+         %State{phase: :streaming, model_task: %{ref: ref}} = state,
+         {:model, ref, {:restart, why}}
+       ) do
+    state = Stream.discard_open_items(state)
+
+    emit(state, "turn/progress", %{
+      "turnId" => state.turn_id,
+      "progress" => %{"kind" => "retry", "name" => why, "bytes" => 0}
+    })
+
+    {:noreply, state}
+  end
+
   defp on_info(%State{phase: :streaming, model_task: %{ref: ref}} = state, {:model, ref, event}),
     do: model_event(event, state)
 
@@ -1019,6 +1043,22 @@ defmodule Longx.Agent do
     end
   end
 
+  defp model_event({:failed, {:model_failed, slug, message}}, state) do
+    # the chain is spent (or the one model is): the person may pick another to go on
+    if Compaction.overflow?(message) and not state.context_overflow do
+      model_event({:failed, message}, state)
+    else
+      {:noreply,
+       state
+       |> Stream.close_open_items()
+       |> end_turn("failed", %{
+         "message" => "model #{slug} failed: #{message}",
+         "code" => "model_failed",
+         "model" => slug
+       })}
+    end
+  end
+
   defp model_event({:failed, message}, state) do
     # the provider refused the request for its length: fold and try once more
     if Compaction.overflow?(message) and not state.context_overflow do
@@ -1089,7 +1129,13 @@ defmodule Longx.Agent do
       "usage" => state.usage_total
     }
 
-    turn = if error, do: Map.put(turn, "error", %{"message" => error}), else: turn
+    turn =
+      case error do
+        nil -> turn
+        %{"message" => _} = structured -> Map.put(turn, "error", structured)
+        message -> Map.put(turn, "error", %{"message" => message})
+      end
+
     # the asks go first: whoever hears the turn end must not find a request
     # still waiting (both are casts to the same ThreadState, folded in order)
     state = Asks.cancel_asks(state)
@@ -1113,7 +1159,8 @@ defmodule Longx.Agent do
         compacting: nil,
         context_overflow: false,
         compact_requested: false,
-        pending_images: []
+        pending_images: [],
+        progress: nil
     }
   end
 

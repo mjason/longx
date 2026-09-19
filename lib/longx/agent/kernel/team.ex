@@ -248,9 +248,10 @@ defmodule Longx.Agent.Kernel.Team do
         error
       ) do
     report =
-      case status do
-        "completed" -> last_answer(state) || "(no answer)"
-        other -> "#{other}: #{error || "no details"}"
+      case {status, error} do
+        {"completed", _} -> last_answer(state) || "(no answer)"
+        {other, %{"message" => message}} -> "#{other}: #{message}"
+        {other, _} -> "#{other}: #{error || "no details"}"
       end
 
     name = state.reply_as || state.name

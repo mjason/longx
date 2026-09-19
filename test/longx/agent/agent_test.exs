@@ -493,6 +493,81 @@ defmodule Longx.AgentTest do
     assert %{"status" => "completed"} = await_turn_end()
   end
 
+  test "a call's arguments streaming in is progress the thread shows: the tool's name and the bytes so far, gone once the call runs",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [
+      ResponsesFixture.function_call("exec_command", nil, %{
+        "cmd" => "echo " <> String.duplicate("x", 3_000)
+      }),
+      ResponsesFixture.assistant_message("done")
+    ])
+
+    {:ok, _} = Agent.send(id, "run it")
+
+    # the call opened: its name is known before a byte of its arguments
+    assert_receive {:thread, _, "turn/progress",
+                    %{
+                      "progress" => %{
+                        "kind" => "toolCall",
+                        "name" => "exec_command",
+                        "bytes" => 0
+                      }
+                    }},
+                   5_000
+
+    # the arguments came: the bytes grew
+    assert_receive {:thread, _, "turn/progress",
+                    %{"progress" => %{"name" => "exec_command", "bytes" => bytes}}}
+                   when bytes > 3_000,
+                   5_000
+
+    # the call ran: no progress to show; the view says so too
+    assert_receive {:thread, _, "turn/progress", %{"progress" => nil}}, 5_000
+    assert %{"status" => "completed"} = await_turn_end()
+    assert ThreadState.snapshot(id).progress == nil
+  end
+
+  test "a stream that breaks mid-turn is retried: the person sees the retry as progress and the turn completes; past the retries the turn fails naming the model so another can take over",
+       %{bypass: bypass, dir: dir, model: model} do
+    settings = Map.put(Longx.Agent.Definition.Settings.defaults(), :model_retries, 1)
+    id = agent!("retry-#{System.unique_integer([:positive])}", dir, settings: fn -> settings end)
+    [created, added, delta | _] = ResponsesFixture.assistant_message("hello there")
+    {:ok, counter} = Elixir.Agent.start_link(fn -> 0 end)
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      n = Elixir.Agent.get_and_update(counter, &{&1 + 1, &1 + 1})
+      # the first stream drops after a few events; the second is whole
+      if n == 1,
+        do: sse(conn, [created, added, delta]),
+        else: sse(conn, ResponsesFixture.assistant_message("hello there"))
+    end)
+
+    {:ok, _} = Agent.send(id, "hi")
+
+    assert_receive {:thread, _, "turn/progress",
+                    %{"progress" => %{"kind" => "retry", "name" => why}}},
+                   5_000
+
+    assert why =~ "ended"
+    assert %{"status" => "completed"} = await_turn_end()
+    assert Elixir.Agent.get(counter, & &1) == 2
+
+    # every stream breaks: one retry (the setting), then the turn fails with the model's name
+    Elixir.Agent.update(counter, fn _ -> 0 end)
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      Elixir.Agent.update(counter, &(&1 + 1))
+      sse(conn, [created, added, delta])
+    end)
+
+    {:ok, _} = Agent.send(id, "again")
+    assert %{"status" => "failed", "error" => error} = await_turn_end(10_000)
+    assert %{"code" => "model_failed", "model" => slug, "message" => message} = error
+    assert slug == model.slug
+    assert message =~ "ended"
+    assert Elixir.Agent.get(counter, & &1) == 2
+  end
+
   test "interrupt ends the turn at once; the late reply is ignored; the thread goes on", %{
     bypass: bypass,
     thread_id: id

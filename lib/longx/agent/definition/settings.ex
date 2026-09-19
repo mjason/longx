@@ -20,6 +20,7 @@ defmodule Longx.Agent.Definition.Settings do
     :max_depth,
     :max_children,
     :idle_minutes,
+    :model_retries,
     :child_model,
     :child_effort
   ]
@@ -27,6 +28,9 @@ defmodule Longx.Agent.Definition.Settings do
     max_depth: 2,
     max_children: 4,
     idle_minutes: 30,
+    # a model call that breaks (a 5xx, a dropped stream, silence) is tried this
+    # many more times before the chain's next model, or the person, takes over
+    model_retries: 3,
     child_model: nil,
     child_effort: nil
   }
@@ -35,6 +39,7 @@ defmodule Longx.Agent.Definition.Settings do
           max_depth: pos_integer,
           max_children: pos_integer,
           idle_minutes: pos_integer,
+          model_retries: non_neg_integer,
           child_model: String.t() | nil,
           child_effort: String.t() | nil
         }
@@ -149,6 +154,12 @@ defmodule Longx.Agent.Definition.Settings do
     if is_integer(value) and value >= 1,
       do: :ok,
       else: {:error, "must be a whole number of at least 1"}
+  end
+
+  defp check(:model_retries, value, _attrs) do
+    if is_integer(value) and value >= 0 and value <= 20,
+      do: :ok,
+      else: {:error, "must be a whole number from 0 to 20"}
   end
 
   defp check(:child_model, slug, attrs) do

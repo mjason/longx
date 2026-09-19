@@ -43,7 +43,11 @@ export type ThreadSnapshot = {
   items: ThreadItem[];
   pending_requests: PendingRequest[];
   goal?: ThreadGoal | null;
+  progress?: TurnProgress | null;
 };
+
+/** What the model is writing right now (`turn/progress`): a call's arguments, or a retry after a broken stream. */
+export type TurnProgress = { kind: "toolCall" | "retry"; name: string; bytes: number };
 
 export type ThreadEvent = {
   seq: number;
@@ -62,6 +66,7 @@ export type ThreadView = {
   items: ThreadItem[];
   requests: PendingRequest[];
   goal: ThreadGoal | null;
+  progress: TurnProgress | null;
 };
 
 export function fromSnapshot(s: ThreadSnapshot): ThreadView {
@@ -76,6 +81,7 @@ export function fromSnapshot(s: ThreadSnapshot): ThreadView {
     items: s.items,
     requests: s.pending_requests,
     goal: s.goal ?? null,
+    progress: s.progress ?? null,
   };
 }
 
@@ -91,6 +97,7 @@ export function emptyView(threadId: string): ThreadView {
     items: [],
     requests: [],
     goal: null,
+    progress: null,
   };
 }
 
@@ -142,6 +149,7 @@ function fold(
         ...view,
         turn,
         turns: id ? { ...view.turns, [id]: { ...(view.turns[id] ?? {}), ...turn } } : view.turns,
+        progress: null,
       };
     }
     case "thread/status/changed":
@@ -158,6 +166,8 @@ function fold(
       };
     case "thread/goal/cleared":
       return { ...view, goal: null };
+    case "turn/progress":
+      return { ...view, progress: (params["progress"] as TurnProgress | null | undefined) ?? null };
     case "item/started":
     case "item/completed": {
       const item = params["item"] as ThreadItem | undefined;
