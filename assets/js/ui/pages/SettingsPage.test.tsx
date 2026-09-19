@@ -630,9 +630,18 @@ describe("SettingsPage", () => {
     expect(depth.value).toBe("2");
     await user.clear(depth);
     await user.type(depth, "3");
+    // the machine's guards on commands sit with the team parameters
+    const floor = within(settings).getByLabelText("内存下限（%）") as HTMLInputElement;
+    expect(floor.value).toBe("8");
+    expect((within(settings).getByLabelText("每条命令的内存上限（%）") as HTMLInputElement).value).toBe("50");
+    expect((within(settings).getByLabelText("命令被 OOM 先杀的优先级") as HTMLInputElement).value).toBe("800");
+    await user.clear(floor);
+    await user.type(floor, "12");
     await user.click(within(settings).getByRole("button", { name: "保存" }));
     await waitFor(() =>
-      expect(setAgentSettings).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ maxDepth: 3, maxChildren: 4, idleMinutes: 30, childModel: null }) })),
+      expect(setAgentSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ input: expect.objectContaining({ maxDepth: 3, maxChildren: 4, idleMinutes: 30, childModel: null, memoryFloorPercent: 12, commandMemoryPercent: 50, commandOomPriority: 800 }) }),
+      ),
     );
   });
 

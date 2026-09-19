@@ -5,7 +5,12 @@ defmodule Longx.Agent.Definition.Settings do
   but from the database: how deep a team may nest (`max_depth`), how
   many children an agent may have at once (`max_children`), how long an
   idle agent stays (`idle_minutes`), the model a child runs on when its
-  role names none (`child_model` / `child_effort`).
+  role names none (`child_model` / `child_effort`), and the machine's guards on
+  the agent's commands — `command_oom_priority` (the tree's `oom_score_adj`:
+  the kernel kills the agent's command before anything else), `command_memory_percent`
+  (each command's address space capped at this share of RAM; 0 = no cap) and
+  `memory_floor_percent` (free memory below this share → every running
+  command is killed, `Longx.System.Pressure`; 0 = off).
   No role ships with the kernel, so no role has a fixed model here: a role's
   model is its own declaration.
 
@@ -21,6 +26,9 @@ defmodule Longx.Agent.Definition.Settings do
     :max_children,
     :idle_minutes,
     :model_retries,
+    :command_oom_priority,
+    :command_memory_percent,
+    :memory_floor_percent,
     :child_model,
     :child_effort
   ]
@@ -31,6 +39,11 @@ defmodule Longx.Agent.Definition.Settings do
     # a model call that breaks (a 5xx, a dropped stream, silence) is tried this
     # many more times before the chain's next model, or the person, takes over
     model_retries: 3,
+    # a GPU backtest once took the whole machine down: the driver's memory is no
+    # process's, so the OOM killer went for Firefox and the box was rebooted
+    command_oom_priority: 800,
+    command_memory_percent: 50,
+    memory_floor_percent: 8,
     child_model: nil,
     child_effort: nil
   }
@@ -40,6 +53,9 @@ defmodule Longx.Agent.Definition.Settings do
           max_children: pos_integer,
           idle_minutes: pos_integer,
           model_retries: non_neg_integer,
+          command_oom_priority: non_neg_integer,
+          command_memory_percent: non_neg_integer,
+          memory_floor_percent: non_neg_integer,
           child_model: String.t() | nil,
           child_effort: String.t() | nil
         }
@@ -160,6 +176,24 @@ defmodule Longx.Agent.Definition.Settings do
     if is_integer(value) and value >= 0 and value <= 20,
       do: :ok,
       else: {:error, "must be a whole number from 0 to 20"}
+  end
+
+  defp check(:command_oom_priority, value, _attrs) do
+    if is_integer(value) and value >= 0 and value <= 1000,
+      do: :ok,
+      else: {:error, "must be a whole number from 0 to 1000"}
+  end
+
+  defp check(:command_memory_percent, value, _attrs) do
+    if is_integer(value) and value >= 0 and value <= 100,
+      do: :ok,
+      else: {:error, "must be a whole number from 0 to 100"}
+  end
+
+  defp check(:memory_floor_percent, value, _attrs) do
+    if is_integer(value) and value >= 0 and value <= 50,
+      do: :ok,
+      else: {:error, "must be a whole number from 0 to 50"}
   end
 
   defp check(:child_model, slug, attrs) do

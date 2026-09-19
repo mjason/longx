@@ -41,6 +41,9 @@ defmodule Longx.Projects.Project do
     max_children: [type: :integer],
     idle_minutes: [type: :integer],
     model_retries: [type: :integer],
+    command_oom_priority: [type: :integer],
+    command_memory_percent: [type: :integer],
+    memory_floor_percent: [type: :integer],
     child_model: [type: :string],
     child_effort: [type: :string]
   ]

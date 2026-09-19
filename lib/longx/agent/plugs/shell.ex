@@ -9,7 +9,15 @@ defmodule Longx.Agent.Plugs.Shell do
   a command runs to completion here (up to `timeout_ms`, default 2 min,
   max 30 min) — `yield_time_ms` / `write_stdin` sessions are not offered
   yet. No sandbox: the kernel runs on the person's machine as the person
-  (isolation, when wanted, is the deployment's job).
+  (isolation, when wanted, is the deployment's job) — but **the machine is
+  guarded** (the settings' command guards, given as the plug's options by
+  the loader's settings layer): `oom_score_adj:` for the command's tree so
+  the kernel kills it before anything else, `memory_percent:` (or
+  `memory_limit:` in bytes) as the tree's address-space cap, and
+  `memory_floor_percent:`: the command registers with `Longx.System.Pressure`
+  and is killed when free memory falls under that share. The tool's
+  description tells the model the limits so it splits heavy work instead of
+  looping it.
 
   The model gets stdout and stderr interleaved as they arrived, capped
   by `max_output_tokens` (10 000 by default, ~4 bytes a token: head and
@@ -56,7 +64,72 @@ defmodule Longx.Agent.Plugs.Shell do
           "True runs the shell with -l semantics; false disables them. Defaults to true."
   end
 
-  def exec_command(%{"cmd" => command} = args, ctx) do
+  @impl true
+  def init(opts), do: opts
+
+  # the tool mounted with the guards the options name: a closure carrying them,
+  # the description saying what they are (a note the model can act on)
+  @impl true
+  def call(%Step{phase: :request} = step, opts) do
+    guards = guards(opts)
+    tool = Enum.find(__agent_tools__(), &(&1.name == "exec_command"))
+
+    tool = %{
+      tool
+      | fun: fn args, ctx -> exec_command(args, ctx, guards) end,
+        description: tool.description <> guard_note(guards)
+    }
+
+    step
+    |> Longx.Agent.Plug.mount(__MODULE__)
+    |> Step.tool(tool)
+  end
+
+  def call(step, _opts), do: step
+
+  @doc false
+  def guards(opts) do
+    total = Longx.System.Memory.total()
+    percent = Keyword.get(opts, :memory_percent)
+
+    limit =
+      cond do
+        is_integer(opts[:memory_limit]) and opts[:memory_limit] > 0 -> opts[:memory_limit]
+        is_integer(percent) and percent > 0 and is_integer(total) -> div(total * percent, 100)
+        true -> nil
+      end
+
+    oom = Keyword.get(opts, :oom_score_adj)
+    floor = Keyword.get(opts, :memory_floor_percent, 0)
+
+    %{
+      oom_score_adj: if(is_integer(oom) and oom > 0, do: oom),
+      memory_limit: limit,
+      floor: if(is_integer(floor) and floor > 0 and is_integer(total), do: floor, else: 0)
+    }
+  end
+
+  defp guard_note(%{memory_limit: nil, floor: 0}), do: ""
+
+  defp guard_note(%{memory_limit: limit, floor: floor}) do
+    lines =
+      [
+        limit &&
+          "a command may use at most #{Longx.System.Pressure.human(limit)} of address space (allocations past it fail)",
+        floor > 0 &&
+          "when the machine's free memory drops below #{floor}% every running command is killed"
+      ]
+      |> Enum.filter(& &1)
+
+    " Limits: " <>
+      Enum.join(lines, "; ") <>
+      ". Split heavy jobs (backtests, training, big data loads) into small runs and check each one; never a loop of them in one command."
+  end
+
+  def exec_command(args, ctx), do: exec_command(args, ctx, guards([]))
+
+  @doc false
+  def exec_command(%{"cmd" => command} = args, ctx, guards) do
     timeout = args["timeout_ms"] |> timeout()
     cwd = workdir(args["workdir"], ctx)
 
@@ -74,7 +147,18 @@ defmodule Longx.Agent.Plugs.Shell do
     # shell), nothing of the BEAM's: Go, brew, nvm are where their .zshrc put them
     opts =
       [cd: cwd, env: ShellEnv.env_list(), env_clear: true] ++
-        if(tty?, do: [pty: true], else: [stderr: :stream])
+        if(tty?, do: [pty: true], else: [stderr: :stream]) ++
+        if(guards.oom_score_adj, do: [oom_score_adj: guards.oom_score_adj], else: []) ++
+        if(guards.memory_limit, do: [memory_limit: guards.memory_limit], else: [])
+
+    # the watchdog knows this command before it starts; the entry dies with this process
+    :ok =
+      Longx.System.Pressure.register(%{
+        shim: nil,
+        floor: guards.floor,
+        cmd: command,
+        thread_id: ctx.thread_id
+      })
 
     case Shim.start_link([shell, flag, command], opts) do
       {:ok, shim} ->
@@ -97,6 +181,15 @@ defmodule Longx.Agent.Plugs.Shell do
           {:timeout, acc} ->
             Shim.kill(shim)
             {:error, "timed out after #{timeout} ms\n" <> text(acc, max_bytes)}
+
+          {:pressure, %{percent: percent, available: available, total: total}, acc} ->
+            Shim.kill(shim)
+
+            {:error,
+             "killed by Longx: the machine was down to #{percent}% free memory " <>
+               "(#{Longx.System.Pressure.human(available)} of #{Longx.System.Pressure.human(total)}). " <>
+               "Run a smaller job (fewer rows, a smaller batch, one run at a time) and check its memory before going bigger.\n" <>
+               text(acc, max_bytes)}
         end
 
       {:error, reason} ->
@@ -146,6 +239,9 @@ defmodule Longx.Agent.Plugs.Shell do
 
       {:exited, {:error, _}} ->
         collect(%{acc | exit: -1}, ctx, deadline)
+
+      {:memory_pressure, reading} ->
+        {:pressure, reading, acc}
     after
       max(remaining, 0) -> {:timeout, acc}
     end

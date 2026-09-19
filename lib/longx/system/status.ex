@@ -68,6 +68,9 @@ defmodule Longx.System.Status do
     max_children: [type: :integer, allow_nil?: false],
     idle_minutes: [type: :integer, allow_nil?: false],
     model_retries: [type: :integer, allow_nil?: false],
+    command_oom_priority: [type: :integer, allow_nil?: false],
+    command_memory_percent: [type: :integer, allow_nil?: false],
+    memory_floor_percent: [type: :integer, allow_nil?: false],
     child_model: [type: :string],
     child_effort: [type: :string]
   ]
@@ -221,6 +224,9 @@ defmodule Longx.System.Status do
       argument :max_children, :integer
       argument :idle_minutes, :integer
       argument :model_retries, :integer
+      argument :command_oom_priority, :integer
+      argument :command_memory_percent, :integer
+      argument :memory_floor_percent, :integer
       argument :child_model, :string
       argument :child_effort, :string
 

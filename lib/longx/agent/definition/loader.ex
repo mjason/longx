@@ -202,12 +202,21 @@ defmodule Longx.Agent.Definition.Loader do
       {:options, Longx.Agent.Plugs.Agents,
        [max_depth: settings.max_depth, max_children: settings.max_children]}
 
+    # the machine's guards on every command the agent runs
+    guards =
+      {:options, Longx.Agent.Plugs.Shell,
+       [
+         oom_score_adj: settings.command_oom_priority,
+         memory_percent: settings.command_memory_percent,
+         memory_floor_percent: settings.memory_floor_percent
+       ]}
+
     {model, effort} =
       if role != nil and declared_model == nil and settings.child_model,
         do: {settings.child_model, settings.child_effort},
         else: {nil, nil}
 
-    [%Config{ops: [limits], model: model, effort: effort}]
+    [%Config{ops: [limits, guards], model: model, effort: effort}]
   end
 
   defp last(configs, fun), do: configs |> Enum.map(fun) |> Enum.reject(&is_nil/1) |> List.last()

@@ -287,7 +287,24 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     the shim), `timeout_ms` (default 2 min, max 30 min; the command runs to completion —
     `write_stdin` sessions are not offered), `max_output_tokens`, `shell`, `login`;
     stdout+stderr interleaved, head+tail kept, exit code reported; `Longx.Agent.Tools.
-    ShellEnv` builds the environment), `apply_patch` (`Plugs.Patch` over
+    ShellEnv` builds the environment). **The machine is guarded** (the settings'
+    `command_oom_priority` 800 / `command_memory_percent` 50 / `memory_floor_percent`
+    8, per project too; the loader's settings layer hands them to the plug as
+    `options Shell, oom_score_adj:/memory_percent:/memory_floor_percent:` and the tool
+    is mounted as a closure carrying them, its description telling the model the
+    limits): the tree's `oom_score_adj` so the kernel kills the agent's command first,
+    `RLIMIT_AS` at that share of RAM (`Longx.System.Memory.total/0`; allocations past
+    it fail inside the command — Linux; Windows through the Job), and the command
+    registers with **`Longx.System.Pressure`** (a watchdog in the tree, every 2 s while
+    a command runs, `Pressure.Registry` duplicate keys under `:running`): free memory
+    (`MemAvailable`, `vm_stat` on macOS) under the floor → `{:memory_pressure, …}` to
+    the tool task, the shim tree killed, the model told "killed by Longx: the machine
+    was down to 3% free memory…", a `:memory` fault recorded. Why: a jbt GPU backtest
+    on the Spark took ~100 GB the NVIDIA driver carved out of RAM — no process's RSS,
+    invisible to RLIMIT and cgroups — and the kernel's OOM killer took Firefox instead;
+    a shell loop of 24 backtests then started the next one. Tests:
+    `test/longx/system/{memory,pressure}_test`, the Shell guards in `plugs_test`),
+    `apply_patch` (`Plugs.Patch` over
     `Longx.Agent.Tools.Patch`: codex's patch grammar parsed and applied in Elixir — all
     hunks matched first, then written; **a miss says where the block stops matching** —
     the context and deleted lines are one block matched line by line, and an error naming
@@ -339,8 +356,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `agent.exs`; gitignored via `Layout.ensure_ignored/1`; **always loaded**: it is what
     the agent wrote on this machine) → the settings layer (`Longx.Agent.Definition.
     Settings`: `max_depth` 2, `max_children` 4, `idle_minutes` 30, `child_model` /
-    `child_effort`, `model_retries` 3 — global in `Longx.System.Setting`, overridden per
-    project by `Project.agent_settings`). **No global code layer**: no global agents, plugs
+    `child_effort`, `model_retries` 3, the command guards `command_oom_priority` 800 /
+    `command_memory_percent` 50 / `memory_floor_percent` 8 — global in
+    `Longx.System.Setting`, overridden per project by `Project.agent_settings`). **No global code layer**: no global agents, plugs
     or skills; the only thing shared across projects is the global knowledge. A layer is
     `agent.exs` + `plugs/**/*.exs` + `agents/<name>/agent.exs`; every `defmodule` of a layer
     and every reference to it is renamed under `Longx.Agent.Local.<tag>` before

@@ -529,6 +529,69 @@ defmodule Longx.Agent.PlugsTest do
       assert home == System.get_env("HOME")
     end
 
+    test "the guards from the options: the tree's oom_score_adj, an address-space cap, and the prompt saying so",
+         %{ctx: ctx} do
+      step =
+        Shell.call(
+          Step.new(phase: :request),
+          Shell.init(oom_score_adj: 700, memory_percent: 50, memory_floor_percent: 8)
+        )
+
+      tool = step.tools["exec_command"]
+      assert tool.description =~ "address space"
+      assert tool.description =~ "8%"
+
+      # the command's own oom_score_adj is the setting's
+      assert {:ok, out, _} =
+               Tool.call(tool, %{"cmd" => "cat /proc/self/oom_score_adj", "login" => false}, ctx)
+
+      assert String.trim(out) =~ "700"
+
+      # an allocation past the cap fails inside the command, not in the BEAM (a tiny cap for the test)
+      tiny = Shell.call(Step.new(phase: :request), Shell.init(memory_limit: 256 * 1024 * 1024))
+      cmd = "python3 -c \"b = bytearray(512*1024*1024); print('allocated')\""
+
+      assert {:ok, out, %{"exitCode" => code}} =
+               Tool.call(tiny.tools["exec_command"], %{"cmd" => cmd, "login" => false}, ctx)
+
+      assert out =~ "MemoryError"
+      refute code == 0
+
+      # no guards: the plain tool, no note
+      plain = Shell.call(Step.new(phase: :request), Shell.init([]))
+      refute plain.tools["exec_command"].description =~ "address space"
+    end
+
+    test "memory pressure kills the command and the model is told why", %{ctx: ctx} do
+      step = Shell.call(Step.new(phase: :request), Shell.init(memory_floor_percent: 10))
+      tool = step.tools["exec_command"]
+      me = self()
+      ctx = %{ctx | emit: &send(me, {:out, &1})}
+
+      task =
+        Task.async(fn ->
+          Tool.call(
+            tool,
+            %{"cmd" => "echo start; sleep 20", "login" => false, "timeout_ms" => 15_000},
+            ctx
+          )
+        end)
+
+      # the command registered itself (with its floor) before it started; a sweep below the floor kills it
+      assert_receive {:out, "start\n"}, 5_000
+      task_pid = task.pid
+
+      assert [{^task_pid, %{floor: 10}}] =
+               Enum.filter(Longx.System.Pressure.running(), &(elem(&1, 0) == task_pid))
+
+      assert Longx.System.Pressure.sweep(%{total: 100, available: 3}) == 1
+
+      assert {:error, message} = Task.await(task, 10_000)
+      assert message =~ "killed by Longx"
+      assert message =~ "3%"
+      assert message =~ "start"
+    end
+
     test "a non-zero exit is reported, not an error", %{ctx: ctx} do
       assert {:ok, output, %{"exitCode" => 3}} =
                Tool.call(tool!(Shell, "exec_command"), %{"cmd" => "echo boom; exit 3"}, ctx)

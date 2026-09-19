@@ -151,11 +151,14 @@ export type AgentSettingsView = {
   maxChildren: number | null;
   idleMinutes: number | null;
   modelRetries: number | null;
+  commandOomPriority: number | null;
+  commandMemoryPercent: number | null;
+  memoryFloorPercent: number | null;
   childModel: string | null;
   childEffort: string | null;
 };
 
-const agentSettingsViewFields = ["maxDepth", "maxChildren", "idleMinutes", "modelRetries", "childModel", "childEffort"] as const;
+const agentSettingsViewFields = ["maxDepth", "maxChildren", "idleMinutes", "modelRetries", "commandOomPriority", "commandMemoryPercent", "memoryFloorPercent", "childModel", "childEffort"] as const;
 
 // `agents` is an untyped array on the wire (ash_typescript 0.18 selects nothing inside one)
 const agentDefinitionFields = [

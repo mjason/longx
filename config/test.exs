@@ -65,6 +65,8 @@ config :longx, LongxWeb.Vite,
 
 # no background release checks in the suite; tests configure the rest
 config :longx, Longx.Upgrade, tick: nil
+# the memory watchdog's clock is off in the suite: tests sweep by hand
+config :longx, Longx.System.Pressure, tick: nil
 
 # no job runs by itself in the suite (Oban.Testing drives the workers)
 config :longx, Oban, testing: :manual

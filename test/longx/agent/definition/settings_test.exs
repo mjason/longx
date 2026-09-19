@@ -33,6 +33,25 @@ defmodule Longx.Agent.Definition.SettingsTest do
 
     assert %{max_depth: 3, max_children: 4, idle_minutes: 5} = Settings.global()
 
+    # the machine's guards on commands: OOM priority, address-space share, the memory floor
+    assert %{command_oom_priority: 800, command_memory_percent: 50, memory_floor_percent: 8} =
+             Settings.global()
+
+    assert {:ok, %{command_memory_percent: 0, memory_floor_percent: 20}} =
+             Settings.put_global(%{command_memory_percent: 0, memory_floor_percent: 20})
+
+    assert {:error, %{field: :command_oom_priority}} =
+             Settings.put_global(%{command_oom_priority: 1001})
+
+    assert {:error, %{field: :command_memory_percent}} =
+             Settings.put_global(%{command_memory_percent: 101})
+
+    assert {:error, %{field: :memory_floor_percent}} =
+             Settings.put_global(%{memory_floor_percent: 51})
+
+    assert {:ok, _} =
+             Settings.put_global(%{command_memory_percent: nil, memory_floor_percent: nil})
+
     assert {:error, %{field: :max_children}} = Settings.put_global(%{max_children: 0})
     assert {:error, %{field: :child_model}} = Settings.put_global(%{child_model: "no-such-model"})
     # nil clears a value back to the default
@@ -75,6 +94,13 @@ defmodule Longx.Agent.Definition.SettingsTest do
     main = Loader.load(dir, tag: tag, trusted: true, settings: settings)
     assert {Agents, opts} = Enum.find(main.plugs, &match?({Agents, _}, &1))
     assert opts[:max_depth] == 3 and opts[:max_children] == 1
+    # the command guards reach the Shell plug as its options
+    assert {Longx.Agent.Plugs.Shell, shell} =
+             Enum.find(main.plugs, &match?({Longx.Agent.Plugs.Shell, _}, &1))
+
+    assert shell[:oom_score_adj] == 800 and shell[:memory_percent] == 50 and
+             shell[:memory_floor_percent] == 8
+
     # the main agent keeps whatever the person chose: no model from the settings
     assert main.model == nil
 

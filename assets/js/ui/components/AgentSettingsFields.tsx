@@ -14,6 +14,9 @@ export type AgentSettingsForm = {
   maxChildren: string;
   idleMinutes: string;
   modelRetries: string;
+  commandOomPriority: string;
+  commandMemoryPercent: string;
+  memoryFloorPercent: string;
   childModel: string;
   childEffort: string;
 };
@@ -23,6 +26,9 @@ export const emptyAgentSettingsForm: AgentSettingsForm = {
   maxChildren: "",
   idleMinutes: "",
   modelRetries: "",
+  commandOomPriority: "",
+  commandMemoryPercent: "",
+  memoryFloorPercent: "",
   childModel: "",
   childEffort: "",
 };
@@ -36,6 +42,9 @@ export function agentSettingsInput(form: AgentSettingsForm) {
     maxChildren: num(form.maxChildren),
     idleMinutes: num(form.idleMinutes),
     modelRetries: num(form.modelRetries),
+    commandOomPriority: num(form.commandOomPriority),
+    commandMemoryPercent: num(form.commandMemoryPercent),
+    memoryFloorPercent: num(form.memoryFloorPercent),
     childModel: str(form.childModel),
     childEffort: str(form.childEffort),
   };
@@ -48,6 +57,9 @@ export function agentSettingsForm(values: Partial<Record<keyof AgentSettingsForm
     maxChildren: one(values.maxChildren),
     idleMinutes: one(values.idleMinutes),
     modelRetries: one(values.modelRetries),
+    commandOomPriority: one(values.commandOomPriority),
+    commandMemoryPercent: one(values.commandMemoryPercent),
+    memoryFloorPercent: one(values.memoryFloorPercent),
     childModel: one(values.childModel),
     childEffort: one(values.childEffort),
   };
@@ -74,10 +86,10 @@ export function AgentSettingsFields({
     const v = inherited?.[key];
     return v === null || v === undefined ? undefined : `${s.inherit} ${v}`;
   };
-  const number = (key: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries", label: string, hint?: string) => (
+  const number = (key: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries" | "commandOomPriority" | "commandMemoryPercent" | "memoryFloorPercent", label: string, hint?: string, min = 1) => (
     <div className="flex flex-col gap-1.5">
       <Label htmlFor={`${idPrefix}-${key}`}>{label}</Label>
-      <Input id={`${idPrefix}-${key}`} type="number" min={1} inputMode="numeric" value={value[key]} placeholder={placeholder(key)} onChange={(e) => set(key, e.target.value)} className="w-40" />
+      <Input id={`${idPrefix}-${key}`} type="number" min={min} inputMode="numeric" value={value[key]} placeholder={placeholder(key)} onChange={(e) => set(key, e.target.value)} className="w-40" />
       {hint ? <span className="text-muted-foreground text-xs">{hint}</span> : null}
     </div>
   );
@@ -125,6 +137,9 @@ export function AgentSettingsFields({
       {number("idleMinutes", s.idleMinutes, s.idleMinutesHint)}
       {number("modelRetries", s.modelRetries, s.modelRetriesHint)}
       {modelPick("childModel", "childEffort", s.childModel, s.childModelHint)}
+      {number("commandMemoryPercent", s.commandMemoryPercent, s.commandMemoryPercentHint, 0)}
+      {number("memoryFloorPercent", s.memoryFloorPercent, s.memoryFloorPercentHint, 0)}
+      {number("commandOomPriority", s.commandOomPriority, s.commandOomPriorityHint, 0)}
     </div>
   );
 }
