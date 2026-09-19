@@ -418,6 +418,27 @@ defmodule Longx.Agent.Definition.LoaderTest do
     prompts = for {Longx.Agent.Plugs.Prompt, [text: t]} <- role.plugs, do: t
     assert prompts == ["Project P.", "You research.\n"]
 
+    # the role is read again on every load — the kernel loads per step — so an edit to its
+    # model, level or prompt reaches an agent already running at its next model call
+    write!(
+      root,
+      ".longx/shared/agents/researcher/agent.exs",
+      String.replace(@researcher, "cheap-model", "pro")
+    )
+
+    File.write!(
+      Path.join(root, ".longx/shared/agents/researcher/prompt.md"),
+      "You research carefully.\n"
+    )
+
+    edited = Loader.load(root, tag: tag, trusted: true, agent: "researcher")
+    assert edited.model == "pro"
+
+    assert Enum.any?(
+             for({Longx.Agent.Plugs.Prompt, [text: t]} <- edited.plugs, do: t),
+             &(&1 =~ "carefully")
+           )
+
     # an unknown role is an error, not a silent main agent
     assert {:error, message} =
              Loader.load(root, tag: tag, trusted: true, agent: "nobody")
