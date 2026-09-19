@@ -77,7 +77,13 @@ defmodule Longx.Agent.Plugs.Shell do
     tool = %{
       tool
       | fun: fn args, ctx -> exec_command(args, ctx, guards) end,
-        description: tool.description <> guard_note(guards)
+        description:
+          String.replace(
+            tool.description,
+            "default #{@default_timeout}",
+            "default #{guards.timeout}"
+          ) <>
+            guard_note(guards)
     }
 
     step
@@ -105,7 +111,9 @@ defmodule Longx.Agent.Plugs.Shell do
     %{
       oom_score_adj: if(is_integer(oom) and oom > 0, do: oom),
       memory_limit: limit,
-      floor: if(is_integer(floor) and floor > 0 and is_integer(total), do: floor, else: 0)
+      floor: if(is_integer(floor) and floor > 0 and is_integer(total), do: floor, else: 0),
+      # `options Shell, timeout_ms:` — a description's default for every command (capped)
+      timeout: timeout(Keyword.get(opts, :timeout_ms), @default_timeout)
     }
   end
 
@@ -130,7 +138,7 @@ defmodule Longx.Agent.Plugs.Shell do
 
   @doc false
   def exec_command(%{"cmd" => command} = args, ctx, guards) do
-    timeout = args["timeout_ms"] |> timeout()
+    timeout = timeout(args["timeout_ms"], guards.timeout)
     cwd = workdir(args["workdir"], ctx)
 
     shell =
@@ -200,9 +208,8 @@ defmodule Longx.Agent.Plugs.Shell do
   defp workdir(dir, ctx) when is_binary(dir) and dir != "", do: Context.path(ctx, dir)
   defp workdir(_dir, ctx), do: ctx.cwd || File.cwd!()
 
-  defp timeout(nil), do: @default_timeout
-  defp timeout(ms) when is_integer(ms) and ms > 0, do: min(ms, @max_timeout)
-  defp timeout(_), do: @default_timeout
+  defp timeout(ms, _default) when is_integer(ms) and ms > 0, do: min(ms, @max_timeout)
+  defp timeout(_, default), do: default
 
   defp output_cap(tokens) when is_number(tokens) and tokens > 0,
     do: trunc(tokens) * @bytes_per_token

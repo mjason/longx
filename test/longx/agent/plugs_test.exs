@@ -11,9 +11,11 @@ defmodule Longx.Agent.PlugsTest do
     %{dir: dir, ctx: %Context{cwd: dir}}
   end
 
+  # the test's emit tags its messages {:emitted, _}: exec_command's own receive loop
+  # takes {:out, _} for the shim's output, and an emit shaped the same was swallowed
   defp collect_out(acc) do
     receive do
-      {:out, chunk} -> collect_out([chunk | acc])
+      {:emitted, chunk} -> collect_out([chunk | acc])
     after
       0 -> Enum.reverse(acc)
     end
@@ -189,6 +191,9 @@ defmodule Longx.Agent.PlugsTest do
       assert text =~ "do not wait"
       # a role's prompt is read again at every step, so an edit reaches a running agent too
       assert text =~ "re-read at every step"
+
+      # and a task cannot override a role's rules — the parent is told to write tasks within them
+      assert text =~ "cannot override"
     end
 
     test "agents [...] narrows the choices; a role nobody declared is not offered" do
@@ -480,14 +485,14 @@ defmodule Longx.Agent.PlugsTest do
     test "output that is not UTF-8 is scrubbed, streamed and stored: the view stays JSON-encodable; a clip never cuts a character",
          %{dir: dir} do
       me = self()
-      ctx = %Context{cwd: dir, emit: &send(me, {:out, &1})}
+      ctx = %Context{cwd: dir, emit: &send(me, {:emitted, &1})}
       tool = tool!(Shell, "exec_command")
 
       assert {:ok, output, _} = Tool.call(tool, %{"cmd" => ~S|printf 'a\377\376b'|}, ctx)
       assert String.valid?(output)
       assert output =~ "a"
       assert output =~ "b"
-      assert_receive {:out, chunk}
+      assert_receive {:emitted, chunk}
       assert String.valid?(chunk)
 
       # a long multibyte output clipped in the middle: both halves valid
@@ -504,7 +509,7 @@ defmodule Longx.Agent.PlugsTest do
 
     test "runs the command in the cwd and streams its output", %{dir: dir} do
       me = self()
-      ctx = %Context{cwd: dir, emit: &send(me, {:out, &1})}
+      ctx = %Context{cwd: dir, emit: &send(me, {:emitted, &1})}
       tool = tool!(Shell, "exec_command")
 
       assert tool.show == :command
@@ -564,11 +569,30 @@ defmodule Longx.Agent.PlugsTest do
       refute plain.tools["exec_command"].description =~ "address space"
     end
 
+    test "options Shell, timeout_ms: is the default timeout of every command (a role set 30 min and got 2)",
+         %{ctx: ctx} do
+      step = Shell.call(Step.new(phase: :request), Shell.init(timeout_ms: 500))
+      tool = step.tools["exec_command"]
+      assert tool.description =~ "default 500"
+
+      assert {:error, message} =
+               Tool.call(tool, %{"cmd" => "echo start; sleep 10", "login" => false}, ctx)
+
+      assert message =~ "timed out after 500 ms"
+      # a call's own timeout_ms still wins, within the cap
+      assert {:ok, _, _} =
+               Tool.call(
+                 tool,
+                 %{"cmd" => "sleep 0.8; echo done", "login" => false, "timeout_ms" => 5_000},
+                 ctx
+               )
+    end
+
     test "memory pressure kills the command and the model is told why", %{ctx: ctx} do
       step = Shell.call(Step.new(phase: :request), Shell.init(memory_floor_percent: 10))
       tool = step.tools["exec_command"]
       me = self()
-      ctx = %{ctx | emit: &send(me, {:out, &1})}
+      ctx = %{ctx | emit: &send(me, {:emitted, &1})}
 
       task =
         Task.async(fn ->
@@ -580,7 +604,7 @@ defmodule Longx.Agent.PlugsTest do
         end)
 
       # the command registered itself (with its floor) before it started; a sweep below the floor kills it
-      assert_receive {:out, "start\n"}, 5_000
+      assert_receive {:emitted, "start\n"}, 5_000
       task_pid = task.pid
 
       assert [{^task_pid, %{floor: 10}}] =

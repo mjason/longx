@@ -218,7 +218,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     sibling) / `close_agent` (own members) over the **declared roles**
     (`.longx/shared/agents/<name>/agent.exs`, `local/agents/<name>/`); the prompt lists
     the team with status, role and task and says to ask a finished agent again rather
-    than spawn anew; with no role declared the spawn tool is absent and the prompt
+    than spawn anew; **a task cannot override a role's rules**: the child is told its
+    role's instructions take precedence over the task (leave the forbidden part out,
+    report which rule it hit), the parent that a task changing method must fit the
+    role's prompt or the rule must change first (a parent asked coder for three fee
+    tiers and a loop its own prompt.md forbade — the coder followed the task and the
+    machine went down); with no role declared the spawn tool is absent and the prompt
     teaches the model to declare one (`local/agents/<name>/agent.exs` + `prompt.md`) —
     **Longx ships no roles**: they grow in the project and are promoted to `shared/`.
     Prefix stability is what makes a follow-up cheap: nothing in the request varies per
@@ -281,7 +286,8 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `:web_search` → `webSearch`.
   - **The tool set is codex's by name and parameters** — models tuned for codex call them
     as they know them: `exec_command` (`Plugs.Shell`: `cmd`, `workdir`, `tty` (a pty through
-    the shim), `timeout_ms` (default 2 min, max 30 min; the command runs to completion —
+    the shim), `timeout_ms` (default 2 min — `options Shell, timeout_ms:` sets a
+    description's default —, max 30 min; the command runs to completion —
     `write_stdin` sessions are not offered), `max_output_tokens`, `shell`, `login`;
     stdout+stderr interleaved, head+tail kept, exit code reported; `Longx.Agent.Tools.
     ShellEnv` builds the environment). **The machine is guarded** (the settings'

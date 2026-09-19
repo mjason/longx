@@ -1588,6 +1588,8 @@ defmodule Longx.AgentTest do
              child_request["input"]
 
     assert child_request["instructions"] =~ "sub-agent"
+    # a task cannot override the role's own rules: the child is told which wins
+    assert child_request["instructions"] =~ "take precedence over the task"
     parent_last = requests |> Enum.filter(&(first_text(&1) == "start")) |> List.last()
 
     assert List.last(parent_last["input"])["content"] |> hd() |> Map.get("text") =~
