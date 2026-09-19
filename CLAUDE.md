@@ -55,7 +55,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
 - `lib/longx/projects/` — Ash domain `Longx.Projects` (single-user; no thread ↔ user mapping):
   - `Project` = a working directory (absolute, existing, unique `root_path`, `slug`) +
     defaults for its threads: `model_id` (nil → global default), `web_search`,
-    `dirty_start` (`:commit` | `:ask` | `:off`), `trust_local_agent` (loads
+    `trust_local_agent` (loads
     `.longx/agent.exs` + `.longx/shared/`, below), `agent_settings` (a map overriding the
     global kernel settings), `archived_at`. Whether it is a git repo is read live
     (`git_info/1`), never stored; `init_git/1` sets git up with a first commit. The UI warns
@@ -67,13 +67,14 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     sub-agent's row, `status`, `last_activity_at`). Statuses: `:idle`, `:active`,
     `:unrecoverable`, `:archived`. `start_thread/2` → `Longx.Agent.ensure/2` + the row +
     `Tracker.track`.
-  - `Turn` = one turn with git bookmarks (`kernel_turn_id`, `user_text`, `model_slug`,
-    `reasoning_effort`, `status`, `started/completed_at`, `commit_before/after`,
-    `dirty_start`, `diff`, `error`). `send_message/3` does the **git preflight** first:
-    clean tree → `commit_before = HEAD`; dirty → per `dirty_start` (`:commit` makes a
-    `longx: before turn — …` commit; `:off` records `dirty_start: true`; `:ask` returns
-    `{:error, {:dirty_tree, changes}}` unless `dirty: :commit | :ignore`), writes the Turn
-    row **first** with a generated `turn_<uuid>`, then `Longx.Agent.send/3`
+  - `Turn` = one turn (`kernel_turn_id`, `user_text`, `model_slug`, `reasoning_effort`,
+    `status`, `started/completed_at`, `error`, `usage`). **Nothing of git on a turn and
+    no commit by Longx, ever**: the per-turn bookmarks (`commit_before/after`), the
+    dirty-tree policy with its `longx: before turn — …` commits and the restore points
+    of 0.2.x went in 0.2.22 (a migration drops the columns) — they polluted every
+    history they touched and bought nothing; the working tree is the person's, the Git
+    tool window is where they commit. `send_message/3` writes the Turn row **first**
+    with a generated `turn_<uuid>`, then `Longx.Agent.send/3`
     (`{:error, :turn_in_progress}` while one runs; `model:` / `effort:` / `images:` — data
     urls from the composer, passed through as `input_image` parts). A message while a turn
     runs is a **steer** (`steer_message/3` → `Agent.send/3` on a running thread; no new
@@ -84,7 +85,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     re-snapshot), the text comes back to the composer. `compact_thread/2` = `/compact`.
     `delete_thread/1` removes the row, its turns and its transcript (not while a turn runs).
   - `Longx.Projects.Tracker` (in the tree) follows every thread's `"thread:<id>"` topic:
-    fills `status` / `completed_at` / `commit_after` / `diff` from `turn/completed`, the
+    fills `status` / `completed_at` / `usage` from `turn/completed`, the
     thread `preview` from the first user message, gives a turn the kernel started by itself
     (a goal continuation, a sub-agent's report waking an idle parent) a row via
     `record_external_turn/2`, turns a parent's first `subAgentActivity` into a Thread row
@@ -97,10 +98,6 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     (a `ThreadChannel` join) and `send_message/3` both `Tracker.track/1` (idempotent), and
     `Projects.settle_after_restart/0` (a boot `Task`) fails every `:in_progress` turn and
     idles every `:active` thread a previous boot left.
-  - **Going back**: `restore_proposal/1` (commit, dirty now?, changed files, later turns) is
-    what the UI shows; `restore_files/2` needs `confirm: true`, makes a safety commit of any
-    uncommitted work first, then `restore_tree` (default) or `reset_hard`. Nothing touches
-    ignored files or side effects outside the repo; say so in the UI.
   - **Files and git for the UI** — two data-less resources, one generic action per
     operation, wire-tested in `test/longx_web/rpc/workspace_rpc_test.exs`:
     `Longx.Projects.Files` over `Longx.Projects.Workspace` (`list_files` one level,
@@ -817,8 +814,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `list_running_threads`, `set_goal` / `clear_goal`, `rename_thread`, `archive_thread`,
     `delete_thread`; Project: `list_projects`, `get_project` (by slug), `create` / `update`
     / `archive` / `delete_project`, `git_info`, `init_git`, `search_files`,
-    `agent_definition`, `promote_local`; Turn: `list_turns`, `restore_proposal`,
-    `restore_files`.
+    `agent_definition`, `promote_local`; Turn: `list_turns`.
   - **Channels** (`LongxWeb.UserSocket` at `/socket`, `connect_info: [:uri]` — the uri feeds
     `LongxWeb.Origins`; the endpoint had it only on the LiveView socket until 0.2.7, so the
     browser's address was never remembered). **Nothing a channel sends can kill the
@@ -871,8 +867,8 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `SubAgent.rowItemIds`), the latest row carrying the child's whole conversation as
     `messages`, earlier ones a completed marker — so a child asked again is seen where
     the person is, not at its spawn far above), `adapter.ts` (`buildAdapter` →
-    `ExternalStoreAdapter`: `onNew` → `steerTurn` while `runningTurnId(view)`, else `sendMessage`
-    (a `dirty_tree` error asks `onDirtyTree`); `/goal <objective>` typed past the popover
+    `ExternalStoreAdapter`: `onNew` → `steerTurn` while `runningTurnId(view)`, else `sendMessage`;
+    `/goal <objective>` typed past the popover
     sets the goal; `onCancel` → `retractTurn` + `onRetract(text)` while `turnHadEffects`
     is false, else `interruptTurn`; `extras.answerAction`), `threadList.ts`, `runtime.ts` (**`useLongxRuntime({ projectId, defaults, threadId,
     onOpenThread })`** — the whole thing as one hook; everything the adapter is built
@@ -896,11 +892,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     private network), `update` 版本与更新, `requests` 请求记录, `appearance` 外观).
     `ProjectWindow`: desktop = icon rail + docked resizable tool window + status strip;
     phone = chat full-screen, bottom toolbar, tools as bottom sheets. Tool windows
-    `frame/tools/{Threads,Git,Turns,Agents,Files}Tool` toggled with ⌘1–5 (`core/frame.ts`,
-    remembered per device): Threads is the `thread-list` element; Git is GitHub Desktop's
-    shape (branch popover, sync button, Changes, History); Turns is the history with the
-    per-turn diff, restore (proposal → confirm → `restore_files`) and the
-    `checkpoint-history` element; Agents is the thread's sub-agents as `background-inbox`;
+    `frame/tools/{Threads,Git,Agents,Files}Tool` toggled with ⌘1–4 (`core/frame.ts`,
+    remembered per device; a device that remembered the gone `history` tool falls back):
+    Threads is the `thread-list` element; Git is GitHub Desktop's
+    shape (branch popover, sync button, Changes, History); Agents is the thread's sub-agents as `background-inbox`;
     Files is the IDE tree (git status coloured, ignored dimmed, new / rename / delete, a
     filter over `search_files`). `frame/StatusStrip`: HEAD and dirty count, missing
     dependencies, the browser download, a new version — every item `whitespace-nowrap
@@ -933,7 +928,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `DialogContent` is a flex column capped at the viewport with `DialogBody` as the
     scrolling middle.
   - **The chat** — `ui/chat/`: `ChatProvider` (mounted by `ProjectWindow` around the whole
-    window: `useLongxRuntime` + `AssistantRuntimeProvider` + `DirtyTreeDialog` +
+    window: `useLongxRuntime` + `AssistantRuntimeProvider` +
     `GoalProvider`; `useChat()` reads it), `ThreadPage` (the Thread element; the composer
     rail: `ComposerTrailing` = the `context-display` ring (a click-to-open popover, not the
     hover tooltip — the auto-scroll closed it) + the `model-selector` element standalone
@@ -945,7 +940,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     unfolding every thought while it streamed was too long; a sub-agent's row is folded
     the same way, opening by itself only when its child waits on the person —
     `ToolRow`'s `openWhileRunning`), `SlashCommands` (`/new`, `/compact`, `/goal`, `/git` `/files`
-    `/history`, `/settings`, `/init` — over `unstable_useSlashCommandAdapter` and the
+    `/settings`, `/init` — over `unstable_useSlashCommandAdapter` and the
     `composer-trigger-popover` element), `FileMentions` (`@` over
     `unstable_useLiveCompletionAdapter` → `search_files`; `directive-text` chips),
     `toolkit.tsx` (`defineToolkit` with `type: "backend"`, `display: "standalone"`
@@ -1001,7 +996,7 @@ Key patterns:
   `js/ui/components/assistant-ui/elements/` (`*.aui.tsx` read the runtime, the rest are
   props-driven) and are **source we own and adapt**: `thread.aui` (zh-CN strings, our
   composer slots), `tool-call`, `terminal-block`, `code-diff`, `file-tree`, `web-search`,
-  `elicitation-form`, `agent-status`, `background-inbox`, `checkpoint-history`,
+  `elicitation-form`, `agent-status`, `background-inbox`,
   `context-display`, `model-selector` / `model-picker`, `reasoning-panel`,
   `markdown-text` with `shiki-highlighter` and `mermaid-diagram`, `thread-list.aui`,
   `message-timing.aui`, `composer-trigger-popover.aui`, `directive-text`, `message-queue`,

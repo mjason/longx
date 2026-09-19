@@ -8,8 +8,8 @@ describe("frame transitions", () => {
     expect(s.tool).toBe("git");
     s = toggleTool(s, "git");
     expect(s.tool).toBeNull();
-    s = toggleTool(s, "history");
-    expect(s.tool).toBe("history");
+    s = toggleTool(s, "agents");
+    expect(s.tool).toBe("agents");
   });
 
   test("panel width is clamped", () => {
@@ -18,13 +18,12 @@ describe("frame transitions", () => {
     expect(resizePanel(DEFAULT_FRAME, 400.4).panelWidth).toBe(400);
   });
 
-  test("⌘1..5 map to the tools in rail order", () => {
+  test("⌘1..4 map to the tools in rail order (the git turn history went in 0.2.22)", () => {
     expect(toolForShortcut("1")).toBe("threads");
     expect(toolForShortcut("2")).toBe("git");
-    expect(toolForShortcut("3")).toBe("history");
-    expect(toolForShortcut("4")).toBe("agents");
-    expect(toolForShortcut("5")).toBe("files");
-    expect(toolForShortcut("6")).toBeNull();
+    expect(toolForShortcut("3")).toBe("agents");
+    expect(toolForShortcut("4")).toBe("files");
+    expect(toolForShortcut("5")).toBeNull();
     expect(toolForShortcut("k")).toBeNull();
   });
 });
@@ -34,10 +33,14 @@ describe("frame store", () => {
     const mem = new Map<string, string>();
     const storage = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => mem.set(k, v) };
     const a = createFrameStore(storage);
-    a.open("history");
+    a.open("agents");
     a.resize(500);
     const b = createFrameStore(storage);
-    expect(b.get()).toEqual({ tool: "history", panelWidth: 500 });
+    expect(b.get()).toEqual({ tool: "agents", panelWidth: 500 });
+
+    // a device that remembered the history tool (gone) falls back to the default
+    mem.set("longx:frame", JSON.stringify({ tool: "history", panelWidth: 500 }));
+    expect(createFrameStore(storage).get()).toEqual({ ...DEFAULT_FRAME, panelWidth: 500 });
 
     mem.set("longx:frame", "{not json");
     expect(createFrameStore(storage).get()).toEqual(DEFAULT_FRAME);

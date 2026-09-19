@@ -24,11 +24,11 @@ describe("AgentsTool", () => {
     vi.mocked(listSubagents).mockResolvedValue(ok(subagents) as never);
   });
 
-  test("⌘4 lists the thread's sub-agents as background runs; a finished one opens as a workbench tab", async () => {
+  test("⌘3 lists the thread's sub-agents as background runs; a finished one opens as a workbench tab", async () => {
     const user = userEvent.setup();
     const { router } = renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-    await user.keyboard("{Meta>}4{/Meta}");
+    await user.keyboard("{Meta>}3{/Meta}");
     const panel = await screen.findByTestId("tool-panel");
     await within(panel).findByText("alpha");
     expect(listSubagents).toHaveBeenCalledWith(expect.objectContaining({ input: { parentThreadId: "t1" } }));
@@ -47,7 +47,7 @@ describe("AgentsTool", () => {
     const user = userEvent.setup();
     renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-    await user.keyboard("{Meta>}4{/Meta}");
+    await user.keyboard("{Meta>}3{/Meta}");
     const panel = await screen.findByTestId("tool-panel");
     await within(panel).findByText("这个会话没有派出子 agent");
   });

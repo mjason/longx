@@ -54,20 +54,15 @@ defmodule Longx.Projects.Thread do
       argument :model, :string
       # the reasoning level from this turn on (absent: the thread keeps its level)
       argument :effort, :string
-      # what to do with a dirty tree when the project's policy is :ask
-      argument :dirty, :atom, constraints: [one_of: [:commit, :ignore]]
 
       run fn input, _ ->
         opts =
           input.arguments
-          |> Map.take([:images, :model, :effort, :dirty])
+          |> Map.take([:images, :model, :effort])
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
         with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
           case Longx.Projects.send_message(thread, input.arguments.text, opts) do
-            {:error, {:dirty_tree, changes}} ->
-              {:error, Longx.Projects.Errors.DirtyTree.exception(changes: changes)}
-
             {:error, :turn_in_progress} ->
               argument_error(:thread_id, "a turn is running")
 

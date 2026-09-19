@@ -21,7 +21,7 @@ import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { t } from "@/ui/strings";
 import { ProjectWatches } from "./settings/ProjectWatches";
 
-type Form = Required<Pick<UpdateProjectInput, "name" | "webSearch" | "dirtyStart" | "trustLocalAgent">> & {
+type Form = Required<Pick<UpdateProjectInput, "name" | "webSearch" | "trustLocalAgent">> & {
   description: string;
   modelId: string;
   /** the kernel's parameters this project overrides ("" = inherit) */
@@ -30,7 +30,7 @@ type Form = Required<Pick<UpdateProjectInput, "name" | "webSearch" | "dirtyStart
 
 /**
  * The project's settings: what every new thread starts with (web search,
- * dirty-tree policy, model), the agent definition, and the danger zone.
+ * model), the agent definition, and the danger zone.
  * Thread-level overrides live in the composer rail.
  */
 export function ProjectSettingsPage() {
@@ -53,7 +53,6 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
     name: project.name,
     description: project.description ?? "",
     webSearch: project.webSearch,
-    dirtyStart: project.dirtyStart,
     trustLocalAgent: project.trustLocalAgent,
     modelId: project.modelId ?? "__default",
     agentOverrides: agentSettingsForm((project.agentSettings ?? {}) as Parameters<typeof agentSettingsForm>[0]),
@@ -71,7 +70,6 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
             name: form.name,
             description: form.description || null,
             webSearch: form.webSearch,
-            dirtyStart: form.dirtyStart,
             trustLocalAgent: form.trustLocalAgent,
             modelId: form.modelId === "__default" ? null : form.modelId,
             agentSettings: agentSettingsInput(form.agentOverrides),
@@ -136,18 +134,6 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
           <Label htmlFor="ps-web-search">{t.webSearch}</Label>
           <Switch id="ps-web-search" checked={form.webSearch} onCheckedChange={(v) => set("webSearch", v)} />
         </div>
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">{t.dirtyStart}</legend>
-          <p className="text-muted-foreground text-xs">{t.dirtyStartHint}</p>
-          <RadioGroup value={form.dirtyStart} onValueChange={(v) => set("dirtyStart", v as Form["dirtyStart"])}>
-            {(["commit", "ask", "off"] as const).map((d) => (
-              <div key={d} className="flex items-center gap-2">
-                <RadioGroupItem value={d} id={`ps-dirty-${d}`} />
-                <Label htmlFor={`ps-dirty-${d}`}>{t.dirtyStartOptions[d]}</Label>
-              </div>
-            ))}
-          </RadioGroup>
-        </fieldset>
         <div className="flex items-center gap-4">
           <Label htmlFor="ps-model" className="w-24 shrink-0">
             {t.model}

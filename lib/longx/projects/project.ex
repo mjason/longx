@@ -74,7 +74,6 @@ defmodule Longx.Projects.Project do
         :name,
         :description,
         :root_path,
-        :dirty_start,
         :web_search,
         :model_id,
         :trust_local_agent,
@@ -96,7 +95,6 @@ defmodule Longx.Projects.Project do
         :name,
         :slug,
         :description,
-        :dirty_start,
         :web_search,
         :model_id,
         :trust_local_agent,
@@ -220,15 +218,6 @@ defmodule Longx.Projects.Project do
     attribute :description, :string, public?: true
 
     attribute :root_path, :string, allow_nil?: false, public?: true
-
-    # What to do when a turn starts with uncommitted changes in a git project:
-    # commit them first (every turn then starts from a commit), ask, or just record.
-    attribute :dirty_start, :atom do
-      allow_nil? false
-      public? true
-      default :commit
-      constraints one_of: [:commit, :ask, :off]
-    end
 
     # whether threads get web search (`Plugs.WebSearch`); decided at thread start
     attribute :web_search, :boolean, allow_nil?: false, default: true, public?: true

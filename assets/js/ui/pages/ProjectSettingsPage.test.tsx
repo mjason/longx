@@ -27,13 +27,15 @@ describe("ProjectSettingsPage", () => {
     expect(within(form).queryByText(/内核/)).not.toBeInTheDocument();
     expect(within(form).getByRole("switch", { name: /网页搜索/ })).toBeChecked();
     await user.click(within(form).getByRole("switch", { name: /网页搜索/ }));
-    await user.click(within(form).getByRole("radio", { name: "先问我" }));
+    // no dirty-tree policy any more: Longx never commits on the person's behalf
+    expect(within(form).queryByRole("radio", { name: "先问我" })).not.toBeInTheDocument();
     await user.click(within(form).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(updateProject).toHaveBeenCalledWith(
-        expect.objectContaining({ identity: "id-1", input: expect.objectContaining({ webSearch: false, dirtyStart: "ask", modelId: null }) }),
+        expect.objectContaining({ identity: "id-1", input: expect.objectContaining({ webSearch: false, modelId: null }) }),
       ),
     );
+    expect(vi.mocked(updateProject).mock.calls[0]![0]!.input).not.toHaveProperty("dirtyStart");
   });
 
   test("the project shows its .longx definition and the trust switch, saved with the form", async () => {

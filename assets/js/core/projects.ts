@@ -13,9 +13,6 @@ import {
   listRunningThreads,
   setGoal,
   clearGoal,
-  listTurns,
-  restoreFiles,
-  restoreProposal,
   listProjects,
   listSubagents,
   getThread,
@@ -34,7 +31,6 @@ export const projectFields = [
   "description",
   "rootPath",
   "webSearch",
-  "dirtyStart",
   "modelId",
   "trustLocalAgent",
   "agentSettings",
@@ -104,7 +100,6 @@ export const queryKeys = {
   git: (id: string) => ["project", id, "git"] as const,
   threads: (id: string) => ["project", id, "threads"] as const,
   models: ["models"] as const,
-  turns: (threadId: string) => ["turns", threadId] as const,
   subagents: (threadId: string) => ["subagents", threadId] as const,
   running: ["running-threads"] as const,
 };
@@ -296,22 +291,6 @@ export function useThread(id: string | undefined) {
   });
 }
 
-export const turnFields = [
-  "id",
-  "kernelTurnId",
-  "userText",
-  "modelSlug",
-  "status",
-  "startedAt",
-  "completedAt",
-  "commitBefore",
-  "commitAfter",
-  "dirtyStart",
-  "diff",
-  "error",
-] as const;
-
-/** The turns of a thread, oldest first (reverted ones included when asked). */
 export function useSubagents(threadId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.subagents(threadId ?? ""),
@@ -323,58 +302,6 @@ export function useSubagents(threadId: string | undefined) {
           input: { parentThreadId: threadId! },
         }),
       ),
-  });
-}
-
-export function useTurns(
-  threadId: string | undefined,
-  includeReverted = false,
-) {
-  return useQuery({
-    queryKey: [...queryKeys.turns(threadId ?? ""), includeReverted],
-    enabled: !!threadId,
-    queryFn: async () =>
-      unwrap(
-        await listTurns({
-          fields: [...turnFields],
-          input: { threadId: threadId!, includeReverted },
-        }),
-      ),
-  });
-}
-
-export type RestoreProposal = {
-  commit: string;
-  dirtyNow: boolean;
-  changedFiles: string[];
-  laterTurns: number;
-};
-
-export function fetchRestoreProposal(turnId: string) {
-  return restoreProposal({
-    fields: ["commit", "dirtyNow", "changedFiles", "laterTurns"],
-    input: { turnId },
-  }).then(unwrap);
-}
-
-export function useRestoreFiles(threadId: string | undefined) {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: {
-      turnId: string;
-      mode?: "restore_tree" | "reset_hard";
-    }) =>
-      unwrap(
-        await restoreFiles({
-          fields: ["safetyCommit", "head"],
-          input: { ...input, confirm: true },
-        }),
-      ),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["project"] });
-      if (threadId)
-        client.invalidateQueries({ queryKey: queryKeys.turns(threadId) });
-    },
   });
 }
 

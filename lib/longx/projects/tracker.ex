@@ -18,7 +18,6 @@ defmodule Longx.Projects.Tracker do
 
   use GenServer
 
-  alias Longx.Git
   alias Longx.Projects
   alias Longx.Projects.{Thread, Turn}
   alias Phoenix.PubSub
@@ -115,7 +114,6 @@ defmodule Longx.Projects.Tracker do
         Projects.complete_turn!(row, %{
           status: status,
           completed_at: DateTime.utc_now(),
-          commit_after: head(thread.cwd),
           error: error,
           usage: if(is_map(turn["usage"]), do: turn["usage"], else: row.usage)
         })
@@ -297,11 +295,4 @@ defmodule Longx.Projects.Tracker do
   end
 
   defp user_text(_), do: nil
-
-  defp head(dir) do
-    case Git.head(dir) do
-      {:ok, sha} -> sha
-      _ -> nil
-    end
-  end
 end

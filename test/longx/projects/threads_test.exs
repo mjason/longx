@@ -146,12 +146,10 @@ defmodule Longx.Projects.ThreadsTest do
 
     {:ok, turn} = Projects.send_message(thread, "hello")
     assert turn.status == :in_progress
-    assert turn.commit_before
     assert thread!(thread.id).status == :active
 
     assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
     turn = turn!(turn.id)
-    assert turn.commit_after == turn.commit_before
     # the turn's own token usage lands on the row (the badge survives a restart)
     assert %{"inputTokens" => 12, "outputTokens" => _, "totalTokens" => _} = turn.usage
     assert thread!(thread.id).status == :idle
@@ -792,66 +790,30 @@ defmodule Longx.Projects.ThreadsTest do
     assert {:error, :thread_archived} = Projects.set_goal(thread, %{objective: "x"})
   end
 
-  describe "the turn's git bookmarks" do
-    test "dirty tree with dirty_start: :commit commits first so the turn starts from a commit", %{
-      bypass: bypass,
-      project: project,
-      dir: dir
-    } do
+  describe "the working tree is the person's" do
+    test "a dirty tree is left exactly as it is: Longx never commits, the turn carries no git bookmark",
+         %{
+           bypass: bypass,
+           project: project,
+           dir: dir
+         } do
       script!(bypass, [ResponsesFixture.assistant_message("ok")])
       {:ok, before} = Git.head(dir)
       File.write!(Path.join(dir, "a.txt"), "edited by hand\n")
       {:ok, thread} = Projects.start_thread(project)
 
       {:ok, turn} = Projects.send_message(thread, "say ok")
-      refute turn.commit_before == before
-      refute turn.dirty_start
-      assert %{clean?: true} = Git.status(dir)
-      assert [%{sha: sha, subject: subject} | _] = Git.log(dir, limit: 1)
-      assert sha == turn.commit_before
-      assert subject =~ "longx: before turn"
-      assert subject =~ "say ok"
-      assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
-    end
-
-    test "dirty tree with dirty_start: :off only records that the start was dirty", %{
-      bypass: bypass,
-      project: project,
-      dir: dir
-    } do
-      script!(bypass, [ResponsesFixture.assistant_message("ok")])
-      project = Projects.update_project!(project, %{dirty_start: :off})
-      {:ok, before} = Git.head(dir)
-      File.write!(Path.join(dir, "a.txt"), "edited\n")
-      {:ok, thread} = Projects.start_thread(project)
-
-      {:ok, turn} = Projects.send_message(thread, "say ok")
-      assert turn.commit_before == before
-      assert turn.dirty_start
+      refute Map.has_key?(turn, :commit_before)
+      refute Map.has_key?(turn, :dirty_start)
       assert %{clean?: false} = Git.status(dir)
+      assert {:ok, ^before} = Git.head(dir)
       assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
+      # still nothing of ours on the branch
+      assert {:ok, ^before} = Git.head(dir)
+      assert File.read!(Path.join(dir, "a.txt")) == "edited by hand\n"
     end
 
-    test "dirty tree with dirty_start: :ask refuses until told what to do", %{
-      bypass: bypass,
-      project: project,
-      dir: dir
-    } do
-      script!(bypass, [ResponsesFixture.assistant_message("ok")])
-      project = Projects.update_project!(project, %{dirty_start: :ask})
-      File.write!(Path.join(dir, "a.txt"), "edited\n")
-      {:ok, thread} = Projects.start_thread(project)
-
-      assert {:error, {:dirty_tree, [%{path: "a.txt", status: :modified}]}} =
-               Projects.send_message(thread, "say ok")
-
-      assert {:ok, %Turn{dirty_start: false} = turn} =
-               Projects.send_message(thread, "say ok", dirty: :commit)
-
-      assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
-    end
-
-    test "a project without git still works, with no bookmarks", %{bypass: bypass} do
+    test "a project without git works the same", %{bypass: bypass} do
       script!(bypass, [ResponsesFixture.assistant_message("fine")])
       plain = Path.join(System.tmp_dir!(), "longx-plain-#{System.unique_integer([:positive])}")
       File.mkdir_p!(plain)
@@ -860,12 +822,7 @@ defmodule Longx.Projects.ThreadsTest do
 
       {:ok, thread} = Projects.start_thread(project)
       {:ok, turn} = Projects.send_message(thread, "say fine")
-      assert turn.commit_before == nil
       assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
-      assert turn!(turn.id).commit_after == nil
-
-      assert {:error, :no_git} = Projects.restore_proposal(turn)
-      assert {:error, :no_git} = Projects.restore_files(turn, confirm: true)
     end
 
     test "model: and effort: switch for this and later turns, recorded on the thread and the turn",
@@ -907,53 +864,6 @@ defmodule Longx.Projects.ThreadsTest do
       assert body["model"] == "real-model"
 
       assert Enum.map(Projects.list_turns!(thread), & &1.id) == [turn.id, turn2.id, turn3.id]
-    end
-  end
-
-  describe "restoring the files a turn started from" do
-    setup %{bypass: bypass, project: project, dir: dir} do
-      script!(bypass, [ResponsesFixture.assistant_message("go")])
-      {:ok, thread} = Projects.start_thread(project)
-      {:ok, turn} = Projects.send_message(thread, "say go")
-      assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
-      # "the agent" changed files during/after the turn
-      File.write!(Path.join(dir, "a.txt"), "changed by agent\n")
-      File.write!(Path.join(dir, "new.txt"), "new\n")
-      %{thread: thread, turn: turn}
-    end
-
-    test "restore_proposal/1 describes what would happen", %{turn: turn} do
-      assert {:ok, proposal} = Projects.restore_proposal(turn)
-      assert proposal.commit == turn.commit_before
-      assert proposal.dirty_now?
-      assert proposal.changed_files == ["a.txt", "new.txt"]
-      assert proposal.later_turns == 0
-    end
-
-    test "restore_files/2 requires explicit confirmation", %{turn: turn} do
-      assert {:error, :confirmation_required} = Projects.restore_files(turn)
-      assert {:error, :confirmation_required} = Projects.restore_files(turn, confirm: false)
-    end
-
-    test "restore_files/2 makes a safety commit, then puts the files back; history keeps everything",
-         %{dir: dir, turn: turn} do
-      assert {:ok, %{safety_commit: safety, head: head}} =
-               Projects.restore_files(turn, confirm: true)
-
-      assert is_binary(safety)
-      assert File.read!(Path.join(dir, "a.txt")) == "v1\n"
-      refute File.exists?(Path.join(dir, "new.txt"))
-      # the safety commit is on the branch, the restore itself is a working-tree change
-      assert head == safety
-      assert [%{subject: subject} | _] = Git.log(dir, limit: 1)
-      assert subject =~ "longx: before restoring"
-    end
-
-    test "restore_files/2 with mode: :reset_hard moves the branch back", %{dir: dir, turn: turn} do
-      assert {:ok, %{head: head}} = Projects.restore_files(turn, confirm: true, mode: :reset_hard)
-      assert head == turn.commit_before
-      assert {:ok, ^head} = Git.head(dir)
-      assert File.read!(Path.join(dir, "a.txt")) == "v1\n"
     end
   end
 end

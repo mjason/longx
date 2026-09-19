@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Bot, FolderTree, GitBranch, History, MessagesSquare, Settings, X } from "lucide-react";
+import { Bot, FolderTree, GitBranch, MessagesSquare, Settings, X } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { Link, Outlet, useMatch, useParams } from "react-router";
 import { Workbench } from "@/ui/workbench/Workbench";
@@ -19,14 +19,12 @@ import { t } from "@/ui/strings";
 import { StatusStrip } from "./StatusStrip";
 import { AgentsTool } from "./tools/AgentsTool";
 import { FilesTool } from "./tools/FilesTool";
-import { TurnsTool } from "./tools/TurnsTool";
 import { GitTool } from "./tools/GitTool";
 import { ThreadsTool } from "./tools/ThreadsTool";
 
 const ICONS: Record<Tool, typeof MessagesSquare> = {
   threads: MessagesSquare,
   git: GitBranch,
-  history: History,
   agents: Bot,
   files: FolderTree,
 };
@@ -58,7 +56,6 @@ export function ProjectWindow() {
     return joinProjectChannel(getSocket(), id, {
       onChanged: () => {
         client.invalidateQueries({ queryKey: queryKeys.threads(id) });
-        client.invalidateQueries({ queryKey: ["turns"] });
         client.invalidateQueries({ queryKey: ["subagents"] });
       },
       onFiles: () => invalidateFiles(client, id),
@@ -166,8 +163,6 @@ function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
       return <ThreadsTool />;
     case "git":
       return <GitTool ctx={ctx} />;
-    case "history":
-      return <TurnsTool ctx={ctx} />;
     case "agents":
       return <AgentsTool ctx={ctx} />;
     case "files":

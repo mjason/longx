@@ -261,52 +261,6 @@ describe("chat adapter", () => {
     expect(onRetract).toHaveBeenCalledTimes(2);
   });
 
-  test("a dirty tree asks the page what to do, then resends with the answer", async () => {
-    const dirty = {
-      success: false,
-      errors: [
-        {
-          type: "dirty_tree",
-          message: "dirty",
-          shortMessage: "dirty",
-          vars: {},
-          fields: [],
-          path: [],
-          details: { changes: [{ path: "a.txt", status: "modified" }] },
-        },
-      ],
-    };
-    vi.mocked(sendMessage).mockResolvedValueOnce(dirty as never);
-    const onDirtyTree = vi.fn(async () => "commit" as const);
-    const adapter = buildAdapter({
-      target,
-      view: emptyView("thr_1"),
-      model: null,
-      onDirtyTree,
-    });
-    await adapter.onNew(append("go"));
-    expect(onDirtyTree).toHaveBeenCalledWith([
-      { path: "a.txt", status: "modified" },
-    ]);
-    expect(sendMessage).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        input: { threadId: "row-1", text: "go", dirty: "commit" },
-      }),
-    );
-
-    // declining leaves the message unsent, without an error
-    vi.mocked(sendMessage).mockResolvedValueOnce(dirty as never);
-    const cancel = buildAdapter({
-      target,
-      view: emptyView("thr_1"),
-      model: null,
-      onDirtyTree: async () => null,
-    });
-    const before = vi.mocked(sendMessage).mock.calls.length;
-    await expect(cancel.onNew(append("go"))).resolves.toBeUndefined();
-    expect(vi.mocked(sendMessage).mock.calls.length).toBe(before + 1);
-  });
-
   test("without a thread, the first message creates one and lands there", async () => {
     const createThread = vi.fn(async () => ({
       threadId: "row-new",

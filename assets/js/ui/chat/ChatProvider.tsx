@@ -13,11 +13,9 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate, useParams } from "react-router";
-import type { DirtyChange, DirtyDecision } from "@/core/chat/adapter";
 import { useLongxRuntime, type LongxRuntime } from "@/core/chat/runtime";
 import { toast } from "sonner";
 import { t } from "@/ui/strings";
-import { DirtyTreeDialog, type DirtyPrompt } from "./DirtyTreeDialog";
 import { GoalProvider } from "./GoalBar";
 import { useWorkbench, type Tab } from "@/core/workbench";
 import { ActionAnswerContext, chatConfig, CompactionUI, GoalContinuationUI, SubagentContext, SurfaceContext } from "./toolkit";
@@ -38,8 +36,7 @@ export function useChat(): LongxRuntime {
 
 /**
  * Mounts assistant-ui's runtime for the whole project window, so the
- * thread list tool and the chat in the centre share one runtime; the
- * dirty-tree question is the one piece of DOM this needs.
+ * thread list tool and the chat in the centre share one runtime.
  */
 export function ChatProvider({
   projectId,
@@ -56,27 +53,12 @@ export function ChatProvider({
 }) {
   const { threadId } = useParams();
   const navigate = useNavigate();
-  const [dirty, setDirty] = useState<DirtyPrompt | null>(null);
 
   // null: the thread on screen was deleted or archived → the project's new chat
   const onOpenThread = useCallback(
     (id: string | null) => navigate(id ? `/p/${slug}/t/${id}` : `/p/${slug}`),
     [navigate, slug],
   );
-  const onDirtyTree = useCallback(
-    (changes: DirtyChange[]) =>
-      new Promise<DirtyDecision>((resolve) => {
-        setDirty({
-          changes,
-          resolve: (decision) => {
-            setDirty(null);
-            resolve(decision);
-          },
-        });
-      }),
-    [],
-  );
-
   // where the agent's surfaces open: the project's workbench (a tab; a sheet on a phone)
   const workbench = useWorkbench(projectId);
   const openSurface = workbench.open;
@@ -122,7 +104,6 @@ export function ChatProvider({
     defaultModelId,
     threadId,
     onOpenThread,
-    onDirtyTree,
     onSignal,
     onRetract,
   });
@@ -178,7 +159,6 @@ export function ChatProvider({
         </SubagentContext.Provider>
         </ActionAnswerContext.Provider>
       </SurfaceContext.Provider>
-        <DirtyTreeDialog prompt={dirty} />
       </AssistantRuntimeProvider>
     </ChatContext.Provider>
   );

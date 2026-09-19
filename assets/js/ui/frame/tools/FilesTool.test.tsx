@@ -23,7 +23,7 @@ async function openFiles(width = 1280) {
   const user = userEvent.setup();
   const r = renderAt("/p/app-1/t/t1");
   await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-  await user.keyboard("{Meta>}5{/Meta}");
+  await user.keyboard("{Meta>}4{/Meta}");
   const panel = await screen.findByTestId(width < 1024 ? "tool-sheet" : "tool-panel");
   await within(panel).findByText("README.md");
   return { user, panel, ...r };
@@ -42,7 +42,7 @@ describe("FilesTool", () => {
     vi.mocked(readFile).mockResolvedValue(ok({ path: "lib/a.ex", content: "defmodule A do\nend\n", size: 12, binary: false, truncated: false }) as never);
   });
 
-  test("⌘5 shows the tree: folders first, lazy children, git status on files and their folders; a file opens in the editor", async () => {
+  test("⌘4 shows the tree: folders first, lazy children, git status on files and their folders; a file opens in the editor", async () => {
     const { user, panel } = await openFiles();
     const rows = within(panel).getAllByRole("treeitem");
     expect(rows.map((r) => r.textContent)).toEqual(["lib", "README.md"]);

@@ -62,7 +62,7 @@ defmodule LongxWeb.ProjectsRpcTest do
   defp create!(conn, dir, extra \\ %{}) do
     %{"success" => true, "data" => project} =
       rpc(conn, "create_project", %{
-        "fields" => ["id", "slug", "name", "rootPath", "webSearch", "dirtyStart"],
+        "fields" => ["id", "slug", "name", "rootPath", "webSearch"],
         "input" => Map.merge(%{"name" => "Demo App", "rootPath" => dir}, extra)
       })
 
@@ -159,7 +159,6 @@ defmodule LongxWeb.ProjectsRpcTest do
       assert project["slug"] == "demo-app"
       assert project["rootPath"] == Path.expand(dir)
       assert project["webSearch"] == true
-      assert project["dirtyStart"] == "commit"
 
       assert %{"success" => true, "data" => [%{"id" => id}]} =
                rpc(conn, "list_projects", %{"fields" => ["id"]})
@@ -580,62 +579,6 @@ defmodule LongxWeb.ProjectsRpcTest do
   end
 
   describe "history" do
-    test "restore_proposal → restore_files over the wire", %{conn: conn, dir: dir, bypass: bypass} do
-      script!(bypass, [ResponsesFixture.assistant_message("one")])
-      project = create!(conn, dir, %{"initGit" => true})
-      {thread_id, _} = start!(conn, project)
-
-      %{"success" => true, "data" => %{"id" => turn_id}} =
-        rpc(conn, "send_message", %{
-          "fields" => ["id"],
-          "input" => %{"threadId" => thread_id, "text" => "say one"}
-        })
-
-      thread_idle(conn, project["id"], thread_id)
-
-      %{"success" => true, "data" => [%{"commitBefore" => sha, "status" => "completed"}]} =
-        rpc(conn, "list_turns", %{
-          "fields" => ["status", "commitBefore"],
-          "input" => %{"threadId" => thread_id}
-        })
-
-      assert is_binary(sha)
-
-      # some work after the turn, then the proposal names it
-      File.write!(Path.join(dir, "a.txt"), "changed")
-
-      assert %{"success" => true, "data" => proposal} =
-               rpc(conn, "restore_proposal", %{
-                 "fields" => ["commit", "dirtyNow", "changedFiles", "laterTurns"],
-                 "input" => %{"turnId" => turn_id}
-               })
-
-      assert %{
-               "commit" => ^sha,
-               "dirtyNow" => true,
-               "changedFiles" => ["a.txt"],
-               "laterTurns" => 0
-             } = proposal
-
-      # restoring needs confirm, makes the safety commit, puts a.txt back
-      assert %{"success" => false} =
-               rpc(conn, "restore_files", %{
-                 "fields" => ["head"],
-                 "input" => %{"turnId" => turn_id}
-               })
-
-      assert %{"success" => true, "data" => %{"safetyCommit" => safety, "head" => head}} =
-               rpc(conn, "restore_files", %{
-                 "fields" => ["safetyCommit", "head"],
-                 "input" => %{"turnId" => turn_id, "confirm" => true}
-               })
-
-      assert is_binary(safety) and is_binary(head)
-      refute File.exists?(Path.join(dir, "a.txt"))
-    end
-  end
-
-  describe "delete thread" do
     test "delete_thread removes the row and its turns, not while a turn runs", %{
       conn: conn,
       dir: dir,
@@ -674,33 +617,30 @@ defmodule LongxWeb.ProjectsRpcTest do
   end
 
   describe "dirty tree" do
-    test "send_message on a dirty :ask project is a structured error the UI can act on", %{
+    test "send_message on a dirty tree just sends: no policy, no commit, no dirty argument", %{
       conn: conn,
       dir: dir,
       bypass: bypass
     } do
       script!(bypass, [ResponsesFixture.assistant_message("go")])
-      project = create!(conn, dir, %{"initGit" => true, "dirtyStart" => "ask"})
+      project = create!(conn, dir, %{"initGit" => true})
       File.write!(Path.join(dir, "a.txt"), "changed")
       {thread_id, _} = start!(conn, project)
 
-      assert %{"success" => false, "errors" => [error]} =
+      assert %{"success" => true} =
                rpc(conn, "send_message", %{
                  "fields" => ["id"],
                  "input" => %{"threadId" => thread_id, "text" => "go"}
                })
 
-      assert %{"type" => "dirty_tree", "details" => %{"changes" => [%{"path" => "a.txt"}]}} =
-               error
-
-      # the override goes through
-      assert %{"success" => true} =
-               rpc(conn, "send_message", %{
-                 "fields" => ["id"],
-                 "input" => %{"threadId" => thread_id, "text" => "go", "dirty" => "ignore"}
-               })
-
       thread_idle(conn, project["id"], thread_id)
+      assert File.read!(Path.join(dir, "a.txt")) == "changed"
+
+      assert %{"success" => false} =
+               rpc(conn, "list_turns", %{
+                 "fields" => ["commitBefore"],
+                 "input" => %{"threadId" => thread_id}
+               })
     end
   end
 

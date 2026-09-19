@@ -208,11 +208,10 @@ export type ProjectFilesAttributesOnlySchema = {
 // Project Schema
 export type ProjectResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "agentSettings" | "archivedAt" | "description" | "dirtyStart" | "id" | "insertedAt" | "modelId" | "name" | "rootPath" | "slug" | "trustLocalAgent" | "updatedAt" | "webSearch";
+  __primitiveFields: "agentSettings" | "archivedAt" | "description" | "id" | "insertedAt" | "modelId" | "name" | "rootPath" | "slug" | "trustLocalAgent" | "updatedAt" | "webSearch";
   agentSettings: Record<string, any> | null;
   archivedAt: UtcDateTimeUsec | null;
   description: string | null;
-  dirtyStart: "ask" | "commit" | "off";
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   modelId: UUID | null;
@@ -229,11 +228,10 @@ export type ProjectResourceSchema = {
 
 export type ProjectAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "agentSettings" | "archivedAt" | "description" | "dirtyStart" | "id" | "insertedAt" | "modelId" | "name" | "rootPath" | "slug" | "trustLocalAgent" | "updatedAt" | "webSearch";
+  __primitiveFields: "agentSettings" | "archivedAt" | "description" | "id" | "insertedAt" | "modelId" | "name" | "rootPath" | "slug" | "trustLocalAgent" | "updatedAt" | "webSearch";
   agentSettings: Record<string, any> | null;
   archivedAt: UtcDateTimeUsec | null;
   description: string | null;
-  dirtyStart: "ask" | "commit" | "off";
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   modelId: UUID | null;
@@ -311,12 +309,8 @@ export type ThreadAttributesOnlySchema = {
 // Turn Schema
 export type TurnResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "commitAfter" | "commitBefore" | "completedAt" | "diff" | "dirtyStart" | "error" | "id" | "insertedAt" | "kernelTurnId" | "modelSlug" | "reasoningEffort" | "startedAt" | "status" | "threadId" | "updatedAt" | "usage" | "userText";
-  commitAfter: string | null;
-  commitBefore: string | null;
+  __primitiveFields: "completedAt" | "error" | "id" | "insertedAt" | "kernelTurnId" | "modelSlug" | "reasoningEffort" | "startedAt" | "status" | "threadId" | "updatedAt" | "usage" | "userText";
   completedAt: UtcDateTimeUsec | null;
-  diff: string | null;
-  dirtyStart: boolean;
   error: string | null;
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
@@ -336,12 +330,8 @@ export type TurnResourceSchema = {
 
 export type TurnAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "commitAfter" | "commitBefore" | "completedAt" | "diff" | "dirtyStart" | "error" | "id" | "insertedAt" | "kernelTurnId" | "modelSlug" | "reasoningEffort" | "startedAt" | "status" | "threadId" | "updatedAt" | "usage" | "userText";
-  commitAfter: string | null;
-  commitBefore: string | null;
+  __primitiveFields: "completedAt" | "error" | "id" | "insertedAt" | "kernelTurnId" | "modelSlug" | "reasoningEffort" | "startedAt" | "status" | "threadId" | "updatedAt" | "usage" | "userText";
   completedAt: UtcDateTimeUsec | null;
-  diff: string | null;
-  dirtyStart: boolean;
   error: string | null;
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
@@ -1171,16 +1161,6 @@ export type ProjectFilterInput = {
     stringStartsWith?: string;
   };
 
-  dirtyStart?: {
-    eq?: "ask" | "commit" | "off";
-    notEq?: "ask" | "commit" | "off";
-    in?: Array<"ask" | "commit" | "off">;
-    lessThan?: "ask" | "commit" | "off";
-    greaterThan?: "ask" | "commit" | "off";
-    lessThanOrEqual?: "ask" | "commit" | "off";
-    greaterThanOrEqual?: "ask" | "commit" | "off";
-  };
-
   id?: {
     eq?: UUIDv7;
     notEq?: UUIDv7;
@@ -1487,34 +1467,6 @@ export type TurnFilterInput = {
   or?: Array<TurnFilterInput>;
   not?: Array<TurnFilterInput>;
 
-  commitAfter?: {
-    isNil?: boolean;
-    eq?: string;
-    notEq?: string;
-    in?: Array<string>;
-    lessThan?: string;
-    greaterThan?: string;
-    lessThanOrEqual?: string;
-    greaterThanOrEqual?: string;
-    contains?: string;
-    stringEndsWith?: string;
-    stringStartsWith?: string;
-  };
-
-  commitBefore?: {
-    isNil?: boolean;
-    eq?: string;
-    notEq?: string;
-    in?: Array<string>;
-    lessThan?: string;
-    greaterThan?: string;
-    lessThanOrEqual?: string;
-    greaterThanOrEqual?: string;
-    contains?: string;
-    stringEndsWith?: string;
-    stringStartsWith?: string;
-  };
-
   completedAt?: {
     isNil?: boolean;
     eq?: UtcDateTimeUsec;
@@ -1524,26 +1476,6 @@ export type TurnFilterInput = {
     greaterThan?: UtcDateTimeUsec;
     lessThanOrEqual?: UtcDateTimeUsec;
     greaterThanOrEqual?: UtcDateTimeUsec;
-  };
-
-  diff?: {
-    isNil?: boolean;
-    eq?: string;
-    notEq?: string;
-    in?: Array<string>;
-    lessThan?: string;
-    greaterThan?: string;
-    lessThanOrEqual?: string;
-    greaterThanOrEqual?: string;
-    contains?: string;
-    stringEndsWith?: string;
-    stringStartsWith?: string;
-  };
-
-  dirtyStart?: {
-    eq?: boolean;
-    notEq?: boolean;
-    in?: Array<boolean>;
   };
 
   error?: {
@@ -2056,14 +1988,14 @@ export const credentialFilterFields = ["allowedHosts", "authorizeUrl", "clientId
 export type CredentialFilterField = (typeof credentialFilterFields)[number];
 
 
-export const projectFilterFields = ["agentSettings", "archivedAt", "description", "dirtyStart", "id", "insertedAt", "modelId", "name", "rootPath", "slug", "trustLocalAgent", "updatedAt", "webSearch", "model"] as const;
+export const projectFilterFields = ["agentSettings", "archivedAt", "description", "id", "insertedAt", "modelId", "name", "rootPath", "slug", "trustLocalAgent", "updatedAt", "webSearch", "model"] as const;
 export type ProjectFilterField = (typeof projectFilterFields)[number];
 
 
 export const threadFilterFields = ["agentPath", "cwd", "handle", "id", "insertedAt", "kernelThreadId", "lastActivityAt", "modelSlug", "parentThreadId", "preview", "projectId", "reasoningEffort", "status", "title", "updatedAt", "webSearch", "parentThread", "project"] as const;
 export type ThreadFilterField = (typeof threadFilterFields)[number];
 
-export const turnFilterFields = ["commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "usage", "userText", "thread"] as const;
+export const turnFilterFields = ["completedAt", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "usage", "userText", "thread"] as const;
 export type TurnFilterField = (typeof turnFilterFields)[number];
 
 
@@ -2085,14 +2017,14 @@ export const credentialSortFields = ["allowedHosts", "authorizeUrl", "clientId",
 export type CredentialSortField = (typeof credentialSortFields)[number];
 
 
-export const projectSortFields = ["agentSettings", "archivedAt", "description", "dirtyStart", "id", "insertedAt", "modelId", "name", "rootPath", "slug", "trustLocalAgent", "updatedAt", "webSearch"] as const;
+export const projectSortFields = ["agentSettings", "archivedAt", "description", "id", "insertedAt", "modelId", "name", "rootPath", "slug", "trustLocalAgent", "updatedAt", "webSearch"] as const;
 export type ProjectSortField = (typeof projectSortFields)[number];
 
 
 export const threadSortFields = ["agentPath", "cwd", "handle", "id", "insertedAt", "kernelThreadId", "lastActivityAt", "modelSlug", "parentThreadId", "preview", "projectId", "reasoningEffort", "status", "title", "updatedAt", "webSearch"] as const;
 export type ThreadSortField = (typeof threadSortFields)[number];
 
-export const turnSortFields = ["commitAfter", "commitBefore", "completedAt", "diff", "dirtyStart", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "usage", "userText"] as const;
+export const turnSortFields = ["completedAt", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "usage", "userText"] as const;
 export type TurnSortField = (typeof turnSortFields)[number];
 
 

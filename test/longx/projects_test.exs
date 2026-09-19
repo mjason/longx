@@ -24,7 +24,7 @@ defmodule Longx.ProjectsTest do
 
       assert project.root_path == Path.expand(dir)
       assert project.slug == "my-cool-app"
-      assert project.dirty_start == :commit
+      refute Map.has_key?(project, :dirty_start)
       assert project.web_search == true
       assert project.trust_local_agent == false
       assert project.agent_settings == nil
@@ -61,9 +61,8 @@ defmodule Longx.ProjectsTest do
       assert id == project.id
       assert {:ok, %{id: ^id}} = Projects.get_project_by_slug("listed")
 
-      updated = Projects.update_project!(project, %{web_search: false, dirty_start: :off})
+      updated = Projects.update_project!(project, %{web_search: false})
       assert updated.web_search == false
-      assert updated.dirty_start == :off
 
       archived = Projects.archive_project!(project)
       assert %DateTime{} = archived.archived_at

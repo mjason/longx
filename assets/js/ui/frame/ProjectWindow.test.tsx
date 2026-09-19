@@ -114,7 +114,7 @@ describe("ProjectWindow", () => {
     setViewport(1280);
     const user = userEvent.setup();
     renderAt("/p/app-1/t/t2");
-    await user.keyboard("{Meta>}4{/Meta}");
+    await user.keyboard("{Meta>}3{/Meta}");
     const directory = await screen.findByTestId("session-directory");
     const rows = await within(directory).findAllByTestId("session-row");
     expect(rows).toHaveLength(2);

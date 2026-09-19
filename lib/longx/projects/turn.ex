@@ -1,9 +1,9 @@
 defmodule Longx.Projects.Turn do
   @moduledoc """
-  One turn of a project thread with its git bookmarks: the commit the
-  working tree was at when the turn started (`commit_before`, after any
-  dirty-start commit) and when it finished (`commit_after`). Those are what
-  "go back to before turn N" restores to.
+  One turn of a project thread: what was sent, on which model and level,
+  when it started and ended, how it ended, what it cost. Nothing of git:
+  the working tree is the person's (the per-turn bookmarks and restore
+  points of 0.2.x are gone).
   """
 
   use Ash.Resource,
@@ -21,59 +21,8 @@ defmodule Longx.Projects.Turn do
     type_name "Turn"
   end
 
-  # what restore_proposal/1 shows before anyone touches the tree
-  @restore_proposal [
-    commit: [type: :string, allow_nil?: false],
-    dirty_now: [type: :boolean, allow_nil?: false],
-    changed_files: [type: {:array, :string}, allow_nil?: false],
-    later_turns: [type: :integer, allow_nil?: false]
-  ]
-
-  @restore_result [
-    safety_commit: [type: :string],
-    head: [type: :string, allow_nil?: false]
-  ]
-
   actions do
     defaults [:read, :destroy]
-
-    ## Generic actions the SPA calls; the work is in Longx.Projects
-
-    action :restore_proposal, :map do
-      constraints fields: @restore_proposal
-      argument :turn_id, :uuid, allow_nil?: false
-
-      run fn input, _ ->
-        with {:ok, turn} <- Ash.get(__MODULE__, input.arguments.turn_id),
-             {:ok, proposal} <- Longx.Projects.restore_proposal(turn) do
-          {:ok,
-           %{
-             commit: proposal.commit,
-             dirty_now: proposal.dirty_now?,
-             changed_files: proposal.changed_files,
-             later_turns: proposal.later_turns
-           }}
-        end
-      end
-    end
-
-    # files back to before this turn; never without confirm
-    action :restore_files, :map do
-      constraints fields: @restore_result
-      argument :turn_id, :uuid, allow_nil?: false
-      argument :confirm, :boolean, default: false
-      argument :mode, :atom, constraints: [one_of: [:restore_tree, :reset_hard]]
-
-      run fn input, _ ->
-        opts =
-          input.arguments
-          |> Map.take([:confirm, :mode])
-          |> Enum.reject(fn {_, v} -> is_nil(v) end)
-
-        with {:ok, turn} <- Ash.get(__MODULE__, input.arguments.turn_id),
-             do: Longx.Projects.restore_files(turn, opts)
-      end
-    end
 
     create :create do
       primary? true
@@ -84,18 +33,12 @@ defmodule Longx.Projects.Turn do
         :user_text,
         :model_slug,
         :reasoning_effort,
-        :commit_before,
-        :dirty_start,
         :started_at
       ]
     end
 
     update :complete do
-      accept [:status, :completed_at, :commit_after, :error, :usage]
-    end
-
-    update :set_diff do
-      accept [:diff]
+      accept [:status, :completed_at, :error, :usage]
     end
 
     # the turn was removed from the conversation by a redo; kept for the record
@@ -149,13 +92,6 @@ defmodule Longx.Projects.Turn do
     attribute :started_at, :utc_datetime_usec, allow_nil?: false, public?: true
     attribute :completed_at, :utc_datetime_usec, public?: true
 
-    # git bookmarks; nil when the project is not a repository
-    attribute :commit_before, :string, public?: true
-    attribute :commit_after, :string, public?: true
-    # the tree had uncommitted changes when the turn started and they were not committed
-    attribute :dirty_start, :boolean, allow_nil?: false, default: false, public?: true
-
-    attribute :diff, :string, public?: true
     attribute :error, :string, public?: true
     # the turn's own token usage (inputTokens, cachedInputTokens, outputTokens,
     # reasoningOutputTokens, totalTokens) — the per-turn badge, kept across restarts

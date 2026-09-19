@@ -2,7 +2,7 @@
 // the slash-command adapter. Thread commands (/compact, /init, /goal) go to
 // the backend; the rest open a tool or a page. The text clears on pick — a command is not part of the message.
 import { unstable_useSlashCommandAdapter, useAui } from "@assistant-ui/react";
-import { FolderTree, GitBranch, History, MessageSquarePlus, Minimize2, ScrollText, Settings, Target } from "lucide-react";
+import { FolderTree, GitBranch, MessageSquarePlus, Minimize2, ScrollText, Settings, Target } from "lucide-react";
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 import { useGoalDialog } from "./GoalBar";
 
-const ICONS = { new: MessageSquarePlus, compact: Minimize2, init: ScrollText, goal: Target, git: GitBranch, files: FolderTree, history: History, settings: Settings };
+const ICONS = { new: MessageSquarePlus, compact: Minimize2, init: ScrollText, goal: Target, git: GitBranch, files: FolderTree, settings: Settings };
 
 export function SlashCommands() {
   const { thread } = useChat();
@@ -46,7 +46,6 @@ export function SlashCommands() {
       { id: "goal", description: t.commands.goal, icon: "goal", execute: () => goalDialog?.open() },
       { id: "git", description: t.commands.git, icon: "git", execute: () => frame.open("git") },
       { id: "files", description: t.commands.files, icon: "files", execute: () => frame.open("files") },
-      { id: "history", description: t.commands.history, icon: "history", execute: () => frame.open("history") },
       { id: "settings", description: t.commands.settings, icon: "settings", execute: () => navigate(`/p/${slug}/settings`) },
     ];
   }, [threadId, aui, frame, navigate, slug, goalDialog]);

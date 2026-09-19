@@ -101,7 +101,6 @@ export const project = (n: number) => ({
   description: null,
   rootPath: `/srv/app-${n}`,
   webSearch: true,
-  dirtyStart: "commit",
   modelId: null,
   trustLocalAgent: false,
   agentSettings: null,
@@ -339,7 +338,6 @@ export function rpcMock() {
     steerTurn: vi.fn(async () => ok({ kernelTurnId: "turn_2" })),
     answerRequest: vi.fn(async () => ok(null)),
     deleteThread: vi.fn(async () => ok(null)),
-    listTurns: vi.fn(async () => ok([])),
     listSubagents: vi.fn(async () => ok([])),
     searchFiles: vi.fn(async () => ok([])),
     listFiles: vi.fn(async () => ok([])),
@@ -414,17 +412,6 @@ export function rpcMock() {
     gitFetch: vi.fn(async () => ok(null)),
     gitPull: vi.fn(async () => ok(null)),
     gitPush: vi.fn(async () => ok(null)),
-    restoreProposal: vi.fn(async () =>
-      ok({
-        commit: "aaaa1111",
-        dirtyNow: false,
-        changedFiles: [],
-        laterTurns: 0,
-      }),
-    ),
-    restoreFiles: vi.fn(async () =>
-      ok({ safetyCommit: null, head: "aaaa1111" }),
-    ),
     renameThread: vi.fn(async () => ok(thread(1))),
     setThreadHandle: vi.fn(async ({ input }: { input: { threadId: string; handle: string | null } }) => ok({ id: input.threadId, handle: input.handle })),
     directory: vi.fn(async () => ok({ sessions: [session(1, { handle: "main", address: "main", title: "值班", state: "running" }), session(2)] })),

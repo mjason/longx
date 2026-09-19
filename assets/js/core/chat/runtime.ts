@@ -22,8 +22,6 @@ import {
 } from "@assistant-ui/react";
 import {
   buildAdapter,
-  type DirtyChange,
-  type DirtyDecision,
   type ThreadTarget,
 } from "./adapter";
 import { subagentsOf, type SubViews } from "./messages";
@@ -44,7 +42,6 @@ export type LongxRuntimeOptions = {
   threadId: string | undefined;
   /** navigate to a thread; null = the project's new chat (after the thread on screen is gone) */
   onOpenThread: (threadId: string | null) => void;
-  onDirtyTree?: (changes: DirtyChange[]) => Promise<DirtyDecision>;
   /** a thread event worth telling the person about as it happens (model/rerouted) */
   onSignal?: (method: string, params: Record<string, unknown>) => void;
   /** a stop before anything came back: the message's text, to be put back in the composer */
@@ -99,7 +96,6 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     defaultModelId = null,
     threadId,
     onOpenThread,
-    onDirtyTree,
     onSignal,
     onRetract,
   } = opts;
@@ -286,7 +282,6 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
         loading: thread !== undefined && !ready && !error,
         createThread,
         onSent,
-        onDirtyTree,
         onRetract,
         refetch,
         threadList,
@@ -308,7 +303,6 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       error,
       createThread,
       onSent,
-      onDirtyTree,
       onRetract,
       refetch,
       threadList,

@@ -12,17 +12,12 @@ import type {
     ThreadMessageLike,
 } from "@assistant-ui/react";
 import { answerRequest, interruptTurn, retractTurn, sendMessage, setGoal, steerTurn } from "@/ash_rpc";
-import { RpcFailure, unwrap } from "@/core/projects";
+import { unwrap } from "@/core/projects";
 import { toMessages, type SubViews } from "./messages";
 import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
 import { runningTurnId, type ThreadView } from "./thread";
 
 export type ThreadTarget = { threadId: string; kernelThreadId: string };
-
-export type DirtyChange = { path: string; status: string };
-
-/** what to do with uncommitted changes when the project's policy is "ask"; null = don't send */
-export type DirtyDecision = "commit" | "ignore" | null;
 
 /** What renderers reach through `useAuiState((s) => s.thread.extras)`. */
 export type ThreadExtras = {
@@ -50,8 +45,6 @@ export type AdapterOptions = {
   loading?: boolean;
   createThread?: () => Promise<ThreadTarget>;
   onSent?: (target: ThreadTarget) => void;
-  /** the project's dirty_start is :ask and the tree is dirty — ask the person */
-  onDirtyTree?: (changes: DirtyChange[]) => Promise<DirtyDecision>;
   /** re-pull the snapshot in place (threads.reloadMainThread) */
   refetch?: () => Promise<void>;
   threadList?: ExternalStoreThreadListAdapter;
@@ -166,8 +159,8 @@ export function buildAdapter(
         }
         if (!steered.errors.some((e) => e.message === "not_running")) unwrap(steered);
       }
-      const send = (dirty?: "commit" | "ignore") =>
-        sendMessage({
+      unwrap(
+        await sendMessage({
           fields: ["id"],
           input: {
             threadId: target.threadId,
@@ -175,18 +168,9 @@ export function buildAdapter(
             ...(images.length > 0 ? { images } : {}),
             ...(opts.model ? { model: opts.model } : {}),
             ...(opts.effort ? { effort: opts.effort } : {}),
-            ...(dirty ? { dirty } : {}),
           },
-        });
-      try {
-        unwrap(await send());
-      } catch (error) {
-        const changes = dirtyChanges(error);
-        if (!changes || !opts.onDirtyTree) throw error;
-        const decision = await opts.onDirtyTree(changes);
-        if (!decision) return;
-        unwrap(await send(decision));
-      }
+        }),
+      );
       opts.onSent?.(target);
     },
     onCancel: async () => {
@@ -208,11 +192,3 @@ export function buildAdapter(
   };
 }
 
-function dirtyChanges(error: unknown): DirtyChange[] | null {
-  if (!(error instanceof RpcFailure)) return null;
-  const dirty = error.errors.find((e) => e.type === "dirty_tree");
-  if (!dirty) return null;
-  const changes = (dirty.details as { changes?: DirtyChange[] } | undefined)
-    ?.changes;
-  return Array.isArray(changes) ? changes : [];
-}
