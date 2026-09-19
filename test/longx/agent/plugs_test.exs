@@ -196,6 +196,18 @@ defmodule Longx.Agent.PlugsTest do
       assert text =~ "cannot override"
     end
 
+    test "two members with one name (a closed one's row revived by a restart) never break the tools' schema" do
+      twins = [
+        %{id: "a", name: "researcher", status: "done", role: "researcher", task: "x"},
+        %{id: "b", name: "researcher", status: "done", role: "researcher", task: "y"}
+      ]
+
+      step = Agents.call(team_step(%{children: twins}), Agents.init([]))
+      assert step.tools["close_agent"].schema["properties"]["agent"]["enum"] == ["researcher"]
+      assert step.tools["send_message"].schema["properties"]["agent"]["enum"] == ["researcher"]
+      assert :ok = Tool.validate(step.tools["close_agent"].schema, %{"agent" => "researcher"})
+    end
+
     test "agents [...] narrows the choices; a role nobody declared is not offered" do
       step = Agents.call(team_step(%{allowed: ["reviewer", "ghost"]}), Agents.init([]))
       assert step.tools["spawn_agent"].schema["properties"]["agent"]["enum"] == ["reviewer"]

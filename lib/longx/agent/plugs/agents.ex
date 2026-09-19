@@ -233,8 +233,10 @@ defmodule Longx.Agent.Plugs.Agents do
   # the team as tools: every member can be messaged (a finished one keeps
   # its context and answers on it), only this agent's own can be closed
   defp team_tools(children, siblings, directory) do
-    names = Enum.map(children ++ siblings, & &1.name)
-    own = Enum.map(children, & &1.name)
+    # unique: a JSON Schema enum with a name twice is invalid and every call fails
+    # (a closed child's row, revived by a restart, once doubled "researcher")
+    names = Enum.uniq(Enum.map(children ++ siblings, & &1.name))
+    own = Enum.uniq(Enum.map(children, & &1.name))
 
     to =
       case directory do
@@ -405,6 +407,8 @@ defmodule Longx.Agent.Plugs.Agents do
       Longx.Agent.forget_child(ctx.thread_id, id)
       Longx.Agent.stop(id)
       Longx.Agent.Kernel.Specs.delete(id)
+      # its row too, else a restart rebuilds the team from the rows and it is back
+      Longx.Projects.archive_agent_row(id)
       {:ok, "agent #{name} closed"}
     end
   end

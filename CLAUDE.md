@@ -188,8 +188,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     A child's idle exit (`:normal`, `:noproc`) keeps it a member with `pid` nil; `send/3`
     revives it through `Specs` and `Agent.interacted/2` re-monitors the new process; a
     crash marks it `failed` and is a message "[agent X] exited: reason"; only
-    `forget_child/2` (the `close_agent` tool, which also stops it and deletes its spec)
-    removes one. `max_children` counts working members. The team survives the parent
+    `forget_child/2` (the `close_agent` tool, which also stops it, deletes its spec and
+    **archives its row** — `Projects.archive_agent_row/1`; `list_subagents` skips
+    archived rows, so a restart's rebuild leaves a closed child out: a closed
+    researcher once came back beside the new one and the two names made the tools'
+    enum an invalid schema, every `close_agent` failing from then on — the enums are
+    `Enum.uniq`'d too) removes one. `max_children` counts working members. The team survives the parent
     leaving idle: `init` rebuilds it from `Specs.children_of/1` (specs carry `parent:`,
     `task:`, `spawned_at:`), and after a BEAM restart `Projects.ensure_agent` registers
     the children's specs from their rows (`register_team_specs/1`) before starting the

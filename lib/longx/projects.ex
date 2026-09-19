@@ -509,6 +509,25 @@ defmodule Longx.Projects do
 
   defp register_team_specs(_child), do: :ok
 
+  @doc """
+  A sub-agent closed by its parent (`close_agent`): its row is archived so
+  the team rebuilt from the rows after a restart leaves it out (a closed
+  researcher came back beside the new one, two members of one name, and the
+  tools' schema was invalid from then on). Nothing when the row is gone.
+  """
+  @spec archive_agent_row(String.t()) :: :ok
+  def archive_agent_row(kernel_thread_id) do
+    case get_thread_by_kernel_id(kernel_thread_id) do
+      {:ok, %Thread{parent_thread_id: parent} = row} when not is_nil(parent) ->
+        archive_thread!(row)
+        broadcast_changed(row.project_id)
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
   defp agent_opts(%Thread{} = thread) do
     [
       thread_id: thread.kernel_thread_id,

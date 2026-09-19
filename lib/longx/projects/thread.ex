@@ -331,7 +331,8 @@ defmodule Longx.Projects.Thread do
     # the sub-agents spawned inside a thread's conversation
     read :subagents_of do
       argument :parent_thread_id, :uuid, allow_nil?: false
-      filter expr(parent_thread_id == ^arg(:parent_thread_id))
+      # a closed child is archived: out of the team, the inbox and a restart's rebuild
+      filter expr(parent_thread_id == ^arg(:parent_thread_id) and status != :archived)
       prepare build(sort: [inserted_at: :asc])
     end
 

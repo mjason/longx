@@ -506,6 +506,52 @@ defmodule Longx.Projects.ThreadsTest do
     assert Agent.whereis(child_id) == nil
   end
 
+  test "a closed child is archived: a restart's team rebuild leaves it out, and a new child may take its name",
+       %{bypass: bypass, project: project} do
+    script!(bypass, [
+      ResponsesFixture.assistant_message("REPORT: done"),
+      ResponsesFixture.assistant_message("thanks"),
+      ResponsesFixture.assistant_message("REPORT: done again"),
+      ResponsesFixture.assistant_message("thanks again")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    assert {:ok, child_id} = Agent.spawn(thread.kernel_thread_id, "researcher", "look it up")
+    assert [%Thread{kernel_thread_id: ^child_id} = child] = Projects.list_subagents!(thread.id)
+
+    assert_eventually_ok(fn ->
+      match?([%Turn{status: :completed}], Projects.list_turns!(thread)) and
+        thread!(child.id).status == :idle and thread!(thread.id).status == :idle
+    end)
+
+    # closed through the tool's path: forgotten, stopped, spec gone — and the row archived
+    ctx = %Longx.Agent.Context{thread_id: thread.kernel_thread_id, project_id: project.id}
+
+    assert {:ok, "agent researcher closed"} =
+             Longx.Agent.Plugs.Agents.close_agent(%{"agent" => "researcher"}, ctx)
+
+    assert thread!(child.id).status == :archived
+    assert Projects.list_subagents!(thread.id) == []
+    assert Agent.children(thread.kernel_thread_id) == []
+
+    # a second researcher takes the plain name; after the parent is gone and hosted again
+    # (a restart rebuilds the team from the rows) the team has one researcher, not two
+    assert {:ok, child2} = Agent.spawn(thread.kernel_thread_id, "researcher", "look again")
+    assert [%Thread{kernel_thread_id: ^child2}] = Projects.list_subagents!(thread.id)
+
+    assert_eventually_ok(fn ->
+      match?([_, %Turn{status: :completed}], Projects.list_turns!(thread)) and
+        thread!(thread.id).status == :idle
+    end)
+
+    Longx.Test.Agents.stop_all!()
+    Longx.Agent.Kernel.Specs.delete(thread.kernel_thread_id)
+    Longx.Agent.Kernel.Specs.delete(child_id)
+    Longx.Agent.Kernel.Specs.delete(child2)
+    assert {:ok, _} = Projects.host_thread(thread.kernel_thread_id)
+    assert [%{name: "researcher", id: ^child2}] = Agent.children(thread.kernel_thread_id)
+  end
+
   test "the stall watchdog interrupts a turn with no progress even while pages keep joining the thread",
        %{bypass: bypass, project: project} do
     previous = Application.get_env(:longx, Projects.Tracker, [])
