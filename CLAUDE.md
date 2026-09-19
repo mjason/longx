@@ -926,7 +926,11 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `priv/static/images/logo.png` with `python3 assets/scripts/icons.py`. Tailwind v4 with
     shadcn token names, **no `@apply`**, no daisyUI; only `html` gets `overflow-x: hidden`.
     `DialogContent` is a flex column capped at the viewport with `DialogBody` as the
-    scrolling middle.
+    scrolling middle. **Copy works over plain http**: a LAN address is not a secure
+    context and the browser gives no `navigator.clipboard`, so `ui/lib/clipboard.ts`
+    (`copyText`, the selection + `execCommand("copy")` way) backs `use-copy-to-clipboard`
+    and `installClipboardFallback()` at boot (`index.tsx`) gives the page a
+    `navigator.clipboard.writeText` for assistant-ui's own copy button.
   - **The chat** — `ui/chat/`: `ChatProvider` (mounted by `ProjectWindow` around the whole
     window: `useLongxRuntime` + `AssistantRuntimeProvider` +
     `GoalProvider`; `useChat()` reads it), `ThreadPage` (the Thread element; the composer

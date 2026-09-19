@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { copyText } from "@/ui/lib/clipboard";
 
 export type UseCopyToClipboardOptions = {
   copiedDuration?: number;
@@ -12,11 +13,10 @@ export const useCopyToClipboard = ({
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
   const copyToClipboard = (value: string) => {
-    if (!value || typeof navigator === "undefined" || !navigator.clipboard) {
-      return;
-    }
+    if (!value) return;
 
-    navigator.clipboard.writeText(value).then(
+    // the Clipboard API, or the selection way on a plain-http LAN address
+    copyText(value).then(
       () => {
         setIsCopied(true);
         setTimeout(() => setIsCopied(false), copiedDuration);
