@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, PresentTool, SendFileTool, ShowDiffTool, ShowFileTool, ShowHtmlTool, SubagentTool, SurfaceContext, WebSearchTool, parseDiff, treeOf } from "./toolkit";
+import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, PresentTool, SendFileTool, ShowDiffTool, ShowFileTool, ShowHtmlTool, SubagentContext, SubagentTool, SurfaceContext, WebSearchTool, parseDiff, treeOf } from "./toolkit";
 
 const answerAction = vi.fn(async () => {});
 
@@ -309,6 +309,22 @@ describe("agents", () => {
       <SubagentTool {...part({ toolName: "subagent", toolCallId: "child-alpha", args: { name: "alpha", path: "/root/alpha", threadId: "child-alpha", kind: "completed", request: null }, result: { kind: "completed" }, status: { type: "complete" } })} />,
     );
     expect(screen.getByText("子 agent 完成")).toBeInTheDocument();
+  });
+
+  test("a working sub-agent's buttons stay on its header line, the status pill below — a phone never wraps 停止 to a line of its own", () => {
+    const ctx = { views: {}, stop: vi.fn(async () => {}), open: vi.fn() };
+    render(
+      <SubagentContext.Provider value={ctx}>
+        <SubagentTool {...part({ toolName: "subagent", toolCallId: "child-alpha", args: { name: "alpha", path: "/root/alpha", threadId: "child-alpha", kind: "started", request: null } })} />
+      </SubagentContext.Provider>,
+    );
+    const row = screen.getByTestId("tool-subagent");
+    const header = within(row).getByTestId("subagent-header");
+    expect(header).not.toHaveClass("flex-wrap");
+    expect(within(header).getByRole("button", { name: "打开" })).toBeInTheDocument();
+    expect(within(header).getByRole("button", { name: "停止" })).toBeInTheDocument();
+    expect(within(header).queryByText("已启动")).not.toBeInTheDocument();
+    expect(within(row).getByText("已启动")).toBeInTheDocument();
   });
 
   test("a context compaction is a quiet marker", async () => {

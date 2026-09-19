@@ -767,21 +767,25 @@ export const SubagentTool: ToolCallMessagePartComponent<
   };
   return (
     <div className="flex flex-col gap-1.5 py-1" data-testid="tool-subagent" data-state={state}>
-      <div className="flex flex-wrap items-center gap-2 text-[13.5px]">
+      {/* one line that never wraps: the name gives way, the buttons keep the end (on a phone
+          the pill pushed 停止 onto a line of its own) */}
+      <div className="flex min-w-0 items-center gap-2 text-[13.5px]" data-testid="subagent-header">
         <Bot className={cn("size-3.5 shrink-0", failed ? "text-destructive" : "text-foreground/55")} aria-hidden />
-        <span className="text-foreground/55">{failed ? t.subagentInterrupted : done ? t.subagentDone : t.subagentWorking}</span>
-        <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">{p.args.name}</code>
-        <AgentStatus state={state} label={label} elapsed={elapsedLabel(elapsed)} action={null} className="pe-3.5" />
+        <span className="text-foreground/55 shrink-0">{failed ? t.subagentInterrupted : done ? t.subagentDone : t.subagentWorking}</span>
+        <code className="bg-muted min-w-0 truncate rounded px-1.5 py-0.5 font-mono text-xs">{p.args.name}</code>
         {subagents ? (
-          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => subagents.open(p.args.threadId, p.args.name)}>
+          <Button size="sm" variant="ghost" className="ms-auto h-6 shrink-0 px-2 text-xs" onClick={() => subagents.open(p.args.threadId, p.args.name)}>
             {t.openSubagent}
           </Button>
         ) : null}
         {!done && subagents ? (
-          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={stopping} onClick={() => void stop()}>
+          <Button size="sm" variant="ghost" className="h-6 shrink-0 px-2 text-xs" disabled={stopping} onClick={() => void stop()}>
             {t.stopSubagent}
           </Button>
         ) : null}
+      </div>
+      <div className="flex min-w-0 ps-6">
+        <AgentStatus state={state} label={label} elapsed={elapsedLabel(elapsed)} action={null} className="max-w-full pe-3.5 [&>span:not(.sr-only)]:max-w-none [&>span:not(.sr-only)]:min-w-0" />
       </div>
       {excerpt ? <p className="text-muted-foreground truncate ps-6 text-xs">{excerpt}</p> : null}
       {pending ? (
