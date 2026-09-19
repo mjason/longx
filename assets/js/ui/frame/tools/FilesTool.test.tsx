@@ -88,18 +88,17 @@ describe("FilesTool", () => {
     const { user, panel } = await openFiles();
     await user.click(within(panel).getByRole("treeitem", { name: /README/ }));
     const preview = await screen.findByTestId("markdown-preview");
-    // shiki highlights asynchronously: wait for the block with its text
-    const pre = await waitFor(
+    // shiki highlights asynchronously and swaps the plain block for its own:
+    // query afresh each time — a block found earlier may be detached by now
+    await waitFor(
       () => {
         const el = preview.querySelector("pre");
         expect(el?.textContent).toContain("xargs -r rm -rf");
-        return el!;
+        // the highlighter's wrapper carries the rules for its pre: wrap, never a hidden overflow
+        expect(el!.closest('[class*="whitespace-pre-wrap"]')).not.toBeNull();
       },
       { timeout: 4000 },
     );
-    // the container's rules: wrap, never a hidden overflow
-    const container = pre.closest(".aui-shiki-base");
-    expect(container?.className).toMatch(/\[&_pre\]:whitespace-pre-wrap/);
   });
 
   test("editing marks the tab; save writes the file (⌘S too)", async () => {
