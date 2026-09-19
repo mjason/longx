@@ -34,7 +34,7 @@ defmodule Longx.Agent.Definition.SettingsTest do
     assert %{max_depth: 3, max_children: 4, idle_minutes: 5} = Settings.global()
 
     # the machine's guards on commands: OOM priority, address-space share, the memory floor
-    assert %{command_oom_priority: 800, command_memory_percent: 50, memory_floor_percent: 8} =
+    assert %{command_oom_priority: 800, command_memory_percent: 90, memory_floor_percent: 8} =
              Settings.global()
 
     assert {:ok, %{command_memory_percent: 0, memory_floor_percent: 20}} =
@@ -98,7 +98,7 @@ defmodule Longx.Agent.Definition.SettingsTest do
     assert {Longx.Agent.Plugs.Shell, shell} =
              Enum.find(main.plugs, &match?({Longx.Agent.Plugs.Shell, _}, &1))
 
-    assert shell[:oom_score_adj] == 800 and shell[:memory_percent] == 50 and
+    assert shell[:oom_score_adj] == 800 and shell[:memory_percent] == 90 and
              shell[:memory_floor_percent] == 8
 
     # the main agent keeps whatever the person chose: no model from the settings

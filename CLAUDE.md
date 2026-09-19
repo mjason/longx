@@ -288,7 +288,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `write_stdin` sessions are not offered), `max_output_tokens`, `shell`, `login`;
     stdout+stderr interleaved, head+tail kept, exit code reported; `Longx.Agent.Tools.
     ShellEnv` builds the environment). **The machine is guarded** (the settings'
-    `command_oom_priority` 800 / `command_memory_percent` 50 / `memory_floor_percent`
+    `command_oom_priority` 800 / `command_memory_percent` 90 / `memory_floor_percent`
     8, per project too; the loader's settings layer hands them to the plug as
     `options Shell, oom_score_adj:/memory_percent:/memory_floor_percent:` and the tool
     is mounted as a closure carrying them, its description telling the model the
@@ -357,7 +357,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     the agent wrote on this machine) → the settings layer (`Longx.Agent.Definition.
     Settings`: `max_depth` 2, `max_children` 4, `idle_minutes` 30, `child_model` /
     `child_effort`, `model_retries` 3, the command guards `command_oom_priority` 800 /
-    `command_memory_percent` 50 / `memory_floor_percent` 8 — global in
+    `command_memory_percent` 90 / `memory_floor_percent` 8 — global in
     `Longx.System.Setting`, overridden per project by `Project.agent_settings`). **No global code layer**: no global agents, plugs
     or skills; the only thing shared across projects is the global knowledge. A layer is
     `agent.exs` + `plugs/**/*.exs` + `agents/<name>/agent.exs`; every `defmodule` of a layer

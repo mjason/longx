@@ -135,6 +135,8 @@ defmodule LongxWeb.ProjectsRpcTest do
     end
   end
 
+  # the thread idle and no turn row left in progress (the Tracker idles the thread
+  # first, then finishes the turn row — a list right after the idle saw in_progress)
   defp thread_idle(conn, project_id, thread_id) do
     assert_eventually(fn ->
       %{"success" => true, "data" => threads} =
@@ -143,7 +145,11 @@ defmodule LongxWeb.ProjectsRpcTest do
           "input" => %{"projectId" => project_id}
         })
 
-      match?(%{"status" => "idle"}, Enum.find(threads, &(&1["id"] == thread_id)))
+      %{"success" => true, "data" => turns} =
+        rpc(conn, "list_turns", %{"fields" => ["status"], "input" => %{"threadId" => thread_id}})
+
+      match?(%{"status" => "idle"}, Enum.find(threads, &(&1["id"] == thread_id))) and
+        not Enum.any?(turns, &(&1["status"] == "in_progress"))
     end)
   end
 

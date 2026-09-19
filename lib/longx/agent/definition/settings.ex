@@ -42,7 +42,7 @@ defmodule Longx.Agent.Definition.Settings do
     # a GPU backtest once took the whole machine down: the driver's memory is no
     # process's, so the OOM killer went for Firefox and the box was rebooted
     command_oom_priority: 800,
-    command_memory_percent: 50,
+    command_memory_percent: 90,
     memory_floor_percent: 8,
     child_model: nil,
     child_effort: nil

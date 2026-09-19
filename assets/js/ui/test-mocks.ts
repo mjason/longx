@@ -69,7 +69,7 @@ export const agentSettingsData = () => ({
   idleMinutes: 30,
   modelRetries: 3,
   commandOomPriority: 800,
-  commandMemoryPercent: 50,
+  commandMemoryPercent: 90,
   memoryFloorPercent: 8,
   childModel: null,
   childEffort: null,
