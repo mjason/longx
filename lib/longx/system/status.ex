@@ -71,6 +71,13 @@ defmodule Longx.System.Status do
     child_effort: [type: :string]
   ]
 
+  @sentry_fields [
+    enabled: [type: :boolean, allow_nil?: false],
+    dsn: [type: :string],
+    environment: [type: :string, allow_nil?: false],
+    release: [type: :string, allow_nil?: false]
+  ]
+
   actions do
     # The directory picker: subdirectories of `path` (home when omitted),
     # each flagged when it is a git repository. Files are never listed;
@@ -255,6 +262,38 @@ defmodule Longx.System.Status do
 
       run fn _input, _ ->
         {:ok, %{url: Longx.System.public_url(), setting: Longx.System.public_url_setting()}}
+      end
+    end
+
+    # error reporting (Longx.Sentry): on when a DSN is saved
+    action :sentry_status, :map do
+      constraints fields: @sentry_fields
+      run fn _input, _ -> {:ok, Longx.Sentry.status()} end
+    end
+
+    action :set_sentry_dsn, :map do
+      constraints fields: @sentry_fields
+      argument :dsn, :string, allow_nil?: false, constraints: [allow_empty?: true]
+
+      run fn input, _ ->
+        case Longx.Sentry.set_dsn(input.arguments.dsn) do
+          {:ok, _} -> {:ok, Longx.Sentry.status()}
+          {:error, message} -> argument_error(:dsn, message)
+        end
+      end
+    end
+
+    action :sentry_test, :map do
+      constraints fields: [
+                    ok: [type: :boolean, allow_nil?: false],
+                    message: [type: :string, allow_nil?: false]
+                  ]
+
+      run fn _input, _ ->
+        case Longx.Sentry.send_test() do
+          {:ok, id} -> {:ok, %{ok: true, message: id}}
+          {:error, message} -> {:ok, %{ok: false, message: message}}
+        end
       end
     end
 

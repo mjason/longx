@@ -684,6 +684,21 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   `upgrade_check` / `upgrade_apply` / `set_github_token`, `gateway_requests`, the browser
   actions. `Longx.System.Setting` is the key/value store (`:encrypted_value` — upsert
   names that column, else a second put never updates).
+  - **Error reporting — `Longx.Sentry`** (`{:sentry, "~> 13"}`, the default Finch client):
+    the SDK starts with no DSN (`config :sentry` — silent) and the one saved in the
+    settings (`Setting` key `sentry_dsn`, encrypted) is applied at runtime with
+    `Sentry.put_config/2` — `set_dsn/1` validates the shape and applies, `""` clears
+    and turns reporting off, `configure_from_settings/0` is a boot task after the repo.
+    Reported: request exceptions (`use Sentry.PlugCapture` on the endpoint,
+    `plug Sentry.PlugContext` after the parsers), process crashes
+    (`Sentry.LoggerHandler` attached once a DSN is set, crash reports only),
+    `Longx.System.Faults.record/3` (`fault/3`, warnings), failed turns from the Tracker
+    (`turn_failed/3`, errors tagged thread / turn, fingerprinted by the message's first
+    words), and `send_test/0` from the page. RPC `sentry_status` / `set_sentry_dsn` /
+    `sentry_test`; the card at the bottom of Settings → 请求记录 (`SentryCard`,
+    `core/sentry.ts`): the DSN masked, 已开启 / 未开启, 发送测试事件, 清除并停止. Tests:
+    `test/longx/sentry_test.exs` (Bypass plays Sentry's envelope endpoint),
+    `sentry_rpc_test`.
   - **`Longx.System.Dependencies`** — the command-line tools the agent leans on: `rg`,
     `fd` (`fdfind` on Debian), `fzf`, `bat` (`batcat`), `jq`, `tree`, `git`, `gh`, `delta`;
     `check/1` runs `--version` through the shim (2 s cap), cached in `persistent_term` for

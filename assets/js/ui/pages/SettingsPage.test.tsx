@@ -33,6 +33,8 @@ import {
   upgradeCheck,
   upgradeStatus,
   recentFaults,
+  setSentryDsn,
+  sentryTest,
 } from "@/ash_rpc";
 import { browserIdle, dependencyReport, dependencyTool, model, upgradeIdle } from "@/ui/test-mocks";
 import { page } from "@/core/upgrade";
@@ -415,6 +417,22 @@ describe("SettingsPage", () => {
     expect(rows[0]).toHaveTextContent("socket_encode");
     expect(rows[0]).toHaveTextContent("thread:native_1");
     expect(rows[0]).toHaveTextContent("invalid byte");
+  });
+
+  test("requests: error reporting is off until a DSN is saved; then it shows masked, on, and a test event can be sent", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/requests");
+    const card = await screen.findByTestId("section-sentry");
+    expect(await within(card).findByText("未开启")).toBeInTheDocument();
+    await user.type(within(card).getByLabelText("DSN"), "https://abc@o1.ingest.sentry.io/42");
+    await user.click(within(card).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(setSentryDsn).toHaveBeenCalledWith(expect.objectContaining({ input: { dsn: "https://abc@o1.ingest.sentry.io/42" } })));
+    expect(await within(card).findByText(/https:\/\/\*\*\*@o1\.ingest\.sentry\.io\/42/)).toBeInTheDocument();
+    expect(card).toHaveTextContent("已开启");
+    await user.click(within(card).getByRole("button", { name: "发送测试事件" }));
+    await waitFor(() => expect(sentryTest).toHaveBeenCalled());
+    expect(await within(card).findByText(/evt-1/)).toBeInTheDocument();
   });
 
   test("watches: every project's watches, the running one first, with project, schedule, state and last run", async () => {

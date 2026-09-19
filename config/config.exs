@@ -134,6 +134,16 @@ config :phoenix, :json_library, Jason
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
+# Error reporting (Longx.Sentry): the SDK starts with no DSN — silent —
+# and the one saved in the settings is applied at runtime. The release is
+# Longx's version; the source code is not shipped, so no context from it.
+config :sentry,
+  dsn: nil,
+  environment_name: config_env(),
+  release: Mix.Project.config()[:version],
+  enable_source_code_context: false,
+  send_result: :none
+
 import_config "#{config_env()}.exs"
 
 # Self-upgrade from GitHub releases (Longx.Upgrade): where to look, how often

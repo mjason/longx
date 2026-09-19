@@ -76,6 +76,8 @@ defmodule Longx.MixProject do
       {:ash, "~> 3.0"},
       {:ash_cloak, "~> 0.4"},
       {:oban, "~> 2.24"},
+      # error reporting, on when a DSN is set in the settings (Longx.Sentry)
+      {:sentry, "~> 13.5"},
       {:cloak, "~> 1.1"},
       {:ex_json_schema, "~> 0.11"},
       {:bypass, "~> 2.1", only: :test},

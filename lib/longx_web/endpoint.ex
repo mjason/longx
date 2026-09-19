@@ -1,4 +1,6 @@
 defmodule LongxWeb.Endpoint do
+  # exceptions in requests reported when a DSN is set (Longx.Sentry)
+  use Sentry.PlugCapture
   use Phoenix.Endpoint, otp_app: :longx
 
   # The session will be stored in the cookie and signed,
@@ -56,6 +58,9 @@ defmodule LongxWeb.Endpoint do
     parsers: [:urlencoded, {:multipart, length: 512_000_000}, :json],
     pass: ["*/*"],
     json_decoder: Phoenix.json_library()
+
+  # the request on a reported exception (method, path, headers without cookies)
+  plug Sentry.PlugContext
 
   plug Plug.MethodOverride
   plug Plug.Head

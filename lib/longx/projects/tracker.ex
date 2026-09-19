@@ -113,6 +113,8 @@ defmodule Longx.Projects.Tracker do
         })
 
         notify_turn_end(thread, status, error)
+        # every failed turn, sub-agents' too: what the person will want to debug
+        if status == :failed, do: Longx.Sentry.turn_failed(kernel_thread_id, turn_id, error)
       end
 
       Projects.touch_thread!(thread, %{status: :idle, last_activity_at: DateTime.utc_now()})

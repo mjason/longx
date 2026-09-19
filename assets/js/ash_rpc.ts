@@ -7659,6 +7659,138 @@ export async function validateRecentFaults(
 }
 
 
+export type SentryStatusFields = UnifiedFieldSelection<{enabled: boolean, dsn: string | null, environment: string, release: string, __type: "TypedMap", __primitiveFields: "enabled" | "dsn" | "environment" | "release"}>[];
+
+export type InferSentryStatusResult<
+  Fields extends SentryStatusFields | undefined,
+> = InferResult<{enabled: boolean, dsn: string | null, environment: string, release: string, __type: "TypedMap", __primitiveFields: "enabled" | "dsn" | "environment" | "release"}, Fields>;
+
+export type SentryStatusResult<Fields extends SentryStatusFields | undefined = undefined> = | { success: true; data: InferSentryStatusResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function sentryStatus<Fields extends SentryStatusFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SentryStatusResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "sentry_status",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SentryStatusResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSentryStatus(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "sentry_status",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SentryTestFields = UnifiedFieldSelection<{ok: boolean, message: string, __type: "TypedMap", __primitiveFields: "ok" | "message"}>[];
+
+export type InferSentryTestResult<
+  Fields extends SentryTestFields | undefined,
+> = InferResult<{ok: boolean, message: string, __type: "TypedMap", __primitiveFields: "ok" | "message"}, Fields>;
+
+export type SentryTestResult<Fields extends SentryTestFields | undefined = undefined> = | { success: true; data: InferSentryTestResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function sentryTest<Fields extends SentryTestFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SentryTestResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "sentry_test",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SentryTestResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSentryTest(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "sentry_test",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type SetAgentSettingsInput = {
   maxDepth?: number | null;
   maxChildren?: number | null;
@@ -7948,6 +8080,80 @@ export async function validateSetPublicUrl(
 ): Promise<ValidationResult> {
   const payload = {
     action: "set_public_url",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetSentryDsnInput = {
+  dsn: string;
+};
+
+export type SetSentryDsnFields = UnifiedFieldSelection<{enabled: boolean, dsn: string | null, environment: string, release: string, __type: "TypedMap", __primitiveFields: "enabled" | "dsn" | "environment" | "release"}>[];
+
+export type InferSetSentryDsnResult<
+  Fields extends SetSentryDsnFields | undefined,
+> = InferResult<{enabled: boolean, dsn: string | null, environment: string, release: string, __type: "TypedMap", __primitiveFields: "enabled" | "dsn" | "environment" | "release"}, Fields>;
+
+export type SetSentryDsnResult<Fields extends SetSentryDsnFields | undefined = undefined> = | { success: true; data: InferSetSentryDsnResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function setSentryDsn<Fields extends SetSentryDsnFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SetSentryDsnInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetSentryDsnResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_sentry_dsn",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetSentryDsnResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetSentryDsn(
+  config: {
+  tenant?: string;
+  input: SetSentryDsnInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_sentry_dsn",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };

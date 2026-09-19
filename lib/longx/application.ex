@@ -18,6 +18,11 @@ defmodule Longx.Application do
         id: :search_provider_row,
         restart: :temporary
       ),
+      # error reporting, on when a DSN was saved (Longx.Sentry)
+      Supervisor.child_spec({Task, fn -> Longx.Sentry.configure_from_settings() end},
+        id: :sentry_dsn,
+        restart: :temporary
+      ),
       {DNSCluster, query: Application.get_env(:longx, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Longx.PubSub},
       # per-provider in-flight counters (Provider.max_concurrent_requests)

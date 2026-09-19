@@ -25,6 +25,7 @@ defmodule Longx.System.Faults do
   @doc "Remembers a fault. Safe from any process, before the table exists too (then dropped)."
   @spec record(atom, String.t() | nil, String.t()) :: :ok
   def record(kind, where, detail) when is_atom(kind) and is_binary(detail) do
+    Longx.Sentry.fault(kind, where, detail)
     entry = %{kind: kind, where: where, detail: detail, at: DateTime.utc_now()}
 
     try do

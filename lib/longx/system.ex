@@ -17,6 +17,9 @@ defmodule Longx.System do
       rpc_action :dependencies, :dependencies
       rpc_action :check_dependencies, :check_dependencies
       rpc_action :set_public_url, :set_public_url
+      rpc_action :sentry_status, :sentry_status
+      rpc_action :set_sentry_dsn, :set_sentry_dsn
+      rpc_action :sentry_test, :sentry_test
       rpc_action :upgrade_status, :upgrade_status
       rpc_action :upgrade_check, :upgrade_check
       rpc_action :upgrade_apply, :upgrade_apply

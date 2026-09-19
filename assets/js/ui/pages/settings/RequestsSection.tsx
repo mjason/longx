@@ -12,6 +12,7 @@ import { unwrap } from "@/core/projects";
 import { Button } from "@/ui/components/ui/button";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { t } from "@/ui/strings";
+import { SentryCard } from "./SentryCard";
 
 const s = t.requestsPage;
 
@@ -132,6 +133,7 @@ export function RequestsSection() {
         </ul>
       )}
       <FaultsList />
+      <SentryCard />
     </div>
   );
 }
