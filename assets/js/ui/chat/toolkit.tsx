@@ -22,13 +22,14 @@ import {
   type ToolCallMessagePartComponent,
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
-import { AppWindow, Download, FileCode2, GitCompareArrows } from "lucide-react";
+import { AppWindow, Bot, Download, FileCode2, GitCompareArrows } from "lucide-react";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { formatBytes } from "@/core/format";
 import type { Tab } from "@/core/workbench";
 import { toast } from "sonner";
 import type { ThreadExtras } from "@/core/chat/adapter";
-import { modelOf, type SubViews } from "@/core/chat/messages";
+import { askArgs, modelOf, ACTION_REQUEST, type SubViews } from "@/core/chat/messages";
+import type { ThreadView } from "@/core/chat/thread";
 import { Button } from "@/ui/components/ui/button";
 import {
   AgentStatus,
@@ -103,7 +104,30 @@ export const SurfaceContext = createContext<{ projectId: string; open: (tab: Tab
 export const SubagentContext = createContext<{
   views: SubViews;
   stop: (kernelThreadId: string) => Promise<void>;
+  /** the child's conversation in a workbench tab */
+  open: (kernelThreadId: string, name: string) => void;
 } | null>(null);
+
+// a tool-call part built by hand, for a renderer drawn outside a message
+// (a child's ask on its row): the callbacks are inert, the args are the thing
+function standalonePart<A>(id: string, toolName: string, args: A) {
+  return {
+    type: "tool-call" as const,
+    toolCallId: id,
+    toolName,
+    args,
+    argsText: JSON.stringify(args),
+    result: undefined,
+    isError: undefined,
+    artifact: undefined,
+    status: { type: "requires-action" as const, reason: "interrupt" as const },
+    addResult: () => {},
+    resume: () => {},
+    respondToApproval: async () => {},
+    parentId: undefined,
+    toolCallContext: undefined,
+  } as unknown as ToolCallMessagePartProps<A, unknown>;
+}
 
 /** A ToolCall row that opens itself while the work runs or when it failed, and can be toggled after. */
 function ToolRow({
@@ -696,27 +720,13 @@ function elapsedLabel(ms: number | undefined): string | undefined {
   return ms === undefined ? undefined : `${Math.round(ms / 1000)}s`;
 }
 
-// a sub-agent's nested conversation: the child's user turns (its task) and
-// assistant turns rendered with the same parts as the main thread — the
-// toolkit is inherited, so its commands / diffs / asks look the same
-const NestedUser = () => (
-  <MessagePrimitive.Root
-    data-slot="aui_nested-user-message"
-    className="text-muted-foreground my-1 text-sm"
-  >
-    <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
-  </MessagePrimitive.Root>
-);
-const NestedAssistant = () => (
-  <MessagePrimitive.Root
-    data-slot="aui_nested-assistant-message"
-    className="my-1 text-sm"
-  >
-    <AssistantParts />
-  </MessagePrimitive.Root>
-);
-
-/** One sub-agent: its state pill (waiting when the child asks the person to act) and its conversation nested. */
+/**
+ * One sub-agent, as a summary line: its state pill (state · model · what it is
+ * writing), its last words, 停止 while it works and 打开 for its conversation in
+ * a workbench tab — never the conversation itself, which is too long to
+ * unfold in the parent's thread. A child waiting on the person shows its ask
+ * right here, so the answer is one click away.
+ */
 export const SubagentTool: ToolCallMessagePartComponent<
   SubagentArgs,
   SubagentResult
@@ -727,10 +737,11 @@ export const SubagentTool: ToolCallMessagePartComponent<
   const kind = p.result?.kind ?? p.args.kind;
   const done = kind === "completed" || kind === "interrupted";
   const failed = kind === "interrupted";
-  const waiting = !done && p.args.request != null;
+  const childView = subagents?.views[p.args.threadId];
+  const pending = done ? undefined : childView?.requests.find((r) => r.method === ACTION_REQUEST);
+  const waiting = !done && (pending != null || p.args.request != null);
   const state: AgentState = done ? "done" : waiting ? "waiting" : "working";
   // what the child's model is writing right now, and what it runs on, from its own view
-  const childView = subagents?.views[p.args.threadId];
   const progress = done ? null : (childView?.progress ?? null);
   const childModel = childView?.turn ? modelOf(childView.turn) : undefined;
   const onModel = childModel ? `${childModel.slug}${childModel.effort ? ` · ${childModel.effort}` : ""}` : null;
@@ -740,7 +751,9 @@ export const SubagentTool: ToolCallMessagePartComponent<
       : progress?.kind === "toolCall"
         ? t.turnWriting(progress.name, formatBytes(progress.bytes))
         : (t.subagentState[kind] ?? kind);
-  const working = onModel ? `${doing} · ${onModel}` : doing;
+  const label = waiting ? (pending ? String(pending.params["title"] ?? "") : p.args.request?.title) || t.subagentNeedsAction : onModel ? `${doing} · ${onModel}` : doing;
+  // its last words, for the row
+  const excerpt = lastWords(childView);
   const stop = async () => {
     if (!subagents) return;
     setStopping(true);
@@ -753,45 +766,45 @@ export const SubagentTool: ToolCallMessagePartComponent<
     }
   };
   return (
-    <ToolRow
-      label={failed ? t.subagentInterrupted : t.subagentDone}
-      activeLabel={t.subagentWorking}
-      query={p.args.name}
-      running={!done}
-      failed={failed}
-      testId="tool-subagent"
-      openWhileRunning={waiting}
-    >
-      <div className="flex flex-col gap-2">
-        <AgentStatus
-          state={state}
-          label={waiting ? p.args.request?.title || t.subagentNeedsAction : working}
-          elapsed={elapsedLabel(elapsed)}
-          action={
-            !done && subagents ? (
-              <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={stopping} onClick={() => void stop()}>
-                {t.stopSubagent}
-              </Button>
-            ) : null
-          }
-          className="self-start pe-3.5"
-        />
-        {p.messages?.length ? (
-          <div
-            className="border-border/60 flex flex-col border-s ps-3"
-            data-testid="subagent-messages"
-          >
-            <MessagePartPrimitive.Messages>
-              {({ message }) =>
-                message.role === "user" ? <NestedUser /> : <NestedAssistant />
-              }
-            </MessagePartPrimitive.Messages>
-          </div>
+    <div className="flex flex-col gap-1.5 py-1" data-testid="tool-subagent" data-state={state}>
+      <div className="flex flex-wrap items-center gap-2 text-[13.5px]">
+        <Bot className={cn("size-3.5 shrink-0", failed ? "text-destructive" : "text-foreground/55")} aria-hidden />
+        <span className="text-foreground/55">{failed ? t.subagentInterrupted : done ? t.subagentDone : t.subagentWorking}</span>
+        <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">{p.args.name}</code>
+        <AgentStatus state={state} label={label} elapsed={elapsedLabel(elapsed)} action={null} className="pe-3.5" />
+        {subagents ? (
+          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => subagents.open(p.args.threadId, p.args.name)}>
+            {t.openSubagent}
+          </Button>
+        ) : null}
+        {!done && subagents ? (
+          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={stopping} onClick={() => void stop()}>
+            {t.stopSubagent}
+          </Button>
         ) : null}
       </div>
-    </ToolRow>
+      {excerpt ? <p className="text-muted-foreground truncate ps-6 text-xs">{excerpt}</p> : null}
+      {pending ? (
+        <div className="ps-6" data-testid="subagent-ask">
+          <ActionTool {...standalonePart(`${String(pending.params["itemId"] ?? pending.id)}:ask`, "action", askArgs(pending) as ActionArgs)} />
+        </div>
+      ) : null}
+    </div>
   );
 };
+
+// the child's latest words: the last of its messages with text, clipped
+function lastWords(view: ThreadView | undefined): string | null {
+  if (!view) return null;
+  for (let i = view.items.length - 1; i >= 0; i -= 1) {
+    const item = view.items[i]!;
+    if (item.type === "agentMessage" && typeof item["text"] === "string" && (item["text"] as string).trim()) {
+      const text = (item["text"] as string).trim().replace(/\s+/g, " ");
+      return text.length > 120 ? text.slice(0, 120) + "…" : text;
+    }
+  }
+  return null;
+}
 
 // ---- the kernel compacted the conversation here (older turns summarised away)
 

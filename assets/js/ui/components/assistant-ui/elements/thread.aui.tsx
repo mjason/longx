@@ -154,6 +154,30 @@ export const Thread: FC<ThreadProps> = ({
   );
 };
 
+/**
+ * Longx: a conversation to read, not to write in — a sub-agent's, in a
+ * workbench tab: the viewport, the messages and the way back down, no
+ * composer, no welcome. Mounted under a runtime of its own.
+ */
+export const ReadOnlyThread: FC<{ components?: ThreadComponents | undefined }> = ({
+  components = EMPTY_COMPONENTS,
+}) => (
+  <ThreadComponentsContext.Provider value={components}>
+    <ThreadPrimitive.Root className="aui-root aui-thread-root bg-background @container flex h-full flex-col" style={{ ["--thread-max-width" as string]: "44rem" }}>
+      <ThreadPrimitive.Viewport data-slot="aui_thread-viewport" className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth">
+        <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
+          <div data-slot="aui_message-group" className="mb-6 flex flex-col gap-y-6 empty:hidden">
+            <ThreadPrimitive.Messages>{() => <ThreadMessage />}</ThreadPrimitive.Messages>
+          </div>
+          <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto flex flex-col items-center pb-3">
+            <ThreadScrollToBottom />
+          </ThreadPrimitive.ViewportFooter>
+        </div>
+      </ThreadPrimitive.Viewport>
+    </ThreadPrimitive.Root>
+  </ThreadComponentsContext.Provider>
+);
+
 const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
   isEmpty,
   autoFocus,

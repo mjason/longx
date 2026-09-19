@@ -154,8 +154,13 @@ export function ChatProvider({
         if (!row || !turnId) return;
         unwrap(await interruptTurn({ input: { threadId: row.id, kernelTurnId: turnId } }));
       },
+      // the child's conversation as a workbench tab (its row id is its page)
+      open: (kernelThreadId: string, name: string) => {
+        const row = rows?.find((r) => r.kernelThreadId === kernelThreadId);
+        openSurface({ kind: "agent", threadId: kernelThreadId, rowId: row?.id ?? null, name });
+      },
     }),
-    [rows, subviews],
+    [rows, subviews, openSurface],
   );
 
   return (

@@ -1,6 +1,7 @@
-import { useNavigate, useParams } from "react-router";
+import { useParams } from "react-router";
 import { relativeTime } from "@/core/format";
 import { useSubagents } from "@/core/projects";
+import { useWorkbench } from "@/core/workbench";
 import { BackgroundInbox, type BackgroundRun } from "@/ui/components/assistant-ui/elements/background-inbox";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { t } from "@/ui/strings";
@@ -31,7 +32,7 @@ export function AgentsTool({ ctx }: { ctx: ProjectContext }) {
 
 function Subagents({ ctx }: { ctx: ProjectContext }) {
   const { threadId } = useParams();
-  const navigate = useNavigate();
+  const workbench = useWorkbench(ctx.id);
   const subagents = useSubagents(threadId);
 
   if (!threadId) return <p className="text-muted-foreground text-sm">{t.pickThread}</p>;
@@ -49,7 +50,11 @@ function Subagents({ ctx }: { ctx: ProjectContext }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <BackgroundInbox runs={runs} title={t.subagentsTitle} countLabel={t.subagentsCount} onCollect={(id) => navigate(`/p/${ctx.slug}/t/${id}`)} className="max-w-none" />
+      <BackgroundInbox runs={runs} title={t.subagentsTitle} countLabel={t.subagentsCount} onCollect={(id) => {
+          // its conversation opens beside the chat; the row's page stays a link away
+          const row = subagents.data.find((r) => r.id === id);
+          if (row) workbench.open({ kind: "agent", threadId: row.kernelThreadId, rowId: row.id, name: row.title ?? row.agentPath ?? row.kernelThreadId });
+        }} className="max-w-none" />
       <p className="text-muted-foreground text-xs">{t.subagentsHint}</p>
     </div>
   );

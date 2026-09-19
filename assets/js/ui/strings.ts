@@ -250,6 +250,8 @@ export const t = {
   // status
   turnRunning: "进行中",
   stopSubagent: "停止",
+  openSubagent: "打开",
+  subagentPage: "到它的页面去对话 →",
   turnWriting: (tool: string, bytes: string) => `正在写 ${tool} 的参数（${bytes}）`,
   turnRetrying: (why: string) => `连接中断，正在重试：${why}`,
   modelFailed: {
@@ -415,7 +417,7 @@ export const t = {
   subagentsTitle: "子 agent",
   subagentsCount: (ready: number, running: number) =>
     running > 0 ? `${running} 个在跑` : `${ready} 个完成`,
-  subagentsHint: "点开一个完成的子 agent 就能看它的完整会话。",
+  subagentsHint: "点开一个子 agent，它的完整会话在旁边的标签页里打开。",
   directory: {
     title: "本项目的会话",
     hint: "每个会话都有一个地址：句柄（@名字）或 ~ 加 id 末六位。agent 之间用它互相发消息；给会话起个句柄，别的 agent 和定时任务就能找到它。",

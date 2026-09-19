@@ -150,22 +150,7 @@ export function toMessages(
   for (const request of view.requests) {
     if (request.method !== ACTION_REQUEST) continue;
     const itemId = String(request.params["itemId"] ?? request.id);
-    const args = {
-      requestId: String(request.id),
-      title: String(request.params["title"] ?? ""),
-      text: String(request.params["text"] ?? ""),
-      url:
-        typeof request.params["url"] === "string"
-          ? request.params["url"]
-          : null,
-      fields:
-        (request.params["fields"] as
-          { id: string; label: string; secret?: boolean; required?: boolean }[] | undefined) ?? [],
-      // a generative tree (prompt_user, Context.ask spec:) drawn instead of the fields
-      ...(request.params["spec"] !== undefined && request.params["spec"] !== null
-        ? { spec: request.params["spec"] }
-        : {}),
-    };
+    const args = askArgs(request);
     attachPending(
       out,
       `${itemId}:ask`,
@@ -225,6 +210,20 @@ function subagentPart(
     }),
   );
   return { ...part, messages };
+}
+
+/** An ask (`longx/action/request`) as the `action` part's arguments — what `ActionTool` draws. */
+export function askArgs(request: PendingRequest): Record<string, unknown> {
+  return {
+    requestId: String(request.id),
+    title: String(request.params["title"] ?? ""),
+    text: String(request.params["text"] ?? ""),
+    url: typeof request.params["url"] === "string" ? request.params["url"] : null,
+    fields:
+      (request.params["fields"] as { id: string; label: string; secret?: boolean; required?: boolean }[] | undefined) ?? [],
+    // a generative tree (prompt_user, Context.ask spec:) drawn instead of the fields
+    ...(request.params["spec"] !== undefined && request.params["spec"] !== null ? { spec: request.params["spec"] } : {}),
+  };
 }
 
 function attachPending(

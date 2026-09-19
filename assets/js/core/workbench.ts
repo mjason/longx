@@ -12,7 +12,9 @@ export type Tab =
   | { kind: "file"; path: string; line?: number }
   | { kind: "diff"; path: string; sha: string | null }
   // an html document the agent wrote (`show_html`), or a URL; drawn in a sandboxed frame
-  | { kind: "artifact"; id: string; title: string; html?: string; url?: string };
+  | { kind: "artifact"; id: string; title: string; html?: string; url?: string }
+  // a sub-agent's conversation, live (its kernel thread id joins its channel; the row id is its page)
+  | { kind: "agent"; threadId: string; rowId: string | null; name: string };
 export type WorkbenchState = { tabs: Tab[]; active: string; dirty: string[] };
 
 export const EMPTY_WORKBENCH: WorkbenchState = { tabs: [{ kind: "chat" }], active: "chat", dirty: [] };
@@ -27,6 +29,8 @@ export function tabKey(tab: Tab): string {
       return `diff:${tab.path}@${tab.sha ?? ""}`;
     case "artifact":
       return `artifact:${tab.id}`;
+    case "agent":
+      return `agent:${tab.threadId}`;
   }
 }
 

@@ -57,3 +57,22 @@ describe("artifact tabs", () => {
     expect(again.get().tabs.map(tabKey)).toEqual(["chat", "file:a.ex"]);
   });
 });
+
+describe("agent tabs", () => {
+  test("a sub-agent's conversation is a tab kind of its own, keyed by its kernel thread, closable, remembered on the device", async () => {
+    let s: WorkbenchState = openTab(EMPTY_WORKBENCH, { kind: "agent", threadId: "native_c1", rowId: "t9", name: "coder-2" });
+    expect(s.tabs.map(tabKey)).toEqual(["chat", "agent:native_c1"]);
+    expect(s.active).toBe("agent:native_c1");
+    // opened again: the same tab, the details refreshed
+    s = openTab(s, { kind: "agent", threadId: "native_c1", rowId: "t9", name: "coder-2" });
+    expect(s.tabs).toHaveLength(2);
+    expect(closeTab(s, "agent:native_c1").tabs.map(tabKey)).toEqual(["chat"]);
+
+    const { createWorkbenchStore } = await import("./workbench");
+    const memory = new Map<string, string>();
+    const storage = { getItem: (k: string) => memory.get(k) ?? null, setItem: (k: string, v: string) => void memory.set(k, v) };
+    const store = createWorkbenchStore(storage, "wb2");
+    store.open({ kind: "agent", threadId: "native_c1", rowId: "t9", name: "coder-2" });
+    expect(createWorkbenchStore(storage, "wb2").get().tabs.map(tabKey)).toEqual(["chat", "agent:native_c1"]);
+  });
+});

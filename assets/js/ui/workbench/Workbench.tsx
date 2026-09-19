@@ -2,13 +2,14 @@
 // chat first and always, then the files and diffs opened from the tools —
 // over whichever is active. The chat stays mounted behind a file so its
 // scroll and composer draft survive a look at the code.
-import { AppWindow, FileCode2, GitCompareArrows, MessagesSquare, X } from "lucide-react";
+import { AppWindow, Bot, FileCode2, GitCompareArrows, MessagesSquare, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useViewport } from "@/core/viewport";
 import { tabKey, useWorkbench, type Tab } from "@/core/workbench";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/ui/components/ui/alert-dialog";
 import { t } from "@/ui/strings";
+import { AgentTab } from "./AgentTab";
 import { DiffTab } from "./DiffTab";
 import { EditorTab } from "./EditorTab";
 
@@ -55,6 +56,7 @@ export function Workbench({ projectId, children }: { projectId: string; children
       {active.kind === "file" ? <EditorTab key={active.path} projectId={projectId} path={active.path} line={active.line} /> : null}
       {active.kind === "diff" ? <DiffTab key={tabKey(active)} projectId={projectId} path={active.path} sha={active.sha} /> : null}
       {active.kind === "artifact" && !phoneArtifact ? <ArtifactTab key={tabKey(active)} tab={active} /> : null}
+      {active.kind === "agent" ? <AgentTab key={tabKey(active)} threadId={active.threadId} rowId={active.rowId} name={active.name} /> : null}
       <Sheet open={phoneArtifact !== null} onOpenChange={(open) => (open || !phoneArtifact ? null : wb.close(tabKey(phoneArtifact)))}>
         <SheetContent side="bottom" showCloseButton={false} className="flex h-dvh flex-col gap-0 rounded-none p-0" data-testid="artifact-sheet">
           <SheetHeader className="safe-top border-border/60 flex flex-row items-center gap-2 border-b px-4 py-3">
@@ -113,12 +115,14 @@ function TabIcon({ tab }: { tab: Tab }) {
   if (tab.kind === "chat") return <MessagesSquare className="size-3.5" />;
   if (tab.kind === "file") return <FileCode2 className="size-3.5" />;
   if (tab.kind === "artifact") return <AppWindow className="size-3.5" />;
+  if (tab.kind === "agent") return <Bot className="size-3.5" />;
   return <GitCompareArrows className="size-3.5" />;
 }
 
 function tabLabel(tab: Tab): string {
   if (tab.kind === "chat") return t.chatTab;
   if (tab.kind === "artifact") return tab.title || t.artifactTab;
+  if (tab.kind === "agent") return tab.name;
   const name = tab.path.split("/").at(-1) ?? tab.path;
   return tab.kind === "diff" ? `${name} ±` : name;
 }

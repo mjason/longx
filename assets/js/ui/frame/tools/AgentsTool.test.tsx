@@ -24,7 +24,7 @@ describe("AgentsTool", () => {
     vi.mocked(listSubagents).mockResolvedValue(ok(subagents) as never);
   });
 
-  test("⌘4 lists the thread's sub-agents as background runs; a finished one opens its own thread", async () => {
+  test("⌘4 lists the thread's sub-agents as background runs; a finished one opens as a workbench tab", async () => {
     const user = userEvent.setup();
     const { router } = renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
@@ -35,7 +35,11 @@ describe("AgentsTool", () => {
     expect(within(panel).getByText("read b.txt")).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: /alpha/ })).toBeDisabled();
     await user.click(within(panel).getByRole("button", { name: /beta/ }));
-    expect(router.state.location.pathname).toBe("/p/app-1/t/t10");
+    // the conversation opens beside the chat, the page stays the parent's
+    const pane = await screen.findByTestId("agent-tab");
+    expect(pane).toHaveTextContent("beta");
+    expect(screen.getByRole("link", { name: /到它的页面去对话/ })).toHaveAttribute("href", "/p/app-1/t/t10");
+    expect(router.state.location.pathname).toBe("/p/app-1/t/t1");
   });
 
   test("a thread without sub-agents says so", async () => {

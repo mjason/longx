@@ -879,7 +879,8 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     filter over `search_files`). `frame/StatusStrip`: HEAD and dirty count, missing
     dependencies, the browser download, a new version — every item `whitespace-nowrap
     shrink-0`. **The centre is an editor area** (`ui/workbench/Workbench`, state in
-    `core/workbench.ts`): the chat tab first and always, files and diffs from the tools;
+    `core/workbench.ts`): the chat tab first and always, files and diffs from the tools,
+    a sub-agent's conversation (`agent`, from its row or the Agents inbox);
     `EditorTab` = `ui/editor/CodeEditor` (CodeMirror 6, lazy languages + Elixir, our tokens
     as the theme, ⌘S; **a markdown file opens rendered** — `ui/editor/MarkdownPreview`,
     react-markdown + remark-gfm with the chat's markdown classes and shiki — 编辑 / 预览
@@ -926,9 +927,17 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     invocation a `tool-call` row whose body is `terminal-block` (commands), `file-tree` +
     `code-diff` (file changes), `web-search` / a `ReadPage` link row (search / `web_fetch`),
     `ActionTool` (an ask: `elicitation-form` for fields, buttons otherwise, answered via
-    `extras.answerAction`), `SubagentTool` (a row with an `agent-status` pill and the
-    child's conversation over the exported `AssistantParts`), `CompactionUI` for the
-    marker). Attachments: `CompositeAttachmentAdapter([SimpleImage, SimpleText,
+    `extras.answerAction`), `SubagentTool` (**a one-line summary, never the
+    conversation**: name, `agent-status` pill with what it does and its model · level,
+    the child's last words as an excerpt, its pending ask drawn on the row as an
+    `ActionTool` — answered there —, 打开 and 停止; 打开 asks `SubagentContext.open` for
+    the workbench `agent` tab — the child's whole conversation read-only in the editor
+    area (`ui/workbench/AgentTab`: a read-only `useExternalStoreRuntime` over the
+    parent page's `subviews`, else its own `useThreadView`, drawn by `thread.aui`'s
+    exported `ReadOnlyThread`; a header link 到它的页面去对话 leads to the child's own
+    page). The Agents tool window's inbox opens the same tab. A nested conversation in
+    the transcript made a page one had to scroll for minutes to fold), `CompactionUI` for
+    the marker). Attachments: `CompositeAttachmentAdapter([SimpleImage, SimpleText,
     FileUpload])` — images go out as `images`, text files appended, anything else uploaded
     to `/attachments`. Dictation is off (`DICTATION = false` in `runtime.ts`). Terminal
     output linkifies URLs (an ask's link is often printed there). `thread.aui` shows a

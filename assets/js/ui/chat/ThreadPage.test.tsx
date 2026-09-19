@@ -675,8 +675,6 @@ describe("ThreadPage", () => {
         }),
       );
       const sub = screen.getByTestId("tool-subagent");
-      // folded until opened: the child's whole conversation is too long to unfold by itself
-      await user.click(within(sub).getByRole("button", { name: /researcher|gamma|子 agent/ }));
       expect(sub).toHaveTextContent("deepseek-flash · low");
       // the parent's badge: the model behind the popover
       const badges = screen.getAllByRole("button", { name: /耗时/ });
@@ -718,16 +716,30 @@ describe("ThreadPage", () => {
         }),
       );
       const sub = screen.getByTestId("tool-subagent");
-      await user.click(within(sub).getByRole("button", { name: /beta|子 agent/ }));
+      // the row is a summary — state, what its model is writing, its last words — never the conversation
       expect(sub).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");
+      expect(sub).toHaveTextContent("writing the note…");
+      expect(within(sub).queryByTestId("subagent-messages")).not.toBeInTheDocument();
       await user.click(within(sub).getByRole("button", { name: "停止" }));
       await waitFor(() => expect(interruptTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t9", kernelTurnId: "turn_2-beta" } })));
+      // 打开: the conversation in a workbench tab, live, with the way to its own page
+      await user.click(within(sub).getByRole("button", { name: "打开" }));
+      const tabs = await screen.findByTestId("workbench-tabs");
+      expect(within(tabs).getByRole("tab", { name: /beta/ })).toHaveAttribute("aria-selected", "true");
+      const pane = await screen.findByTestId("agent-tab");
+      // the child's words stream in (smooth text): wait for them
+      expect(await within(pane).findByText(/writing the note/, {}, { timeout: 3000 })).toBeInTheDocument();
+      expect(within(pane).getByRole("link", { name: /到它的页面/ })).toHaveAttribute("href", "/p/app-1/t/t9");
+      act(() => {
+        channel.deliverTo(`thread:${child}`, "event", { seq: 3, method: "item/completed", params: { turnId: "turn_2-beta", item: { id: "m_beta2", type: "agentMessage", turnId: "turn_2-beta", text: "note written" } } });
+      });
+      expect(await within(pane).findByText("note written")).toBeInTheDocument();
     } finally {
       vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
     }
   });
 
-  test("a sub-agent joins its own thread: its conversation nests under the parent, its ask is answered there", async () => {
+  test("a sub-agent joins its own thread: its row sums it up under the parent, its ask is answered there", async () => {
     const user = userEvent.setup();
     await open();
     const child = "thr_1-alpha";
@@ -783,11 +795,9 @@ describe("ThreadPage", () => {
     );
     const sub = screen.getByTestId("tool-subagent");
     expect(sub).toHaveTextContent("alpha");
-    expect(within(sub).getByTestId("subagent-messages")).toHaveTextContent(
-      "echo alpha",
-    );
-    // the child's ask: named on the row, answered inside its conversation, on the child's thread
-    expect(sub).toHaveTextContent("登录 alpha 的账号");
+    // the row is a summary, never the conversation; the child's ask is on it, answered right there
+    expect(within(sub).queryByTestId("subagent-messages")).not.toBeInTheDocument();
+    expect(within(sub).getByTestId("subagent-ask")).toHaveTextContent("登录 alpha 的账号");
     expect(screen.getByTestId("turn-bar")).toHaveTextContent("等待你操作");
     await user.click(within(sub).getByRole("button", { name: "已完成" }));
     await waitFor(() =>
@@ -852,10 +862,10 @@ describe("ThreadPage", () => {
         },
       });
     });
-    // finished, the row folds like any tool; its conversation is a click away
+    // finished: the row says so with the child's last words; the ask is gone
     expect(screen.getByText("子 agent 完成")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /子 agent 完成/ }));
-    expect(screen.getByText("done by alpha")).toBeInTheDocument();
+    expect(sub).toHaveTextContent("done by alpha");
+    expect(within(sub).queryByTestId("subagent-ask")).not.toBeInTheDocument();
   });
 
   test("the composer rail shows how full the model's context is, from the token usage", async () => {
