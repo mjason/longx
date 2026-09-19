@@ -492,8 +492,12 @@ defmodule Longx.Projects.ThreadsTest do
     assert {:ok, child_id} = Agent.spawn(thread.kernel_thread_id, "researcher", "look it up")
     assert [%Thread{kernel_thread_id: ^child_id} = child] = Projects.list_subagents!(thread.id)
 
+    # the child's report wakes the parent: that turn too must be over before the
+    # delete (a delete mid-stream closes a Bypass handler's socket, which Bypass
+    # reports as the test exiting with shutdown)
     assert_eventually_ok(fn ->
-      thread!(child.id).status == :idle and thread!(thread.id).status == :idle
+      match?([%Turn{status: :completed}], Projects.list_turns!(thread)) and
+        thread!(child.id).status == :idle and thread!(thread.id).status == :idle
     end)
 
     assert :ok = Projects.delete_thread(thread!(thread.id))

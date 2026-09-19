@@ -2145,9 +2145,29 @@ defmodule Longx.AgentTest do
     assert picky_body["model"] == "real-model"
     assert picky_body["reasoning"]["effort"] == "high"
 
-    # the team's reports would still be arriving after the test: stop it here,
-    # while the scripted replies are alive
+    # the children's reports wake (or steer) the parent: wait for the whole team
+    # to be quiet before stopping it — a stop mid-stream closes a Bypass handler's
+    # socket, and Bypass reports that as the test exiting with shutdown
+    await_quiet(id)
     Agent.stop(id)
+  end
+
+  # nothing running in the team: the parent idle, every child done
+  defp await_quiet(id, tries \\ 40) do
+    receive do
+      {:thread, _, "turn/completed", _} -> await_quiet(id, tries)
+    after
+      250 ->
+        quiet? =
+          Agent.status(id) == :idle and
+            Enum.all?(Agent.children(id), &(&1.status != "working"))
+
+        cond do
+          quiet? -> :ok
+          tries == 0 -> flunk("the team never went quiet")
+          true -> await_quiet(id, tries - 1)
+        end
+    end
   end
 
   ## more helpers
