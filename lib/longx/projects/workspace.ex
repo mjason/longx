@@ -70,7 +70,10 @@ defmodule Longx.Projects.Workspace do
       if binary?(head) do
         {:ok, %{path: rel, content: nil, size: size, binary: true, truncated: false}}
       else
-        content = if size > @read_limit, do: read_bytes(full, @read_limit), else: File.read!(full)
+        content =
+          if size > @read_limit,
+            do: full |> read_bytes(@read_limit) |> trim_partial_utf8(),
+            else: File.read!(full)
 
         {:ok,
          %{path: rel, content: content, size: size, binary: false, truncated: size > @read_limit}}
@@ -98,7 +101,24 @@ defmodule Longx.Projects.Workspace do
     end)
   end
 
-  defp binary?(head), do: String.contains?(head, <<0>>) or not String.valid?(head)
+  # a cut of the file (the sniff, the 1 MB cap) may end inside a character —
+  # a Chinese document is not a binary for that: the cut is judged without
+  # the partial character at its end
+  defp binary?(head),
+    do: String.contains?(head, <<0>>) or not String.valid?(trim_partial_utf8(head))
+
+  @doc false
+  # drops an incomplete UTF-8 sequence at the very end (up to three bytes)
+  def trim_partial_utf8(bytes) when is_binary(bytes) do
+    Enum.find_value(0..3, bytes, fn drop ->
+      size = byte_size(bytes) - drop
+
+      if size >= 0 do
+        candidate = binary_part(bytes, 0, size)
+        if String.valid?(candidate), do: candidate
+      end
+    end)
+  end
 
   @doc "Writes the file (created when missing; its directory must exist)."
   @spec write(Path.t(), String.t(), String.t()) :: :ok | {:error, error}

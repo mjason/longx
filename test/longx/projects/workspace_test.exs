@@ -60,6 +60,21 @@ defmodule Longx.Projects.WorkspaceTest do
     assert byte_size(content) == 1_000_000
 
     assert {:error, :not_found} = Workspace.read(root, "missing.txt")
+
+    # a Chinese document longer than the sniff: the sniff cuts a character in two,
+    # which is not what binary means; the same at the 1 MB cut of a big one
+    File.write!(Path.join(root, "研报.md"), "# 报告\n" <> String.duplicate("小市值策略研究笔记。", 2_000))
+
+    assert {:ok, %{binary: false, truncated: false, content: "# 报告\n" <> _}} =
+             Workspace.read(root, "研报.md")
+
+    File.write!(Path.join(root, "大研报.md"), String.duplicate("小市值策略研究笔记。", 40_000))
+
+    assert {:ok, %{binary: false, truncated: true, content: content}} =
+             Workspace.read(root, "大研报.md")
+
+    assert String.valid?(content)
+    assert byte_size(content) <= 1_000_000 and byte_size(content) > 999_990
     assert {:error, :not_a_file} = Workspace.read(root, "lib")
   end
 
