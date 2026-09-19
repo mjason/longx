@@ -17,8 +17,11 @@ export type SyntaxHighlighterProps = Omit<
   streaming?: boolean;
 };
 
+// long lines wrap: a reading surface (the chat, a rendered document) is
+// not an editor, and a horizontal scroll under a hidden scrollbar looked
+// like a clipped line
 const containerClassName =
-  "aui-shiki-base [&_pre]:border-border/50 [&_pre]:bg-muted/30! [&_.line]:px-0! [&_pre]:overflow-x-auto [&_pre]:rounded-t-none [&_pre]:rounded-b-xl [&_pre]:border [&_pre]:border-t-0 [&_pre]:p-3.5 [&_pre]:text-[13px] [&_pre]:leading-relaxed";
+  "aui-shiki-base [&_pre]:border-border/50 [&_pre]:bg-muted/30! [&_.line]:px-0! [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:wrap-anywhere [&_pre]:rounded-t-none [&_pre]:rounded-b-xl [&_pre]:border [&_pre]:border-t-0 [&_pre]:p-3.5 [&_pre]:text-[13px] [&_pre]:leading-relaxed";
 
 const PlainCode: FC<{ code: string }> = ({ code }) => (
   <pre>

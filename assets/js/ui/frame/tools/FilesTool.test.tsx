@@ -82,6 +82,23 @@ describe("FilesTool", () => {
     await within(editor).findByTestId("markdown-preview");
   });
 
+  test("a fenced block in the preview wraps its long lines instead of clipping them", async () => {
+    const long = "for d in */; do latest=$(ls \"$d\" | sort | tail -1); ls \"$d\" | grep -vxF \"$latest\" | (cd \"$d\" && xargs -r rm -rf); done";
+    vi.mocked(readFile).mockResolvedValue(ok({ path: "README.md", content: `# Clean\n\n\`\`\`bash\n${long}\n\`\`\`\n`, size: 200, binary: false, truncated: false }) as never);
+    const { user, panel } = await openFiles();
+    await user.click(within(panel).getByRole("treeitem", { name: /README/ }));
+    const preview = await screen.findByTestId("markdown-preview");
+    const pre = await waitFor(() => {
+      const el = preview.querySelector("pre");
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    expect(pre.textContent).toContain("xargs -r rm -rf");
+    // the container's rules: wrap, never a hidden overflow
+    const container = pre.closest(".aui-shiki-base");
+    expect(container?.className).toMatch(/\[&_pre\]:whitespace-pre-wrap/);
+  });
+
   test("editing marks the tab; save writes the file (⌘S too)", async () => {
     const { user, panel } = await openFiles();
     vi.mocked(readFile).mockResolvedValue(ok({ path: "README.md", content: "# hi\n", size: 5, binary: false, truncated: false }) as never);

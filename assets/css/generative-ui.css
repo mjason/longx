@@ -754,6 +754,8 @@
   padding: 0.75rem;
   border-radius: calc(var(--radius) - 2px);
   overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 [data-aui="markdown"] pre code {
