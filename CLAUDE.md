@@ -744,7 +744,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `Longx.System.Faults.record/3` (`fault/3`, warnings), failed turns from the Tracker
     (`turn_failed/3`, errors tagged thread / turn, fingerprinted by the message's first
     words), and `send_test/0` from the page. RPC `sentry_status` / `set_sentry_dsn` /
-    `sentry_test`; the card at the bottom of Settings → 请求记录 (`SentryCard`,
+    `sentry_test`; `before_send/1` drops Bandit's client-side protocol errors
+    (`Bandit.HTTPError` — a connection opened and never used is a "Read timeout" logged
+    with a crash reason —, `Bandit.TransportError`), which are not bugs of ours; the
+    Sentry project is `oxo/lonx` (`sentry issue list oxo/lonx`); the card at the bottom of Settings → 请求记录 (`SentryCard`,
     `core/sentry.ts`): the DSN masked, 已开启 / 未开启, 发送测试事件, 清除并停止. Tests:
     `test/longx/sentry_test.exs` (Bypass plays Sentry's envelope endpoint),
     `sentry_rpc_test`.

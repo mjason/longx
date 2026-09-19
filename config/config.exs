@@ -142,6 +142,8 @@ config :sentry,
   environment_name: config_env(),
   release: Mix.Project.config()[:version],
   enable_source_code_context: false,
+  # a client's protocol trouble at the web server is not reported (Longx.Sentry.before_send/1)
+  before_send: {Longx.Sentry, :before_send},
   send_result: :none
 
 import_config "#{config_env()}.exs"

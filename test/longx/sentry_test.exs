@@ -62,6 +62,23 @@ defmodule Longx.SentryTest do
     assert body =~ "turn_1"
     assert body =~ "boom"
 
+    # a client's own protocol error (a connection opened and never used, a
+    # malformed request, a closed socket) is not a bug of ours: dropped before
+    # it goes out; a real exception still goes
+    Sentry.capture_exception(
+      %Bandit.HTTPError{message: "Read timeout", plug_status: :request_timeout},
+      result: :sync
+    )
+
+    Sentry.capture_exception(%Bandit.TransportError{message: "closed", error: :closed},
+      result: :sync
+    )
+
+    refute_receive {:envelope, _}, 300
+    Sentry.capture_exception(%RuntimeError{message: "a real one"}, result: :sync)
+    assert_receive {:envelope, body}, 5_000
+    assert body =~ "a real one"
+
     # off again: nothing goes out
     {:ok, nil} = Reporting.set_dsn("")
     Reporting.fault(:socket_encode, "thread:y", "quiet")

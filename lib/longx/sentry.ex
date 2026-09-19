@@ -119,6 +119,18 @@ defmodule Longx.Sentry do
     end
   end
 
+  @doc """
+  `before_send`: what never leaves. A client's own protocol trouble at the
+  web server — a connection opened and never used (Bandit's "Read timeout"),
+  a malformed request, a socket closed mid-way — is logged by Bandit as an
+  error with a crash reason, which the logger handler would report; it is
+  not a bug of ours. Everything else goes.
+  """
+  @spec before_send(Sentry.Event.t()) :: Sentry.Event.t() | false
+  def before_send(%Sentry.Event{original_exception: %Bandit.HTTPError{}}), do: false
+  def before_send(%Sentry.Event{original_exception: %Bandit.TransportError{}}), do: false
+  def before_send(%Sentry.Event{} = event), do: event
+
   @doc "A test event from the settings page; `{:ok, id}` once the server took it."
   @spec send_test() :: {:ok, String.t()} | {:error, String.t()}
   def send_test do
