@@ -187,6 +187,8 @@ defmodule Longx.Agent.PlugsTest do
       assert text =~ "researcher — finds things out"
       assert text =~ "[agent <name>]"
       assert text =~ "do not wait"
+      # a role's prompt is read again at every step, so an edit reaches a running agent too
+      assert text =~ "re-read at every step"
     end
 
     test "agents [...] narrows the choices; a role nobody declared is not offered" do
