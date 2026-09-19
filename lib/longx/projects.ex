@@ -828,6 +828,13 @@ defmodule Longx.Projects do
   """
   @spec record_external_turn(Thread.t(), String.t(), keyword) :: {:ok, Turn.t()} | {:error, term}
   def record_external_turn(%Thread{} = thread, kernel_turn_id, opts \\ []) do
+    # a turn of an agent that is gone (the thread being deleted): no row for it
+    if Longx.Agent.whereis(thread.kernel_thread_id),
+      do: do_record_external_turn(thread, kernel_turn_id, opts),
+      else: {:error, :agent_gone}
+  end
+
+  defp do_record_external_turn(%Thread{} = thread, kernel_turn_id, opts) do
     goal = Longx.Agent.ThreadState.Store.meta(thread.kernel_thread_id).goal
 
     text =
@@ -1008,24 +1015,20 @@ defmodule Longx.Projects do
     end
   end
 
-  # the thread's agent (stopped first: a wake-up arriving meanwhile would give
-  # it a new turn row), its spec, its transcript, then its turns and its row
-  # in one transaction — the Tracker's writes cannot land between the two
+  # the thread's spec first (a wake-up arriving now finds no agent to bring
+  # back), then its agent, its transcript, its turns and its row; a turn event
+  # still on its way to the Tracker finds the agent gone and writes nothing
+  # (`record_external_turn`)
   defp delete_rows(%Thread{} = thread) do
-    Longx.Agent.stop(thread.kernel_thread_id)
     Longx.Agent.Kernel.Specs.delete(thread.kernel_thread_id)
+    Longx.Agent.stop(thread.kernel_thread_id)
     Longx.Agent.Transcript.delete!(thread.kernel_thread_id)
 
-    {:ok, :ok} =
-      Longx.Repo.transaction(fn ->
-        Ash.bulk_destroy!(Ash.Query.filter(Turn, thread_id == ^thread.id), :destroy, %{},
-          authorize?: false
-        )
+    Ash.bulk_destroy!(Ash.Query.filter(Turn, thread_id == ^thread.id), :destroy, %{},
+      authorize?: false
+    )
 
-        Ash.destroy!(thread)
-        :ok
-      end)
-
+    Ash.destroy!(thread)
     :ok
   end
 
