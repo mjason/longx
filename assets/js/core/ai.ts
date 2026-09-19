@@ -29,6 +29,8 @@ import {
   type CreateProviderInput,
   type UpdateModelInput,
   type UpdateProviderInput,
+  defaultModelSetting,
+  setDefaultModel,
 } from "@/ash_rpc";
 import { queryKeys, unwrap } from "./projects";
 
@@ -39,10 +41,21 @@ export const aiKeys = {
   search: ["ai", "search"] as const,
   presets: ["ai", "presets"] as const,
   aliases: ["ai", "aliases"] as const,
+  defaultModel: ["ai", "default-model"] as const,
 };
 
 /** a tier (ultra / pro / plus, always there) or a team's alias: a chain of model slugs, the first used, the rest fallbacks */
 export type ModelAlias = { name: string; label: string; models: string[]; builtin: boolean };
+
+/** the default model: a name (a tier, an alias, a slug) and what it resolves to now */
+export type DefaultModel = { name: string; slug: string | null; kind: "tier" | "alias" | "model" };
+
+export function useDefaultModel() {
+  return useQuery({
+    queryKey: aiKeys.defaultModel,
+    queryFn: async () => unwrap(await defaultModelSetting({ fields: ["name", "slug", "kind"] })) as DefaultModel,
+  });
+}
 
 export function useModelAliases() {
   return useQuery({
@@ -293,6 +306,9 @@ export function useAiActions() {
             input: { id },
           }),
         ) as { ok: boolean; latencyMs: number | null; error: string | null },
+    ),
+    setDefaultModel: useAiWrite(async (name: string) =>
+      unwrap(await setDefaultModel({ fields: ["name", "slug", "kind"], input: { name } })) as DefaultModel,
     ),
     setModelAlias: useAiWrite(async (input: { name: string; models: string[] }) =>
       unwrap(await setModelAlias({ fields: ["name", "label", "models", "builtin"], input })),

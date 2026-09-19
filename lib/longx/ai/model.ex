@@ -21,6 +21,12 @@ defmodule Longx.AI.Model do
     type_name "Model"
   end
 
+  @default_fields [
+    name: [type: :string, allow_nil?: false],
+    slug: [type: :string],
+    kind: [type: :atom, allow_nil?: false, constraints: [one_of: [:tier, :alias, :model]]]
+  ]
+
   @alias_fields [
     name: [type: :string, allow_nil?: false],
     label: [type: :string, allow_nil?: false],
@@ -103,6 +109,24 @@ defmodule Longx.AI.Model do
             {:ok, %{latency_ms: ms}} -> {:ok, %{ok: true, latency_ms: ms, error: nil}}
             {:error, reason} -> {:ok, %{ok: false, latency_ms: nil, error: inspect(reason)}}
           end
+        end
+      end
+    end
+
+    # the default (Longx.AI.default_model_name/0): a tier, an alias or a slug
+    action :default_model_setting, :map do
+      constraints fields: @default_fields
+      run fn _input, _ -> {:ok, Longx.AI.default_model_info()} end
+    end
+
+    action :set_default_model, :map do
+      constraints fields: @default_fields
+      argument :name, :string, allow_nil?: false
+
+      run fn input, _ ->
+        case Longx.AI.set_default_model(input.arguments.name) do
+          {:ok, info} -> {:ok, info}
+          {:error, message} -> alias_error(:name, message)
         end
       end
     end

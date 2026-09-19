@@ -1008,16 +1008,25 @@ defmodule Longx.Projects do
     end
   end
 
-  # the thread's turns, its agent, its transcript, its row
+  # the thread's agent (stopped first: a wake-up arriving meanwhile would give
+  # it a new turn row), its spec, its transcript, then its turns and its row
+  # in one transaction — the Tracker's writes cannot land between the two
   defp delete_rows(%Thread{} = thread) do
-    Ash.bulk_destroy!(Ash.Query.filter(Turn, thread_id == ^thread.id), :destroy, %{},
-      authorize?: false
-    )
-
     Longx.Agent.stop(thread.kernel_thread_id)
     Longx.Agent.Kernel.Specs.delete(thread.kernel_thread_id)
     Longx.Agent.Transcript.delete!(thread.kernel_thread_id)
-    Ash.destroy!(thread)
+
+    {:ok, :ok} =
+      Longx.Repo.transaction(fn ->
+        Ash.bulk_destroy!(Ash.Query.filter(Turn, thread_id == ^thread.id), :destroy, %{},
+          authorize?: false
+        )
+
+        Ash.destroy!(thread)
+        :ok
+      end)
+
+    :ok
   end
 
   defp refuse_while_running(%Thread{status: :active}), do: {:error, :turn_in_progress}

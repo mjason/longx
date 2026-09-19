@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { contextUsage } from "@/core/chat/thread";
 import { formatBytes } from "@/core/format";
 import { useModels } from "@/core/projects";
-import { useModelAliases } from "@/core/ai";
+import { useDefaultModel, useModelAliases } from "@/core/ai";
 import { ContextDisplay } from "@/ui/components/assistant-ui/elements/context-display";
 import {
   ModelSelectorContent,
@@ -64,6 +64,7 @@ export function ComposerTrailing() {
     useChat();
   const models = useModels();
   const aliases = useModelAliases();
+  const globalDefault = useDefaultModel();
   const rows = useMemo(
     () => (models.data ?? []).filter((m) => m.slug),
     [models.data],
@@ -72,16 +73,20 @@ export function ComposerTrailing() {
   // (it overrides the default silently otherwise — a turn went to a provider the rail
   // never named); a new chat the project's default, else the global one
   const described = definitionModel?.model ?? null;
+  // the global default is a name (a tier by preference): what the rail shows when nothing else stands
+  const fallback = globalDefault.data?.name ?? rows.find((m) => m.default)?.slug ?? null;
   const current = thread
-    ? (thread.modelSlug ?? described ?? rows.find((m) => m.default)?.slug ?? null)
+    ? (thread.modelSlug ?? described ?? fallback)
     : described ||
       (defaultModelId && rows.find((m) => m.id === defaultModelId)?.slug) ||
-      rows.find((m) => m.default)?.slug ||
-      null;
+      fallback;
   const selected = model ?? current ?? undefined;
-  // a tier or alias answers with its first model's levels
+  // a tier or alias stands for its first model; an unmapped tier for the base
+  // model (what the global default resolves to, else the row flagged default)
+  const base = globalDefault.data?.slug ?? rows.find((m) => m.default)?.slug;
   const aliasRow = aliases.data?.find((a) => a.name === selected);
-  const row = rows.find((m) => m.slug === (aliasRow ? aliasRow.models[0] : selected));
+  const concrete = aliasRow ? (aliasRow.models[0] ?? base) : selected;
+  const row = rows.find((m) => m.slug === concrete);
   // the level in force: the thread's own while it stays on its model, the description's, else the model's default
   const inForce =
     (thread && (model === null || model === thread.modelSlug)
@@ -99,7 +104,7 @@ export function ComposerTrailing() {
         name: a.label === a.name ? a.name : `${a.name}（${a.label}）`,
         description: a.models.length ? a.models.join(" → ") : t.ai.aliasNone,
         provider: t.ai.aliases,
-        efforts: (rows.find((m) => m.slug === a.models[0])?.reasoningLevels ?? []).map((level) => ({
+        efforts: (rows.find((m) => m.slug === (a.models[0] ?? base))?.reasoningLevels ?? []).map((level) => ({
           id: level,
           name: effortLabel(level),
         })),
@@ -119,7 +124,7 @@ export function ComposerTrailing() {
           : {}),
       })),
     ],
-    [rows, aliases.data],
+    [rows, aliases.data, base],
   );
   const groups = useMemo(() => {
     const aliasCount = aliases.data?.length ?? 0;
@@ -158,9 +163,11 @@ export function ComposerTrailing() {
     if (level !== null) setEffort(level);
   };
 
+  // a tier or alias shows its name and, muted, the model it stands for right now
   const label = row ? (
     <span className="flex min-w-0 items-center gap-1.5">
-      <span className="truncate">{row.slug}</span>
+      <span className="truncate">{aliasRow ? aliasRow.name : row.slug}</span>
+      {aliasRow ? <span className="text-muted-foreground hidden truncate sm:inline">{row.slug}</span> : null}
       {shownEffort ? (
         <span className="text-muted-foreground hidden sm:inline">
           {effortLabel(shownEffort)}

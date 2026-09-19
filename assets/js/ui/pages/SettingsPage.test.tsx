@@ -19,6 +19,7 @@ import {
   browserStatus,
   setBrowserPrivateNetwork,
   setModelAlias,
+  setDefaultModel,
   applyPreset,
   checkModel,
   createModel,
@@ -352,6 +353,22 @@ describe("SettingsPage", () => {
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(dialog).toHaveTextContent("401 bad key"));
     vi.mocked(discoverModels).mockResolvedValue(ok({ ok: true, error: null, models: [] }) as never);
+  });
+
+  test("models: the default is a name — plus unless set — picked from the tiers, the aliases and the models, with what it resolves to and why a tier is better", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/models");
+    const card = await screen.findByTestId("default-model");
+    expect(card).toHaveTextContent("plus");
+    expect(card).toHaveTextContent("deepseek-flash");
+    expect(card).toHaveTextContent("推荐用档位");
+    await user.click(within(card).getByRole("combobox", { name: "默认模型" }));
+    // tiers first with their labels, then the aliases, then the models themselves
+    expect(await screen.findByRole("option", { name: /ultra.*旗舰/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "glm-5" })).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /ultra.*旗舰/ }));
+    await waitFor(() => expect(setDefaultModel).toHaveBeenCalledWith(expect.objectContaining({ input: { name: "ultra" } })));
   });
 
   test("models: tiers and aliases — a chain per name, mapped in place; an alias can be added and removed", async () => {

@@ -270,6 +270,8 @@ export function rpcMock() {
     ),
     deleteModel: vi.fn(async () => ok(null)),
     makeDefaultModel: vi.fn(async () => ok(model(2, { default: true }))),
+    defaultModelSetting: vi.fn(async () => ok({ name: "plus", slug: "deepseek-flash", kind: "tier" })),
+    setDefaultModel: vi.fn(async ({ input }: { input: { name: string } }) => ok({ name: input.name, slug: "glm-5", kind: input.name === "ultra" || input.name === "pro" || input.name === "plus" ? "tier" : "model" })),
     checkModel: vi.fn(async () =>
       ok({ ok: true, latencyMs: 321, error: null }),
     ),

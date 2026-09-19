@@ -372,6 +372,72 @@ export async function validateCreateModel(
 }
 
 
+export type DefaultModelSettingFields = UnifiedFieldSelection<{name: string, slug: string | null, kind: "alias" | "model" | "tier", __type: "TypedMap", __primitiveFields: "name" | "slug" | "kind"}>[];
+
+export type InferDefaultModelSettingResult<
+  Fields extends DefaultModelSettingFields | undefined,
+> = InferResult<{name: string, slug: string | null, kind: "alias" | "model" | "tier", __type: "TypedMap", __primitiveFields: "name" | "slug" | "kind"}, Fields>;
+
+export type DefaultModelSettingResult<Fields extends DefaultModelSettingFields | undefined = undefined> = | { success: true; data: InferDefaultModelSettingResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Model
+ *
+ * @ashActionType :action
+ */
+export async function defaultModelSetting<Fields extends DefaultModelSettingFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DefaultModelSettingResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "default_model_setting",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<DefaultModelSettingResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Model
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateDefaultModelSetting(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "default_model_setting",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type DeleteModelResult = | { success: true; data: {}; }
 | { success: false; errors: AshRpcError[]; }
 
@@ -732,6 +798,80 @@ export async function validateListModels(
   const payload = {
     action: "list_models",
     ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetDefaultModelInput = {
+  name: string;
+};
+
+export type SetDefaultModelFields = UnifiedFieldSelection<{name: string, slug: string | null, kind: "alias" | "model" | "tier", __type: "TypedMap", __primitiveFields: "name" | "slug" | "kind"}>[];
+
+export type InferSetDefaultModelResult<
+  Fields extends SetDefaultModelFields | undefined,
+> = InferResult<{name: string, slug: string | null, kind: "alias" | "model" | "tier", __type: "TypedMap", __primitiveFields: "name" | "slug" | "kind"}, Fields>;
+
+export type SetDefaultModelResult<Fields extends SetDefaultModelFields | undefined = undefined> = | { success: true; data: InferSetDefaultModelResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Model
+ *
+ * @ashActionType :action
+ */
+export async function setDefaultModel<Fields extends SetDefaultModelFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SetDefaultModelInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetDefaultModelResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_default_model",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetDefaultModelResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Model
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetDefaultModel(
+  config: {
+  tenant?: string;
+  input: SetDefaultModelInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_default_model",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
   };
 
   return executeValidationRpcRequest<ValidationResult>(

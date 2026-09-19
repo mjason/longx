@@ -2109,16 +2109,15 @@ defmodule Longx.AgentTest do
         models: &Longx.AI.model_choices/0
       )
 
-    script!(bypass, [
-      ResponsesFixture.assistant_message("parent done"),
-      ResponsesFixture.assistant_message("child done"),
-      ResponsesFixture.assistant_message("picky done"),
-      # the children's reports wake the parent: a reply for each of those turns too
-      ResponsesFixture.assistant_message("noted"),
-      ResponsesFixture.assistant_message("noted again"),
-      ResponsesFixture.assistant_message("and again"),
-      ResponsesFixture.assistant_message("still noted")
-    ])
+    # every request (the children's reports wake the parent too) gets the same
+    # short answer: only the requests' bodies matter here
+    test = self()
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      {body, conn} = body!(conn)
+      send(test, {:request, body})
+      sse(conn, ResponsesFixture.assistant_message("ok"))
+    end)
 
     {:ok, _} = Agent.send(id, "go", model: other.slug, effort: "low")
     assert_receive {:request, parent_body}, 5_000

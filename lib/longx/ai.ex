@@ -47,6 +47,8 @@ defmodule Longx.AI do
       rpc_action :create_model, :create
       rpc_action :update_model, :update
       rpc_action :make_default_model, :make_default
+      rpc_action :default_model_setting, :default_model_setting
+      rpc_action :set_default_model, :set_default_model
       rpc_action :check_model, :check_model
       rpc_action :model_aliases, :model_aliases
       rpc_action :set_model_alias, :set_model_alias
@@ -155,7 +157,16 @@ defmodule Longx.AI do
     end
   end
 
-  def resolve_targets(_default), do: with({:ok, target} <- resolve_target(), do: {:ok, [target]})
+  # the default is a name (a tier, an alias, a slug): its whole chain, like any name
+  def resolve_targets(_default) do
+    case default_model_name() |> resolve_targets_named() do
+      {:ok, targets} -> {:ok, targets}
+      {:error, _} -> with({:ok, target} <- resolve_target(), do: {:ok, [target]})
+    end
+  end
+
+  defp resolve_targets_named(name) when name in [nil, @placeholder_model], do: {:error, :circular}
+  defp resolve_targets_named(name), do: resolve_targets(name)
 
   @doc """
   Every model as the native kernel's prompt names it: slug, name, provider,
@@ -173,6 +184,8 @@ defmodule Longx.AI do
           }
         ]
   def model_choices do
+    default = default_model_name()
+
     aliases =
       for %{name: name, label: label} <- Aliases.all(),
           {:ok, chain} <- [Aliases.resolve(name)] do
@@ -182,7 +195,7 @@ defmodule Longx.AI do
           provider: "",
           levels: [],
           default_level: nil,
-          default?: false,
+          default?: name == default,
           alias: chain
         }
       end
@@ -195,7 +208,7 @@ defmodule Longx.AI do
           provider: (model.provider && model.provider.name) || "",
           levels: model.reasoning_levels || [],
           default_level: model.reasoning_effort,
-          default?: model.default
+          default?: slug == default
         }
       end
       |> Enum.sort_by(&{!&1.default?, &1.provider, &1.slug})
@@ -325,20 +338,98 @@ defmodule Longx.AI do
            }}
           | {:error, term}
   def in_force(name, effort) do
-    with {:ok, model, explicit?} <- fetch_model(name) do
+    # nothing asked for: the default's name stands where a name would
+    asked = if name in [nil, @placeholder_model], do: default_model_name(), else: name
+
+    with {:ok, model, _explicit?} <- fetch_model(asked) do
       slug =
-        case name && Aliases.resolve(name) do
+        case Aliases.resolve(asked) do
           {:ok, [first | _]} -> first
           _ -> model.slug
         end
 
       {:ok,
        %{
-         name: if(explicit?, do: name),
+         name: if(Aliases.alias?(asked), do: asked),
          slug: slug,
          effort: effort || model.reasoning_effort,
          levels: model.reasoning_levels || []
        }}
+    end
+  end
+
+  ## The default model: a name
+
+  @default_model_key "default_model"
+  @default_model_tier "plus"
+
+  @doc """
+  What a session runs on when nobody picks: the saved name — a tier, an
+  alias or a slug — and `plus` unless one was saved (an unmapped tier
+  means the base row, the one flagged `default`, so a fresh install runs
+  on the model its preset chose).
+  """
+  @spec default_model_name() :: String.t()
+  def default_model_name do
+    case Longx.System.get_setting(@default_model_key) do
+      {:ok, %{value: name}} when is_binary(name) and name != "" -> name
+      _ -> @default_model_tier
+    end
+  end
+
+  @typedoc "The default as the page shows it: the name, what it resolves to now, what kind of name it is."
+  @type default_model_info :: %{
+          name: String.t(),
+          slug: String.t() | nil,
+          kind: :tier | :alias | :model
+        }
+
+  @spec default_model_info() :: default_model_info
+  def default_model_info, do: default_model_info(default_model_name())
+
+  defp default_model_info(name) do
+    kind =
+      cond do
+        String.downcase(name) in Aliases.tiers() -> :tier
+        Aliases.alias?(name) -> :alias
+        true -> :model
+      end
+
+    slug =
+      case Aliases.resolve(name) do
+        {:ok, [first | _]} -> first
+        :error -> if(match?({:ok, _}, get_model_by_slug(name)), do: name)
+      end
+
+    %{name: name, slug: slug, kind: kind}
+  end
+
+  @doc """
+  Saves the default: a tier (`plus` / `pro` / `ultra`), an alias, or a
+  model's slug — a slug also becomes the base row (`make_default_model`),
+  so an unmapped tier means it too. A name nobody has is refused.
+  """
+  @spec set_default_model(String.t()) :: {:ok, default_model_info} | {:error, String.t()}
+  def set_default_model(name) when is_binary(name) do
+    name = String.trim(name)
+    tier? = String.downcase(name) in Aliases.tiers()
+    name = if tier?, do: String.downcase(name), else: name
+
+    cond do
+      tier? or Aliases.alias?(name) ->
+        with {:ok, _} <- Longx.System.put_setting(@default_model_key, name),
+             do: {:ok, default_model_info(name)}
+
+      true ->
+        case get_model_by_slug(name) do
+          {:ok, %Model{} = model} ->
+            with {:ok, _} <- make_default_model(model),
+                 {:ok, _} <- Longx.System.put_setting(@default_model_key, name),
+                 do: {:ok, default_model_info(name)}
+
+          {:error, _} ->
+            {:error, "没有叫 #{name} 的档位、别名或模型"}
+        end
     end
   end
 
@@ -639,10 +730,26 @@ defmodule Longx.AI do
     end
   end
 
+  # the default's name resolved to a row (a tier's or alias's first model),
+  # else the base row — the one flagged `default`
   defp fetch_default_model do
-    case default_model() do
-      {:ok, nil} -> {:error, :no_default_model}
-      other -> other
+    name = default_model_name()
+
+    concrete =
+      case Aliases.resolve(name) do
+        {:ok, [first | _]} -> get_model_by_slug(first)
+        :error -> get_model_by_slug(name)
+      end
+
+    case concrete do
+      {:ok, %Model{} = model} ->
+        {:ok, model}
+
+      _ ->
+        case default_model() do
+          {:ok, nil} -> {:error, :no_default_model}
+          other -> other
+        end
     end
   end
 

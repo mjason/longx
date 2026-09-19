@@ -592,7 +592,19 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     alone — keys are entered in Settings, not read from the environment. A new NOT NULL
     column needs a `default:` in the migration (SQLite).
   - `Longx.AI.Aliases` (above): RPC `model_aliases` / `set_model_alias` /
-    `delete_model_alias`; `model_choices/0` is what the agent is told.
+    `delete_model_alias`; `model_choices/0` is what the agent is told (the default marked
+    by its name). **The default model is a name** (`AI.default_model_name/0`: the
+    `default_model` setting, `plus` unless saved — a tier by preference, an alias or a
+    slug; `set_default_model/1` saves it, a slug also becoming the base row;
+    `default_model_info/0` says what it resolves to now; RPC `default_model_setting` /
+    `set_default_model`). The row flagged `default` (`make_default_model`) is the
+    **base**: what an unmapped tier means and the fallback when the name no longer
+    resolves, so a fresh install runs on its preset's model until the person maps
+    `plus`. `resolve_targets(nil)` is the default name's whole chain; `in_force(nil, _)`
+    names it (`turn/model` says `plus` → the slug). Settings → 模型与 Provider has the
+    默认模型 card (`DefaultModelCard`: tiers with their labels, aliases, models, the
+    resolution and the reason to prefer a tier); the composer rail shows a tier as
+    `plus deepseek-flash high` (`useDefaultModel`).
   - `Longx.AI.Gateway.prepare/2` shapes a Responses request for its target: the
     placeholder `longx` swapped for the `upstream_id`, `stream: true`, `max_output_tokens`
     from the row, the row's `reasoning_summary` on the request's `reasoning` block (the

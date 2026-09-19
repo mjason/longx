@@ -77,3 +77,72 @@ defmodule LongxWeb.AliasesRpcTest do
     assert {:ok, ["model-b", "model-a"]} = AI.Aliases.resolve("ultra")
   end
 end
+
+defmodule LongxWeb.DefaultModelRpcTest do
+  @moduledoc "The default model on the wire: a name — plus unless set — and what it resolves to."
+  use LongxWeb.ConnCase, async: false
+
+  alias Longx.AI
+
+  setup do
+    Ash.bulk_destroy!(Longx.System.Setting, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
+    n = System.unique_integer([:positive])
+
+    provider =
+      AI.create_provider!(%{
+        name: "Up #{n}",
+        slug: "up-#{n}",
+        base_url: "http://localhost:1/v1",
+        api_key: "k"
+      })
+
+    a =
+      AI.create_model!(%{name: "A", upstream_id: "a", slug: "model-a", provider_id: provider.id})
+
+    _b =
+      AI.create_model!(%{name: "B", upstream_id: "b", slug: "model-b", provider_id: provider.id})
+
+    AI.make_default_model!(a)
+    :ok
+  end
+
+  defp rpc(conn, action, params) do
+    conn
+    |> put_req_header("content-type", "application/json")
+    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
+    |> json_response(200)
+  end
+
+  test "read, set to a tier, an alias's error, a concrete model", %{conn: conn} do
+    assert %{
+             "success" => true,
+             "data" => %{"name" => "plus", "slug" => "model-a", "kind" => "tier"}
+           } =
+             rpc(conn, "default_model_setting", %{"fields" => ~w(name slug kind)})
+
+    assert %{"success" => true, "data" => %{"name" => "ultra", "kind" => "tier"}} =
+             rpc(conn, "set_default_model", %{
+               "fields" => ~w(name slug kind),
+               "input" => %{"name" => "ultra"}
+             })
+
+    assert %{"success" => false, "errors" => [%{"fields" => ["name"]}]} =
+             rpc(conn, "set_default_model", %{
+               "fields" => ~w(name slug kind),
+               "input" => %{"name" => "nope"}
+             })
+
+    assert %{
+             "success" => true,
+             "data" => %{"name" => "model-b", "kind" => "model", "slug" => "model-b"}
+           } =
+             rpc(conn, "set_default_model", %{
+               "fields" => ~w(name slug kind),
+               "input" => %{"name" => "model-b"}
+             })
+
+    assert {:ok, %AI.Model{slug: "model-b"}} = AI.default_model()
+  end
+end

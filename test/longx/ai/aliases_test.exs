@@ -96,3 +96,72 @@ defmodule Longx.AI.AliasesTest do
     assert Enum.map(models, & &1.slug) == ["model-a", "model-b"]
   end
 end
+
+defmodule Longx.AI.DefaultModelTest do
+  @moduledoc "What runs when nobody picks: the default is a name — `plus` unless saved — over the base row."
+  use Longx.DataCase, async: false
+
+  alias Longx.AI
+  alias Longx.AI.Aliases
+
+  setup do
+    Ash.bulk_destroy!(Longx.System.Setting, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
+    n = System.unique_integer([:positive])
+
+    provider =
+      AI.create_provider!(%{
+        name: "Up #{n}",
+        slug: "up-#{n}",
+        base_url: "http://localhost:1/v1",
+        api_key: "k"
+      })
+
+    a =
+      AI.create_model!(%{
+        name: "A",
+        upstream_id: "a",
+        slug: "model-a",
+        provider_id: provider.id,
+        reasoning_levels: ["low", "high"],
+        reasoning_effort: "low"
+      })
+
+    b =
+      AI.create_model!(%{name: "B", upstream_id: "b", slug: "model-b", provider_id: provider.id})
+
+    AI.make_default_model!(a)
+    %{a: a, b: b}
+  end
+
+  test "unsaved, the default is the plus tier, which means the base row until plus is mapped; a saved tier, alias or slug takes over; the turn names what it runs on" do
+    assert %{name: "plus", slug: "model-a", kind: :tier} = AI.default_model_info()
+    assert {:ok, %{model: "a"}} = AI.resolve_target(nil)
+    # what the turn says: asked for as plus, running on model-a at its default level
+    assert {:ok, %{name: "plus", slug: "model-a", effort: "low"}} = AI.in_force(nil, nil)
+
+    # plus mapped: the default follows it
+    {:ok, _} = Aliases.put("plus", ["model-b", "model-a"])
+    assert %{name: "plus", slug: "model-b"} = AI.default_model_info()
+    assert {:ok, [%{model: "b"}, %{model: "a"}]} = AI.resolve_targets(nil)
+    assert {:ok, %{name: "plus", slug: "model-b"}} = AI.in_force("longx", nil)
+
+    # another tier, an alias, a concrete model (which also becomes the base row)
+    assert {:ok, %{name: "ultra", kind: :tier, slug: "model-a"}} = AI.set_default_model("ultra")
+    {:ok, _} = Aliases.put("青龙", ["model-b"])
+    assert {:ok, %{name: "青龙", kind: :alias, slug: "model-b"}} = AI.set_default_model("青龙")
+
+    assert {:ok, %{name: "model-b", kind: :model, slug: "model-b"}} =
+             AI.set_default_model("model-b")
+
+    assert {:ok, %AI.Model{slug: "model-b"}} = AI.default_model()
+    assert {:ok, %{name: nil, slug: "model-b"}} = AI.in_force(nil, nil)
+
+    # a name nobody has is refused; the prompt's list marks the default by its name
+    assert {:error, message} = AI.set_default_model("nope")
+    assert message =~ "nope"
+    {:ok, _} = AI.set_default_model("plus")
+    assert [%{slug: "plus", default?: true} | _] = Enum.filter(AI.model_choices(), & &1.default?)
+  end
+end

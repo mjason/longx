@@ -140,7 +140,7 @@ describe("ThreadPage", () => {
       expect(screen.queryByRole("option", { name: /glm-5/ })).not.toBeInTheDocument();
       const pick = posts.find((p) => p["type"] === "pick") as { id: string; title: string; sections: { label: string; options: { id: string }[] }[]; selected: string };
       expect(pick.title).toBe("模型");
-      expect(pick.selected).toBe("deepseek-flash");
+      expect(pick.selected).toBe("plus");
       // the tiers and aliases first (their own section), then the models by provider
       expect(pick.sections.flatMap((s) => s.options.map((o) => o.id))).toEqual(["ultra", "pro", "plus", "deepseek-flash", "glm-5"]);
       window.LongxShell!.picked(pick.id, "glm-5");
@@ -183,10 +183,9 @@ describe("ThreadPage", () => {
       ]) as never,
     );
     const first = await open();
-    // the thread runs on the default model at its default level
-    expect(screen.getByTestId("model-picker")).toHaveTextContent(
-      "deepseek-flash",
-    );
+    // the thread runs on the default — the plus tier, standing for deepseek-flash — at that model's default level
+    await waitFor(() => expect(screen.getByTestId("model-picker")).toHaveTextContent("plus"));
+    expect(screen.getByTestId("model-picker")).toHaveTextContent("deepseek-flash");
     expect(screen.getByTestId("model-picker")).toHaveTextContent("high");
     await user.click(screen.getByTestId("model-picker"));
     await user.click(await screen.findByRole("radio", { name: "max" }));

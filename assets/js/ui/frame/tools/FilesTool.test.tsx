@@ -88,12 +88,15 @@ describe("FilesTool", () => {
     const { user, panel } = await openFiles();
     await user.click(within(panel).getByRole("treeitem", { name: /README/ }));
     const preview = await screen.findByTestId("markdown-preview");
-    const pre = await waitFor(() => {
-      const el = preview.querySelector("pre");
-      expect(el).not.toBeNull();
-      return el!;
-    });
-    expect(pre.textContent).toContain("xargs -r rm -rf");
+    // shiki highlights asynchronously: wait for the block with its text
+    const pre = await waitFor(
+      () => {
+        const el = preview.querySelector("pre");
+        expect(el?.textContent).toContain("xargs -r rm -rf");
+        return el!;
+      },
+      { timeout: 4000 },
+    );
     // the container's rules: wrap, never a hidden overflow
     const container = pre.closest(".aui-shiki-base");
     expect(container?.className).toMatch(/\[&_pre\]:whitespace-pre-wrap/);

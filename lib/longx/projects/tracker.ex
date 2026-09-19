@@ -166,7 +166,10 @@ defmodule Longx.Projects.Tracker do
            "kind" => kind
          }
        }) do
-    with {:ok, %Thread{} = parent} <- Projects.get_thread_by_kernel_id(parent_id) do
+    with {:ok, %Thread{} = parent} <- Projects.get_thread_by_kernel_id(parent_id),
+         # a child without a spec is one that was deleted (its rows first, then the
+         # parent's): a late activity event must not bring its row back
+         true <- Longx.Agent.Kernel.Specs.get(child_id) != nil do
       child =
         case Projects.get_thread_by_kernel_id(child_id) do
           {:ok, %Thread{} = child} ->

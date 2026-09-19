@@ -20,6 +20,7 @@ import {
   useModelRows,
   usePresets,
   useProviders,
+  useDefaultModel,
   useModelAliases,
   type ModelAlias,
   useSearchProviders,
@@ -66,7 +67,9 @@ import { Label } from "@/ui/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/ui/components/ui/select";
@@ -122,6 +125,7 @@ export function ModelsSection() {
           />
         ))}
       </section>
+      <DefaultModelCard models={models.data} />
       <AliasesCard models={models.data} />
       <SearchProviderCard />
       {editing?.kind === "choose" ? (
@@ -1172,6 +1176,58 @@ function LevelsEditor({
  * chain of models: what a description names instead of a concrete slug, so
  * a migration is a change here and nowhere else.
  */
+/** What runs when nobody picks: a tier by preference, an alias or a model. */
+function DefaultModelCard({ models }: { models: ModelRow[] }) {
+  const current = useDefaultModel();
+  const aliases = useModelAliases();
+  const actions = useAiActions();
+  if (!current.data || !aliases.data) return null;
+  const tiers = aliases.data.filter((a) => a.builtin);
+  const custom = aliases.data.filter((a) => !a.builtin);
+  const slugs = models.filter((m) => m.slug).map((m) => m.slug!);
+  const pick = (name: string) => actions.setDefaultModel.mutate(name, { onSuccess: () => toast.success(s.defaultModelSaved), onError: fail });
+  return (
+    <section className="flex flex-col gap-3" data-testid="default-model">
+      <h2 className="text-base font-medium">{s.defaultModel}</h2>
+      <p className="text-muted-foreground text-sm">{s.defaultModelHint}</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={current.data.name} onValueChange={pick}>
+          <SelectTrigger className="h-10 w-72" aria-label={s.defaultModel}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel>{s.defaultModelTiers}</SelectLabel>
+              {tiers.map((a) => (
+                <SelectItem key={a.name} value={a.name}>
+                  {a.name} · {a.label}{a.models[0] ? ` → ${a.models[0]}` : ` → ${s.defaultModelBase}`}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            {custom.length > 0 ? (
+              <SelectGroup>
+                <SelectLabel>{s.defaultModelAliases}</SelectLabel>
+                {custom.map((a) => (
+                  <SelectItem key={a.name} value={a.name}>{a.name}{a.models[0] ? ` → ${a.models[0]}` : ""}</SelectItem>
+                ))}
+              </SelectGroup>
+            ) : null}
+            <SelectGroup>
+              <SelectLabel>{s.defaultModelModels}</SelectLabel>
+              {slugs.map((slug) => (
+                <SelectItem key={slug} value={slug}>{slug}</SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <span className="text-muted-foreground text-sm">
+          {current.data.slug ? s.defaultModelNow(current.data.slug) : s.defaultModelUnresolved}
+        </span>
+      </div>
+    </section>
+  );
+}
+
 function AliasesCard({ models }: { models: ModelRow[] }) {
   const aliases = useModelAliases();
   const actions = useAiActions();
