@@ -488,7 +488,8 @@ defmodule Longx.Projects do
     Longx.Agent.ensure(agent_opts(thread) ++ extra)
   end
 
-  defp register_team_specs(%Thread{parent_thread_id: nil, id: id}) do
+  # any thread's: a child's own children too (they spawn to max_depth)
+  defp register_team_specs(%Thread{id: id}) do
     for child <- list_subagents!(id),
         Longx.Agent.Kernel.Specs.get(child.kernel_thread_id) == nil do
       task =
@@ -506,8 +507,6 @@ defmodule Longx.Projects do
 
     :ok
   end
-
-  defp register_team_specs(_child), do: :ok
 
   @doc """
   A sub-agent closed by its parent (`close_agent`): its row is archived so
@@ -1059,6 +1058,13 @@ defmodule Longx.Projects do
     if ran? or asked?, do: {:error, :has_output}, else: :ok
   end
 
+  # every child row, archived ones included (what the team shows is `list_subagents!`)
+  defp all_subagents!(parent_id) do
+    Thread
+    |> Ash.Query.filter(parent_thread_id == ^parent_id)
+    |> Ash.read!()
+  end
+
   @doc """
   Deletes the thread row, its turns, its agent and its transcript (never
   while a turn runs).
@@ -1068,9 +1074,9 @@ defmodule Longx.Projects do
     thread = Ash.get!(Thread, thread.id)
 
     with :ok <- refuse_while_running(thread) do
-      # the sub-agents first: their rows point at this one, and their
-      # processes stop with the parent anyway
-      for child <- list_subagents!(thread.id), do: delete_rows(child)
+      # the sub-agents first — the closed (archived) ones too: their rows point
+      # at this one, and their processes stop with the parent anyway
+      for child <- all_subagents!(thread.id), do: delete_rows(child)
       delete_rows(thread)
       broadcast_changed(thread.project_id)
       :ok

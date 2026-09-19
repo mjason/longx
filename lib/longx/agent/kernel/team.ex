@@ -143,11 +143,12 @@ defmodule Longx.Agent.Kernel.Team do
     end)
   end
 
-  defp running?(child_id) do
-    match?({:running, _}, Longx.Agent.status(child_id))
-  catch
-    :exit, _ -> false
-  end
+  # from the view in ETS, never a call: this runs in the parent's init, and a
+  # child reporting to a parent that had left is blocked inside `ensure_alive`
+  # (the start of this very process) — a call to it would wait the whole timeout
+  # and then call it done while it works
+  defp running?(child_id),
+    do: match?(%{"status" => "inProgress"}, Longx.Agent.ThreadState.Store.meta(child_id).turn)
 
   # the parent's other children, from the specs (an ETS read, never a call
   # to the parent — it may be calling this agent at the same time)

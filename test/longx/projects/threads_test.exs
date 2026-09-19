@@ -550,6 +550,12 @@ defmodule Longx.Projects.ThreadsTest do
     Longx.Agent.Kernel.Specs.delete(child2)
     assert {:ok, _} = Projects.host_thread(thread.kernel_thread_id)
     assert [%{name: "researcher", id: ^child2}] = Agent.children(thread.kernel_thread_id)
+
+    # deleting the parent takes the archived child's row too (a leftover row would break the delete)
+    Longx.Test.Agents.stop_all!()
+    assert :ok = Projects.delete_thread(thread!(thread.id))
+    assert {:error, _} = Ash.get(Thread, child.id)
+    assert [] = Transcript.items!(child_id)
   end
 
   test "the stall watchdog interrupts a turn with no progress even while pages keep joining the thread",

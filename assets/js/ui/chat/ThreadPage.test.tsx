@@ -735,6 +735,10 @@ describe("ThreadPage", () => {
           progress: { kind: "toolCall", name: "apply_patch", bytes: 20480 },
         }),
       );
+      // the bar at the top of the page names every child at work, wherever the page is scrolled
+      const bar = screen.getByTestId("agents-bar");
+      expect(bar).toHaveTextContent("beta");
+      expect(bar).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");
       const sub = screen.getByTestId("tool-subagent");
       // the row is a summary — state, what its model is writing, its last words — never the conversation
       expect(sub).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");
@@ -754,6 +758,11 @@ describe("ThreadPage", () => {
         channel.deliverTo(`thread:${child}`, "event", { seq: 3, method: "item/completed", params: { turnId: "turn_2-beta", item: { id: "m_beta2", type: "agentMessage", turnId: "turn_2-beta", text: "note written" } } });
       });
       expect(await within(pane).findByText("note written")).toBeInTheDocument();
+      // the child's turn ends: the bar has nobody to show and goes
+      act(() => {
+        channel.deliverTo(`thread:${child}`, "event", { seq: 4, method: "turn/completed", params: { turn: { id: "turn_2-beta", status: "completed" } } });
+      });
+      await waitFor(() => expect(screen.queryByTestId("agents-bar")).not.toBeInTheDocument());
     } finally {
       vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
     }

@@ -220,6 +220,7 @@ export const t = {
   turnRunning: "进行中",
   stopSubagent: "停止",
   openSubagent: "打开",
+  agentsAtWork: (n: number) => `${n} 个子 agent 在工作`,
   subagentPage: "到它的页面去对话 →",
   turnWriting: (tool: string, bytes: string) => `正在写 ${tool} 的参数（${bytes}）`,
   turnRetrying: (why: string) => `连接中断，正在重试：${why}`,

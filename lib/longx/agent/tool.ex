@@ -115,7 +115,8 @@ defmodule Longx.Agent.Tool do
   defp type_schema(:map),
     do: %{"type" => "object", "additionalProperties" => %{"type" => "string"}}
 
-  defp type_schema({:enum, values}), do: %{"type" => "string", "enum" => values}
+  # unique: a JSON Schema enum with a value twice is invalid and every call fails
+  defp type_schema({:enum, values}), do: %{"type" => "string", "enum" => Enum.uniq(values)}
   defp type_schema({:array, type}), do: %{"type" => "array", "items" => type_schema(type)}
 
   defp put_doc(schema, nil), do: schema

@@ -204,6 +204,15 @@ defmodule Longx.Agent.PlugsTest do
 
       step = Agents.call(team_step(%{children: twins}), Agents.init([]))
       assert step.tools["close_agent"].schema["properties"]["agent"]["enum"] == ["researcher"]
+      # and the schema builder itself never lets a doubled value through
+      assert Tool.declare(
+               __MODULE__,
+               :t,
+               "t",
+               [{:x, {:enum, ["a", "a", "b"]}, "x", required: true}],
+               []
+             ).schema["properties"]["x"]["enum"] == ["a", "b"]
+
       assert step.tools["send_message"].schema["properties"]["agent"]["enum"] == ["researcher"]
       assert :ok = Tool.validate(step.tools["close_agent"].schema, %{"agent" => "researcher"})
     end

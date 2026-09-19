@@ -196,7 +196,8 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `Enum.uniq`'d too) removes one. `max_children` counts working members. The team survives the parent
     leaving idle: `init` rebuilds it from `Specs.children_of/1` (specs carry `parent:`,
     `task:`, `spawned_at:`), and after a BEAM restart `Projects.ensure_agent` registers
-    the children's specs from their rows (`register_team_specs/1`) before starting the
+    the children's specs from their rows (`register_team_specs/1`, any thread's — a
+    child's own children too) before starting the
     parent, so `host_thread/1` lists the team again and a follow-up revives a child from
     its row. Siblings — the parent's other children, read from `Specs`, never a call to
     the parent (it may be calling this agent) — are `step.assigns.siblings`; a child may
