@@ -89,7 +89,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     (a goal continuation, a sub-agent's report waking an idle parent) a row via
     `record_external_turn/2`, turns a parent's first `subAgentActivity` into a Thread row
     under it (`parent_thread_id`, `agent_path` `/root/<name>`; hidden from the project's
-    list, `list_subagents/1`), pushes the notify feed, and runs the **stall watchdog**: no
+    list, `list_subagents/1`), pushes the notify feed, and runs the **stall watchdog** (`running_threads/0` — the welcome page, the notify join — counts
+    a root thread as running when one of its sub-agents is at work too, `working` naming
+    them, and the directory says `running` for it): no
     event for `stall_after` (10 min; `config :longx, Longx.Projects.Tracker, stall_after:,
     tick:`) → interrupt, turn `:interrupted`. Its followed list is in memory: `host_thread/1`
     (a `ThreadChannel` join) and `send_message/3` both `Tracker.track/1` (idempotent), and

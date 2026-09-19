@@ -113,7 +113,9 @@ function RunningThreads({ threads }: { threads: RunningThread[] }) {
               <span className="min-w-0 flex-1">
                 <span className="flex items-baseline justify-between gap-3">
                   <span className="truncate font-medium">{r.title || r.preview || r.projectName}</span>
-                  <span className={`shrink-0 text-xs ${r.waiting ? "text-warning" : "text-muted-foreground"}`}>{r.waiting ? t.waitingForYou : t.runningTurn}</span>
+                  <span className={`shrink-0 text-xs ${r.waiting ? "text-warning" : "text-muted-foreground"}`}>
+                    {r.waiting ? t.waitingForYou : r.working?.length ? t.agentsWorking(r.working) : t.runningTurn}
+                  </span>
                 </span>
                 <span className="text-muted-foreground mt-0.5 flex items-baseline justify-between gap-3 text-xs">
                   <span className="truncate">{r.projectName}</span>

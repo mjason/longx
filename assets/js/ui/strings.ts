@@ -51,6 +51,7 @@ export const t = {
   searchProjects: "搜索项目…",
   runningNow: "正在进行",
   runningTurn: "进行中",
+  agentsWorking: (names: string[]) => `${names.join("、")} 工作中`,
   waitingForYou: "等待你",
   noMatch: "没有匹配的项目",
   chooseDirectory: "选择目录",

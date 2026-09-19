@@ -538,6 +538,39 @@ defmodule Longx.Projects.ThreadsTest do
     Bypass.pass(bypass)
   end
 
+  test "a thread whose sub-agent is still working counts as running on the welcome page, naming the agent",
+       %{bypass: bypass, project: project} do
+    script!(bypass, [
+      ResponsesFixture.assistant_message("delegated"),
+      held(ResponsesFixture.assistant_message("REPORT: done")),
+      ResponsesFixture.assistant_message("thanks")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, first} = Projects.send_message(thread, "hi")
+    assert_eventually_ok(fn -> turn!(first.id).status == :completed end)
+    assert Projects.running_threads() == []
+
+    # the parent is idle, the child at work: the session is busy
+    assert {:ok, _child_id} = Agent.spawn(thread.kernel_thread_id, "researcher", "look it up")
+    assert_receive {:held, handler}, 5_000
+    assert_eventually_ok(fn -> thread!(thread.id).status == :idle end)
+
+    assert [%{id: id, waiting: false, working: ["researcher"]}] = Projects.running_threads()
+    assert id == thread.id
+    # the directory says so too
+    assert [%{state: :running, team: ["researcher"]}] = Projects.directory(project.id)
+
+    send(handler, :go)
+
+    assert_eventually_ok(fn ->
+      match?([_, %Turn{status: :completed}], Projects.list_turns!(thread)) and
+        thread!(thread.id).status == :idle
+    end)
+
+    assert Projects.running_threads() == []
+  end
+
   test "session_named/3 finds the session with that handle or starts one", %{project: project} do
     assert {:ok, %Thread{handle: "watch-deploy", title: "⏰ deploy"} = thread} =
              Projects.session_named(project, "watch-deploy", title: "⏰ deploy")

@@ -188,6 +188,8 @@ export type RunningThread = {
   projectName: string;
   /** a tool holds a question for the person (an ask waiting to be answered) */
   waiting: boolean;
+  /** the sub-agents at work while the thread itself is idle */
+  working?: string[];
 };
 
 /** Every running thread, refreshed every few seconds while the caller shows. */

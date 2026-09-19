@@ -29,13 +29,16 @@ describe("WelcomePage", () => {
         threads: [
           { id: "t-1", kernelThreadId: "thr_1", title: null, preview: "跑一下测试", lastActivityAt: new Date().toISOString(), projectId: "id-1", projectSlug: "app-1", projectName: "App 1", waiting: true },
           { id: "t-2", kernelThreadId: "thr_2", title: "重构登录", preview: "…", lastActivityAt: new Date().toISOString(), projectId: "id-2", projectSlug: "app-2", projectName: "App 2", waiting: false },
+          // the parent is idle, its researcher at work: the session is busy all the same
+          { id: "t-3", kernelThreadId: "thr_3", title: "找研报", preview: "…", lastActivityAt: new Date().toISOString(), projectId: "id-2", projectSlug: "app-2", projectName: "App 2", waiting: false, working: ["researcher"] },
         ],
       }) as never,
     );
     renderAt("/");
     const list = await screen.findByTestId("running-threads");
     const links = within(list).getAllByRole("link");
-    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/p/app-1/t/t-1", "/p/app-2/t/t-2"]);
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/p/app-1/t/t-1", "/p/app-2/t/t-2", "/p/app-2/t/t-3"]);
+    expect(links[2]).toHaveTextContent("researcher 工作中");
     expect(links[0]).toHaveTextContent("App 1");
     expect(links[0]).toHaveTextContent("跑一下测试");
     expect(links[0]).toHaveTextContent("等待你");

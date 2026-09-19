@@ -255,6 +255,16 @@ defmodule Longx.Projects do
     for %Thread{} = thread <- threads do
       name = agent_name(thread)
       other? = thread.project_id != project_id
+      team = list_subagents!(thread.id)
+      # a session whose agent works for it is busy, idle itself or not
+      state =
+        case session_state(thread) do
+          idle when idle in [:idle, :asleep] ->
+            if Enum.any?(team, &(&1.status == :active)), do: :running, else: idle
+
+          state ->
+            state
+        end
 
       %{
         thread_id: thread.id,
@@ -265,9 +275,9 @@ defmodule Longx.Projects do
         handle: thread.handle,
         title: thread.title,
         preview: thread.preview,
-        state: session_state(thread),
+        state: state,
         goal: goal_summary(thread.kernel_thread_id),
-        team: thread.id |> list_subagents!() |> Enum.map(&agent_name/1),
+        team: Enum.map(team, &agent_name/1),
         last_activity_at: thread.last_activity_at
       }
     end
@@ -705,14 +715,50 @@ defmodule Longx.Projects do
   end
 
   @doc """
-  Every root thread with a turn in flight, across projects, newest activity
-  first — the welcome page's way back into what is running. `waiting` is
-  whether the thread holds a question for the person.
+  Every root thread with a turn in flight — its own, or one of its
+  sub-agents' (the parent is idle while a researcher works; the session is
+  busy all the same) — across projects, newest activity first: the welcome
+  page's way back into what is running. `waiting` is whether the thread or
+  one of its agents holds a question for the person, `working` the names of
+  the sub-agents at work.
   """
   @spec running_threads() :: [map]
   def running_threads do
-    list_active_threads!(load: :project)
+    active = list_all_active_threads!(load: :project)
+    roots = Map.new(active, &{&1.id, &1})
+
+    # a working sub-agent makes its root busy: walk up to it (a row a hop at a time)
+    {roots, working} =
+      Enum.reduce(active, {roots, %{}}, fn
+        %Thread{parent_thread_id: nil}, acc ->
+          acc
+
+        %Thread{} = child, {roots, working} ->
+          case root_of(child) do
+            {:ok, %Thread{} = root} ->
+              root =
+                if Map.has_key?(roots, root.id),
+                  do: roots[root.id],
+                  else: Ash.load!(root, :project)
+
+              {Map.put_new(roots, root.id, root),
+               Map.update(working, root.id, [agent_name(child)], &(&1 ++ [agent_name(child)]))}
+
+            _ ->
+              {roots, working}
+          end
+      end)
+
+    roots
+    |> Map.values()
+    |> Enum.filter(&is_nil(&1.parent_thread_id))
+    |> Enum.sort_by(
+      &{&1.last_activity_at || ~U[1970-01-01 00:00:00Z], &1.inserted_at},
+      {:desc, DateTime}
+    )
     |> Enum.map(fn %Thread{} = thread ->
+      agents = Map.get(working, thread.id, [])
+
       %{
         id: thread.id,
         kernel_thread_id: thread.kernel_thread_id,
@@ -722,9 +768,26 @@ defmodule Longx.Projects do
         project_id: thread.project_id,
         project_slug: thread.project.slug,
         project_name: thread.project.name,
-        waiting: Longx.Agent.ThreadState.Store.requests(thread.kernel_thread_id) != []
+        waiting:
+          Longx.Agent.ThreadState.Store.requests(thread.kernel_thread_id) != [] or
+            Enum.any?(active, fn a ->
+              a.parent_thread_id != nil and a.project_id == thread.project_id and
+                Longx.Agent.ThreadState.Store.requests(a.kernel_thread_id) != [] and
+                match?({:ok, %Thread{id: id}} when id == thread.id, root_of(a))
+            end),
+        working: agents
       }
     end)
+  end
+
+  # the root of a sub-agent's row: its parent, its parent's parent…
+  defp root_of(%Thread{parent_thread_id: nil} = thread), do: {:ok, thread}
+
+  defp root_of(%Thread{parent_thread_id: parent_id}) do
+    case Ash.get(Thread, parent_id) do
+      {:ok, %Thread{} = parent} -> root_of(parent)
+      {:error, _} = error -> error
+    end
   end
 
   ## The notify feed
