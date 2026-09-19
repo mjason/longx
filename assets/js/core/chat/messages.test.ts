@@ -259,6 +259,46 @@ describe("multi-agent", () => {
     expect(sub.messages[0]!.content.map((p) => (p as { type: string }).type)).toEqual(["tool-call", "text"]);
   });
 
+  test("a child asked again in a later turn gets its row there, with the conversation; the earlier row stays as a completed marker", () => {
+    const child = view({
+      threadId: "child-alpha",
+      turn: { id: "ct2", status: "inProgress" },
+      items: [
+        { id: "cu1", type: "userMessage", turnId: "ct1", content: [{ type: "text", text: "[agent main] first task" }], from: "main" },
+        { id: "cm1", type: "agentMessage", turnId: "ct1", text: "first answer" },
+        { id: "cu2", type: "userMessage", turnId: "ct2", content: [{ type: "text", text: "[agent main] and more" }], from: "main" },
+        { id: "cm2", type: "agentMessage", turnId: "ct2", text: "working…" },
+      ],
+    });
+    const at = (id: string, kind: string, turnId: string) => ({ ...activity(id, kind), turnId });
+    const msgs = toMessages(
+      view({
+        turn: { id: "t22", status: "inProgress" },
+        items: [
+          { id: "u20", type: "userMessage", turnId: "t20", content: [{ type: "text", text: "spawn alpha" }] },
+          at("act1", "started", "t20"),
+          { id: "a20", type: "agentMessage", turnId: "t20", text: "sent" },
+          at("act2", "completed", "t21"),
+          { id: "a21", type: "agentMessage", turnId: "t21", text: "it reported" },
+          { id: "u22", type: "userMessage", turnId: "t22", content: [{ type: "text", text: "ask it more" }] },
+          at("act3", "interacted", "t22"),
+          { id: "a22", type: "agentMessage", turnId: "t22", text: "asked" },
+        ],
+      }),
+      { "child-alpha": child },
+    );
+    // t20: the spawn's row, completed, no conversation nested (it moved on); t22: the live row with everything
+    const first = parts(msgs[1]!)[0] as unknown as { toolCallId: string; args: Record<string, unknown>; result: unknown; messages?: unknown[] };
+    expect(first).toMatchObject({ toolCallId: "child-alpha:act1", args: { kind: "completed" }, result: { kind: "completed" } });
+    expect(first.messages).toBeUndefined();
+    const again = parts(msgs[msgs.length - 1]!)[0] as unknown as { toolCallId: string; args: Record<string, unknown>; result: unknown; messages: { role: string }[] };
+    expect(again).toMatchObject({ toolCallId: "child-alpha", args: { kind: "interacted" } });
+    expect(again.result).toBeUndefined();
+    expect(again.messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
+    // a completion in a turn of its own makes no row
+    expect(parts(msgs[2]!).map((p) => p["type"])).toEqual(["text"]);
+  });
+
   test("a sub-agent still working has no result; without its view the call has no messages", () => {
     const msgs = toMessages(view({ turn: { id: "t20", status: "inProgress" }, items: [activity("act1", "started")] }));
     const sub = parts(msgs[0]!)[0]!;

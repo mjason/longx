@@ -27,7 +27,10 @@ export type SubAgent = {
   name: string;
   path: string;
   kind: string;
-  firstItemId: string;
+  /** the activity items that open a row: the first engagement (started / interacted) in each turn */
+  rowItemIds: string[];
+  /** the turns those rows are in */
+  rowTurnIds: string[];
   startedAtMs?: number;
   completedAtMs?: number;
 };
@@ -45,6 +48,17 @@ export function subagentsOf(view: ThreadView): Map<string, SubAgent> {
     const path = String(item["agentPath"] ?? "");
     const kind = String(item["kind"] ?? "started");
     const known = agents.get(threadId);
+    // a child engaged in a turn — spawned, or asked again later — gets a row
+    // in that turn (one per turn); its conversation follows the latest row
+    const engages = kind === "started" || kind === "interacted";
+    const rowItemIds =
+      engages && !(known?.rowTurnIds ?? []).includes(item.turnId ?? "")
+        ? [...(known?.rowItemIds ?? []), item.id]
+        : (known?.rowItemIds ?? []);
+    const rowTurnIds =
+      engages && !(known?.rowTurnIds ?? []).includes(item.turnId ?? "")
+        ? [...(known?.rowTurnIds ?? []), item.turnId ?? ""]
+        : (known?.rowTurnIds ?? []);
     const started =
       known?.startedAtMs ??
       (typeof item["startedAtMs"] === "number"
@@ -61,7 +75,8 @@ export function subagentsOf(view: ThreadView): Map<string, SubAgent> {
       name: path.split("/").filter(Boolean).at(-1) ?? threadId,
       path,
       kind,
-      firstItemId: known?.firstItemId ?? item.id,
+      rowItemIds,
+      rowTurnIds,
       ...(started !== undefined ? { startedAtMs: started } : {}),
       ...(completed !== undefined ? { completedAtMs: completed } : {}),
     });
@@ -170,24 +185,28 @@ function subagentPart(
   subviews: SubViews,
 ): ToolPart | null {
   const agent = agents.get(String(item["agentThreadId"] ?? ""));
-  if (!agent || agent.firstItemId !== item.id) return null;
-  const done = agent.kind === "completed" || agent.kind === "interrupted";
-  const child = subviews[agent.threadId];
+  if (!agent || !agent.rowItemIds.includes(item.id)) return null;
+  // an earlier row (the child was asked again in a later turn): a completed
+  // marker without the conversation, which lives on the latest row
+  const latest = agent.rowItemIds.at(-1) === item.id;
+  const kind = latest ? agent.kind : "completed";
+  const done = kind === "completed" || kind === "interrupted";
+  const child = latest ? subviews[agent.threadId] : undefined;
   const pending = child?.requests.find((r) => r.method === ACTION_REQUEST);
   const part = toolPart(
-    agent.threadId,
+    latest ? agent.threadId : `${agent.threadId}:${item.id}`,
     "subagent",
     {
       name: agent.name,
       path: agent.path,
       threadId: agent.threadId,
-      kind: agent.kind,
+      kind,
       request: pending
         ? { title: String(pending.params["title"] ?? "") }
         : null,
     },
-    done ? { kind: agent.kind } : undefined,
-    agent.kind === "interrupted",
+    done ? { kind } : undefined,
+    kind === "interrupted",
     undefined,
     agent.startedAtMs !== undefined
       ? {
