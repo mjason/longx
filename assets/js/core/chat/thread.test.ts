@@ -90,6 +90,18 @@ describe("thread view", () => {
     expect(v.progress).toBeNull();
   });
 
+  test("turn/model merges the model and level onto the turn, the current one included", () => {
+    let v = fromSnapshot(snapshot);
+    v = applyEvent(v, { seq: 11, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+    v = applyEvent(v, { seq: 12, method: "turn/model", params: { turnId: "turn_2", model: "deepseek-flash", name: "plus", effort: "low" } });
+    expect(v.turn).toMatchObject({ id: "turn_2", status: "inProgress", model: "deepseek-flash", modelName: "plus", effort: "low" });
+    expect(v.turns["turn_2"]).toMatchObject({ model: "deepseek-flash", effort: "low" });
+    // an older turn's model is its own
+    v = applyEvent(v, { seq: 13, method: "turn/model", params: { turnId: "turn_1", model: "glm-5", name: null, effort: "high" } });
+    expect(v.turn?.["model"]).toBe("deepseek-flash");
+    expect(v.turns["turn_1"]).toMatchObject({ model: "glm-5" });
+  });
+
   test("thread/reverted drops the named turns' items", () => {
     let v = fromSnapshot(snapshot);
     v = applyEvent(v, { seq: 11, method: "item/completed", params: { turnId: "turn_2", item: { id: "a2", type: "agentMessage", text: "x" } } });

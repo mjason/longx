@@ -97,7 +97,7 @@ export function toMessages(
         content: current.parts,
         status: statusFor(view, current.turnId, running),
         ...(timed
-          ? { metadata: { timing: timed.timing, ...(timed.usage ? { custom: { usage: timed.usage } } : {}) } }
+          ? { metadata: { timing: timed.timing, custom: { ...(timed.usage ? { usage: timed.usage } : {}), ...(timed.model ? { model: timed.model } : {}) } } }
           : {}),
       });
     }
@@ -259,9 +259,10 @@ function timingFor(
   view: ThreadView,
   turnId: string | undefined,
   parts: Part[],
-): { timing: MessageTiming; usage?: TurnUsage } | undefined {
+): { timing: MessageTiming; usage?: TurnUsage; model?: TurnModel } | undefined {
   const turn = turnOf(view, turnId);
   if (!turn || typeof turn["startedAt"] !== "number") return undefined;
+  const model = modelOf(turn);
   const startedAt = (turn["startedAt"] as number) * 1000;
   const completedAt =
     typeof turn["completedAt"] === "number"
@@ -286,6 +287,19 @@ function timingFor(
       toolCallCount: parts.filter((p) => p.type === "tool-call").length,
     },
     ...(usage && completedAt !== undefined ? { usage } : {}),
+    ...(model ? { model } : {}),
+  };
+}
+
+/** the model (and level) a turn ran on, as the kernel told it (`turn/model`) */
+export type TurnModel = { slug: string; name: string | null; effort: string | null };
+
+export function modelOf(turn: Record<string, unknown>): TurnModel | undefined {
+  if (typeof turn["model"] !== "string") return undefined;
+  return {
+    slug: turn["model"],
+    name: typeof turn["modelName"] === "string" ? turn["modelName"] : null,
+    effort: typeof turn["effort"] === "string" ? turn["effort"] : null,
   };
 }
 

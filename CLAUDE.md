@@ -200,7 +200,15 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `send_message` one and gets its answer itself. A child monitors its parent but goes
     on when it leaves idle or crashes (the child's report brings it back from its spec);
     it stops with the parent only when the parent's spec is gone for good (`Agent.stop`
-    stops the children first anyway). **Depth guard**: a spawn past `max_depth`
+    stops the children first anyway). **A child inherits the session's model and
+    level**: `Team.spawn_child` passes `inherited_model:` / `inherited_effort:` (what
+    the parent runs on, or what it inherited itself), the child's row keeps them as
+    `model_slug` / `reasoning_effort` (for a sub-agent row `agent_opts` gives them back
+    as the inheritance, not a choice), and the loader puts them under everything
+    (`inherited:` → the first `Config`): a spawn option, the role's own `model`, the
+    settings' `child_model` all outrank it; the level goes with the model that stands
+    (`model_and_effort/1` — an inherited `xhigh` never rides under another model).
+    **Depth guard**: a spawn past `max_depth`
     (settings; `config :longx, Longx.Agent, max_depth:` 2) answers `{:error, :too_deep}` —
     a strategy plug inherited by every child recursed for ever without it. How a child is
     made is the `spawner:` function the agent was `ensure`d with
@@ -247,6 +255,16 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `step.context_window` let a plug judge the context; `step.calls` are the model's calls
     at `:response`; `Step.instructions/2`, `Step.tool/2`, `Step.raw_tool/2` build the
     request.
+  - **What a turn runs on is told**: `Longx.AI.in_force(name, effort)` resolves the tier /
+    alias / slug asked for to the concrete slug and the level in force (the model's
+    default level when none was asked); the kernel puts it on the step
+    (`assigns.model_in_force`) — `Plugs.Environment` adds "Model: you are running on
+    model `x` (asked for as `plus`) at reasoning effort `low`" so the agent can say so
+    instead of guessing — and emits `turn/model` `%{"turnId", "model", "name",
+    "effort"}` at the first request and on every change (a chain fallback,
+    `model/rerouted`, now names slugs); the Store merges it onto the turn
+    (`put_turn` merges partials), the client too, and the badge's popover shows 模型 /
+    档位, a sub-agent's row its child's `slug · level`.
   - **Events keep codex's vocabulary** (`turn/started`, `item/started`,
     `item/agentMessage/delta`, `item/reasoning/summaryTextDelta`,
     `item/commandExecution/outputDelta`, `item/completed`, `thread/tokenUsage/updated`,

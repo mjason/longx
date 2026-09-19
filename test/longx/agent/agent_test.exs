@@ -927,10 +927,13 @@ defmodule Longx.AgentTest do
 
     {:ok, _} = Agent.send(id, "hi", model: "ultra")
 
-    assert %{"fromModel" => "real-model", "toModel" => "real-model-2", "reason" => reason} =
+    assert %{"fromModel" => from, "toModel" => to, "reason" => reason} =
              await("model/rerouted")
 
+    assert {from, to} == {model.slug, second.slug}
     assert reason =~ "quota"
+    # the turn's badge follows the model that serves
+    assert_receive {:thread, _, "turn/model", %{"model" => ^to}}, 5_000
     assert %{"status" => "completed"} = await_turn_end()
   end
 
@@ -2081,7 +2084,84 @@ defmodule Longx.AgentTest do
     assert slug == model.slug
   end
 
+  test "a child inherits the session's model and level unless its role names its own; the turn says what it runs on",
+       %{bypass: bypass, dir: dir, model: model} do
+    # a second model, the session's pick; the default stays `model`
+    other =
+      AI.create_model!(%{
+        name: "Other",
+        upstream_id: "real-other",
+        slug: "other-#{System.unique_integer([:positive])}",
+        provider_id: model.provider_id,
+        reasoning_levels: ["low", "high"],
+        context_window: 64_000
+      })
+
+    File.mkdir_p!(Path.join(dir, ".longx/local/agents/picky"))
+
+    File.write!(
+      Path.join(dir, ".longx/local/agents/picky/agent.exs"),
+      "import Longx.Agent.Config\nagent do\n  model #{inspect(model.slug)}, effort: \"high\"\n  prompt \"be picky\"\nend\n"
+    )
+
+    id =
+      agent!("inherit-#{System.unique_integer([:positive])}", dir,
+        models: &Longx.AI.model_choices/0
+      )
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("parent done"),
+      ResponsesFixture.assistant_message("child done"),
+      ResponsesFixture.assistant_message("picky done"),
+      # the children's reports wake the parent: a reply for each of those turns too
+      ResponsesFixture.assistant_message("noted"),
+      ResponsesFixture.assistant_message("noted again"),
+      ResponsesFixture.assistant_message("and again"),
+      ResponsesFixture.assistant_message("still noted")
+    ])
+
+    {:ok, _} = Agent.send(id, "go", model: other.slug, effort: "low")
+    assert_receive {:request, parent_body}, 5_000
+    assert parent_body["model"] == "real-other"
+    # the turn says what it runs on: the slug and the level in force
+    assert_receive {:thread, _, "turn/model", %{"model" => slug, "effort" => "low"}}, 5_000
+    assert slug == other.slug
+    assert %{"status" => "completed"} = await_turn_end()
+    # the prompt tells the agent too
+    assert parent_body["instructions"] =~ "running on model `#{other.slug}`"
+    assert parent_body["instructions"] =~ "reasoning effort `low`"
+
+    # a bare child: the session's model and level
+    {:ok, child} = Agent.spawn(id, "helper", "help")
+    assert_receive {:request, child_body}, 5_000
+    assert child_body["model"] == "real-other"
+    assert child_body["reasoning"]["effort"] == "low"
+    assert Agent.info(child).name == "helper"
+
+    # a role with its own model: the role's, at its own level (the helper's
+    # report wakes the parent meanwhile: the picky request is the one with its prompt)
+    {:ok, _picky} = Agent.spawn(id, "picky", "be picky", role: "picky")
+
+    picky_body = await_request_matching(~r/be picky/)
+    assert picky_body["model"] == "real-model"
+    assert picky_body["reasoning"]["effort"] == "high"
+
+    # the team's reports would still be arriving after the test: stop it here,
+    # while the scripted replies are alive
+    Agent.stop(id)
+  end
+
   ## more helpers
+
+  # the next request whose instructions match (another agent's may come first)
+  defp await_request_matching(regex) do
+    receive do
+      {:request, %{"instructions" => instructions} = body} when is_binary(instructions) ->
+        if Regex.match?(regex, instructions), do: body, else: await_request_matching(regex)
+    after
+      5_000 -> flunk("no request matching #{inspect(regex)}")
+    end
+  end
 
   defp await_item_started(type) do
     receive do

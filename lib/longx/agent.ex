@@ -280,6 +280,8 @@ defmodule Longx.Agent do
       last_active: System.monotonic_time(:millisecond),
       trust: Keyword.get(opts, :trust, fn -> false end),
       web_search: Keyword.get(opts, :web_search, true),
+      inherited_model: Keyword.get(opts, :inherited_model),
+      inherited_effort: Keyword.get(opts, :inherited_effort),
       seq: items |> Enum.map(& &1.seq) |> Enum.max(fn -> 0 end),
       transcript: Transcript.input(items),
       # the goal outlives the process in the view
@@ -558,6 +560,7 @@ defmodule Longx.Agent do
           reply_to: Keyword.get(opts, :reply_to),
           reply_as: Keyword.get(opts, :reply_as),
           hops: Keyword.get(opts, :hops, 0),
+          turn_model: nil,
           usage_total: %{},
           turn_started_at: System.system_time(:millisecond),
           continues: 0,
@@ -659,8 +662,9 @@ defmodule Longx.Agent do
   defp start_model(state, %Step{request: nil}),
     do: {:noreply, end_turn(state, "failed", "the pipeline built no request")}
 
-  defp start_model(state, %Step{request: request, model: model, tools: tools}) do
+  defp start_model(state, %Step{request: request, model: model, tools: tools} = step) do
     ref = make_ref()
+    state = tell_model(state, step.assigns[:model_in_force] || in_force(model, step.effort))
 
     task =
       Task.Supervisor.async_nolink(@tasks, Longx.Agent.Model, :run, [
@@ -690,6 +694,29 @@ defmodule Longx.Agent do
     end
   end
 
+  # `turn/model`: the slug, the name asked for and the level, once per change
+  defp tell_model(state, nil), do: state
+
+  defp tell_model(%State{turn_model: same} = state, same), do: state
+
+  defp tell_model(state, %{slug: slug} = in_force) do
+    emit(state, "turn/model", %{
+      "turnId" => state.turn_id,
+      "model" => slug,
+      "name" => in_force[:name],
+      "effort" => in_force[:effort]
+    })
+
+    %{state | turn_model: in_force}
+  end
+
+  defp in_force(model, effort) do
+    case Longx.AI.in_force(model, effort) do
+      {:ok, in_force} -> in_force
+      {:error, _} -> nil
+    end
+  end
+
   defp build_step(%State{} = state, phase, extra \\ []) do
     Step.new(
       [
@@ -714,6 +741,7 @@ defmodule Longx.Agent do
           name: state.name,
           role: state.role,
           depth: state.depth,
+          inherited: %{model: state.inherited_model, effort: state.inherited_effort},
           children: Team.children_list(state),
           siblings: Team.siblings(state),
           goal: state.goal
@@ -743,7 +771,9 @@ defmodule Longx.Agent do
           Map.merge(step.assigns, %{
             agents: loaded.agents,
             allowed: loaded.allowed,
-            models: models
+            models: models,
+            # what this step runs on, for the Environment plug and the turn's event
+            model_in_force: in_force(model, effort)
           })
     }
 
@@ -786,7 +816,8 @@ defmodule Longx.Agent do
       tag: project_id || "adhoc",
       trusted: trusted?,
       agent: assigns[:role],
-      settings: (assigns[:settings] || fn -> nil end).()
+      settings: (assigns[:settings] || fn -> nil end).(),
+      inherited: assigns[:inherited]
     )
   end
 
@@ -888,7 +919,13 @@ defmodule Longx.Agent do
          {:model, ref, {:fallback, from, to, reason}}
        ) do
     emit(state, "model/rerouted", %{"fromModel" => from, "toModel" => to, "reason" => reason})
-    {:noreply, state}
+
+    {:noreply,
+     tell_model(state, %{
+       slug: to,
+       name: state.turn_model && state.turn_model[:name],
+       effort: state.turn_model && state.turn_model[:effort]
+     })}
   end
 
   defp on_info(%State{phase: :compacting, model_task: %{ref: ref}} = state, {:model, ref, event}),

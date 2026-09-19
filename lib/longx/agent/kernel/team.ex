@@ -33,6 +33,16 @@ defmodule Longx.Agent.Kernel.Team do
     spawner = Keyword.get(opts, :spawner) || state.spawner || configured_spawner()
     name = unique_name(state, name)
 
+    # the session's model and level go with the child, under its own role's
+    # and a spawn option's (what this agent runs on, or what it inherited itself)
+    opts =
+      opts
+      |> Keyword.put_new(:inherited_model, state.model || state.inherited_model)
+      |> Keyword.put_new(
+        :inherited_effort,
+        if(state.model, do: state.effort, else: state.inherited_effort)
+      )
+
     with :ok <- depth_ok(state),
          {:ok, child_id} <- spawner.(state, name, task, opts),
          pid when is_pid(pid) <- Longx.Agent.whereis(child_id) || {:error, :not_started} do
@@ -193,9 +203,11 @@ defmodule Longx.Agent.Kernel.Team do
              name: name,
              project_id: parent.project_id,
              cwd: Keyword.get(opts, :cwd, parent.cwd),
-             # no model given: the role's own, else the default (not the parent's)
+             # no model given: the role's own, else the session's (inherited), else the default
              model: Keyword.get(opts, :model),
              effort: Keyword.get(opts, :effort),
+             inherited_model: Keyword.get(opts, :inherited_model),
+             inherited_effort: Keyword.get(opts, :inherited_effort),
              role: Keyword.get(opts, :role),
              task: summary(task),
              spawned_at: System.os_time(:microsecond),

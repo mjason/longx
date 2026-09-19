@@ -135,8 +135,12 @@ defmodule Longx.Agent.Definition.Loader do
 
     {configs, prompt_errors} = with_prompt_files(main ++ role_configs)
 
+    # a child's inheritance (the session it was spawned from) stands under
+    # everything: a description, the settings' child model, a spawn option
+    # all outrank it — it is what runs when nobody said otherwise
     configs =
-      configs ++
+      inherited_layer(Keyword.get(opts, :inherited)) ++
+        configs ++
         settings_layer(Keyword.get(opts, :settings), role, last(configs, & &1.model)) ++
         List.wrap(Keyword.get(opts, :overrides))
 
@@ -160,10 +164,12 @@ defmodule Longx.Agent.Definition.Loader do
           }
         end)
 
+    {model, effort} = model_and_effort(configs)
+
     %{
       plugs: plugs,
-      model: last(configs, & &1.model),
-      effort: last(configs, & &1.effort),
+      model: model,
+      effort: effort,
       errors: errors,
       notices: notices(errors, configs) ++ Enum.flat_map(layers, &Map.get(&1, :warnings, [])),
       present?: File.dir?(project_dir),
@@ -205,6 +211,26 @@ defmodule Longx.Agent.Definition.Loader do
   end
 
   defp last(configs, fun), do: configs |> Enum.map(fun) |> Enum.reject(&is_nil/1) |> List.last()
+
+  # the model is the last named; the level goes with it — one named before
+  # the model (an inherited "xhigh" under a description's other model) would
+  # be a level that model may not have
+  defp model_and_effort(configs) do
+    case Enum.find_index(Enum.reverse(configs), & &1.model) do
+      nil ->
+        {nil, last(configs, & &1.effort)}
+
+      from_end ->
+        from = length(configs) - 1 - from_end
+        since = Enum.drop(configs, from)
+        {hd(since).model, last(since, & &1.effort)}
+    end
+  end
+
+  defp inherited_layer(%{model: model, effort: effort}) when is_binary(model),
+    do: [%Config{ops: [], model: model, effort: effort}]
+
+  defp inherited_layer(_), do: []
 
   # every declared role, the later layer's declaration replacing the
   # earlier (a local declaration stands in for the shared one); a

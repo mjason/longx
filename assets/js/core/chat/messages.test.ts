@@ -168,6 +168,16 @@ describe("toMessages", () => {
     expect(two[0]!.metadata?.timing).toMatchObject({ totalStreamTime: 10_000, tokenCount: 80 });
     expect(two[0]!.metadata?.custom).toMatchObject({ usage: { inputTokens: 1000, cachedInputTokens: 400, outputTokens: 80, reasoningOutputTokens: 30 } });
     expect(two[1]!.metadata?.timing).toMatchObject({ totalStreamTime: 3_000, tokenCount: 5 });
+
+    // the model and level the turn ran on ride along for the badge
+    const modelled = toMessages(
+      view({
+        turn: { id: "t14", status: "completed", startedAt: 1_700_000_300, completedAt: 1_700_000_301, model: "deepseek-flash", modelName: "plus", effort: "low" },
+        turns: { t14: { id: "t14", status: "completed", startedAt: 1_700_000_300, completedAt: 1_700_000_301, model: "deepseek-flash", modelName: "plus", effort: "low" } },
+        items: [{ id: "a14", type: "agentMessage", turnId: "t14", text: "ok" }],
+      }),
+    );
+    expect(modelled[0]!.metadata?.custom).toMatchObject({ model: { slug: "deepseek-flash", name: "plus", effort: "low" } });
   });
 
   test("a tool's ask (Context.ask) is a standalone action part on the last message, answered through extras", () => {

@@ -55,6 +55,12 @@ defmodule Longx.Agent.Kernel.State do
             pending_images: [],
             # a call the model is still writing (`turn/progress`): %{item, name, bytes, shown_at}
             progress: nil,
+            # what the turn runs on as last told (`turn/model`): %{"model", "name", "effort"}
+            turn_model: nil,
+            # a child's inheritance: the session's model and level it was spawned from,
+            # standing where neither a spawn option nor its role names one
+            inherited_model: nil,
+            inherited_effort: nil,
             # this agent's place in a team: who spawned it, what it is called,
             # who it spawned (child thread id → %{name, pid, ref, status, role, task, n};
             # a child stays a member after its turn — done, idle, failed — until closed)

@@ -77,11 +77,10 @@ defmodule Longx.Agent.ThreadState.Store do
     })
   end
 
+  # a partial (turn/model) merges into what the turn is; the current turn is the merged one
   defp put_turn(thread_id, %{"id" => id} = turn) do
-    turns =
-      Map.merge(meta(thread_id).turns, %{id => Map.merge(meta(thread_id).turns[id] || %{}, turn)})
-
-    put_meta(thread_id, %{turn: turn, turns: turns})
+    merged = Map.merge(meta(thread_id).turns[id] || %{}, turn)
+    put_meta(thread_id, %{turn: merged, turns: Map.put(meta(thread_id).turns, id, merged)})
   end
 
   defp put_turn(thread_id, turn), do: put_meta(thread_id, %{turn: turn})
@@ -243,6 +242,17 @@ defmodule Longx.Agent.ThreadState.Store do
   end
 
   def fold(t, "turn/progress", %{"progress" => progress}), do: put_meta(t, %{progress: progress})
+
+  # what the turn runs on: onto the turn (its badge names the model and level)
+  def fold(t, "turn/model", %{"turnId" => id} = p) when is_binary(id),
+    do:
+      put_turn(t, %{
+        "id" => id,
+        "model" => p["model"],
+        "modelName" => p["name"],
+        "effort" => p["effort"]
+      })
+
   def fold(t, "thread/status/changed", %{"status" => status}), do: put_meta(t, %{status: status})
 
   def fold(t, "thread/tokenUsage/updated", %{"tokenUsage" => usage}),

@@ -309,6 +309,39 @@ defmodule Longx.AI do
   end
 
   # {:ok, model, named explicitly?}
+  @doc """
+  What a turn runs on, for the person and the agent to see: `name` the
+  tier / alias / slug asked for (nil when nothing was), `slug` the model
+  it resolves to (the chain's first), `effort` the level in force (the one
+  asked for, else the model's default level), `levels` the model's.
+  """
+  @spec in_force(String.t() | nil, String.t() | nil) ::
+          {:ok,
+           %{
+             name: String.t() | nil,
+             slug: String.t(),
+             effort: String.t() | nil,
+             levels: [String.t()]
+           }}
+          | {:error, term}
+  def in_force(name, effort) do
+    with {:ok, model, explicit?} <- fetch_model(name) do
+      slug =
+        case name && Aliases.resolve(name) do
+          {:ok, [first | _]} -> first
+          _ -> model.slug
+        end
+
+      {:ok,
+       %{
+         name: if(explicit?, do: name),
+         slug: slug,
+         effort: effort || model.reasoning_effort,
+         levels: model.reasoning_levels || []
+       }}
+    end
+  end
+
   defp fetch_model(nil), do: fetch_model(@placeholder_model)
 
   defp fetch_model(@placeholder_model) do

@@ -168,6 +168,18 @@ function fold(
       return { ...view, goal: null };
     case "turn/progress":
       return { ...view, progress: (params["progress"] as TurnProgress | null | undefined) ?? null };
+    case "turn/model": {
+      // what the turn runs on, onto the turn (the badge names it); the current one too
+      const id = params["turnId"];
+      if (typeof id !== "string") return view;
+      const patch = { model: params["model"], modelName: params["name"], effort: params["effort"] };
+      const merged = { ...(view.turns[id] ?? { id }), ...patch };
+      return {
+        ...view,
+        turns: { ...view.turns, [id]: merged },
+        turn: view.turn?.["id"] === id ? { ...view.turn, ...patch } : view.turn,
+      };
+    }
     case "item/started":
     case "item/completed": {
       const item = params["item"] as ThreadItem | undefined;

@@ -507,8 +507,6 @@ defmodule Longx.Projects do
       thread_id: thread.kernel_thread_id,
       project_id: thread.project_id,
       cwd: thread.cwd,
-      model: thread.model_slug,
-      effort: thread.reasoning_effort,
       web_search: thread.web_search,
       trust: trust_fun(thread.project_id),
       settings: settings_fun(thread.project_id),
@@ -518,8 +516,16 @@ defmodule Longx.Projects do
           Longx.Agent.Definition.Settings.for_project_id(thread.project_id)
         ),
       spawner: &__MODULE__.spawn_native_agent/4
-    ] ++ team_opts(thread)
+    ] ++ model_opts(thread) ++ team_opts(thread)
   end
+
+  # a root thread's model is the person's choice; a sub-agent's row holds what it
+  # inherited from the session, which its role's own model outranks
+  defp model_opts(%Thread{parent_thread_id: nil} = thread),
+    do: [model: thread.model_slug, effort: thread.reasoning_effort]
+
+  defp model_opts(%Thread{} = child),
+    do: [inherited_model: child.model_slug, inherited_effort: child.reasoning_effort]
 
   # read at every turn, like the trust switch
   defp settings_fun(project_id),
@@ -576,9 +582,12 @@ defmodule Longx.Projects do
     turn_id = "turn_" <> Ash.UUID.generate()
 
     with {:ok, %Thread{} = parent} <- get_thread_by_kernel_id(parent_state.thread_id),
-         # no model given: the role's own, else the default — not the parent's
+         # a model given is the child's; else the session's is inherited (the row
+         # keeps it, under the role's own — see agent_opts) — else the default
          model_slug = Keyword.get(opts, :model),
          effort = Keyword.get(opts, :effort),
+         inherited_model = Keyword.get(opts, :inherited_model),
+         inherited_effort = Keyword.get(opts, :inherited_effort),
          {:ok, child} <-
            create_thread(%{
              kernel_thread_id: child_id,
@@ -587,15 +596,17 @@ defmodule Longx.Projects do
              agent_path: (parent.agent_path || "/root") <> "/" <> name,
              title: name,
              cwd: Keyword.get(opts, :cwd, parent.cwd),
-             model_slug: model_slug,
-             reasoning_effort: effort,
+             model_slug: model_slug || inherited_model,
+             reasoning_effort: effort || inherited_effort,
              web_search: parent.web_search,
              status: :active
            }),
          {:ok, _pid} <-
-           ensure_agent(child,
-             task: String.slice(task, 0, 200),
-             spawned_at: System.os_time(:microsecond)
+           ensure_agent(
+             child,
+             [task: String.slice(task, 0, 200), spawned_at: System.os_time(:microsecond)]
+             |> put_if(:model, model_slug)
+             |> put_if(:effort, effort)
            ),
          :ok <- Tracker.track(child_id),
          {:ok, _turn} <-

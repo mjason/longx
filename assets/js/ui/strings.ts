@@ -332,6 +332,8 @@ export const t = {
   },
   timing: {
     title: "这一轮的耗时",
+    model: "模型",
+    level: "档位",
     firstToken: "首个输出",
     total: "总耗时",
     speed: "速度",

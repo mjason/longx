@@ -645,6 +645,48 @@ describe("ThreadPage", () => {
     expect(message).not.toHaveTextContent("[agent researcher]");
   });
 
+  test("the badge names the model and level a turn ran on; a sub-agent's row names its child's", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listSubagents).mockResolvedValue(ok([{ ...thread(9), id: "t9", kernelThreadId: "thr_1-gamma", title: "gamma", agentPath: "/root/gamma", status: "active" }]) as never);
+    try {
+      await open();
+      const child = "thr_1-gamma";
+      act(() => {
+        channel.deliverTo("thread:thr_1", "event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress", startedAt: 1_700_000_000 } } });
+        channel.deliverTo("thread:thr_1", "event", { seq: 5, method: "turn/model", params: { turnId: "turn_2", model: "glm-5", name: "pro", effort: "high" } });
+        channel.deliverTo("thread:thr_1", "event", {
+          seq: 6,
+          method: "item/completed",
+          params: { turnId: "turn_2", item: { id: "act_gamma", type: "subAgentActivity", agentPath: "/root/gamma", agentThreadId: child, kind: "started" } },
+        });
+        channel.deliverTo("thread:thr_1", "event", { seq: 7, method: "item/completed", params: { turnId: "turn_2", item: { id: "a2", type: "agentMessage", turnId: "turn_2", text: "sent gamma" } } });
+        channel.deliverTo("thread:thr_1", "event", { seq: 8, method: "turn/completed", params: { turn: { id: "turn_2", status: "completed", startedAt: 1_700_000_000, completedAt: 1_700_000_004, usage: { totalTokens: 10, outputTokens: 4 } } } });
+      });
+      await waitFor(() => expect(channel.topics).toContain(`thread:${child}`));
+      act(() =>
+        channel.replyTo(`thread:${child}`, "ok", {
+          thread_id: child,
+          seq: 2,
+          thread: null,
+          turn: { id: "turn_2-gamma", status: "inProgress", model: "deepseek-flash", modelName: null, effort: "low" },
+          status: null,
+          token_usage: null,
+          items: [{ id: "m_gamma", type: "agentMessage", turnId: "turn_2-gamma", text: "hi" }],
+          pending_requests: [],
+        }),
+      );
+      const sub = screen.getByTestId("tool-subagent");
+      expect(sub).toHaveTextContent("deepseek-flash · low");
+      // the parent's badge: the model behind the popover
+      const badges = screen.getAllByRole("button", { name: /耗时/ });
+      await user.hover(badges[badges.length - 1]!);
+      expect(await screen.findByText(/glm-5/)).toBeInTheDocument();
+      expect(screen.getByText(/pro · high/)).toBeInTheDocument();
+    } finally {
+      vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
+    }
+  });
+
   test("a working sub-agent's row says what its model is writing and can be stopped from the parent's page", async () => {
     const user = userEvent.setup();
     vi.mocked(listSubagents).mockResolvedValue(ok([{ ...thread(9), id: "t9", kernelThreadId: "thr_1-beta", title: "beta", agentPath: "/root/beta", status: "active" }]) as never);

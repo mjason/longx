@@ -10,7 +10,7 @@ import {
 } from "@/ui/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { formatTokens } from "@/core/format";
-import type { TurnUsage } from "@/core/chat/messages";
+import type { TurnModel, TurnUsage } from "@/core/chat/messages";
 import type { FC } from "react";
 
 const formatTimingMs = (ms: number | undefined): string => {
@@ -46,6 +46,8 @@ export const MessageTiming: FC<{
   const timing = useMessageTiming();
   // Longx: the turn's own token usage (the kernel stamps every turn)
   const usage = useAuiState((s) => s.message.metadata.custom?.["usage"] as TurnUsage | undefined);
+  // Longx: the model (and level) the turn ran on
+  const model = useAuiState((s) => s.message.metadata.custom?.["model"] as TurnModel | undefined);
   if (timing?.totalStreamTime === undefined) return null;
   const usageRows: [string, number | undefined][] = [
     [t.context.input, usage?.inputTokens],
@@ -109,6 +111,21 @@ export const MessageTiming: FC<{
                 {timing.totalChunks}
               </span>
             </div>
+            {model ? (
+              <>
+                <div className="bg-border my-0.5 h-px" />
+                <div className="flex items-center justify-between gap-4" data-testid="timing-model">
+                  <span className="text-muted-foreground">{t.timing.model}</span>
+                  <span className="font-mono">{model.slug}</span>
+                </div>
+                {model.name || model.effort ? (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">{t.timing.level}</span>
+                    <span className="font-mono">{[model.name, model.effort].filter(Boolean).join(" · ")}</span>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
             {usage ? (
               <>
                 <div className="bg-border my-0.5 h-px" />

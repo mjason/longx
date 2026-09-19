@@ -124,7 +124,9 @@ defmodule Longx.Agent.ModelTest do
 
     ref2 = make_ref()
     assert :ok = Model.stream(%{@request | "model" => "ultra"}, self(), ref2)
-    assert_receive {:model, ^ref2, {:fallback, "real-model", "real-model-2", reason}}, 5_000
+    # the fallback names the models as the person knows them: by slug
+    assert_receive {:model, ^ref2, {:fallback, from, to, reason}}, 5_000
+    assert {from, to} == {model.slug, second.slug}
     assert reason =~ "quota"
     assert_receive {:model, ^ref2, {:completed, _, %{context_window: 32_000}}}, 5_000
   end

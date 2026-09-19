@@ -28,7 +28,7 @@ import { formatBytes } from "@/core/format";
 import type { Tab } from "@/core/workbench";
 import { toast } from "sonner";
 import type { ThreadExtras } from "@/core/chat/adapter";
-import type { SubViews } from "@/core/chat/messages";
+import { modelOf, type SubViews } from "@/core/chat/messages";
 import { Button } from "@/ui/components/ui/button";
 import {
   AgentStatus,
@@ -726,14 +726,18 @@ export const SubagentTool: ToolCallMessagePartComponent<
   const failed = kind === "interrupted";
   const waiting = !done && p.args.request != null;
   const state: AgentState = done ? "done" : waiting ? "waiting" : "working";
-  // what the child's model is writing right now, from its own view
-  const progress = done ? null : (subagents?.views[p.args.threadId]?.progress ?? null);
-  const working =
+  // what the child's model is writing right now, and what it runs on, from its own view
+  const childView = subagents?.views[p.args.threadId];
+  const progress = done ? null : (childView?.progress ?? null);
+  const childModel = childView?.turn ? modelOf(childView.turn) : undefined;
+  const onModel = childModel ? `${childModel.slug}${childModel.effort ? ` · ${childModel.effort}` : ""}` : null;
+  const doing =
     progress?.kind === "retry"
       ? t.turnRetrying(progress.name)
       : progress?.kind === "toolCall"
         ? t.turnWriting(progress.name, formatBytes(progress.bytes))
         : (t.subagentState[kind] ?? kind);
+  const working = onModel ? `${doing} · ${onModel}` : doing;
   const stop = async () => {
     if (!subagents) return;
     setStopping(true);

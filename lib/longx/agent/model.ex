@@ -91,7 +91,14 @@ defmodule Longx.Agent.Model do
 
           [next | others] ->
             Logger.warning("agent model: #{message}; falling back to #{next.target.model}")
-            send(owner, {:model, ref, {:fallback, target.model, next.target.model, message}})
+
+            send(
+              owner,
+              {:model, ref,
+               {:fallback, target.slug || target.model, next.target.slug || next.target.model,
+                message}}
+            )
+
             run_chain(next, others, owner, ref)
         end
     end
