@@ -20,7 +20,7 @@ import { t } from "@/ui/strings";
 import { DirtyTreeDialog, type DirtyPrompt } from "./DirtyTreeDialog";
 import { GoalProvider } from "./GoalBar";
 import { useWorkbench, type Tab } from "@/core/workbench";
-import { ActionAnswerContext, chatConfig, CompactionUI, SubagentContext, SurfaceContext } from "./toolkit";
+import { ActionAnswerContext, chatConfig, CompactionUI, GoalContinuationUI, SubagentContext, SurfaceContext } from "./toolkit";
 
 const ChatContext = createContext<LongxRuntime | null>(null);
 
@@ -168,6 +168,7 @@ export function ChatProvider({
       <AssistantRuntimeProvider runtime={chat.runtime} config={chatConfig}>
         <ComposerBridge composerRef={composerRef} />
         <CompactionUI />
+        <GoalContinuationUI />
         <SurfaceContext.Provider value={surface}>
       <ActionAnswerContext.Provider value={answerAction}>
         <SubagentContext.Provider value={subagentContext}>

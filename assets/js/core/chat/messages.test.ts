@@ -92,6 +92,38 @@ describe("toMessages", () => {
     expect(parts(other[0]!)[0]).toMatchObject({ type: "data-item" });
   });
 
+  test("a goal's continuation — a user message the kernel wrote — is a marker in the turn, never the person's bubble", () => {
+    const msgs = toMessages(
+      view({
+        items: [
+          { id: "u1", type: "userMessage", turnId: "t7", content: [{ type: "text", text: "do it" }] },
+          { id: "a1", type: "agentMessage", turnId: "t7", text: "step one" },
+          { id: "u2", type: "userMessage", turnId: "t7", content: [{ type: "text", text: "（目标续跑）Your goal is still active (round 2): ship it\n\nContinue…" }], origin: { kind: "goal", round: 2, objective: "ship it" } },
+          { id: "a2", type: "agentMessage", turnId: "t7", text: "step two" },
+        ],
+      }),
+    );
+    expect(msgs.map((m) => m.role)).toEqual(["user", "assistant"]);
+    const ps = parts(msgs[1]!);
+    expect(ps[0]).toMatchObject({ type: "text", text: "step one" });
+    expect(ps[1]).toEqual({ type: "data-goal", data: { id: "u2", round: 2, objective: "ship it" } });
+    expect(ps[2]).toMatchObject({ type: "text", text: "step two" });
+  });
+
+  test("a continuation written before it carried an origin is recognised by its text", () => {
+    const text = "（目标续跑）Your goal is still active (round 3): 以「市值排序」为核心的改进路径\n\nContinue working toward it. When it is achieved, call update_goal…";
+    const msgs = toMessages(
+      view({
+        items: [
+          { id: "a1", type: "agentMessage", turnId: "t7", text: "step one" },
+          { id: "u2", type: "userMessage", turnId: "t7", content: [{ type: "text", text }] },
+        ],
+      }),
+    );
+    expect(msgs).toHaveLength(1);
+    expect(parts(msgs[0]!)[1]).toEqual({ type: "data-goal", data: { id: "u2", round: 3, objective: "以「市值排序」为核心的改进路径" } });
+  });
+
   test("reasoning lists (summary or full text) become one reasoning part", () => {
     const msgs = toMessages(
       view({

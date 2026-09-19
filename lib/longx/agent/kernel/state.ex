@@ -103,8 +103,8 @@ defmodule Longx.Agent.Kernel.State do
 
   ## Transcript
 
-  def append_user(state, text, images, from \\ nil) do
-    ui = user_ui(new_id("item"), state.turn_id, text, images, from)
+  def append_user(state, text, images, from \\ nil, origin \\ nil) do
+    ui = user_ui(new_id("item"), state.turn_id, text, images, from, origin)
     emit(state, "item/started", %{"item" => ui, "turnId" => state.turn_id})
     append(state, :user_message, user_input(text, images), ui)
   end
@@ -117,14 +117,19 @@ defmodule Longx.Agent.Kernel.State do
     %{"type" => "message", "role" => "user", "content" => content}
   end
 
-  def user_ui(id, turn_id, text, images, from) do
+  def user_ui(id, turn_id, text, images, from, origin \\ nil) do
     content =
       [%{"type" => "text", "text" => text}] ++
         Enum.map(images, &%{"type" => "image", "url" => &1})
 
-    ui = %{"id" => id, "type" => "userMessage", "turnId" => turn_id, "content" => content}
-    if from, do: Map.put(ui, "from", from), else: ui
+    %{"id" => id, "type" => "userMessage", "turnId" => turn_id, "content" => content}
+    |> put_if("from", from)
+    # a message the kernel wrote (a goal's continuation): the page draws a marker, not a bubble
+    |> put_if("origin", origin)
   end
+
+  defp put_if(map, _key, nil), do: map
+  defp put_if(map, key, value), do: Map.put(map, key, value)
 
   # records an item (the log and the context) and shows its UI item, if any
   def append(%State{} = state, kind, input, ui, opts \\ []) do

@@ -18,7 +18,7 @@ defmodule Longx.Agent.Plugs.Goal do
   instructions """
   # Goals
 
-  When the person asks for something to be pursued until done (not a single task), create a goal with `create_goal`: from then on every time you finish a turn without completing it, you are handed the objective again and continue. Call `update_goal` with `status: complete` when the objective is achieved, `blocked` when you cannot make progress without the person. Do not create a goal for an ordinary request.
+  When the person asks for something to be pursued until done (not a single task), create a goal with `create_goal`: from then on every time you finish a turn without completing it, you are handed the objective again and continue. Call `update_goal` with `status: complete` when the objective is achieved, `blocked` (with a `reason`) when you cannot make progress without the person. Waiting on an agent you spawned is not blocked: end your turn, its report wakes you and the goal goes on. Do not create a goal for an ordinary request.
   """
 
   tool :create_goal,
@@ -30,6 +30,10 @@ defmodule Longx.Agent.Plugs.Goal do
   tool :update_goal, "Changes the goal's status or objective." do
     param :status, {:enum, ["active", "paused", "blocked", "complete"]}, "The new status"
     param :objective, :string, "A revised objective"
+
+    param :reason,
+          :string,
+          "When blocked: what stands in the way, in one sentence (shown to the person)"
   end
 
   tool :get_goal, "Reads the current goal." do
@@ -47,16 +51,23 @@ defmodule Longx.Agent.Plugs.Goal do
     used = goal["tokensUsed"] || 0
 
     cond do
+      # a child at work: its report starts the next turn by itself — continuing now
+      # only made the model say "waiting" round after round until the cap blocked the goal
+      Enum.any?(step.assigns[:children] || [], &(&1.status == "working")) ->
+        step
+
       is_integer(budget) and used >= budget ->
-        Step.goal(step, %{"status" => "blocked"})
+        Step.goal(step, %{"status" => "blocked", "reason" => "budget"})
 
       rounds >= opts[:max_rounds] ->
-        Step.goal(step, %{"status" => "blocked"})
+        Step.goal(step, %{"status" => "blocked", "reason" => "rounds"})
 
       true ->
         step
         |> Step.put_state(:goal_rounds, rounds + 1)
-        |> Step.continue(continuation(goal, rounds + 1))
+        |> Step.continue(continuation(goal, rounds + 1),
+          origin: %{"kind" => "goal", "round" => rounds + 1, "objective" => goal["objective"]}
+        )
     end
   end
 
@@ -86,7 +97,10 @@ defmodule Longx.Agent.Plugs.Goal do
 
   def update_goal(args, ctx) do
     attrs =
-      args |> Map.take(["status", "objective"]) |> Enum.reject(&is_nil(elem(&1, 1))) |> Map.new()
+      args
+      |> Map.take(["status", "objective", "reason"])
+      |> Enum.reject(&is_nil(elem(&1, 1)))
+      |> Map.new()
 
     with {:ok, goal} <- Longx.Agent.set_goal(ctx.thread_id, attrs) do
       {:ok, "goal is now #{goal["status"]}: #{goal["objective"]}"}

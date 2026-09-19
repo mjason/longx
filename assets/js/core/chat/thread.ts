@@ -23,6 +23,8 @@ export type ThreadGoal = {
     | "usageLimited"
     | "budgetLimited"
     | "complete";
+  // why it is blocked: `rounds` / `budget` from the kernel, else the model's own sentence
+  reason?: string | null;
   tokenBudget: number | null;
   tokensUsed: number;
   timeUsedSeconds: number;

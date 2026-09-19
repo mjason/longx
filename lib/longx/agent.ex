@@ -859,12 +859,13 @@ defmodule Longx.Agent do
       {:ok, %Step{effects: effects} = step} ->
         state = take_effects(state, step)
 
-        case Enum.find(effects, &match?({:continue, _}, &1)) do
+        case Enum.find(effects, &match?({:continue, _}, &1)) ||
+               Enum.find(effects, &match?({:continue, _, _}, &1)) do
           {:continue, text} ->
-            state = %{state | continues: state.continues + 1, phase: :step, model_task: nil}
-            state = append_user(state, text, [])
-            Kernel.send(self(), :next_step)
-            state
+            continue_turn(state, text, nil)
+
+          {:continue, text, origin} ->
+            continue_turn(state, text, origin)
 
           nil ->
             end_turn(state, "completed", nil)
@@ -873,6 +874,14 @@ defmodule Longx.Agent do
       {:error, message} ->
         end_turn(state, "failed", message)
     end
+  end
+
+  # another step with a plug's words as the user message (`origin` marks them as the kernel's on the UI item)
+  defp continue_turn(state, text, origin) do
+    state = %{state | continues: state.continues + 1, phase: :step, model_task: nil}
+    state = append_user(state, text, [], nil, origin)
+    Kernel.send(self(), :next_step)
+    state
   end
 
   # what every phase takes from the step it ran: `step.state`, and the

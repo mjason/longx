@@ -17,9 +17,12 @@ defmodule Longx.Agent.Kernel.Goal do
   def update_goal(%State{goal: goal} = state, attrs) do
     base = goal || Map.put(@goal_defaults, "startedAt", System.system_time(:second))
 
+    # a status change drops the old reason unless the new one brings its own
+    # (`rounds` / `budget` from the plug, the model's sentence from `update_goal`)
     goal =
       base
-      |> Map.merge(Map.take(attrs, ["objective", "status", "tokenBudget"]))
+      |> then(&if(Map.has_key?(attrs, "status"), do: Map.delete(&1, "reason"), else: &1))
+      |> Map.merge(Map.take(attrs, ["objective", "status", "tokenBudget", "reason"]))
       |> Map.put_new("objective", "")
       |> with_time()
 

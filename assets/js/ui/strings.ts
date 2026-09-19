@@ -354,6 +354,10 @@ export const t = {
       budgetLimited: "预算用尽",
       complete: "已完成",
     } as Record<string, string>,
+    reason: {
+      rounds: "一个回合里连跑了太多轮，停下来等你看一眼；说一句话它就接着跑",
+      budget: "token 预算用完了；提高预算或按继续",
+    } as Record<string, string>,
     pause: "暂停",
     resume: "继续",
     edit: "编辑",
@@ -402,6 +406,8 @@ export const t = {
   toolError: "错误",
   // chat: agents
   compacted: "上下文已压缩",
+  goalRound: (round: number) => `目标续跑 · 第 ${round} 轮`,
+  goalRoundUnknown: "目标续跑",
   subagent: "子 agent",
   subagentWorking: "子 agent 工作中",
   subagentDone: "子 agent 完成",

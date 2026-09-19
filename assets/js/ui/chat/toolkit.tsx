@@ -827,6 +827,30 @@ export function CompactionView() {
   );
 }
 
+// ---- goal mode handed the model its objective again (the kernel's words, not the person's)
+
+export function GoalContinuationView({ round, objective }: { round: number | null; objective: string | null }) {
+  const label = round === null ? t.goalRoundUnknown : t.goalRound(round);
+  return (
+    <div
+      role="separator"
+      aria-label={label}
+      className="text-muted-foreground my-2 flex min-w-0 items-center gap-2 text-[11px]"
+      data-testid="goal-continuation"
+    >
+      <span className="bg-border h-px w-6 shrink-0" />
+      <span className="shrink-0">{label}</span>
+      {objective ? <span className="min-w-0 truncate opacity-70" title={objective}>{objective}</span> : null}
+      <span className="bg-border h-px flex-1" />
+    </div>
+  );
+}
+
+export const GoalContinuationUI = makeAssistantDataUI<{ id: string; round: number | null; objective: string | null }>({
+  name: "goal",
+  render: ({ data }) => <GoalContinuationView round={data.round} objective={data.objective} />,
+});
+
 export const CompactionUI = makeAssistantDataUI<{ id: string }>({
   name: "compaction",
   render: () => <CompactionView />,

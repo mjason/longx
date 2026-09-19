@@ -12,7 +12,7 @@ import { useThreadViews } from "@/core/chat/useThreadViews";
 import { ReadOnlyThread } from "@/ui/components/assistant-ui/elements/thread.aui";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { useChatMaybe } from "@/ui/chat/ChatProvider";
-import { chatConfig } from "@/ui/chat/toolkit";
+import { chatConfig, CompactionUI, GoalContinuationUI } from "@/ui/chat/toolkit";
 import { t } from "@/ui/strings";
 
 export function AgentTab({ threadId, rowId, name }: { threadId: string; rowId: string | null; name: string }) {
@@ -57,6 +57,9 @@ export function AgentTab({ threadId, rowId, name }: { threadId: string; rowId: s
       {!ready && !error ? <Skeleton className="m-4 h-16" /> : null}
       <div className="min-h-0 flex-1">
         <AssistantRuntimeProvider runtime={runtime} config={chatConfig}>
+          {/* the same markers the chat draws (a compaction, a goal's next round) */}
+          <CompactionUI />
+          <GoalContinuationUI />
           <ReadOnlyThread />
         </AssistantRuntimeProvider>
       </div>

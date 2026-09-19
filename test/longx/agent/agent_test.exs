@@ -692,7 +692,7 @@ defmodule Longx.AgentTest do
     def call(%Step{phase: :turn_end} = step, _) do
       if Enum.any?(step.transcript, &(&1["role"] == "user" and text_of(&1) == "one more")),
         do: step,
-        else: Step.continue(step, "one more")
+        else: Step.continue(step, "one more", origin: %{"kind" => "goal", "round" => 1})
     end
 
     def call(step, _), do: step
@@ -738,8 +738,11 @@ defmodule Longx.AgentTest do
              await_item_started("commandExecution")
 
     assert %{"item" => %{"id" => ^cmd, "status" => "completed"}} = await_item_completed(cmd)
-    # the turn would end → the turn-end plug continues it with its own message
-    assert %{"turnId" => ^turn_id} = await_user_message("one more")
+    # the turn would end → the turn-end plug continues it with its own message,
+    # the UI item saying it is the kernel's (the page draws a marker, not the person's bubble)
+    assert %{"turnId" => ^turn_id, "origin" => %{"kind" => "goal", "round" => 1}} =
+             await_user_message("one more")
+
     assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
 
     requests = collect_requests([])

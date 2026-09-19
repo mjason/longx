@@ -439,6 +439,25 @@ describe("ThreadPage", () => {
       });
     });
     await waitFor(() => expect(bar).toHaveTextContent("已暂停"));
+
+    // blocked says why: the plug's cap on rounds, the budget, or the model's own sentence
+    act(() => {
+      channel.deliver("event", {
+        seq: 6,
+        method: "thread/goal/updated",
+        params: { threadId: "thr_1", turnId: null, goal: { threadId: "thr_1", objective: "让测试全绿", status: "blocked", reason: "rounds", tokenBudget: 50000, tokensUsed: 12500, timeUsedSeconds: 125, createdAt: 1, updatedAt: 2 } },
+      });
+    });
+    await waitFor(() => expect(bar).toHaveTextContent("卡住了"));
+    expect(bar).toHaveTextContent("一个回合里连跑了太多轮");
+    act(() => {
+      channel.deliver("event", {
+        seq: 7,
+        method: "thread/goal/updated",
+        params: { threadId: "thr_1", turnId: null, goal: { threadId: "thr_1", objective: "让测试全绿", status: "blocked", reason: "需要 COROS 的登录", tokenBudget: 50000, tokensUsed: 12500, timeUsedSeconds: 125, createdAt: 1, updatedAt: 2 } },
+      });
+    });
+    await waitFor(() => expect(bar).toHaveTextContent("需要 COROS 的登录"));
     await user.click(within(bar).getByRole("button", { name: "继续" }));
     await waitFor(() => expect(setGoal).toHaveBeenLastCalledWith(expect.objectContaining({ input: { threadId: "t1", status: "active" } })));
 
@@ -452,11 +471,12 @@ describe("ThreadPage", () => {
     await user.clear(within(dialog).getByLabelText(/token 预算/));
     await user.type(within(dialog).getByLabelText(/token 预算/), "80000");
     await user.click(within(dialog).getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(setGoal).toHaveBeenLastCalledWith(expect.objectContaining({ input: { threadId: "t1", objective: "跑通回测", tokenBudget: 80000 } })));
+    // saved while blocked: the goal goes active again with the new words
+    await waitFor(() => expect(setGoal).toHaveBeenLastCalledWith(expect.objectContaining({ input: { threadId: "t1", objective: "跑通回测", tokenBudget: 80000, status: "active" } })));
 
     await user.click(within(bar).getByRole("button", { name: "清除" }));
     await waitFor(() => expect(clearGoal).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1" } })));
-    act(() => channel.deliver("event", { seq: 6, method: "thread/goal/cleared", params: { threadId: "thr_1" } }));
+    act(() => channel.deliver("event", { seq: 8, method: "thread/goal/cleared", params: { threadId: "thr_1" } }));
     await waitFor(() => expect(screen.queryByTestId("goal-bar")).not.toBeInTheDocument());
 
     // /goal opens the dialog for a new goal

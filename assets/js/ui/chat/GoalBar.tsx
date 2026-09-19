@@ -122,6 +122,11 @@ function GoalBarView({
         <Badge variant={done ? "secondary" : active ? "default" : "outline"}>
           {t.goal.status[goal.status] ?? goal.status}
         </Badge>
+        {goal.status === "blocked" && goal.reason ? (
+          <span className="text-muted-foreground min-w-0 truncate text-xs" title={t.goal.reason[goal.reason] ?? goal.reason}>
+            {t.goal.reason[goal.reason] ?? goal.reason}
+          </span>
+        ) : null}
         <span className="text-muted-foreground text-xs">
           {t.goal.tokens(
             formatTokens(goal.tokensUsed),

@@ -327,6 +327,14 @@ describe("agents", () => {
     expect(within(row).getByText("已启动")).toBeInTheDocument();
   });
 
+  test("a goal's next round is a quiet marker naming the round and the objective", async () => {
+    const { GoalContinuationView } = await import("./toolkit");
+    render(<GoalContinuationView round={3} objective="以「市值排序」为核心的改进路径" />);
+    const marker = screen.getByRole("separator");
+    expect(marker).toHaveTextContent("目标续跑 · 第 3 轮");
+    expect(marker).toHaveTextContent("以「市值排序」为核心的改进路径");
+  });
+
   test("a context compaction is a quiet marker", async () => {
     const { CompactionView } = await import("./toolkit");
     render(<CompactionView />);

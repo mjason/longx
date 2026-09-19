@@ -120,6 +120,16 @@ export function toMessages(
   };
 
   for (const item of view.items) {
+    if (item.type === "userMessage" && isGoalContinuation(item)) {
+      // the kernel's own words (a goal's next round): a marker inside the turn, never a
+      // bubble in the person's voice — the model reads the text, the page names the round
+      if (!current || current.turnId !== item.turnId) {
+        flush();
+        current = { turnId: item.turnId, parts: [] };
+      }
+      current.parts.push(goalPart(item));
+      continue;
+    }
     if (item.type === "userMessage") {
       flush();
       const from = typeof item["from"] === "string" && item["from"] !== "" ? item["from"] : null;
@@ -498,6 +508,32 @@ function toPart(item: ThreadItem): Part | null {
     default:
       return { type: "data-item", data: item } as Part;
   }
+}
+
+// the continuation as the kernel wrote it before it carried an `origin` (transcripts from
+// before 0.2.19 replay the old items): the round and the objective read off the text
+const GOAL_TEXT = /^（目标续跑）Your goal is still active \(round (\d+)\): ([\s\S]*?)\n\nContinue working toward it\./;
+
+function goalOrigin(item: ThreadItem): { round: number | null; objective: string | null } | null {
+  const origin = item["origin"];
+  if (typeof origin === "object" && origin !== null && (origin as Record<string, unknown>)["kind"] === "goal") {
+    const o = origin as Record<string, unknown>;
+    return {
+      round: typeof o["round"] === "number" ? o["round"] : null,
+      objective: typeof o["objective"] === "string" ? o["objective"] : null,
+    };
+  }
+  const m = GOAL_TEXT.exec(userText(item));
+  return m ? { round: Number(m[1]), objective: m[2]!.trim() } : null;
+}
+
+function isGoalContinuation(item: ThreadItem): boolean {
+  return goalOrigin(item) !== null;
+}
+
+function goalPart(item: ThreadItem): Part {
+  const origin = goalOrigin(item)!;
+  return { type: "data-goal", data: { id: item.id, ...origin } } as Part;
 }
 
 function toolPart(

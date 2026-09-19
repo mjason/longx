@@ -149,8 +149,14 @@ defmodule Longx.Agent.Step do
 
   @doc "Asks the kernel for another step with this text instead of ending the turn (at `:turn_end`)."
   @spec continue(t, String.t()) :: t
-  def continue(%__MODULE__{} = step, text) when is_binary(text),
-    do: effect(step, {:continue, text})
+  def continue(%__MODULE__{} = step, text, opts \\ []) when is_binary(text) and is_list(opts) do
+    case Keyword.get(opts, :origin) do
+      nil -> effect(step, {:continue, text})
+      # `origin:` says whose words these are (`%{"kind" => "goal", "round" => n}`): the
+      # model reads the text as a user message, the page draws a marker instead of a bubble
+      origin when is_map(origin) -> effect(step, {:continue, text, origin})
+    end
+  end
 
   @doc "Asks the kernel to fold the context before the model is called (at `:request`)."
   @spec compact(t, keyword) :: t

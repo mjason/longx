@@ -544,7 +544,15 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   - **Goal mode** (`Plugs.Goal`, `Kernel.Goal`): `create_goal` / `update_goal` / `get_goal`;
     with the goal `active` the `:turn_end` phase continues the turn with a step naming the
     objective until the model marks it `complete` / `blocked`, the token budget is spent
-    or `max_rounds:` (8) continuations happened (then `blocked`, never a loop).
+    or `max_rounds:` (8) continuations happened (then `blocked`, never a loop) — **not
+    while a child works**: its report starts the next turn by itself (a parent waiting
+    on coder was continued eight times saying "waiting" and blocked). The continuation
+    is `Step.continue(text, origin: %{"kind" => "goal", "round", "objective"})` →
+    `{:continue, text, origin}` → the user item carries `"origin"`, and the page draws
+    a marker 目标续跑 · 第 N 轮 (`GoalContinuationUI`, `data-goal` part; older items
+    recognised by their text) instead of the person's bubble. A blocked goal carries
+    `"reason"` (`rounds` / `budget` from the plug, the model's sentence through
+    `update_goal`'s `reason`), shown beside 卡住了.
     `Agent.set_goal/2` (RPC `set_goal` / `clear_goal`, the `/goal` command, `GoalBar`)
     sets the same goal; `thread/goal/updated` is the view's `goal`.
   - **Bytes that are not UTF-8 never reach the view or the transcript** — `Longx.Agent.Text`

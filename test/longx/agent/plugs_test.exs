@@ -286,7 +286,11 @@ defmodule Longx.Agent.PlugsTest do
     test "an active goal continues the turn with the objective; a complete or paused one does not" do
       active = %{"objective" => "ship it", "status" => "active"}
       step = Goal.call(goal_step(active), Goal.init([]))
-      assert [{:continue, text}] = step.effects
+
+      # the continuation says where it comes from, so the page draws a marker, not a bubble in the person's voice
+      assert [{:continue, text, %{"kind" => "goal", "round" => 1, "objective" => "ship it"}}] =
+               step.effects
+
       assert text =~ "ship it"
       assert text =~ "update_goal"
       assert step.state.goal_rounds == 1
@@ -296,19 +300,50 @@ defmodule Longx.Agent.PlugsTest do
       assert Goal.call(goal_step(nil), Goal.init([])).effects == []
     end
 
+    test "while a child works the goal waits for its report instead of spending rounds (a parent waiting on coder was continued eight times and blocked)" do
+      active = %{"objective" => "ship it", "status" => "active"}
+
+      working =
+        Step.new(
+          phase: :turn_end,
+          assigns: %{
+            goal: active,
+            children: [%{id: "c", name: "coder", status: "working", role: nil, task: "run it"}]
+          },
+          state: %{goal_rounds: 2}
+        )
+
+      assert Goal.call(working, Goal.init([])).effects == []
+
+      done =
+        Step.new(
+          phase: :turn_end,
+          assigns: %{
+            goal: active,
+            children: [%{id: "c", name: "coder", status: "done", role: nil, task: "run it"}]
+          },
+          state: %{}
+        )
+
+      assert [{:continue, _, _}] = Goal.call(done, Goal.init([])).effects
+    end
+
     test "too many rounds in one turn, or the budget spent, block the goal instead of looping" do
       active = %{"objective" => "ship it", "status" => "active"}
+      # the goal says why it is blocked: the bar shows the reason, not a bare 卡住了
       step = Goal.call(goal_step(active, %{goal_rounds: 8}), Goal.init(max_rounds: 8))
-      assert [{:goal, %{"status" => "blocked"}}] = step.effects
+      assert [{:goal, %{"status" => "blocked", "reason" => "rounds"}}] = step.effects
 
       spent = Map.merge(active, %{"tokenBudget" => 100, "tokensUsed" => 120})
       step = Goal.call(goal_step(spent), Goal.init([]))
-      assert [{:goal, %{"status" => "blocked"}}] = step.effects
+      assert [{:goal, %{"status" => "blocked", "reason" => "budget"}}] = step.effects
     end
 
-    test "the tools: create, update, get" do
+    test "the tools: create, update, get; update_goal takes the model's reason for a block" do
       names = Enum.map(Goal.__agent_tools__(), & &1.name) |> Enum.sort()
       assert names == ["create_goal", "get_goal", "update_goal"]
+      update = Enum.find(Goal.__agent_tools__(), &(&1.name == "update_goal"))
+      assert "reason" in Map.keys(update.schema["properties"])
     end
   end
 
