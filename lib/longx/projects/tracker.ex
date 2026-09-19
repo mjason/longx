@@ -102,6 +102,10 @@ defmodule Longx.Projects.Tracker do
        }) do
     with {:ok, %Turn{} = row} <- Projects.get_turn_by_kernel_id(turn_id),
          {:ok, %Thread{} = thread} <- Projects.get_thread_by_kernel_id(kernel_thread_id) do
+      # the thread first: whoever sees the turn's row completed finds the
+      # thread idle too (a message sent right then was refused as in progress)
+      Projects.touch_thread!(thread, %{status: :idle, last_activity_at: DateTime.utc_now()})
+
       # a retract marks its row reverted before the interrupt that ends the
       # turn: that row is out of the history already, its ending is no news
       if row.status != :reverted do
@@ -121,7 +125,6 @@ defmodule Longx.Projects.Tracker do
         if status == :failed, do: Longx.Sentry.turn_failed(kernel_thread_id, turn_id, error)
       end
 
-      Projects.touch_thread!(thread, %{status: :idle, last_activity_at: DateTime.utc_now()})
       Projects.broadcast_changed(thread.project_id)
     end
   end
