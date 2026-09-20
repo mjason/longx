@@ -966,12 +966,22 @@ describe("ThreadPage", () => {
             turnId: "turn_1",
             content: [{ type: "text", text: "read @lib/a.ex first" }],
           },
+          {
+            id: "u2",
+            type: "userMessage",
+            turnId: "turn_1",
+            content: [{ type: "text", text: "first line\n\nsecond paragraph" }],
+          },
         ],
       }),
     );
     // a mention already in the history is a chip
     const chip = await screen.findByText("lib/a.ex");
     expect(chip.closest("[data-slot=directive-text-chip]")).not.toBeNull();
+    // the person's line breaks stay line breaks (a plain message without a chip lost them)
+    const plain = screen.getByText(/first line/);
+    expect(plain).toHaveClass("whitespace-pre-wrap");
+    expect(plain.textContent).toBe("first line\n\nsecond paragraph");
 
     const box = screen.getByRole("textbox", { name: "随心输入" });
     await user.type(box, "look at @gat");

@@ -37,8 +37,9 @@ export function createDirectiveText(
   const Component: FC<{ text: string }> = ({ text }) => {
     const segments = formatter.parse(text);
 
+    // Longx: a plain message keeps its line breaks too (a bare fragment collapsed them)
     if (segments.length === 1 && segments[0]!.kind === "text") {
-      return <>{text}</>;
+      return <span className="whitespace-pre-wrap">{text}</span>;
     }
 
     return (
