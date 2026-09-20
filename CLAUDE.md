@@ -434,7 +434,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `agent_definition`) lists the files, the resolved plugs, the notices and the
     description's model (`definitionModel`, what the composer shows). `Longx.Agent` loads
     per step when no `pipeline:` module is given (tests give one).
-  - **Knowledge instead of memory — `Plugs.Knowledge` over `Longx.Agent.Knowledge`**:
+  - **Knowledge instead of memory — `Plugs.Knowledge` over `Longx.Agent.Knowledge`** (the
+    prompt is codex's memory decision boundary — `ext/memories/templates/memories/
+    read_path.md`: skip only a self-contained request, a quick `knowledge_search` when
+    unsure — and its skills trigger rules — read a matching doc whole before acting,
+    not carried across turns, "not proof of current behavior"; the writing rules are
+    ours):
     markdown with front matter (`title`, `summary`, `tags`, `always: true`) in four roots —
     `longx/` shipped read-only (`priv/agent/knowledge/`: `writing-plugs.md`,
     `description-format.md`), `global/` the person's (`config :longx,

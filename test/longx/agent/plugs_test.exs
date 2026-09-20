@@ -402,6 +402,22 @@ defmodule Longx.Agent.PlugsTest do
     end
   end
 
+  describe "Knowledge" do
+    test "the prompt carries codex's memory and skills rules: when to read, read whole before acting, not proof of current behaviour" do
+      alias Longx.Agent.Plugs.Knowledge
+      step = Knowledge.call(Step.new(phase: :request, cwd: File.cwd!()), Knowledge.init([]))
+      text = Enum.join(Enum.reject(step.instructions, &is_nil/1), "\n")
+      assert text =~ "Skip the knowledge ONLY when the request is clearly self-contained"
+      assert text =~ "If unsure, do a quick pass with `knowledge_search`."
+      assert text =~ "read it completely with `knowledge_read` before taking task actions"
+      assert text =~ "Knowledge is not proof of current behavior."
+      assert text =~ "Do not carry docs across turns unless re-mentioned."
+      # ours: writing, the roots, the precedence of the shipped guidance
+      assert text =~ "knowledge_write"
+      assert text =~ "take precedence over a local, project or global doc"
+    end
+  end
+
   describe "Goal" do
     alias Longx.Agent.Plugs.Goal
 

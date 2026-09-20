@@ -41,10 +41,28 @@ defmodule Longx.Agent.Plugs.Knowledge do
     param :content, :string, "The whole doc, front matter first", required: true
   end
 
+  # codex's memory decision boundary (ext/memories/templates/memories/read_path.md)
+  # and its skills trigger rules (the gpt-5.6 instructions template, "Using
+  # skills"), on one store: our knowledge is both what prior runs learned and
+  # what the person wrote for the agent. The writing rules are ours — codex's
+  # memory is consolidated offline, ours is written by the agent as it works.
   @growth """
   # Knowledge
 
-  What is worth keeping is written down, never just remembered. Before guessing about this project, search the knowledge (knowledge_search) and read what applies (knowledge_read — a topic path lists its docs). When you learn something durable — a fact about the code, a decision and its reason, a procedure that worked, a pitfall — write it with knowledge_write as `local/<topic>/<name>.md` (yours, on this machine, not in git); `project/<topic>/<name>.md` is the shared tree the team reads, only for what the person asked to share; `global/<topic>/<name>.md` for things about the person or their machine. Pick an existing topic before opening a new one, and prefer improving a doc over adding one. Mark `always: true` only for what every turn must know; keep those short. Fix a doc that turned out wrong. The shipped `longx/` docs and the plugs' own guidance take precedence over a local, project or global doc that contradicts them (a doc written before a Longx release changed the way): fix that doc, do not follow it.
+  You have access to knowledge docs — guidance from prior runs, from the person and from Longx itself. They can save time and help you stay consistent. Use them whenever they are likely to help.
+
+  Decision boundary: should you use the knowledge for a new user query?
+
+  - Skip the knowledge ONLY when the request is clearly self-contained and does not need workspace history, conventions, or prior decisions.
+  - Hard skip examples: current time/date, simple translation, simple sentence rewrite, one-line shell command, trivial formatting.
+  - Use the knowledge by default when ANY of these are true: the query mentions a module, path or file named in the index below; the user asks for prior context, consistency or previous decisions; the task is ambiguous and could depend on earlier project choices; the ask is non-trivial and related to an indexed doc.
+  - If unsure, do a quick pass with `knowledge_search`.
+
+  Trigger rules: if the user names a doc OR the task clearly matches a doc's summary, read it completely with `knowledge_read` before taking task actions (a topic path lists its docs; read each required doc yourself, do not delegate reading or summarizing it). Multiple matches mean read them all. Do not carry docs across turns unless re-mentioned. Announce which docs you are using and why.
+
+  Knowledge is not proof of current behavior. For consequential or changeable claims, use judgment about drift, verification cost, and harm; inspect the actual owning source when warranted and acknowledge material uncertainty. The shipped `longx/` docs and the plugs' own guidance take precedence over a local, project or global doc that contradicts them (a doc written before a Longx release changed the way): fix that doc, do not follow it.
+
+  What is worth keeping is written down, never just remembered. When you learn something durable — a fact about the code, a decision and its reason, a procedure that worked, a pitfall — write it with `knowledge_write` as `local/<topic>/<name>.md` (yours, on this machine, not in git); `project/<topic>/<name>.md` is the shared tree the team reads, only for what the person asked to share; `global/<topic>/<name>.md` for things about the person or their machine. Pick an existing topic before opening a new one, and prefer improving a doc over adding one. Mark `always: true` only for what every turn must know; keep those short. Fix a doc that turned out wrong.
   """
 
   @impl true
