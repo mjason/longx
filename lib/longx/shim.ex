@@ -432,7 +432,14 @@ defmodule Longx.Shim do
   @impl true
   def terminate(_reason, %State{port: port, shim_exited?: false}) do
     # Closing our side of the pipe is the shim's signal to take the child down.
-    if Port.info(port), do: Port.close(port)
+    # The port may close between the check and the close (the shim exiting right
+    # now, after a kill): nothing to do then.
+    try do
+      if Port.info(port), do: Port.close(port)
+    rescue
+      ArgumentError -> :ok
+    end
+
     :ok
   end
 

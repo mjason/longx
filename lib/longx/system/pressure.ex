@@ -28,10 +28,13 @@ defmodule Longx.System.Pressure do
   @tick 2_000
 
   @type entry :: %{
-          shim: pid | nil,
-          floor: non_neg_integer,
-          cmd: String.t(),
-          thread_id: String.t() | nil
+          required(:shim) => pid | nil,
+          required(:floor) => non_neg_integer,
+          required(:cmd) => String.t(),
+          required(:thread_id) => String.t() | nil,
+          optional(:id) => String.t(),
+          optional(:started_at) => integer,
+          optional(:os_pid) => pos_integer | nil
         }
 
   def registry, do: @registry
@@ -43,6 +46,19 @@ defmodule Longx.System.Pressure do
   def register(%{floor: floor} = entry) when is_integer(floor) do
     {:ok, _} = Registry.register(@registry, :running, entry)
     :ok
+  end
+
+  @doc "Replaces the calling process's entry (a duplicate registry has no update): the merged map."
+  @spec update(map) :: :ok
+  def update(changes) when is_map(changes) do
+    case Enum.find(Registry.lookup(@registry, :running), fn {pid, _} -> pid == self() end) do
+      {_, entry} ->
+        Registry.unregister(@registry, :running)
+        register(Map.merge(entry, changes))
+
+      nil ->
+        :ok
+    end
   end
 
   @doc "Every registered command: `{pid, entry}`."

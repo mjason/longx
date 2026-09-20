@@ -26,6 +26,8 @@ defmodule Longx.System do
       rpc_action :set_github_token, :set_github_token
       rpc_action :gateway_requests, :gateway_requests
       rpc_action :recent_faults, :recent_faults
+      rpc_action :running_commands, :running_commands
+      rpc_action :kill_command, :kill_command
       rpc_action :browser_settings, :browser_settings
       rpc_action :browser_status, :browser_status
       rpc_action :browser_install, :browser_install

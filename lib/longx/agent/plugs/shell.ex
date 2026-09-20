@@ -159,17 +159,23 @@ defmodule Longx.Agent.Plugs.Shell do
         if(guards.oom_score_adj, do: [oom_score_adj: guards.oom_score_adj], else: []) ++
         if(guards.memory_limit, do: [memory_limit: guards.memory_limit], else: [])
 
-    # the watchdog knows this command before it starts; the entry dies with this process
+    # the watchdog and the settings page know this command before it starts
+    # (`Longx.System.Commands`); the entry dies with this process
     :ok =
       Longx.System.Pressure.register(%{
+        id: "cmd_" <> Ash.UUID.generate(),
         shim: nil,
         floor: guards.floor,
         cmd: command,
-        thread_id: ctx.thread_id
+        thread_id: ctx.thread_id,
+        started_at: System.system_time(:millisecond)
       })
 
     case Shim.start_link([shell, flag, command], opts) do
       {:ok, shim} ->
+        # the ledger gets the shim and the OS pid: what the settings page shows and kills
+        Longx.System.Pressure.update(%{shim: shim, os_pid: Shim.os_pid(shim)})
+
         :ok = Shim.close_stdin(shim)
         me = self()
         spawn_link(fn -> pump(shim, &Shim.read/3, me) end)
@@ -189,6 +195,14 @@ defmodule Longx.Agent.Plugs.Shell do
           {:timeout, acc} ->
             Shim.kill(shim)
             {:error, "timed out after #{timeout} ms\n" <> text(acc, max_bytes)}
+
+          {:killed, acc} ->
+            Shim.kill(shim)
+
+            {:error,
+             "killed from the settings page by the person (it was taking too long or hanging). " <>
+               "Do not run it again as it was; ask what to do next or take a smaller step.\n" <>
+               text(acc, max_bytes)}
 
           {:pressure, %{percent: percent, available: available, total: total}, acc} ->
             Shim.kill(shim)
@@ -249,6 +263,9 @@ defmodule Longx.Agent.Plugs.Shell do
 
       {:memory_pressure, reading} ->
         {:pressure, reading, acc}
+
+      {:kill_command, _by} ->
+        {:killed, acc}
     after
       max(remaining, 0) -> {:timeout, acc}
     end

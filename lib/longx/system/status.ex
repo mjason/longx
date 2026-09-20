@@ -401,6 +401,55 @@ defmodule Longx.System.Status do
 
     # Settings → 请求记录: the gateway's last requests (Longx.AI.Gateway.Log) —
     # what went wrong on the server lately (Longx.System.Faults), newest first
+    # the agents' live commands, for the settings page; one killed from there
+    action :running_commands, :map do
+      constraints fields: [commands: [type: {:array, :map}, allow_nil?: false]]
+
+      run fn _input, _ ->
+        {:ok,
+         %{
+           commands:
+             Enum.map(Longx.System.Commands.list(), fn c ->
+               # an untyped map crosses the wire as it is: the client's names here
+               %{
+                 "id" => c.id,
+                 "cmd" => c.cmd,
+                 "osPid" => c.os_pid,
+                 "threadId" => c.thread_id,
+                 "startedAt" => c.started_at,
+                 "elapsedMs" => c.elapsed_ms,
+                 "session" =>
+                   case c.session do
+                     nil ->
+                       nil
+
+                     s ->
+                       %{
+                         "title" => s.title,
+                         "slug" => s.slug,
+                         "threadRowId" => s.thread_row_id,
+                         "rootRowId" => s.root_row_id,
+                         "agent" => s.agent
+                       }
+                   end
+               }
+             end)
+         }}
+      end
+    end
+
+    action :kill_command, :map do
+      constraints fields: [ok: [type: :boolean, allow_nil?: false]]
+      argument :id, :string, allow_nil?: false
+
+      run fn input, _ ->
+        case Longx.System.Commands.kill(input.arguments.id) do
+          :ok -> {:ok, %{ok: true}}
+          {:error, :not_found} -> argument_error(:id, "no such command is running")
+        end
+      end
+    end
+
     action :recent_faults, :map do
       constraints fields: [
                     faults: [type: {:array, :map}, allow_nil?: false],

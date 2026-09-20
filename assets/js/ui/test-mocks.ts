@@ -240,6 +240,15 @@ export function rpcMock() {
     publicUrl: vi.fn(async () => ok({ url: "http://192.168.2.129:7788", setting: null })),
     dependencies: vi.fn(async () => ok(dependencyReport())),
     recentFaults: vi.fn(async () => ok({ faults: [], recent: 0 })),
+    runningCommands: vi.fn(async () =>
+      ok({
+        commands: [
+          { id: "cmd_1", cmd: "uv run jbt run 小市值 --backend cuda", osPid: 48213, threadId: "thr_1-coder-2", startedAt: Date.now() - 125_000, elapsedMs: 125_000, session: { title: "小市值策略", slug: "app-1", threadRowId: "t9", rootRowId: "t1", agent: "coder-2" } },
+          { id: "cmd_2", cmd: "sleep 100", osPid: null, threadId: "native_x", startedAt: Date.now() - 3_000, elapsedMs: 3_000, session: null },
+        ],
+      }),
+    ),
+    killCommand: vi.fn(async () => ok({ ok: true })),
     sentryStatus: vi.fn(async () => ok({ enabled: false, dsn: null, environment: "production", release: "0.2.8" })),
     setSentryDsn: vi.fn(async ({ input }: { input: { dsn: string } }) => ok({ enabled: input.dsn !== "", dsn: input.dsn ? input.dsn.replace(/\/\/[^@]+@/, "//***@") : null, environment: "production", release: "0.2.8" })),
     sentryTest: vi.fn(async () => ok({ ok: true, message: "evt-1" })),

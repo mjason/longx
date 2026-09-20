@@ -609,6 +609,36 @@ defmodule Longx.Agent.PlugsTest do
                )
     end
 
+    test "a command killed from the settings page ends with the person named; the ledger knows it while it runs",
+         %{ctx: ctx} do
+      step = Shell.call(Step.new(phase: :request), Shell.init([]))
+      tool = step.tools["exec_command"]
+      me = self()
+      ctx = %{ctx | emit: &send(me, {:emitted, &1}), thread_id: "native_ledger"}
+
+      task =
+        Task.async(fn ->
+          Tool.call(
+            tool,
+            %{"cmd" => "echo start; sleep 20", "login" => false, "timeout_ms" => 15_000},
+            ctx
+          )
+        end)
+
+      assert_receive {:emitted, "start\n"}, 5_000
+      # the ledger knows the OS pid too, once the shim started it
+      assert [%{id: id, cmd: "echo start; sleep 20", thread_id: "native_ledger", os_pid: os_pid}] =
+               Enum.filter(Longx.System.Commands.list(), &(&1.thread_id == "native_ledger"))
+
+      assert is_integer(os_pid) and os_pid > 0
+
+      assert :ok = Longx.System.Commands.kill(id)
+      assert {:error, message} = Task.await(task, 10_000)
+      assert message =~ "killed from the settings page"
+      assert message =~ "start"
+      assert Enum.filter(Longx.System.Commands.list(), &(&1.thread_id == "native_ledger")) == []
+    end
+
     test "memory pressure kills the command and the model is told why", %{ctx: ctx} do
       step = Shell.call(Step.new(phase: :request), Shell.init(memory_floor_percent: 10))
       tool = step.tools["exec_command"]

@@ -307,7 +307,15 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     a command runs, `Pressure.Registry` duplicate keys under `:running`): free memory
     (`MemAvailable`, `vm_stat` on macOS) under the floor → `{:memory_pressure, …}` to
     the tool task, the shim tree killed, the model told "killed by Longx: the machine
-    was down to 3% free memory…", a `:memory` fault recorded. Why: a jbt GPU backtest
+    was down to 3% free memory…", a `:memory` fault recorded. The same registry is
+    **the ledger of live commands** (`Longx.System.Commands`: each entry has an `id`,
+    the command, its thread, `started_at`, and the shim + OS pid once started —
+    `Pressure.update/1` replaces the caller's entry); `list/0` names each command's
+    session (the root conversation, the sub-agent beside it), `kill/1` sends the tool
+    task `{:kill_command, :person}` → the whole tree dies and the model reads "killed
+    from the settings page by the person…"; RPC `running_commands` / `kill_command`;
+    Settings → 进程 (`ProcessesSection`, `core/commands.ts`, refreshed every 2 s, 结束
+    behind a confirm) — the GUI for a hung backtest. Why: a jbt GPU backtest
     on the Spark took ~100 GB the NVIDIA driver carved out of RAM — no process's RSS,
     invisible to RLIMIT and cgroups — and the kernel's OOM killer took Firefox instead;
     a shell loop of 24 backtests then started the next one. Tests:
@@ -900,7 +908,8 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     Provider — providers as cards, presets first, `LevelsEditor`, 档位与别名 —,
     `dependencies` 系统依赖, `knowledge` 知识 (global docs in the CodeEditor, a save is a
     commit when git is there), `agent` Agent 内核 (settings, public URL, the browser card,
-    private network), `update` 版本与更新, `requests` 请求记录, `appearance` 外观).
+    private network), `watches` 监控与定时, `processes` 进程 (the agents' live commands,
+    killed from the page), `update` 版本与更新, `requests` 请求记录, `appearance` 外观).
     `ProjectWindow`: desktop = icon rail + docked resizable tool window + status strip;
     phone = chat full-screen, bottom toolbar, tools as bottom sheets. Tool windows
     `frame/tools/{Threads,Git,Agents,Files}Tool` toggled with ⌘1–4 (`core/frame.ts`,

@@ -7162,6 +7162,80 @@ export async function validateGatewayRequests(
 }
 
 
+export type KillCommandInput = {
+  id: string;
+};
+
+export type KillCommandFields = UnifiedFieldSelection<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}>[];
+
+export type InferKillCommandResult<
+  Fields extends KillCommandFields | undefined,
+> = InferResult<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}, Fields>;
+
+export type KillCommandResult<Fields extends KillCommandFields | undefined = undefined> = | { success: true; data: InferKillCommandResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function killCommand<Fields extends KillCommandFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: KillCommandInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<KillCommandResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "kill_command",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<KillCommandResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateKillCommand(
+  config: {
+  tenant?: string;
+  input: KillCommandInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "kill_command",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type KnowledgeDeleteInput = {
   path: string;
 };
@@ -7636,6 +7710,72 @@ export async function validateRecentFaults(
 ): Promise<ValidationResult> {
   const payload = {
     action: "recent_faults",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type RunningCommandsFields = UnifiedFieldSelection<{commands: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "commands"}>[];
+
+export type InferRunningCommandsResult<
+  Fields extends RunningCommandsFields | undefined,
+> = InferResult<{commands: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "commands"}, Fields>;
+
+export type RunningCommandsResult<Fields extends RunningCommandsFields | undefined = undefined> = | { success: true; data: InferRunningCommandsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function runningCommands<Fields extends RunningCommandsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<RunningCommandsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "running_commands",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<RunningCommandsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateRunningCommands(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "running_commands",
     ...(config.tenant !== undefined && { tenant: config.tenant })
   };
 
