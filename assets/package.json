@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run test",
-    "present-schema": "node scripts/present-schema.mjs"
+    "present-schema": "node scripts/present-schema.mjs",
+    "e2e": "node scripts/e2e/run.mjs"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.19",

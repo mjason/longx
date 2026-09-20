@@ -1271,7 +1271,19 @@ Where tests live / what to use:
   <url> phone|desktop out.png` (playwright, in `assets/`) loads the page as an iPhone 13 or a
   1280px desktop, prints console/page errors and any element wider than the viewport, and
   saves a screenshot to read back. Point it at the running dev server (never start a second
-  one on 7798 if it is already up).
+  one on 7798 if it is already up). **The e2e suite** — `npm run e2e` in `assets/`
+  (`scripts/e2e/run.mjs`; `-- turn exchange` picks scenarios by name; `LONGX_E2E_URL`,
+  `LONGX_E2E_MODEL`, `LONGX_E2E_KEEP=1` keeps the scratch projects) — drives a running
+  Longx with its real model through the page and the page's own RPC (`scripts/e2e/
+  lib.mjs`: a `Harness` with a scratch project under the OS tmp dir, `send` / `idle`
+  (no turn in progress), a phone context, console-error and overflow checks, screenshots
+  in `scripts/e2e/out/`). Scenarios: `01-pages` (every page, desktop and phone), `02-turn`
+  (a file written and run, the rows and the badge, a second turn from the composer),
+  `03-stop` (a `sleep` stopped from the page, the next message taken), `04-exchange` (two
+  sessions: on duty asked and answered, off duty refused, the Agents window's switches),
+  `05-goal` (the bar: paused, gone once complete). A model that refuses an instruction
+  fails a scenario — that is the point; run it before a release and after a change to the
+  kernel, the prompts or the chat.
 - TypeScript/React → also test-first: vitest + testing-library in `assets/` (`npm test`).
   Pure code in `js/core/` is unit-tested directly; pages render the real route tree with
   `renderAt(path)` from `ui/test-utils.tsx`, mocking `@/ash_rpc` (and `@/core/socket`) with

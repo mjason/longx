@@ -46,3 +46,4 @@ npm-debug.log
 # dialyzer PLT
 /priv/plts/
 .claude/worktrees/
+assets/scripts/e2e/out/
