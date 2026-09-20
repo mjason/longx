@@ -735,7 +735,7 @@ describe("ThreadPage", () => {
           progress: { kind: "toolCall", name: "apply_patch", bytes: 20480 },
         }),
       );
-      // the bar at the top of the page names every child at work, wherever the page is scrolled
+      // the composer rail names every child at work, wherever the page is scrolled
       const bar = screen.getByTestId("agents-bar");
       expect(bar).toHaveTextContent("beta");
       expect(bar).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");

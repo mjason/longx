@@ -20,11 +20,12 @@ import {
 import { Button } from "@/ui/components/ui/button";
 import { shellPick, shellPresent } from "@/ui/shell/longxShell";
 import { t } from "@/ui/strings";
+import { AgentsBar } from "./AgentsBar";
 import { useChat } from "./ChatProvider";
 
 /**
  * Left of the composer rail: what the turn is doing right now (running,
- * or waiting on the person to act).
+ * or waiting on the person to act) and the children at work.
  */
 export function ComposerLeading() {
   const { state, view } = useChat();
@@ -33,6 +34,7 @@ export function ComposerLeading() {
       className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs"
       data-testid="turn-bar"
     >
+      <AgentsBar />
       {state === "running" ? (
         <span className="flex items-center gap-1">
           <Loader2 className="size-3.5 animate-spin" />{" "}

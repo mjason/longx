@@ -1,8 +1,9 @@
-// The children at work, named at the top of the page whatever is scrolled
-// into view: their rows sit wherever they were spawned in the transcript,
-// and a long session hid who was still working. One chip per working or
-// waiting child — its state, what its model is writing, 打开 for its tab,
-// 停止 — gone when nobody works.
+// The children at work, named on the composer rail — where "what is
+// happening now" already lives (the turn state), next to where the person
+// types, on a phone too — whatever is scrolled into view: their rows sit
+// wherever they were spawned in the transcript, and a long session hid who
+// was still working. One chip per working or waiting child — its state, what
+// its model is writing, a click for its tab, 停止 — nothing when nobody works.
 import { Bot, ShieldAlert, Square } from "lucide-react";
 import { useContext, useState } from "react";
 import { toast } from "sonner";
@@ -62,11 +63,9 @@ export function AgentsBar() {
   };
 
   return (
-    <div className="border-b px-3 py-1.5" data-testid="agents-bar">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-        <span className="text-muted-foreground shrink-0">{t.agentsAtWork(working.length)}</span>
-        {working.map((w) => (
-          <span key={w.threadId} className="bg-muted flex min-w-0 items-center gap-1.5 rounded-full py-0.5 ps-2 pe-1">
+    <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto text-xs [scrollbar-width:none]" data-testid="agents-bar">
+      {working.map((w) => (
+          <span key={w.threadId} className="bg-muted flex shrink-0 items-center gap-1.5 rounded-full py-0.5 ps-2 pe-1">
             {w.waiting ? (
               <ShieldAlert className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
             ) : (
@@ -79,7 +78,7 @@ export function AgentsBar() {
               title={t.openSubagent}
             >
               <code className="font-mono">{w.name}</code>
-              <span className={`truncate ${w.waiting ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+              <span className={`hidden max-w-48 truncate sm:inline ${w.waiting ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
                 {w.waiting ?? w.doing}
               </span>
             </button>
@@ -97,7 +96,6 @@ export function AgentsBar() {
             ) : null}
           </span>
         ))}
-      </div>
     </div>
   );
 }
