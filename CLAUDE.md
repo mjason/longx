@@ -61,7 +61,15 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     (`git_info/1`), never stored; `init_git/1` sets git up with a first commit. The UI warns
     when a project has no git. `delete_project/2` needs `confirm: true`: threads, turns,
     transcripts and attachments go first (`Changes.DeleteThreads` /
-    `DeleteAttachments`), never the working directory.
+    `DeleteAttachments`), never the working directory. **Nothing waits on a process or the
+    disk inside an Ash transaction** (`Repo.write_transactions?` is on, so a change's
+    `before_action` / `after_action` runs holding SQLite's write lock): `DeleteThreads`
+    stops the agents in `before_transaction` and deletes the rows in `before_action`,
+    `DeleteAttachments` removes the files in `before_transaction`, `InitGit` runs git in
+    `after_transaction` — a project delete once stopped its agents inside the transaction,
+    each stop waiting on an agent that was itself waiting for that write lock, and every
+    other writer saw "database is locked" (busy_timeout 16 s) for the whole of it (prod,
+    2026-09-20).
   - `Thread` = kernel thread ↔ project (`kernel_thread_id`, `title`, `preview`, `cwd`,
     `model_slug`, `reasoning_effort`, `web_search`, `parent_thread_id` / `agent_path` for a
     sub-agent's row, `status`, `last_activity_at`). Statuses: `:idle`, `:active`,
