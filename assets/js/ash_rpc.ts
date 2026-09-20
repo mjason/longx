@@ -6471,6 +6471,81 @@ export async function validateSetThreadHandle(
 }
 
 
+export type SetThreadOnDutyInput = {
+  threadId: UUID;
+  onDuty: boolean;
+};
+
+export type SetThreadOnDutyFields = UnifiedFieldSelection<ThreadResourceSchema>[];
+
+export type InferSetThreadOnDutyResult<
+  Fields extends SetThreadOnDutyFields | undefined,
+> = InferResult<ThreadResourceSchema, Fields>;
+
+export type SetThreadOnDutyResult<Fields extends SetThreadOnDutyFields | undefined = undefined> = | { success: true; data: InferSetThreadOnDutyResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function setThreadOnDuty<Fields extends SetThreadOnDutyFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SetThreadOnDutyInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetThreadOnDutyResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_thread_on_duty",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetThreadOnDutyResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetThreadOnDuty(
+  config: {
+  tenant?: string;
+  input: SetThreadOnDutyInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_thread_on_duty",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type StartThreadInput = {
   projectId: UUID;
   model?: string | null;

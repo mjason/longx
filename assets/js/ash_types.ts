@@ -275,7 +275,7 @@ export type ProjectRepoAttributesOnlySchema = {
 // Thread Schema
 export type ThreadResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "agentPath" | "cwd" | "handle" | "id" | "insertedAt" | "kernelThreadId" | "lastActivityAt" | "modelSlug" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "status" | "title" | "updatedAt" | "webSearch";
+  __primitiveFields: "agentPath" | "cwd" | "handle" | "id" | "insertedAt" | "kernelThreadId" | "lastActivityAt" | "modelSlug" | "onDuty" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "status" | "title" | "updatedAt" | "webSearch";
   agentPath: string | null;
   cwd: string;
   handle: string | null;
@@ -284,6 +284,7 @@ export type ThreadResourceSchema = {
   kernelThreadId: string;
   lastActivityAt: UtcDateTimeUsec | null;
   modelSlug: string | null;
+  onDuty: boolean;
   parentThreadId: UUID | null;
   preview: string | null;
   projectId: UUID;
@@ -300,7 +301,7 @@ export type ThreadResourceSchema = {
 
 export type ThreadAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "agentPath" | "cwd" | "handle" | "id" | "insertedAt" | "kernelThreadId" | "lastActivityAt" | "modelSlug" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "status" | "title" | "updatedAt" | "webSearch";
+  __primitiveFields: "agentPath" | "cwd" | "handle" | "id" | "insertedAt" | "kernelThreadId" | "lastActivityAt" | "modelSlug" | "onDuty" | "parentThreadId" | "preview" | "projectId" | "reasoningEffort" | "status" | "title" | "updatedAt" | "webSearch";
   agentPath: string | null;
   cwd: string;
   handle: string | null;
@@ -309,6 +310,7 @@ export type ThreadAttributesOnlySchema = {
   kernelThreadId: string;
   lastActivityAt: UtcDateTimeUsec | null;
   modelSlug: string | null;
+  onDuty: boolean;
   parentThreadId: UUID | null;
   preview: string | null;
   projectId: UUID;
@@ -1446,6 +1448,12 @@ export type ThreadFilterInput = {
     stringStartsWith?: string;
   };
 
+  onDuty?: {
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
+  };
+
   parentThreadId?: {
     isNil?: boolean;
     eq?: UUID;
@@ -2070,7 +2078,7 @@ export const projectFilterFields = ["agentSettings", "archivedAt", "description"
 export type ProjectFilterField = (typeof projectFilterFields)[number];
 
 
-export const threadFilterFields = ["agentPath", "cwd", "handle", "id", "insertedAt", "kernelThreadId", "lastActivityAt", "modelSlug", "parentThreadId", "preview", "projectId", "reasoningEffort", "status", "title", "updatedAt", "webSearch", "parentThread", "project"] as const;
+export const threadFilterFields = ["agentPath", "cwd", "handle", "id", "insertedAt", "kernelThreadId", "lastActivityAt", "modelSlug", "onDuty", "parentThreadId", "preview", "projectId", "reasoningEffort", "status", "title", "updatedAt", "webSearch", "parentThread", "project"] as const;
 export type ThreadFilterField = (typeof threadFilterFields)[number];
 
 export const turnFilterFields = ["completedAt", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "usage", "userText", "thread"] as const;
@@ -2099,7 +2107,7 @@ export const projectSortFields = ["agentSettings", "archivedAt", "description", 
 export type ProjectSortField = (typeof projectSortFields)[number];
 
 
-export const threadSortFields = ["agentPath", "cwd", "handle", "id", "insertedAt", "kernelThreadId", "lastActivityAt", "modelSlug", "parentThreadId", "preview", "projectId", "reasoningEffort", "status", "title", "updatedAt", "webSearch"] as const;
+export const threadSortFields = ["agentPath", "cwd", "handle", "id", "insertedAt", "kernelThreadId", "lastActivityAt", "modelSlug", "onDuty", "parentThreadId", "preview", "projectId", "reasoningEffort", "status", "title", "updatedAt", "webSearch"] as const;
 export type ThreadSortField = (typeof threadSortFields)[number];
 
 export const turnSortFields = ["completedAt", "error", "id", "insertedAt", "kernelTurnId", "modelSlug", "reasoningEffort", "startedAt", "status", "threadId", "updatedAt", "usage", "userText"] as const;

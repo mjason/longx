@@ -200,6 +200,33 @@ defmodule Longx.Projects.ThreadsTest do
            )
   end
 
+  test "an agent that dies mid-turn: the turn fails at once with the reason, the thread is idle again and takes the next message",
+       %{bypass: bypass, project: project} do
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("never")),
+      ResponsesFixture.assistant_message("back")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, turn} = Projects.send_message(thread, "first")
+    assert_receive {:held, held}, 5_000
+    Bypass.pass(bypass)
+
+    # the kernel process is killed (a bug, an OOM, a hot reload in dev): no
+    # turn/completed will ever come
+    pid = Agent.whereis(thread.kernel_thread_id)
+    assert is_pid(pid)
+    Process.exit(pid, :kill)
+    send(held, :go)
+
+    assert_eventually_ok(fn -> turn!(turn.id).status == :failed end)
+    assert turn!(turn.id).error =~ "killed"
+    assert thread!(thread.id).status == :idle
+
+    {:ok, turn2} = Projects.send_message(thread, "again")
+    assert_eventually_ok(fn -> turn!(turn2.id).status == :completed end)
+  end
+
   test "opening a thread after a restart starts its agent again; deleting it drops the log", %{
     bypass: bypass,
     project: project
@@ -387,10 +414,69 @@ defmodule Longx.Projects.ThreadsTest do
     assert [%{handle: "main", state: :asleep}] = Projects.directory(project.id)
   end
 
+  test "on duty: a plain conversation of the person's cannot be woken by another agent; the switch, a handle or an active goal put a session on duty",
+       %{bypass: bypass, project: project} do
+    {:ok, asker} = Projects.start_thread(project)
+    {:ok, plain} = Projects.start_thread(project)
+    {:ok, named} = Projects.start_thread(project, handle: "ops")
+    {:ok, driven} = Projects.start_thread(project)
+    address = Projects.agent_name(plain)
+
+    # the directory says who is on duty
+    rows = Projects.directory(project.id)
+    assert %{on_duty: false} = Enum.find(rows, &(&1.thread_id == plain.id))
+    assert %{on_duty: true} = Enum.find(rows, &(&1.thread_id == named.id))
+
+    # a message to a conversation is refused — nothing starts there
+    assert {:error, :off_duty} =
+             Projects.deliver(project.id, address, "did you write this?",
+               from_thread: asker.kernel_thread_id
+             )
+
+    assert Projects.list_turns!(plain) == []
+
+    # the switch
+    assert {:ok, %Thread{on_duty: true}} = Projects.set_on_duty(plain, true)
+
+    assert %{on_duty: true} =
+             Enum.find(Projects.directory(project.id), &(&1.thread_id == plain.id))
+
+    # its answer wakes the asker — a conversation itself, off duty: a reply is not a call
+    script!(bypass, [
+      ResponsesFixture.assistant_message("yes, mine"),
+      ResponsesFixture.assistant_message("noted")
+    ])
+
+    assert {:ok, %Thread{id: id}} =
+             Projects.deliver(project.id, address, "did you write this?",
+               from_thread: asker.kernel_thread_id
+             )
+
+    assert id == plain.id
+
+    assert_eventually_ok(fn ->
+      match?([%Turn{status: :completed}], Projects.list_turns!(plain))
+    end)
+
+    assert_eventually_ok(fn ->
+      match?([%Turn{status: :completed}], Projects.list_turns!(asker))
+    end)
+
+    assert {:ok, %Thread{on_duty: false}} = Projects.set_on_duty(plain, false)
+
+    # an active goal is a duty as well
+    {:ok, _} = Agent.set_goal(driven.kernel_thread_id, %{"objective" => "keep the build green"})
+
+    assert %{on_duty: true} =
+             Enum.find(Projects.directory(project.id), &(&1.thread_id == driven.id))
+  end
+
   test "the Agents plug: the prompt names this session and the others; agents_directory, claim_handle and send_message by address",
        %{bypass: bypass, project: project} do
     {:ok, ops} = Projects.start_thread(project, handle: "ops", title: "值班")
     {:ok, thread} = Projects.start_thread(project)
+    # a conversation the person had: not a colleague
+    {:ok, chat} = Projects.start_thread(project, title: "聊聊架构")
 
     by_content = fn body, conn ->
       texts = for %{"role" => "user", "content" => [%{"text" => t}]} <- body["input"], do: t
@@ -431,8 +517,11 @@ defmodule Longx.Projects.ThreadsTest do
     assert prompt =~ "# Sessions in this project"
     assert prompt =~ "- ops — 值班"
     assert prompt =~ "Others reach you as `~" <> String.slice(thread.id, -6, 6)
+    # the person's conversation is not offered as a colleague
+    refute prompt =~ "聊聊架构"
+    assert prompt =~ "not on duty"
 
-    # the directory tool: both sessions, states, addresses
+    # the directory tool: every session, states, addresses, who is on duty
     assert_receive {:request, second}
 
     [%{"output" => directory}] =
@@ -441,6 +530,8 @@ defmodule Longx.Projects.ThreadsTest do
     assert directory =~ "ops"
     assert directory =~ "idle"
     assert directory =~ "running"
+    assert directory =~ "on duty"
+    assert directory =~ "#{Projects.agent_name(chat)} [idle · conversation] — 聊聊架构"
 
     # claim_handle names this session; the later prompt says so
     assert_receive {:request, third}
@@ -586,6 +677,41 @@ defmodule Longx.Projects.ThreadsTest do
 
     Task.await(joiner, 5_000)
     Bypass.pass(bypass)
+  end
+
+  test "the stall watchdog settles a turn whose agent is no longer running instead of leaving the thread active for ever",
+       %{bypass: bypass, project: project} do
+    previous = Application.get_env(:longx, Projects.Tracker, [])
+    Application.put_env(:longx, Projects.Tracker, stall_after: 400, tick: 100)
+    on_exit(fn -> Application.put_env(:longx, Projects.Tracker, previous) end)
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("done"),
+      ResponsesFixture.assistant_message("again")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, first} = Projects.send_message(thread, "hi")
+    assert_eventually_ok(fn -> turn!(first.id).status == :completed end)
+
+    # a row left open with the thread active while the agent sits idle
+    # (a crash the monitor missed — a restart of the Tracker itself, say)
+    {:ok, stale} =
+      Projects.create_turn(%{
+        kernel_turn_id: "turn_" <> Ash.UUID.generate(),
+        thread_id: thread.id,
+        user_text: "lost",
+        started_at: DateTime.utc_now()
+      })
+
+    Projects.touch_thread!(thread!(thread.id), %{status: :active})
+    assert {:error, :turn_in_progress} = Projects.send_message(thread, "blocked")
+
+    assert_eventually_ok(fn -> turn!(stale.id).status == :failed end, 30)
+    assert turn!(stale.id).error =~ "no longer running"
+    assert thread!(thread.id).status == :idle
+    {:ok, next} = Projects.send_message(thread, "again")
+    assert_eventually_ok(fn -> turn!(next.id).status == :completed end)
   end
 
   test "a thread whose sub-agent is still working counts as running on the welcome page, naming the agent",

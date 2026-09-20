@@ -293,6 +293,11 @@ defmodule Longx.Projects.Thread do
       validate {Longx.Projects.Thread.HandleFormat, []}
     end
 
+    # the duty switch: whether another agent may wake this session with a message
+    update :set_on_duty do
+      accept [:on_duty]
+    end
+
     update :archive do
       change set_attribute(:status, :archived)
     end
@@ -385,6 +390,18 @@ defmodule Longx.Projects.Thread do
       end
     end
 
+    # the person puts a session on duty (reachable by other agents) or takes it off
+    action :set_on_duty_action, :struct do
+      constraints instance_of: __MODULE__
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :on_duty, :boolean, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             do: Longx.Projects.set_on_duty(thread, input.arguments.on_duty)
+      end
+    end
+
     # the person names a session (nil takes the handle away)
     action :set_handle_action, :struct do
       constraints instance_of: __MODULE__
@@ -432,6 +449,10 @@ defmodule Longx.Projects.Thread do
     # the session's address for other agents: a slug, unique in the project
     # (a session without one is addressed as ~<the last six characters of its id>)
     attribute :handle, :string, public?: true
+    # on duty: other agents may wake it with a message (`Longx.Projects.on_duty?/1`
+    # counts a handle and an active goal as duty too); off, it is a conversation
+    # of the person's that nobody but the person starts
+    attribute :on_duty, :boolean, allow_nil?: false, default: false, public?: true
 
     # working directory the agent was given (the project root, or a worktree later)
     attribute :cwd, :string, allow_nil?: false, public?: true

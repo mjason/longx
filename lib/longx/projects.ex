@@ -44,6 +44,7 @@ defmodule Longx.Projects do
       rpc_action :clear_goal, :clear_goal
       rpc_action :rename_thread, :rename
       rpc_action :set_thread_handle, :set_handle_action
+      rpc_action :set_thread_on_duty, :set_on_duty_action
       rpc_action :directory, :directory
       rpc_action :archive_thread, :archive
       rpc_action :delete_thread, :delete_thread
@@ -100,6 +101,7 @@ defmodule Longx.Projects do
       define :touch_thread, action: :touch
       define :rename_thread, action: :rename
       define :set_thread_handle, action: :set_handle
+      define :set_thread_on_duty, action: :set_on_duty
       define :get_thread_by_handle, action: :by_handle, args: [:project_id, :handle]
       define :archive_thread, action: :archive
       define :get_thread_by_kernel_id, action: :by_kernel_id, args: [:kernel_thread_id]
@@ -221,6 +223,32 @@ defmodule Longx.Projects do
   end
 
   @doc """
+  Puts a session on duty — another agent may wake it with a message — or
+  takes it off. A conversation the person had and left is off duty by
+  default: an agent once woke one to ask about files it had seen, and the
+  person had not meant that session to work any more.
+  """
+  @spec set_on_duty(Thread.t(), boolean) :: {:ok, Thread.t()} | {:error, term}
+  def set_on_duty(%Thread{} = thread, on_duty) when is_boolean(on_duty) do
+    with {:ok, thread} <- set_thread_on_duty(thread, %{on_duty: on_duty}) do
+      broadcast_changed(thread.project_id)
+      {:ok, thread}
+    end
+  end
+
+  @doc """
+  Whether other agents may wake this session: the switch, a handle (the
+  person or the agent named it to be found — a watch's session too), or an
+  active goal (it is at work on something).
+  """
+  @spec on_duty?(Thread.t()) :: boolean
+  def on_duty?(%Thread{on_duty: true}), do: true
+  def on_duty?(%Thread{handle: handle}) when is_binary(handle) and handle != "", do: true
+
+  def on_duty?(%Thread{kernel_thread_id: id}),
+    do: match?(%{status: "active"}, goal_summary(id))
+
+  @doc """
   How other agents call this session: its handle, else its team name (a
   sub-agent's), else `~` and the last six characters of its id — every
   session has an address, named or not.
@@ -274,6 +302,7 @@ defmodule Longx.Projects do
         preview: thread.preview,
         state: state,
         goal: goal_summary(thread.kernel_thread_id),
+        on_duty: on_duty?(thread),
         team: Enum.map(team, &agent_name/1),
         last_activity_at: thread.last_activity_at
       }
@@ -347,14 +376,17 @@ defmodule Longx.Projects do
   is the sender's kernel id: the message is signed with its name and the
   target's answer comes back to it (signed with the target's address);
   `from:` names a sender that is no session (a watch). `{:error, :self}`
-  to oneself, `{:error, :not_found}` for an address nobody has.
+  to oneself, `{:error, :not_found}` for an address nobody has,
+  `{:error, :off_duty}` for a session that is not on duty (`on_duty?/1`) —
+  the person's conversations are not woken by agents or watches.
   """
   @spec deliver(String.t(), String.t(), String.t(), keyword) ::
-          {:ok, Thread.t()} | {:error, :self | :not_found | term}
+          {:ok, Thread.t()} | {:error, :self | :not_found | :off_duty | term}
   def deliver(project_id, address, text, opts) when is_binary(text) do
     with {:ok, %Thread{} = target} <- resolve_address(project_id, address),
          :ok <- not_self(target, opts[:from_thread]),
          :ok <- ensure_usable(target),
+         :ok <- ensure_on_duty(target),
          {:ok, send_opts} <- delivery_opts(target, opts),
          :ok <- wake(target),
          {:ok, _} <- sent(Longx.Agent.send(target.kernel_thread_id, text, send_opts)) do
@@ -364,6 +396,8 @@ defmodule Longx.Projects do
 
   defp not_self(%Thread{kernel_thread_id: id}, id), do: {:error, :self}
   defp not_self(_target, _from), do: :ok
+
+  defp ensure_on_duty(target), do: if(on_duty?(target), do: :ok, else: {:error, :off_duty})
 
   defp delivery_opts(target, opts) do
     base = [deliver: Keyword.get(opts, :deliver, :now), hops: Keyword.get(opts, :hops, 0)]

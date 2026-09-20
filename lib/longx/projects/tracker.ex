@@ -30,7 +30,8 @@ defmodule Longx.Projects.Tracker do
   defmodule State do
     @moduledoc false
     # tracked: kernel thread id → last event (monotonic ms)
-    defstruct tracked: %{}, interrupted: MapSet.new(), timer: nil
+    # monitors: monitor ref → kernel thread id, one per agent with a turn in flight
+    defstruct tracked: %{}, interrupted: MapSet.new(), monitors: %{}, timer: nil
   end
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -68,7 +69,8 @@ defmodule Longx.Projects.Tracker do
         _ -> state
       end
 
-    {:noreply, touch(state, method, params["threadId"])}
+    {:noreply,
+     state |> watch_agent(method, params["threadId"]) |> touch(method, params["threadId"])}
   rescue
     e ->
       Logger.error("projects tracker failed on #{method}: #{Exception.message(e)}")
@@ -79,7 +81,76 @@ defmodule Longx.Projects.Tracker do
     {:noreply, state |> check_stalls() |> schedule_tick()}
   end
 
+  # the agent died with a turn in flight: no turn/completed will come, so
+  # the row is failed here with the reason and the thread is idle again —
+  # a crashed agent once left its thread "active" and refusing every message
+  # until the next restart
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %State{monitors: monitors} = state) do
+    case Map.pop(monitors, ref) do
+      {nil, _} -> :ok
+      {kernel_thread_id, _} -> agent_died(kernel_thread_id, reason)
+    end
+
+    {:noreply, %State{state | monitors: Map.delete(monitors, ref)}}
+  end
+
   def handle_info(_other, state), do: {:noreply, state}
+
+  ## The agent process, watched while a turn runs
+
+  defp watch_agent(%State{monitors: monitors} = state, "turn/started", kernel_thread_id) do
+    case Longx.Agent.whereis(kernel_thread_id) do
+      pid when is_pid(pid) ->
+        if Enum.any?(monitors, fn {_ref, id} -> id == kernel_thread_id end) do
+          state
+        else
+          ref = Process.monitor(pid)
+          %State{state | monitors: Map.put(monitors, ref, kernel_thread_id)}
+        end
+
+      nil ->
+        state
+    end
+  end
+
+  defp watch_agent(%State{monitors: monitors} = state, "turn/completed", kernel_thread_id) do
+    {gone, kept} = Enum.split_with(monitors, fn {_ref, id} -> id == kernel_thread_id end)
+    Enum.each(gone, fn {ref, _} -> Process.demonitor(ref, [:flush]) end)
+    %State{state | monitors: Map.new(kept)}
+  end
+
+  defp watch_agent(state, _method, _kernel_thread_id), do: state
+
+  # a graceful end (the idle exit, Agent.stop) cannot have a turn in flight;
+  # anything else with a turn row open is a crash
+  defp agent_died(_kernel_thread_id, reason) when reason in [:normal, :shutdown], do: :ok
+  defp agent_died(_kernel_thread_id, {:shutdown, _}), do: :ok
+
+  defp agent_died(kernel_thread_id, reason) do
+    with {:ok, %Thread{} = thread} <- Projects.get_thread_by_kernel_id(kernel_thread_id),
+         [turn] <- running_turn(thread) do
+      error = "the agent died mid-turn: #{Longx.Agent.Kernel.State.describe(reason)}"
+      Logger.error("projects tracker: #{error} (thread #{kernel_thread_id}, turn #{turn.id})")
+      settle(thread, turn, error)
+      Projects.broadcast_changed(thread.project_id)
+    else
+      _ -> :ok
+    end
+  end
+
+  # a turn no agent will ever complete: failed with the reason, the thread idle
+  defp settle(%Thread{} = thread, %Turn{} = turn, error) do
+    Projects.touch_thread!(thread, %{status: :idle, last_activity_at: DateTime.utc_now()})
+
+    Projects.complete_turn!(turn, %{
+      status: :failed,
+      completed_at: DateTime.utc_now(),
+      error: error
+    })
+
+    notify_turn_end(thread, :failed, error)
+    Longx.Sentry.turn_failed(thread.kernel_thread_id, turn.kernel_turn_id, error)
+  end
 
   ## Thread events
 
@@ -226,7 +297,21 @@ defmodule Longx.Projects.Tracker do
           error: "no progress for #{div(stall_after, 1000)} seconds; interrupted"
         })
 
-        Projects.interrupt_turn(thread, turn.kernel_turn_id)
+        case Projects.interrupt_turn(thread, turn.kernel_turn_id) do
+          # nothing to interrupt: the row outlived its agent (a crash nobody
+          # saw, a Tracker restart) — settle it here, or the thread stays
+          # "active" and refuses every message until the next boot
+          {:error, :not_running} ->
+            settle(
+              thread,
+              turn,
+              "the agent is no longer running this turn; settled by the watchdog"
+            )
+
+          _ ->
+            :ok
+        end
+
         Projects.broadcast_changed(thread.project_id)
         MapSet.put(acc, thread.kernel_thread_id)
       end)

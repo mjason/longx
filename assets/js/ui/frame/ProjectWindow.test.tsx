@@ -7,7 +7,7 @@ import { channel, ok } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { browserStatus, dependencies, setThreadHandle, startThread, upgradeStatus } from "@/ash_rpc";
+import { browserStatus, dependencies, setThreadHandle, setThreadOnDuty, startThread, upgradeStatus } from "@/ash_rpc";
 import { browserIdle, dependencyReport, upgradeIdle } from "@/ui/test-mocks";
 
 describe("ProjectWindow", () => {
@@ -127,6 +127,22 @@ describe("ProjectWindow", () => {
     await user.type(within(directory).getByLabelText("句柄"), "ops");
     await user.click(within(directory).getByRole("button", { name: "保存" }));
     expect(setThreadHandle).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t2", handle: "ops" } }));
+  });
+
+  test("every session has a duty switch: a plain conversation is off until the person flips it; a named one is always on duty", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/p/app-1/t/t2");
+    await user.keyboard("{Meta>}3{/Meta}");
+    const directory = await screen.findByTestId("session-directory");
+    const rows = await within(directory).findAllByTestId("session-row");
+    const named = within(rows[0]!).getByRole("switch", { name: "值班" });
+    expect(named).toBeChecked();
+    expect(named).toBeDisabled();
+    const plain = within(rows[1]!).getByRole("switch", { name: "值班" });
+    expect(plain).not.toBeChecked();
+    await user.click(plain);
+    expect(setThreadOnDuty).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t2", onDuty: true } }));
   });
 
   test("新会话 from the threads tool opens the new-chat page (no row until the first message)", async () => {

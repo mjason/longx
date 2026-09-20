@@ -159,6 +159,7 @@ export const session = (n: number, extra: Record<string, unknown> = {}) => ({
   preview: `thread ${n}`,
   state: "idle",
   goal: null,
+  onDuty: false,
   team: [],
   lastActivityAt: "2026-09-12T00:00:00Z",
   ...extra,
@@ -427,7 +428,8 @@ export function rpcMock() {
     gitPush: vi.fn(async () => ok(null)),
     renameThread: vi.fn(async () => ok(thread(1))),
     setThreadHandle: vi.fn(async ({ input }: { input: { threadId: string; handle: string | null } }) => ok({ id: input.threadId, handle: input.handle })),
-    directory: vi.fn(async () => ok({ sessions: [session(1, { handle: "main", address: "main", title: "值班", state: "running" }), session(2)] })),
+    setThreadOnDuty: vi.fn(async ({ input }: { input: { threadId: string; onDuty: boolean } }) => ok({ id: input.threadId, onDuty: input.onDuty })),
+    directory: vi.fn(async () => ok({ sessions: [session(1, { handle: "main", address: "main", title: "值班", state: "running", onDuty: true }), session(2)] })),
     listWatches: vi.fn(async () => ok([watch("health"), watch("nightly", { kind: "once", cron: null, at: "2026-09-20T00:00:00Z", enabled: false, disabledReason: "load_error", loadError: "once: not an ISO 8601 instant", lastRunAt: null })])),
     listAllWatches: vi.fn(async () => ok({ watches: [
       { ...watch("deploy", { runningSince: "2026-09-19T00:00:00Z" }), projectId: "p2", projectName: "App 2", projectSlug: "app-2" },

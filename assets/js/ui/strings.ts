@@ -425,7 +425,9 @@ export const t = {
   subagentsHint: "点开一个子 agent，它的完整会话在旁边的标签页里打开。",
   directory: {
     title: "本项目的会话",
-    hint: "每个会话都有一个地址：句柄（@名字）或 ~ 加 id 末六位。agent 之间用它互相发消息；给会话起个句柄，别的 agent 和定时任务就能找到它。",
+    hint: "每个会话都有一个地址：句柄（@名字）或 ~ 加 id 末六位。只有值班中的会话会被别的 agent 和定时任务叫醒；聊完搁下的对话默认不值班。给会话起个句柄、或设了目标，就一直值班。",
+    onDuty: "值班",
+    onDutyImplied: "有句柄或目标的会话始终值班",
     states: {
       running: "运行中",
       waiting: "等待你操作",

@@ -22,6 +22,7 @@ import {
   type ListModelsFields,
   directory,
   setThreadHandle,
+  setThreadOnDuty,
 } from "@/ash_rpc";
 
 export const projectFields = [
@@ -252,6 +253,8 @@ export type SessionEntry = {
   preview: string | null;
   state: "running" | "waiting" | "idle" | "asleep" | "archived" | "unrecoverable";
   goal: { objective: string; status: string | null } | null;
+  /** other agents may wake it with a message (the switch, a handle or an active goal) */
+  onDuty: boolean;
   team: string[];
   lastActivityAt: string | null;
 };
@@ -287,6 +290,15 @@ export function useSetThreadHandle(projectId: string | undefined) {
       if (projectId) client.invalidateQueries({ queryKey: queryKeys.threads(projectId) });
       client.invalidateQueries({ queryKey: ["thread"] });
     },
+  });
+}
+
+export function useSetThreadOnDuty(projectId: string | undefined) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ threadId, onDuty }: { threadId: string; onDuty: boolean }) =>
+      unwrap(await setThreadOnDuty({ fields: ["id", "onDuty"], input: { threadId, onDuty } })),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["sessions", projectId ?? ""] }),
   });
 }
 

@@ -94,7 +94,13 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     a root thread as running when one of its sub-agents is at work too, `working` naming
     them, and the directory says `running` for it): no
     event for `stall_after` (10 min; `config :longx, Longx.Projects.Tracker, stall_after:,
-    tick:`) → interrupt, turn `:interrupted`. Its followed list is in memory: `host_thread/1`
+    tick:`) → interrupt, turn `:interrupted`; an interrupt answered `:not_running` (the
+    row outlived its agent) settles the row `:failed` and the thread idle. **The agent
+    process is monitored while a turn runs** (`turn/started` → `Process.monitor`,
+    `turn/completed` → demonitor): a `:DOWN` that is no graceful exit with a turn row
+    open fails the turn at once ("the agent died mid-turn: …", Sentry, the notify feed)
+    and idles the thread — a crashed agent once left its thread `:active`, refusing
+    every message ("a turn is running") until the next boot. Its followed list is in memory: `host_thread/1`
     (a `ThreadChannel` join) and `send_message/3` both `Tracker.track/1` (idempotent), and
     `Projects.settle_after_restart/0` (a boot `Task`) fails every `:in_progress` turn and
     idles every `:active` thread a previous boot left.
@@ -249,10 +255,21 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `reply_to:` and `reply_as:` — `Team.report_to_parent` signs a root session's answer
     with the address the asker used; `hops` cap an exchange at six bounces; `:self` and
     archived targets refused). `Projects.session_named/3` finds or starts a session by
-    handle. `Plugs.Agents` names this session in the prompt (`# Sessions in this
-    project`, handles / titles / goals only — live state would break the cached
-    prefix), offers `agents_directory` (live state), `send_message(to, message,
-    deliver)` for a team name *or* an address, and `claim_handle` on a root session.
+    handle. **On duty**: only a session on duty may be woken by another agent or a
+    watch — `Thread.on_duty` (the switch beside every row of the Agents window's
+    directory, RPC `set_thread_on_duty`), a handle (the person or the agent named it
+    to be found; a watch's session too) or an active goal (`Projects.on_duty?/1`,
+    `on_duty` on every directory row); `deliver/4` answers `{:error, :off_duty}` for
+    the rest — a plain conversation the person had and left is not a colleague (an
+    agent once read the directory, saw the person's last chat and woke it to ask
+    about uncommitted files it had found; the person had been done with that
+    session). A reply goes back to the asker regardless (it is not a call).
+    `Plugs.Agents` names this session in the prompt (`# Sessions in this
+    project`, the sessions **on duty** with handles / titles / goals only — live state
+    would break the cached prefix — and the rule that a conversation is not woken),
+    offers `agents_directory` (every session, live state, `on duty` / `conversation`),
+    `send_message(to, message, deliver)` for a team name *or* an address (an
+    off-duty target is refused with the reason), and `claim_handle` on a root session.
     The `turn/started` event carries `from` when an agent or a watch started the turn
     (the Tracker names the row `（定时触发）<name>` / `（agent 消息）`; the list's
     preview drops the `[agent …] ` prefix).
@@ -592,8 +609,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `promote_local`, and a hint naming the `shared/watches/` files an untrusted project
     keeps off — RPC `list_watches` / `switch_watch` /
     `dry_run_watch` / `delete_watch`), the Agents tool window's session directory
-    (`SessionDirectory`: addresses, states, the handle field — RPC `directory`,
-    `set_thread_handle`). Tests: `test/longx/agent/watch_test`,
+    (`SessionDirectory`: addresses, states, the 值班 switch on every row — on and
+    disabled for a handle or an active goal —, the handle field — RPC `directory`,
+    `set_thread_handle`, `set_thread_on_duty`). Tests: `test/longx/agent/watch_test`,
     `test/longx/watches/{watches,plug}_test`, `hooks_controller_test`,
     `watches_rpc_test`, the loader's watches test.
   - **Goal mode** (`Plugs.Goal`, `Kernel.Goal`): `create_goal` / `update_goal` / `get_goal`;

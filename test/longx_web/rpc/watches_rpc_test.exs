@@ -127,10 +127,29 @@ defmodule LongxWeb.Rpc.WatchesRpcTest do
              "address" => "main",
              "handle" => "main",
              "state" => "idle",
+             "onDuty" => true,
              "threadId" => id,
              "team" => []
            } = session
 
     assert id == thread.id
+
+    # the duty switch: a session without a handle is a conversation until the person flips it
+    {:ok, other} = Projects.start_thread(project)
+
+    assert %{"success" => true, "data" => %{"onDuty" => true}} =
+             rpc(conn, "set_thread_on_duty", %{
+               "fields" => ~w(id onDuty),
+               "input" => %{"threadId" => other.id, "onDuty" => true}
+             })
+
+    assert %{"success" => true, "data" => %{"sessions" => sessions}} =
+             rpc(conn, "directory", %{
+               "fields" => ~w(sessions),
+               "input" => %{"projectId" => project.id}
+             })
+
+    assert %{"onDuty" => true, "handle" => nil} =
+             Enum.find(sessions, &(&1["threadId"] == other.id))
   end
 end

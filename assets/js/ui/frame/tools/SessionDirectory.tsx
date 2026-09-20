@@ -5,12 +5,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { useSessions, useSetThreadHandle, type SessionEntry } from "@/core/projects";
+import { useSessions, useSetThreadHandle, useSetThreadOnDuty, type SessionEntry } from "@/core/projects";
 import { Badge } from "@/ui/components/ui/badge";
 import { Button } from "@/ui/components/ui/button";
 import { Input } from "@/ui/components/ui/input";
 import { Label } from "@/ui/components/ui/label";
 import { Skeleton } from "@/ui/components/ui/skeleton";
+import { Switch } from "@/ui/components/ui/switch";
 import { t } from "@/ui/strings";
 
 const s = t.directory;
@@ -22,11 +23,24 @@ function stateVariant(state: SessionEntry["state"]) {
   return "outline";
 }
 
+// the duty switch: whether other agents may wake this session. A handle or
+// an active goal is a duty of its own, so the switch stays on for those.
+function DutySwitch({ row, onChange }: { row: SessionEntry; onChange: (onDuty: boolean) => void }) {
+  const implied = !!row.handle || row.goal?.status === "active";
+  return (
+    <label className="text-muted-foreground flex shrink-0 flex-col items-center justify-center gap-1 px-3 text-[11px]" title={implied ? s.onDutyImplied : undefined}>
+      <Switch checked={row.onDuty} disabled={implied} onCheckedChange={onChange} aria-label={s.onDuty} />
+      <span aria-hidden>{s.onDuty}</span>
+    </label>
+  );
+}
+
 export function SessionDirectory({ projectId, slug }: { projectId: string; slug: string }) {
   const { threadId } = useParams();
   const navigate = useNavigate();
   const sessions = useSessions(projectId);
   const setHandle = useSetThreadHandle(projectId);
+  const setOnDuty = useSetThreadOnDuty(projectId);
   const me = sessions.data?.find((row) => row.threadId === threadId);
   const [draft, setDraft] = useState("");
   useEffect(() => setDraft(me?.handle ?? ""), [me?.handle]);
@@ -49,10 +63,10 @@ export function SessionDirectory({ projectId, slug }: { projectId: string; slug:
       {sessions.data && sessions.data.length > 0 ? (
         <ul className="divide-y rounded-md border">
           {sessions.data.map((row) => (
-            <li key={row.threadId} data-testid="session-row">
+            <li key={row.threadId} data-testid="session-row" className="flex items-stretch">
               <button
                 type="button"
-                className="hover:bg-accent/40 flex w-full flex-col gap-0.5 px-3 py-2 text-left"
+                className="hover:bg-accent/40 flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2 text-left"
                 aria-current={row.threadId === threadId ? "true" : undefined}
                 onClick={() => navigate(`/p/${slug}/t/${row.threadId}`)}
               >
@@ -65,6 +79,7 @@ export function SessionDirectory({ projectId, slug }: { projectId: string; slug:
                 {row.goal ? <span className="text-muted-foreground truncate text-xs">{s.goal}: {row.goal.objective}</span> : null}
                 {row.team.length > 0 ? <span className="text-muted-foreground truncate text-xs">{s.team}: {row.team.join(", ")}</span> : null}
               </button>
+              <DutySwitch row={row} onChange={(onDuty) => setOnDuty.mutateAsync({ threadId: row.threadId, onDuty }).catch((e: Error) => toast.error(e.message))} />
             </li>
           ))}
         </ul>

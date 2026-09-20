@@ -73,8 +73,14 @@ defmodule Longx.Agent.Plugs.Agents do
     rows = Longx.Projects.directory(project_id)
 
     case Enum.find(rows, &(&1.kernel_thread_id == thread_id)) do
-      nil -> nil
-      me -> %{me: me, others: Enum.reject(rows, &(&1.kernel_thread_id == thread_id))}
+      nil ->
+        nil
+
+      me ->
+        # colleagues are the sessions on duty; the person's other conversations
+        # are not offered (an agent once woke one to ask about files it had seen)
+        others = Enum.reject(rows, &(&1.kernel_thread_id == thread_id))
+        %{me: me, others: Enum.filter(others, & &1.on_duty)}
     end
   rescue
     _ -> nil
@@ -95,10 +101,10 @@ defmodule Longx.Agent.Plugs.Agents do
     listing =
       case others do
         [] ->
-          "No other session in this project right now."
+          "No other session is on duty in this project right now."
 
         _ ->
-          "The other sessions of this project (`agents_directory` tells their live state):
+          "The other sessions on duty in this project (`agents_directory` tells their live state):
 " <>
             Enum.map_join(Enum.take(others, 20), "
 ", &session_line/1)
@@ -107,7 +113,7 @@ defmodule Longx.Agent.Plugs.Agents do
     """
     # Sessions in this project
 
-    Every conversation in this project is a session with an address, and sessions talk through their mailboxes: `send_message(to, message)` with an address instead of a team name reaches any of them — a handle, `~` and the last six characters of its id, or `<project>:<handle>` for another project's. The message starts a turn there (or steers one in flight; `deliver: "idle"` waits for it to be idle instead) and **its answer comes back to you as a message from it** — never wait or poll. Before starting long-running work others may care about, look at the directory: a session already on duty is asked, not duplicated.
+    Every conversation in this project is a session with an address, and sessions talk through their mailboxes: `send_message(to, message)` with an address instead of a team name reaches one **on duty** — a handle, `~` and the last six characters of its id, or `<project>:<handle>` for another project's. The message starts a turn there (or steers one in flight; `deliver: "idle"` waits for it to be idle instead) and **its answer comes back to you as a message from it** — never wait or poll. Before starting long-running work others may care about, look at the directory: a session on duty already doing it is asked, not duplicated. A session not on duty is a conversation the person had — `agents_directory` lists it as `conversation` so you know what happened in the project, but it is not a colleague: a message to it is refused, and what it worked on is the person's to tell you about. The person puts a session on duty in the Agents window; a handle or an active goal is a duty too.
 
     #{you} #{listing}
     """
@@ -355,6 +361,10 @@ defmodule Longx.Agent.Plugs.Agents do
       {:error, :self} ->
         {:error, "that is your own address"}
 
+      {:error, :off_duty} ->
+        {:error,
+         "#{address} is not on duty: a conversation the person had, not a colleague. Do not wake it — ask the person instead; they can put it on duty in the Agents window"}
+
       {:error, reason} ->
         {:error, "could not deliver to #{address}: #{inspect(reason)}"}
     end
@@ -378,7 +388,9 @@ defmodule Longx.Agent.Plugs.Agents do
              _ -> ""
            end
 
-         "- #{row.address} [#{row.state}] — #{label};#{team}#{goal}" <>
+         duty = if row.on_duty, do: "on duty", else: "conversation"
+
+         "- #{row.address} [#{row.state} · #{duty}] — #{label};#{team}#{goal}" <>
            if(row.last_activity_at, do: " last active #{row.last_activity_at}", else: "")
        end)}
     end
