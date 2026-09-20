@@ -278,7 +278,7 @@ defmodule Longx.AI.GatewayTest do
       refute Enum.any?(plain.headers, &(elem(&1, 0) in ["chatgpt-account-id", "originator"]))
     end
 
-    test "a ChatGPT-subscription target gets no output-only fields back on replayed items (the backend answers 400 to `input[1].status`)" do
+    test "a ChatGPT-subscription target: reasoning items lose `status` and `content` (measured: the backend refuses both), keep their summary and ciphertext; messages and calls go as they are" do
       chatgpt = %Target{
         @target
         | kind: :openai,
@@ -293,6 +293,31 @@ defmodule Longx.AI.GatewayTest do
             "type" => "message",
             "role" => "user",
             "content" => [%{"type" => "input_text", "text" => "hi"}]
+          },
+          # qwen's reasoning from a thread that ran there before: text and a summary, no ciphertext
+          %{
+            "type" => "reasoning",
+            "id" => "msg_x-1",
+            "summary" => [%{"type" => "summary_text", "text" => "weighed it"}],
+            "content" => [%{"type" => "reasoning_text", "text" => "thinking"}],
+            "status" => "completed"
+          },
+          # one with text only: nothing left to send once the text goes
+          %{
+            "type" => "reasoning",
+            "id" => "msg_x-2",
+            "summary" => [],
+            "content" => [%{"type" => "reasoning_text", "text" => "more thinking"}],
+            "status" => "completed"
+          },
+          # its own
+          %{
+            "type" => "reasoning",
+            "id" => "rs_1",
+            "summary" => [],
+            "content" => [],
+            "encrypted_content" => "enc",
+            "status" => "completed"
           },
           %{
             "type" => "message",
@@ -316,65 +341,20 @@ defmodule Longx.AI.GatewayTest do
         ])
 
       {:ok, up} = Gateway.prepare(body, chatgpt)
-      [_, message, call, _] = up.body["input"]
-      refute Map.has_key?(message, "status")
-      refute Map.has_key?(message, "phase")
-      refute Map.has_key?(hd(message["content"]), "logprobs")
-      assert hd(message["content"])["text"] == "yo"
-      refute Map.has_key?(call, "status")
-      assert call["call_id"] == "c1"
-      # api.openai.com takes them as they are
-      {:ok, plain} = Gateway.prepare(body, %Target{@target | kind: :openai})
-      assert Enum.at(plain.body["input"], 1)["status"] == "completed"
-    end
+      assert [%{"role" => "user"}, foreign, own, message, call, _] = up.body["input"]
+      assert foreign["summary"] == [%{"type" => "summary_text", "text" => "weighed it"}]
 
-    test "a ChatGPT-subscription target gets no reasoning but its own (summary + ciphertext, no content): another provider's readable reasoning is dropped whole — the backend takes `content` only empty" do
-      chatgpt = %Target{
-        @target
-        | kind: :openai,
-          chatgpt?: true,
-          account_id: "a",
-          base_url: "https://chatgpt.com/backend-api/codex"
-      }
+      refute Map.has_key?(foreign, "content") or Map.has_key?(foreign, "status") or
+               Map.has_key?(foreign, "id")
 
-      body =
-        Map.put(@codex_body, "input", [
-          %{
-            "type" => "message",
-            "role" => "user",
-            "content" => [%{"type" => "input_text", "text" => "hi"}]
-          },
-          # qwen's reasoning, read on a thread that ran there before: text, no ciphertext
-          %{
-            "type" => "reasoning",
-            "id" => "msg_x-1",
-            "summary" => [],
-            "content" => [%{"type" => "reasoning_text", "text" => "thinking"}],
-            "status" => "completed"
-          },
-          # its own
-          %{
-            "type" => "reasoning",
-            "id" => "rs_1",
-            "summary" => [%{"type" => "summary_text", "text" => "s"}],
-            "content" => [],
-            "encrypted_content" => "enc",
-            "status" => "completed"
-          },
-          %{
-            "type" => "message",
-            "id" => "msg_1",
-            "role" => "assistant",
-            "status" => "completed",
-            "content" => [%{"type" => "output_text", "text" => "yo", "annotations" => []}]
-          }
-        ])
-
-      {:ok, up} = Gateway.prepare(body, chatgpt)
-      assert [%{"role" => "user"}, own, %{"role" => "assistant"}] = up.body["input"]
       assert own["id"] == "rs_1" and own["encrypted_content"] == "enc"
-      refute Map.has_key?(own, "content")
-      refute Map.has_key?(own, "status")
+      refute Map.has_key?(own, "content") or Map.has_key?(own, "status")
+      # the backend takes these as they are: nothing touched
+      assert message["status"] == "completed" and message["phase"] == "final_answer"
+      assert call["status"] == "completed"
+      # api.openai.com takes reasoning `content` and `status` (the reference says so): untouched
+      {:ok, plain} = Gateway.prepare(body, %Target{@target | kind: :openai})
+      assert Enum.at(plain.body["input"], 3)["status"] == "completed"
     end
 
     test "the hosted image_generation tool goes only to a model flagged for it; a stray one is dropped for the rest" do

@@ -667,16 +667,17 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     .chatgpt_account_id` (`AI.chatgpt_account_id/1`), and `Gateway.prepare` adds the
     backend's headers (`chatgpt-account-id`, `OpenAI-Beta: responses=experimental`,
     `originator: codex_cli_rs` — the backend serves only clients it knows) and
-    `store: false` + `include: ["reasoning.encrypted_content"]`, and strips what only
-    an output item carries from **every** replayed input item (`status`, `phase`, a
-    part's `logprobs` — messages, calls and reasoning items all carry a `status`; the
-    backend answers 400 "Unknown parameter: 'input[1].status'"; api.openai.com takes
-    them) and keeps **no reasoning but the backend's own** (`rs_` + ciphertext, its
-    `content` dropped — the backend takes `content` only empty: "Invalid
-    'input[1].content': array too long"; another provider's readable reasoning on a
-    thread that ran there before goes whole). Checked against the real backend with
-    a real thread's mixed history (qwen / deepseek reasoning, uuids, statuses, calls)
-    and a two-step tool call; `discover_models`
+    `store: false` + `include: ["reasoning.encrypted_content"]`, and — **measured
+    against the backend item by item, not guessed** — takes `status` and `content`
+    off every replayed reasoning item (a reasoning `status` → 400 "Unknown parameter";
+    a non-empty `content` → 400 "array too long … maximum length 0"; a summary alone
+    is fine, so another provider's summary from a thread that ran there before stays,
+    one left with neither summary nor ciphertext goes) while messages and calls keep
+    their `status` / `phase` / `logprobs` (accepted). The public API's reference
+    (developers.openai.com, Responses → input → reasoning) allows `content` and
+    `status`, so api.openai.com is untouched. Checked with a real thread's mixed
+    history (80 items: qwen / deepseek reasoning, uuids, statuses, calls) and a
+    two-step tool call; `discover_models`
     reads the backend's catalog (`GET /models?client_version=` → `models[]` with
     `slug`, `context_window`, `supported_reasoning_levels`, `visibility` — hidden ones
     left out) with the same headers. **Any provider's own list**: `discover_models/1`

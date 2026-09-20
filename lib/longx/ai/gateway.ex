@@ -291,47 +291,33 @@ defmodule Longx.AI.Gateway do
     end)
   end
 
-  # the Codex backend refuses an input item carrying what only an output item
-  # has (`status`, `phase`, a part's `logprobs`): "Unknown parameter:
-  # 'input[1].status'" — api.openai.com takes them, so only that target is cleaned
-  @output_only_item_keys ["status", "phase"]
-  @output_only_part_keys ["logprobs"]
-
+  # What the Codex backend (a ChatGPT subscription) takes back, measured against
+  # it item by item (2026-09-20): a message or a function_call with its
+  # `status` / `phase` / a part's `logprobs` — fine; a reasoning item with a
+  # `status` — 400 "Unknown parameter: 'input[1].status'"; a reasoning item
+  # with a non-empty `content` (another provider's readable reasoning_text) —
+  # 400 "Invalid 'input[1].content': array too long … maximum length 0"; a
+  # reasoning item with a summary alone (no id, no ciphertext) — fine. The
+  # public API (developers.openai.com, Responses → input → reasoning) takes
+  # `content` and `status`, so api.openai.com is left as it is. Here every
+  # reasoning item loses `status` and `content`; one left with nothing (no
+  # summary text, no ciphertext) goes.
   defp strip_output_fields(input, %Target{chatgpt?: true}) do
-    # every item: a reasoning item carries a status too — and the backend takes
-    # a reasoning item only as its own (`rs_` + ciphertext) with an empty
-    # `content`: another provider's readable reasoning ("Invalid
-    # 'input[1].content': array too long") goes, its own loses `content`
-    input
-    |> Enum.filter(fn
-      %{"type" => "reasoning"} = item -> own_reasoning?(item)
-      _ -> true
-    end)
-    |> Enum.map(fn
-      %{"type" => "reasoning"} = item -> Map.delete(item, "content")
-      item -> item
-    end)
-    |> Enum.map(fn item when is_map(item) ->
-      item
-      |> Map.drop(@output_only_item_keys)
-      |> Map.update("content", nil, fn
-        parts when is_list(parts) ->
-          Enum.map(parts, &if(is_map(&1), do: Map.drop(&1, @output_only_part_keys), else: &1))
+    Enum.flat_map(input, fn
+      %{"type" => "reasoning"} = item ->
+        item = Map.drop(item, ["status", "content"])
 
-        other ->
-          other
-      end)
-      |> then(&if(is_nil(&1["content"]), do: Map.delete(&1, "content"), else: &1))
+        if readable?(item["summary"]) or
+             (is_binary(item["encrypted_content"]) and item["encrypted_content"] != ""),
+           do: [item],
+           else: []
+
+      item ->
+        [item]
     end)
   end
 
   defp strip_output_fields(input, _target), do: input
-
-  defp own_reasoning?(%{"id" => @openai_reasoning_prefix <> _, "encrypted_content" => enc})
-       when is_binary(enc) and enc != "",
-       do: true
-
-  defp own_reasoning?(_item), do: false
 
   @doc "The degraded form of a request: no encrypted reasoning at all, not even the target's own."
   @spec strip_all_encrypted(map) :: map
