@@ -100,10 +100,17 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     tick:`) → interrupt, turn `:interrupted`; an interrupt answered `:not_running` (the
     row outlived its agent) settles the row `:failed` and the thread idle. **The agent
     process is monitored while a turn runs** (`turn/started` → `Process.monitor`,
-    `turn/completed` → demonitor): a `:DOWN` that is no graceful exit with a turn row
-    open fails the turn at once ("the agent died mid-turn: …", Sentry, the notify feed)
-    and idles the thread — a crashed agent once left its thread `:active`, refusing
-    every message ("a turn is running") until the next boot. Its followed list is in memory: `host_thread/1`
+    `turn/completed` → demonitor; `in_flight/0` lists those threads) — that monitor set
+    is what the watchdog looks at (every thread ever hosted used to cost a row lookup
+    and a turn query per tick once quiet for ten minutes) plus, in one query, the
+    `in_progress` rows older than `stall_after` that no monitor covers (orphans: a
+    crash nobody saw); a `:DOWN` that is no graceful exit with a turn row open fails
+    the turn at once ("the agent died mid-turn: …", Sentry, the notify feed) and idles
+    the thread — a crashed agent once left its thread `:active`, refusing every message
+    ("a turn is running") until the next boot. **A (re)start recovers from the rows**
+    (`handle_continue(:recover)`): every `in_progress` turn's thread is followed again,
+    its agent monitored when it runs that turn (`Projects.agent_status/1`), the row
+    settled when it does not. Its followed list is in memory: `host_thread/1`
     (a `ThreadChannel` join) and `send_message/3` both `Tracker.track/1` (idempotent), and
     `Projects.settle_after_restart/0` (a boot `Task`) fails every `:in_progress` turn and
     idles every `:active` thread a previous boot left.

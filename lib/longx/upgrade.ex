@@ -378,7 +378,9 @@ defmodule Longx.Upgrade do
   end
 
   def handle_info(:tick, state) do
-    Task.start(fn -> check(force: true) end)
+    # under the tree's supervisor, like the upgrade itself; the result lands
+    # through store_check
+    Task.Supervisor.start_child(Longx.Upgrade.TaskSupervisor, fn -> check(force: true) end)
     Process.send_after(self(), :tick, config(:tick))
     {:noreply, state}
   end

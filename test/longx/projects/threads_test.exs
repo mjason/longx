@@ -679,6 +679,59 @@ defmodule Longx.Projects.ThreadsTest do
     Bypass.pass(bypass)
   end
 
+  test "the Tracker knows which threads have a turn in flight (the monitor on the agent is the truth); the watchdog looks only at those",
+       %{bypass: bypass, project: project} do
+    script!(bypass, [held(ResponsesFixture.assistant_message("one"))])
+    {:ok, thread} = Projects.start_thread(project)
+    refute thread.kernel_thread_id in Projects.Tracker.in_flight()
+
+    {:ok, turn} = Projects.send_message(thread, "go")
+    assert_receive {:held, h}, 5_000
+    assert_eventually_ok(fn -> thread.kernel_thread_id in Projects.Tracker.in_flight() end)
+
+    send(h, :go)
+    assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
+    assert_eventually_ok(fn -> thread.kernel_thread_id not in Projects.Tracker.in_flight() end)
+  end
+
+  test "a Tracker that restarts mid-turn recovers what is in flight from the rows: the running turn still completes, an orphaned row is settled",
+       %{bypass: bypass, project: project} do
+    script!(bypass, [held(ResponsesFixture.assistant_message("one"))])
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, turn} = Projects.send_message(thread, "go")
+    assert_receive {:held, h}, 5_000
+
+    # a row whose agent will never speak (a thread nobody hosts)
+    {:ok, ghost} = Projects.start_thread(project)
+    Agent.stop(ghost.kernel_thread_id)
+
+    {:ok, orphan} =
+      Projects.create_turn(%{
+        kernel_turn_id: "turn_" <> Ash.UUID.generate(),
+        thread_id: ghost.id,
+        user_text: "lost",
+        started_at: DateTime.utc_now()
+      })
+
+    Projects.touch_thread!(thread!(ghost.id), %{status: :active})
+
+    tracker = Process.whereis(Projects.Tracker)
+    ref = Process.monitor(tracker)
+    Process.exit(tracker, :kill)
+    assert_receive {:DOWN, ^ref, :process, ^tracker, :killed}
+    assert_eventually_ok(fn -> Process.whereis(Projects.Tracker) not in [nil, tracker] end)
+
+    # the new Tracker found the running turn in the rows and follows it again
+    assert_eventually_ok(fn -> thread.kernel_thread_id in Projects.Tracker.in_flight() end)
+    send(h, :go)
+    assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
+    assert thread!(thread.id).status == :idle
+
+    # and settled the row with no agent behind it
+    assert_eventually_ok(fn -> turn!(orphan.id).status == :failed end)
+    assert thread!(ghost.id).status == :idle
+  end
+
   test "the stall watchdog settles a turn whose agent is no longer running instead of leaving the thread active for ever",
        %{bypass: bypass, project: project} do
     previous = Application.get_env(:longx, Projects.Tracker, [])

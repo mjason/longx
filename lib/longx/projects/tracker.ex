@@ -29,9 +29,11 @@ defmodule Longx.Projects.Tracker do
 
   defmodule State do
     @moduledoc false
-    # tracked: kernel thread id → last event (monotonic ms)
-    # monitors: monitor ref → kernel thread id, one per agent with a turn in flight
-    defstruct tracked: %{}, interrupted: MapSet.new(), monitors: %{}, timer: nil
+    # tracked: the kernel thread ids whose topic this process follows
+    # in_flight: kernel thread id → %{ref, last} — the monitor on the agent
+    # while a turn runs, and the last event's time (monotonic ms); a thread
+    # with no turn costs the watchdog nothing
+    defstruct tracked: MapSet.new(), interrupted: MapSet.new(), in_flight: %{}, timer: nil
   end
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -40,24 +42,69 @@ defmodule Longx.Projects.Tracker do
   @spec track(String.t()) :: :ok
   def track(kernel_thread_id), do: GenServer.call(__MODULE__, {:track, kernel_thread_id})
 
+  @doc "The kernel thread ids with a turn in flight, as the monitors on their agents say."
+  @spec in_flight() :: [String.t()]
+  def in_flight, do: GenServer.call(__MODULE__, :in_flight)
+
   @impl true
-  def init(_opts), do: {:ok, schedule_tick(%State{})}
+  def init(_opts), do: {:ok, schedule_tick(%State{}), {:continue, :recover}}
+
+  # a (re)start: what the rows say is in flight is followed again — a turn
+  # whose agent still runs gets its monitor back, one whose agent is gone is
+  # settled — so a Tracker crash never leaves a thread active for ever
+  @impl true
+  def handle_continue(:recover, state) do
+    state =
+      Enum.reduce(Projects.list_all_turns_in_progress!(), state, fn turn, acc ->
+        case Ash.get(Thread, turn.thread_id) do
+          {:ok, %Thread{kernel_thread_id: id} = thread} ->
+            acc = follow(acc, id)
+
+            case Projects.agent_status(id) do
+              {:running, kernel_turn_id} when kernel_turn_id == turn.kernel_turn_id ->
+                watch_agent(acc, "turn/started", id)
+
+              _ ->
+                settle(
+                  thread,
+                  turn,
+                  "the agent is no longer running this turn; settled after a restart"
+                )
+
+                Projects.broadcast_changed(thread.project_id)
+                acc
+            end
+
+          _ ->
+            acc
+        end
+      end)
+
+    {:noreply, state}
+  rescue
+    e ->
+      Logger.error("projects tracker: recovery failed: #{Exception.message(e)}")
+      {:noreply, state}
+  end
 
   @impl true
   def handle_call({:track, kernel_thread_id}, _from, state) do
     {:reply, :ok, follow(state, kernel_thread_id)}
   end
 
-  # a thread already followed keeps its clock: a page joining it (host_thread
+  def handle_call(:in_flight, _from, %State{in_flight: in_flight} = state),
+    do: {:reply, Map.keys(in_flight), state}
+
+  # a thread already followed is left as it is: a page joining it (host_thread
   # tracks on every join) is not progress — pages kept reopening a stuck
   # sub-agent and the watchdog never saw ten quiet minutes
   defp follow(%State{tracked: tracked} = state, kernel_thread_id) do
-    if Map.has_key?(tracked, kernel_thread_id) do
+    if MapSet.member?(tracked, kernel_thread_id) do
       state
     else
       :ok = PubSub.subscribe(Longx.PubSub, Longx.Agent.ThreadState.topic(kernel_thread_id))
       # (re)arm the watchdog with the current settings for the new thread
-      schedule_tick(%State{state | tracked: Map.put(tracked, kernel_thread_id, now())})
+      schedule_tick(%State{state | tracked: MapSet.put(tracked, kernel_thread_id)})
     end
   end
 
@@ -85,38 +132,41 @@ defmodule Longx.Projects.Tracker do
   # the row is failed here with the reason and the thread is idle again —
   # a crashed agent once left its thread "active" and refusing every message
   # until the next restart
-  def handle_info({:DOWN, ref, :process, _pid, reason}, %State{monitors: monitors} = state) do
-    case Map.pop(monitors, ref) do
-      {nil, _} -> :ok
-      {kernel_thread_id, _} -> agent_died(kernel_thread_id, reason)
-    end
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %State{in_flight: in_flight} = state) do
+    case Enum.find(in_flight, fn {_id, %{ref: r}} -> r == ref end) do
+      nil ->
+        {:noreply, state}
 
-    {:noreply, %State{state | monitors: Map.delete(monitors, ref)}}
+      {kernel_thread_id, _} ->
+        agent_died(kernel_thread_id, reason)
+        {:noreply, %State{state | in_flight: Map.delete(in_flight, kernel_thread_id)}}
+    end
   end
 
   def handle_info(_other, state), do: {:noreply, state}
 
   ## The agent process, watched while a turn runs
 
-  defp watch_agent(%State{monitors: monitors} = state, "turn/started", kernel_thread_id) do
-    case Longx.Agent.whereis(kernel_thread_id) do
-      pid when is_pid(pid) ->
-        if Enum.any?(monitors, fn {_ref, id} -> id == kernel_thread_id end) do
-          state
-        else
-          ref = Process.monitor(pid)
-          %State{state | monitors: Map.put(monitors, ref, kernel_thread_id)}
-        end
+  defp watch_agent(%State{in_flight: in_flight} = state, "turn/started", kernel_thread_id) do
+    case {Map.has_key?(in_flight, kernel_thread_id), Longx.Agent.whereis(kernel_thread_id)} do
+      {false, pid} when is_pid(pid) ->
+        entry = %{ref: Process.monitor(pid), last: now()}
+        %State{state | in_flight: Map.put(in_flight, kernel_thread_id, entry)}
 
-      nil ->
+      _ ->
         state
     end
   end
 
-  defp watch_agent(%State{monitors: monitors} = state, "turn/completed", kernel_thread_id) do
-    {gone, kept} = Enum.split_with(monitors, fn {_ref, id} -> id == kernel_thread_id end)
-    Enum.each(gone, fn {ref, _} -> Process.demonitor(ref, [:flush]) end)
-    %State{state | monitors: Map.new(kept)}
+  defp watch_agent(%State{in_flight: in_flight} = state, "turn/completed", kernel_thread_id) do
+    case Map.pop(in_flight, kernel_thread_id) do
+      {nil, _} ->
+        state
+
+      {%{ref: ref}, rest} ->
+        Process.demonitor(ref, [:flush])
+        %State{state | in_flight: rest}
+    end
   end
 
   defp watch_agent(state, _method, _kernel_thread_id), do: state
@@ -274,17 +324,34 @@ defmodule Longx.Projects.Tracker do
 
   ## Stall watchdog
 
-  defp check_stalls(%State{tracked: tracked, interrupted: interrupted} = state) do
+  # only the threads with a turn in flight are looked at: every thread ever
+  # hosted used to be a row lookup and a turn query per tick once it had
+  # been quiet for ten minutes
+  defp check_stalls(%State{in_flight: in_flight, interrupted: interrupted} = state) do
     stall_after = config(:stall_after, @default_stall_after)
     cutoff = now() - stall_after
 
     stalled =
-      for {kernel_thread_id, last} <- tracked,
+      for {kernel_thread_id, %{last: last}} <- in_flight,
           last < cutoff,
           not MapSet.member?(interrupted, kernel_thread_id),
           {:ok, %Thread{} = thread} <- [Projects.get_thread_by_kernel_id(kernel_thread_id)],
           turn <- running_turn(thread),
           do: {thread, turn}
+
+    # rows in progress that no agent this process watches — a thread whose
+    # turn began before a Tracker restart and never spoke since, a crash
+    # nobody saw: one query, settled through the not_running branch below
+    orphans =
+      for %Turn{} = turn <- Projects.list_all_turns_in_progress!(),
+          turn.started_at != nil and
+            DateTime.diff(DateTime.utc_now(), turn.started_at, :millisecond) > stall_after,
+          {:ok, %Thread{kernel_thread_id: id} = thread} <- [Ash.get(Thread, turn.thread_id)],
+          not Map.has_key?(in_flight, id),
+          not MapSet.member?(interrupted, id),
+          do: {thread, turn}
+
+    stalled = stalled ++ orphans
 
     interrupted =
       Enum.reduce(stalled, interrupted, fn {thread, turn}, acc ->
@@ -327,20 +394,30 @@ defmodule Longx.Projects.Tracker do
     thread |> Projects.list_turns!() |> Enum.filter(&(&1.status == :in_progress)) |> Enum.take(1)
   end
 
-  # any event on a thread is progress; a turn ending clears its interrupt mark
+  # any event on a thread with a turn in flight is progress; a turn ending
+  # clears its interrupt mark
   defp touch(state, _method, nil), do: state
 
-  defp touch(%State{tracked: tracked, interrupted: interrupted} = state, method, kernel_thread_id) do
+  defp touch(
+         %State{in_flight: in_flight, interrupted: interrupted} = state,
+         method,
+         kernel_thread_id
+       ) do
     interrupted =
       if method == "turn/completed",
         do: MapSet.delete(interrupted, kernel_thread_id),
         else: interrupted
 
-    %State{
-      state
-      | tracked: Map.replace(tracked, kernel_thread_id, now()),
-        interrupted: interrupted
-    }
+    in_flight =
+      case in_flight do
+        %{^kernel_thread_id => entry} ->
+          Map.put(in_flight, kernel_thread_id, %{entry | last: now()})
+
+        _ ->
+          in_flight
+      end
+
+    %State{state | in_flight: in_flight, interrupted: interrupted}
   end
 
   defp schedule_tick(%State{timer: timer} = state) do

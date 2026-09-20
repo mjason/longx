@@ -1062,7 +1062,9 @@ defmodule Longx.Projects do
     end
   end
 
-  defp agent_status(id) do
+  @doc "Whether the thread's agent runs a turn now (`{:running, kernel_turn_id}`), read off the process; `:idle` when none runs."
+  @spec agent_status(String.t()) :: :idle | {:running, String.t()}
+  def agent_status(id) do
     case Longx.Agent.whereis(id) do
       nil -> :idle
       _pid -> Longx.Agent.status(id)

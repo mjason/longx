@@ -196,7 +196,9 @@ defmodule Longx.Agent.Kernel.Calls do
     %{append(state, :user_message, input, nil) | pending_images: []}
   end
 
-  # every tool answered: the images, then the next step (GenServer.call has no continue from here)
+  # every tool answered: the images, then the next step — through the mailbox
+  # on purpose, so a steer or an interrupt that arrived while the tools ran
+  # is handled before the next model call, not after it started
   def continue_step(state) do
     Kernel.send(self(), :next_step)
     %{attach_images(state) | phase: :step}
