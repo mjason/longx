@@ -298,8 +298,20 @@ defmodule Longx.AI.Gateway do
   @output_only_part_keys ["logprobs"]
 
   defp strip_output_fields(input, %Target{chatgpt?: true}) do
-    # every item: a reasoning item carries a status too
-    Enum.map(input, fn item when is_map(item) ->
+    # every item: a reasoning item carries a status too — and the backend takes
+    # a reasoning item only as its own (`rs_` + ciphertext) with an empty
+    # `content`: another provider's readable reasoning ("Invalid
+    # 'input[1].content': array too long") goes, its own loses `content`
+    input
+    |> Enum.filter(fn
+      %{"type" => "reasoning"} = item -> own_reasoning?(item)
+      _ -> true
+    end)
+    |> Enum.map(fn
+      %{"type" => "reasoning"} = item -> Map.delete(item, "content")
+      item -> item
+    end)
+    |> Enum.map(fn item when is_map(item) ->
       item
       |> Map.drop(@output_only_item_keys)
       |> Map.update("content", nil, fn
@@ -314,6 +326,12 @@ defmodule Longx.AI.Gateway do
   end
 
   defp strip_output_fields(input, _target), do: input
+
+  defp own_reasoning?(%{"id" => @openai_reasoning_prefix <> _, "encrypted_content" => enc})
+       when is_binary(enc) and enc != "",
+       do: true
+
+  defp own_reasoning?(_item), do: false
 
   @doc "The degraded form of a request: no encrypted reasoning at all, not even the target's own."
   @spec strip_all_encrypted(map) :: map

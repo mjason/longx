@@ -671,7 +671,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     an output item carries from **every** replayed input item (`status`, `phase`, a
     part's `logprobs` — messages, calls and reasoning items all carry a `status`; the
     backend answers 400 "Unknown parameter: 'input[1].status'"; api.openai.com takes
-    them); `discover_models`
+    them) and keeps **no reasoning but the backend's own** (`rs_` + ciphertext, its
+    `content` dropped — the backend takes `content` only empty: "Invalid
+    'input[1].content': array too long"; another provider's readable reasoning on a
+    thread that ran there before goes whole). Checked against the real backend with
+    a real thread's mixed history (qwen / deepseek reasoning, uuids, statuses, calls)
+    and a two-step tool call; `discover_models`
     reads the backend's catalog (`GET /models?client_version=` → `models[]` with
     `slug`, `context_window`, `supported_reasoning_levels`, `visibility` — hidden ones
     left out) with the same headers. **Any provider's own list**: `discover_models/1`

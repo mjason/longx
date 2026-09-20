@@ -328,6 +328,55 @@ defmodule Longx.AI.GatewayTest do
       assert Enum.at(plain.body["input"], 1)["status"] == "completed"
     end
 
+    test "a ChatGPT-subscription target gets no reasoning but its own (summary + ciphertext, no content): another provider's readable reasoning is dropped whole — the backend takes `content` only empty" do
+      chatgpt = %Target{
+        @target
+        | kind: :openai,
+          chatgpt?: true,
+          account_id: "a",
+          base_url: "https://chatgpt.com/backend-api/codex"
+      }
+
+      body =
+        Map.put(@codex_body, "input", [
+          %{
+            "type" => "message",
+            "role" => "user",
+            "content" => [%{"type" => "input_text", "text" => "hi"}]
+          },
+          # qwen's reasoning, read on a thread that ran there before: text, no ciphertext
+          %{
+            "type" => "reasoning",
+            "id" => "msg_x-1",
+            "summary" => [],
+            "content" => [%{"type" => "reasoning_text", "text" => "thinking"}],
+            "status" => "completed"
+          },
+          # its own
+          %{
+            "type" => "reasoning",
+            "id" => "rs_1",
+            "summary" => [%{"type" => "summary_text", "text" => "s"}],
+            "content" => [],
+            "encrypted_content" => "enc",
+            "status" => "completed"
+          },
+          %{
+            "type" => "message",
+            "id" => "msg_1",
+            "role" => "assistant",
+            "status" => "completed",
+            "content" => [%{"type" => "output_text", "text" => "yo", "annotations" => []}]
+          }
+        ])
+
+      {:ok, up} = Gateway.prepare(body, chatgpt)
+      assert [%{"role" => "user"}, own, %{"role" => "assistant"}] = up.body["input"]
+      assert own["id"] == "rs_1" and own["encrypted_content"] == "enc"
+      refute Map.has_key?(own, "content")
+      refute Map.has_key?(own, "status")
+    end
+
     test "the hosted image_generation tool goes only to a model flagged for it; a stray one is dropped for the rest" do
       body =
         Map.put(@codex_body, "tools", [
