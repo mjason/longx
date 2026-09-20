@@ -769,6 +769,9 @@ defmodule Longx.Projects.ThreadsTest do
     {:ok, thread} = Projects.start_thread(project)
     {:ok, first} = Projects.send_message(thread, "hi")
     assert_eventually_ok(fn -> turn!(first.id).status == :completed end)
+    # a goal on the parent does not make a child's report a "goal continuation" row
+    {:ok, _} =
+      Agent.set_goal(thread.kernel_thread_id, %{"objective" => "find it", "status" => "paused"})
 
     assert {:ok, child_id} = Agent.spawn(thread.kernel_thread_id, "researcher", "look it up")
     assert [%Thread{kernel_thread_id: ^child_id} = child] = Projects.list_subagents!(thread.id)

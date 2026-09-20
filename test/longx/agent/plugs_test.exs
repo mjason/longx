@@ -311,6 +311,13 @@ defmodule Longx.Agent.PlugsTest do
       Step.new(phase: :turn_end, assigns: %{goal: goal}, state: state)
     end
 
+    test "the prompt reserves goals for what the person asked to pursue: delegating to agents is none" do
+      step = Goal.call(Step.new(phase: :request), Goal.init([]))
+      prompt = Enum.join(step.instructions, "\n")
+      assert prompt =~ "only when the person"
+      assert prompt =~ "not a reason for a goal"
+    end
+
     test "an active goal continues the turn with the objective; a complete or paused one does not" do
       active = %{"objective" => "ship it", "status" => "active"}
       step = Goal.call(goal_step(active), Goal.init([]))

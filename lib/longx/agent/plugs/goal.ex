@@ -18,7 +18,7 @@ defmodule Longx.Agent.Plugs.Goal do
   instructions """
   # Goals
 
-  When the person asks for something to be pursued until done (not a single task), create a goal with `create_goal`: from then on every time you finish a turn without completing it, you are handed the objective again and continue. Call `update_goal` with `status: complete` when the objective is achieved, `blocked` (with a `reason`) when you cannot make progress without the person. Waiting on an agent you spawned is not blocked: end your turn, its report wakes you and the goal goes on. Do not create a goal for an ordinary request.
+  Create a goal with `create_goal` only when the person asks for something to be pursued until done on your own — "keep going until the tests pass", "don't stop until it works" — or asks for a goal by name: from then on every time you finish a turn without completing it, you are handed the objective again and continue. A request you can answer in one turn, a task you delegate to your team, a conversation with the person: none of these is a goal. Delegating is not a reason for a goal either — an agent's report wakes you by itself, goal or not. Call `update_goal` with `status: complete` when the objective is achieved, `blocked` (with a `reason`) when you cannot make progress without the person. Waiting on an agent you spawned is not blocked: end your turn, its report wakes you and the goal goes on.
   """
 
   tool :create_goal,

@@ -423,7 +423,7 @@ describe("ThreadPage", () => {
         params: { threadId: "thr_1", turnId: null, goal: { threadId: "thr_1", objective: "让测试全绿", status: "active", tokenBudget: 50000, tokensUsed: 12500, timeUsedSeconds: 125, createdAt: 1, updatedAt: 2 } },
       });
     });
-    const bar = await screen.findByTestId("goal-bar");
+    let bar = await screen.findByTestId("goal-bar");
     expect(bar).toHaveTextContent("让测试全绿");
     expect(bar).toHaveTextContent("进行中");
     expect(bar).toHaveTextContent("12.5k / 50k");
@@ -459,6 +459,23 @@ describe("ThreadPage", () => {
       });
     });
     await waitFor(() => expect(bar).toHaveTextContent("需要 COROS 的登录"));
+    // done: the bar leaves (a finished goal stayed above every later message)
+    act(() => {
+      channel.deliver("event", {
+        seq: 8,
+        method: "thread/goal/updated",
+        params: { threadId: "thr_1", turnId: null, goal: { threadId: "thr_1", objective: "让测试全绿", status: "complete", tokenBudget: 50000, tokensUsed: 12500, timeUsedSeconds: 125, createdAt: 1, updatedAt: 2 } },
+      });
+    });
+    await waitFor(() => expect(screen.queryByTestId("goal-bar")).not.toBeInTheDocument());
+    act(() => {
+      channel.deliver("event", {
+        seq: 9,
+        method: "thread/goal/updated",
+        params: { threadId: "thr_1", turnId: null, goal: { threadId: "thr_1", objective: "让测试全绿", status: "blocked", reason: "需要 COROS 的登录", tokenBudget: 50000, tokensUsed: 12500, timeUsedSeconds: 125, createdAt: 1, updatedAt: 2 } },
+      });
+    });
+    bar = await screen.findByTestId("goal-bar");
     await user.click(within(bar).getByRole("button", { name: "继续" }));
     await waitFor(() => expect(setGoal).toHaveBeenLastCalledWith(expect.objectContaining({ input: { threadId: "t1", status: "active" } })));
 
@@ -477,7 +494,7 @@ describe("ThreadPage", () => {
 
     await user.click(within(bar).getByRole("button", { name: "清除" }));
     await waitFor(() => expect(clearGoal).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1" } })));
-    act(() => channel.deliver("event", { seq: 8, method: "thread/goal/cleared", params: { threadId: "thr_1" } }));
+    act(() => channel.deliver("event", { seq: 10, method: "thread/goal/cleared", params: { threadId: "thr_1" } }));
     await waitFor(() => expect(screen.queryByTestId("goal-bar")).not.toBeInTheDocument());
 
     // /goal opens the dialog for a new goal

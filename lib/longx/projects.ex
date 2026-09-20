@@ -941,10 +941,15 @@ defmodule Longx.Projects do
   defp do_record_external_turn(%Thread{} = thread, kernel_turn_id, opts) do
     goal = Longx.Agent.ThreadState.Store.meta(thread.kernel_thread_id).goal
 
+    # who started it: a watch, an agent (a child's report, another session's
+    # answer — the goal set on this thread has nothing to do with it; every
+    # report once read "（目标续跑）" and the person asked why the goal kept
+    # starting), else the kernel by itself for its goal
     text =
       case {Keyword.get(opts, :from), goal} do
         {"watch-" <> name, _} -> "（定时触发）" <> name
-        {_, %{"objective" => objective}} when is_binary(objective) -> "（目标续跑）" <> objective
+        {from, _} when is_binary(from) -> "（agent 消息）"
+        {nil, %{"objective" => objective}} when is_binary(objective) -> "（目标续跑）" <> objective
         _ -> "（agent 消息）"
       end
 

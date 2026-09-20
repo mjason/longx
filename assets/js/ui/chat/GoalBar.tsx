@@ -84,10 +84,14 @@ export function GoalProvider({
 
 type Actions = ReturnType<typeof useGoalActions>;
 
-/** The thread's goal above the chat; nothing when there is none. */
+/**
+ * The thread's goal above the chat; nothing when there is none — or when it
+ * is done: a finished goal has nothing left to say, and one once sat above
+ * every later message of a long conversation.
+ */
 export function GoalBar() {
   const ctx = useGoalDialog();
-  if (!ctx || !ctx.goal || !ctx.threadId) return null;
+  if (!ctx || !ctx.goal || !ctx.threadId || ctx.goal.status === "complete") return null;
   return (
     <GoalBarView goal={ctx.goal} onEdit={ctx.open} actions={ctx.actions} />
   );

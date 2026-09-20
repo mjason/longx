@@ -87,8 +87,11 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   - `Longx.Projects.Tracker` (in the tree) follows every thread's `"thread:<id>"` topic:
     fills `status` / `completed_at` / `usage` from `turn/completed`, the
     thread `preview` from the first user message, gives a turn the kernel started by itself
-    (a goal continuation, a sub-agent's report waking an idle parent) a row via
-    `record_external_turn/2`, turns a parent's first `subAgentActivity` into a Thread row
+    (a sub-agent's report waking an idle parent, another session's answer, a watch) a
+    row via `record_external_turn/2` — named by who started it: `（定时触发）<name>` for
+    a watch, `（agent 消息）` for an agent, `（目标续跑）<objective>` only for a turn
+    nobody signed while a goal is set (every child's report once read 目标续跑 whenever
+    the parent had a goal, and the person asked why the goal kept starting) —, turns a parent's first `subAgentActivity` into a Thread row
     under it (`parent_thread_id`, `agent_path` `/root/<name>`; hidden from the project's
     list, `list_subagents/1`), pushes the notify feed, and runs the **stall watchdog** (`running_threads/0` — the welcome page, the notify join — counts
     a root thread as running when one of its sub-agents is at work too, `working` naming
@@ -615,8 +618,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `test/longx/watches/{watches,plug}_test`, `hooks_controller_test`,
     `watches_rpc_test`, the loader's watches test.
   - **Goal mode** (`Plugs.Goal`, `Kernel.Goal`): `create_goal` / `update_goal` / `get_goal`;
-    with the goal `active` the `:turn_end` phase continues the turn with a step naming the
-    objective until the model marks it `complete` / `blocked`, the token budget is spent
+    the prompt reserves a goal for what the person asked to pursue until done ("keep
+    going until…", or a goal by name) — a one-turn request, a delegated task, a
+    conversation are none (a coordinator once made a goal out of "have the researcher
+    and coder look into it"); with the goal `active` the `:turn_end` phase continues
+    the turn with a step naming the objective until the model marks it `complete` /
+    `blocked`, the token budget is spent
     or `max_rounds:` (8) continuations happened (then `blocked`, never a loop) — **not
     while a child works**: its report starts the next turn by itself (a parent waiting
     on coder was continued eight times saying "waiting" and blocked). The continuation
@@ -626,7 +633,8 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     recognised by their text) instead of the person's bubble. A blocked goal carries
     `"reason"` (`rounds` / `budget` from the plug, the model's sentence through
     `update_goal`'s `reason`), shown beside 卡住了.
-    `Agent.set_goal/2` (RPC `set_goal` / `clear_goal`, the `/goal` command, `GoalBar`)
+    `Agent.set_goal/2` (RPC `set_goal` / `clear_goal`, the `/goal` command, `GoalBar` —
+    gone once the goal is `complete`; a blocked one stays with its reason until cleared)
     sets the same goal; `thread/goal/updated` is the view's `goal`.
   - **Bytes that are not UTF-8 never reach the view or the transcript** — `Longx.Agent.Text`
     (`utf8/1`, `deep/1`, U+FFFD per invalid sequence) at three doors: a shell chunk and the
