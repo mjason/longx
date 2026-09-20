@@ -685,7 +685,11 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     a key from elsewhere is dropped otherwise. A content-policy refusal ("Invalid
     prompt: your prompt was flagged as potentially violating our usage policy", relayed
     by a gateway as a 502) is **final** like a quota refusal — no retry of the same
-    prompt; `Model.policy?/1`; `discover_models`
+    prompt; `Model.policy?/1`. The Codex backend also gets the Codex CLI's session
+    headers `session-id` / `thread-id` (the thread): the backend routes a session to
+    the shard holding its prompt cache — measured with identical requests: without
+    them a repeat hit the cache every other time, with them every time after the
+    first (a two-turn kernel test: turn 2 cached 24,064 of 24,653); `discover_models`
     reads the backend's catalog (`GET /models?client_version=` → `models[]` with
     `slug`, `context_window`, `supported_reasoning_levels`, `visibility` — hidden ones
     left out) with the same headers. **Any provider's own list**: `discover_models/1`

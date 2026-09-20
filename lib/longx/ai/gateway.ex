@@ -56,6 +56,8 @@ defmodule Longx.AI.Gateway do
   """
   @spec prepare(term, Target.t()) :: {:ok, Upstream.t()} | {:error, :invalid_request}
   def prepare(%{"input" => input} = body, %Target{} = target) when is_list(input) do
+    thread = thread_of(body)
+
     body =
       body
       |> put_prompt_cache_key(target)
@@ -88,7 +90,7 @@ defmodule Longx.AI.Gateway do
            {"authorization", "Bearer " <> target.api_key},
            {"content-type", "application/json"},
            {"accept", "text/event-stream"}
-         ] ++ chatgpt_headers(target),
+         ] ++ chatgpt_headers(target, thread),
        body: body,
        provider_slug: target.provider_slug,
        kind: target.kind,
@@ -124,14 +126,26 @@ defmodule Longx.AI.Gateway do
 
   defp shape_chatgpt(body, _target), do: body
 
-  defp chatgpt_headers(%{chatgpt?: true} = target) do
+  # the session headers the Codex CLI sends (`session-id`, `thread-id`): the backend
+  # routes a session to the shard holding its prompt cache — measured 2026-09-20:
+  # without them an identical request hit the cache every other time, with them
+  # every time after the first
+  defp chatgpt_headers(%{chatgpt?: true} = target, thread) do
     [
       {"openai-beta", "responses=experimental"},
       {"originator", "codex_cli_rs"}
-    ] ++ if(target.account_id, do: [{"chatgpt-account-id", target.account_id}], else: [])
+    ] ++
+      if(target.account_id, do: [{"chatgpt-account-id", target.account_id}], else: []) ++
+      if(thread, do: [{"session-id", thread}, {"thread-id", thread}], else: [])
   end
 
-  defp chatgpt_headers(_target), do: []
+  defp chatgpt_headers(_target, _thread), do: []
+
+  defp thread_of(%{"client_metadata" => %{"thread_id" => thread}})
+       when is_binary(thread) and thread != "",
+       do: thread
+
+  defp thread_of(_body), do: nil
 
   # dev aid: `config :longx, Longx.AI.Gateway, dump_requests_to: dir` writes every
   # prepared request as JSON (what the model actually sees — the way to check

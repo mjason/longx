@@ -269,6 +269,10 @@ defmodule Longx.AI.GatewayTest do
       assert {"chatgpt-account-id", "acct-123"} in up.headers
       assert {"openai-beta", "responses=experimental"} in up.headers
       assert {"originator", "codex_cli_rs"} in up.headers
+      # the session headers the Codex CLI sends: the backend routes a session to the
+      # shard holding its prompt cache (measured: without them a repeat hit half the time)
+      assert {"session-id", "thread-1"} in up.headers
+      assert {"thread-id", "thread-1"} in up.headers
       assert up.body["store"] == false
       assert up.body["include"] == ["reasoning.encrypted_content"]
       # an ordinary target gets none of it
