@@ -66,6 +66,109 @@ defmodule LongxWeb.CredentialsRpcTest do
     assert Credentials.list() == []
   end
 
+  test "the device-code login on the wire: begin gives the code and the page, polls say pending then done; the chatgpt preset makes the credential and its provider",
+       %{conn: conn} do
+    bypass = Bypass.open()
+    base = "http://localhost:#{bypass.port}"
+
+    # the preset's credential, pointed at the fake vendor for the test
+    assert %{
+             "success" => true,
+             "data" => %{"providerId" => provider_id, "credentialId" => cred_id}
+           } =
+             rpc(conn, "apply_preset", %{
+               "fields" => ["providerId", "credentialId"],
+               "input" => %{"slug" => "chatgpt"}
+             })
+
+    {:ok, cred} = Credentials.fetch("chatgpt")
+    assert cred.id == cred_id
+    assert {:ok, %{credential_id: ^cred_id}} = Longx.AI.get_provider_by_slug("chatgpt")
+    assert is_binary(provider_id)
+
+    {:ok, _} =
+      Credentials.update_credential(cred, %{
+        authorize_url: base <> "/oauth/authorize",
+        token_url: base <> "/oauth/token",
+        allowed_hosts: ["localhost"]
+      })
+
+    Bypass.expect_once(bypass, "POST", "/api/accounts/deviceauth/usercode", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.send_resp(
+        200,
+        Jason.encode!(%{device_auth_id: "d1", user_code: "WXYZ-1234", interval: 2})
+      )
+    end)
+
+    assert %{
+             "success" => true,
+             "data" => %{
+               "state" => state,
+               "userCode" => "WXYZ-1234",
+               "verificationUrl" => url,
+               "interval" => 2
+             }
+           } =
+             rpc(conn, "credential_device_begin", %{
+               "fields" => ["state", "userCode", "verificationUrl", "interval"],
+               "input" => %{"id" => cred_id}
+             })
+
+    assert url == base <> "/codex/device"
+
+    Bypass.expect_once(
+      bypass,
+      "POST",
+      "/api/accounts/deviceauth/token",
+      &Plug.Conn.send_resp(&1, 403, "")
+    )
+
+    assert %{"success" => true, "data" => %{"status" => "pending"}} =
+             rpc(conn, "credential_device_poll", %{
+               "fields" => ["status", "message"],
+               "input" => %{"state" => state}
+             })
+
+    Bypass.expect_once(bypass, "POST", "/api/accounts/deviceauth/token", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.send_resp(
+        200,
+        Jason.encode!(%{authorization_code: "ac", code_verifier: "v", code_challenge: "c"})
+      )
+    end)
+
+    Bypass.expect_once(bypass, "POST", "/oauth/token", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.send_resp(
+        200,
+        Jason.encode!(%{access_token: "at", refresh_token: "rt", expires_in: 3600})
+      )
+    end)
+
+    assert %{"success" => true, "data" => %{"status" => "ok"}} =
+             rpc(conn, "credential_device_poll", %{
+               "fields" => ["status", "message"],
+               "input" => %{"state" => state}
+             })
+
+    assert %{
+             "success" => true,
+             "data" => [%{"name" => "chatgpt", "status" => "ready", "deviceFlow" => "openai"}]
+           } =
+             rpc(conn, "list_credentials", %{"fields" => ["name", "status", "deviceFlow"]})
+
+    # a spent state: an error on it
+    assert %{"success" => false, "errors" => [%{"fields" => ["state"]} | _]} =
+             rpc(conn, "credential_device_poll", %{
+               "fields" => ["status"],
+               "input" => %{"state" => state}
+             })
+  end
+
   test "an OAuth2 credential: the redirect URI to register, the login URL, a refresh", %{
     conn: conn
   } do

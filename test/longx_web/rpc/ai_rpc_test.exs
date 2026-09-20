@@ -156,7 +156,8 @@ defmodule LongxWeb.AiRpcTest do
              "glm",
              "bailian-token-plan-personal",
              "bailian-token-plan-team",
-             "openai"
+             "openai",
+             "chatgpt"
            ]
 
     [deepseek | _] = presets

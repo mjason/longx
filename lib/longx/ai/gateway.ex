@@ -74,16 +74,18 @@ defmodule Longx.AI.Gateway do
       |> drop_hosted_calls(target)
       |> put_max_output_tokens(target)
       |> put_reasoning_summary(target)
+      |> shape_chatgpt(target)
       |> dump_request()
 
     {:ok,
      %Upstream{
        url: String.trim_trailing(target.base_url, "/") <> "/responses",
-       headers: [
-         {"authorization", "Bearer " <> target.api_key},
-         {"content-type", "application/json"},
-         {"accept", "text/event-stream"}
-       ],
+       headers:
+         [
+           {"authorization", "Bearer " <> target.api_key},
+           {"content-type", "application/json"},
+           {"accept", "text/event-stream"}
+         ] ++ chatgpt_headers(target),
        body: body,
        provider_slug: target.provider_slug,
        kind: target.kind,
@@ -93,6 +95,27 @@ defmodule Longx.AI.Gateway do
   end
 
   def prepare(_body, _target), do: {:error, :invalid_request}
+
+  # the Codex backend (a ChatGPT subscription) keeps nothing server-side: every
+  # request says `store: false` and asks the reasoning back encrypted so the next
+  # step can replay it; the headers are what the Codex CLI sends — the backend
+  # answers only a known originator
+  defp shape_chatgpt(body, %{chatgpt?: true}) do
+    body
+    |> Map.put("store", false)
+    |> Map.put("include", ["reasoning.encrypted_content"])
+  end
+
+  defp shape_chatgpt(body, _target), do: body
+
+  defp chatgpt_headers(%{chatgpt?: true} = target) do
+    [
+      {"openai-beta", "responses=experimental"},
+      {"originator", "codex_cli_rs"}
+    ] ++ if(target.account_id, do: [{"chatgpt-account-id", target.account_id}], else: [])
+  end
+
+  defp chatgpt_headers(_target), do: []
 
   # dev aid: `config :longx, Longx.AI.Gateway, dump_requests_to: dir` writes every
   # prepared request as JSON (what the model actually sees — the way to check

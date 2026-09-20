@@ -16,8 +16,12 @@ defmodule Longx.Credentials.Logins do
 
   @type login :: %{
           required(:credential_id) => String.t(),
-          required(:verifier) => String.t() | nil,
-          required(:redirect_uri) => String.t(),
+          optional(:verifier) => String.t() | nil,
+          optional(:redirect_uri) => String.t(),
+          # a device-code login (Longx.Credentials.OAuth.device_begin/2)
+          optional(:device_auth_id) => String.t(),
+          optional(:user_code) => String.t(),
+          optional(:issuer) => String.t(),
           optional(:notify) => pid | nil,
           optional(:thread_id) => String.t() | nil,
           optional(:at) => integer
@@ -26,6 +30,15 @@ defmodule Longx.Credentials.Logins do
   @doc "Remembers a login under its state."
   @spec put(String.t(), login) :: :ok
   def put(state, %{} = login), do: GenServer.call(@table, {:put, state, login})
+
+  @doc "Reads the login for a state without taking it (a device-code poll); `:error` when unknown or expired."
+  @spec get(String.t()) :: {:ok, login} | :error
+  def get(state) do
+    case :ets.lookup(@table, state) do
+      [{_, login}] -> if(fresh?(login), do: {:ok, login}, else: :error)
+      [] -> :error
+    end
+  end
 
   @doc "Takes the login for a state (once); `:error` for an unknown or expired one."
   @spec take(String.t()) :: {:ok, login} | :error

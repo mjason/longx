@@ -34,6 +34,8 @@ defmodule Longx.AI.Preset do
                       key_url: [type: :string, allow_nil?: false],
                       docs_url: [type: :string, allow_nil?: false],
                       installed: [type: :boolean, allow_nil?: false],
+                      # the key is a login (a subscription), not a string
+                      credential: [type: :boolean, allow_nil?: false],
                       provider_id: [type: :uuid],
                       models: [type: {:array, :map}, allow_nil?: false]
                     ]
@@ -52,7 +54,9 @@ defmodule Longx.AI.Preset do
     action :apply_preset, :map do
       constraints fields: [
                     provider_id: [type: :uuid, allow_nil?: false],
-                    model_ids: [type: {:array, :uuid}, allow_nil?: false]
+                    model_ids: [type: {:array, :uuid}, allow_nil?: false],
+                    # the OAuth2 credential a subscription preset made (the login comes next)
+                    credential_id: [type: :uuid]
                   ]
 
       argument :slug, :string, allow_nil?: false
@@ -71,8 +75,13 @@ defmodule Longx.AI.Preset do
           |> put_if(:make_default, args[:make_default])
 
         case Presets.apply(args.slug, opts) do
-          {:ok, %{provider: provider, models: models}} ->
-            {:ok, %{provider_id: provider.id, model_ids: Enum.map(models, & &1.id)}}
+          {:ok, %{provider: provider, models: models, credential: credential}} ->
+            {:ok,
+             %{
+               provider_id: provider.id,
+               model_ids: Enum.map(models, & &1.id),
+               credential_id: credential && credential.id
+             }}
 
           {:error, :unknown_preset} ->
             argument_error(:slug, "没有这个模版")

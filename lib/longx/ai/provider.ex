@@ -80,6 +80,7 @@ defmodule Longx.AI.Provider do
         :kind,
         :base_url,
         :api_key,
+        :credential_id,
         :supports_hosted_web_search,
         :request_timeout_ms,
         :max_concurrent_requests
@@ -96,6 +97,7 @@ defmodule Longx.AI.Provider do
         :kind,
         :base_url,
         :api_key,
+        :credential_id,
         :supports_hosted_web_search,
         :request_timeout_ms,
         :max_concurrent_requests
@@ -146,6 +148,11 @@ defmodule Longx.AI.Provider do
 
     attribute :api_key, :string, sensitive?: true
 
+    # an OAuth2 credential (Longx.Credentials) standing in for the key: the
+    # provider's requests carry its access token — a ChatGPT subscription
+    # through the Codex backend; the credential refreshes itself
+    attribute :credential_id, :uuid, public?: true
+
     # :openai is the one provider whose reasoning items carry real ciphertext
     # that only it can read; every other Responses API host is :openai_compatible
     attribute :kind, :atom do
@@ -190,7 +197,9 @@ defmodule Longx.AI.Provider do
   end
 
   calculations do
-    calculate :has_api_key?, :boolean, expr(not is_nil(encrypted_api_key)) do
+    calculate :has_api_key?,
+              :boolean,
+              expr(not is_nil(encrypted_api_key) or not is_nil(credential_id)) do
       public? true
     end
   end

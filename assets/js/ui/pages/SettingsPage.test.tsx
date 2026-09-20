@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
-import { ok, rpcMock, socketMock } from "@/ui/test-mocks";
+import { ok, rpcMock, socketMock, provider, credential } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () =>
@@ -37,6 +37,12 @@ import {
   setSentryDsn,
   sentryTest,
   killCommand,
+  listProviders,
+  listCredentials,
+  credentialDeviceBegin,
+  credentialDevicePoll,
+  credentialLoginUrl,
+  credentialCompleteUrl,
 } from "@/ash_rpc";
 import { browserIdle, dependencyReport, dependencyTool, model, upgradeIdle } from "@/ui/test-mocks";
 import { page } from "@/core/upgrade";
@@ -163,10 +169,10 @@ describe("SettingsPage", () => {
     await user.click(screen.getByRole("button", { name: "添加 Provider" }));
     await user.click(
       within(await screen.findByRole("dialog")).getByRole("button", {
-        name: /OpenAI/,
+        name: /OpenAI(?!（)/,
       }),
     );
-    const dialog = await screen.findByRole("dialog", { name: /OpenAI/ });
+    const dialog = await screen.findByRole("dialog", { name: /OpenAI(?!（)/ });
     // where to get a key, the recommended models pre-checked, the rest not
     expect(
       within(dialog).getByRole("link", { name: /获取 API Key/ }),
@@ -223,6 +229,53 @@ describe("SettingsPage", () => {
         }),
       ),
     );
+  });
+
+  test("models: the ChatGPT-subscription template needs no key — it makes the credential and opens the device-code login; the card shows the login state and offers the browser way with a pasted address", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    // after the template is applied the provider and its credential exist
+    vi.mocked(listProviders).mockResolvedValue(ok([provider(1), provider(3, { name: "OpenAI（ChatGPT 订阅）", slug: "chatgpt", kind: "openai", baseUrl: "https://chatgpt.com/backend-api/codex", hasApiKey: true, credentialId: "cred-chatgpt" })]) as never);
+    vi.mocked(listCredentials).mockResolvedValue(ok([credential("chatgpt", { id: "cred-chatgpt", kind: "oauth2", status: "needs_login", hasSecret: false, clientId: "app_x", authorizeUrl: "https://auth.openai.com/oauth/authorize", tokenUrl: "https://auth.openai.com/oauth/token", deviceFlow: "openai", redirectUri: "http://localhost:1455/auth/callback" })]) as never);
+    try {
+      renderAt("/settings/models");
+      await screen.findByTestId("provider-p1");
+      await user.click(screen.getByRole("button", { name: "添加 Provider" }));
+      await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: /ChatGPT 订阅/ }));
+      const dialog = await screen.findByRole("dialog", { name: /ChatGPT 订阅/ });
+      expect(within(dialog).queryByLabelText("API Key")).not.toBeInTheDocument();
+      expect(dialog).toHaveTextContent("登录");
+      await user.click(within(dialog).getByRole("button", { name: "添加" }));
+      await waitFor(() => expect(applyPreset).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ slug: "chatgpt" }) })));
+
+      // the login dialog opens by itself with the device code and where to type it
+      const login = await screen.findByRole("dialog", { name: /登录 ChatGPT/ });
+      await waitFor(() => expect(credentialDeviceBegin).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "cred-chatgpt" } })));
+      expect(await within(login).findByText("WXYZ-1234")).toBeInTheDocument();
+      expect(within(login).getByRole("link", { name: /auth.openai.com\/codex\/device/ })).toHaveAttribute("href", "https://auth.openai.com/codex/device");
+      // the browser way is there too: the login page opens, the pasted address completes it
+      await user.click(within(login).getByRole("button", { name: "改用浏览器登录" }));
+      await waitFor(() => expect(credentialLoginUrl).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ id: "cred-chatgpt" }) })));
+      await user.type(within(login).getByLabelText("登录后的地址"), "http://localhost:1455/auth/callback?code=c1&state=s1");
+      await user.click(within(login).getByRole("button", { name: "完成登录" }));
+      await waitFor(() => expect(credentialCompleteUrl).toHaveBeenCalledWith(expect.objectContaining({ input: { url: "http://localhost:1455/auth/callback?code=c1&state=s1" } })));
+
+      // it polls; once the vendor says done the credential is refreshed and the dialog says so
+      vi.mocked(credentialDevicePoll).mockResolvedValue(ok({ status: "ok", message: null }) as never);
+      await waitFor(() => expect(credentialDevicePoll).toHaveBeenCalledWith(expect.objectContaining({ input: { state: "dev-state" } })), { timeout: 4000 });
+      vi.mocked(listCredentials).mockResolvedValue(ok([credential("chatgpt", { id: "cred-chatgpt", kind: "oauth2", status: "ready", hasSecret: false, deviceFlow: "openai" })]) as never);
+      await waitFor(() => expect(login).toHaveTextContent("已登录"), { timeout: 4000 });
+      await user.click(within(login).getByRole("button", { name: "完成" }));
+
+      // the card: the login state instead of a key badge, and the login from its menu
+      const card = screen.getByTestId("provider-p3");
+      await waitFor(() => expect(card).toHaveTextContent("已登录"));
+      await user.click(within(card).getByRole("button", { name: /的操作/ }));
+      expect(await screen.findByRole("menuitem", { name: "登录 ChatGPT" })).toBeInTheDocument();
+    } finally {
+      vi.mocked(listProviders).mockResolvedValue(ok([provider(1), provider(2)]) as never);
+      vi.mocked(listCredentials).mockResolvedValue(ok([credential("svc")]) as never);
+    }
   });
 
   test("models: a reasoning level the list does not know is typed and added", async () => {

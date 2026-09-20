@@ -253,6 +253,31 @@ defmodule Longx.AI.GatewayTest do
       assert {"accept", "text/event-stream"} in up.headers
     end
 
+    test "a ChatGPT-subscription target: the codex backend's headers, store false, the encrypted reasoning asked back" do
+      chatgpt = %Target{
+        @target
+        | kind: :openai,
+          chatgpt?: true,
+          account_id: "acct-123",
+          base_url: "https://chatgpt.com/backend-api/codex",
+          api_key: "jwt"
+      }
+
+      {:ok, up} = Gateway.prepare(@codex_body, chatgpt)
+      assert up.url == "https://chatgpt.com/backend-api/codex/responses"
+      assert {"authorization", "Bearer jwt"} in up.headers
+      assert {"chatgpt-account-id", "acct-123"} in up.headers
+      assert {"openai-beta", "responses=experimental"} in up.headers
+      assert {"originator", "codex_cli_rs"} in up.headers
+      assert up.body["store"] == false
+      assert up.body["include"] == ["reasoning.encrypted_content"]
+      # an ordinary target gets none of it
+      {:ok, plain} = Gateway.prepare(Map.drop(@codex_body, ["store", "include"]), @target)
+      refute Map.has_key?(plain.body, "store")
+      refute Map.has_key?(plain.body, "include")
+      refute Enum.any?(plain.headers, &(elem(&1, 0) in ["chatgpt-account-id", "originator"]))
+    end
+
     test "handles a base_url with a trailing slash" do
       {:ok, up} =
         Gateway.prepare(@codex_body, %Target{@target | base_url: "https://x.example/v1/"})

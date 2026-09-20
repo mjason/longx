@@ -52,15 +52,16 @@ defmodule Longx.AI.Presets do
         }
 
   @type preset :: %{
-          slug: String.t(),
-          name: String.t(),
-          kind: :openai | :openai_compatible,
-          base_url: String.t(),
-          supports_hosted_web_search: boolean,
-          key_env: String.t(),
-          key_url: String.t(),
-          docs_url: String.t(),
-          models: [preset_model]
+          required(:slug) => String.t(),
+          required(:name) => String.t(),
+          required(:kind) => :openai | :openai_compatible,
+          required(:base_url) => String.t(),
+          required(:supports_hosted_web_search) => boolean,
+          required(:key_env) => String.t(),
+          required(:key_url) => String.t(),
+          required(:docs_url) => String.t(),
+          optional(:credential) => boolean,
+          required(:models) => [preset_model]
         }
 
   @openai_levels ~w(low medium high xhigh max)
@@ -244,8 +245,68 @@ defmodule Longx.AI.Presets do
             recommended: recommended
           }
         end
+    },
+    %{
+      slug: "chatgpt",
+      name: "OpenAI（ChatGPT 订阅）",
+      kind: :openai,
+      base_url: "https://chatgpt.com/backend-api/codex",
+      supports_hosted_web_search: false,
+      key_env: "",
+      key_url: "https://chatgpt.com/",
+      docs_url: "https://developers.openai.com/codex",
+      # the key is a login, not a string: `credential: true` tells the page and `apply/2`
+      credential: true,
+      models:
+        for {upstream_id, name, effort, levels, recommended} <- [
+              {"gpt-5.6-sol", "GPT-5.6 Sol", "low", @openai_levels ++ ["ultra"], true},
+              {"gpt-5.6-terra", "GPT-5.6 Terra", "medium", @openai_levels ++ ["ultra"], true},
+              {"gpt-5.6-luna", "GPT-5.6 Luna", "medium", @openai_levels, false},
+              {"gpt-6-astra", "GPT-6 Astra", "low", @openai_levels ++ ["ultra"], false},
+              {"gpt-5.5", "GPT-5.5", "medium", ~w(low medium high xhigh), false}
+            ] do
+          %{
+            upstream_id: upstream_id,
+            slug: upstream_id,
+            name: name,
+            context_window: 272_000,
+            reasoning_levels: levels,
+            reasoning_effort: effort,
+            image: true,
+            recommended: recommended
+          }
+        end
     }
   ]
+
+  # A ChatGPT subscription through the Codex backend: no API key — the Codex
+  # CLI's own OAuth2 client (public, PKCE, fixed by OpenAI), logged in with
+  # the device code (no port, no redirect to catch) or the browser (the
+  # person pastes the localhost:1455 address back). The credential is the
+  # provider's key (`credential_id`); it refreshes itself. The originator
+  # is the Codex CLI's: the backend serves only clients it knows.
+  @chatgpt_credential %{
+    name: "chatgpt",
+    label: "ChatGPT（Codex）",
+    allowed_hosts: ["chatgpt.com", "auth.openai.com"],
+    client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
+    authorize_url: "https://auth.openai.com/oauth/authorize",
+    token_url: "https://auth.openai.com/oauth/token",
+    scopes: "openid profile email offline_access",
+    pkce: true,
+    fixed_client: true,
+    device_flow: :openai,
+    redirect_uri: "http://localhost:1455/auth/callback",
+    authorize_params: %{
+      "id_token_add_organizations" => "true",
+      "codex_cli_simplified_flow" => "true",
+      "originator" => "codex_cli_rs"
+    }
+  }
+
+  @doc "The OAuth2 credential the `chatgpt` preset makes (tests, the settings page's words)."
+  @spec chatgpt_credential() :: map
+  def chatgpt_credential, do: @chatgpt_credential
 
   @doc "Every preset, in the order the settings page shows them."
   @spec all() :: [preset]
@@ -271,6 +332,7 @@ defmodule Longx.AI.Presets do
 
       preset
       |> Map.put(:installed, provider != nil)
+      |> Map.put(:credential, Map.get(preset, :credential, false))
       |> Map.put(:provider_id, provider && provider.id)
       |> Map.put(
         :models,
@@ -314,12 +376,23 @@ defmodule Longx.AI.Presets do
   def apply(slug, opts \\ []) do
     with {:ok, preset} <- fetch_preset(slug),
          {:ok, chosen} <- chosen_models(preset, Keyword.get(opts, :models, :recommended)),
-         {:ok, provider} <- upsert_provider(preset, Keyword.get(opts, :api_key)),
+         {:ok, credential} <- upsert_credential(preset),
+         {:ok, provider} <- upsert_provider(preset, Keyword.get(opts, :api_key), credential),
          {:ok, models} <- upsert_models(provider, chosen),
          :ok <- maybe_make_default(models, Keyword.get(opts, :make_default, false)) do
-      {:ok, %{provider: provider, models: models}}
+      {:ok, %{provider: provider, models: models, credential: credential}}
     end
   end
+
+  # a preset whose key is a login makes (or keeps) its OAuth2 credential
+  defp upsert_credential(%{credential: true}) do
+    case Longx.Credentials.fetch(@chatgpt_credential.name) do
+      {:ok, cred} -> {:ok, cred}
+      {:error, _} -> Longx.Credentials.create_oauth2(@chatgpt_credential)
+    end
+  end
+
+  defp upsert_credential(_preset), do: {:ok, nil}
 
   defp fetch_preset(slug) do
     case fetch(slug) do
@@ -342,13 +415,15 @@ defmodule Longx.AI.Presets do
     end)
   end
 
-  defp upsert_provider(preset, api_key) do
-    facts = %{
-      name: preset.name,
-      kind: preset.kind,
-      base_url: preset.base_url,
-      supports_hosted_web_search: preset.supports_hosted_web_search
-    }
+  defp upsert_provider(preset, api_key, credential) do
+    facts =
+      %{
+        name: preset.name,
+        kind: preset.kind,
+        base_url: preset.base_url,
+        supports_hosted_web_search: preset.supports_hosted_web_search
+      }
+      |> then(&if(credential, do: Map.put(&1, :credential_id, credential.id), else: &1))
 
     case AI.get_provider_by_slug(preset.slug) do
       {:ok, %Provider{} = provider} ->

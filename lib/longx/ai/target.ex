@@ -21,6 +21,10 @@ defmodule Longx.AI.Target do
     request_timeout_ms: 600_000,
     max_concurrent_requests: nil,
     max_output_tokens: nil,
+    # a ChatGPT subscription through the Codex backend: the key is an OAuth access
+    # token, the request carries the account id and the backend's headers
+    chatgpt?: false,
+    account_id: nil,
     # the row's reasoning summary (auto / concise / detailed / none); nil = the
     # kernel's auto. Only OpenAI's hidden-reasoning models read it
     reasoning_summary: nil
@@ -38,6 +42,8 @@ defmodule Longx.AI.Target do
           request_timeout_ms: pos_integer,
           max_concurrent_requests: pos_integer | nil,
           max_output_tokens: pos_integer | nil,
+          chatgpt?: boolean,
+          account_id: String.t() | nil,
           reasoning_summary: :auto | :concise | :detailed | :none | nil
         }
 

@@ -60,6 +60,8 @@ export const credential = (name: string, extra: Record<string, unknown> = {}) =>
   hasAccessToken: false,
   hasRefreshToken: false,
   hasClientSecret: false,
+  deviceFlow: "none",
+  redirectUri: null,
   ...extra,
 });
 
@@ -301,7 +303,9 @@ export function rpcMock() {
     ),
     updateSearchProvider: vi.fn(async () => ok({ id: "s1", hasApiKey: true })),
     listPresets: vi.fn(async () => ok(presets())),
-    applyPreset: vi.fn(async () => ok({ providerId: "p9", modelIds: ["m9"] })),
+    applyPreset: vi.fn(async ({ input }: { input: { slug: string } }) => ok({ providerId: input.slug === "chatgpt" ? "p3" : "p9", modelIds: ["m9"], credentialId: input.slug === "chatgpt" ? "cred-chatgpt" : null })),
+    credentialDeviceBegin: vi.fn(async () => ok({ state: "dev-state", userCode: "WXYZ-1234", verificationUrl: "https://auth.openai.com/codex/device", interval: 1 })),
+    credentialDevicePoll: vi.fn(async () => ok({ status: "pending", message: null })),
     gatewayRequests: vi.fn(async () =>
       ok({
         keep: 1000,
@@ -605,6 +609,23 @@ export const presets = () => [
       }),
     ],
   },
+  {
+    slug: "chatgpt",
+    name: "OpenAI（ChatGPT 订阅）",
+    kind: "openai",
+    baseUrl: "https://chatgpt.com/backend-api/codex",
+    supportsHostedWebSearch: false,
+    keyEnv: "",
+    keyUrl: "https://chatgpt.com/",
+    docsUrl: "https://developers.openai.com/codex",
+    credential: true,
+    installed: false,
+    providerId: null,
+    models: [
+      presetModel("gpt-5.6-sol", "GPT-5.6 Sol", { contextWindow: 272_000, reasoningLevels: ["low", "medium", "high", "xhigh", "max", "ultra"], reasoningEffort: "low", image: true }),
+      presetModel("gpt-5.5", "GPT-5.5", { contextWindow: 272_000, reasoningLevels: ["low", "medium", "high", "xhigh"], reasoningEffort: "medium", image: true, recommended: false }),
+    ],
+  },
 ];
 
 export const provider = (n: number, extra: Record<string, unknown> = {}) => ({
@@ -623,6 +644,7 @@ export const provider = (n: number, extra: Record<string, unknown> = {}) => ({
   lastCheckedAt: null,
   lastError: n === 2 ? "401 Authentication Fails" : null,
   lastErrorAt: null,
+  credentialId: null,
   ...extra,
 });
 

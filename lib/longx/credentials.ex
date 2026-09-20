@@ -31,6 +31,8 @@ defmodule Longx.Credentials do
       rpc_action :credential_login_url, :login_url
       rpc_action :refresh_credential, :refresh
       rpc_action :credential_complete_url, :complete_url
+      rpc_action :credential_device_begin, :device_begin
+      rpc_action :credential_device_poll, :device_poll
       rpc_action :credential_redirect_uri, :redirect_uri
     end
   end
@@ -86,6 +88,22 @@ defmodule Longx.Credentials do
 
   def reveal(name) when is_binary(name) do
     with {:ok, cred} <- fetch(name), do: reveal(cred)
+  end
+
+  @doc """
+  The value a credential stands for, ready to use — an API key as it is, an
+  OAuth2 access token refreshed first when it is about to expire — by row id
+  (a provider on a credential, `Longx.AI`). Errors as `Credentials.Http`'s.
+  """
+  @spec access_value(String.t()) :: {:ok, String.t()} | {:error, term}
+  def access_value(id) when is_binary(id) do
+    case Ash.get(Credential, id) do
+      {:ok, cred} ->
+        with {:ok, cred} <- reveal(cred), do: Http.value_for(cred)
+
+      {:error, _} ->
+        {:error, :not_found}
+    end
   end
 
   @spec delete(Credential.t()) :: :ok | {:error, term}

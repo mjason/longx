@@ -67,8 +67,9 @@ export type PresetAttributesOnlySchema = {
 // Provider Schema
 export type ProviderResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "baseUrl" | "hasApiKey" | "id" | "insertedAt" | "kind" | "lastCheckedAt" | "lastError" | "lastErrorAt" | "maxConcurrentRequests" | "name" | "requestTimeoutMs" | "slug" | "supportsHostedWebSearch" | "updatedAt";
+  __primitiveFields: "baseUrl" | "credentialId" | "hasApiKey" | "id" | "insertedAt" | "kind" | "lastCheckedAt" | "lastError" | "lastErrorAt" | "maxConcurrentRequests" | "name" | "requestTimeoutMs" | "slug" | "supportsHostedWebSearch" | "updatedAt";
   baseUrl: string;
+  credentialId: UUID | null;
   hasApiKey: boolean | null;
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
@@ -88,8 +89,9 @@ export type ProviderResourceSchema = {
 
 export type ProviderAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "baseUrl" | "id" | "insertedAt" | "kind" | "lastCheckedAt" | "lastError" | "lastErrorAt" | "maxConcurrentRequests" | "name" | "requestTimeoutMs" | "slug" | "supportsHostedWebSearch" | "updatedAt";
+  __primitiveFields: "baseUrl" | "credentialId" | "id" | "insertedAt" | "kind" | "lastCheckedAt" | "lastError" | "lastErrorAt" | "maxConcurrentRequests" | "name" | "requestTimeoutMs" | "slug" | "supportsHostedWebSearch" | "updatedAt";
   baseUrl: string;
+  credentialId: UUID | null;
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   kind: "openai" | "openai_compatible";
@@ -135,12 +137,15 @@ export type SearchProviderAttributesOnlySchema = {
 // Credential Schema
 export type CredentialResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "allowedHosts" | "authorizeUrl" | "clientId" | "expiresAt" | "extraParams" | "hasAccessToken" | "hasClientSecret" | "hasRefreshToken" | "hasSecret" | "header" | "id" | "insertedAt" | "kind" | "label" | "lastError" | "lastErrorAt" | "name" | "pkce" | "refreshedAt" | "registrationUrl" | "scheme" | "scopes" | "status" | "tokenUrl" | "updatedAt";
+  __primitiveFields: "allowedHosts" | "authorizeParams" | "authorizeUrl" | "clientId" | "deviceFlow" | "expiresAt" | "extraParams" | "fixedClient" | "hasAccessToken" | "hasClientSecret" | "hasRefreshToken" | "hasSecret" | "header" | "id" | "insertedAt" | "kind" | "label" | "lastError" | "lastErrorAt" | "name" | "pkce" | "redirectUri" | "refreshedAt" | "registrationUrl" | "scheme" | "scopes" | "status" | "tokenUrl" | "updatedAt";
   allowedHosts: Array<string>;
+  authorizeParams: Record<string, any>;
   authorizeUrl: string | null;
   clientId: string | null;
+  deviceFlow: "none" | "openai";
   expiresAt: UtcDateTimeUsec | null;
   extraParams: Record<string, any>;
+  fixedClient: boolean;
   hasAccessToken: boolean | null;
   hasClientSecret: boolean | null;
   hasRefreshToken: boolean | null;
@@ -154,6 +159,7 @@ export type CredentialResourceSchema = {
   lastErrorAt: UtcDateTimeUsec | null;
   name: string;
   pkce: boolean;
+  redirectUri: string | null;
   refreshedAt: UtcDateTimeUsec | null;
   registrationUrl: string | null;
   scheme: string;
@@ -167,12 +173,15 @@ export type CredentialResourceSchema = {
 
 export type CredentialAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "allowedHosts" | "authorizeUrl" | "clientId" | "expiresAt" | "extraParams" | "header" | "id" | "insertedAt" | "kind" | "label" | "lastError" | "lastErrorAt" | "name" | "pkce" | "refreshedAt" | "registrationUrl" | "scheme" | "scopes" | "tokenUrl" | "updatedAt";
+  __primitiveFields: "allowedHosts" | "authorizeParams" | "authorizeUrl" | "clientId" | "deviceFlow" | "expiresAt" | "extraParams" | "fixedClient" | "header" | "id" | "insertedAt" | "kind" | "label" | "lastError" | "lastErrorAt" | "name" | "pkce" | "redirectUri" | "refreshedAt" | "registrationUrl" | "scheme" | "scopes" | "tokenUrl" | "updatedAt";
   allowedHosts: Array<string>;
+  authorizeParams: Record<string, any>;
   authorizeUrl: string | null;
   clientId: string | null;
+  deviceFlow: "none" | "openai";
   expiresAt: UtcDateTimeUsec | null;
   extraParams: Record<string, any>;
+  fixedClient: boolean;
   header: string;
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
@@ -182,6 +191,7 @@ export type CredentialAttributesOnlySchema = {
   lastErrorAt: UtcDateTimeUsec | null;
   name: string;
   pkce: boolean;
+  redirectUri: string | null;
   refreshedAt: UtcDateTimeUsec | null;
   registrationUrl: string | null;
   scheme: string;
@@ -616,6 +626,17 @@ export type ProviderFilterInput = {
     stringStartsWith?: string;
   };
 
+  credentialId?: {
+    isNil?: boolean;
+    eq?: UUID;
+    notEq?: UUID;
+    in?: Array<UUID>;
+    lessThan?: UUID;
+    greaterThan?: UUID;
+    lessThanOrEqual?: UUID;
+    greaterThanOrEqual?: UUID;
+  };
+
   hasApiKey?: {
     isNil?: boolean;
     eq?: boolean;
@@ -845,6 +866,16 @@ export type CredentialFilterInput = {
     has?: string;
   };
 
+  authorizeParams?: {
+    eq?: Record<string, any>;
+    notEq?: Record<string, any>;
+    in?: Array<Record<string, any>>;
+    lessThan?: Record<string, any>;
+    greaterThan?: Record<string, any>;
+    lessThanOrEqual?: Record<string, any>;
+    greaterThanOrEqual?: Record<string, any>;
+  };
+
   authorizeUrl?: {
     isNil?: boolean;
     eq?: string;
@@ -873,6 +904,16 @@ export type CredentialFilterInput = {
     stringStartsWith?: string;
   };
 
+  deviceFlow?: {
+    eq?: "none" | "openai";
+    notEq?: "none" | "openai";
+    in?: Array<"none" | "openai">;
+    lessThan?: "none" | "openai";
+    greaterThan?: "none" | "openai";
+    lessThanOrEqual?: "none" | "openai";
+    greaterThanOrEqual?: "none" | "openai";
+  };
+
   expiresAt?: {
     isNil?: boolean;
     eq?: UtcDateTimeUsec;
@@ -892,6 +933,12 @@ export type CredentialFilterInput = {
     greaterThan?: Record<string, any>;
     lessThanOrEqual?: Record<string, any>;
     greaterThanOrEqual?: Record<string, any>;
+  };
+
+  fixedClient?: {
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
   };
 
   hasAccessToken?: {
@@ -1021,6 +1068,20 @@ export type CredentialFilterInput = {
     eq?: boolean;
     notEq?: boolean;
     in?: Array<boolean>;
+  };
+
+  redirectUri?: {
+    isNil?: boolean;
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
   };
 
   refreshedAt?: {
@@ -1978,13 +2039,13 @@ export const modelFilterFields = ["contextWindow", "default", "hostedWebSearch",
 export type ModelFilterField = (typeof modelFilterFields)[number];
 
 
-export const providerFilterFields = ["baseUrl", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
+export const providerFilterFields = ["baseUrl", "credentialId", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
 export type ProviderFilterField = (typeof providerFilterFields)[number];
 
 export const searchProviderFilterFields = ["baseUrl", "default", "hasApiKey", "id", "kind", "name", "slug"] as const;
 export type SearchProviderFilterField = (typeof searchProviderFilterFields)[number];
 
-export const credentialFilterFields = ["allowedHosts", "authorizeUrl", "clientId", "expiresAt", "extraParams", "hasAccessToken", "hasClientSecret", "hasRefreshToken", "hasSecret", "header", "id", "insertedAt", "kind", "label", "lastError", "lastErrorAt", "name", "pkce", "refreshedAt", "registrationUrl", "scheme", "scopes", "status", "tokenUrl", "updatedAt"] as const;
+export const credentialFilterFields = ["allowedHosts", "authorizeParams", "authorizeUrl", "clientId", "deviceFlow", "expiresAt", "extraParams", "fixedClient", "hasAccessToken", "hasClientSecret", "hasRefreshToken", "hasSecret", "header", "id", "insertedAt", "kind", "label", "lastError", "lastErrorAt", "name", "pkce", "redirectUri", "refreshedAt", "registrationUrl", "scheme", "scopes", "status", "tokenUrl", "updatedAt"] as const;
 export type CredentialFilterField = (typeof credentialFilterFields)[number];
 
 
@@ -2007,13 +2068,13 @@ export const modelSortFields = ["contextWindow", "default", "hostedWebSearch", "
 export type ModelSortField = (typeof modelSortFields)[number];
 
 
-export const providerSortFields = ["baseUrl", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
+export const providerSortFields = ["baseUrl", "credentialId", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
 export type ProviderSortField = (typeof providerSortFields)[number];
 
 export const searchProviderSortFields = ["baseUrl", "default", "hasApiKey", "id", "kind", "name", "slug"] as const;
 export type SearchProviderSortField = (typeof searchProviderSortFields)[number];
 
-export const credentialSortFields = ["allowedHosts", "authorizeUrl", "clientId", "expiresAt", "extraParams", "hasAccessToken", "hasClientSecret", "hasRefreshToken", "hasSecret", "header", "id", "insertedAt", "kind", "label", "lastError", "lastErrorAt", "name", "pkce", "refreshedAt", "registrationUrl", "scheme", "scopes", "status", "tokenUrl", "updatedAt"] as const;
+export const credentialSortFields = ["allowedHosts", "authorizeParams", "authorizeUrl", "clientId", "deviceFlow", "expiresAt", "extraParams", "fixedClient", "hasAccessToken", "hasClientSecret", "hasRefreshToken", "hasSecret", "header", "id", "insertedAt", "kind", "label", "lastError", "lastErrorAt", "name", "pkce", "redirectUri", "refreshedAt", "registrationUrl", "scheme", "scopes", "status", "tokenUrl", "updatedAt"] as const;
 export type CredentialSortField = (typeof credentialSortFields)[number];
 
 

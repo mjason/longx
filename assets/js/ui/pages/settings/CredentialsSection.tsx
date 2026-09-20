@@ -5,6 +5,7 @@
 // console), refreshed by hand, deleted behind a confirm.
 import { useState } from "react";
 import { KeyRound, LogIn, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { ChatGptLoginDialog } from "./ChatGptLoginDialog";
 import { toast } from "sonner";
 import {
   splitHosts,
@@ -110,6 +111,8 @@ function CredentialCard({ credential: c, onLoginStarted }: { credential: Credent
   // 127.0.0.1 page (it runs on another machine) — its address pasted here finishes it
   const [pasteFor, setPasteFor] = useState<string | null>(null);
   const [pasted, setPasted] = useState("");
+  // a vendor with a device-code login (ChatGPT): the dialog with the code and the browser way
+  const [deviceLogin, setDeviceLogin] = useState(false);
 
   const login = async () => {
     try {
@@ -184,11 +187,16 @@ function CredentialCard({ credential: c, onLoginStarted }: { credential: Credent
         <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
           <Pencil className="size-4" /> {s.edit}
         </Button>
-        {c.kind === "oauth2" ? (
+        {c.kind === "oauth2" && c.deviceFlow === "openai" ? (
+          <Button size="sm" variant="outline" onClick={() => setDeviceLogin(true)}>
+            <LogIn className="size-4" /> {s.login}
+          </Button>
+        ) : c.kind === "oauth2" ? (
           <Button size="sm" variant="outline" onClick={login} disabled={actions.loginUrl.isPending}>
             <LogIn className="size-4" /> {s.login}
           </Button>
         ) : null}
+        {deviceLogin ? <ChatGptLoginDialog credentialId={c.id} onClose={() => setDeviceLogin(false)} /> : null}
         {c.kind === "oauth2" && c.hasRefreshToken ? (
           <Button
             size="sm"

@@ -239,7 +239,9 @@ defmodule Longx.AI do
              do: provider.supports_hosted_web_search,
              else: model.hosted_web_search
            ),
-         kind: provider.kind,
+         kind: if(chatgpt_backend?(provider), do: :openai, else: provider.kind),
+         chatgpt?: chatgpt_backend?(provider),
+         account_id: if(chatgpt_backend?(provider), do: chatgpt_account_id(api_key)),
          reasoning_summary: model.reasoning_summary,
          request_timeout_ms: provider.request_timeout_ms,
          max_concurrent_requests: provider.max_concurrent_requests,
@@ -509,6 +511,9 @@ defmodule Longx.AI do
   provider already has a row for. The list is the settings page's "从接口
   获取模型".
   """
+  # the Codex CLI version the catalog is asked for (a newer client sees newer models)
+  @codex_client_version "0.160.0"
+
   @spec discover_models(Provider.t()) ::
           {:ok, [discovered_model]}
           | {:error,
@@ -519,10 +524,15 @@ defmodule Longx.AI do
     provider = Ash.load!(provider, [:api_key, :models])
 
     with {:ok, api_key} <- fetch_api_key(provider) do
+      chatgpt? = chatgpt_backend?(provider)
+
       request =
         Req.new(
           url: String.trim_trailing(provider.base_url, "/") <> "/models",
           auth: {:bearer, api_key},
+          # the Codex backend serves its catalog only to a known client, per version
+          params: if(chatgpt?, do: [client_version: @codex_client_version], else: []),
+          headers: if(chatgpt?, do: chatgpt_discovery_headers(api_key), else: []),
           retry: false,
           receive_timeout: @check_timeout
         )
@@ -537,6 +547,16 @@ defmodule Longx.AI do
              discovered_model(entry, MapSet.member?(installed, id))
            end}
 
+        # the Codex backend's catalog: `models[]` with a slug, hidden entries left out
+        {:ok, %Req.Response{status: status, body: %{"models" => entries}}}
+        when status in 200..299 and is_list(entries) ->
+          {:ok,
+           for %{"slug" => slug} = entry <- entries,
+               is_binary(slug),
+               entry["visibility"] in [nil, "list"] do
+             codex_model(entry, MapSet.member?(installed, slug))
+           end}
+
         {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
           {:error, {:status, status, "not a model list: #{error_message(body)}"}}
 
@@ -547,6 +567,42 @@ defmodule Longx.AI do
           {:error, {:unreachable, Exception.message(exception)}}
       end
     end
+  end
+
+  defp chatgpt_discovery_headers(token) do
+    [{"originator", "codex_cli_rs"}, {"openai-beta", "responses=experimental"}] ++
+      case chatgpt_account_id(token) do
+        nil -> []
+        id -> [{"chatgpt-account-id", id}]
+      end
+  end
+
+  defp codex_model(%{"slug" => slug} = entry, installed?) do
+    levels =
+      case entry["supported_reasoning_levels"] do
+        list when is_list(list) -> for %{"effort" => e} <- list, is_binary(e), do: e
+        _ -> []
+      end
+
+    modalities = entry["input_modalities"] || []
+
+    %{
+      id: slug,
+      name:
+        if(is_binary(entry["display_name"]) and entry["display_name"] != "",
+          do: entry["display_name"],
+          else: slug
+        ),
+      owned_by: "openai",
+      context_window: if(is_integer(entry["context_window"]), do: entry["context_window"]),
+      reasoning_levels: levels,
+      reasoning_effort:
+        if(is_binary(entry["default_reasoning_level"]) and levels != [],
+          do: entry["default_reasoning_level"]
+        ),
+      image_input: is_list(modalities) and "image" in modalities,
+      installed: installed?
+    }
   end
 
   # the canonical order of efforts, for a list that names them in any order
@@ -753,6 +809,36 @@ defmodule Longx.AI do
     end
   end
 
+  # a provider on a credential: the credential's access token, refreshed when
+  # close to expiry; no token yet (not logged in) is a missing key
+  defp fetch_api_key(%{credential_id: id, slug: slug}) when is_binary(id) do
+    case Longx.Credentials.access_value(id) do
+      {:ok, token} -> {:ok, token}
+      {:error, _} -> {:error, {:missing_api_key, slug}}
+    end
+  end
+
   defp fetch_api_key(%{api_key: key}) when is_binary(key) and key != "", do: {:ok, key}
   defp fetch_api_key(%{slug: slug}), do: {:error, {:missing_api_key, slug}}
+
+  # the Codex backend (chatgpt.com's `backend-api`), reached with a subscription's token
+  defp chatgpt_backend?(%{credential_id: id, base_url: url}) when is_binary(id),
+    do: String.contains?(url || "", "chatgpt.com") or String.contains?(url || "", "backend-api")
+
+  defp chatgpt_backend?(_provider), do: false
+
+  @doc "The ChatGPT account id in an access token's claims (`https://api.openai.com/auth`), nil when absent."
+  @spec chatgpt_account_id(String.t()) :: String.t() | nil
+  def chatgpt_account_id(jwt) when is_binary(jwt) do
+    with [_, payload, _] <- String.split(jwt, "."),
+         {:ok, json} <- Base.url_decode64(payload, padding: false),
+         {:ok, %{"https://api.openai.com/auth" => %{"chatgpt_account_id" => id}}}
+         when is_binary(id) <- Jason.decode(json) do
+      id
+    else
+      _ -> nil
+    end
+  end
+
+  def chatgpt_account_id(_), do: nil
 end

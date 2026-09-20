@@ -11,6 +11,8 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
+import { ChatGptLoginDialog } from "./ChatGptLoginDialog";
+import { useCredentials } from "@/core/credentials";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { relativeTime } from "@/core/format";
@@ -86,6 +88,7 @@ const fail = (e: unknown) =>
 type Editing =
   | { kind: "choose" }
   | { kind: "preset"; preset: Preset }
+  | { kind: "login"; credentialId: string }
   | { kind: "custom"; provider: Provider | null }
   | null;
 
@@ -122,6 +125,7 @@ export function ModelsSection() {
             }
             onEdit={() => setEditing({ kind: "custom", provider: p })}
             onAddFromPreset={(preset) => setEditing({ kind: "preset", preset })}
+            onLogin={(credentialId) => setEditing({ kind: "login", credentialId })}
           />
         ))}
       </section>
@@ -141,9 +145,13 @@ export function ModelsSection() {
           onClose={() => setEditing(null)}
         />
       ) : null}
+      {editing?.kind === "login" ? (
+        <ChatGptLoginDialog credentialId={editing.credentialId} onClose={() => setEditing(null)} />
+      ) : null}
       {editing?.kind === "preset" ? (
         <PresetDialog
           preset={editing.preset}
+          onLogin={(credentialId) => setEditing({ kind: "login", credentialId })}
           onClose={() => setEditing(null)}
         />
       ) : null}
@@ -231,16 +239,20 @@ const formatWindow = (tokens: number) =>
 function PresetDialog({
   preset,
   onClose,
+  onLogin,
 }: {
   preset: Preset;
   onClose: () => void;
+  /** a subscription template: the credential is made, the login comes next */
+  onLogin: (credentialId: string) => void;
 }) {
   const actions = useAiActions();
   const providers = useProviders();
-  // an installed provider without a key still wants one
+  // an installed provider without a key still wants one — unless its key is a login
   const needsKey =
-    !preset.installed ||
-    !providers.data?.find((p) => p.id === preset.providerId)?.hasApiKey;
+    !preset.credential &&
+    (!preset.installed ||
+      !providers.data?.find((p) => p.id === preset.providerId)?.hasApiKey);
   const candidates = preset.models.filter((m) => !m.installed);
   const [apiKey, setApiKey] = useState("");
   const [chosen, setChosen] = useState<string[]>(
@@ -278,7 +290,15 @@ function PresetDialog({
           ? { makeDefault }
           : {}),
       },
-      { onSuccess: () => (toast.success(s.saved), onClose()), onError: fail },
+      {
+        onSuccess: (r) => {
+          toast.success(s.saved);
+          // a subscription: straight on to the login
+          if (preset.credential && r.credentialId) onLogin(r.credentialId);
+          else onClose();
+        },
+        onError: fail,
+      },
     );
   };
   return (
@@ -296,6 +316,9 @@ function PresetDialog({
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="flex flex-col gap-4">
+            {preset.credential ? (
+              <p className="text-muted-foreground text-sm">{s.presetLoginHint}</p>
+            ) : null}
             {needsKey ? (
               <Field
                 id="ps-key"
@@ -313,14 +336,16 @@ function PresetDialog({
               </Field>
             ) : null}
             <div className="flex flex-wrap gap-3 text-xs">
-              <a
-                href={preset.keyUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary inline-flex items-center gap-1 underline-offset-4 hover:underline"
-              >
-                {s.getKey} <ExternalLink className="size-3" />
-              </a>
+              {preset.credential ? null : (
+                <a
+                  href={preset.keyUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary inline-flex items-center gap-1 underline-offset-4 hover:underline"
+                >
+                  {s.getKey} <ExternalLink className="size-3" />
+                </a>
+              )}
               <a
                 href={preset.docsUrl}
                 target="_blank"
@@ -389,14 +414,19 @@ function ProviderCard({
   preset,
   onEdit,
   onAddFromPreset,
+  onLogin,
 }: {
   provider: Provider;
   models: ModelRow[];
   preset: Preset | null;
   onEdit: () => void;
   onAddFromPreset: (preset: Preset) => void;
+  onLogin: (credentialId: string) => void;
 }) {
   const actions = useAiActions();
+  // a provider on a credential (a ChatGPT subscription): its login is its key
+  const credentials = useCredentials({ refetchInterval: provider.credentialId ? 5000 : false });
+  const credential = provider.credentialId ? (credentials.data?.find((c) => c.id === provider.credentialId) ?? null) : null;
   const [adding, setAdding] = useState<ModelRow | "new" | null>(null);
   const [discovering, setDiscovering] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -409,7 +439,15 @@ function ProviderCard({
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{provider.name}</span>
             <Badge variant="outline">{s.kinds[provider.kind]}</Badge>
-            {provider.hasApiKey ? (
+            {provider.credentialId ? (
+              credential?.status === "ready" ? (
+                <Badge variant="secondary">{s.loginSet}</Badge>
+              ) : credential?.status === "expired" || credential?.status === "error" ? (
+                <Badge variant="destructive">{s.loginExpired}</Badge>
+              ) : (
+                <Badge variant="destructive">{s.loginMissing}</Badge>
+              )
+            ) : provider.hasApiKey ? (
               <Badge variant="secondary">{s.apiKeySet}</Badge>
             ) : (
               <Badge variant="destructive">{s.apiKeyMissing}</Badge>
@@ -440,6 +478,11 @@ function ProviderCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {provider.credentialId ? (
+              <DropdownMenuItem onSelect={() => onLogin(provider.credentialId!)}>
+                {s.loginChatGpt}
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem onSelect={onEdit}>
               {s.editProvider}
             </DropdownMenuItem>

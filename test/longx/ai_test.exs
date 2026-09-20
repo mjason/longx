@@ -497,6 +497,104 @@ defmodule Longx.AITest do
     end
   end
 
+  describe "discover_models/1 on the Codex backend (a ChatGPT subscription)" do
+    test "the catalog's shape (`models[]` with slug, context window, reasoning levels, visibility) is normalised; hidden entries left out; the subscription's headers sent",
+         %{} do
+      bypass = Bypass.open()
+
+      {:ok, cred} =
+        Longx.Credentials.create_oauth2(%{
+          name: "chatgpt-disc",
+          allowed_hosts: ["localhost"],
+          authorize_url: "http://localhost:#{bypass.port}/oauth/authorize",
+          token_url: "http://localhost:#{bypass.port}/oauth/token",
+          client_id: "app_x",
+          fixed_client: true
+        })
+
+      {:ok, _} =
+        Longx.Credentials.store_tokens(cred, %{
+          access_token: "tok",
+          expires_at: DateTime.add(DateTime.utc_now(), 3600, :second)
+        })
+
+      provider =
+        create_provider!(%{
+          slug: "chatgpt-disc",
+          base_url: "http://localhost:#{bypass.port}/backend-api/codex",
+          credential_id: cred.id
+        })
+
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "GET", "/backend-api/codex/models", fn up ->
+        send(test_pid, {:upstream, up.req_headers, up.query_string})
+
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "models" => [
+              %{
+                "slug" => "gpt-5.6-sol",
+                "display_name" => "GPT-5.6-Sol",
+                "visibility" => "list",
+                "context_window" => 272_000,
+                "input_modalities" => ["text", "image"],
+                "default_reasoning_level" => "low",
+                "supported_reasoning_levels" => [
+                  %{"effort" => "low"},
+                  %{"effort" => "high"},
+                  %{"effort" => "xhigh"}
+                ]
+              },
+              %{
+                "slug" => "gpt-daybreak-red-latest",
+                "visibility" => "hide",
+                "context_window" => 372_000
+              },
+              %{
+                "slug" => "gpt-5.5",
+                "display_name" => "GPT-5.5",
+                "visibility" => "list",
+                "context_window" => 272_000,
+                "default_reasoning_level" => "medium",
+                "supported_reasoning_levels" => []
+              }
+            ]
+          })
+        )
+      end)
+
+      assert {:ok, models} = AI.discover_models(provider)
+      assert_receive {:upstream, headers, query}
+      assert {"authorization", "Bearer tok"} in headers
+      assert {"originator", "codex_cli_rs"} in headers
+      assert query =~ "client_version="
+
+      assert [
+               %{
+                 id: "gpt-5.6-sol",
+                 name: "GPT-5.6-Sol",
+                 context_window: 272_000,
+                 reasoning_levels: ["low", "high", "xhigh"],
+                 reasoning_effort: "low",
+                 image_input: true,
+                 installed: false
+               },
+               %{
+                 id: "gpt-5.5",
+                 name: "GPT-5.5",
+                 context_window: 272_000,
+                 reasoning_levels: [],
+                 reasoning_effort: nil,
+                 image_input: false
+               }
+             ] = models
+    end
+  end
+
   describe "discover_models/1 (the provider's own model list: OpenAI's GET /models standard)" do
     setup do
       bypass = Bypass.open()
@@ -776,6 +874,59 @@ defmodule Longx.AITest do
 
       assert {:error, {:unknown_model, "nope"}} = AI.resolve_target("nope")
       assert {:ok, %AI.Target{model: "a-default"}} = AI.resolve_target(nil)
+    end
+  end
+
+  describe "resolve_target/0 with a credential-backed provider (a ChatGPT subscription)" do
+    test "the provider's key is the credential's access token, the account id read off it; without a token the target is missing its key" do
+      # a JWT whose payload carries the chatgpt account id (signature never checked here)
+      payload =
+        Base.url_encode64(
+          Jason.encode!(%{
+            "https://api.openai.com/auth" => %{"chatgpt_account_id" => "acct-123"},
+            "exp" => 4_102_444_800
+          }),
+          padding: false
+        )
+
+      jwt = "eyJhbGciOiJSUzI1NiJ9.#{payload}.sig"
+
+      {:ok, cred} =
+        Longx.Credentials.create_oauth2(%{
+          name: "chatgpt-test",
+          allowed_hosts: ["chatgpt.com"],
+          authorize_url: "https://auth.openai.com/oauth/authorize",
+          token_url: "https://auth.openai.com/oauth/token",
+          client_id: "app_x",
+          fixed_client: true
+        })
+
+      provider =
+        create_provider!(%{
+          slug: "chatgpt",
+          base_url: "https://chatgpt.com/backend-api/codex",
+          credential_id: cred.id
+        })
+
+      model = create_model!(provider, %{upstream_id: "gpt-5.6-sol", slug: "gpt-5.6-sol"})
+      AI.make_default_model!(model)
+
+      # no login yet: no key
+      assert {:error, {:missing_api_key, "chatgpt"}} = AI.resolve_target()
+
+      {:ok, _} =
+        Longx.Credentials.store_tokens(cred, %{
+          access_token: jwt,
+          refresh_token: "rt",
+          expires_at: DateTime.add(DateTime.utc_now(), 3600, :second)
+        })
+
+      assert {:ok,
+              %AI.Target{api_key: ^jwt, kind: :openai, chatgpt?: true, account_id: "acct-123"}} =
+               AI.resolve_target()
+
+      # a provider with a credential counts as keyed for the chains
+      assert {:ok, [%AI.Target{chatgpt?: true}]} = AI.resolve_targets("gpt-5.6-sol")
     end
   end
 

@@ -96,7 +96,8 @@ defmodule Longx.Credentials.OAuth do
           {:ok, %{url: String.t(), state: String.t(), redirect_uri: String.t()}}
           | {:error, String.t()}
   def begin_login(%Credential{} = cred, opts) do
-    redirect = redirect_uri(Keyword.get(opts, :origin))
+    # a redirect the provider dictates wins over Longx's own
+    redirect = fixed_redirect(cred) || redirect_uri(Keyword.get(opts, :origin))
 
     with :ok <- oauth2?(cred),
          :ok <- present(cred.authorize_url, "no authorize URL"),
@@ -116,12 +117,13 @@ defmodule Longx.Credentials.OAuth do
         })
 
       query =
-        %{
+        cred.authorize_params
+        |> Map.merge(%{
           "response_type" => "code",
           "client_id" => cred.client_id,
           "redirect_uri" => redirect,
           "state" => state
-        }
+        })
         |> put_if("scope", cred.scopes)
         |> put_if("code_challenge", verifier && challenge(verifier))
         |> put_if("code_challenge_method", verifier && "S256")
@@ -267,6 +269,8 @@ defmodule Longx.Credentials.OAuth do
   # authorize endpoint refuses outright (a probe answering 400). A
   # confidential client (a secret from the provider's console) is used as it
   # is; no way to register: the login goes on as it is.
+  defp accepted_client(%Credential{fixed_client: true} = cred, _redirect), do: {:ok, cred}
+
   defp accepted_client(%Credential{} = cred, redirect) do
     cond do
       foreign_public_client?(cred) or probe_authorize(cred, redirect) == :rejected ->
@@ -339,6 +343,149 @@ defmodule Longx.Credentials.OAuth do
       end
     )
   end
+
+  defp fixed_redirect(%Credential{redirect_uri: uri}) when is_binary(uri) and uri != "", do: uri
+  defp fixed_redirect(_cred), do: nil
+
+  ## The device-code flow (OpenAI's Codex one)
+
+  @doc """
+  Starts a device-code login (`device_flow: :openai`): the vendor hands a
+  user code the person types at `verification_url`; `device_poll/1` with
+  the returned `state` asks whether they did and finishes the login. No
+  redirect, no port, no address to paste: the way for a Longx on a server
+  the browser is not on.
+  """
+  @spec device_begin(Credential.t(), keyword) ::
+          {:ok,
+           %{
+             state: String.t(),
+             user_code: String.t(),
+             verification_url: String.t(),
+             interval: pos_integer
+           }}
+          | {:error, String.t()}
+  def device_begin(%Credential{} = cred, opts \\ []) do
+    with :ok <- oauth2?(cred),
+         :ok <- device_flow?(cred),
+         :ok <- present(cred.client_id, "no client id"),
+         {:ok, issuer} <- issuer(cred) do
+      case Req.post(issuer <> "/api/accounts/deviceauth/usercode",
+             json: %{"client_id" => cred.client_id},
+             retry: false,
+             receive_timeout: 30_000
+           ) do
+        {:ok, %{status: 200, body: %{"device_auth_id" => id, "user_code" => code} = body}}
+        when is_binary(id) and is_binary(code) ->
+          state = random(24)
+          interval = interval_of(body["interval"])
+
+          :ok =
+            Logins.put(state, %{
+              credential_id: cred.id,
+              device_auth_id: id,
+              user_code: code,
+              issuer: issuer,
+              notify: Keyword.get(opts, :notify),
+              thread_id: Keyword.get(opts, :thread_id)
+            })
+
+          {:ok,
+           %{
+             state: state,
+             user_code: code,
+             verification_url: issuer <> "/codex/device",
+             interval: interval
+           }}
+
+        {:ok, %{status: 404}} ->
+          {:error, "the provider offers no device-code login; use the browser login"}
+
+        {:ok, %{status: status, body: body}} ->
+          {:error, "the device-code request answered #{status}: #{describe(body)}"}
+
+        {:error, reason} ->
+          {:error, "the device-code request failed: #{Exception.message(reason)}"}
+      end
+    end
+  end
+
+  @doc """
+  One poll of a device-code login: `{:ok, :pending}` while the person has
+  not typed the code, the credential once they did (the vendor hands the
+  authorization code and the PKCE verifier it made; the exchange uses the
+  vendor's own callback), an error when the login is refused or unknown.
+  """
+  @spec device_poll(String.t()) ::
+          {:ok, :pending} | {:ok, Credential.t()} | {:error, :unknown_state | String.t()}
+  def device_poll(state) when is_binary(state) do
+    case Logins.get(state) do
+      {:ok, %{device_auth_id: id, user_code: code, issuer: issuer} = login} ->
+        case Req.post(issuer <> "/api/accounts/deviceauth/token",
+               json: %{"device_auth_id" => id, "user_code" => code},
+               retry: false,
+               receive_timeout: 30_000
+             ) do
+          {:ok, %{status: 200, body: %{"authorization_code" => auth_code} = body}}
+          when is_binary(auth_code) ->
+            {:ok, _} = Logins.take(state)
+
+            result =
+              with {:ok, cred} <- fetch_by_id(login.credential_id) do
+                exchange(cred, auth_code, body["code_verifier"], issuer <> "/deviceauth/callback")
+              end
+
+            if is_pid(login[:notify]),
+              do: send(login[:notify], {:credential_login, state, result})
+
+            if is_binary(login[:thread_id]), do: answer_ask(login[:thread_id], state, result)
+            result
+
+          {:ok, %{status: status}} when status in [403, 404] ->
+            {:ok, :pending}
+
+          {:ok, %{status: status, body: body}} ->
+            {:ok, _} = Logins.take(state)
+            {:error, "the device-code login answered #{status}: #{describe(body)}"}
+
+          {:error, reason} ->
+            {:error, "the device-code poll failed: #{Exception.message(reason)}"}
+        end
+
+      _ ->
+        {:error, :unknown_state}
+    end
+  end
+
+  defp device_flow?(%Credential{device_flow: :openai}), do: :ok
+  defp device_flow?(_cred), do: {:error, "this credential has no device-code login"}
+
+  # the vendor's origin, off the authorize URL
+  defp issuer(%Credential{authorize_url: url}) when is_binary(url) and url != "" do
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host, port: port} when is_binary(host) ->
+        default_port = URI.default_port(scheme || "https")
+        {:ok, "#{scheme}://#{host}#{if port && port != default_port, do: ":#{port}", else: ""}"}
+
+      _ ->
+        {:error, "no authorize URL"}
+    end
+  end
+
+  defp issuer(_cred), do: {:error, "no authorize URL"}
+
+  defp interval_of(n) when is_integer(n) and n > 0, do: n
+
+  defp interval_of(n) when is_binary(n),
+    do:
+      case(Integer.parse(n),
+        do: (
+          {v, _} when v > 0 -> v
+          _ -> 5
+        )
+      )
+
+  defp interval_of(_), do: 5
 
   defp oauth2?(%Credential{kind: :oauth2}), do: :ok
   defp oauth2?(_), do: {:error, "not an OAuth2 credential"}

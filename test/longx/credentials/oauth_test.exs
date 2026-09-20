@@ -83,6 +83,126 @@ defmodule Longx.Credentials.OAuthTest do
     assert {:error, :unknown_state} = OAuth.complete(state, %{"code" => "again"})
   end
 
+  test "a provider's own client (OpenAI's Codex app): a fixed redirect URI, authorize-only params, the client never replaced",
+       %{bypass: bypass, base: base} do
+    # the metadata offers registration — a foreign public client would be replaced by it
+    Bypass.stub(bypass, "GET", "/.well-known/openid-configuration", fn conn ->
+      json!(conn, 200, %{registration_endpoint: base <> "/register"})
+    end)
+
+    Bypass.stub(bypass, "POST", "/register", fn conn ->
+      json!(conn, 201, %{client_id: "replaced"})
+    end)
+
+    {:ok, cred} =
+      Credentials.create_oauth2(%{
+        name: "chatgpt",
+        allowed_hosts: ["localhost"],
+        authorize_url: base <> "/authorize",
+        token_url: base <> "/token",
+        scopes: "openid profile email offline_access",
+        client_id: "app_fixed",
+        fixed_client: true,
+        redirect_uri: "http://localhost:1455/auth/callback",
+        authorize_params: %{"codex_cli_simplified_flow" => "true", "originator" => "codex_cli_rs"}
+      })
+
+    assert {:ok, %{url: url, redirect_uri: "http://localhost:1455/auth/callback"}} =
+             OAuth.begin_login(cred, [])
+
+    q = URI.decode_query(URI.parse(url).query)
+    assert q["client_id"] == "app_fixed"
+    assert q["redirect_uri"] == "http://localhost:1455/auth/callback"
+    assert q["codex_cli_simplified_flow"] == "true"
+    assert q["originator"] == "codex_cli_rs"
+    # the row keeps its client: no registration happened
+    assert {:ok, %Credential{client_id: "app_fixed"}} = Credentials.fetch("chatgpt")
+
+    # the token request carries none of the authorize-only params
+    test = self()
+
+    Bypass.expect_once(bypass, "POST", "/token", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      send(test, {:token_request, URI.decode_query(body)})
+      json!(conn, 200, %{access_token: "at", refresh_token: "rt", expires_in: 1800})
+    end)
+
+    assert {:ok, _} =
+             OAuth.complete_url("http://localhost:1455/auth/callback?code=c1&state=#{q["state"]}")
+
+    assert_receive {:token_request, form}
+    assert form["redirect_uri"] == "http://localhost:1455/auth/callback"
+    refute Map.has_key?(form, "codex_cli_simplified_flow")
+  end
+
+  test "the device-code flow (OpenAI's): a user code to type at the verification page, a poll, then the exchange with the verifier the server hands back",
+       %{bypass: bypass, base: base} do
+    test = self()
+
+    Bypass.expect_once(bypass, "POST", "/api/accounts/deviceauth/usercode", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      send(test, {:usercode_request, Jason.decode!(body)})
+      json!(conn, 200, %{device_auth_id: "dev-1", user_code: "ABCD-EFGH", interval: 1})
+    end)
+
+    {:ok, cred} =
+      Credentials.create_oauth2(%{
+        name: "chatgpt",
+        allowed_hosts: ["localhost"],
+        authorize_url: base <> "/oauth/authorize",
+        token_url: base <> "/oauth/token",
+        scopes: "openid offline_access",
+        client_id: "app_fixed",
+        fixed_client: true,
+        device_flow: :openai
+      })
+
+    assert {:ok, %{state: state, user_code: "ABCD-EFGH", verification_url: url, interval: 1}} =
+             OAuth.device_begin(cred)
+
+    assert url == base <> "/codex/device"
+    assert_receive {:usercode_request, %{"client_id" => "app_fixed"}}
+
+    # not approved yet: the poll says so
+    Bypass.expect_once(
+      bypass,
+      "POST",
+      "/api/accounts/deviceauth/token",
+      &Plug.Conn.send_resp(&1, 403, "")
+    )
+
+    assert {:ok, :pending} = OAuth.device_poll(state)
+
+    # approved: the server hands the code and the verifier it made; the exchange uses its own callback
+    Bypass.expect_once(bypass, "POST", "/api/accounts/deviceauth/token", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      send(test, {:poll_request, Jason.decode!(body)})
+
+      json!(conn, 200, %{
+        authorization_code: "ac-1",
+        code_verifier: "ver-1",
+        code_challenge: "ch-1"
+      })
+    end)
+
+    Bypass.expect_once(bypass, "POST", "/oauth/token", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      send(test, {:token_request, URI.decode_query(body)})
+      json!(conn, 200, %{access_token: "at", refresh_token: "rt", expires_in: 1800})
+    end)
+
+    assert {:ok, %Credential{name: "chatgpt"}} = OAuth.device_poll(state)
+    assert_receive {:poll_request, %{"device_auth_id" => "dev-1", "user_code" => "ABCD-EFGH"}}
+    assert_receive {:token_request, form}
+    assert form["grant_type"] == "authorization_code"
+    assert form["code"] == "ac-1"
+    assert form["code_verifier"] == "ver-1"
+    assert form["redirect_uri"] == base <> "/deviceauth/callback"
+    assert %{status: :ready} = Enum.find(Credentials.list(), &(&1.name == "chatgpt"))
+    # the state is spent
+    assert {:error, :unknown_state} = OAuth.device_poll(state)
+  end
+
   test "the provider sending an error back, or a token endpoint refusing, ends the login with the reason",
        %{bypass: bypass, cred: cred} do
     {:ok, %{state: state}} = OAuth.begin_login(cred, notify: self())

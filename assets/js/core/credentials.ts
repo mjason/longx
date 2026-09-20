@@ -12,6 +12,8 @@ import {
   listCredentials,
   refreshCredential,
   updateCredential,
+  credentialDeviceBegin,
+  credentialDevicePoll,
 } from "@/ash_rpc";
 import { unwrap } from "@/core/projects";
 
@@ -40,6 +42,10 @@ export type Credential = {
   hasAccessToken: boolean | null;
   hasRefreshToken: boolean | null;
   hasClientSecret: boolean | null;
+  /** a vendor's device-code login besides the browser one ("openai" = the Codex flow) */
+  deviceFlow: "none" | "openai";
+  /** a redirect URI the vendor dictates, in place of Longx's own */
+  redirectUri: string | null;
 };
 
 export const credentialFields = [
@@ -64,6 +70,8 @@ export const credentialFields = [
   "hasAccessToken",
   "hasRefreshToken",
   "hasClientSecret",
+  "deviceFlow",
+  "redirectUri",
 ] as const;
 
 export const credentialKeys = {
@@ -155,9 +163,24 @@ export function useCredentialActions() {
     mutationFn: async (url: string) => unwrap(await credentialCompleteUrl({ fields, input: { url } })) as Credential,
     onSuccess: invalidate,
   });
+  // the device-code login: a code to type at the vendor's page, then polls until done
+  const deviceBegin = useMutation({
+    mutationFn: async (id: string) =>
+      unwrap(await credentialDeviceBegin({ fields: ["state", "userCode", "verificationUrl", "interval"], input: { id } })) as {
+        state: string;
+        userCode: string;
+        verificationUrl: string;
+        interval: number;
+      },
+  });
+  const devicePoll = useMutation({
+    mutationFn: async (state: string) =>
+      unwrap(await credentialDevicePoll({ fields: ["status", "message"], input: { state } })) as { status: "pending" | "ok" | "error"; message: string | null },
+    onSuccess: (r) => (r.status === "ok" ? invalidate() : undefined),
+  });
   const refresh = useMutation({
     mutationFn: async (id: string) => unwrap(await refreshCredential({ fields, input: { id } })) as Credential,
     onSuccess: invalidate,
   });
-  return { createApiKey, createOauth2, update, remove, loginUrl, completeUrl, refresh, invalidate };
+  return { createApiKey, createOauth2, update, remove, loginUrl, completeUrl, deviceBegin, devicePoll, refresh, invalidate };
 }

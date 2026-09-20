@@ -64,7 +64,11 @@ defmodule Longx.Credentials.Credential do
         :registration_url,
         :scopes,
         :pkce,
-        :extra_params
+        :extra_params,
+        :fixed_client,
+        :redirect_uri,
+        :authorize_params,
+        :device_flow
       ]
 
       change set_attribute(:kind, :oauth2)
@@ -88,7 +92,11 @@ defmodule Longx.Credentials.Credential do
         :registration_url,
         :scopes,
         :pkce,
-        :extra_params
+        :extra_params,
+        :fixed_client,
+        :redirect_uri,
+        :authorize_params,
+        :device_flow
       ]
 
       change Changes.NormaliseHosts
@@ -163,6 +171,69 @@ defmodule Longx.Credentials.Credential do
     end
 
     # the address the browser was sent to after the login, pasted by the person
+    # the device-code login: the code to type and where, then polls until done
+    action :device_begin, :map do
+      constraints fields: [
+                    state: [type: :string, allow_nil?: false],
+                    user_code: [type: :string, allow_nil?: false],
+                    verification_url: [type: :string, allow_nil?: false],
+                    interval: [type: :integer, allow_nil?: false]
+                  ]
+
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, cred} <- Ash.get(__MODULE__, input.arguments.id),
+             {:ok, begun} <- Longx.Credentials.OAuth.device_begin(cred) do
+          {:ok, begun}
+        else
+          {:error, message} when is_binary(message) ->
+            {:error,
+             Ash.Error.Invalid.exception(
+               errors: [
+                 Ash.Error.Changes.InvalidArgument.exception(field: :id, message: message)
+               ]
+             )}
+
+          other ->
+            other
+        end
+      end
+    end
+
+    action :device_poll, :map do
+      constraints fields: [
+                    status: [type: :string, allow_nil?: false],
+                    message: [type: :string]
+                  ]
+
+      argument :state, :string, allow_nil?: false
+
+      run fn input, _ ->
+        case Longx.Credentials.OAuth.device_poll(input.arguments.state) do
+          {:ok, :pending} ->
+            {:ok, %{status: "pending", message: nil}}
+
+          {:ok, _cred} ->
+            {:ok, %{status: "ok", message: nil}}
+
+          {:error, :unknown_state} ->
+            {:error,
+             Ash.Error.Invalid.exception(
+               errors: [
+                 Ash.Error.Changes.InvalidArgument.exception(
+                   field: :state,
+                   message: "no device-code login is waiting (expired, or already done)"
+                 )
+               ]
+             )}
+
+          {:error, message} ->
+            {:ok, %{status: "error", message: to_string(message)}}
+        end
+      end
+    end
+
     action :complete_url, :struct do
       constraints instance_of: __MODULE__
       argument :url, :string, allow_nil?: false
@@ -287,6 +358,24 @@ defmodule Longx.Credentials.Credential do
     attribute :pkce, :boolean, allow_nil?: false, default: true, public?: true
     # extra form fields on token requests (e.g. `resource`)
     attribute :extra_params, :map, allow_nil?: false, default: %{}, public?: true
+    # a provider's own client (OpenAI's Codex app): the id is used as it is, never
+    # replaced by one Longx registers
+    attribute :fixed_client, :boolean, allow_nil?: false, default: false, public?: true
+    # a redirect URI the provider dictates (`http://localhost:1455/auth/callback`),
+    # in place of Longx's own; the browser lands on an unreachable page and the
+    # person pastes its address back
+    attribute :redirect_uri, :string, public?: true
+    # extra query params on the authorize URL only (`codex_cli_simplified_flow`, `originator`)
+    attribute :authorize_params, :map, allow_nil?: false, default: %{}, public?: true
+
+    # a vendor's device-code login besides the browser one: `:openai` is the Codex
+    # flow (`/api/accounts/deviceauth/*` under the authorize URL's origin)
+    attribute :device_flow, :atom do
+      allow_nil? false
+      default :none
+      public? true
+      constraints one_of: [:none, :openai]
+    end
 
     attribute :expires_at, :utc_datetime_usec, public?: true
     attribute :refreshed_at, :utc_datetime_usec, public?: true

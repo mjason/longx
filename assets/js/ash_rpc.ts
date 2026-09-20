@@ -1049,11 +1049,11 @@ export type ApplyPresetInput = {
   makeDefault?: string | null;
 };
 
-export type ApplyPresetFields = UnifiedFieldSelection<{providerId: UUID, modelIds: Array<UUID>, __type: "TypedMap", __primitiveFields: "providerId" | "modelIds"}>[];
+export type ApplyPresetFields = UnifiedFieldSelection<{providerId: UUID, modelIds: Array<UUID>, credentialId: UUID | null, __type: "TypedMap", __primitiveFields: "providerId" | "modelIds" | "credentialId"}>[];
 
 export type InferApplyPresetResult<
   Fields extends ApplyPresetFields | undefined,
-> = InferResult<{providerId: UUID, modelIds: Array<UUID>, __type: "TypedMap", __primitiveFields: "providerId" | "modelIds"}, Fields>;
+> = InferResult<{providerId: UUID, modelIds: Array<UUID>, credentialId: UUID | null, __type: "TypedMap", __primitiveFields: "providerId" | "modelIds" | "credentialId"}, Fields>;
 
 export type ApplyPresetResult<Fields extends ApplyPresetFields | undefined = undefined> = | { success: true; data: InferApplyPresetResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -1119,11 +1119,11 @@ export async function validateApplyPreset(
 }
 
 
-export type ListPresetsFields = UnifiedFieldSelection<{slug: string, name: string, kind: string, baseUrl: string, supportsHostedWebSearch: boolean, keyEnv: string, keyUrl: string, docsUrl: string, installed: boolean, providerId: UUID | null, models: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "slug" | "name" | "kind" | "baseUrl" | "supportsHostedWebSearch" | "keyEnv" | "keyUrl" | "docsUrl" | "installed" | "providerId" | "models"}>[];
+export type ListPresetsFields = UnifiedFieldSelection<{slug: string, name: string, kind: string, baseUrl: string, supportsHostedWebSearch: boolean, keyEnv: string, keyUrl: string, docsUrl: string, installed: boolean, credential: boolean, providerId: UUID | null, models: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "slug" | "name" | "kind" | "baseUrl" | "supportsHostedWebSearch" | "keyEnv" | "keyUrl" | "docsUrl" | "installed" | "credential" | "providerId" | "models"}>[];
 
 export type InferListPresetsResult<
   Fields extends ListPresetsFields | undefined,
-> = Array<InferResult<{slug: string, name: string, kind: string, baseUrl: string, supportsHostedWebSearch: boolean, keyEnv: string, keyUrl: string, docsUrl: string, installed: boolean, providerId: UUID | null, models: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "slug" | "name" | "kind" | "baseUrl" | "supportsHostedWebSearch" | "keyEnv" | "keyUrl" | "docsUrl" | "installed" | "providerId" | "models"}, Fields>>;
+> = Array<InferResult<{slug: string, name: string, kind: string, baseUrl: string, supportsHostedWebSearch: boolean, keyEnv: string, keyUrl: string, docsUrl: string, installed: boolean, credential: boolean, providerId: UUID | null, models: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "slug" | "name" | "kind" | "baseUrl" | "supportsHostedWebSearch" | "keyEnv" | "keyUrl" | "docsUrl" | "installed" | "credential" | "providerId" | "models"}, Fields>>;
 
 export type ListPresetsResult<Fields extends ListPresetsFields | undefined = undefined> = | { success: true; data: InferListPresetsResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }
@@ -1190,6 +1190,7 @@ export type CreateProviderInput = {
   slug: string;
   kind?: "openai" | "openai_compatible";
   baseUrl: string;
+  credentialId?: UUID | null;
   supportsHostedWebSearch?: boolean;
   requestTimeoutMs?: number;
   maxConcurrentRequests?: number | null;
@@ -1509,6 +1510,7 @@ export type UpdateProviderInput = {
   name?: string;
   kind?: "openai" | "openai_compatible";
   baseUrl?: string;
+  credentialId?: UUID | null;
   supportsHostedWebSearch?: boolean;
   requestTimeoutMs?: number;
   maxConcurrentRequests?: number | null;
@@ -1938,6 +1940,10 @@ export type CreateCredentialOauth2Input = {
   scopes?: string | null;
   pkce?: boolean;
   extraParams?: Record<string, any>;
+  fixedClient?: boolean;
+  redirectUri?: string | null;
+  authorizeParams?: Record<string, any>;
+  deviceFlow?: "none" | "openai";
   clientSecret?: string | null;
 };
 
@@ -2064,6 +2070,154 @@ export async function validateDeleteCredential(
     action: "delete_credential",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     identity: config.identity
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type CredentialDeviceBeginInput = {
+  id: UUID;
+};
+
+export type CredentialDeviceBeginFields = UnifiedFieldSelection<{state: string, userCode: string, verificationUrl: string, interval: number, __type: "TypedMap", __primitiveFields: "state" | "userCode" | "verificationUrl" | "interval"}>[];
+
+export type InferCredentialDeviceBeginResult<
+  Fields extends CredentialDeviceBeginFields | undefined,
+> = InferResult<{state: string, userCode: string, verificationUrl: string, interval: number, __type: "TypedMap", __primitiveFields: "state" | "userCode" | "verificationUrl" | "interval"}, Fields>;
+
+export type CredentialDeviceBeginResult<Fields extends CredentialDeviceBeginFields | undefined = undefined> = | { success: true; data: InferCredentialDeviceBeginResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Credential
+ *
+ * @ashActionType :action
+ */
+export async function credentialDeviceBegin<Fields extends CredentialDeviceBeginFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: CredentialDeviceBeginInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<CredentialDeviceBeginResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "credential_device_begin",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<CredentialDeviceBeginResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Credential
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateCredentialDeviceBegin(
+  config: {
+  tenant?: string;
+  input: CredentialDeviceBeginInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "credential_device_begin",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type CredentialDevicePollInput = {
+  state: string;
+};
+
+export type CredentialDevicePollFields = UnifiedFieldSelection<{status: string, message: string | null, __type: "TypedMap", __primitiveFields: "status" | "message"}>[];
+
+export type InferCredentialDevicePollResult<
+  Fields extends CredentialDevicePollFields | undefined,
+> = InferResult<{status: string, message: string | null, __type: "TypedMap", __primitiveFields: "status" | "message"}, Fields>;
+
+export type CredentialDevicePollResult<Fields extends CredentialDevicePollFields | undefined = undefined> = | { success: true; data: InferCredentialDevicePollResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Credential
+ *
+ * @ashActionType :action
+ */
+export async function credentialDevicePoll<Fields extends CredentialDevicePollFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: CredentialDevicePollInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<CredentialDevicePollResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "credential_device_poll",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<CredentialDevicePollResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Credential
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateCredentialDevicePoll(
+  config: {
+  tenant?: string;
+  input: CredentialDevicePollInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "credential_device_poll",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
   };
 
   return executeValidationRpcRequest<ValidationResult>(
@@ -2411,6 +2565,10 @@ export type UpdateCredentialInput = {
   scopes?: string | null;
   pkce?: boolean;
   extraParams?: Record<string, any>;
+  fixedClient?: boolean;
+  redirectUri?: string | null;
+  authorizeParams?: Record<string, any>;
+  deviceFlow?: "none" | "openai";
   clientSecret?: string | null;
   secret?: string | null;
 };

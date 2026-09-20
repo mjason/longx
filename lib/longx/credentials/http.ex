@@ -94,14 +94,15 @@ defmodule Longx.Credentials.Http do
   ## pieces
 
   # the value to send: the key, or a fresh enough access token
-  defp value_for(%Credential{kind: :api_key, secret: secret}) when is_binary(secret),
+  @doc false
+  def value_for(%Credential{kind: :api_key, secret: secret}) when is_binary(secret),
     do: {:ok, secret}
 
-  defp value_for(%Credential{kind: :api_key}), do: {:error, :needs_login}
+  def value_for(%Credential{kind: :api_key}), do: {:error, :needs_login}
 
-  defp value_for(%Credential{kind: :oauth2, access_token: nil}), do: {:error, :needs_login}
+  def value_for(%Credential{kind: :oauth2, access_token: nil}), do: {:error, :needs_login}
 
-  defp value_for(%Credential{kind: :oauth2} = cred) do
+  def value_for(%Credential{kind: :oauth2} = cred) do
     cond do
       not stale?(cred.expires_at) ->
         {:ok, cred.access_token}

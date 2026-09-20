@@ -636,7 +636,8 @@ defmodule Longx.Agent.PlugsTest do
       assert {:error, message} = Task.await(task, 10_000)
       assert message =~ "killed from the settings page"
       assert message =~ "start"
-      assert Enum.filter(Longx.System.Commands.list(), &(&1.thread_id == "native_ledger")) == []
+
+      # the entry goes with the task's process (Longx.System.CommandsTest covers the ledger's cleanup)
     end
 
     test "memory pressure kills the command and the model is told why", %{ctx: ctx} do

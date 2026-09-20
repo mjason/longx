@@ -103,6 +103,8 @@ export type Provider = {
   lastCheckedAt: string | null;
   lastError: string | null;
   lastErrorAt: string | null;
+  /** an OAuth2 credential standing in for the key (a ChatGPT subscription) */
+  credentialId: string | null;
 };
 
 export type ModelRow = {
@@ -142,6 +144,8 @@ export type Preset = {
   keyEnv: string;
   keyUrl: string;
   docsUrl: string;
+  /** the key is a login, not a string: apply makes the credential, then the person logs in */
+  credential: boolean;
   installed: boolean;
   providerId: string | null;
   models: PresetModel[];
@@ -175,6 +179,7 @@ const providerFields = [
   "lastCheckedAt",
   "lastError",
   "lastErrorAt",
+  "credentialId",
 ] as const;
 const modelRowFields = [
   "id",
@@ -199,6 +204,7 @@ const presetFields = [
   "keyEnv",
   "keyUrl",
   "docsUrl",
+  "credential",
   "installed",
   "providerId",
   "models",
@@ -282,8 +288,8 @@ export function useAiActions() {
     applyPreset: useAiWrite(
       async (input: ApplyPresetInput) =>
         unwrap(
-          await applyPreset({ fields: ["providerId", "modelIds"], input }),
-        ) as { providerId: string; modelIds: string[] },
+          await applyPreset({ fields: ["providerId", "modelIds", "credentialId"], input }),
+        ) as { providerId: string; modelIds: string[]; credentialId: string | null },
     ),
     createModel: useAiWrite(async (input: ModelInput) =>
       unwrap(await createModel({ fields: ["id"], input })),

@@ -7,6 +7,7 @@ defmodule Longx.AI.PresetsTest do
   setup do
     Ash.bulk_destroy!(AI.Model, :destroy, %{}, authorize?: false)
     Ash.bulk_destroy!(AI.Provider, :destroy, %{}, authorize?: false)
+    Ash.bulk_destroy!(Longx.Credentials.Credential, :destroy, %{}, authorize?: false)
     :ok
   end
 
@@ -16,7 +17,8 @@ defmodule Longx.AI.PresetsTest do
              "glm",
              "bailian-token-plan-personal",
              "bailian-token-plan-team",
-             "openai"
+             "openai",
+             "chatgpt"
            ]
 
     {:ok, deepseek} = Presets.fetch("deepseek")
@@ -84,6 +86,44 @@ defmodule Longx.AI.PresetsTest do
   end
 
   describe "apply/2" do
+    test "chatgpt: a subscription — the Codex app's OAuth2 credential (fixed client, device-code login, the vendor's redirect), the provider on it, the models; idempotent" do
+      assert {:ok, %{provider: provider, models: models, credential: cred}} =
+               Presets.apply("chatgpt")
+
+      assert provider.slug == "chatgpt"
+      assert provider.base_url == "https://chatgpt.com/backend-api/codex"
+      assert provider.kind == :openai
+      assert provider.credential_id == cred.id
+      assert Ash.load!(provider, :api_key).api_key == nil
+
+      assert %Longx.Credentials.Credential{
+               name: "chatgpt",
+               kind: :oauth2,
+               client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
+               authorize_url: "https://auth.openai.com/oauth/authorize",
+               token_url: "https://auth.openai.com/oauth/token",
+               scopes: "openid profile email offline_access",
+               fixed_client: true,
+               device_flow: :openai,
+               redirect_uri: "http://localhost:1455/auth/callback",
+               pkce: true
+             } = cred
+
+      assert "chatgpt.com" in cred.allowed_hosts and "auth.openai.com" in cred.allowed_hosts
+      assert cred.authorize_params["codex_cli_simplified_flow"] == "true"
+      assert cred.authorize_params["id_token_add_organizations"] == "true"
+      assert cred.authorize_params["originator"] == "codex_cli_rs"
+      assert "gpt-5.6-sol" in Enum.map(models, & &1.slug)
+
+      # the models' slugs are the plain ones when free, else prefixed (the openai preset took them?)
+      assert Enum.all?(models, &(&1.provider_id == provider.id))
+
+      # again: the same credential and provider, nothing doubled
+      assert {:ok, %{provider: again, credential: cred_again}} = Presets.apply("chatgpt")
+      assert again.id == provider.id and cred_again.id == cred.id
+      assert length(Longx.Credentials.list()) == 1
+    end
+
     test "creates the provider and the recommended models, the key on the provider" do
       assert {:ok, %{provider: provider, models: models}} =
                Presets.apply("deepseek", api_key: "sk-ds")
