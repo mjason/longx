@@ -298,21 +298,18 @@ defmodule Longx.AI.Gateway do
   @output_only_part_keys ["logprobs"]
 
   defp strip_output_fields(input, %Target{chatgpt?: true}) do
-    Enum.map(input, fn
-      %{"type" => type} = item when type in ["message", "function_call", "custom_tool_call"] ->
-        item
-        |> Map.drop(@output_only_item_keys)
-        |> Map.update("content", nil, fn
-          parts when is_list(parts) ->
-            Enum.map(parts, &if(is_map(&1), do: Map.drop(&1, @output_only_part_keys), else: &1))
+    # every item: a reasoning item carries a status too
+    Enum.map(input, fn item when is_map(item) ->
+      item
+      |> Map.drop(@output_only_item_keys)
+      |> Map.update("content", nil, fn
+        parts when is_list(parts) ->
+          Enum.map(parts, &if(is_map(&1), do: Map.drop(&1, @output_only_part_keys), else: &1))
 
-          other ->
-            other
-        end)
-        |> then(&if(is_nil(&1["content"]), do: Map.delete(&1, "content"), else: &1))
-
-      item ->
-        item
+        other ->
+          other
+      end)
+      |> then(&if(is_nil(&1["content"]), do: Map.delete(&1, "content"), else: &1))
     end)
   end
 

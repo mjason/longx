@@ -668,9 +668,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     backend's headers (`chatgpt-account-id`, `OpenAI-Beta: responses=experimental`,
     `originator: codex_cli_rs` — the backend serves only clients it knows) and
     `store: false` + `include: ["reasoning.encrypted_content"]`, and strips what only
-    an output item carries from the replayed input (`status`, `phase`, a part's
-    `logprobs` — the backend answers 400 "Unknown parameter: 'input[1].status'";
-    api.openai.com takes them); `discover_models`
+    an output item carries from **every** replayed input item (`status`, `phase`, a
+    part's `logprobs` — messages, calls and reasoning items all carry a `status`; the
+    backend answers 400 "Unknown parameter: 'input[1].status'"; api.openai.com takes
+    them); `discover_models`
     reads the backend's catalog (`GET /models?client_version=` → `models[]` with
     `slug`, `context_window`, `supported_reasoning_levels`, `visibility` — hidden ones
     left out) with the same headers. **Any provider's own list**: `discover_models/1`
