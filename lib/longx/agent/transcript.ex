@@ -94,7 +94,41 @@ defmodule Longx.Agent.Transcript do
   defp user_words?(_), do: false
 
   @spec append!(map) :: Item.t()
-  def append!(attrs), do: Ash.create!(Item, attrs, action: :append)
+  def append!(attrs), do: write_with_retry(fn -> Ash.create!(Item, attrs, action: :append) end)
+
+  # SQLite takes one writer at a time: a team of agents writing their
+  # transcripts while the Tracker writes turn rows meets "database is locked"
+  # now and then (the pool's busy_timeout ran out under a long transaction),
+  # and a raise here ended the agent mid-turn. A locked write is tried again
+  # after a short wait, a few times; any other error is raised as it is.
+  @lock_waits [200, 500, 1_000, 2_000]
+
+  @doc false
+  @spec write_with_retry((-> term), keyword) :: term
+  def write_with_retry(fun, opts \\ []) when is_function(fun, 0) do
+    do_write(fun, Keyword.get(opts, :waits, @lock_waits))
+  end
+
+  defp do_write(fun, waits) do
+    fun.()
+  rescue
+    e in Ash.Error.Unknown ->
+      case {locked?(e), waits} do
+        {true, [wait | rest]} ->
+          Process.sleep(wait)
+          do_write(fun, rest)
+
+        _ ->
+          reraise e, __STACKTRACE__
+      end
+  end
+
+  defp locked?(%Ash.Error.Unknown{errors: errors}) do
+    Enum.any?(errors, fn
+      %{message: message} when is_binary(message) -> message =~ "database is locked"
+      other -> inspect(other) =~ "database is locked"
+    end)
+  end
 
   @doc "The thread's items, oldest first."
   @spec items!(String.t()) :: [Item.t()]

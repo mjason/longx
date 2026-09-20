@@ -350,7 +350,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     user's own messages before it verbatim (newest first within `keep_user_bytes`, 80 KB),
     the summary, then everything after; a `function_call` without an output gets a
     synthetic "interrupted" output. A boot replays the `ui` items through
-    `ThreadState.backfill`; a retract is a truncation.
+    `ThreadState.backfill`; a retract is a truncation. `append!/1` retries a write
+    SQLite refused as "database is locked" (`write_with_retry/2`, 200 ms → 2 s; a team
+    of agents writing at once ran past the pool's `busy_timeout` and the raise ended
+    an agent mid-turn — Sentry LONX-5).
   - **Descriptions: `Longx.Agent.Config`** (the DSL: `version` / `extends` / `model` /
     `prompt` / `prompt_file` / `summary` / `agents` / `plug` / `options` / `drop` /
     `pipeline`), data evaluated before anything runs, the same format in every layer.
@@ -664,7 +667,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     .chatgpt_account_id` (`AI.chatgpt_account_id/1`), and `Gateway.prepare` adds the
     backend's headers (`chatgpt-account-id`, `OpenAI-Beta: responses=experimental`,
     `originator: codex_cli_rs` — the backend serves only clients it knows) and
-    `store: false` + `include: ["reasoning.encrypted_content"]`; `discover_models`
+    `store: false` + `include: ["reasoning.encrypted_content"]`, and strips what only
+    an output item carries from the replayed input (`status`, `phase`, a part's
+    `logprobs` — the backend answers 400 "Unknown parameter: 'input[1].status'";
+    api.openai.com takes them); `discover_models`
     reads the backend's catalog (`GET /models?client_version=` → `models[]` with
     `slug`, `context_window`, `supported_reasoning_levels`, `visibility` — hidden ones
     left out) with the same headers. **Any provider's own list**: `discover_models/1`

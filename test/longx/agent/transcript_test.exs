@@ -5,6 +5,37 @@ defmodule Longx.Agent.TranscriptTest do
 
   @thread "th-#{System.unique_integer([:positive])}"
 
+  test "a write that meets SQLite's lock is tried again before it fails (a locked database once crashed the agent mid-turn)" do
+    # a writer that is refused twice, then goes through
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    write = fn ->
+      n = Agent.get_and_update(counter, &{&1, &1 + 1})
+      if n < 2, do: raise(locked()), else: :written
+    end
+
+    assert :written == Transcript.write_with_retry(write, waits: [1, 1, 1])
+    assert Agent.get(counter, & &1) == 3
+
+    # not a lock: raised as it is, at once
+    assert_raise ArgumentError, fn ->
+      Transcript.write_with_retry(fn -> raise ArgumentError, "other" end, waits: [1])
+    end
+
+    # still locked after every wait: the last error is the one raised
+    assert_raise Ash.Error.Unknown, fn ->
+      Transcript.write_with_retry(fn -> raise(locked()) end, waits: [1, 1])
+    end
+  end
+
+  # the error as Ash raises it around Exqlite's
+  defp locked,
+    do:
+      Ash.Error.to_error_class(%Exqlite.Error{
+        message: "database is locked",
+        statement: "BEGIN IMMEDIATE TRANSACTION"
+      })
+
   test "items are appended in sequence, listed in order, truncated per turn and deleted per thread" do
     user = %{"type" => "message", "role" => "user", "content" => "hi"}
     call = %{"type" => "function_call", "call_id" => "c1", "name" => "exec", "arguments" => "{}"}

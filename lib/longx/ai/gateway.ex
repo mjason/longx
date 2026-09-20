@@ -69,6 +69,7 @@ defmodule Longx.AI.Gateway do
         |> translate_agent_messages(target.kind)
         |> sanitize_reasoning(target.kind)
         |> translate_agent_messages(target.kind)
+        |> strip_output_fields(target)
       )
       |> drop_hosted_search(target)
       |> put_image_generation(target)
@@ -289,6 +290,33 @@ defmodule Longx.AI.Gateway do
       end
     end)
   end
+
+  # the Codex backend refuses an input item carrying what only an output item
+  # has (`status`, `phase`, a part's `logprobs`): "Unknown parameter:
+  # 'input[1].status'" — api.openai.com takes them, so only that target is cleaned
+  @output_only_item_keys ["status", "phase"]
+  @output_only_part_keys ["logprobs"]
+
+  defp strip_output_fields(input, %Target{chatgpt?: true}) do
+    Enum.map(input, fn
+      %{"type" => type} = item when type in ["message", "function_call", "custom_tool_call"] ->
+        item
+        |> Map.drop(@output_only_item_keys)
+        |> Map.update("content", nil, fn
+          parts when is_list(parts) ->
+            Enum.map(parts, &if(is_map(&1), do: Map.drop(&1, @output_only_part_keys), else: &1))
+
+          other ->
+            other
+        end)
+        |> then(&if(is_nil(&1["content"]), do: Map.delete(&1, "content"), else: &1))
+
+      item ->
+        item
+    end)
+  end
+
+  defp strip_output_fields(input, _target), do: input
 
   @doc "The degraded form of a request: no encrypted reasoning at all, not even the target's own."
   @spec strip_all_encrypted(map) :: map

@@ -278,6 +278,56 @@ defmodule Longx.AI.GatewayTest do
       refute Enum.any?(plain.headers, &(elem(&1, 0) in ["chatgpt-account-id", "originator"]))
     end
 
+    test "a ChatGPT-subscription target gets no output-only fields back on replayed items (the backend answers 400 to `input[1].status`)" do
+      chatgpt = %Target{
+        @target
+        | kind: :openai,
+          chatgpt?: true,
+          account_id: "a",
+          base_url: "https://chatgpt.com/backend-api/codex"
+      }
+
+      body =
+        Map.put(@codex_body, "input", [
+          %{
+            "type" => "message",
+            "role" => "user",
+            "content" => [%{"type" => "input_text", "text" => "hi"}]
+          },
+          %{
+            "type" => "message",
+            "id" => "msg_1",
+            "role" => "assistant",
+            "status" => "completed",
+            "phase" => "final_answer",
+            "content" => [
+              %{"type" => "output_text", "text" => "yo", "annotations" => [], "logprobs" => []}
+            ]
+          },
+          %{
+            "type" => "function_call",
+            "id" => "fc_1",
+            "call_id" => "c1",
+            "name" => "exec_command",
+            "arguments" => "{}",
+            "status" => "completed"
+          },
+          %{"type" => "function_call_output", "call_id" => "c1", "output" => "ok"}
+        ])
+
+      {:ok, up} = Gateway.prepare(body, chatgpt)
+      [_, message, call, _] = up.body["input"]
+      refute Map.has_key?(message, "status")
+      refute Map.has_key?(message, "phase")
+      refute Map.has_key?(hd(message["content"]), "logprobs")
+      assert hd(message["content"])["text"] == "yo"
+      refute Map.has_key?(call, "status")
+      assert call["call_id"] == "c1"
+      # api.openai.com takes them as they are
+      {:ok, plain} = Gateway.prepare(body, %Target{@target | kind: :openai})
+      assert Enum.at(plain.body["input"], 1)["status"] == "completed"
+    end
+
     test "the hosted image_generation tool goes only to a model flagged for it; a stray one is dropped for the rest" do
       body =
         Map.put(@codex_body, "tools", [
