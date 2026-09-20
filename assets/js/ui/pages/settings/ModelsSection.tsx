@@ -719,6 +719,8 @@ function ProviderDialog({
     apiKey: "",
     kind: provider?.kind ?? "openai_compatible",
     supportsHostedWebSearch: provider?.supportsHostedWebSearch ?? false,
+    // "auto" follows the kind (OpenAI sends it, a compatible service does not)
+    promptCacheKey: provider?.promptCacheKey === true ? "on" : provider?.promptCacheKey === false ? "off" : "auto",
     timeoutS: String(
       Math.round((provider?.requestTimeoutMs ?? 600_000) / 1000),
     ),
@@ -737,6 +739,7 @@ function ProviderDialog({
       baseUrl: form.baseUrl.trim(),
       kind: form.kind as Provider["kind"],
       supportsHostedWebSearch: form.supportsHostedWebSearch,
+      promptCacheKey: form.promptCacheKey === "on" ? true : form.promptCacheKey === "off" ? false : null,
       requestTimeoutMs: Math.max(1, Number(form.timeoutS) || 600) * 1000,
       maxConcurrentRequests: form.concurrency ? Number(form.concurrency) : null,
       ...(form.apiKey ? { apiKey: form.apiKey } : {}),
@@ -835,6 +838,18 @@ function ProviderDialog({
                 onCheckedChange={(v) => set("supportsHostedWebSearch", v)}
               />
             </div>
+            <Field id="pv-cache" label="prompt_cache_key" hint={s.promptCacheKeyHint}>
+              <Select value={form.promptCacheKey} onValueChange={(v) => set("promptCacheKey", v)}>
+                <SelectTrigger id="pv-cache" aria-label="prompt_cache_key">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">{s.promptCacheKeyOptions.auto}</SelectItem>
+                  <SelectItem value="on">{s.promptCacheKeyOptions.on}</SelectItem>
+                  <SelectItem value="off">{s.promptCacheKeyOptions.off}</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
             <details className="group">
               <summary className="text-muted-foreground flex cursor-pointer list-none items-center gap-1 text-sm">
                 <ChevronDown className="size-4 transition-transform group-open:rotate-180" />{" "}

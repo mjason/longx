@@ -58,6 +58,7 @@ defmodule Longx.AI.Gateway do
   def prepare(%{"input" => input} = body, %Target{} = target) when is_list(input) do
     body =
       body
+      |> put_prompt_cache_key(target)
       |> Map.drop(@internal_fields)
       |> Map.put("model", target.model)
       |> Map.put("stream", true)
@@ -97,6 +98,19 @@ defmodule Longx.AI.Gateway do
   end
 
   def prepare(_body, _target), do: {:error, :invalid_request}
+
+  # OpenAI caches a request's prefix per `prompt_cache_key` (the Codex CLI sends
+  # its session id): the thread is ours. Whether a provider gets it is its switch
+  # (`Provider.prompt_cache_key`; by kind when unset) — the others cache prefixes
+  # by themselves and get none
+  defp put_prompt_cache_key(%{"client_metadata" => %{"thread_id" => thread}} = body, %Target{
+         prompt_cache_key?: true
+       })
+       when is_binary(thread) and thread != "",
+       do: Map.put(body, "prompt_cache_key", thread)
+
+  # no thread known, or a provider without the parameter: none (a key from elsewhere goes too)
+  defp put_prompt_cache_key(body, _target), do: Map.delete(body, "prompt_cache_key")
 
   # the Codex backend (a ChatGPT subscription) keeps nothing server-side: every
   # request says `store: false` and asks the reasoning back encrypted so the next

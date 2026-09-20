@@ -69,7 +69,7 @@ export type PresetAttributesOnlySchema = {
 // Provider Schema
 export type ProviderResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "baseUrl" | "credentialId" | "hasApiKey" | "id" | "insertedAt" | "kind" | "lastCheckedAt" | "lastError" | "lastErrorAt" | "maxConcurrentRequests" | "name" | "requestTimeoutMs" | "slug" | "supportsHostedWebSearch" | "updatedAt";
+  __primitiveFields: "baseUrl" | "credentialId" | "hasApiKey" | "id" | "insertedAt" | "kind" | "lastCheckedAt" | "lastError" | "lastErrorAt" | "maxConcurrentRequests" | "name" | "promptCacheKey" | "requestTimeoutMs" | "slug" | "supportsHostedWebSearch" | "updatedAt";
   baseUrl: string;
   credentialId: UUID | null;
   hasApiKey: boolean | null;
@@ -81,6 +81,7 @@ export type ProviderResourceSchema = {
   lastErrorAt: UtcDateTimeUsec | null;
   maxConcurrentRequests: number | null;
   name: string;
+  promptCacheKey: boolean | null;
   requestTimeoutMs: number;
   slug: string;
   supportsHostedWebSearch: boolean;
@@ -91,7 +92,7 @@ export type ProviderResourceSchema = {
 
 export type ProviderAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "baseUrl" | "credentialId" | "id" | "insertedAt" | "kind" | "lastCheckedAt" | "lastError" | "lastErrorAt" | "maxConcurrentRequests" | "name" | "requestTimeoutMs" | "slug" | "supportsHostedWebSearch" | "updatedAt";
+  __primitiveFields: "baseUrl" | "credentialId" | "id" | "insertedAt" | "kind" | "lastCheckedAt" | "lastError" | "lastErrorAt" | "maxConcurrentRequests" | "name" | "promptCacheKey" | "requestTimeoutMs" | "slug" | "supportsHostedWebSearch" | "updatedAt";
   baseUrl: string;
   credentialId: UUID | null;
   id: UUIDv7;
@@ -102,6 +103,7 @@ export type ProviderAttributesOnlySchema = {
   lastErrorAt: UtcDateTimeUsec | null;
   maxConcurrentRequests: number | null;
   name: string;
+  promptCacheKey: boolean | null;
   requestTimeoutMs: number;
   slug: string;
   supportsHostedWebSearch: boolean;
@@ -740,6 +742,13 @@ export type ProviderFilterInput = {
     contains?: string;
     stringEndsWith?: string;
     stringStartsWith?: string;
+  };
+
+  promptCacheKey?: {
+    isNil?: boolean;
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
   };
 
   requestTimeoutMs?: {
@@ -2047,7 +2056,7 @@ export const modelFilterFields = ["contextWindow", "default", "hostedWebSearch",
 export type ModelFilterField = (typeof modelFilterFields)[number];
 
 
-export const providerFilterFields = ["baseUrl", "credentialId", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
+export const providerFilterFields = ["baseUrl", "credentialId", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "promptCacheKey", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
 export type ProviderFilterField = (typeof providerFilterFields)[number];
 
 export const searchProviderFilterFields = ["baseUrl", "default", "hasApiKey", "id", "kind", "name", "slug"] as const;
@@ -2076,7 +2085,7 @@ export const modelSortFields = ["contextWindow", "default", "hostedWebSearch", "
 export type ModelSortField = (typeof modelSortFields)[number];
 
 
-export const providerSortFields = ["baseUrl", "credentialId", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
+export const providerSortFields = ["baseUrl", "credentialId", "hasApiKey", "id", "insertedAt", "kind", "lastCheckedAt", "lastError", "lastErrorAt", "maxConcurrentRequests", "name", "promptCacheKey", "requestTimeoutMs", "slug", "supportsHostedWebSearch", "updatedAt"] as const;
 export type ProviderSortField = (typeof providerSortFields)[number];
 
 export const searchProviderSortFields = ["baseUrl", "default", "hasApiKey", "id", "kind", "name", "slug"] as const;

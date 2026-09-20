@@ -646,6 +646,7 @@ export const provider = (n: number, extra: Record<string, unknown> = {}) => ({
   lastError: n === 2 ? "401 Authentication Fails" : null,
   lastErrorAt: null,
   credentialId: null,
+  promptCacheKey: null,
   ...extra,
 });
 

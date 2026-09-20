@@ -930,6 +930,28 @@ defmodule Longx.AITest do
     end
   end
 
+  describe "prompt_cache_key per provider" do
+    test "unset follows the kind (OpenAI on, compatible off); set, the provider's word stands" do
+      openai =
+        create_provider!(%{slug: "oa", base_url: "https://api.openai.com/v1", api_key: "k"})
+
+      compat =
+        create_provider!(%{slug: "cp", base_url: "https://api.deepseek.com/v1", api_key: "k"})
+
+      assert openai.prompt_cache_key == nil and compat.prompt_cache_key == nil
+
+      m1 = create_model!(openai, %{upstream_id: "a", slug: "a"})
+      m2 = create_model!(compat, %{upstream_id: "b", slug: "b"})
+      assert {:ok, %AI.Target{prompt_cache_key?: true}} = AI.resolve_target("a")
+      assert {:ok, %AI.Target{prompt_cache_key?: false}} = AI.resolve_target("b")
+
+      AI.update_provider!(compat, %{prompt_cache_key: true})
+      AI.update_provider!(openai, %{prompt_cache_key: false})
+      assert {:ok, %AI.Target{prompt_cache_key?: true}} = AI.resolve_target(m2.slug)
+      assert {:ok, %AI.Target{prompt_cache_key?: false}} = AI.resolve_target(m1.slug)
+    end
+  end
+
   describe "resolve_target/0" do
     test "combines the default model with its provider's credentials" do
       provider = create_provider!(%{base_url: "https://api.deepseek.com/v1", api_key: "sk-ds"})

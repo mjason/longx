@@ -677,7 +677,15 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     (developers.openai.com, Responses → input → reasoning) allows `content` and
     `status`, so api.openai.com is untouched. Checked with a real thread's mixed
     history (80 items: qwen / deepseek reasoning, uuids, statuses, calls) and a
-    two-step tool call; `discover_models`
+    two-step tool call. **`prompt_cache_key`** (OpenAI caches the prefix per key; the
+    Codex CLI sends its session id) is the thread id, sent when the provider's
+    `prompt_cache_key` says so — nil follows the kind (OpenAI and the Codex backend on,
+    compatible off; the provider dialog's prompt_cache_key select: 自动 / 发送 / 不发 — a
+    compatible service that reads it is switched on there), `Target.prompt_cache_key?`;
+    a key from elsewhere is dropped otherwise. A content-policy refusal ("Invalid
+    prompt: your prompt was flagged as potentially violating our usage policy", relayed
+    by a gateway as a 502) is **final** like a quota refusal — no retry of the same
+    prompt; `Model.policy?/1`; `discover_models`
     reads the backend's catalog (`GET /models?client_version=` → `models[]` with
     `slug`, `context_window`, `supported_reasoning_levels`, `visibility` — hidden ones
     left out) with the same headers. **Any provider's own list**: `discover_models/1`

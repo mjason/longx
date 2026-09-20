@@ -105,6 +105,8 @@ export type Provider = {
   lastErrorAt: string | null;
   /** an OAuth2 credential standing in for the key (a ChatGPT subscription) */
   credentialId: string | null;
+  /** requests carry prompt_cache_key; null = by kind */
+  promptCacheKey: boolean | null;
 };
 
 export type ModelRow = {
@@ -181,6 +183,7 @@ const providerFields = [
   "lastError",
   "lastErrorAt",
   "credentialId",
+  "promptCacheKey",
 ] as const;
 const modelRowFields = [
   "id",

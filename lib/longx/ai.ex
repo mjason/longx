@@ -240,6 +240,11 @@ defmodule Longx.AI do
              else: model.hosted_web_search
            ),
          image_generation?: model.image_generation == true,
+         prompt_cache_key?:
+           if(is_nil(provider.prompt_cache_key),
+             do: provider.kind == :openai or chatgpt_backend?(provider),
+             else: provider.prompt_cache_key
+           ),
          kind: if(chatgpt_backend?(provider), do: :openai, else: provider.kind),
          chatgpt?: chatgpt_backend?(provider),
          account_id: if(chatgpt_backend?(provider), do: chatgpt_account_id(api_key)),

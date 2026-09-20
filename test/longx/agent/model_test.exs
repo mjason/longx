@@ -82,6 +82,23 @@ defmodule Longx.Agent.ModelTest do
              Longx.AI.Gateway.Log.recent(5)
   end
 
+  test "a content-policy refusal is final whatever the status (a gateway relays OpenAI's as a 502): no retry of the same prompt",
+       %{bypass: bypass, model: model} do
+    Bypass.expect_once(bypass, "POST", "/v1/responses", fn conn ->
+      Plug.Conn.send_resp(
+        conn,
+        502,
+        ~s({"error":{"message":"Invalid prompt: your prompt was flagged as potentially violating our usage policy. Please try again with a different prompt: https://platform.openai.com/docs/guides/reasoning#advice-on-prompting"}})
+      )
+    end)
+
+    ref = make_ref()
+    assert :ok = Model.stream(@request, self(), ref)
+    assert_receive {:model, ^ref, {:failed, {:model_failed, slug, message}}}, 2_000
+    assert slug == model.slug
+    assert message =~ "usage policy"
+  end
+
   test "a quota exhaustion is final at once and names the model; a chain falls back to its next model",
        %{bypass: bypass, model: model} do
     Bypass.expect_once(bypass, "POST", "/v1/responses", fn conn ->

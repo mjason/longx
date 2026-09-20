@@ -1194,6 +1194,7 @@ export type CreateProviderInput = {
   baseUrl: string;
   credentialId?: UUID | null;
   supportsHostedWebSearch?: boolean;
+  promptCacheKey?: boolean | null;
   requestTimeoutMs?: number;
   maxConcurrentRequests?: number | null;
   apiKey?: string | null;
@@ -1514,6 +1515,7 @@ export type UpdateProviderInput = {
   baseUrl?: string;
   credentialId?: UUID | null;
   supportsHostedWebSearch?: boolean;
+  promptCacheKey?: boolean | null;
   requestTimeoutMs?: number;
   maxConcurrentRequests?: number | null;
   apiKey?: string | null;

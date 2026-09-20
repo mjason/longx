@@ -109,6 +109,9 @@ describe("SettingsPage", () => {
       "https://api.openai.com/v1",
     );
     await user.type(within(dialog).getByLabelText("API Key"), "sk-1");
+    // the prompt-cache key: follows the kind unless the person decides
+    await user.click(within(dialog).getByRole("combobox", { name: "prompt_cache_key" }));
+    await user.click(await screen.findByRole("option", { name: "发送" }));
     await user.click(within(dialog).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(createProvider).toHaveBeenCalledWith(
@@ -118,6 +121,7 @@ describe("SettingsPage", () => {
             slug: "openai",
             baseUrl: "https://api.openai.com/v1",
             apiKey: "sk-1",
+            promptCacheKey: true,
           }),
         }),
       ),

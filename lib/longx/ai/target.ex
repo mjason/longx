@@ -17,6 +17,8 @@ defmodule Longx.AI.Target do
     hosted_web_search?: false,
     # the provider's hosted image_generation tool is offered
     image_generation?: false,
+    # requests carry `prompt_cache_key` (the thread): OpenAI caches the prefix per key
+    prompt_cache_key?: false,
     # :openai is the only provider whose reasoning items may be replayed to it
     # with their encrypted_content (see Longx.AI.Gateway)
     kind: :openai_compatible,
@@ -41,6 +43,7 @@ defmodule Longx.AI.Target do
           provider_slug: String.t() | nil,
           hosted_web_search?: boolean,
           image_generation?: boolean,
+          prompt_cache_key?: boolean,
           kind: :openai | :openai_compatible,
           request_timeout_ms: pos_integer,
           max_concurrent_requests: pos_integer | nil,

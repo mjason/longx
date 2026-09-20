@@ -357,6 +357,30 @@ defmodule Longx.AI.GatewayTest do
       assert Enum.at(plain.body["input"], 3)["status"] == "completed"
     end
 
+    test "a target flagged for it gets the thread as its prompt_cache_key (OpenAI caches the prefix per session; a provider's switch); the rest get none" do
+      body =
+        Map.put(@codex_body, "client_metadata", %{
+          "thread_id" => "native_abc",
+          "turn_id" => "turn_1"
+        })
+
+      {:ok, keyed} = Gateway.prepare(body, %Target{@target | prompt_cache_key?: true})
+      assert keyed.body["prompt_cache_key"] == "native_abc"
+      refute Map.has_key?(keyed.body, "client_metadata")
+
+      {:ok, other} = Gateway.prepare(body, %Target{@target | prompt_cache_key?: false})
+      refute Map.has_key?(other.body, "prompt_cache_key")
+
+      # no thread known: no key, not even one the request carried
+      {:ok, bare} =
+        Gateway.prepare(Map.delete(@codex_body, "client_metadata"), %Target{
+          @target
+          | prompt_cache_key?: true
+        })
+
+      refute Map.has_key?(bare.body, "prompt_cache_key")
+    end
+
     test "the hosted image_generation tool goes only to a model flagged for it; a stray one is dropped for the rest" do
       body =
         Map.put(@codex_body, "tools", [

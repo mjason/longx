@@ -674,6 +674,8 @@ export const t = {
     >,
     kindHint: "只有 OpenAI 自己能读回它的加密推理；其它服务选“OpenAI 兼容”",
     hostedSearch: "自带联网搜索（web_search 工具）",
+    promptCacheKeyHint: "请求里带上会话 id 作为 prompt_cache_key，让服务端按会话缓存前缀（OpenAI 的参数；Codex CLI 也这么发）。自动 = OpenAI 发、兼容服务不发；别的服务支持的话手动打开。",
+    promptCacheKeyOptions: { auto: "自动（按类型）", on: "发送", off: "不发" } as Record<string, string>,
     timeout: "请求超时（秒）",
     concurrency: "并发上限",
     unlimited: "不限",

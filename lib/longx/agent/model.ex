@@ -179,6 +179,12 @@ defmodule Longx.Agent.Model do
   @quota ~r/quota|exhaust|insufficient|balance|credit|billing|payment|exceeded your/i
   defp quota?(message), do: Regex.match?(@quota, message)
 
+  # OpenAI's content filter ("Invalid prompt: your prompt was flagged as potentially
+  # violating our usage policy") — a gateway in front relays it as a 502, and three
+  # retries of the same prompt change nothing: final, the chain's next model may differ
+  @policy ~r/usage policy|invalid prompt|content_policy|flagged as/i
+  defp policy?(message), do: Regex.match?(@policy, message)
+
   defp post(up, target, owner, ref) do
     request =
       Req.new(
@@ -199,6 +205,7 @@ defmodule Longx.Agent.Model do
 
         cond do
           status == 429 and quota?(message) -> {:failed, status, message}
+          policy?(message) -> {:failed, status, message}
           status == 429 or status >= 500 -> {:retry, status, message}
           true -> {:failed, status, message}
         end

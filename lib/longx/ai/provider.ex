@@ -82,6 +82,7 @@ defmodule Longx.AI.Provider do
         :api_key,
         :credential_id,
         :supports_hosted_web_search,
+        :prompt_cache_key,
         :request_timeout_ms,
         :max_concurrent_requests
       ]
@@ -99,6 +100,7 @@ defmodule Longx.AI.Provider do
         :api_key,
         :credential_id,
         :supports_hosted_web_search,
+        :prompt_cache_key,
         :request_timeout_ms,
         :max_concurrent_requests
       ]
@@ -168,6 +170,11 @@ defmodule Longx.AI.Provider do
       allow_nil?: false,
       default: false,
       public?: true
+
+    # Whether requests carry `prompt_cache_key` (the thread): OpenAI's Responses
+    # API caches the prefix per key; nil = by kind (OpenAI on, compatible off) —
+    # a compatible service that reads it is switched on here
+    attribute :prompt_cache_key, :boolean, public?: true
 
     # How long the gateway waits for the upstream to say anything (a model can
     # think for minutes before its first byte).
