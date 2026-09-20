@@ -257,6 +257,15 @@ export type SessionEntry = {
 };
 
 /** the project's sessions with their live state; refreshed while shown */
+/** how a session is named where a name is expected: its title, else its first words, else its address */
+export function sessionTitle(session: { title: string | null; preview: string | null }, address: string): string {
+  if (session.title) return session.title;
+  const preview = (session.preview ?? "").trim();
+  if (!preview) return address;
+  const chars = Array.from(preview);
+  return chars.length > 24 ? chars.slice(0, 24).join("") + "…" : preview;
+}
+
 export function useSessions(projectId: string | undefined) {
   return useQuery({
     queryKey: ["sessions", projectId ?? ""] as const,

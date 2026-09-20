@@ -58,6 +58,9 @@ import {
   domainOf,
 } from "@/ui/components/assistant-ui/elements/web-search";
 import { t } from "@/ui/strings";
+import { Link, useOutletContext } from "react-router";
+import { sessionTitle, useSessions } from "@/core/projects";
+import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 
 type CommandArgs = { command?: string; fullCommand?: string; cwd?: string };
 type CommandResult = {
@@ -883,6 +886,48 @@ export const CompactionUI = makeAssistantDataUI<{ id: string }>({
   render: () => <CompactionView />,
 });
 
+/**
+ * `agents.send_message`: the agent spoke to someone — a member of its team by
+ * name, or another session by address. A row saying whom it asked (a session's
+ * title from the directory, linked to its page) and what; the answer arrives
+ * later as that agent's message.
+ */
+export const SendMessageTool: ToolCallMessagePartComponent<{ to?: string; message?: string }, unknown> = (p) => {
+  const to = typeof p.args.to === "string" ? p.args.to : "";
+  const message = typeof p.args.message === "string" ? p.args.message : "";
+  const [open, setOpen] = useState(false);
+  const long = message.length > 160;
+  return (
+    <div className="my-1 flex flex-col gap-1 py-1 text-[13.5px]" data-testid="tool-send-message">
+      <div className="flex min-w-0 items-center gap-2">
+        <Bot className={cn("size-3.5 shrink-0", p.isError ? "text-destructive" : "text-foreground/55")} aria-hidden />
+        <span className="text-foreground/55 shrink-0">{p.isError ? t.askedFailed : t.asked}</span>
+        <SessionName address={to} />
+      </div>
+      {message ? (
+        <button type="button" className="text-muted-foreground border-border/60 ms-6 min-w-0 border-s-2 ps-3 text-start text-xs whitespace-pre-wrap" onClick={() => setOpen((o) => !o)} title={long ? t.expand : undefined}>
+          {open || !long ? message : message.slice(0, 160) + "…"}
+        </button>
+      ) : null}
+    </div>
+  );
+};
+
+/** a session's name for an address (the directory's title, linked), a team name as it is */
+function SessionName({ address }: { address: string }) {
+  const ctx = useOutletContext<ProjectContext | undefined>();
+  const addressed = address.startsWith("~") || address.includes(":");
+  const sessions = useSessions(addressed ? ctx?.id : undefined);
+  const session = addressed ? sessions.data?.find((s) => s.address === address) : undefined;
+  if (!session) return <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">{address}</code>;
+  return (
+    <Link to={`/p/${session.projectSlug || ctx?.slug || ""}/t/${session.threadId}`} className="text-foreground/90 flex min-w-0 items-center gap-1.5 hover:underline">
+      <span className="truncate font-medium">{sessionTitle(session, address)}</span>
+      <code className="text-muted-foreground font-mono text-xs">{address}</code>
+    </Link>
+  );
+}
+
 // `type: "backend"`: the kernel runs these; we only render. `display: "standalone"`
 // keeps them out of the collapsible "n tool calls" trace group — what the
 // agent ran and changed is the point of this UI, not a trace to fold away;
@@ -909,6 +954,7 @@ export const longxToolkit = defineToolkit({
   "longx.send_file": { type: "backend", render: SendFileTool, display: "standalone" },
   "longx.image_generation": { type: "backend", render: ImageGenerationTool, display: "standalone" },
   "longx.show_html": { type: "backend", render: ShowHtmlTool, display: "standalone" },
+  "agents.send_message": { type: "backend", render: SendMessageTool, display: "standalone" },
 });
 
 export const chatConfig = AuiConfig({

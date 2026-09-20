@@ -688,6 +688,53 @@ describe("ThreadPage", () => {
     }
   });
 
+  test("a message the agent sent to another session is a row of its own: whom it asked (the session's title, linked) and what", async () => {
+    vi.mocked(directory).mockResolvedValue(ok({ sessions: [session(7, { address: "~052ca4", title: "coder 定义流" }), session(2)] }) as never);
+    try {
+      await open();
+      act(() =>
+        channel.deliver("event", {
+          seq: 4,
+          method: "item/completed",
+          params: {
+            turnId: "turn_2",
+            item: {
+              id: "fc_send",
+              type: "dynamicToolCall",
+              turnId: "turn_2",
+              namespace: "agents",
+              tool: "send_message",
+              arguments: { to: "~052ca4", message: "这些文件是你建的吗？请先回报，别再改。", deliver: "now" },
+              status: "completed",
+              success: true,
+              contentItems: [{ type: "inputText", text: "sent to ~052ca4" }],
+            },
+          },
+        }),
+      );
+      const row = await screen.findByTestId("tool-send-message");
+      expect(row).toHaveTextContent("问了");
+      expect(await within(row).findByRole("link", { name: /coder 定义流/ })).toHaveAttribute("href", "/p/app-1/t/t7");
+      expect(row).toHaveTextContent("这些文件是你建的吗");
+      // a team member by name: no link, the name as it is
+      act(() =>
+        channel.deliver("event", {
+          seq: 5,
+          method: "item/completed",
+          params: {
+            turnId: "turn_2",
+            item: { id: "fc_send2", type: "dynamicToolCall", turnId: "turn_2", namespace: "agents", tool: "send_message", arguments: { to: "researcher", message: "再查一下" }, status: "completed", success: true, contentItems: [] },
+          },
+        }),
+      );
+      const rows = await screen.findAllByTestId("tool-send-message");
+      expect(rows[1]).toHaveTextContent("researcher");
+      expect(within(rows[1]!).queryByRole("link")).not.toBeInTheDocument();
+    } finally {
+      vi.mocked(directory).mockResolvedValue(ok({ sessions: [session(1, { handle: "main", address: "main", title: "值班", state: "running" }), session(2)] }) as never);
+    }
+  });
+
   test("an attachment the person sent is a chip in their bubble, not the tag and the note the model reads", async () => {
     await open();
     act(() =>

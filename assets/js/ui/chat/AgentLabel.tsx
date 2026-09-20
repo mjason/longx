@@ -3,7 +3,7 @@
 // reads as nothing to the person, so the directory's title stands in front
 // of it and the label links to that session's page.
 import { Link, useOutletContext } from "react-router";
-import { useSessions } from "@/core/projects";
+import { sessionTitle, useSessions } from "@/core/projects";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
@@ -15,7 +15,7 @@ export function AgentLabel({ from }: { from: string }) {
   const sessions = useSessions(addressed ? projectId : undefined);
   const session = addressed ? sessions.data?.find((s) => s.address === from) : undefined;
   if (!session) return <span className="font-mono">{t.agentMessageFrom(from)}</span>;
-  const title = session.title || session.preview || from;
+  const title = sessionTitle(session, from);
   return (
     <Link to={`/p/${session.projectSlug || slug}/t/${session.threadId}`} className="hover:text-foreground flex min-w-0 items-center gap-1.5 hover:underline">
       <span className="truncate">{title}</span>

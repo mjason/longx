@@ -367,6 +367,9 @@ export const t = {
   },
   modelRerouted: (from: string, to: string) => `模型已切换：${from} → ${to}`,
   agentMessageFrom: (name: string) => `agent ${name}`,
+  asked: "问了",
+  askedFailed: "没问到",
+  expand: "展开",
   modelReroutedReason: {} as Record<string, string>,
   // chat: tools
   agentAsks: "agent 有问题要问",
