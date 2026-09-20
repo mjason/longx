@@ -697,7 +697,14 @@ defmodule Longx.Agent.PlugsTest do
       File.write!(Path.join(dir, "a.txt"), "one\ntwo\n")
       tool = tool!(Patch, "apply_patch")
       assert tool.show == :file_change
-      assert %{syntax: "lark", param: "input"} = tool.freeform
+      assert %{syntax: "lark", param: "input", definition: grammar} = tool.freeform
+      # the grammar is codex's, line for line: every line a rule, a directive or blank
+      # (a prose line left in by a bad copy made the Codex backend answer 400 "Invalid lark grammar")
+      assert grammar =~ "%import common.LF"
+
+      for line <- String.split(grammar, "\n"), line != "" do
+        assert Regex.match?(~r/^(\w+:|%import|\/\/)/, line), "not a grammar line: #{line}"
+      end
 
       patch =
         "*** Begin Patch\n*** Add File: b.txt\n+b\n*** Update File: a.txt\n@@\n-two\n+2\n*** End Patch\n"
