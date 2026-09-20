@@ -186,7 +186,7 @@ defmodule Longx.Agent.Plugs.Agents do
           ""
 
         _ ->
-          "\n\nYour team so far — each keeps everything it did and learned, so **ask it again** with `send_message` instead of spawning anew for a follow-up:\n" <>
+          "\n\nYour team so far:\n" <>
             Enum.map_join(children ++ siblings, "\n", &member_line/1)
       end
 
@@ -205,14 +205,33 @@ defmodule Longx.Agent.Plugs.Agents do
           "\n\nYou cannot spawn more agents until one of yours finishes or is closed (#{opts[:max_children]} working at once)."
       end
 
+    # codex's root role (models.json `multi_agent.role.root`) with what differs
+    # here: declared roles instead of agent types, the mailbox instead of
+    # `followup_task` / `wait`, reports as `[agent <name>]` user messages
     """
     # Agents
 
-    You may delegate to these agents, each a separate process with its own instructions and tools:
+    You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.
+
+    At the start of your turn, you are the active agent.
+    You can spawn sub-agents to handle subtasks, and those sub-agents can spawn their own sub-agents. All agents in the team run the same loop with the same tools, each on top of a declared role — its own instructions, and what it never does. The roles you can spawn:
 
     #{listing}
 
-    `spawn_agent(agent, task)` starts one on a task and returns at once. **Its report arrives later as a message from it** — a user message beginning `[agent <name>]` — in a later step of this turn if you are still working, or as a new turn if you had finished. So do not wait or poll for it: continue with what does not depend on it, or end your turn with a short note that the agent is working and you will pick up its report. `send_message(agent, message)` speaks to a member of your team — a follow-up question to one that finished (it answers on its kept context), more context or a redirection to one still working, a question to a teammate; the answer arrives as a message from it, like a report. `close_agent(agent)` stops one of yours you no longer need — its context is gone then. Give a task everything the agent needs to know, since it sees nothing of this conversation. A task cannot override the role's own rules (its `prompt.md`): an agent asked for something its role forbids leaves that part out and reports it — so before writing a task that changes method (how to run, what to compute, which format), read the role's prompt and either write the task within its rules or change the rule first. When no declared agent fits a kind of task you keep delegating, declare a new one (`.longx/local/agents/<name>/agent.exs` + `prompt.md`, see the knowledge on plugs and agents) rather than bending one. A role's `agent.exs` and `prompt.md` are re-read at every step of every agent: an edit — its model, its level, its prompt — reaches the agents already running at their next model call, no respawn needed (what they were told earlier in their conversation stays; say it again with `send_message` if it matters).#{team}#{why}
+    You can use `spawn_agent` to create a new agent on a role and a task, and `send_message` to give an existing agent a follow-up task or a message (it triggers a turn when the agent is idle, and is delivered promptly while it is running).
+    `send_message` calls may be read by a human, so ensure they are legible. Always put proper spaces between words and/or numbers.
+    Child agents can also spawn their own sub-agents.
+    An agent sees nothing of this conversation: give a task everything it needs to know.
+
+    You will receive messages from agents as user messages in the form:
+    ```
+    [agent <name>] <payload text>
+    ```
+    An agent's final answer arrives the same way when it finishes — in a later step of this turn if you are still working, or as a new turn if you had finished. So do not wait or poll for it: continue with what does not depend on it, or end your turn with a short note that the agent is working and you will pick up its report.
+
+    A finished agent stays in the team with everything it did and learned: for a follow-up, **ask it again** with `send_message` instead of spawning anew. `close_agent` closes one you no longer need; its context is gone then.
+
+    A task cannot override the role's own rules (its `prompt.md`): an agent asked for something its role forbids leaves that part out and reports it — so before writing a task that changes method (how to run, what to compute, which format), read the role's prompt and either write the task within its rules or change the rule first. When no declared agent fits a kind of task you keep delegating, declare a new one (`.longx/local/agents/<name>/agent.exs` + `prompt.md`, see the knowledge on plugs and agents) rather than bending one. A role's `agent.exs` and `prompt.md` are re-read at every step of every agent: an edit — its model, its level, its prompt — reaches the agents already running at their next model call, no respawn needed (what they were told earlier in their conversation stays; say it again with `send_message` if it matters).#{team}#{why}
     """
   end
 
@@ -220,10 +239,13 @@ defmodule Longx.Agent.Plugs.Agents do
     Tool.declare(
       __MODULE__,
       :spawn_agent,
-      "Starts a sub-agent on a task; returns at once, the agent's report comes back later as a message from it.",
+      # codex's spawn_agent (multi_agents_spec.rs, v2) — roles for agent types,
+      # the answer as a message instead of a wait
+      "Spawns an agent to work on the specified task, on one of the declared roles. The spawned agent runs the same loop with the same tools as you, on top of its role, and can spawn its own subagents when its role allows. It will be able to send you and other agents of the team messages, and its final answer will be provided to you when it finishes — as a message from it, in a later step or a later turn; this call returns at once.",
       [
-        {:agent, {:enum, Enum.map(roles, & &1.name)}, "Which declared agent", required: true},
-        {:task, :string, "The task, complete and self-contained", required: true}
+        {:agent, {:enum, Enum.map(roles, & &1.name)}, "The declared role for the new agent.",
+         required: true},
+        {:task, :string, "Initial plain-text task for the new agent.", required: true}
       ],
       timeout: 30_000
     )
@@ -261,10 +283,12 @@ defmodule Longx.Agent.Plugs.Agents do
       Tool.declare(
         __MODULE__,
         :send_message,
-        "Sends a message to a member of your team or to another session by address. An agent keeps everything it did and learned, so a follow-up question to a finished one continues where it stopped; one still working takes it as more context or a redirection. Its answer comes back as a message from it.",
+        # codex's followup_task and send_input in one (multi_agents_spec.rs): the
+        # mailbox does both, and an address of the directory is a target too
+        "Send a follow-up task or a message to an existing agent and trigger a turn if it is idle. If the target is already running, deliver the message promptly at message boundaries while sampling, or after the pending tool call completes. Reuse an agent this way when the task depends on the context of a previous one: a finished agent keeps everything it did and learned. Its answer arrives as a message from it. A session of the project addressed through the directory is reached the same way.",
         [
           to,
-          {:message, :string, "What to tell or ask it", required: true},
+          {:message, :string, "Message text to send to the target agent.", required: true},
           {:deliver, {:enum, ["now", "idle"]},
            "now (default): a session at work is steered at once; idle: the message waits in its mailbox until it is idle and starts a turn then",
            []}
@@ -276,7 +300,9 @@ defmodule Longx.Agent.Plugs.Agents do
       Tool.declare(
         __MODULE__,
         :close_agent,
-        "Stops one of your agents and forgets it; its unfinished work and its context are gone.",
+        # codex's close_agent (multi_agents_spec.rs); here only working agents
+        # count against the limit, so that sentence is left out
+        "Close an agent and any open descendants when they are no longer needed, and return the target agent's previous status before shutdown was requested. Completed agents remain in the team until closed. Don't keep agents open for too long if they are not needed anymore.",
         [{:agent, {:enum, own}, "Which agent", required: true}],
         timeout: 30_000
       )
@@ -415,33 +441,33 @@ defmodule Longx.Agent.Plugs.Agents do
   def claim_handle(_args, _ctx), do: {:error, "not inside a project"}
 
   def close_agent(%{"agent" => name}, ctx) do
-    with {:ok, id} <- child(ctx.thread_id, name) do
+    with {:ok, id, status} <- child(ctx.thread_id, name) do
       Longx.Agent.forget_child(ctx.thread_id, id)
       Longx.Agent.stop(id)
       Longx.Agent.Kernel.Specs.delete(id)
       # its row too, else a restart rebuilds the team from the rows and it is back
       Longx.Projects.archive_agent_row(id)
-      {:ok, "agent #{name} closed"}
+      {:ok, "agent #{name} closed; its status was #{status}"}
     end
   end
 
   defp child(parent_id, name) do
     case Enum.find(Longx.Agent.children(parent_id), &(&1.name == name)) do
-      %{id: id} -> {:ok, id}
+      %{id: id} = member -> {:ok, id, Map.get(member, :status, "unknown")}
       nil -> {:error, "no agent of yours named #{name}"}
     end
   end
 
   defp teammate(thread_id, name) do
     case child(thread_id, name) do
-      {:ok, id} ->
+      {:ok, id, _status} ->
         {:ok, id, thread_id}
 
       {:error, _} ->
         case Longx.Agent.info(thread_id) do
           %{parent: parent} when is_binary(parent) ->
             case child(parent, name) do
-              {:ok, id} -> {:ok, id, parent}
+              {:ok, id, _status} -> {:ok, id, parent}
               {:error, _} -> {:error, "no agent named #{name} in your team"}
             end
 

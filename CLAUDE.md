@@ -228,7 +228,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     (`Longx.Projects.spawn_native_agent/4`: a Thread row under the parent, the task as its
     first Turn row). `step.assigns` carries `parent`, `name`, `children`, `siblings`;
     **`step.state`** (`Step.put_state/3`) is a map kept across the phases and steps of
-    one turn. `Plugs.Agents` offers `spawn_agent` / `send_message` (every member and
+    one turn. `Plugs.Agents` speaks codex's multi-agent words (`models.json`
+    `multi_agent.role.root` / `.subagent` for the prompt and `Team.team_instructions`,
+    `core/src/tools/handlers/multi_agents_spec.rs` for the tools — `spawn_agent`,
+    `send_message` as codex's `followup_task` + `send_input` in one, `close_agent`
+    answering the previous status) adapted to roles, the mailbox and reports as
+    `[agent <name>]` messages; it offers `spawn_agent` / `send_message` (every member and
     sibling) / `close_agent` (own members) over the **declared roles**
     (`.longx/shared/agents/<name>/agent.exs`, `local/agents/<name>/`); the prompt lists
     the team with status, role and task and says to ask a finished agent again rather
@@ -354,10 +359,18 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `priv/agent/apply_patch.md`), `view_image` (an `input_image` user message after the
     result). There is no `read_file` / `list_dir` / `grep_files`: reading is `exec_command`
     (`cat`, `sed -n`, `rg`).
-  - **The base prompt is codex's, trimmed** (`Plugs.Base` reads `priv/agent/base_prompt.md`
-    at compile time: sandbox / approvals / plans / AGENTS.md sections out, our tool names
-    in, "reply in the user's language" added). `Plugs.Environment` adds the working
-    directory, OS and architecture, the shell and today's date; `Plugs.Prompt` the
+  - **Every prompt starts from codex's own text** (`openai/codex`, `codex-rs/`) and changes
+    only what Longx does differently, with the source file named in a comment — a
+    prompt of our own once let a coordinator infer a goal from "have the researcher
+    and coder look into it". **The base prompt is codex's gpt-5.6
+    `instructions_template`** (`models-manager/models.json`; `Plugs.Base` reads
+    `priv/agent/base_prompt.md` at compile time; the template is kept as
+    `test/support/fixtures/codex_gpt56_instructions.md` and `plugs_test` lists every
+    paragraph that differs — the identity (Longx, no model named), Harmony's channels
+    said in plain words, file references as paths not links, no `$CODEX_HOME`, the
+    skills section out, "# Where you work" and a commands-run-to-completion line in).
+    `Plugs.Environment` is codex's `<environment_context>` block (`cwd`, `shell`,
+    `current_date`) plus our `operating_system` and `model` elements; `Plugs.Prompt` the
     description's prompt or a loader notice; `Plugs.Local` what the agent is told about its own definition
     (the reference `priv/agent/reference.md`, its layout, and a `# Models` section from
     `Longx.AI.model_choices/0` — aliases first, then slugs with levels and the default).

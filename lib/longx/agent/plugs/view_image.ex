@@ -16,10 +16,10 @@ defmodule Longx.Agent.Plugs.ViewImage do
     ".bmp" => "image/bmp"
   }
 
+  # codex's words (core/src/tools/handlers/view_image_spec.rs)
   tool :view_image,
-       "Attaches a local image (png, jpeg, gif, webp) to the context so you can look at it." do
-    param :path, :string, "Path of the image file, relative to the working directory or absolute",
-      required: true
+       "View a local image file from the filesystem when visual inspection is needed. Use this for images already available on disk." do
+    param :path, :string, "Local filesystem path to an image file.", required: true
   end
 
   def view_image(%{"path" => path}, ctx) do

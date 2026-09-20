@@ -1712,7 +1712,13 @@ defmodule Longx.AgentTest do
     assert [%{"role" => "user", "content" => [%{"text" => "find the answer"}]}] =
              child_request["input"]
 
-    assert child_request["instructions"] =~ "sub-agent"
+    # codex's subagent role text (models.json multi_agent.role.subagent), adapted
+    assert child_request["instructions"] =~
+             "You are an agent in a team of agents collaborating to complete a task."
+
+    assert child_request["instructions"] =~
+             "your final answer may be read by a human, so ensure it is legible"
+
     # a task cannot override the role's own rules: the child is told which wins
     assert child_request["instructions"] =~ "take precedence over the task"
     parent_last = requests |> Enum.filter(&(first_text(&1) == "start")) |> List.last()
@@ -2291,7 +2297,7 @@ defmodule Longx.AgentTest do
     assert slug == other.slug
     assert %{"status" => "completed"} = await_turn_end()
     # the prompt tells the agent too
-    assert parent_body["instructions"] =~ "running on model `#{other.slug}`"
+    assert parent_body["instructions"] =~ "<model>#{other.slug}"
     assert parent_body["instructions"] =~ "reasoning effort `low`"
 
     # a bare child: the session's model and level

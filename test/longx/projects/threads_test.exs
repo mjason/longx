@@ -618,7 +618,7 @@ defmodule Longx.Projects.ThreadsTest do
     # closed through the tool's path: forgotten, stopped, spec gone — and the row archived
     ctx = %Longx.Agent.Context{thread_id: thread.kernel_thread_id, project_id: project.id}
 
-    assert {:ok, "agent researcher closed"} =
+    assert {:ok, "agent researcher closed; its status was " <> _} =
              Longx.Agent.Plugs.Agents.close_agent(%{"agent" => "researcher"}, ctx)
 
     assert thread!(child.id).status == :archived

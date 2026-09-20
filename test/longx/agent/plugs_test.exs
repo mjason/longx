@@ -194,6 +194,48 @@ defmodule Longx.Agent.PlugsTest do
 
       # and a task cannot override a role's rules — the parent is told to write tasks within them
       assert text =~ "cannot override"
+
+      # codex's own words for the team (models.json multi_agent.role.root, its tool specs),
+      # adapted to roles, the mailbox and no wait tool
+      assert text =~
+               "You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals."
+
+      assert text =~ "At the start of your turn, you are the active agent."
+
+      assert text =~
+               "`send_message` calls may be read by a human, so ensure they are legible. Always put proper spaces between words and/or numbers."
+
+      assert text =~ "You will receive messages from agents as user messages in the form"
+
+      assert step.tools["spawn_agent"].description =~
+               "Spawns an agent to work on the specified task"
+
+      assert step.tools["spawn_agent"].description =~
+               "its final answer will be provided to you when it finishes"
+
+      assert step.tools["spawn_agent"].schema["properties"]["task"]["description"] ==
+               "Initial plain-text task for the new agent."
+
+      team =
+        Agents.call(
+          team_step(%{
+            children: [
+              %{id: "c", name: "researcher", status: "done", role: "researcher", task: "x"}
+            ]
+          }),
+          Agents.init([])
+        )
+
+      assert team.tools["send_message"].description =~ "trigger a turn if it is idle"
+
+      assert team.tools["send_message"].description =~
+               "deliver the message promptly at message boundaries while sampling, or after the pending tool call completes"
+
+      assert team.tools["close_agent"].description =~
+               "Close an agent and any open descendants when they are no longer needed, and return the target agent's previous status before shutdown was requested."
+
+      assert team.tools["close_agent"].description =~
+               "Don't keep agents open for too long if they are not needed anymore."
     end
 
     test "two members with one name (a closed one's row revived by a restart) never break the tools' schema" do
@@ -301,6 +343,62 @@ defmodule Longx.Agent.PlugsTest do
       step = Agents.call(team_step(%{}), Agents.init([]))
       refute Map.has_key?(step.tools, "send_message")
       refute Map.has_key?(step.tools, "close_agent")
+    end
+  end
+
+  describe "Base" do
+    # codex's instructions_template for gpt-5.6 (models-manager/models.json), kept as a
+    # fixture: every paragraph of it is in our prompt except the ones listed here
+    @codex File.read!("test/support/fixtures/codex_gpt56_instructions.md")
+
+    test "the base prompt is codex's gpt-5.6 template, changed only where Longx differs" do
+      assert [ours] = Base.call(Step.new(), []).instructions
+      paragraphs = @codex |> String.split("\n\n", trim: true) |> Enum.map(&String.trim/1)
+
+      dropped =
+        Enum.reject(paragraphs, &String.contains?(ours, &1))
+        |> Enum.map(&String.slice(&1, 0, 60))
+        |> Enum.map(&String.trim/1)
+
+      # what is adapted or left out, by its first words — nothing else may differ
+      assert dropped == [
+               # the identity: Longx, and no model named (DeepSeek and Qwen run here too)
+               "You are Codex, an agent based on GPT-5. You and the user sha",
+               "As Codex, you are an excellent communicator with a curious,",
+               # the channels are Harmony's: the same rules in plain words
+               "You have two channels for staying in conversation with the u",
+               "When you run out of context, the conversation is automatical",
+               "## Intermediate commentary",
+               "As you work, you send messages to the `commentary` channel.",
+               "If the user's request requires calling tools, start with a m",
+               "Do NOT put a final response (e.g. a blocking / clarifying qu",
+               # a file reference is a path here, not a link the page could open
+               "- You may format with GitHub-flavored Markdown.\n- When refer",
+               # $CODEX_HOME; and our line on commands running to completion
+               "- When you search for text or files, you reach first for `rg",
+               "- Make sure the action is clearly within the user's request.",
+               # no SKILL.md here: the knowledge plug speaks for itself
+               "# Using skills",
+               "A skill is a set of instructions provided through a `SKILL.m",
+               "### How to use skills",
+               "- Discovery: When a `## Skills` section is present, it lists",
+               "When the user names a skill in their request, you must add t",
+               "Explicitly tell the user in the `commentary` channel wheneve",
+               "When using a skill the user did not explicitly name, follow",
+               "- First, tell the user in the commentary channel **why** you",
+               "If a skill causes the current turn to pause or otherwise blo"
+             ]
+
+      # the adaptations
+      assert ours =~
+               "You are Longx, an agent working in the person's project on their own machine. You and the user share one workspace, and your job is to collaborate with them until their goal is genuinely handled."
+
+      assert ours =~ "Reply in the language the user writes in."
+      assert ours =~ "# Where you work"
+      refute ours =~ "CODEX_HOME"
+      refute ours =~ "commentary"
+      refute ours =~ "SKILL.md"
+      assert ours =~ "Commands run to completion"
     end
   end
 
@@ -498,20 +596,34 @@ defmodule Longx.Agent.PlugsTest do
   end
 
   describe "Environment" do
-    test "names the working directory, the OS and the date", %{dir: dir} do
-      step = Environment.call(Step.new(cwd: dir), [])
-      [text] = step.instructions
-      assert text =~ dir
-      assert text =~ "linux"
-      assert text =~ Date.to_iso8601(Date.utc_today())
-    end
-  end
+    test "is codex's <environment_context> block: cwd, shell, date, plus our OS and model lines",
+         %{dir: dir} do
+      step =
+        Environment.call(
+          Step.new(
+            cwd: dir,
+            assigns: %{model_in_force: %{slug: "deepseek-flash", name: "plus", effort: "high"}}
+          ),
+          []
+        )
 
-  describe "Base" do
-    test "is the base prompt" do
-      step = Base.call(Step.new(), [])
-      assert [text] = step.instructions
-      assert text =~ "You are"
+      [text] = step.instructions
+
+      assert text ==
+               """
+               <environment_context>
+                 <cwd>#{dir}</cwd>
+                 <shell>bash</shell>
+                 <current_date>#{Date.to_iso8601(Date.utc_today())}</current_date>
+                 <operating_system>unix linux, #{:erlang.system_info(:system_architecture)}</operating_system>
+                 <model>deepseek-flash (asked for as `plus`) at reasoning effort `high`</model>
+               </environment_context>
+               """
+
+      # a cwd with an ampersand is escaped like codex escapes it
+      [text] = Environment.call(Step.new(cwd: "/tmp/a&b"), []).instructions
+      assert text =~ "<cwd>/tmp/a&amp;b</cwd>"
+      refute text =~ "<model>"
     end
   end
 

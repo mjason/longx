@@ -17,8 +17,9 @@ defmodule Longx.Agent.Plugs.Compaction do
   tool :get_context_remaining, "Get the remaining tokens in the current context window." do
   end
 
+  # codex's words (core/src/tools/handlers/new_context_window_spec.rs)
   tool :new_context_window,
-       "Start a new context window: the conversation so far is summarized before your next step. Does not clear, reset, or otherwise affect environment state." do
+       "Start a new context window. Does not clear, reset, or otherwise affect environment state." do
   end
 
   @impl true
