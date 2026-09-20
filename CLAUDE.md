@@ -618,12 +618,21 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `test/longx/watches/{watches,plug}_test`, `hooks_controller_test`,
     `watches_rpc_test`, the loader's watches test.
   - **Goal mode** (`Plugs.Goal`, `Kernel.Goal`): `create_goal` / `update_goal` / `get_goal`;
-    the prompt reserves a goal for what the person asked to pursue until done ("keep
-    going until…", or a goal by name) — a one-turn request, a delegated task, a
-    conversation are none (a coordinator once made a goal out of "have the researcher
-    and coder look into it"); with the goal `active` the `:turn_end` phase continues
-    the turn with a step naming the objective until the model marks it `complete` /
-    `blocked`, the token budget is spent
+    **the words are codex's** (`codex-rs/ext/goal`: the rules sit on the tools, nothing
+    in the system prompt — `create_goal` "only when explicitly requested by the user or
+    system/developer instructions; do not infer goals from ordinary tasks", `token_budget`
+    "omit unless explicitly requested", `update_goal` for `complete` / `blocked` /
+    `paused` only (a resume is the person's; `paused` at their explicit request;
+    `blocked` after the same blocker three goal turns running) plus our `reason` shown
+    beside 卡住了; the tools answer codex's JSON `{goal, remainingTokens,
+    completionBudgetReport}`, a second `create_goal` on an unfinished goal is refused;
+    the continuation is codex's `templates/goals/continuation.md` vendored as
+    `priv/agent/goal/continuation.md` with the objective escaped inside `<objective>`
+    and the budget lines filled in, its `update_plan` paragraph left out as codex does
+    without that tool — a coordinator once made a goal out of "have the researcher and
+    coder look into it" under our own looser wording); with the goal `active` the
+    `:turn_end` phase continues the turn with that step until the model marks it
+    `complete` / `blocked`, the token budget is spent
     or `max_rounds:` (8) continuations happened (then `blocked`, never a loop) — **not
     while a child works**: its report starts the next turn by itself (a parent waiting
     on coder was continued eight times saying "waiting" and blocked). The continuation

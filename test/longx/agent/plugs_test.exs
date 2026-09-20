@@ -311,11 +311,28 @@ defmodule Longx.Agent.PlugsTest do
       Step.new(phase: :turn_end, assigns: %{goal: goal}, state: state)
     end
 
-    test "the prompt reserves goals for what the person asked to pursue: delegating to agents is none" do
+    test "the goal tools carry codex's own words: no goal inferred from an ordinary task, update_goal for status only" do
       step = Goal.call(Step.new(phase: :request), Goal.init([]))
-      prompt = Enum.join(step.instructions, "\n")
-      assert prompt =~ "only when the person"
-      assert prompt =~ "not a reason for a goal"
+      # codex puts the rules on the tools, nothing in the system prompt
+      assert step.instructions == []
+      tools = step.tools
+
+      assert tools["create_goal"].description =~
+               "Create a goal only when explicitly requested by the user or system/developer instructions; do not infer goals from ordinary tasks."
+
+      assert tools["create_goal"].schema["properties"]["token_budget"]["description"] =~
+               "Omit unless explicitly requested"
+
+      assert tools["update_goal"].description =~ "never on your own initiative"
+
+      assert tools["update_goal"].schema["properties"]["status"]["enum"] == [
+               "complete",
+               "blocked",
+               "paused"
+             ]
+
+      refute Map.has_key?(tools["update_goal"].schema["properties"], "objective")
+      assert tools["get_goal"].description =~ "remaining token budget"
     end
 
     test "an active goal continues the turn with the objective; a complete or paused one does not" do
@@ -326,9 +343,17 @@ defmodule Longx.Agent.PlugsTest do
       assert [{:continue, text, %{"kind" => "goal", "round" => 1, "objective" => "ship it"}}] =
                step.effects
 
-      assert text =~ "ship it"
-      assert text =~ "update_goal"
+      # codex's continuation template, the objective and the budget filled in
+      assert text =~ "Continue working toward the active thread goal."
+      assert text =~ "<objective>\nship it\n</objective>"
+      assert text =~ "- Tokens used: 0\n- Token budget: none\n- Tokens remaining: unbounded"
+      assert text =~ "Completion audit:"
+      refute text =~ "update_plan"
       assert step.state.goal_rounds == 1
+
+      budgeted = Map.merge(active, %{"tokenBudget" => 5000, "tokensUsed" => 1200})
+      [{:continue, text, _}] = Goal.call(goal_step(budgeted), Goal.init([])).effects
+      assert text =~ "- Tokens used: 1200\n- Token budget: 5000\n- Tokens remaining: 3800"
 
       assert Goal.call(goal_step(%{active | "status" => "complete"}), Goal.init([])).effects == []
       assert Goal.call(goal_step(%{active | "status" => "paused"}), Goal.init([])).effects == []

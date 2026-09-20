@@ -2113,6 +2113,37 @@ defmodule Longx.AgentTest do
     assert output =~ "report"
   end
 
+  test "the goal tools answer as codex's do: the goal as JSON, remaining tokens, a report to make on completion",
+       %{thread_id: thread_id} do
+    alias Longx.Agent.Plugs.Goal
+    ctx = %{thread_id: thread_id}
+
+    assert {:ok, none} = Goal.get_goal(%{}, ctx)
+    assert %{"goal" => nil} = Jason.decode!(none)
+
+    assert {:ok, made} =
+             Goal.create_goal(%{"objective" => " ship it ", "token_budget" => 500}, ctx)
+
+    assert %{
+             "goal" => %{"objective" => "ship it", "status" => "active", "tokenBudget" => 500},
+             "remainingTokens" => 500
+           } = Jason.decode!(made)
+
+    assert {:error, "cannot create a new goal" <> _} =
+             Goal.create_goal(%{"objective" => "another"}, ctx)
+
+    assert {:ok, done} = Goal.update_goal(%{"status" => "complete"}, ctx)
+
+    assert %{
+             "goal" => %{"status" => "complete"},
+             "completionBudgetReport" => "Goal achieved." <> _
+           } =
+             Jason.decode!(done)
+
+    # complete: a new goal may replace it
+    assert {:ok, _} = Goal.create_goal(%{"objective" => "next"}, ctx)
+  end
+
   test "goal mode: create_goal keeps the turn going with continuation steps until the model marks it complete; the goal is shown and survives a restart",
        %{bypass: bypass, dir: dir} do
     id = agent!("goal-#{System.unique_integer([:positive])}", dir, [])
@@ -2124,10 +2155,11 @@ defmodule Longx.AgentTest do
         length(body["input"]) == 1 ->
           ResponsesFixture.function_call("create_goal", nil, %{"objective" => "make it green"})
 
-        last["type"] == "function_call_output" and last["output"] =~ "goal set" ->
+        last["type"] == "function_call_output" and last["output"] =~ ~s("status":"active") ->
           ResponsesFixture.assistant_message("started")
 
-        last["type"] == "message" and hd(last["content"])["text"] =~ "目标续跑" ->
+        last["type"] == "message" and
+            hd(last["content"])["text"] =~ "Continue working toward the active thread goal" ->
           ResponsesFixture.function_call("update_goal", nil, %{"status" => "complete"})
 
         true ->
