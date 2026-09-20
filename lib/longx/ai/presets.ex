@@ -242,6 +242,8 @@ defmodule Longx.AI.Presets do
             reasoning_levels: levels,
             reasoning_effort: effort,
             image: true,
+            # OpenAI's Responses API draws on its side (the image_generation tool)
+            image_generation: true,
             recommended: recommended
           }
         end
@@ -273,6 +275,7 @@ defmodule Longx.AI.Presets do
             reasoning_levels: levels,
             reasoning_effort: effort,
             image: true,
+            image_generation: true,
             recommended: recommended
           }
         end
@@ -457,6 +460,7 @@ defmodule Longx.AI.Presets do
                  reasoning_levels: spec.reasoning_levels,
                  reasoning_effort: spec.reasoning_effort,
                  hosted_web_search: Map.get(spec, :hosted_search),
+                 image_generation: Map.get(spec, :image_generation, false),
                  provider_id: provider.id
                }) do
             {:ok, model} -> {:cont, {:ok, acc ++ [model]}}

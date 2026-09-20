@@ -22,7 +22,7 @@ import {
   type ToolCallMessagePartComponent,
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
-import { AppWindow, Bot, Download, FileCode2, GitCompareArrows } from "lucide-react";
+import { AppWindow, Bot, Download, FileCode2, GitCompareArrows, Image as ImageIcon, Loader2 } from "lucide-react";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { formatBytes } from "@/core/format";
 import type { Tab } from "@/core/workbench";
@@ -481,7 +481,7 @@ type ActionArgs = {
 // ---- surfaces: a file, a diff, a download, an artifact opened for the person
 
 type SurfaceDetails = Record<string, unknown> | undefined;
-function detailsOf(p: ToolCallMessagePartProps): SurfaceDetails {
+function detailsOf(p: { result?: unknown }): SurfaceDetails {
   const result = p.result as { details?: unknown } | undefined;
   return result && typeof result === "object" && result.details && typeof result.details === "object" ? (result.details as Record<string, unknown>) : undefined;
 }
@@ -531,7 +531,34 @@ export function fileUrl(projectId: string, path: string, attachment: boolean, in
 }
 
 /** `longx.send_file`: a download card — the name, the size, the link; an image drawn inline. */
-export const SendFileTool: ToolCallMessagePartComponent<{ path?: string; title?: string }, unknown> = (p) => {
+export const SendFileTool: ToolCallMessagePartComponent<{ path?: string; title?: string }, unknown> = (p) => (
+  <FileCard part={p} label={t.sentFile} icon={<Download className="size-3.5" />} testId="tool-send-file" />
+);
+
+/**
+ * `longx.image_generation`: the provider drew a picture on its side (OpenAI's
+ * hosted tool); the kernel saved it as an attachment — the same card as a sent
+ * file, the prompt as its title, the picture inline; a row still in progress
+ * says the provider is drawing.
+ */
+export const ImageGenerationTool: ToolCallMessagePartComponent<{ prompt?: string; size?: string }, unknown> = (p) => {
+  const running = p.status.type === "running";
+  if (running || !detailsOf(p)) {
+    return (
+      <div className="border-border/60 my-2 flex w-full max-w-md items-center gap-2 rounded-xl border p-3 text-xs" data-testid="tool-image-generation">
+        <ImageIcon className="text-foreground/45 size-3.5 shrink-0" />
+        <span className={p.isError ? "text-destructive" : "text-foreground/60"}>{p.isError ? t.imageFailed : t.drawing}</span>
+        {typeof p.args.prompt === "string" && p.args.prompt ? <span className="text-foreground/90 min-w-0 flex-1 truncate font-medium">{p.args.prompt}</span> : null}
+        {running ? <Loader2 className="text-foreground/45 size-3.5 shrink-0 animate-spin" /> : null}
+      </div>
+    );
+  }
+  return <FileCard part={p} label={t.drewImage} icon={<ImageIcon className="size-3.5" />} testId="tool-image-generation" />;
+};
+
+type FilePart = { args: Record<string, unknown>; result?: unknown; isError?: boolean };
+
+function FileCard({ part: p, label, icon, testId }: { part: FilePart; label: string; icon: ReactNode; testId: string }) {
   const surface = useContext(SurfaceContext);
   const details = detailsOf(p);
   const name = String(details?.["name"] ?? p.args.path ?? "");
@@ -542,10 +569,10 @@ export const SendFileTool: ToolCallMessagePartComponent<{ path?: string; title?:
   const path = typeof details?.["path"] === "string" ? (details["path"] as string) : null;
   const href = surface && path ? fileUrl(surface.projectId, path, attachment) : null;
   return (
-    <div className="border-border/60 my-2 flex w-full max-w-md flex-col gap-2 rounded-xl border p-3 text-xs" data-testid="tool-send-file">
+    <div className="border-border/60 my-2 flex w-full max-w-md flex-col gap-2 rounded-xl border p-3 text-xs" data-testid={testId}>
       <div className="flex min-w-0 items-center gap-2">
-        <span className="text-foreground/45 flex size-4 shrink-0 items-center justify-center"><Download className="size-3.5" /></span>
-        <span className={p.isError ? "text-destructive shrink-0" : "text-foreground/60 shrink-0"}>{t.sentFile}</span>
+        <span className="text-foreground/45 flex size-4 shrink-0 items-center justify-center">{icon}</span>
+        <span className={p.isError ? "text-destructive shrink-0" : "text-foreground/60 shrink-0"}>{label}</span>
         {title ? <span className="text-foreground/90 min-w-0 flex-1 truncate font-medium">{title}</span> : null}
       </div>
       {href && mime.startsWith("image/") ? <img src={fileUrl(surface!.projectId, path!, attachment, true)} alt={name} className="max-h-72 w-auto self-start rounded-md" /> : null}
@@ -560,7 +587,7 @@ export const SendFileTool: ToolCallMessagePartComponent<{ path?: string; title?:
       </div>
     </div>
   );
-};
+}
 
 /** `longx.show_html`: an artifact — html of the model's own, or a URL — opened in the workbench; the row reopens it. */
 export const ShowHtmlTool: ToolCallMessagePartComponent<{ title?: string; html?: string; url?: string }, unknown> = (p) => {
@@ -880,6 +907,7 @@ export const longxToolkit = defineToolkit({
   "longx.show_file": { type: "backend", render: ShowFileTool, display: "standalone" },
   "longx.show_diff": { type: "backend", render: ShowDiffTool, display: "standalone" },
   "longx.send_file": { type: "backend", render: SendFileTool, display: "standalone" },
+  "longx.image_generation": { type: "backend", render: ImageGenerationTool, display: "standalone" },
   "longx.show_html": { type: "backend", render: ShowHtmlTool, display: "standalone" },
 });
 

@@ -262,6 +262,9 @@ export const t = {
   openedFile: "打开了",
   openedDiff: "打开了改动",
   sentFile: "发来了文件",
+  drawing: "正在生成图片",
+  drewImage: "生成了图片",
+  imageFailed: "图片生成失败",
   openedArtifact: "打开了",
   openSurface: "打开",
   download: "下载",
@@ -712,6 +715,8 @@ export const t = {
       longx: "Longx 代搜（Tavily）",
     },
     hostedWebSearchHint: "模型自带的搜索是 provider 在服务端跑的 web_search 工具；同一个 provider 下有的模型不支持（百炼的 kimi、MiniMax、glm-5），那些模型选「Longx 代搜」。",
+    imageGeneration: "图片生成",
+    imageGenerationHint: "把 provider 服务端的 image_generation 工具交给模型，它在你要求时画图，图存进项目附件并在聊天里显示。仅 OpenAI 的 Responses API（含 ChatGPT 订阅）支持，别的 provider 开了会报错。",
     advanced: "高级",
     // templates
     chooseTemplate: "从模版添加",

@@ -43,6 +43,25 @@ defmodule Longx.Projects.Attachments do
     end
   end
 
+  @doc """
+  Stores bytes the kernel holds (a picture a provider generated) as
+  `<stamp>-<name>` under the project's directory; the name the file got is
+  what `_attachments/<name>` reaches.
+  """
+  @spec store_bytes(String.t(), String.t(), binary) ::
+          {:ok, %{path: Path.t(), name: String.t(), bytes: non_neg_integer}} | {:error, term}
+  def store_bytes(project_id, name, bytes) when is_binary(bytes) do
+    name = safe_name(name)
+    stamp = DateTime.utc_now() |> DateTime.truncate(:second) |> Calendar.strftime("%Y%m%dT%H%M%S")
+    file = "#{stamp}-#{name}"
+    dest = Path.join(dir(project_id), file)
+
+    with :ok <- File.mkdir_p(dir(project_id)),
+         :ok <- File.write(dest, bytes) do
+      {:ok, %{path: dest, name: file, bytes: byte_size(bytes)}}
+    end
+  end
+
   @doc "Removes everything the project ever attached."
   @spec delete_all(String.t()) :: :ok
   def delete_all(project_id) do

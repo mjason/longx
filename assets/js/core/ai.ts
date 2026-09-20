@@ -120,6 +120,7 @@ export type ModelRow = {
   maxOutputTokens: number | null;
   /** the model's provider searches the web on its side; null = the provider's say */
   hostedWebSearch: boolean | null;
+  imageGeneration: boolean;
   providerId: string;
 };
 
@@ -193,6 +194,7 @@ const modelRowFields = [
   "reasoningSummary",
   "maxOutputTokens",
   "hostedWebSearch",
+  "imageGeneration",
   "providerId",
 ] as const;
 const presetFields = [

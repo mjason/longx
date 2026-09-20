@@ -511,6 +511,7 @@ export const model = (
   reasoningSummary: null,
   maxOutputTokens: null,
   hostedWebSearch: null,
+  imageGeneration: false,
   providerId: extra.providerId ?? (n === 2 ? "p2" : "p1"),
   provider: {
     id: extra.providerId ?? (n === 2 ? "p2" : "p1"),

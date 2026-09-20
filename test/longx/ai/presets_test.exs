@@ -114,6 +114,8 @@ defmodule Longx.AI.PresetsTest do
       assert cred.authorize_params["id_token_add_organizations"] == "true"
       assert cred.authorize_params["originator"] == "codex_cli_rs"
       assert "gpt-5.6-sol" in Enum.map(models, & &1.slug)
+      # the subscription's models draw (OpenAI's hosted image_generation tool)
+      assert Enum.all?(models, & &1.image_generation)
 
       # the models' slugs are the plain ones when free, else prefixed (the openai preset took them?)
       assert Enum.all?(models, &(&1.provider_id == provider.id))
@@ -132,6 +134,8 @@ defmodule Longx.AI.PresetsTest do
       assert provider.base_url == "https://api.deepseek.com/v1"
       assert Ash.load!(provider, :api_key).api_key == "sk-ds"
       assert Enum.map(models, & &1.upstream_id) == ["deepseek-flash", "deepseek-v4-pro"]
+      # no drawing outside OpenAI's API
+      refute Enum.any?(models, & &1.image_generation)
       assert Enum.map(models, & &1.slug) == ["deepseek-flash", "deepseek-v4-pro"]
       [flash | _] = models
       assert flash.context_window == 1_000_000

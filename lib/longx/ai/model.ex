@@ -55,7 +55,8 @@ defmodule Longx.AI.Model do
         :reasoning_effort,
         :reasoning_summary,
         :max_output_tokens,
-        :hosted_web_search
+        :hosted_web_search,
+        :image_generation
       ]
 
       change Longx.AI.Model.Changes.DeriveSlug
@@ -76,7 +77,8 @@ defmodule Longx.AI.Model do
         :reasoning_effort,
         :reasoning_summary,
         :max_output_tokens,
-        :hosted_web_search
+        :hosted_web_search,
+        :image_generation
       ]
 
       validate Longx.AI.Model.Validations.EffortInLevels
@@ -229,6 +231,11 @@ defmodule Longx.AI.Model do
     # not enabled" for kimi-k2.x, MiniMax, glm-5.1), so this is per model;
     # false sends the thread to Longx's own search instead.
     attribute :hosted_web_search, :boolean, public?: true
+
+    # the provider's hosted `image_generation` tool (OpenAI's Responses API, the
+    # Codex backend): offered to the model when true — it draws when asked to;
+    # off by default, other providers refuse the tool
+    attribute :image_generation, :boolean, allow_nil?: false, default: false, public?: true
 
     # Cap on one response, applied by the gateway (`max_output_tokens` on the
     # Responses request) when codex sets none; nil = the provider's default.

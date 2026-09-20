@@ -278,6 +278,34 @@ defmodule Longx.AI.GatewayTest do
       refute Enum.any?(plain.headers, &(elem(&1, 0) in ["chatgpt-account-id", "originator"]))
     end
 
+    test "the hosted image_generation tool goes only to a model flagged for it; a stray one is dropped for the rest" do
+      body =
+        Map.put(@codex_body, "tools", [
+          %{"type" => "function", "name" => "exec_command", "parameters" => %{}}
+        ])
+
+      {:ok, plain} = Gateway.prepare(body, @target)
+      refute Enum.any?(plain.body["tools"], &(&1["type"] == "image_generation"))
+
+      {:ok, drawing} = Gateway.prepare(body, %Target{@target | image_generation?: true})
+      assert Enum.map(drawing.body["tools"], & &1["type"]) == ["function", "image_generation"]
+
+      # once is enough; a request already carrying it keeps one
+      {:ok, twice} = Gateway.prepare(drawing.body, %Target{@target | image_generation?: true})
+      assert Enum.count(twice.body["tools"], &(&1["type"] == "image_generation")) == 1
+      # a replayed image_generation_call item never reaches a target without the tool
+      replay =
+        Map.put(
+          body,
+          "input",
+          body["input"] ++
+            [%{"type" => "image_generation_call", "id" => "ig_1", "result" => "AAAA"}]
+        )
+
+      {:ok, stripped} = Gateway.prepare(replay, @target)
+      refute Enum.any?(stripped.body["input"], &(&1["type"] == "image_generation_call"))
+    end
+
     test "handles a base_url with a trailing slash" do
       {:ok, up} =
         Gateway.prepare(@codex_body, %Target{@target | base_url: "https://x.example/v1/"})

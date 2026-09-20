@@ -71,6 +71,7 @@ defmodule Longx.AI.Gateway do
         |> translate_agent_messages(target.kind)
       )
       |> drop_hosted_search(target)
+      |> put_image_generation(target)
       |> drop_hosted_calls(target)
       |> put_max_output_tokens(target)
       |> put_reasoning_summary(target)
@@ -142,7 +143,7 @@ defmodule Longx.AI.Gateway do
   # a `web_search_call` item is the searching provider's own: replayed to
   # another it is an unknown item type (the model's message that followed
   # carries what it found)
-  @hosted_call_items ["web_search_call"]
+  @hosted_call_items ["web_search_call", "image_generation_call"]
 
   defp drop_hosted_calls(body, %Target{hosted_web_search?: true}), do: body
 
@@ -166,6 +167,26 @@ defmodule Longx.AI.Gateway do
        do: Map.put(body, "reasoning", Map.delete(reasoning, "summary"))
 
   defp put_reasoning_summary(body, _target), do: body
+
+  # the provider's hosted image_generation tool, for a model flagged for it —
+  # always the same entry, so the request's prefix stays stable; off it goes
+  # for every other target
+  @image_tool %{"type" => "image_generation"}
+
+  defp put_image_generation(%{"tools" => tools} = body, %Target{image_generation?: true})
+       when is_list(tools) do
+    if Enum.any?(tools, &(&1["type"] == "image_generation")),
+      do: body,
+      else: Map.put(body, "tools", tools ++ [@image_tool])
+  end
+
+  defp put_image_generation(body, %Target{image_generation?: true}),
+    do: Map.put(body, "tools", [@image_tool])
+
+  defp put_image_generation(%{"tools" => tools} = body, _target) when is_list(tools),
+    do: Map.put(body, "tools", Enum.reject(tools, &(&1["type"] == "image_generation")))
+
+  defp put_image_generation(body, _target), do: body
 
   defp drop_hosted_search(body, %Target{hosted_web_search?: true}), do: body
 

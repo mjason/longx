@@ -907,6 +907,7 @@ function ModelDialog({
         : model?.hostedWebSearch === false
           ? "longx"
           : "provider",
+    imageGeneration: model?.imageGeneration === true,
   });
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -932,6 +933,7 @@ function ModelDialog({
           : form.hostedWebSearch === "longx"
             ? false
             : null,
+      imageGeneration: form.imageGeneration,
       ...(form.slug.trim() ? { slug: form.slug.trim() } : {}),
     };
     const done = {
@@ -1111,6 +1113,13 @@ function ModelDialog({
                 {s.hostedWebSearchHint}
               </p>
             </Field>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-3">
+                <Switch id="md-image" checked={form.imageGeneration} onCheckedChange={(v) => set("imageGeneration", v)} aria-label={s.imageGeneration} />
+                <Label htmlFor="md-image">{s.imageGeneration}</Label>
+              </div>
+              <p className="text-muted-foreground text-xs">{s.imageGenerationHint}</p>
+            </div>
           </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>

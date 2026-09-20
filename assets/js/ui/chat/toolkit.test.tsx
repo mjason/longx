@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, PresentTool, SendFileTool, ShowDiffTool, ShowFileTool, ShowHtmlTool, SubagentContext, SubagentTool, SurfaceContext, WebSearchTool, parseDiff, treeOf } from "./toolkit";
+import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, ImageGenerationTool, PresentTool, SendFileTool, ShowDiffTool, ShowFileTool, ShowHtmlTool, SubagentContext, SubagentTool, SurfaceContext, WebSearchTool, parseDiff, treeOf } from "./toolkit";
 
 const answerAction = vi.fn(async () => {});
 
@@ -387,6 +387,18 @@ describe("surfaces: files and artifacts for the person", () => {
     expect(link).toHaveAttribute("download");
     const img = within(cards[1]!).getByRole("img");
     expect(img).toHaveAttribute("src", "/files/p1/_attachments/20260918T010203-x.png?inline=1");
+  });
+
+  test("a hosted image generation is drawn like a sent file: the prompt as the title, the picture inline from the attachment", () => {
+    render(
+      <SurfaceContext.Provider value={surface}>
+        <ImageGenerationTool {...done("longx.image_generation", { prompt: "a red circle", size: "1024x1024" }, { path: "20260920T010203-image-abc.png", name: "20260920T010203-image-abc.png", bytes: 12000, mime: "image/png", attachment: true, title: "a red circle" })} />
+      </SurfaceContext.Provider>,
+    );
+    const card = screen.getByTestId("tool-image-generation");
+    expect(card).toHaveTextContent("a red circle");
+    expect(within(card).getByRole("img")).toHaveAttribute("src", "/files/p1/_attachments/20260920T010203-image-abc.png?inline=1");
+    expect(within(card).getByRole("link", { name: /下载/ })).toHaveAttribute("download");
   });
 
   test("show_html is an artifact row: the title, 打开 opens the artifact tab with the html (or the url)", () => {

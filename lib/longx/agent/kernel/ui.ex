@@ -203,6 +203,27 @@ defmodule Longx.Agent.Kernel.UI do
     |> Map.merge(Map.take(extra, ["details"]))
   end
 
+  @doc """
+  A hosted image generation as a row: the provider drew a picture on its side
+  (`image_generation_call`); the item is a `longx.image_generation` dynamic
+  tool call the chat draws like `send_file` — an inline image from the
+  attachment the kernel saved, the prompt as its title.
+  """
+  def image_generation_ui(id, turn_id, item, status, details \\ nil) do
+    %{
+      "id" => id,
+      "type" => "dynamicToolCall",
+      "turnId" => turn_id,
+      "namespace" => "longx",
+      "tool" => "image_generation",
+      "arguments" => %{"prompt" => item["revised_prompt"], "size" => item["size"]},
+      "status" => status,
+      "success" => status == "completed",
+      "contentItems" => []
+    }
+    |> then(&if(details, do: Map.put(&1, "details", details), else: &1))
+  end
+
   @doc "A `longx.present` item already complete: a card pushed by a plug (`Context.present/2`)."
   def present_ui(id, turn_id, tree) do
     %{

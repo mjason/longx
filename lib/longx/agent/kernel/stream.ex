@@ -39,6 +39,13 @@ defmodule Longx.Agent.Kernel.Stream do
     put_item(%{state | last_search: ui}, id, %{ui: ui["id"], kind: :hosted_call})
   end
 
+  # the provider is drawing (hosted image generation): a row in progress
+  def fold(state, {:item_added, %{"id" => id, "type" => "image_generation_call"} = item}) do
+    ui = UI.image_generation_ui(new_id("item"), state.turn_id, item, "inProgress")
+    emit(state, "item/started", %{"item" => ui, "turnId" => state.turn_id})
+    put_item(state, id, %{ui: ui["id"], kind: :hosted_call})
+  end
+
   # a call opened: the model is writing its arguments now — shown as
   # progress (name, bytes so far) until the call runs, since nothing else
   # reaches the thread while a long patch streams
@@ -134,6 +141,36 @@ defmodule Longx.Agent.Kernel.Stream do
     }
 
     state |> append(:reasoning, item, ui) |> drop_item(id)
+  end
+
+  # the picture came: saved as an attachment of the project, shown inline; the
+  # model's context gets a note naming the file — never the bytes (with `store:
+  # false` every step replays the history, and one image is a megabyte or two)
+  def fold(state, {:item_done, %{"type" => "image_generation_call", "id" => id} = item}) do
+    ui_id = ui_id(state, id)
+
+    case save_image(state, item) do
+      {:ok, details} ->
+        ui = UI.image_generation_ui(ui_id, state.turn_id, item, "completed", details)
+
+        note =
+          "[image_generation] The image you generated (#{item["revised_prompt"] || "no prompt"}) " <>
+            "was saved as the attachment #{details["path"]} (#{details["bytes"]} bytes, #{details["mime"]}) " <>
+            "and shown to the person. Refer to it by that name; view_image its path to look at it."
+
+        state
+        |> append(:hosted_call, State.user_input(note, []), ui)
+        |> drop_item(id)
+
+      {:error, reason} ->
+        ui = UI.image_generation_ui(ui_id, state.turn_id, item, "failed")
+
+        note = "[image_generation] The image could not be saved: #{inspect(reason)}"
+
+        state
+        |> append(:hosted_call, State.user_input(note, []), ui)
+        |> drop_item(id)
+    end
   end
 
   def fold(state, {:item_done, %{"type" => "web_search_call", "id" => id} = item}) do
@@ -251,4 +288,42 @@ defmodule Longx.Agent.Kernel.Stream do
     %{state | usage_total: total, usage_last: last, context_window: window}
     |> Goal.charge_goal(last["totalTokens"])
   end
+
+  ## Hosted image generation: the bytes to a file
+
+  defp save_image(%State{project_id: project_id, thread_id: thread_id}, item) do
+    with {:ok, bytes} <- decode_image(item["result"]) do
+      format =
+        if item["output_format"] in ["png", "jpeg", "webp"],
+          do: item["output_format"],
+          else: "png"
+
+      ext = if format == "jpeg", do: "jpg", else: format
+
+      name =
+        "image-#{String.slice(thread_id, -6, 6)}-#{System.unique_integer([:positive])}.#{ext}"
+
+      with {:ok, %{path: _path, name: saved, bytes: size}} <-
+             Longx.Projects.Attachments.store_bytes(project_id || "adhoc", name, bytes) do
+        {:ok,
+         %{
+           "path" => saved,
+           "name" => saved,
+           "bytes" => size,
+           "mime" => "image/#{format}",
+           "attachment" => true,
+           "title" => item["revised_prompt"]
+         }}
+      end
+    end
+  end
+
+  defp decode_image(result) when is_binary(result) and result != "" do
+    case Base.decode64(result) do
+      {:ok, bytes} -> {:ok, bytes}
+      :error -> {:error, :not_base64}
+    end
+  end
+
+  defp decode_image(_), do: {:error, :no_image}
 end

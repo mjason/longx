@@ -15,6 +15,8 @@ defmodule Longx.AI.Target do
     :context_window,
     :provider_slug,
     hosted_web_search?: false,
+    # the provider's hosted image_generation tool is offered
+    image_generation?: false,
     # :openai is the only provider whose reasoning items may be replayed to it
     # with their encrypted_content (see Longx.AI.Gateway)
     kind: :openai_compatible,
@@ -38,6 +40,7 @@ defmodule Longx.AI.Target do
           context_window: pos_integer,
           provider_slug: String.t() | nil,
           hosted_web_search?: boolean,
+          image_generation?: boolean,
           kind: :openai | :openai_compatible,
           request_timeout_ms: pos_integer,
           max_concurrent_requests: pos_integer | nil,

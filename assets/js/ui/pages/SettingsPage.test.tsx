@@ -143,11 +143,15 @@ describe("SettingsPage", () => {
     // web search per model: this one searches through Longx whatever the provider says
     await user.click(within(md).getByRole("combobox", { name: "联网搜索" }));
     await user.click(await screen.findByRole("option", { name: /Longx 代搜/ }));
+    // image generation: off unless the person says so (only OpenAI's API has the tool)
+    expect(within(md).getByRole("switch", { name: "图片生成" })).not.toBeChecked();
+    await user.click(within(md).getByRole("switch", { name: "图片生成" }));
     await user.click(within(md).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(createModel).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
+            imageGeneration: true,
             name: "GLM 5",
             upstreamId: "glm-5-turbo",
             providerId: "p2",

@@ -300,6 +300,7 @@ export type CreateModelInput = {
   reasoningSummary?: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens?: number | null;
   hostedWebSearch?: boolean | null;
+  imageGeneration?: boolean;
 };
 
 export type CreateModelFields = UnifiedFieldSelection<ModelResourceSchema>[];
@@ -966,6 +967,7 @@ export type UpdateModelInput = {
   reasoningSummary?: "auto" | "concise" | "detailed" | "none" | null;
   maxOutputTokens?: number | null;
   hostedWebSearch?: boolean | null;
+  imageGeneration?: boolean;
 };
 
 export type UpdateModelFields = UnifiedFieldSelection<ModelResourceSchema>[];

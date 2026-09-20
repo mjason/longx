@@ -239,6 +239,7 @@ defmodule Longx.AI do
              do: provider.supports_hosted_web_search,
              else: model.hosted_web_search
            ),
+         image_generation?: model.image_generation == true,
          kind: if(chatgpt_backend?(provider), do: :openai, else: provider.kind),
          chatgpt?: chatgpt_backend?(provider),
          account_id: if(chatgpt_backend?(provider), do: chatgpt_account_id(api_key)),

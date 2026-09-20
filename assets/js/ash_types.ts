@@ -10,11 +10,12 @@ export type UtcDateTimeUsec = string;
 // Model Schema
 export type ModelResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "contextWindow" | "default" | "hostedWebSearch" | "id" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
+  __primitiveFields: "contextWindow" | "default" | "hostedWebSearch" | "id" | "imageGeneration" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
   contextWindow: number;
   default: boolean;
   hostedWebSearch: boolean | null;
   id: UUIDv7;
+  imageGeneration: boolean;
   insertedAt: UtcDateTimeUsec;
   maxOutputTokens: number | null;
   name: string;
@@ -32,11 +33,12 @@ export type ModelResourceSchema = {
 
 export type ModelAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "contextWindow" | "default" | "hostedWebSearch" | "id" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
+  __primitiveFields: "contextWindow" | "default" | "hostedWebSearch" | "id" | "imageGeneration" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
   contextWindow: number;
   default: boolean;
   hostedWebSearch: boolean | null;
   id: UUIDv7;
+  imageGeneration: boolean;
   insertedAt: UtcDateTimeUsec;
   maxOutputTokens: number | null;
   name: string;
@@ -482,6 +484,12 @@ export type ModelFilterInput = {
     greaterThan?: UUIDv7;
     lessThanOrEqual?: UUIDv7;
     greaterThanOrEqual?: UUIDv7;
+  };
+
+  imageGeneration?: {
+    eq?: boolean;
+    notEq?: boolean;
+    in?: Array<boolean>;
   };
 
   insertedAt?: {
@@ -2035,7 +2043,7 @@ export type WatchFilterInput = {
 };
 
 
-export const modelFilterFields = ["contextWindow", "default", "hostedWebSearch", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId", "provider"] as const;
+export const modelFilterFields = ["contextWindow", "default", "hostedWebSearch", "id", "imageGeneration", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId", "provider"] as const;
 export type ModelFilterField = (typeof modelFilterFields)[number];
 
 
@@ -2064,7 +2072,7 @@ export const watchFilterFields = ["at", "budgetPerHour", "cron", "disabledReason
 export type WatchFilterField = (typeof watchFilterFields)[number];
 
 
-export const modelSortFields = ["contextWindow", "default", "hostedWebSearch", "id", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId"] as const;
+export const modelSortFields = ["contextWindow", "default", "hostedWebSearch", "id", "imageGeneration", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId"] as const;
 export type ModelSortField = (typeof modelSortFields)[number];
 
 

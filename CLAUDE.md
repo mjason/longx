@@ -520,6 +520,24 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `Plugs.Browser` is `web_fetch(url, format, selector)` in every mode — obscura through
     `Longx.Browser.fetch/2`, markdown by default; while the browser is still being
     downloaded the tool answers "being downloaded (N%)".
+  - **Image generation is the provider's hosted tool, per model** — `Model.image_generation`
+    (default false; the `openai` and `chatgpt` presets set it on their models; the model
+    dialog's 图片生成 switch, "only OpenAI's Responses API"): `Target.image_generation?`
+    makes `Gateway.prepare` append `{"type": "image_generation"}` to the tools (once; a
+    stray one is dropped for every other target, a replayed `image_generation_call`
+    item too — `@hosted_call_items`). No plug, no per-thread switch: the model draws
+    when asked. The stream folds `image_generation_call` (`Kernel.Stream`): in progress
+    → a `longx.image_generation` `dynamicToolCall` row (`UI.image_generation_ui`); done →
+    the base64 saved with `Attachments.store_bytes/3` as `<stamp>-image-<thread>-<n>.png`
+    under the project's attachment dir, the row completed with `send_file`-shaped
+    `details` (`path`, `mime`, `attachment: true`, the `revised_prompt` as `title`) so
+    `ImageGenerationTool` draws it inline through `/files/<project>/_attachments/…?inline=1`
+    (a `FileCard` shared with `SendFileTool`), and **the model's context gets a note**
+    (`[image_generation] The image … was saved as the attachment <name> …`, a user
+    message, kind `:hosted_call`) instead of the bytes — with `store: false` every step
+    replays the history and one picture is a megabyte. `agent_test` "hosted image
+    generation" folds a fixture stream; the real thing was checked once through the
+    subscription (a 877 KB png back for a red circle).
   - **Compaction, codex's shape** (`Plugs.Compaction` policy; `Kernel.Compaction`
     execution): the kernel folds on its own when the person types `/compact`
     (`Agent.compact/1`: at once when idle, before the next step when running) and when the

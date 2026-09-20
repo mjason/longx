@@ -1396,6 +1396,131 @@ defmodule Longx.AgentTest do
     end)
   end
 
+  # a hosted image generation as OpenAI streams it: the call with the picture, then a message
+  defp image_generation_stream(png) do
+    resp = %{id: "resp_ig", object: "response", created_at: 1, model: "fake-model", output: []}
+
+    call = %{
+      id: "ig_1",
+      type: "image_generation_call",
+      status: "completed",
+      revised_prompt: "a red circle",
+      output_format: "png",
+      size: "1024x1024",
+      result: Base.encode64(png)
+    }
+
+    message = %{
+      id: "msg_ig",
+      type: "message",
+      status: "completed",
+      role: "assistant",
+      content: [%{type: "output_text", text: "here it is", annotations: []}]
+    }
+
+    [
+      %{type: "response.created", response: Map.put(resp, :status, "in_progress")},
+      %{
+        type: "response.output_item.added",
+        output_index: 0,
+        item: %{call | status: "in_progress", result: nil}
+      },
+      %{type: "response.output_item.done", output_index: 0, item: call},
+      %{
+        type: "response.output_item.added",
+        output_index: 1,
+        item: %{message | content: [], status: "in_progress"}
+      },
+      %{
+        type: "response.output_text.delta",
+        item_id: "msg_ig",
+        output_index: 1,
+        content_index: 0,
+        delta: "here it is"
+      },
+      %{type: "response.output_item.done", output_index: 1, item: message},
+      %{
+        type: "response.completed",
+        response:
+          Map.merge(resp, %{
+            status: "completed",
+            output: [call, message],
+            usage: %{input_tokens: 3, output_tokens: 2, total_tokens: 5}
+          })
+      }
+    ]
+    |> Enum.with_index()
+    |> Enum.map(fn {event, seq} ->
+      "event: #{event.type}\ndata: #{Jason.encode!(Map.put(event, :sequence_number, seq))}\n\n"
+    end)
+  end
+
+  test "hosted image generation: the model's picture is saved as an attachment, shown inline, and the context keeps a note instead of the bytes",
+       %{bypass: bypass, thread_id: id, model: model} do
+    AI.update_model!(model, %{image_generation: true})
+    png = <<137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13>> <> :crypto.strong_rand_bytes(64)
+    project_id = "proj-img-#{System.unique_integer([:positive])}"
+    on_exit(fn -> Longx.Projects.Attachments.delete_all(project_id) end)
+
+    script!(bypass, [
+      image_generation_stream(png),
+      ResponsesFixture.assistant_message("done")
+    ])
+
+    Agent.stop(id)
+    Longx.Agent.Kernel.Specs.delete(id)
+
+    {:ok, _} =
+      Agent.ensure(thread_id: id, cwd: File.cwd!(), project_id: project_id, model: model.slug)
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "draw a red circle")
+
+    # the request offered the hosted tool
+    assert_receive {:request, first}, 5_000
+
+    assert [%{"type" => "image_generation"}] =
+             Enum.filter(first["tools"], &(&1["type"] == "image_generation"))
+
+    # the row: a send_file-shaped item the chat draws as an inline image, with the prompt as its title
+    assert %{
+             "item" => %{
+               "type" => "dynamicToolCall",
+               "namespace" => "longx",
+               "tool" => "image_generation",
+               "id" => row
+             }
+           } =
+             await_item_started("dynamicToolCall")
+
+    assert %{"item" => %{"id" => ^row, "status" => "completed", "details" => details}} =
+             await_item_completed(row)
+
+    assert %{
+             "mime" => "image/png",
+             "attachment" => true,
+             "title" => "a red circle",
+             "path" => name
+           } = details
+
+    assert String.ends_with?(name, ".png")
+    assert File.read!(Path.join(Longx.Projects.Attachments.dir(project_id), name)) == png
+
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+
+    # the model's context: no base64, a note naming the file
+    {:ok, _} = Agent.send(id, "and now?")
+    assert_receive {:request, second}, 5_000
+    refute inspect(second["input"]) =~ Base.encode64(png)
+
+    assert Enum.any?(second["input"], fn item ->
+             item["role"] == "user" and inspect(item["content"]) =~ name and
+               inspect(item["content"]) =~ "image_generation"
+           end)
+
+    refute Enum.any?(second["input"], &(&1["type"] == "image_generation_call"))
+    await_turn_end()
+  end
+
   test "hosted web search: the provider's tool goes out, its call shows as a search row with the cited sources",
        %{bypass: bypass, thread_id: id, model: model} do
     provider = Ash.load!(model, :provider).provider
