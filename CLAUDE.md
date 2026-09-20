@@ -629,8 +629,27 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `Longx.Projects`. `resolve_target/1` (`longx` = the default model) = model + its
     provider's decrypted key.
   - **Presets** (`Longx.AI.Presets`, pure data + `apply/2`, idempotent): DeepSeek, GLM,
-    阿里云百炼 Token Plan (个人版 / 团队版) and OpenAI with endpoint / kind / hosted search /
-    key url / docs url and their models. **Any provider's own list**: `discover_models/1`
+    阿里云百炼 Token Plan (个人版 / 团队版), OpenAI and **`chatgpt` — a ChatGPT
+    subscription through the Codex backend** (`credential: true`: `apply/2` makes the
+    OAuth2 credential `chatgpt` from `Presets.chatgpt_credential/0` — the Codex CLI's
+    public client `app_EMoamEEZ73f0CkXaXp7hrann`, PKCE, `fixed_client`, `device_flow:
+    :openai`, the vendor's `redirect_uri` `http://localhost:1455/auth/callback`,
+    `authorize_params` `codex_cli_simplified_flow` / `originator` — and a provider
+    `kind: :openai` on `https://chatgpt.com/backend-api/codex` with `credential_id`
+    pointing at it; the RPC answers `credentialId` so the page opens the login next)
+    with endpoint / kind / hosted search / key url / docs url and their models.
+    **A provider on a credential** (`Provider.credential_id`): its key is the
+    credential's access token (`Longx.Credentials.access_value/1`, refreshed when about
+    to expire; no login = `{:missing_api_key, slug}`, so the model stays out of the
+    chains), `has_api_key?` counts it; `target_for/1` marks the target `chatgpt?: true`
+    with `account_id` read off the token's claim `https://api.openai.com/auth
+    .chatgpt_account_id` (`AI.chatgpt_account_id/1`), and `Gateway.prepare` adds the
+    backend's headers (`chatgpt-account-id`, `OpenAI-Beta: responses=experimental`,
+    `originator: codex_cli_rs` — the backend serves only clients it knows) and
+    `store: false` + `include: ["reasoning.encrypted_content"]`; `discover_models`
+    reads the backend's catalog (`GET /models?client_version=` → `models[]` with
+    `slug`, `context_window`, `supported_reasoning_levels`, `visibility` — hidden ones
+    left out) with the same headers. **Any provider's own list**: `discover_models/1`
     asks `GET <base_url>/models` and normalises each entry (window, levels, default level,
     image input, `installed`). Over RPC via the data-less `Longx.AI.Preset` (`list_presets`,
     `apply_preset`) and `discover_models` on `Provider`. Seeds (`priv/repo/seeds.exs` →
@@ -726,8 +745,20 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   person into the ask's **`secret: true` field**, masked in the elicitation form, stored
   by the tool). RPC on the resource: `list_credentials`, `create_credential_api_key`,
   `create_credential_oauth2`, `update_credential`, `delete_credential`,
-  `credential_login_url` (`id`, `origin`), `refresh_credential`, `credential_redirect_uri`
-  (`test/longx_web/rpc/credentials_rpc_test`); Settings → 凭证
+  `credential_login_url` (`id`, `origin`), `refresh_credential`, `credential_redirect_uri`,
+  `credential_device_begin` / `credential_device_poll` (`test/longx_web/rpc/credentials_rpc_test`).
+  **A credential may carry a vendor's own OAuth client**: `fixed_client` (the id is used
+  as it is, never replaced by a registration), `redirect_uri` (the vendor's, in place of
+  Longx's own — the browser ends on an unreachable page and the person pastes its
+  address back), `authorize_params` (authorize-only query params; `extra_params` stay
+  token-request form fields) and `device_flow: :openai` — the Codex device-code login
+  (`OAuth.device_begin/2`: `POST <issuer>/api/accounts/deviceauth/usercode` → a
+  `user_code` to type at `<issuer>/codex/device`; `device_poll/1`: `POST
+  …/deviceauth/token` answers 403/404 while pending, then the authorization code and the
+  PKCE verifier the vendor made, exchanged at `/oauth/token` with the vendor's own
+  callback `<issuer>/deviceauth/callback`; the pending login sits in `Logins` under a
+  state, `Logins.get/1` reads without taking). No port, no address to catch: the way for a
+  Longx on a server the browser is not on. Settings → 凭证
   (`settings/CredentialsSection`, `core/credentials.ts`: the list, add API key / OAuth2,
   登录 opens the URL in a new tab and the list polls until the browser comes back, 立即刷新,
   delete behind a confirm, the redirect URI to register). A plug's own Elixir code calls
@@ -905,7 +936,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `/p/:slug/settings` (`pages/ProjectSettingsPage`: name, description, defaults, the
     definition with the trust switch and 提升到 shared, `AgentSettingsFields` overrides,
     `GitCard`, danger zone), `/settings/:section` (`pages/SettingsPage`: `models` 模型与
-    Provider — providers as cards, presets first, `LevelsEditor`, 档位与别名 —,
+    Provider — providers as cards, presets first, `LevelsEditor`, 档位与别名; a provider on
+    a credential shows 已登录 / 未登录 instead of the key badge and 登录 ChatGPT in its
+    menu; the `chatgpt` preset's dialog has no key field and opens
+    `settings/ChatGptLoginDialog` after applying: the device code with the vendor's page
+    and a poll every `interval` s, and beneath it 改用浏览器登录 with the paste box; the
+    凭证 page's 登录 opens the same dialog for a `deviceFlow: "openai"` credential —,
     `dependencies` 系统依赖, `knowledge` 知识 (global docs in the CodeEditor, a save is a
     commit when git is there), `agent` Agent 内核 (settings, public URL, the browser card,
     private network), `watches` 监控与定时, `processes` 进程 (the agents' live commands,
