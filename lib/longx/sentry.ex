@@ -169,7 +169,7 @@ defmodule Longx.Sentry do
   @doc "A turn that ended `failed` (the Tracker), as an error event tagged with the thread and turn."
   @spec turn_failed(String.t(), String.t(), String.t() | nil) :: :ok
   def turn_failed(thread_id, turn_id, error) do
-    if enabled?() do
+    if enabled?() and not providers_own?(error) do
       Sentry.capture_message("turn failed: #{String.slice(error || "no details", 0, 200)}",
         level: :error,
         tags: %{thread: thread_id, turn: turn_id},
@@ -180,6 +180,13 @@ defmodule Longx.Sentry do
 
     :ok
   end
+
+  # a provider refusing the prompt (a content filter) or the account (a spent
+  # quota, an unpaid bill) is its word, not a bug of ours — the person sees it on
+  # the page; three of them once filled the issue list
+  @providers_own ~r/usage policy|invalid prompt|content_policy|flagged as|quota|exhaust|insufficient|balance|credit|billing|payment|exceeded your/i
+  defp providers_own?(error) when is_binary(error), do: Regex.match?(@providers_own, error)
+  defp providers_own?(_), do: false
 
   # failures of one kind group together: the message up to the first colon
   defp first_words(nil), do: "unknown"

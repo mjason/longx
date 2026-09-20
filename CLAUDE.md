@@ -860,7 +860,8 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     (`Sentry.LoggerHandler` attached once a DSN is set, crash reports only),
     `Longx.System.Faults.record/3` (`fault/3`, warnings), failed turns from the Tracker
     (`turn_failed/3`, errors tagged thread / turn, fingerprinted by the message's first
-    words), and `send_test/0` from the page. RPC `sentry_status` / `set_sentry_dsn` /
+    words — a provider's refusal of the prompt or the account (a content filter, a
+    quota) is not sent: the person sees it on the page), and `send_test/0` from the page. RPC `sentry_status` / `set_sentry_dsn` /
     `sentry_test`; `before_send/1` drops Bandit's client-side protocol errors
     (`Bandit.HTTPError` — a connection opened and never used is a "Read timeout" logged
     with a crash reason —, `Bandit.TransportError`), which are not bugs of ours; the

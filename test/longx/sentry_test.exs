@@ -62,6 +62,23 @@ defmodule Longx.SentryTest do
     assert body =~ "turn_1"
     assert body =~ "boom"
 
+    # a provider's refusal of the prompt or the account (a content filter, a spent
+    # quota) is the provider's word, not a bug of ours: the page tells the person,
+    # Sentry hears nothing
+    Reporting.turn_failed(
+      "native_1",
+      "turn_2",
+      "model gpt-5.6-sol failed: gpt-5.6-sol (ls): upstream answered 502: Invalid prompt: your prompt was flagged as potentially violating our usage policy."
+    )
+
+    Reporting.turn_failed(
+      "native_1",
+      "turn_3",
+      "model x failed: upstream answered 429: quota exhausted"
+    )
+
+    refute_receive {:envelope, _}, 300
+
     # a client's own protocol error (a connection opened and never used, a
     # malformed request, a closed socket) is not a bug of ours: dropped before
     # it goes out; a real exception still goes
