@@ -7,6 +7,7 @@ import { Button } from "@/ui/components/ui/button";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 import { FileMentions, FileMentionText } from "./FileMentions";
+import { AgentLabel } from "./AgentLabel";
 import { AgentsPanel, AgentsPill } from "./AgentsPanel";
 import { GoalBar } from "./GoalBar";
 import { ModelFailedBanner } from "./ModelFailedBanner";
@@ -37,7 +38,7 @@ const ComposerQueue = () => {
   return <MessageQueue onInsert={(id) => void insertQueued(id)} insertLabel={t.queueInsert} removeLabel={t.queueRemove} hint={t.queueHint} />;
 };
 
-const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers, ComposerQueue, UserText: FileMentionText, ReasoningGroup: ReasoningSteps };
+const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers, ComposerQueue, UserText: FileMentionText, AgentLabel, ReasoningGroup: ReasoningSteps };
 
 /**
  * The centre of the project window: assistant-ui's Thread element over the

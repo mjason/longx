@@ -7,6 +7,10 @@ import type { Unstable_DirectiveFormatter, Unstable_DirectiveSegment, Unstable_T
 // `@path` or `@"path with spaces"`, not the `@` inside an email or a bare one
 const MENTION = /(^|[^\w.])@(?:"([^"\n]+)"|([^\s@"]+))/g;
 
+// an upload the composer put in the text for the model (`fileAttachments.ts`):
+// the tag and the note after it are the model's; the person sees a chip
+const ATTACHMENT = /<attachment name="([^"]*)" path="([^"]*)" size="([^"]*)" \/>(（[^）]*）)?/g;
+
 export const fileFormatter: Unstable_DirectiveFormatter = {
   serialize(item) {
     return /\s/.test(item.id) ? `@"${item.id}"` : `@${item.id}`;
@@ -14,12 +18,20 @@ export const fileFormatter: Unstable_DirectiveFormatter = {
   parse(text) {
     const out: Unstable_DirectiveSegment[] = [];
     let last = 0;
+    const found: { start: number; end: number; seg: Unstable_DirectiveSegment }[] = [];
     for (const m of text.matchAll(MENTION)) {
       const path = m[2] ?? m[3]!;
-      const start = m.index + m[1]!.length;
-      if (start > last) out.push({ kind: "text", text: text.slice(last, start) });
-      out.push({ kind: "mention", type: "file", label: path, id: path });
-      last = m.index + m[0].length;
+      found.push({ start: m.index + m[1]!.length, end: m.index + m[0].length, seg: { kind: "mention", type: "file", label: path, id: path } });
+    }
+    for (const m of text.matchAll(ATTACHMENT)) {
+      found.push({ start: m.index, end: m.index + m[0].length, seg: { kind: "mention", type: "attachment", label: `${m[1]} · ${m[3]}`, id: m[2]! } });
+    }
+    found.sort((a, b) => a.start - b.start);
+    for (const f of found) {
+      if (f.start < last) continue;
+      if (f.start > last) out.push({ kind: "text", text: text.slice(last, f.start) });
+      out.push(f.seg);
+      last = f.end;
     }
     if (last < text.length) out.push({ kind: "text", text: text.slice(last) });
     return out;

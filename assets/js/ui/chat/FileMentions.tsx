@@ -3,7 +3,7 @@
 // registry's composer-trigger-popover over a live-completion adapter; the
 // message shows the path as a chip (directive-text with our formatter).
 import { unstable_useLiveCompletionAdapter } from "@assistant-ui/react";
-import { FileIcon, FolderIcon, Sparkles } from "lucide-react";
+import { FileIcon, FolderIcon, Paperclip, Sparkles } from "lucide-react";
 import { searchFiles } from "@/ash_rpc";
 import { fileFormatter, fileMentionItems, mentionFormatter } from "@/core/chat/mentions";
 import { unwrap } from "@/core/projects";
@@ -15,7 +15,7 @@ import { useChat } from "./ChatProvider";
 const ICONS = { file: FileIcon, directory: FolderIcon };
 
 /** User message text with `@path` and `$skill` mentions as chips. */
-export const FileMentionText = createDirectiveText(mentionFormatter, { iconMap: { ...ICONS, skill: Sparkles }, fallbackIcon: FileIcon });
+export const FileMentionText = createDirectiveText(mentionFormatter, { iconMap: { ...ICONS, skill: Sparkles, attachment: Paperclip }, fallbackIcon: FileIcon });
 
 export function FileMentions() {
   const { projectId } = useChat();

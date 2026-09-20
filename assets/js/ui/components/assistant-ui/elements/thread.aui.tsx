@@ -88,6 +88,8 @@ export type ThreadComponents = {
   ComposerQueue?: ComponentType | undefined;
   /** Longx: how a user message's text renders (directive chips) */
   UserText?: TextMessagePartComponent | undefined;
+  /** Longx: the label over another agent's message (a team name, or a session's address resolved to its title) */
+  AgentLabel?: ComponentType<{ from: string }> | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
   ToolGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
@@ -631,7 +633,9 @@ const UserMessage: FC = () => {
   );
 };
 
-const AgentMessage: FC<{ from: string }> = ({ from }) => (
+const AgentMessage: FC<{ from: string }> = ({ from }) => {
+  const { AgentLabel } = useContext(ThreadComponentsContext);
+  return (
   <MessagePrimitive.Root
     data-slot="aui_agent-message-root"
     data-role="user"
@@ -640,13 +644,14 @@ const AgentMessage: FC<{ from: string }> = ({ from }) => (
   >
     <div className="text-muted-foreground mb-1 flex items-center gap-1.5 text-xs">
       <BotIcon className="size-3.5" />
-      <span className="font-mono">{t.agentMessageFrom(from)}</span>
+      {AgentLabel ? <AgentLabel from={from} /> : <span className="font-mono">{t.agentMessageFrom(from)}</span>}
     </div>
     <div className="aui-agent-message-content border-border/60 bg-muted/40 text-foreground rounded-xl border px-4 py-2 leading-relaxed wrap-break-word">
       <MessagePrimitive.Parts components={{ Text: MarkdownText, File: UserFilePart, Image: UserImagePart }} />
     </div>
   </MessagePrimitive.Root>
-);
+  );
+};
 
 const EditComposer: FC = () => {
   return (

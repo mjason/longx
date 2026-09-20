@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
 import { _resetWorkbenchForTests } from "@/core/workbench";
-import { agentDefinitionData, channel, failed, model, ok, thread } from "@/ui/test-mocks";
+import { agentDefinitionData, channel, failed, model, ok, thread, session } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("sonner", async (importOriginal) => {
@@ -36,6 +36,7 @@ import {
   sendMessage,
   setGoal,
   startThread,
+  directory,
 } from "@/ash_rpc";
 
 const snapshot = {
@@ -662,6 +663,54 @@ describe("ThreadPage", () => {
     expect(within(message).getByText("冒烟测试通过").tagName).toBe("STRONG");
     expect(within(message).getAllByRole("listitem")).toHaveLength(2);
     expect(message).not.toHaveTextContent("[agent researcher]");
+  });
+
+  test("a message from another session (an address, not a team name) is labelled with that session's title and links to it", async () => {
+    vi.mocked(directory).mockResolvedValue(ok({ sessions: [session(7, { address: "~052ca4", title: "coder 定义流" }), session(2)] }) as never);
+    try {
+      await open();
+      act(() =>
+        channel.deliver("event", {
+          seq: 4,
+          method: "item/completed",
+          params: {
+            turnId: "turn_2",
+            item: { id: "u9", type: "userMessage", turnId: "turn_2", from: "~052ca4", content: [{ type: "text", text: "[agent ~052ca4] 回报：不是我建的" }] },
+          },
+        }),
+      );
+      const message = await screen.findByTestId("agent-message");
+      const label = await within(message).findByRole("link", { name: /coder 定义流/ });
+      expect(label).toHaveAttribute("href", "/p/app-1/t/t7");
+      expect(message).toHaveTextContent("~052ca4");
+    } finally {
+      vi.mocked(directory).mockResolvedValue(ok({ sessions: [session(1, { handle: "main", address: "main", title: "值班", state: "running" }), session(2)] }) as never);
+    }
+  });
+
+  test("an attachment the person sent is a chip in their bubble, not the tag and the note the model reads", async () => {
+    await open();
+    act(() =>
+      channel.deliver("event", {
+        seq: 4,
+        method: "item/completed",
+        params: {
+          turnId: "turn_2",
+          item: {
+            id: "u10",
+            type: "userMessage",
+            turnId: "turn_2",
+            content: [{ type: "text", text: "看看这个\n\n<attachment name=\"factors_raw.jsonl\" path=\"/data/attachments/p1/20260920T074549-factors_raw.jsonl\" size=\"177 KB\" />（文件已存到服务器上的这个路径，需要时直接读取或解压）" }],
+          },
+        },
+      }),
+    );
+    const chip = await screen.findByText(/factors_raw\.jsonl/);
+    expect(chip.closest("[data-slot=directive-text-chip]")).toHaveAttribute("data-directive-type", "attachment");
+    expect(chip.closest("[data-slot=directive-text-chip]")).toHaveTextContent("177 KB");
+    expect(screen.queryByText(/文件已存到服务器/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/<attachment/)).not.toBeInTheDocument();
+    expect(screen.getByText(/看看这个/)).toBeInTheDocument();
   });
 
   test("the badge names the model and level a turn ran on; a sub-agent's row names its child's", async () => {

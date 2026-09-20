@@ -956,7 +956,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     assistant-ui `ThreadMessageLike`: one assistant message per turn, split at each steered
     user message; `metadata.timing`; agentMessage → text, reasoning → reasoning,
     commandExecution / fileChange / webSearch / action / subagent → tool-call parts;
-    `"from"` on an agent's message → `metadata.custom.from`, the `[agent name] ` prefix (for the model) stripped, and `thread.aui`'s `AgentMessage` draws it left-aligned under the name with `MarkdownText` (a report is markdown; the person's bubble is plain text); a sub-agent's activities folded into `subagent`
+    `"from"` on an agent's message → `metadata.custom.from`, the `[agent name] ` prefix (for the model) stripped, and `thread.aui`'s `AgentMessage` draws it left-aligned under the name with `MarkdownText` (a report is markdown; the person's bubble is plain text; the name is the `AgentLabel` slot — `chat/AgentLabel`: a session addressed through the directory (`~052ca4`) shows the directory's title for it and links to its page, a team name stays as it is); an upload's `<attachment name path size />` tag (and the note after it, both for the model) is a paperclip chip `name · size` in the person's bubble (`mentions.ts` parses it beside `@` mentions); a sub-agent's activities folded into `subagent`
     parts — one row per turn the child was engaged in (spawned, or asked again later:
     `SubAgent.rowItemIds`), the latest row carrying the child's whole conversation as
     `messages`, earlier ones a completed marker — so a child asked again is seen where
