@@ -9,13 +9,19 @@ defmodule Longx.Projects.Project.Changes.InitGit do
   @impl true
   def change(changeset, _opts, _ctx) do
     if Ash.Changeset.get_argument(changeset, :init_git) do
-      Ash.Changeset.after_action(changeset, fn _changeset, project ->
-        case Longx.Projects.init_git(project) do
-          {:ok, _sha} -> {:ok, project}
-          {:error, :already_a_repository} -> {:ok, project}
-          {:error, :no_git} -> {:ok, project}
-          {:error, reason} -> {:error, "git init failed: #{inspect(reason)}"}
-        end
+      # after the transaction, not inside it: git runs through the shim for
+      # a while, and the row's write lock is nobody else's to wait on
+      Ash.Changeset.after_transaction(changeset, fn
+        _changeset, {:ok, project} ->
+          case Longx.Projects.init_git(project) do
+            {:ok, _sha} -> {:ok, project}
+            {:error, :already_a_repository} -> {:ok, project}
+            {:error, :no_git} -> {:ok, project}
+            {:error, reason} -> {:error, "git init failed: #{inspect(reason)}"}
+          end
+
+        _changeset, other ->
+          other
       end)
     else
       changeset

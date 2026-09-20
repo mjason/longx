@@ -679,6 +679,24 @@ defmodule Longx.Projects.ThreadsTest do
     Bypass.pass(bypass)
   end
 
+  test "deleting a project stops its agents and removes their files outside the transaction; git init after it — never inside, holding SQLite's write lock while a process is waited on",
+       %{project: project} do
+    destroy = Ash.Changeset.for_destroy(project, :delete, %{confirm: true})
+    # the process stops and the file removals run before the transaction; the rows go inside it
+    assert length(destroy.before_transaction) == 2
+    assert length(destroy.before_action) == 1
+
+    create =
+      Ash.Changeset.for_create(Longx.Projects.Project, :create, %{
+        name: "x",
+        root_path: project.root_path,
+        init_git: true
+      })
+
+    assert length(create.after_transaction) == 1
+    assert create.after_action == []
+  end
+
   test "the Tracker knows which threads have a turn in flight (the monitor on the agent is the truth); the watchdog looks only at those",
        %{bypass: bypass, project: project} do
     script!(bypass, [held(ResponsesFixture.assistant_message("one"))])
