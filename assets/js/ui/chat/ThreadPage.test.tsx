@@ -735,10 +735,20 @@ describe("ThreadPage", () => {
           progress: { kind: "toolCall", name: "apply_patch", bytes: 20480 },
         }),
       );
-      // the composer rail names every child at work, wherever the page is scrolled
-      const bar = screen.getByTestId("agents-bar");
-      expect(bar).toHaveTextContent("beta");
-      expect(bar).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");
+      // a card floats at the chat's top right naming every child at work, wherever the page is scrolled
+      const panel = screen.getByTestId("agents-panel");
+      expect(panel).toHaveTextContent("beta");
+      expect(panel).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");
+      expect(screen.queryByTestId("agents-bar")).not.toBeInTheDocument();
+      // it folds to a pill and back, the choice remembered
+      await user.click(within(panel).getByRole("button", { name: "收起" }));
+      expect(screen.getByTestId("agents-panel")).toHaveTextContent("1 个工作中");
+      expect(screen.getByTestId("agents-panel")).not.toHaveTextContent("apply_patch");
+      await user.click(within(screen.getByTestId("agents-panel")).getByRole("button", { name: /工作中/ }));
+      expect(screen.getByTestId("agents-panel")).toHaveTextContent("apply_patch");
+      // stop from the card
+      await user.click(within(screen.getByTestId("agents-panel")).getByRole("button", { name: "停止 beta" }));
+      await waitFor(() => expect(interruptTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t9", kernelTurnId: "turn_2-beta" } })));
       const sub = screen.getByTestId("tool-subagent");
       // the row is a summary — state, what its model is writing, its last words — never the conversation
       expect(sub).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");
@@ -758,11 +768,12 @@ describe("ThreadPage", () => {
         channel.deliverTo(`thread:${child}`, "event", { seq: 3, method: "item/completed", params: { turnId: "turn_2-beta", item: { id: "m_beta2", type: "agentMessage", turnId: "turn_2-beta", text: "note written" } } });
       });
       expect(await within(pane).findByText("note written")).toBeInTheDocument();
-      // the child's turn ends: the bar has nobody to show and goes
+      // the child's turn ends: the card keeps it under 最近完成 (the report is a click away)
       act(() => {
         channel.deliverTo(`thread:${child}`, "event", { seq: 4, method: "turn/completed", params: { turn: { id: "turn_2-beta", status: "completed" } } });
       });
-      await waitFor(() => expect(screen.queryByTestId("agents-bar")).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId("agents-panel")).toHaveTextContent("最近完成"));
+      expect(screen.getByTestId("agents-panel")).toHaveTextContent("beta");
     } finally {
       vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
     }
@@ -1202,6 +1213,48 @@ describe("ThreadPage", () => {
     expect(
       within(screen.getByTestId("chat-area")).getByTestId("tool-command"),
     ).toBeInTheDocument();
+  });
+
+  test("phone: a child at work is a pill at the chat's top right that opens the Agent sheet, where the inbox says what it does", async () => {
+    setViewport(390);
+    const user = userEvent.setup();
+    vi.mocked(listSubagents).mockResolvedValue(ok([{ ...thread(9), id: "t9", kernelThreadId: "thr_1-beta", title: "beta", agentPath: "/root/beta", status: "active" }]) as never);
+    try {
+      await open();
+      const child = "thr_1-beta";
+      act(() => {
+        channel.deliverTo("thread:thr_1", "event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+        channel.deliverTo("thread:thr_1", "event", {
+          seq: 5,
+          method: "item/completed",
+          params: { turnId: "turn_2", item: { id: "act_beta", type: "subAgentActivity", agentPath: "/root/beta", agentThreadId: child, kind: "started" } },
+        });
+        channel.deliverTo("thread:thr_1", "event", { seq: 6, method: "turn/completed", params: { turn: { id: "turn_2", status: "completed" } } });
+      });
+      await waitFor(() => expect(channel.topics).toContain(`thread:${child}`));
+      act(() =>
+        channel.replyTo(`thread:${child}`, "ok", {
+          thread_id: child,
+          seq: 2,
+          thread: null,
+          turn: { id: "turn_2-beta", status: "inProgress" },
+          status: null,
+          token_usage: null,
+          items: [],
+          pending_requests: [],
+          progress: { kind: "toolCall", name: "apply_patch", bytes: 20480 },
+        }),
+      );
+      expect(screen.queryByTestId("agents-panel")).not.toBeInTheDocument();
+      const pill = screen.getByTestId("agents-pill");
+      expect(pill).toHaveTextContent("1");
+      await user.click(within(pill).getByRole("button"));
+      const sheet = await screen.findByTestId("tool-sheet", {}, { timeout: 3000 });
+      expect(await within(sheet).findByText("beta")).toBeInTheDocument();
+      expect(sheet).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");
+    } finally {
+      vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
+    }
   });
 
   const surfaceItem = (id: string, tool: string, args: Record<string, unknown>, details: Record<string, unknown>) => ({

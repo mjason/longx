@@ -1,11 +1,13 @@
 import { Thread, type ThreadComponents } from "@/ui/components/assistant-ui/elements/thread.aui";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { Link, useOutletContext } from "react-router";
+import { useViewport } from "@/core/viewport";
 import { Alert, AlertDescription } from "@/ui/components/ui/alert";
 import { Button } from "@/ui/components/ui/button";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 import { FileMentions, FileMentionText } from "./FileMentions";
+import { AgentsPanel, AgentsPill } from "./AgentsPanel";
 import { GoalBar } from "./GoalBar";
 import { ModelFailedBanner } from "./ModelFailedBanner";
 import { ReasoningSteps } from "./ReasoningSteps";
@@ -44,6 +46,7 @@ const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, Composer
  */
 export function ThreadPage() {
   const chat = useChat();
+  const viewport = useViewport();
   const ctx = useOutletContext<ProjectContext>();
 
   if (chat.missing) {
@@ -75,7 +78,8 @@ export function ThreadPage() {
       ) : null}
       <GoalBar />
       <ModelFailedBanner />
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
+        {viewport === "phone" ? <AgentsPill /> : <AgentsPanel />}
         <Thread components={THREAD_COMPONENTS} autoFocus={false} />
       </div>
     </div>
