@@ -674,7 +674,8 @@ defmodule Longx.AgentTest do
       checked? =
         Enum.any?(
           step.transcript,
-          &(&1["type"] == "function_call_output" and &1["output"] == "checked\n")
+          &(&1["type"] == "function_call_output" and is_binary(&1["output"]) and
+              String.ends_with?(&1["output"], "Output:\nchecked\n"))
         )
 
       if checked?,
@@ -753,7 +754,7 @@ defmodule Longx.AgentTest do
              %{"role" => "user"},
              %{"role" => "assistant"},
              %{"type" => "function_call", "name" => "exec_command", "call_id" => "longx_" <> _},
-             %{"type" => "function_call_output", "output" => "checked\n"},
+             %{"type" => "function_call_output", "output" => "Exit code: 0\nWall time: " <> _},
              %{"role" => "assistant"},
              %{"role" => "user", "content" => [%{"text" => "one more"}]}
            ] = third["input"]

@@ -133,7 +133,13 @@ defmodule Longx.Agent.Kernel.UI do
 
   def completed_ui(%Tool{show: :command}, id, turn_id, ok?, text, streamed, duration, extra) do
     exit_code = Map.get(extra, "exitCode", if(ok?, do: 0, else: nil))
-    output = if(ok?, do: streamed, else: streamed <> "\n" <> text)
+    # the page shows what streamed; a failure adds why (the model reads the whole result)
+    output =
+      cond do
+        ok? -> streamed
+        is_binary(extra["reason"]) -> streamed <> "\n" <> extra["reason"]
+        true -> streamed <> "\n" <> text
+      end
 
     %{
       "id" => id,

@@ -116,10 +116,21 @@ defmodule Longx.Agent.Kernel.Calls do
     # text goes into the transcript (the model's JSON request) and the view
     {text, ok?, extra} =
       case outcome do
-        {:ok, text} -> {Longx.Agent.Text.utf8(text), true, %{}}
-        {:ok, text, extra} when is_map(extra) -> {Longx.Agent.Text.utf8(text), true, extra}
-        {:error, message} -> {"Error: " <> Longx.Agent.Text.utf8(message), false, %{}}
-        other -> {"Error: " <> inspect(other), false, %{}}
+        {:ok, text} ->
+          {Longx.Agent.Text.utf8(text), true, %{}}
+
+        {:ok, text, extra} when is_map(extra) ->
+          {Longx.Agent.Text.utf8(text), true, extra}
+
+        {:error, message} ->
+          {"Error: " <> Longx.Agent.Text.utf8(message), false, %{}}
+
+        # a failure that is a whole result (a command's output with its exit code)
+        {:error, message, extra} when is_map(extra) ->
+          {Longx.Agent.Text.utf8(message), false, extra}
+
+        other ->
+          {"Error: " <> inspect(other), false, %{}}
       end
 
     ui =

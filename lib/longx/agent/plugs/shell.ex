@@ -19,10 +19,15 @@ defmodule Longx.Agent.Plugs.Shell do
   description tells the model the limits so it splits heavy work instead of
   looping it.
 
-  The model gets stdout and stderr interleaved as they arrived, capped
-  by `max_output_tokens` (10 000 by default, ~4 bytes a token: head and
-  tail kept) and the exit code when it is not zero. A timeout is an
-  error carrying what was printed so far.
+  The model reads codex's `format_exec_output_for_model` shape (its
+  `core/src/tools/mod.rs`): `Exit code:`, `Wall time:`, `Total output
+  lines:` when clipped, then `Output:` and stdout + stderr interleaved as
+  they arrived, capped by `max_output_tokens` (10 000 by default, ~4 bytes a
+  token: the head and the tail kept around codex's `…N tokens truncated…`
+  marker). A timeout is codex's "command timed out after N milliseconds"
+  as the body's first line with exit code 124; a kill (the person, memory
+  pressure) the same way with 137 — `{:error, text, extra}`, the `reason`
+  in `extra` being what the page appends to the streamed output.
   """
 
   use Longx.Agent.Plug
@@ -189,29 +194,37 @@ defmodule Longx.Agent.Plugs.Shell do
 
         case collect(%{output: [], size: 0, emitted: 0, eofs: 0, exit: nil}, ctx, deadline) do
           {:ok, %{exit: code} = acc} ->
-            {:ok, report(text(acc, max_bytes), code),
+            {:ok, report(acc, code, started, max_bytes, nil),
              %{"exitCode" => code, "durationMs" => elapsed(started)}}
 
+          # codex's words and its conventional exit code for a timeout
           {:timeout, acc} ->
             Shim.kill(shim)
-            {:error, "timed out after #{timeout} ms\n" <> text(acc, max_bytes)}
+            reason = "command timed out after #{timeout} milliseconds"
+
+            {:error, report(acc, 124, started, max_bytes, reason),
+             %{"exitCode" => 124, "durationMs" => elapsed(started), "reason" => reason}}
 
           {:killed, acc} ->
             Shim.kill(shim)
 
-            {:error,
-             "killed from the settings page by the person (it was taking too long or hanging). " <>
-               "Do not run it again as it was; ask what to do next or take a smaller step.\n" <>
-               text(acc, max_bytes)}
+            reason =
+              "killed from the settings page by the person (it was taking too long or hanging). " <>
+                "Do not run it again as it was; ask what to do next or take a smaller step."
+
+            {:error, report(acc, 137, started, max_bytes, reason),
+             %{"exitCode" => 137, "durationMs" => elapsed(started), "reason" => reason}}
 
           {:pressure, %{percent: percent, available: available, total: total}, acc} ->
             Shim.kill(shim)
 
-            {:error,
-             "killed by Longx: the machine was down to #{percent}% free memory " <>
-               "(#{Longx.System.Pressure.human(available)} of #{Longx.System.Pressure.human(total)}). " <>
-               "Run a smaller job (fewer rows, a smaller batch, one run at a time) and check its memory before going bigger.\n" <>
-               text(acc, max_bytes)}
+            reason =
+              "killed by Longx: the machine was down to #{percent}% free memory " <>
+                "(#{Longx.System.Pressure.human(available)} of #{Longx.System.Pressure.human(total)}). " <>
+                "Run a smaller job (fewer rows, a smaller batch, one run at a time) and check its memory before going bigger."
+
+            {:error, report(acc, 137, started, max_bytes, reason),
+             %{"exitCode" => 137, "durationMs" => elapsed(started), "reason" => reason}}
         end
 
       {:error, reason} ->
@@ -286,27 +299,45 @@ defmodule Longx.Agent.Plugs.Shell do
 
   defp show(acc, _ctx, _data), do: acc
 
+  # what the model reads is codex's `format_exec_output_for_model` (core/src/tools/mod.rs):
+  # the exit code, the wall time, the line count when the body was clipped,
+  # then the output — a timeout or a kill as the first line of the body, as
+  # codex writes a timeout
+  defp report(acc, code, started, max_bytes, reason) do
+    whole = IO.iodata_to_binary(acc.output)
+    body = if reason, do: reason <> "\n" <> whole, else: whole
+    {clipped, clipped?} = clip(body, max_bytes)
+    seconds = Float.round(elapsed(started) / 1000, 1)
+
+    header =
+      ["Exit code: #{code}", "Wall time: #{seconds} seconds"] ++
+        if(clipped?, do: ["Total output lines: #{line_count(body)}"], else: []) ++
+        ["Output:"]
+
+    Enum.join(header, "\n") <> "\n" <> clipped
+  end
+
+  defp line_count(text), do: text |> String.split("\n") |> Enum.reject(&(&1 == "")) |> length()
+
   # the head and the tail are kept whole; the middle is dropped once past the cap
-  defp text(%{output: out, size: size}, max_bytes) do
-    whole = IO.iodata_to_binary(out)
+  # with codex's marker (its unit is tokens, ~4 bytes each)
+  defp clip(whole, max_bytes) do
+    size = byte_size(whole)
 
     # scrubbed after the clip: the cut may fall inside a multibyte character,
     # and the output may not have been UTF-8 to begin with
     if size > max_bytes do
       half = div(max_bytes, 2)
 
-      Longx.Agent.Text.utf8(
-        binary_part(whole, 0, half) <>
-          "\n\n[... #{size - max_bytes} bytes omitted ...]\n\n" <>
-          binary_part(whole, size - half, half)
-      )
+      {Longx.Agent.Text.utf8(
+         binary_part(whole, 0, half) <>
+           "\n…#{div(size - max_bytes, 4)} tokens truncated…\n" <>
+           binary_part(whole, size - half, half)
+       ), true}
     else
-      Longx.Agent.Text.utf8(whole)
+      {Longx.Agent.Text.utf8(whole), false}
     end
   end
-
-  defp report(text, 0), do: text
-  defp report(text, code), do: text <> "\n[exit code #{code}]"
 
   defp elapsed(started), do: System.monotonic_time(:millisecond) - started
 end

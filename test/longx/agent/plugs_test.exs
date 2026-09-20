@@ -669,7 +669,7 @@ defmodule Longx.Agent.PlugsTest do
                )
 
       assert String.valid?(clipped)
-      assert clipped =~ "bytes omitted"
+      assert clipped =~ "tokens truncated"
     end
 
     test "runs the command in the cwd and streams its output", %{dir: dir} do
@@ -696,7 +696,8 @@ defmodule Longx.Agent.PlugsTest do
                  ctx
                )
 
-      [path, home | _] = String.split(output, "\n")
+      [_, body] = String.split(output, "Output:\n", parts: 2)
+      [path, home | _] = String.split(body, "\n")
       assert path == Longx.Agent.Tools.ShellEnv.env()["PATH"]
       assert home == System.get_env("HOME")
     end
@@ -734,16 +735,61 @@ defmodule Longx.Agent.PlugsTest do
       refute plain.tools["exec_command"].description =~ "address space"
     end
 
+    test "the result reads like codex's format_exec_output_for_model: Exit code, Wall time, Output; a clip is …N tokens truncated…; a timeout says so with exit code 124",
+         %{ctx: ctx} do
+      tool = tool!(Shell, "exec_command")
+
+      assert {:ok, text, %{"exitCode" => 3}} =
+               Tool.call(tool, %{"cmd" => "echo hi; echo err >&2; exit 3", "login" => false}, ctx)
+
+      assert [
+               "Exit code: 3",
+               "Wall time: " <> secs,
+               "Output:",
+               "hi",
+               "err"
+             ] = String.split(text, "\n", trim: true)
+
+      assert secs =~ ~r/^\d+\.\d seconds$/
+
+      # a clip: the head and the tail whole, codex's marker between, the line count in the header
+      assert {:ok, clipped, _} =
+               Tool.call(
+                 tool,
+                 %{"cmd" => "seq 1 20000", "max_output_tokens" => 200, "login" => false},
+                 ctx
+               )
+
+      assert clipped =~
+               ~r/^Exit code: 0\nWall time: [\d.]+ seconds\nTotal output lines: 20000\nOutput:\n1\n2\n/
+
+      assert clipped =~ ~r/…\d+ tokens truncated…/
+      assert clipped =~ "\n20000\n"
+
+      # a timeout: codex's words, the conventional exit code
+      step = Shell.call(Step.new(phase: :request), Shell.init(timeout_ms: 300))
+
+      assert {:error, message, %{"exitCode" => 124, "reason" => "command timed out" <> _}} =
+               Tool.call(
+                 step.tools["exec_command"],
+                 %{"cmd" => "echo start; sleep 5", "login" => false},
+                 ctx
+               )
+
+      assert message =~
+               ~r/^Exit code: 124\nWall time: [\d.]+ seconds\nOutput:\ncommand timed out after 300 milliseconds\nstart\n/
+    end
+
     test "options Shell, timeout_ms: is the default timeout of every command (a role set 30 min and got 2)",
          %{ctx: ctx} do
       step = Shell.call(Step.new(phase: :request), Shell.init(timeout_ms: 500))
       tool = step.tools["exec_command"]
       assert tool.description =~ "default 500"
 
-      assert {:error, message} =
+      assert {:error, message, %{"exitCode" => 124}} =
                Tool.call(tool, %{"cmd" => "echo start; sleep 10", "login" => false}, ctx)
 
-      assert message =~ "timed out after 500 ms"
+      assert message =~ "command timed out after 500 milliseconds"
       # a call's own timeout_ms still wins, within the cap
       assert {:ok, _, _} =
                Tool.call(
@@ -777,7 +823,7 @@ defmodule Longx.Agent.PlugsTest do
       assert is_integer(os_pid) and os_pid > 0
 
       assert :ok = Longx.System.Commands.kill(id)
-      assert {:error, message} = Task.await(task, 10_000)
+      assert {:error, message, _} = Task.await(task, 10_000)
       assert message =~ "killed from the settings page"
       assert message =~ "start"
 
@@ -808,7 +854,7 @@ defmodule Longx.Agent.PlugsTest do
 
       assert Longx.System.Pressure.sweep(%{total: 100, available: 3}) == 1
 
-      assert {:error, message} = Task.await(task, 10_000)
+      assert {:error, message, _} = Task.await(task, 10_000)
       assert message =~ "killed by Longx"
       assert message =~ "3%"
       assert message =~ "start"
@@ -819,11 +865,11 @@ defmodule Longx.Agent.PlugsTest do
                Tool.call(tool!(Shell, "exec_command"), %{"cmd" => "echo boom; exit 3"}, ctx)
 
       assert output =~ "boom"
-      assert output =~ "exit code 3"
+      assert output =~ "Exit code: 3"
     end
 
     test "a command past its timeout is killed", %{ctx: ctx} do
-      assert {:error, message} =
+      assert {:error, message, _} =
                Tool.call(
                  tool!(Shell, "exec_command"),
                  # no login shell: its start-up must not eat the budget before "start" prints

@@ -319,8 +319,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     the shim), `timeout_ms` (default 2 min — `options Shell, timeout_ms:` sets a
     description's default —, max 30 min; the command runs to completion —
     `write_stdin` sessions are not offered), `max_output_tokens`, `shell`, `login`;
-    stdout+stderr interleaved, head+tail kept, exit code reported; `Longx.Agent.Tools.
-    ShellEnv` builds the environment). **The machine is guarded** (the settings'
+    the result in codex's `format_exec_output_for_model` shape — `Exit code:` / `Wall
+    time:` / `Total output lines:` when clipped / `Output:` then stdout+stderr
+    interleaved, head+tail kept around `…N tokens truncated…`, a timeout as "command
+    timed out after N milliseconds" with exit code 124, a kill with 137 (`{:error, text,
+    extra}`; `Calls` takes the 3-tuple, the page appends `extra["reason"]` to what
+    streamed); `Longx.Agent.Tools.ShellEnv` builds the environment). **The machine is guarded** (the settings'
     `command_oom_priority` 800 / `command_memory_percent` 90 / `memory_floor_percent`
     8, per project too; the loader's settings layer hands them to the plug as
     `options Shell, oom_score_adj:/memory_percent:/memory_floor_percent:` and the tool
