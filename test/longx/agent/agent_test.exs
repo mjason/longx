@@ -1751,8 +1751,10 @@ defmodule Longx.AgentTest do
            } =
              await_item_completed_of_type("subAgentActivity")
 
+    # the reason sits in a code fence: a report is markdown, and a provider's words
+    # ("https://***.com/***") drew as bold and italics with the stars eaten
     assert %{"turnId" => ^woke} =
-             await_user_message_matching(~r/\[agent helper\] .*exited: killed/)
+             await_user_message_matching(~r/\[agent helper\] exited:\n```\nkilled\n```/)
 
     await_turn_end()
     # a crashed child is still a member (its transcript is kept): ask it again or close it

@@ -263,11 +263,14 @@ defmodule Longx.Agent.Kernel.Team do
         status,
         error
       ) do
+    # a failure's words are a provider's or a tool's, verbatim in a code fence: a
+    # report is drawn as markdown, and "https://***.com/***" once came out as bold
+    # and italics with the stars eaten
     report =
       case {status, error} do
         {"completed", _} -> last_answer(state) || "(no answer)"
-        {other, %{"message" => message}} -> "#{other}: #{message}"
-        {other, _} -> "#{other}: #{error || "no details"}"
+        {other, %{"message" => message}} -> "#{other}:\n```\n#{message}\n```"
+        {other, _} -> "#{other}:\n```\n#{error || "no details"}\n```"
       end
 
     name = state.reply_as || state.name

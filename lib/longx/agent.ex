@@ -1035,7 +1035,13 @@ defmodule Longx.Agent do
           {:noreply, Team.mark(state, id, if(status == :working, do: :done, else: status), nil)}
         else
           state = Team.mark(state, id, :failed, nil)
-          deliver(state, "exited: #{exit_text(reason)}", name, {id, name, "interrupted"})
+
+          deliver(
+            state,
+            "exited:\n```\n#{exit_text(reason)}\n```",
+            name,
+            {id, name, "interrupted"}
+          )
         end
 
       nil ->
