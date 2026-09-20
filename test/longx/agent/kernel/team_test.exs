@@ -15,10 +15,14 @@ defmodule Longx.Agent.Kernel.TeamTest do
     me = self()
     {:ok, _} = Registry.register(Longx.Agent.Registry, child, nil)
     {:ok, _} = ThreadState.ensure(child)
+    # an ingest is a cast: wait for the fold's broadcast before reading the view
+    ThreadState.subscribe(child)
 
     ThreadState.ingest(child, "turn/started", %{
       "turn" => %{"id" => "t1", "status" => "inProgress"}
     })
+
+    assert_receive {:thread, _, "turn/started", _}
 
     # no process is called: a test process that answers nothing is enough
     {elapsed, state} =
@@ -31,6 +35,7 @@ defmodule Longx.Agent.Kernel.TeamTest do
       "turn" => %{"id" => "t1", "status" => "completed"}
     })
 
+    assert_receive {:thread, _, "turn/completed", _}
     state = Team.restore_children(%State{thread_id: parent, children: %{}})
     assert [%{status: :done}] = Map.values(state.children)
   end

@@ -950,7 +950,13 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     (models grouped by provider, tiers and aliases first, `efforts` from the row's
     levels; the rail shows the description's model when the project pins one —
     `definitionModel`) + the `TurnState` ("waiting" while an ask is pending)),
-    `GoalBar`, `TurnBar`, `ReasoningSteps` (the `reasoning-panel` step design over
+    `GoalBar`, `TurnBar` (`ComposerLeading` = the turn state + `AgentsBar`: every child
+    with a turn in flight or an ask pending, from `subagentsOf(view)` and the
+    `subviews`, as chips on the composer rail beside the +: name, what its model writes
+    or the ask's title, a click opens its tab, ■ stops it; nothing when nobody works —
+    the rows sit where the children were spawned and a long page hid who still
+    worked; not under the goal bar, a child's page has a goal of its own),
+    `ReasoningSteps` (the `reasoning-panel` step design over
     `reasoningSteps.ts`; **folded until the reader opens it**, the choice kept — a page
     unfolding every thought while it streamed was too long; a sub-agent's row is folded
     the same way, opening by itself only when its child waits on the person —
