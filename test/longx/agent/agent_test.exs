@@ -1627,6 +1627,54 @@ defmodule Longx.AgentTest do
     id
   end
 
+  test "an agent with a long transcript loads it in its own process: the supervisor's start_child returns at once, so another agent starts meanwhile; calls wait until it is loaded",
+       %{dir: dir} do
+    big = "big-#{System.unique_integer([:positive])}"
+    small = "small-#{System.unique_integer([:positive])}"
+    text = String.duplicate("x", 4_000)
+
+    for seq <- 1..6_000 do
+      Transcript.append!(%{
+        thread_id: big,
+        turn_id: "turn_old",
+        seq: seq,
+        kind: :agent_message,
+        input: %{
+          "type" => "message",
+          "role" => "assistant",
+          "content" => [%{"type" => "output_text", "text" => text}]
+        },
+        ui: %{
+          "id" => "item_#{seq}",
+          "type" => "agentMessage",
+          "turnId" => "turn_old",
+          "text" => text
+        }
+      })
+    end
+
+    on_exit(fn ->
+      for id <- [big, small] do
+        Agent.stop(id)
+        ThreadState.stop(id)
+        ThreadState.Store.delete(id)
+      end
+    end)
+
+    # the big one loads (a few hundred ms) while the small one starts: the
+    # supervisor is not held up by the load, only the big one's caller waits
+    loading = Task.async(fn -> :timer.tc(fn -> Agent.ensure(thread_id: big, cwd: dir) end) end)
+    {other_us, {:ok, _}} = :timer.tc(fn -> Agent.ensure(thread_id: small, cwd: dir) end)
+    {ensure_us, {:ok, pid}} = Task.await(loading, 30_000)
+    assert other_us < 20_000
+    assert Process.alive?(pid)
+    # ensure answers with the transcript loaded: the view is there, a call answers at once
+    assert length(ThreadState.snapshot(big).items) == 6_000
+    {status_us, :idle} = :timer.tc(fn -> Agent.status(big) end)
+    assert status_us < 20_000
+    assert ensure_us > other_us
+  end
+
   defmodule Counting do
     use Longx.Agent.Plug
 

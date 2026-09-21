@@ -162,8 +162,13 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   `transcript/item.ex`, `context.ex`, `knowledge.ex`, `pipeline.ex`, `plug.ex`, `step.ex`,
   `tool.ex`.
   - `Longx.Agent` — one **`:gen_statem`** per thread (`Longx.Agent.Registry`, under
-    `Longx.Agent.Supervisor`, `restart: :temporary`; states `:idle` / `:running` read off
-    the kernel's finer `phase`, `handle_event_function` + `state_enter`; the handlers keep
+    `Longx.Agent.Supervisor`, `restart: :temporary`; states `:loading` — `init` does
+    nothing slow (the DynamicSupervisor runs every start through it one after the other,
+    and a big transcript read there held up every other agent's start); the transcript
+    read, the view's replay and the team's restore are the state's first event, every
+    other event postponed by OTP meanwhile, and `ensure/1` waits for a `:loaded?` call
+    so its caller (not the supervisor) blocks until the view is there —, `:idle` /
+    `:running` read off the kernel's finer `phase`, `handle_event_function` + `state_enter`; the handlers keep
     their GenServer shapes as `on_call/on_cast/on_info/on_step` behind one translating
     `handle_event/4`; the idle exit is the `:idle` state's `state_timeout`; a message sent
     with `deliver: :idle` while a turn runs is **postponed by OTP in the mailbox** and

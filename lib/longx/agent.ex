@@ -12,8 +12,12 @@ defmodule Longx.Agent do
   the model stopped before seeing it). Interrupt kills the tasks — a tool's
   shim tree dies with its task — and ends the turn.
 
-  The process is a `:gen_statem` with two states, `:idle` and `:running`
-  (the finer phase — step, streaming, dispatching, compacting — is data),
+  The process is a `:gen_statem` with three states — `:loading` (the
+  transcript read and the view replayed as its first event, so a big
+  conversation never holds up the supervisor that starts every agent one
+  after the other; everything arriving meanwhile is postponed), `:idle`
+  and `:running` (the finer phase — step, streaming, dispatching,
+  compacting — is data),
   because the mailbox is the delivery mechanism between agents and OTP's
   *postpone* is how a message waits for the right moment: a message sent
   with `deliver: :idle` while a turn runs stays in the mailbox and is
@@ -64,11 +68,21 @@ defmodule Longx.Agent do
   def ensure(opts) do
     Longx.Agent.Kernel.Specs.put(Keyword.fetch!(opts, :thread_id), opts)
 
+    # the start returns as soon as the process is up; the caller — not the
+    # supervisor, which starts every agent one after the other — then waits
+    # for the transcript to be loaded (a `:loaded?` call is postponed until it is)
     case DynamicSupervisor.start_child(@supervisor, {__MODULE__, opts}) do
-      {:ok, pid} -> {:ok, pid}
-      {:error, {:already_started, pid}} -> {:ok, pid}
+      {:ok, pid} -> loaded(pid)
+      {:error, {:already_started, pid}} -> loaded(pid)
       other -> other
     end
+  end
+
+  defp loaded(pid) do
+    :gen_statem.call(pid, :loaded?, 60_000)
+    {:ok, pid}
+  catch
+    :exit, reason -> {:error, reason}
   end
 
   @doc "The agent, started again from what it was started with if it left (idle, crashed)."
@@ -256,10 +270,14 @@ defmodule Longx.Agent do
   @impl :gen_statem
   def callback_mode, do: [:handle_event_function, :state_enter]
 
+  # init does nothing that takes time: the DynamicSupervisor runs every start
+  # through `init` one after the other, so a big transcript read here held up
+  # every other agent's start. The load is the first event of the `:loading`
+  # state; everything else that arrives meanwhile is postponed by OTP and
+  # handed back once the agent is `:idle`.
   @impl :gen_statem
   def init(opts) do
     thread_id = Keyword.fetch!(opts, :thread_id)
-    items = Transcript.items!(thread_id)
 
     state = %State{
       thread_id: thread_id,
@@ -282,22 +300,32 @@ defmodule Longx.Agent do
       web_search: Keyword.get(opts, :web_search, true),
       inherited_model: Keyword.get(opts, :inherited_model),
       inherited_effort: Keyword.get(opts, :inherited_effort),
-      seq: items |> Enum.map(& &1.seq) |> Enum.max(fn -> 0 end),
-      transcript: Transcript.input(items),
       # the goal outlives the process in the view
       goal: ThreadState.Store.meta(thread_id).goal
     }
 
+    {:ok, :loading, state, [{:next_event, :internal, :load}]}
+  end
+
+  # the transcript, the view rebuilt from it, the team from the specs
+  defp load(%State{thread_id: thread_id} = state) do
+    items = Transcript.items!(thread_id)
+
+    state = %{
+      state
+      | seq: items |> Enum.map(& &1.seq) |> Enum.max(fn -> 0 end),
+        transcript: Transcript.input(items)
+    }
+
     {:ok, _} = ThreadState.ensure(thread_id)
     replay(state, items)
-    # the team it spawned before it left, from the specs
     state = Team.restore_children(state)
     # a child goes when its parent goes
     with parent when is_binary(parent) <- state.parent, pid when is_pid(pid) <- whereis(parent) do
       Process.monitor(pid)
     end
 
-    {:ok, :idle, state}
+    state
   end
 
   @default_idle_ms 30 * 60_000
@@ -318,6 +346,10 @@ defmodule Longx.Agent do
     do: {:keep_state_and_data, [{:state_timeout, ms, :leave}]}
 
   def handle_event(:enter, _old, _state, _data), do: :keep_state_and_data
+
+  # loading: the transcript first, then whatever waited in the mailbox
+  def handle_event(:internal, :load, :loading, data), do: {:next_state, :idle, load(data)}
+  def handle_event(_type, _content, :loading, _data), do: {:keep_state_and_data, :postpone}
 
   # idle for long enough: leave; a message brings the agent back (Specs)
   def handle_event(:state_timeout, :leave, :idle, data), do: {:stop, :normal, data}
@@ -414,6 +446,9 @@ defmodule Longx.Agent do
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
+
+  # answered once the transcript is loaded (postponed while `:loading`)
+  defp on_call(state, :loaded?, _from), do: {:reply, :ok, state}
 
   defp on_call(state, :info, _from) do
     {:reply,
