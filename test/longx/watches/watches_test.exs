@@ -268,9 +268,11 @@ defmodule Longx.WatchesTest do
     assert {:ok, %Thread{handle: "watch-nightly", title: "⏰ nightly"} = own} =
              Projects.get_thread_by_handle(project.id, "watch-nightly")
 
-    eventually(fn ->
-      match?([%Turn{status: :completed}], Projects.list_turns!(own))
-    end)
+    # a model call and the Tracker's row write behind it: generous under a loaded suite
+    eventually(
+      fn -> match?([%Turn{status: :completed}], Projects.list_turns!(own)) end,
+      200
+    )
 
     # the next reconcile drops the row: the file is gone
     assert :ok = Watches.reconcile_project(project)

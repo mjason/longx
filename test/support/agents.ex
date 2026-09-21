@@ -22,6 +22,7 @@ defmodule Longx.Test.Agents do
 
     # a synchronous call answers after everything queued before it
     _ = :sys.get_state(Longx.Projects.Tracker)
+    _ = Longx.Agent.Transcript.flush()
 
     for t <- threads, do: ThreadState.Store.delete(t.kernel_thread_id)
     :ok

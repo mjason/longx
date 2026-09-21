@@ -38,6 +38,9 @@ defmodule Longx.DataCase do
   def setup_sandbox(tags) do
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Longx.Repo, shared: not tags[:async])
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+    # registered after the owner's stop, so it runs before it: the transcript
+    # writer's queue is written on this test's connection, not the next one's
+    if not tags[:async], do: on_exit(fn -> Longx.Agent.Transcript.flush() end)
   end
 
   @doc """

@@ -758,13 +758,11 @@ defmodule Longx.Agent.PlugsTest do
       assert {:ok, text, %{"exitCode" => 3}} =
                Tool.call(tool, %{"cmd" => "echo hi; echo err >&2; exit 3", "login" => false}, ctx)
 
-      assert [
-               "Exit code: 3",
-               "Wall time: " <> secs,
-               "Output:",
-               "hi",
-               "err"
-             ] = String.split(text, "\n", trim: true)
+      # stdout and stderr interleave as they arrive: the two lines in either order
+      assert ["Exit code: 3", "Wall time: " <> secs, "Output:" | streams] =
+               String.split(text, "\n", trim: true)
+
+      assert Enum.sort(streams) == ["err", "hi"]
 
       assert secs =~ ~r/^\d+\.\d seconds$/
 

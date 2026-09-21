@@ -1661,6 +1661,9 @@ defmodule Longx.AgentTest do
       end
     end)
 
+    # the items are on disk (the writer's queue drained); what is measured is the load
+    assert :ok = Transcript.flush()
+
     # the big one loads (a few hundred ms) while the small one starts: the
     # supervisor is not held up by the load, only the big one's caller waits
     loading = Task.async(fn -> :timer.tc(fn -> Agent.ensure(thread_id: big, cwd: dir) end) end)

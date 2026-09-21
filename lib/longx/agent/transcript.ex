@@ -93,8 +93,21 @@ defmodule Longx.Agent.Transcript do
 
   defp user_words?(_), do: false
 
-  @spec append!(map) :: Item.t()
-  def append!(attrs), do: write_with_retry(fn -> Ash.create!(Item, attrs, action: :append) end)
+  @doc "Queues the item for the writer (`Longx.Agent.Transcript.Writer`): the agent's event, written in the next batch."
+  @spec append!(map) :: :ok
+  def append!(attrs), do: Longx.Agent.Transcript.Writer.append(attrs)
+
+  @doc "Everything queued is written; `{:error, _}` when the lock would not let it."
+  @spec flush() :: :ok | {:error, term}
+  def flush, do: Longx.Agent.Transcript.Writer.flush()
+
+  # a read after a flush: nothing is read around a pending item
+  defp flushed! do
+    case flush() do
+      :ok -> :ok
+      {:error, reason} -> raise "transcript writer: #{inspect(reason)}"
+    end
+  end
 
   # SQLite takes one writer at a time: a team of agents writing their
   # transcripts while the Tracker writes turn rows meets "database is locked"
@@ -133,6 +146,8 @@ defmodule Longx.Agent.Transcript do
   @doc "The thread's items, oldest first."
   @spec items!(String.t()) :: [Item.t()]
   def items!(thread_id) do
+    flushed!()
+
     Item
     |> Ash.Query.for_read(:for_thread, %{thread_id: thread_id})
     |> Ash.read!()
@@ -147,6 +162,8 @@ defmodule Longx.Agent.Transcript do
   @doc "Drops one turn's items (a retract / revert)."
   @spec truncate!(String.t(), String.t()) :: :ok
   def truncate!(thread_id, turn_id) do
+    flushed!()
+
     Item
     |> Ash.Query.for_read(:for_turn, %{thread_id: thread_id, turn_id: turn_id})
     |> Ash.read!()
@@ -156,6 +173,7 @@ defmodule Longx.Agent.Transcript do
   @doc "Drops the whole thread's log."
   @spec delete!(String.t()) :: :ok
   def delete!(thread_id) do
+    # items! flushed
     thread_id |> items!() |> Enum.each(&Ash.destroy!/1)
   end
 

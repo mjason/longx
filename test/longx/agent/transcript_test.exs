@@ -36,6 +36,95 @@ defmodule Longx.Agent.TranscriptTest do
         statement: "BEGIN IMMEDIATE TRANSACTION"
       })
 
+  test "every append goes through one writer as an event: appended from many processes at once, written in batches, read back whole and in order; a read, a truncate or a delete flushes first" do
+    alias Longx.Agent.Transcript.Writer
+    threads = for n <- 1..8, do: "w-#{n}-#{System.unique_integer([:positive])}"
+
+    tasks =
+      for thread <- threads do
+        Task.async(fn ->
+          for seq <- 1..40 do
+            Transcript.append!(%{
+              thread_id: thread,
+              turn_id: "t1",
+              seq: seq,
+              kind: :user_message,
+              input: %{
+                "role" => "user",
+                "content" => [%{"type" => "input_text", "text" => "m#{seq}"}]
+              },
+              ui: %{"id" => "i#{seq}", "type" => "userMessage"}
+            })
+          end
+        end)
+      end
+
+    Enum.each(tasks, &Task.await/1)
+    # nothing was written by the appenders themselves: the writer wrote it, in few transactions
+    assert Writer.flush() == :ok
+    assert Writer.stats().batches < 8 * 40
+    assert Writer.stats().written >= 8 * 40
+
+    for thread <- threads do
+      assert Enum.map(Transcript.items!(thread), & &1.seq) == Enum.to_list(1..40)
+    end
+
+    # queued, then read at once: the read sees it (it flushes first)
+    [thread | _] = threads
+
+    Transcript.append!(%{
+      thread_id: thread,
+      turn_id: "t2",
+      seq: 41,
+      kind: :user_message,
+      input: %{"role" => "user", "content" => []},
+      ui: nil
+    })
+
+    assert Transcript.last_seq(thread) == 41
+    # queued, then truncated at once: gone, and it does not come back with a later flush
+    Transcript.append!(%{
+      thread_id: thread,
+      turn_id: "t3",
+      seq: 42,
+      kind: :user_message,
+      input: %{"role" => "user", "content" => []},
+      ui: nil
+    })
+
+    Transcript.truncate!(thread, "t3")
+    assert Writer.flush() == :ok
+    assert Transcript.last_seq(thread) == 41
+    Transcript.delete!(thread)
+    assert Transcript.items!(thread) == []
+  end
+
+  test "a batch the lock refuses is written on the next try; an error that is no lock drops the batch and is recorded, never raised into an agent" do
+    alias Longx.Agent.Transcript.Writer
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    # the writer's write function is the batch: refused twice by "the lock", then through
+    writer = fn batch ->
+      n = Agent.get_and_update(counter, &{&1, &1 + 1})
+      if n < 2, do: raise(locked()), else: {:ok, length(batch)}
+    end
+
+    {:ok, pid} = Writer.start_link(name: nil, write: writer, waits: [1, 1, 1])
+    GenServer.cast(pid, {:append, %{seq: 1}})
+    assert :ok = GenServer.call(pid, :flush)
+    assert Agent.get(counter, & &1) == 3
+    assert GenServer.call(pid, :stats).written == 1
+
+    # a bug is not retried: the batch is dropped with a fault, the writer lives on
+    bad = fn _batch -> raise ArgumentError, "no such column" end
+    {:ok, pid} = Writer.start_link(name: nil, write: bad, waits: [1])
+    GenServer.cast(pid, {:append, %{seq: 1}})
+    # dropped, counted, and the flush answers (a reader raising would help nobody)
+    assert :ok = GenServer.call(pid, :flush)
+    assert GenServer.call(pid, :stats).dropped == 1
+    assert Process.alive?(pid)
+  end
+
   test "items are appended in sequence, listed in order, truncated per turn and deleted per thread" do
     user = %{"type" => "message", "role" => "user", "content" => "hi"}
     call = %{"type" => "function_call", "call_id" => "c1", "name" => "exec", "arguments" => "{}"}

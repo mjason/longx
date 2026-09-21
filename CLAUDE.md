@@ -407,10 +407,19 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     user's own messages before it verbatim (newest first within `keep_user_bytes`, 80 KB),
     the summary, then everything after; a `function_call` without an output gets a
     synthetic "interrupted" output. A boot replays the `ui` items through
-    `ThreadState.backfill`; a retract is a truncation. `append!/1` retries a write
-    SQLite refused as "database is locked" (`write_with_retry/2`, 200 ms → 2 s; a team
-    of agents writing at once ran past the pool's `busy_timeout` and the raise ended
-    an agent mid-turn — Sentry LONX-5).
+    `ThreadState.backfill`; a retract is a truncation. **One writer, an event log**:
+    an agent never writes its transcript itself — `append!/1` is a cast to
+    `Longx.Agent.Transcript.Writer` (in the tree), which writes whatever accumulated in
+    one transaction (`Ash.bulk_create`, `transaction: :all`), then the next batch, one
+    thread's items in order; `items!` / `truncate!` / `delete!` flush first
+    (`Transcript.flush/0`, a call answered after everything queued), so nothing reads
+    around a pending item; a batch the lock refuses is retried through `waits:`
+    (200 ms → 2 s, synchronously for a flush call, by timer otherwise) and then
+    dropped with a `:db` fault, an error that is no lock dropped at once — never a
+    raise into an agent (a team of agents each writing as they went ran past SQLite's
+    `busy_timeout` and the raise ended an agent mid-turn — Sentry LONX-5). Tests:
+    `Longx.DataCase` flushes the writer on exit before the sandbox owner stops, and
+    `Longx.Test.Agents.stop_all!/0` after the Tracker.
   - **Descriptions: `Longx.Agent.Config`** (the DSL: `version` / `extends` / `model` /
     `prompt` / `prompt_file` / `summary` / `agents` / `plug` / `options` / `drop` /
     `pipeline`), data evaluated before anything runs, the same format in every layer.

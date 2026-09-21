@@ -43,6 +43,8 @@ defmodule Longx.Application do
       {Task.Supervisor, name: Longx.Agent.TaskSupervisor},
       Longx.Agent.Definition.Loader.Cache,
       Longx.Agent.Kernel.Specs,
+      # the one writer of transcript items (the agents' event log)
+      Longx.Agent.Transcript.Writer,
       {DynamicSupervisor, name: Longx.Agent.Supervisor, strategy: :one_for_one},
       # keeps project thread/turn rows in step with the agents' events
       Longx.Projects.Tracker,
