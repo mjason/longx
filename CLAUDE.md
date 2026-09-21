@@ -1204,12 +1204,23 @@ Key patterns:
   `elicitation-form`, `agent-status`, `background-inbox`,
   `context-display`, `model-selector` / `model-picker`, `reasoning-panel`,
   `markdown-text` with `shiki-highlighter` and `mermaid-diagram` (**LaTeX** as
-  assistant-ui's guide: `remark-math` + `rehype-katex`, `katex.min.css` imported in
-  `index.tsx`; `preprocessMath` = `normalizeMathDelimiters` (`\(…\)` / `\[…\]` →
-  `$…$` / `$$…$$`) → `blockMathOnItsOwnLines` (a line that is only `$$…$$` gets its
-  fences on their own lines — remark-math reads the one-line form as inline) →
-  `escapeCurrencyDollars` (`$5 到 $7` is not math); `MarkdownPreview` uses the same
-  three), `thread-list.aui`,
+  assistant-ui's guide: `remark-math` + `rehype-katex`, KaTeX and its stylesheet a
+  **lazy chunk** (`ui/math/useMath`: fetched the first time a MarkdownText mounts, every
+  markdown part re-rendered when it is in; the TeX shows as text until then); **one
+  KaTeX** — `katex` is pinned to the major `rehype-katex` renders with (0.16; a 0.18
+  beside it once served a stylesheet whose sizing class was `katex-sizing` to HTML that
+  said `sizing`, and every subscript sat full-size on the baseline — `useMath.test`
+  checks the classes against the CSS and the lockfile for a nested copy). MathJax 4 with
+  Fira Math was tried and reverted: its SVG output estimates the width of glyphs the
+  font lacks, so `\text{中文}_i` lost or misplaced its subscript, and sans operators
+  read thin. Before the renderer, `core/chat/math.ts` (unit-tested, DOM-free):
+  `normalizeMathDelimiters` (`\(…\)` / `\[…\]` → `$…$` / `$$…$$`) →
+  `blockMathOnItsOwnLines` (a line that is only `$$…$$` gets its fences on their own
+  lines — remark-math reads the one-line form as inline) → `wrapIdentifiers` (a run of
+  3+ letters or two capitals inside math, not a macro or a macro's text argument,
+  becomes `\mathrm{}` — TeX set `TotalVolume` as ten italic variables with spacing
+  between) → `escapeCurrencyDollars` (`$5 到 $7` is not math); `MarkdownPreview` uses
+  the same pipeline), `thread-list.aui`,
   `message-timing.aui`, `composer-trigger-popover.aui`, `directive-text`, `message-queue`,
   `surfaces` and `../utils/range.ts` as shared helpers.
 - Tool UI: toolkit `render` per item type; `display: "standalone"` keeps a tool out of the

@@ -87,7 +87,7 @@ describe("FilesTool", () => {
     const { user, panel } = await openFiles();
     await user.click(within(panel).getByRole("treeitem", { name: /README/ }));
     const preview = await screen.findByTestId("markdown-preview");
-    await waitFor(() => expect(preview.querySelectorAll(".katex").length).toBe(2));
+    await waitFor(() => expect(preview.querySelectorAll(".katex").length).toBe(2), { timeout: 15_000 });
     expect(preview.querySelectorAll(".katex-display").length).toBe(1);
   });
 

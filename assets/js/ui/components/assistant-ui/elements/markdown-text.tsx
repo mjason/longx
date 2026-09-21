@@ -11,7 +11,7 @@ import {
 import { preprocessMath } from "@/core/chat/math";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
+import { useMath } from "@/ui/math/useMath";
 import { type FC, memo, useMemo, useRef } from "react";
 import type { TextMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
@@ -43,6 +43,7 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
 };
 
 const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
+  const mathPlugins = useMath();
   const stableComponents = useShallowStable(components);
   const markdownComponents = useMemo(() => {
     if (!stableComponents) return defaultComponents;
@@ -55,7 +56,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
   return (
     <MarkdownTextPrimitive
       remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
+      rehypePlugins={mathPlugins}
       preprocess={preprocessMath}
       className="aui-md"
       components={markdownComponents}
@@ -67,7 +68,8 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
 
 // Longx: LaTeX as assistant-ui's guide (remark-math + rehype-katex) over our
 // preprocessing (`core/chat/math.ts`: the delimiters models emit, block math
-// on its own lines, multi-letter names as \mathrm, prices kept out)
+// on its own lines, multi-letter names as \mathrm, prices kept out); KaTeX
+// and its stylesheet are a lazy chunk (`ui/math/useMath`)
 export { preprocessMath };
 
 // Longx: fenced code tokenises with shiki once the part settles; a `mermaid`

@@ -32,7 +32,7 @@
     "cmdk": "^1.1.1",
     "codemirror": "^6.0.2",
     "codemirror-lang-elixir": "^4.0.1",
-    "katex": "^0.18.7",
+    "katex": "^0.16.47",
     "lucide-react": "^0.545.0",
     "phoenix": "file:../deps/phoenix",
     "radix-ui": "^1.4.3",

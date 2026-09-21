@@ -675,9 +675,9 @@ describe("ThreadPage", () => {
         },
       }),
     );
-    const math = await screen.findAllByText((_, el) => el?.classList.contains("katex") === true);
+    // the renderer is a lazy chunk (KaTeX and its stylesheet): until it is in, the TeX shows as text
+    await waitFor(() => expect(document.querySelectorAll(".katex").length).toBe(4), { timeout: 15_000 });
     // two inline, two display
-    expect(math.length).toBe(4);
     expect(document.querySelectorAll(".katex-display").length).toBe(2);
     expect(screen.getByText(/费用 \$5 到 \$7/)).toBeInTheDocument();
   });
