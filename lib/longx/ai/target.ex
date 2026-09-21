@@ -31,7 +31,9 @@ defmodule Longx.AI.Target do
     account_id: nil,
     # the row's reasoning summary (auto / concise / detailed / none); nil = the
     # kernel's auto. Only OpenAI's hidden-reasoning models read it
-    reasoning_summary: nil
+    reasoning_summary: nil,
+    # OpenAI's text.verbosity (low / medium / high); nil = not sent
+    verbosity: nil
   ]
 
   @type t :: %__MODULE__{
@@ -50,7 +52,8 @@ defmodule Longx.AI.Target do
           max_output_tokens: pos_integer | nil,
           chatgpt?: boolean,
           account_id: String.t() | nil,
-          reasoning_summary: :auto | :concise | :detailed | :none | nil
+          reasoning_summary: :auto | :concise | :detailed | :none | nil,
+          verbosity: String.t() | nil
         }
 
   defimpl Inspect do

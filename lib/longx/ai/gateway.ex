@@ -79,6 +79,7 @@ defmodule Longx.AI.Gateway do
       |> drop_hosted_calls(target)
       |> put_max_output_tokens(target)
       |> put_reasoning_summary(target)
+      |> put_verbosity(target)
       |> shape_chatgpt(target)
       |> dump_request()
 
@@ -196,6 +197,13 @@ defmodule Longx.AI.Gateway do
        do: Map.put(body, "reasoning", Map.delete(reasoning, "summary"))
 
   defp put_reasoning_summary(body, _target), do: body
+
+  # the row's verbosity as OpenAI's `text.verbosity` (codex sends `low` to
+  # gpt-5.x); nil sends nothing, and a `text` block already there keeps its keys
+  defp put_verbosity(body, %Target{verbosity: level}) when level in ["low", "medium", "high"],
+    do: Map.update(body, "text", %{"verbosity" => level}, &Map.put(&1, "verbosity", level))
+
+  defp put_verbosity(body, _target), do: body
 
   # the provider's hosted image_generation tool, for a model flagged for it —
   # always the same entry, so the request's prefix stays stable; off it goes

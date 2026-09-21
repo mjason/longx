@@ -298,6 +298,7 @@ export type CreateModelInput = {
   reasoningLevels?: Array<string>;
   reasoningEffort?: string | null;
   reasoningSummary?: "auto" | "concise" | "detailed" | "none" | null;
+  verbosity?: string | null;
   maxOutputTokens?: number | null;
   hostedWebSearch?: boolean | null;
   imageGeneration?: boolean;
@@ -965,6 +966,7 @@ export type UpdateModelInput = {
   reasoningLevels?: Array<string>;
   reasoningEffort?: string | null;
   reasoningSummary?: "auto" | "concise" | "detailed" | "none" | null;
+  verbosity?: string | null;
   maxOutputTokens?: number | null;
   hostedWebSearch?: boolean | null;
   imageGeneration?: boolean;

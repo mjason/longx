@@ -511,6 +511,7 @@ export const model = (
         ? "medium"
         : null,
   reasoningSummary: null,
+  verbosity: null,
   maxOutputTokens: null,
   hostedWebSearch: null,
   imageGeneration: false,

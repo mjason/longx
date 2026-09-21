@@ -116,6 +116,8 @@ defmodule Longx.AI.PresetsTest do
       assert "gpt-5.6-sol" in Enum.map(models, & &1.slug)
       # the subscription's models draw (OpenAI's hosted image_generation tool)
       assert Enum.all?(models, & &1.image_generation)
+      # and answer short, as codex asks gpt-5.x to (text.verbosity low)
+      assert Enum.all?(models, &(&1.verbosity == "low"))
 
       # the models' slugs are the plain ones when free, else prefixed (the openai preset took them?)
       assert Enum.all?(models, &(&1.provider_id == provider.id))
@@ -134,8 +136,9 @@ defmodule Longx.AI.PresetsTest do
       assert provider.base_url == "https://api.deepseek.com/v1"
       assert Ash.load!(provider, :api_key).api_key == "sk-ds"
       assert Enum.map(models, & &1.upstream_id) == ["deepseek-flash", "deepseek-v4-pro"]
-      # no drawing outside OpenAI's API
+      # no drawing outside OpenAI's API, and no verbosity sent: DeepSeek ignores it
       refute Enum.any?(models, & &1.image_generation)
+      assert Enum.all?(models, &is_nil(&1.verbosity))
       assert Enum.map(models, & &1.slug) == ["deepseek-flash", "deepseek-v4-pro"]
       [flash | _] = models
       assert flash.context_window == 1_000_000

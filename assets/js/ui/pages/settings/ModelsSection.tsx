@@ -913,6 +913,7 @@ function ModelDialog({
     reasoningEffort: model?.reasoningEffort ?? "",
     customLevel: "",
     reasoningSummary: model?.reasoningSummary ?? "__none",
+    verbosity: model?.verbosity ?? "__none",
     maxOutputTokens: model?.maxOutputTokens
       ? String(model.maxOutputTokens)
       : "",
@@ -939,6 +940,7 @@ function ModelDialog({
         form.reasoningSummary === "__none"
           ? null
           : (form.reasoningSummary as ModelRow["reasoningSummary"]),
+      verbosity: form.verbosity === "__none" ? null : (form.verbosity as ModelRow["verbosity"]),
       maxOutputTokens: form.maxOutputTokens
         ? Number(form.maxOutputTokens)
         : null,
@@ -1094,6 +1096,21 @@ function ModelDialog({
                 </Select>
               </Field>
             </div>
+            <Field id="md-verbosity" label={s.verbosity} hint={s.verbosityHint}>
+              <Select value={form.verbosity} onValueChange={(v) => set("verbosity", v)}>
+                <SelectTrigger id="md-verbosity" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">—</SelectItem>
+                  {(["low", "medium", "high"] as const).map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {s.verbosities[k]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
             <Field id="md-max" label={s.maxOutputTokens}>
               <Input
                 id="md-max"

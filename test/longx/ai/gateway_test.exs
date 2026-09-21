@@ -467,6 +467,19 @@ defmodule Longx.AI.GatewayTest do
       refute Map.has_key?(up.body, "reasoning")
     end
 
+    test "the model's verbosity goes out as text.verbosity (OpenAI's knob for how much the answer says); unset sends nothing" do
+      {:ok, up} = Gateway.prepare(@codex_body, @target)
+      refute Map.has_key?(up.body, "text")
+
+      {:ok, up} = Gateway.prepare(@codex_body, %Target{@target | verbosity: "low"})
+      assert up.body["text"] == %{"verbosity" => "low"}
+
+      # a text block already on the request (an output format) keeps its other keys
+      body = Map.put(@codex_body, "text", %{"format" => %{"type" => "text"}})
+      {:ok, up} = Gateway.prepare(body, %Target{@target | verbosity: "high"})
+      assert up.body["text"] == %{"format" => %{"type" => "text"}, "verbosity" => "high"}
+    end
+
     test "the model's max_output_tokens is applied unless codex set one" do
       {:ok, up} = Gateway.prepare(@codex_body, @target)
       refute Map.has_key?(up.body, "max_output_tokens")

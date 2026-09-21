@@ -54,6 +54,7 @@ defmodule Longx.AI.Model do
         :reasoning_levels,
         :reasoning_effort,
         :reasoning_summary,
+        :verbosity,
         :max_output_tokens,
         :hosted_web_search,
         :image_generation
@@ -76,6 +77,7 @@ defmodule Longx.AI.Model do
         :reasoning_levels,
         :reasoning_effort,
         :reasoning_summary,
+        :verbosity,
         :max_output_tokens,
         :hosted_web_search,
         :image_generation
@@ -222,6 +224,14 @@ defmodule Longx.AI.Model do
     attribute :reasoning_summary, :atom do
       public? true
       constraints one_of: [:auto, :concise, :detailed, :none]
+    end
+
+    # OpenAI's `text.verbosity` — how much the answer says (codex sends `low`
+    # to gpt-5.x); nil sends nothing. Other providers accept and ignore it
+    # (DeepSeek and Qwen echo it back, measured 2026-09-21)
+    attribute :verbosity, :string do
+      public? true
+      constraints match: ~r/^(low|medium|high)$/
     end
 
     # Whether the model runs codex's `web_search` tool itself (the provider's

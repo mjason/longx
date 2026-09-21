@@ -119,6 +119,8 @@ export type ModelRow = {
   reasoningLevels: string[];
   reasoningEffort: string | null;
   reasoningSummary: "auto" | "concise" | "detailed" | "none" | null;
+  /** OpenAI's text.verbosity; null = not sent */
+  verbosity: "low" | "medium" | "high" | null;
   maxOutputTokens: number | null;
   /** the model's provider searches the web on its side; null = the provider's say */
   hostedWebSearch: boolean | null;
@@ -195,6 +197,7 @@ const modelRowFields = [
   "reasoningLevels",
   "reasoningEffort",
   "reasoningSummary",
+  "verbosity",
   "maxOutputTokens",
   "hostedWebSearch",
   "imageGeneration",

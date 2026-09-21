@@ -249,6 +249,7 @@ defmodule Longx.AI do
          chatgpt?: chatgpt_backend?(provider),
          account_id: if(chatgpt_backend?(provider), do: chatgpt_account_id(api_key)),
          reasoning_summary: model.reasoning_summary,
+         verbosity: model.verbosity,
          request_timeout_ms: provider.request_timeout_ms,
          max_concurrent_requests: provider.max_concurrent_requests,
          max_output_tokens: model.max_output_tokens

@@ -308,6 +308,8 @@ describe("SettingsPage", () => {
     await user.click(within(glm).getByRole("button", { name: "添加模型" }));
     const md = await screen.findByRole("dialog");
     expect(within(md).getByText("推理摘要")).toBeInTheDocument();
+    // OpenAI's text.verbosity: —(不发) / 简短 / 中等 / 详细
+    expect(within(md).getByText("回答详略")).toBeInTheDocument();
     expect(md).toHaveTextContent(/OpenAI/);
     expect(md).toHaveTextContent(/思考过程/);
     expect(md).toHaveTextContent(/忽略/);

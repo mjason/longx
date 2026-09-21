@@ -244,6 +244,8 @@ defmodule Longx.AI.Presets do
             image: true,
             # OpenAI's Responses API draws on its side (the image_generation tool)
             image_generation: true,
+            # codex's default for gpt-5.x: short answers
+            verbosity: "low",
             recommended: recommended
           }
         end
@@ -276,6 +278,7 @@ defmodule Longx.AI.Presets do
             reasoning_effort: effort,
             image: true,
             image_generation: true,
+            verbosity: "low",
             recommended: recommended
           }
         end
@@ -461,6 +464,7 @@ defmodule Longx.AI.Presets do
                  reasoning_effort: spec.reasoning_effort,
                  hosted_web_search: Map.get(spec, :hosted_search),
                  image_generation: Map.get(spec, :image_generation, false),
+                 verbosity: Map.get(spec, :verbosity),
                  provider_id: provider.id
                }) do
             {:ok, model} -> {:cont, {:ok, acc ++ [model]}}

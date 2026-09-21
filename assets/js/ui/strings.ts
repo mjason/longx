@@ -752,6 +752,10 @@ export const t = {
     } as Record<string, string>,
     reasoningSummaryHint:
       "只对 OpenAI 这类隐藏推理过程的模型有意义：请它随回答附一段思考摘要，显示在「思考过程」里。DeepSeek、百炼、星火等直接输出思考内容，这一项会被忽略。留「—」等于自动。",
+    verbosity: "回答详略",
+    verbosities: { low: "简短", medium: "中等", high: "详细" } as Record<string, string>,
+    verbosityHint:
+      "OpenAI 的 text.verbosity：管回答说多少（推理强度管想多少）。只有 GPT-5 系读它，codex 给 gpt-5.x 默认发「简短」；DeepSeek、百炼会收下但不执行。留「—」不发。",
     maxOutputTokens: "输出上限",
     default: "默认",
     makeDefault: "设为默认",

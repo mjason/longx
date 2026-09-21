@@ -10,7 +10,7 @@ export type UtcDateTimeUsec = string;
 // Model Schema
 export type ModelResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "contextWindow" | "default" | "hostedWebSearch" | "id" | "imageGeneration" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
+  __primitiveFields: "contextWindow" | "default" | "hostedWebSearch" | "id" | "imageGeneration" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId" | "verbosity";
   contextWindow: number;
   default: boolean;
   hostedWebSearch: boolean | null;
@@ -26,6 +26,7 @@ export type ModelResourceSchema = {
   slug: string | null;
   updatedAt: UtcDateTimeUsec;
   upstreamId: string;
+  verbosity: string | null;
   provider: { __type: "Relationship"; __resource: ProviderResourceSchema; };
 };
 
@@ -33,7 +34,7 @@ export type ModelResourceSchema = {
 
 export type ModelAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "contextWindow" | "default" | "hostedWebSearch" | "id" | "imageGeneration" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId";
+  __primitiveFields: "contextWindow" | "default" | "hostedWebSearch" | "id" | "imageGeneration" | "insertedAt" | "maxOutputTokens" | "name" | "providerId" | "reasoningEffort" | "reasoningLevels" | "reasoningSummary" | "slug" | "updatedAt" | "upstreamId" | "verbosity";
   contextWindow: number;
   default: boolean;
   hostedWebSearch: boolean | null;
@@ -49,6 +50,7 @@ export type ModelAttributesOnlySchema = {
   slug: string | null;
   updatedAt: UtcDateTimeUsec;
   upstreamId: string;
+  verbosity: string | null;
 };
 
 
@@ -597,6 +599,20 @@ export type ModelFilterInput = {
   };
 
   upstreamId?: {
+    eq?: string;
+    notEq?: string;
+    in?: Array<string>;
+    lessThan?: string;
+    greaterThan?: string;
+    lessThanOrEqual?: string;
+    greaterThanOrEqual?: string;
+    contains?: string;
+    stringEndsWith?: string;
+    stringStartsWith?: string;
+  };
+
+  verbosity?: {
+    isNil?: boolean;
     eq?: string;
     notEq?: string;
     in?: Array<string>;
@@ -2060,7 +2076,7 @@ export type WatchFilterInput = {
 };
 
 
-export const modelFilterFields = ["contextWindow", "default", "hostedWebSearch", "id", "imageGeneration", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId", "provider"] as const;
+export const modelFilterFields = ["contextWindow", "default", "hostedWebSearch", "id", "imageGeneration", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId", "verbosity", "provider"] as const;
 export type ModelFilterField = (typeof modelFilterFields)[number];
 
 
@@ -2089,7 +2105,7 @@ export const watchFilterFields = ["at", "budgetPerHour", "cron", "disabledReason
 export type WatchFilterField = (typeof watchFilterFields)[number];
 
 
-export const modelSortFields = ["contextWindow", "default", "hostedWebSearch", "id", "imageGeneration", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId"] as const;
+export const modelSortFields = ["contextWindow", "default", "hostedWebSearch", "id", "imageGeneration", "insertedAt", "maxOutputTokens", "name", "providerId", "reasoningEffort", "reasoningLevels", "reasoningSummary", "slug", "updatedAt", "upstreamId", "verbosity"] as const;
 export type ModelSortField = (typeof modelSortFields)[number];
 
 

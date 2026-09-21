@@ -319,6 +319,18 @@ defmodule Longx.AITest do
       assert tuned.reasoning_summary == :detailed
       assert tuned.max_output_tokens == 8_192
 
+      # verbosity: OpenAI's three levels or nothing sent (nil)
+      assert plain.verbosity == nil
+      assert create_model!(provider, %{verbosity: "low"}).verbosity == "low"
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               AI.create_model(%{
+                 name: "bad",
+                 upstream_id: "bad-#{uniq()}",
+                 provider_id: provider.id,
+                 verbosity: "terse"
+               })
+
       # codex's ReasoningSummary is a closed enum; effort is whatever the model advertises
       assert {:error, %Ash.Error.Invalid{}} =
                AI.create_model(%{
@@ -464,7 +476,9 @@ defmodule Longx.AITest do
       assert opts[:web_search] == :standalone
       # not codex's business: the gateway applies it (see resolve_target)
       refute Keyword.has_key?(opts, :max_output_tokens)
-      assert {:ok, %AI.Target{max_output_tokens: 4_096}} = AI.resolve_target()
+      assert {:ok, %AI.Target{max_output_tokens: 4_096, verbosity: nil}} = AI.resolve_target()
+      {:ok, _} = AI.update_model(model, %{verbosity: "low"})
+      assert {:ok, %AI.Target{verbosity: "low"}} = AI.resolve_target()
 
       assert AI.thread_options("longx") == AI.thread_options(nil)
 
