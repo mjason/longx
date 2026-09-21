@@ -7,8 +7,12 @@ import {
   MarkdownTextPrimitive,
   unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
   useIsMarkdownCodeBlock,
+  escapeCurrencyDollars,
+  normalizeMathDelimiters,
 } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { type FC, memo, useMemo, useRef } from "react";
 import type { TextMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
@@ -51,7 +55,9 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
 
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      preprocess={preprocessMath}
       className="aui-md"
       components={markdownComponents}
       componentsByLanguage={BY_LANGUAGE}
@@ -59,6 +65,17 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
     />
   );
 };
+
+// Longx: LaTeX — assistant-ui's LaTeX guide: remark-math + rehype-katex, the
+// `\(…\)` / `\[…\]` delimiters models emit rewritten to `$…$` / `$$…$$`
+// first, and a price (`$5 到 $7`) escaped so it is not read as math
+export const preprocessMath = (text: string) => escapeCurrencyDollars(blockMathOnItsOwnLines(normalizeMathDelimiters(text)));
+
+// remark-math reads `$$…$$` as display math only with the fences on lines of
+// their own; a model (and `\[…\]` once rewritten) writes it on one line, which
+// remark-math renders inline. A line that is nothing but `$$…$$` is spread out.
+const blockMathOnItsOwnLines = (text: string) =>
+  text.replace(/^[ \t]*\$\$(?!\$)([^\n]+?)\$\$[ \t]*$/gm, "$$$$\n$1\n$$$$");
 
 // Longx: fenced code tokenises with shiki once the part settles; a `mermaid`
 // fence draws the diagram instead of showing its source.

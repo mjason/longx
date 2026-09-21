@@ -663,6 +663,25 @@ describe("ThreadPage", () => {
     await waitFor(() => expect(screen.queryByTestId("message-queue")).not.toBeInTheDocument());
   });
 
+  test("LaTeX in a reply is drawn by KaTeX: $…$ inline, $$…$$ display, and the \\(…\\) / \\[…\\] delimiters models emit; a price is not math", async () => {
+    await open();
+    act(() =>
+      channel.deliver("event", {
+        seq: 4,
+        method: "item/completed",
+        params: {
+          turnId: "turn_2",
+          item: { id: "m9", type: "agentMessage", turnId: "turn_2", text: "夏普 $S = \\frac{R_p - R_f}{\\sigma_p}$ 与 \\(\\alpha\\)。\n\n$$\\text{IC} = \\rho(f, r)$$\n\n\\[\\beta = 1\\]\n\n费用 $5 到 $7。" },
+        },
+      }),
+    );
+    const math = await screen.findAllByText((_, el) => el?.classList.contains("katex") === true);
+    // two inline, two display
+    expect(math.length).toBe(4);
+    expect(document.querySelectorAll(".katex-display").length).toBe(2);
+    expect(screen.getByText(/费用 \$5 到 \$7/)).toBeInTheDocument();
+  });
+
   test("another agent's message is not a bubble of the person's: its name as a label, its markdown rendered", async () => {
     await open();
     act(() =>
