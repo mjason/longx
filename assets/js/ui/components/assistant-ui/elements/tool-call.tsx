@@ -29,6 +29,9 @@ export interface ToolCallProps {
   queryDetail?: ReactNode;
   request?: string;
   result?: string;
+  // Longx: how long the call took (or has been running), at the end of the
+  // row before the mark — the registry's Tool timeline element's convention
+  duration?: ReactNode;
   running: boolean;
   failed?: boolean;
   open: boolean;
@@ -44,6 +47,7 @@ export function ToolCall({
   queryDetail,
   request = "",
   result = "",
+  duration,
   running,
   failed = false,
   open,
@@ -95,7 +99,12 @@ export function ToolCall({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        <span className="ms-auto flex w-4 shrink-0 items-center justify-end">
+        {duration ? (
+          <span className={cn(mono, "text-foreground/35 ms-auto shrink-0 tabular-nums")} data-testid="tool-call-duration">
+            {duration}
+          </span>
+        ) : null}
+        <span className={cn("flex w-4 shrink-0 items-center justify-end", !duration && "ms-auto")}>
           {!running && !failed && (
             <CheckIcon className="fade-in zoom-in-90 animate-in size-3.5 text-emerald-500 duration-200" />
           )}

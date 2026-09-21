@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, ImageGenerationTool, PresentTool, SendFileTool, ShowDiffTool, ShowFileTool, ShowHtmlTool, SubagentContext, SubagentTool, SurfaceContext, WebSearchTool, parseDiff, treeOf } from "./toolkit";
@@ -25,6 +25,51 @@ function part(over: Partial<ToolCallMessagePartProps>): any {
 }
 
 describe("CommandExecutionTool", () => {
+  test("the row says how long the command took — the kernel's durationMs, else the client's stamps — and counts up while it runs", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(100_000);
+      const { rerender } = render(
+        <CommandExecutionTool {...part({ args: { command: "uv run jbt run x" }, timing: { startedAt: 37_000 } })} />,
+      );
+      expect(screen.getByTestId("tool-call-duration")).toHaveTextContent("1 min 3 s");
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(screen.getByTestId("tool-call-duration")).toHaveTextContent("1 min 4 s");
+      rerender(
+        <CommandExecutionTool
+          {...part({
+            args: { command: "uv run jbt run x" },
+            status: { type: "complete" },
+            timing: { startedAt: 37_000, completedAt: 101_000 },
+            result: { status: "completed", exitCode: 0, output: "", durationMs: 252_000 },
+          })}
+        />,
+      );
+      expect(screen.getByTestId("tool-call-duration")).toHaveTextContent("4 min 12 s");
+      // no durationMs (an older item): the stamps
+      rerender(
+        <CommandExecutionTool
+          {...part({
+            args: { command: "uv run jbt run x" },
+            status: { type: "complete" },
+            timing: { startedAt: 37_000, completedAt: 101_000 },
+            result: { status: "completed", exitCode: 0, output: "" },
+          })}
+        />,
+      );
+      expect(screen.getByTestId("tool-call-duration")).toHaveTextContent("1 min 4 s");
+      // nothing known (a snapshot's item, no stamps): no duration at all
+      rerender(
+        <CommandExecutionTool
+          {...part({ args: { command: "uv run jbt run x" }, status: { type: "complete" }, result: { status: "completed", exitCode: 0, output: "" } })}
+        />,
+      );
+      expect(screen.queryByTestId("tool-call-duration")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("streams output while running (row open), collapses to a row with the exit code when done", () => {
     const { rerender } = render(
       <CommandExecutionTool {...part({ args: { command: "mix test", cwd: "/p" }, artifact: "line 1\nline 2" })} />,

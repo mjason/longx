@@ -1162,7 +1162,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `toolkit.tsx` (`defineToolkit` with `type: "backend"`, `display: "standalone"`
     renderers per item type, **all built from the registry's Tool-use elements**: every
     invocation a `tool-call` row whose body is `terminal-block` (commands), `file-tree` +
-    `code-diff` (file changes), `web-search` / a `ReadPage` link row (search / `web_fetch`),
+    `code-diff` (file changes), `web-search` / a `ReadPage` link row (search / `web_fetch`)
+    — **the row's end says how long the call took** (`ToolCall`'s `duration` slot, the
+    Tool timeline element's convention; `ToolRow`'s `useDuration`: the kernel's
+    `durationMs` on the result, else the client's `part.timing` stamps, and while it runs
+    the seconds since `timing.startedAt` ticking — a snapshot's item has no stamps, so a
+    reload shows the running one nothing until it ends) —,
     `ActionTool` (an ask: `elicitation-form` for fields, buttons otherwise, answered via
     `extras.answerAction`), `SubagentTool` (**a one-line summary, never the
     conversation**: name, `agent-status` pill with what it does and its model · level,

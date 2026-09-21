@@ -23,8 +23,8 @@ import {
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
 import { AppWindow, Bot, Download, FileCode2, GitCompareArrows, Image as ImageIcon, Loader2 } from "lucide-react";
-import { createContext, useContext, useState, type ReactNode } from "react";
-import { formatBytes } from "@/core/format";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { formatBytes, formatDuration } from "@/core/format";
 import type { Tab } from "@/core/workbench";
 import { toast } from "sonner";
 import type { ThreadExtras } from "@/core/chat/adapter";
@@ -133,6 +133,29 @@ function standalonePart<A>(id: string, toolName: string, args: A) {
 }
 
 /** A ToolCall row that opens itself while the work runs or when it failed, and can be toggled after. */
+// how long a call took: the kernel's own measure on the result (survives a
+// reload), else the client's stamps (`part.timing`); while it runs, the
+// seconds since it started, ticking — a backtest's row says how long it has
+// been at it
+function useDuration(
+  p: { timing?: { startedAt: number; completedAt?: number } | undefined; result?: unknown },
+  running: boolean,
+): string | undefined {
+  const startedAt = p.timing?.startedAt;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running || startedAt === undefined) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [running, startedAt]);
+  if (running) return startedAt === undefined ? undefined : formatDuration(Math.max(0, now - startedAt));
+  const measured = (p.result as { durationMs?: unknown } | undefined)?.durationMs;
+  if (typeof measured === "number" && measured > 0) return formatDuration(measured);
+  if (startedAt !== undefined && p.timing?.completedAt !== undefined) return formatDuration(p.timing.completedAt - startedAt);
+  return undefined;
+}
+
 function ToolRow({
   label,
   activeLabel,
@@ -140,6 +163,7 @@ function ToolRow({
   queryDetail,
   running,
   failed,
+  part,
   children,
   testId,
   openWhileRunning = true,
@@ -150,12 +174,15 @@ function ToolRow({
   queryDetail?: ReactNode;
   running: boolean;
   failed: boolean;
+  /** the part, for its timing and its result's durationMs */
+  part: { timing?: { startedAt: number; completedAt?: number } | undefined; result?: unknown };
   children: ReactNode;
   testId: string;
   /** false: closed even while it runs (a sub-agent's whole conversation is too long to unfold by itself) */
   openWhileRunning?: boolean;
 }) {
   const [open, setOpen] = useState<boolean | null>(null);
+  const duration = useDuration(part, running);
   return (
     <div className="py-1" data-testid={testId}>
       <ToolCall
@@ -163,6 +190,7 @@ function ToolRow({
         activeLabel={activeLabel}
         query={query}
         queryDetail={queryDetail}
+        duration={duration}
         running={running}
         failed={failed}
         open={open ?? ((running && openWhileRunning) || failed)}
@@ -190,6 +218,7 @@ export const CommandExecutionTool: ToolCallMessagePartComponent<
 
   return (
     <ToolRow
+      part={p}
       label={t.ranCommand}
       activeLabel={t.runningCommand}
       query={command}
@@ -262,6 +291,7 @@ export const FileChangeTool: ToolCallMessagePartComponent<
 
   return (
     <ToolRow
+      part={p}
       label={t.changedFiles}
       activeLabel={t.changingFiles}
       query={
@@ -400,6 +430,7 @@ export const WebSearchTool: ToolCallMessagePartComponent<
         : [t.searchedWeb, t.searching];
   return (
     <ToolRow
+      part={p}
       label={labels[0]!}
       activeLabel={labels[1]!}
       query={query}
