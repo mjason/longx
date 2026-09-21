@@ -33,14 +33,16 @@ export function ComposerLeading() {
       className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs"
       data-testid="turn-bar"
     >
-      {state === "running" ? (
+      {state === "running" || state === "compacting" ? (
         <span className="flex items-center gap-1">
           <Loader2 className="size-3.5 animate-spin" />{" "}
           {view.progress?.kind === "retry"
             ? t.turnRetrying(view.progress.name)
             : view.progress?.kind === "toolCall"
               ? t.turnWriting(view.progress.name, formatBytes(view.progress.bytes))
-              : t.turnRunning}
+              : view.progress?.kind === "compaction"
+                ? t.turnCompacting(view.progress.bytes ? formatBytes(view.progress.bytes) : null)
+                : t.turnRunning}
         </span>
       ) : state === "waiting" ? (
         <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">

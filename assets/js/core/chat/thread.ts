@@ -48,8 +48,12 @@ export type ThreadSnapshot = {
   progress?: TurnProgress | null;
 };
 
-/** What the model is writing right now (`turn/progress`): a call's arguments, or a retry after a broken stream. */
-export type TurnProgress = { kind: "toolCall" | "retry"; name: string; bytes: number };
+/**
+ * What the model is writing right now (`turn/progress`): a call's arguments, a
+ * retry after a broken stream, or the context fold's summary (`compaction` —
+ * between turns too, with no turn behind it: `/compact` on an idle thread).
+ */
+export type TurnProgress = { kind: "toolCall" | "retry" | "compaction"; name: string; bytes: number };
 
 export type ThreadEvent = {
   seq: number;

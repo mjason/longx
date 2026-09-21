@@ -253,7 +253,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `core/src/tools/handlers/multi_agents_spec.rs` for the tools — `spawn_agent`,
     `send_message` as codex's `followup_task` + `send_input` in one, `close_agent`
     answering the previous status) adapted to roles, the mailbox and reports as
-    `[agent <name>]` messages; it offers `spawn_agent` / `send_message` (every member and
+    `[agent <name>]` messages; **a child is told its canonical path** the way codex names
+    agents (`your identity is \`/root/coder-3\`: the agent above you in that path
+    (\`/root\`) is your parent`, the final message "delivered back to your parent agent"
+    as codex says, a sibling listed `at \`/root/coder\`` — the specs carry `path:`) — a
+    coder-3 told only its name once took the sibling `coder` for the main agent, sent it
+    its report, and the two argued over the task's scope turn after turn; it offers `spawn_agent` / `send_message` (every member and
     sibling) / `close_agent` (own members) over the **declared roles**
     (`.longx/shared/agents/<name>/agent.exs`, `local/agents/<name>/`); the prompt lists
     the team with status, role and task and says to ask a finished agent again rather
@@ -622,6 +627,12 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `drop` it or set `options Compaction, at: …` — asks (`Step.compact/2`) when the
     context passed `at:` (0.9) of the window or the model called `new_context_window`,
     and offers `get_context_remaining`.
+    **The fold is shown while it runs**: `Compaction.start_compaction` emits
+    `turn/progress` of kind `compaction` (`name` the model, `bytes` of the summary so
+    far — the first delta at once, then once a second, `note_delta/2`; `turnId` nil
+    between turns) and `nil` when it is folded or failed; the client's `TurnState` gains
+    `compacting` (a fold with no turn running) and the turn bar says 正在压缩上下文（摘要
+    N KB） — a `/compact` once showed nothing for a minute and then the marker.
     The kernel streams a summary from a
     task (`priv/agent/compact/prompt.md`, no tools), appends a `:compaction` item
     (`summary_prefix.md` + the summary as a user message), emits the `contextCompaction`
@@ -1049,7 +1060,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     assistant-ui `ThreadMessageLike`: one assistant message per turn, split at each steered
     user message; `metadata.timing`; agentMessage → text, reasoning → reasoning,
     commandExecution / fileChange / webSearch / action / subagent → tool-call parts;
-    `"from"` on an agent's message → `metadata.custom.from`, the `[agent name] ` prefix (for the model) stripped, and `thread.aui`'s `AgentMessage` draws it left-aligned under the name with `MarkdownText` (a report is markdown; the person's bubble is plain text; the name is the `AgentLabel` slot — `chat/AgentLabel`: a session addressed through the directory (`~052ca4`) shows the directory's title for it and links to its page, a team name stays as it is; `core/projects.ts`'s `sessionTitle` names a session — title, else its first 24 characters, else the address); **the outgoing half of an exchange is a row too**: `agents.send_message` renders standalone (`toolkit`'s `SendMessageTool`: 问了 + the same session name, linked + the message, folded past 160 characters) so the person sees whom the agent asked and what before the answer arrives as that session's message; an upload's `<attachment name path size />` tag (and the note after it, both for the model) is a paperclip chip `name · size` in the person's bubble (`mentions.ts` parses it beside `@` mentions); a sub-agent's activities folded into `subagent`
+    `"from"` on an agent's message → `metadata.custom.from`, the `[agent name] ` prefix (for the model) stripped, **`"kind"` → `metadata.custom.kind`** — what the message is, stamped by the kernel (`State.user_ui`, `kind:` on `Agent.send/3`): `report` (`Team.report_to_parent` to the parent: the child done with its task), `answer` (the same to `reply_to`: the asker), `question` (a `send/3` with `reply_to:` — the `send_message` tool, `Projects.deliver` with `from_thread:`); older items have none —, and **consecutive messages from one agent of one kind fold into one message** with several text parts (two steers in a row once drew two boxes each headed `agent coder-3`); `thread.aui`'s `AgentMessage` is the **speaker-identity element's row** (`elements/speaker-identity`: `SpeakerRow`, our extraction of its per-turn markup — the circle badge of `kind: "subagent"`, the name, a detail) with the detail `汇报` / `提问` / `回复` (`· N 条` when folded; `data-testid="agent-message-kind"`) and the text parts stacked through `MessagePrimitive.GroupedParts` with a rule between, each `MarkdownText` (a report is markdown; the person's bubble is plain text; the name is the `AgentLabel` slot — `chat/AgentLabel`: a session addressed through the directory (`~052ca4`) shows the directory's title for it and links to its page, a team name is the bare name; `core/projects.ts`'s `sessionTitle` names a session — title, else its first 24 characters, else the address); **the outgoing half of an exchange is a row too**: `agents.send_message` renders standalone (`toolkit`'s `SendMessageTool`: 问了 + the same session name, linked + the message, folded past 160 characters) so the person sees whom the agent asked and what before the answer arrives as that session's message; an upload's `<attachment name path size />` tag (and the note after it, both for the model) is a paperclip chip `name · size` in the person's bubble (`mentions.ts` parses it beside `@` mentions); a sub-agent's activities folded into `subagent`
     parts — one row per turn the child was engaged in (spawned, or asked again later:
     `SubAgent.rowItemIds`), the latest row carrying the child's whole conversation as
     `messages`, earlier ones a completed marker — so a child asked again is seen where
@@ -1202,7 +1213,9 @@ Key patterns:
   props-driven) and are **source we own and adapt**: `thread.aui` (zh-CN strings, our
   composer slots), `tool-call`, `terminal-block`, `code-diff`, `file-tree`, `web-search`,
   `elicitation-form`, `agent-status`, `background-inbox`,
-  `context-display`, `model-selector` / `model-picker`, `reasoning-panel`,
+  `context-display`, `model-selector` / `model-picker`, `reasoning-panel`, `speaker-identity`
+  (registry name `elements-speaker-identity`; the catalog's names differ from the registry's —
+  `registry.json` at `r.assistant-ui.com` lists them),
   `markdown-text` with `shiki-highlighter` and `mermaid-diagram` (**LaTeX** as
   assistant-ui's guide: `remark-math` + `rehype-katex`, KaTeX and its stylesheet a
   **lazy chunk** (`ui/math/useMath`: fetched the first time a MarkdownText mounts, every

@@ -103,8 +103,8 @@ defmodule Longx.Agent.Kernel.State do
 
   ## Transcript
 
-  def append_user(state, text, images, from \\ nil, origin \\ nil) do
-    ui = user_ui(new_id("item"), state.turn_id, text, images, from, origin)
+  def append_user(state, text, images, opts \\ []) do
+    ui = user_ui(new_id("item"), state.turn_id, text, images, opts)
     emit(state, "item/started", %{"item" => ui, "turnId" => state.turn_id})
     append(state, :user_message, user_input(text, images), ui)
   end
@@ -117,15 +117,20 @@ defmodule Longx.Agent.Kernel.State do
     %{"type" => "message", "role" => "user", "content" => content}
   end
 
-  def user_ui(id, turn_id, text, images, from, origin \\ nil) do
+  # `from:` another agent's name; `kind:` what its message is for the page's
+  # label — `report` (a child done with its task), `question` (an answer is
+  # expected: `reply_to`), `answer` (to such a question) —; `origin:` a
+  # message the kernel wrote (a goal's continuation): the page draws a
+  # marker, not a bubble
+  def user_ui(id, turn_id, text, images, opts \\ []) do
     content =
       [%{"type" => "text", "text" => text}] ++
         Enum.map(images, &%{"type" => "image", "url" => &1})
 
     %{"id" => id, "type" => "userMessage", "turnId" => turn_id, "content" => content}
-    |> put_if("from", from)
-    # a message the kernel wrote (a goal's continuation): the page draws a marker, not a bubble
-    |> put_if("origin", origin)
+    |> put_if("from", Keyword.get(opts, :from))
+    |> put_if("kind", Keyword.get(opts, :kind))
+    |> put_if("origin", Keyword.get(opts, :origin))
   end
 
   defp put_if(map, _key, nil), do: map

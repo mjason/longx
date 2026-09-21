@@ -52,12 +52,55 @@ defmodule Longx.Agent.Kernel.Compaction do
         ref
       ])
 
-    %{
+    state = %{
       state
       | phase: :compacting,
         model_task: %{task: task, ref: ref},
-        compacting: %{text: "", model: model || "longx", was_running: state.turn_id != nil}
+        compacting: %{
+          text: "",
+          model: model || "longx",
+          was_running: state.turn_id != nil,
+          shown_at: System.monotonic_time(:millisecond)
+        }
     }
+
+    # the page is told at once: a fold between turns has no turn to spin for,
+    # and one mid-turn read as a stall (nothing for a minute, then the marker)
+    show_progress(state, 0)
+  end
+
+  @doc """
+  Tells the thread the fold is running and how much of the summary is in
+  (`turn/progress` of kind `compaction`, `turnId` nil between turns), or —
+  with `nil` — that it is over.
+  """
+  def show_progress(%State{compacting: c} = state, bytes) when is_integer(bytes) do
+    emit(state, "turn/progress", %{
+      "turnId" => state.turn_id,
+      "progress" => %{"kind" => "compaction", "name" => c.model, "bytes" => bytes}
+    })
+
+    state
+  end
+
+  def show_progress(%State{} = state, nil) do
+    emit(state, "turn/progress", %{"turnId" => state.turn_id, "progress" => nil})
+    state
+  end
+
+  # the summary's bytes as they stream: the first at once, then once a second
+  def note_delta(%State{compacting: c} = state, delta) do
+    text = c.text <> delta
+    now = System.monotonic_time(:millisecond)
+    state = %{state | compacting: %{c | text: text}}
+
+    if c.text == "" or now - c.shown_at >= 1_000 do
+      state
+      |> show_progress(byte_size(text))
+      |> then(&%{&1 | compacting: %{&1.compacting | shown_at: now}})
+    else
+      state
+    end
   end
 
   def last_turn_id(%State{thread_id: id}) do
@@ -92,6 +135,7 @@ defmodule Longx.Agent.Kernel.Compaction do
     })
 
     emit(state, "item/completed", %{"item" => ui, "turnId" => turn_id})
+    show_progress(state, nil)
 
     %{
       state

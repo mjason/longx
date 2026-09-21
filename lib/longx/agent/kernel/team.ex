@@ -160,7 +160,8 @@ defmodule Longx.Agent.Kernel.Team do
         id: child_id,
         name: Keyword.get(opts, :name),
         role: Keyword.get(opts, :role),
-        task: Keyword.get(opts, :task)
+        task: Keyword.get(opts, :task),
+        path: Keyword.get(opts, :path)
       }
     end
   end
@@ -242,17 +243,22 @@ defmodule Longx.Agent.Kernel.Team do
   # codex's subagent role (models.json `multi_agent.role.subagent`) with what
   # differs here: a name and a role instead of a task path, messages as
   # `[agent <name>]` user messages, and the rule that the role's prompt wins
-  def team_instructions(%State{name: name}) do
+  def team_instructions(%State{name: name, path: path}) do
+    # codex names every agent by its canonical task name (`/root/task1/task_3`):
+    # the parent is the path above; a coder-3 told only its name once took the
+    # sibling `coder` for the main agent and reported to it
+    parent_path = path |> String.split("/") |> Enum.drop(-1) |> Enum.join("/")
+
     [
       """
-      You are an agent in a team of agents collaborating to complete a task. Your name is `#{name}`; the agent that spawned you gave you the task you are working on.
+      You are an agent in a team of agents collaborating to complete a task. Your name is `#{name}` and your identity is `#{path}`: the agent above you in that path (`#{parent_path}`) is your parent, the one that spawned you and gave you the task you are working on.
 
       You can spawn sub-agents to handle subtasks when your role declares agents, and those sub-agents can spawn their own sub-agents. All agents in the team run the same loop with the same tools, each on top of its declared role.
 
       You can use `spawn_agent` to create a new agent and `send_message` to pass a message or a follow-up task to a member of your team.
       `send_message` calls may be read by a human, so ensure they are legible. Always put proper spaces between words and/or numbers.
 
-      When you finish your turn, your final message is immediately delivered back to the agent that asked — it is all that agent sees of your work, so make it complete and self-contained (facts, sources, what you changed, what is open). In addition, your final answer may be read by a human, so ensure it is legible.
+      When you finish your turn, your final message is immediately delivered back to your parent agent (or to the teammate whose message started this turn) — it is all that agent sees of your work, so make it complete and self-contained (facts, sources, what you changed, what is open). In addition, your final answer may be read by a human, so ensure it is legible.
 
       You will receive messages from other agents as user messages in the form `[agent <name>] <payload text>`.
 
@@ -285,17 +291,19 @@ defmodule Longx.Agent.Kernel.Team do
 
     name = state.reply_as || state.name
     target = reply_to || parent
+    # to the asker it is the answer to its question; to the parent the report of the task
+    kind = if reply_to, do: "answer", else: "report"
 
     case Longx.Agent.whereis(target) do
       pid when is_pid(pid) ->
-        Kernel.send(pid, {:agent_message, name, report})
+        Kernel.send(pid, {:agent_message, name, report, kind})
 
       nil ->
         # the asker left idle meanwhile: bring it back with the report — from a
         # task, since a GenServer.call from inside this callback could meet the
         # asker calling us (its stop asks children first) and wait 15 s for nothing
         Task.Supervisor.start_child(Longx.Agent.TaskSupervisor, fn ->
-          Longx.Agent.send(target, report, from: name, hops: hops + 1)
+          Longx.Agent.send(target, report, from: name, hops: hops + 1, kind: kind)
         end)
     end
 

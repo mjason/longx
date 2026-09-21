@@ -1295,9 +1295,18 @@ defmodule Longx.AgentTest do
     await_turn_end()
     assert :ok = Agent.compact(id)
 
+    # the page is told the fold is running (no turn carries it: `turnId` nil),
+    # the summary's bytes as they come, and that it is over — a fold once showed
+    # nothing for a minute and then the marker
+    assert %{"turnId" => nil, "progress" => %{"kind" => "compaction", "bytes" => 0}} =
+             await("turn/progress")
+
+    assert %{"progress" => %{"kind" => "compaction", "bytes" => 7}} = await("turn/progress")
+
     assert %{"item" => %{"type" => "contextCompaction"}} =
              await_item_completed_of_type("contextCompaction")
 
+    assert %{"progress" => nil} = await("turn/progress")
     assert Agent.status(id) == :idle
 
     {:ok, _} = Agent.send(id, "two")
@@ -1752,7 +1761,8 @@ defmodule Longx.AgentTest do
              "turnId" => ^woke
            } = await_item_completed_of_type("subAgentActivity")
 
-    assert %{"turnId" => ^woke, "from" => "researcher"} =
+    # the item says what it is: a report of the task, not a question or an answer
+    assert %{"turnId" => ^woke, "from" => "researcher", "kind" => "report"} =
              await_user_message("[agent researcher] CHILD REPORT: 42")
 
     assert %{"id" => ^woke, "status" => "completed"} = await_turn_end()
@@ -1772,6 +1782,12 @@ defmodule Longx.AgentTest do
 
     assert child_request["instructions"] =~
              "your final answer may be read by a human, so ensure it is legible"
+
+    # codex's canonical task name: the child's identity is a path whose parent is its parent
+    # (a coder-3 once took the sibling `coder` for the main agent)
+    assert child_request["instructions"] =~ "your identity is `/root/researcher`"
+    assert child_request["instructions"] =~ "(`/root`) is your parent"
+    assert child_request["instructions"] =~ "delivered back to your parent agent"
 
     # a task cannot override the role's own rules: the child is told which wins
     assert child_request["instructions"] =~ "take precedence over the task"
@@ -1909,9 +1925,16 @@ defmodule Longx.AgentTest do
     :ok = ThreadState.subscribe(beta)
     drain_activities()
     assert {:ok, _} = Agent.send(beta, "what did you find?", from: "alpha", reply_to: alpha)
-    # beta's answer is a message in alpha's mailbox, not the parent's
+    # a message that expects an answer (reply_to) is a question on beta's page
+    assert %{"from" => "alpha", "kind" => "question"} =
+             await_user_message("[agent alpha] what did you find?")
+
+    # beta's answer is a message in alpha's mailbox, not the parent's — and says it answers
     assert %{"turn" => %{"id" => t}} = await_on(alpha, "turn/started")
-    assert %{"turnId" => ^t, "from" => "beta"} = await_user_message("[agent beta] BETA SAYS 7")
+
+    assert %{"turnId" => ^t, "from" => "beta", "kind" => "answer"} =
+             await_user_message("[agent beta] BETA SAYS 7")
+
     assert %{"turn" => %{"id" => ^t}} = await_on(alpha, "turn/completed")
     # ... and alpha's answer to it goes to its parent, as any of its reports
     await_on(parent, "turn/started")

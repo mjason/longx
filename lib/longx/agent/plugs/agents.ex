@@ -255,8 +255,12 @@ defmodule Longx.Agent.Plugs.Agents do
   defp member_line(%{name: name, status: status} = c),
     do: "- #{name} (#{c[:role] || "agent"}, #{status}): #{c[:task] || "(no task)"}"
 
-  defp member_line(%{name: name} = c),
-    do: "- #{name} (#{c[:role] || "agent"}): #{c[:task] || "(no task)"} — a teammate of yours"
+  # a sibling with its canonical path, as codex names agents: `/root/coder`
+  # beside `/root/coder-3` reads as a sibling, not a parent
+  defp member_line(%{name: name} = c) do
+    at = if(c[:path], do: " at `#{c[:path]}`", else: "")
+    "- #{name} (#{c[:role] || "agent"})#{at}: #{c[:task] || "(no task)"} — a teammate of yours"
+  end
 
   # the team as tools: every member can be messaged (a finished one keeps
   # its context and answers on it), only this agent's own can be closed

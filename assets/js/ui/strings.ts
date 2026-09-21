@@ -248,6 +248,8 @@ export const t = {
   subagentPage: "到它的页面去对话 →",
   turnWriting: (tool: string, bytes: string) => `正在写 ${tool} 的参数（${bytes}）`,
   turnRetrying: (why: string) => `连接中断，正在重试：${why}`,
+  // the context fold (/compact, or the window nearly full): the summary's bytes so far
+  turnCompacting: (bytes: string | null) => (bytes ? `正在压缩上下文（摘要 ${bytes}）` : "正在压缩上下文…"),
   modelFailed: {
     title: (model: string) => `模型 ${model} 连续出错，这一轮停下了。换一个模型继续：`,
     pick: "选择模型",
@@ -366,7 +368,9 @@ export const t = {
     tokens: (used: string, budget: string | null) => (budget ? `${used} / ${budget}` : used),
   },
   modelRerouted: (from: string, to: string) => `模型已切换：${from} → ${to}`,
-  agentMessageFrom: (name: string) => `agent ${name}`,
+  // what another agent's message is, beside its name (the kernel's `kind`)
+  agentMessageKind: { report: "汇报", question: "提问", answer: "回复" } as Record<string, string>,
+  agentMessageCount: (n: number) => `${n} 条`,
   asked: "问了",
   askedFailed: "没问到",
   expand: "展开",

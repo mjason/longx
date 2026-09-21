@@ -299,6 +299,29 @@ defmodule Longx.Agent.PlugsTest do
       assert Agents.call(team_step(%{agents: [], depth: 2}), Agents.init([])).instructions == []
     end
 
+    test "a sibling is listed with its canonical path, as codex names agents: /root/coder beside /root/coder-3 reads as a sibling" do
+      step =
+        Agents.call(
+          team_step(%{
+            name: "coder-3",
+            parent: "root-1",
+            siblings: [
+              %{
+                id: "s1",
+                name: "coder",
+                role: "coder",
+                task: "the base factor",
+                path: "/root/coder"
+              }
+            ]
+          }),
+          Agents.init([])
+        )
+
+      assert Enum.join(step.instructions, "\n") =~
+               "- coder (coder) at `/root/coder`: the base factor — a teammate of yours"
+    end
+
     test "the team persists: finished children and siblings can be messaged; only working ones count against the limit" do
       kids = [
         %{id: "c1", name: "researcher", status: "done", role: "researcher", task: "find X"},

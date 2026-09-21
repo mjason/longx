@@ -133,13 +133,24 @@ export function toMessages(
     if (item.type === "userMessage") {
       flush();
       const from = typeof item["from"] === "string" && item["from"] !== "" ? item["from"] : null;
+      // what another agent's message is (the kernel's stamp): `report` of its
+      // task, `question` expecting an answer, `answer` to one; none on older items
+      const kind = from && typeof item["kind"] === "string" && item["kind"] !== "" ? item["kind"] : null;
+      // another agent's words: the `[agent name] ` prefix is for the model
+      // (the Responses API has no agent role); the UI shows the name itself
+      const content = [{ type: "text" as const, text: from ? stripAgentPrefix(userText(item), from) : userText(item) }, ...userImages(item)];
+      const last = out.at(-1);
+      // the same agent again, right after its previous message of the same
+      // kind (two steers in a row): one labelled message, another paragraph
+      if (from && kind && last && isAgentMessage(last, from, kind)) {
+        out[out.length - 1] = { ...last, content: [...(last.content as typeof content), ...content] };
+        continue;
+      }
       out.push({
         id: item.id,
         role: "user",
-        // another agent's words: the `[agent name] ` prefix is for the model
-        // (the Responses API has no agent role); the UI shows the name itself
-        content: [{ type: "text", text: from ? stripAgentPrefix(userText(item), from) : userText(item) }, ...userImages(item)],
-        ...(from ? { metadata: { custom: { from } } } : {}),
+        content,
+        ...(from ? { metadata: { custom: { from, ...(kind ? { kind } : {}) } } } : {}),
       });
       continue;
     }
@@ -385,6 +396,11 @@ function joined(value: unknown): string {
   if (Array.isArray(value))
     return value.filter((v) => typeof v === "string" && v).join("\n\n");
   return "";
+}
+
+function isAgentMessage(m: ThreadMessageLike, from: string, kind: string): boolean {
+  const custom = m.metadata?.custom;
+  return m.role === "user" && custom?.["from"] === from && custom?.["kind"] === kind;
 }
 
 function stripAgentPrefix(text: string, from: string): string {

@@ -5,7 +5,6 @@
 import { Link, useOutletContext } from "react-router";
 import { sessionTitle, useSessions } from "@/core/projects";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
-import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 
 export function AgentLabel({ from }: { from: string }) {
@@ -14,7 +13,7 @@ export function AgentLabel({ from }: { from: string }) {
   const addressed = from.startsWith("~") || from.includes(":");
   const sessions = useSessions(addressed ? projectId : undefined);
   const session = addressed ? sessions.data?.find((s) => s.address === from) : undefined;
-  if (!session) return <span className="font-mono">{t.agentMessageFrom(from)}</span>;
+  if (!session) return <span className="font-mono">{from}</span>;
   const title = sessionTitle(session, from);
   return (
     <Link to={`/p/${session.projectSlug || slug}/t/${session.threadId}`} className="hover:text-foreground flex min-w-0 items-center gap-1.5 hover:underline">

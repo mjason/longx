@@ -45,6 +45,50 @@ describe("toMessages", () => {
     expect(msgs[1]!.content).toEqual([{ type: "text", text: "[agent researcher] typed by the person, kept" }]);
   });
 
+  test("what an agent's message is (kind) rides in the metadata; consecutive messages from one agent of one kind fold into a single message", () => {
+    const from = (id: string, turnId: string, name: string, kind: string | undefined, text: string) => ({
+      id,
+      type: "userMessage",
+      turnId,
+      from: name,
+      ...(kind ? { kind } : {}),
+      content: [{ type: "text", text: `[agent ${name}] ${text}` }],
+    });
+    const msgs = toMessages(
+      view({
+        items: [
+          from("u1", "t1", "coder-3", "report", "done A"),
+          { id: "a1", type: "agentMessage", turnId: "t1", text: "noted" },
+          // two steers in a row from the same agent: one labelled block, two paragraphs
+          from("u2", "t1", "coder-3", "report", "and B"),
+          from("u3", "t1", "coder-3", "report", "and C"),
+          // another agent, then the same agent with another kind: their own messages
+          from("u4", "t1", "coder-2", "report", "mine"),
+          from("u5", "t1", "coder-3", "answer", "reply"),
+          // an older item without a kind stays a plain agent message
+          from("u6", "t1", "coder-3", undefined, "old"),
+        ],
+      }),
+    );
+    expect(msgs.map((m) => [m.id, m.role])).toEqual([
+      ["u1", "user"],
+      ["turn:t1", "assistant"],
+      ["u2", "user"],
+      ["u4", "user"],
+      ["u5", "user"],
+      ["u6", "user"],
+    ]);
+    expect(msgs[0]!.metadata).toMatchObject({ custom: { from: "coder-3", kind: "report" } });
+    expect(msgs[2]!.content).toEqual([
+      { type: "text", text: "and B" },
+      { type: "text", text: "and C" },
+    ]);
+    expect(msgs[2]!.metadata).toMatchObject({ custom: { from: "coder-3", kind: "report" } });
+    expect(msgs[3]!.content).toEqual([{ type: "text", text: "mine" }]);
+    expect(msgs[4]!.metadata).toMatchObject({ custom: { from: "coder-3", kind: "answer" } });
+    expect(msgs[5]!.metadata?.custom?.["kind"]).toBeUndefined();
+  });
+
   test("the turn in flight is running; a streaming command has no result yet", () => {
     const msgs = toMessages(
       view({

@@ -16,6 +16,7 @@ import {
   ReasoningText,
   ReasoningTrigger,
 } from "@/ui/components/assistant-ui/elements/reasoning.aui";
+import { SpeakerRow } from "@/ui/components/assistant-ui/elements/speaker-identity";
 import { ToolFallback } from "@/ui/components/assistant-ui/elements/tool-fallback.aui";
 import {
   ToolGroupContent,
@@ -48,7 +49,6 @@ import {
 } from "@assistant-ui/react";
 import {
   ArrowDownIcon,
-  BotIcon,
   ArrowUpIcon,
   CheckIcon,
   ChevronLeftIcon,
@@ -633,23 +633,52 @@ const UserMessage: FC = () => {
   );
 };
 
+// Longx: the speaker-identity element's row (who is talking, once a thread
+// holds more than the person and one model): the badge, the agent's name, and
+// what the message is — the kernel's `kind`: a report of its task, a question
+// expecting an answer, an answer to one (older items have none) —, then the
+// markdown. Consecutive messages of one agent and kind arrive folded into one
+// message by `messages.ts`: its text parts stack under one label, a rule between
 const AgentMessage: FC<{ from: string }> = ({ from }) => {
   const { AgentLabel } = useContext(ThreadComponentsContext);
+  const kind = useAuiState((s) => s.message.metadata.custom?.["kind"]);
+  const count = useAuiState((s) => s.message.content.filter((p) => p.type === "text").length);
+  const label = typeof kind === "string" ? t.agentMessageKind[kind] : undefined;
+  const detail = label ? (count > 1 ? `${label} · ${t.agentMessageCount(count)}` : label) : undefined;
   return (
-  <MessagePrimitive.Root
-    data-slot="aui_agent-message-root"
-    data-role="user"
-    data-testid="agent-message"
-    className="fade-in slide-in-from-bottom-1 animate-in px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
-  >
-    <div className="text-muted-foreground mb-1 flex items-center gap-1.5 text-xs">
-      <BotIcon className="size-3.5" />
-      {AgentLabel ? <AgentLabel from={from} /> : <span className="font-mono">{t.agentMessageFrom(from)}</span>}
-    </div>
-    <div className="aui-agent-message-content border-border/60 bg-muted/40 text-foreground rounded-xl border px-4 py-2 leading-relaxed wrap-break-word">
-      <MessagePrimitive.Parts components={{ Text: MarkdownText, File: UserFilePart, Image: UserImagePart }} />
-    </div>
-  </MessagePrimitive.Root>
+    <MessagePrimitive.Root
+      data-slot="aui_agent-message-root"
+      data-role="user"
+      data-testid="agent-message"
+      className="fade-in slide-in-from-bottom-1 animate-in px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+    >
+      <SpeakerRow
+        kind="subagent"
+        name={AgentLabel ? <AgentLabel from={from} /> : <span className="font-mono">{from}</span>}
+        detail={detail && <span data-testid="agent-message-kind">{detail}</span>}
+      >
+        <MessagePrimitive.GroupedParts groupBy={groupPartByType({ text: ["group-agent-text"] })}>
+          {({ part, children }) => {
+            switch (part.type) {
+              case "group-agent-text":
+                return (
+                  <div className="aui-agent-message-content divide-border/60 text-foreground divide-y leading-relaxed wrap-break-word [&>*+*]:pt-2">
+                    {children}
+                  </div>
+                );
+              case "text":
+                return <MarkdownText />;
+              case "file":
+                return <UserFilePart {...part} />;
+              case "image":
+                return <UserImagePart {...part} />;
+              default:
+                return null;
+            }
+          }}
+        </MessagePrimitive.GroupedParts>
+      </SpeakerRow>
+    </MessagePrimitive.Root>
   );
 };
 

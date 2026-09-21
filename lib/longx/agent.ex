@@ -186,7 +186,9 @@ defmodule Longx.Agent do
   as `[agent name] …`) and `reply_to:` (its thread id — the answer of the
   turn this starts goes to it instead of the parent, signed `reply_as:`
   when this agent has no team name; `hops:` counts the bounces of an
-  exchange, and an answer past six is not sent back). Answers
+  exchange, and an answer past six is not sent back); `kind:` says what
+  the message is on the page (`report` / `question` / `answer`) — a
+  message with `reply_to:` is a `question` unless told otherwise. Answers
   `{:ok, %{turn_id, steered}}`.
 
   `deliver: :idle` never steers: the message waits in the agent's mailbox
@@ -615,7 +617,7 @@ defmodule Longx.Agent do
         })
       )
       |> Team.with_activity(Keyword.get(opts, :activity))
-      |> append_user(text, Keyword.get(opts, :images, []), from)
+      |> append_user(text, Keyword.get(opts, :images, []), from: from, kind: kind_of(opts))
 
     {turn_id, state}
   end
@@ -625,7 +627,7 @@ defmodule Longx.Agent do
   defp queue_steer(%State{turn_id: turn_id} = state, text, opts) do
     images = Keyword.get(opts, :images, [])
     {text, from} = attributed(text, opts)
-    ui = user_ui(new_id("item"), turn_id, text, images, from)
+    ui = user_ui(new_id("item"), turn_id, text, images, from: from, kind: kind_of(opts))
     %{touch(state) | steers: state.steers ++ [{user_input(text, images), ui}]}
   end
 
@@ -638,15 +640,28 @@ defmodule Longx.Agent do
     end
   end
 
+  # what another agent's message is, for the page's label: told by the
+  # sender (a report, an answer), else a question when an answer is expected
+  defp kind_of(opts) do
+    cond do
+      Keyword.get(opts, :from) == nil -> nil
+      kind = Keyword.get(opts, :kind) -> kind
+      Keyword.get(opts, :reply_to) -> "question"
+      true -> nil
+    end
+  end
+
   # a message arriving on its own (a child's report, its crash): a steer
   # while a turn runs, a turn of its own when idle
-  defp deliver(%State{phase: :idle} = state, text, from, activity) do
-    {_turn_id, state} = start_turn(state, text, from: from, activity: activity)
+  defp deliver(%State{phase: :idle} = state, text, from, activity, kind) do
+    {_turn_id, state} = start_turn(state, text, from: from, kind: kind, activity: activity)
     {:noreply, state, {:continue, :step}}
   end
 
-  defp deliver(state, text, from, activity),
-    do: {:noreply, state |> Team.with_activity(activity) |> queue_steer(text, from: from)}
+  defp deliver(state, text, from, activity, kind),
+    do:
+      {:noreply,
+       state |> Team.with_activity(activity) |> queue_steer(text, from: from, kind: kind)}
 
   # what the parent's view shows of a child: codex's subAgentActivity item
   # (the client folds them into one row with the child's conversation), kept
@@ -914,7 +929,7 @@ defmodule Longx.Agent do
   # another step with a plug's words as the user message (`origin` marks them as the kernel's on the UI item)
   defp continue_turn(state, text, origin) do
     state = %{state | continues: state.continues + 1, phase: :step, model_task: nil}
-    state = append_user(state, text, [], nil, origin)
+    state = append_user(state, text, [], origin: origin)
     Kernel.send(self(), :next_step)
     state
   end
@@ -1049,11 +1064,12 @@ defmodule Longx.Agent do
   defp on_info(%State{phase: :step} = state, :next_step),
     do: {:noreply, state, {:continue, :step}}
 
-  # another agent (a child reporting back) speaks: into the mailbox, like the person
-  defp on_info(state, {:agent_message, from, text}) do
+  # another agent (a child reporting back, a teammate answering) speaks:
+  # into the mailbox, like the person; `kind` is what the message is
+  defp on_info(state, {:agent_message, from, text, kind}) do
     case Enum.find(state.children, fn {_id, c} -> c.name == from end) do
-      {id, _} -> deliver(Team.mark(state, id, :done), text, from, {id, from, "completed"})
-      nil -> deliver(state, text, from, nil)
+      {id, _} -> deliver(Team.mark(state, id, :done), text, from, {id, from, "completed"}, kind)
+      nil -> deliver(state, text, from, nil, kind)
     end
   end
 
@@ -1075,7 +1091,8 @@ defmodule Longx.Agent do
             state,
             "exited:\n```\n#{exit_text(reason)}\n```",
             name,
-            {id, name, "interrupted"}
+            {id, name, "interrupted"},
+            nil
           )
         end
 
@@ -1162,8 +1179,8 @@ defmodule Longx.Agent do
   # closed into the transcript, the model's calls collected
   defp model_event(event, state), do: {:noreply, Stream.fold(state, event)}
 
-  defp compaction_event({:text_delta, _id, delta}, %State{compacting: c} = state),
-    do: {:noreply, %{state | compacting: %{c | text: c.text <> delta}}}
+  defp compaction_event({:text_delta, _id, delta}, %State{} = state),
+    do: {:noreply, Compaction.note_delta(state, delta)}
 
   defp compaction_event(
          {:item_done, %{"type" => "message"} = item},
@@ -1186,6 +1203,7 @@ defmodule Longx.Agent do
          %State{compacting: c, context_overflow: overflow?} = state
        ) do
     Logger.warning("agent #{state.thread_id}: compaction failed: #{message}")
+    state = Compaction.show_progress(state, nil)
     state = %{state | compacting: nil, model_task: nil, compact_requested: false}
 
     cond do

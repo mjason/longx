@@ -49,7 +49,8 @@ export type LongxRuntimeOptions = {
 };
 
 /** idle, a turn running, or a tool waiting on the person (an ask) */
-export type TurnState = "idle" | "running" | "waiting";
+/** `compacting`: a context fold between turns — no turn runs, but the kernel is busy and the page says so */
+export type TurnState = "idle" | "running" | "waiting" | "compacting";
 
 export type LongxRuntime = {
   runtime: AssistantRuntime;
@@ -323,7 +324,9 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       ? "waiting"
       : thread && runningTurnId(view)
         ? "running"
-        : "idle";
+        : thread && view.progress?.kind === "compaction"
+          ? "compacting"
+          : "idle";
 
   return {
     runtime,

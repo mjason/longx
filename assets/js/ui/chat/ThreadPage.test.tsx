@@ -297,6 +297,34 @@ describe("ThreadPage", () => {
     expect(bar).not.toHaveTextContent("重试");
   });
 
+  test("the turn bar shows a context fold while it runs — between turns too, where no turn spins — and clears when it is over", async () => {
+    await open();
+    // /compact between turns: no turn/started, only the kernel's progress
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "turn/progress", params: { turnId: null, progress: { kind: "compaction", name: "plus", bytes: 0 } } });
+    });
+    const bar = screen.getByTestId("turn-bar");
+    expect(bar).toHaveTextContent("正在压缩上下文");
+    act(() => {
+      channel.deliver("event", { seq: 5, method: "turn/progress", params: { turnId: null, progress: { kind: "compaction", name: "plus", bytes: 2048 } } });
+    });
+    expect(bar).toHaveTextContent("2.0 KB");
+    act(() => {
+      channel.deliver("event", { seq: 6, method: "turn/progress", params: { turnId: null, progress: null } });
+    });
+    expect(bar).toHaveTextContent("");
+    // mid-turn (the context passed the threshold): the same words in place of 进行中
+    act(() => {
+      channel.deliver("event", { seq: 7, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", { seq: 8, method: "turn/progress", params: { turnId: "turn_2", progress: { kind: "compaction", name: "plus", bytes: 0 } } });
+    });
+    expect(bar).toHaveTextContent("正在压缩上下文");
+    act(() => {
+      channel.deliver("event", { seq: 9, method: "turn/progress", params: { turnId: "turn_2", progress: null } });
+    });
+    expect(bar).toHaveTextContent("进行中");
+  });
+
   test("a turn that failed because its model gave up offers another model to go on with: the choice sends 继续 on it", async () => {
     const user = userEvent.setup();
     await open();
@@ -695,10 +723,36 @@ describe("ThreadPage", () => {
       }),
     );
     const message = await screen.findByTestId("agent-message");
-    expect(within(message).getByText("agent researcher")).toBeInTheDocument();
+    expect(within(message).getByText("researcher")).toBeInTheDocument();
     expect(within(message).getByText("冒烟测试通过").tagName).toBe("STRONG");
     expect(within(message).getAllByRole("listitem")).toHaveLength(2);
     expect(message).not.toHaveTextContent("[agent researcher]");
+    // an item without the kernel's kind (older transcripts) carries no detail
+    expect(within(message).queryByTestId("agent-message-kind")).not.toBeInTheDocument();
+  });
+
+  test("an agent's message says what it is (a report, a question, an answer); consecutive ones from the same agent share one label", async () => {
+    await open();
+    const item = (id: string, kind: string, text: string) => ({
+      id,
+      type: "userMessage",
+      turnId: "turn_2",
+      from: "coder-3",
+      kind,
+      content: [{ type: "text", text: `[agent coder-3] ${text}` }],
+    });
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "item/completed", params: { turnId: "turn_2", item: item("u9", "report", "第一条") } });
+      channel.deliver("event", { seq: 5, method: "item/completed", params: { turnId: "turn_2", item: item("u10", "report", "第二条") } });
+      channel.deliver("event", { seq: 6, method: "item/completed", params: { turnId: "turn_2", item: item("u11", "answer", "回你的话") } });
+    });
+    await waitFor(() => expect(screen.getAllByTestId("agent-message")).toHaveLength(2));
+    const [grouped, answer] = screen.getAllByTestId("agent-message");
+    expect(within(grouped!).getByTestId("agent-message-kind")).toHaveTextContent("汇报 · 2 条");
+    expect(grouped).toHaveTextContent("第一条");
+    expect(grouped).toHaveTextContent("第二条");
+    expect(within(answer!).getByTestId("agent-message-kind")).toHaveTextContent("回复");
+    expect(answer).toHaveTextContent("回你的话");
   });
 
   test("a message from another session (an address, not a team name) is labelled with that session's title and links to it", async () => {

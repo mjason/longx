@@ -88,6 +88,9 @@ describe("thread view", () => {
     v = applyEvent(v, { seq: 13, method: "turn/progress", params: { turnId: "turn_2", progress: { kind: "toolCall", name: "exec_command", bytes: 3 } } });
     v = applyEvent(v, { seq: 14, method: "turn/completed", params: { turn: { id: "turn_2", status: "completed" } } });
     expect(v.progress).toBeNull();
+    // a context fold between turns: progress with no turn behind it
+    v = applyEvent(v, { seq: 15, method: "turn/progress", params: { turnId: null, progress: { kind: "compaction", name: "plus", bytes: 512 } } });
+    expect(v.progress).toEqual({ kind: "compaction", name: "plus", bytes: 512 });
   });
 
   test("turn/model merges the model and level onto the turn, the current one included", () => {
