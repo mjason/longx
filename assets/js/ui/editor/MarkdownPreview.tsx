@@ -6,7 +6,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { preprocessMath } from "@/ui/components/assistant-ui/elements/markdown-text";
+import { preprocessMath } from "@/core/chat/math";
 import { markdownComponents } from "@/ui/components/assistant-ui/elements/generative-ui";
 
 const components: Components = {
