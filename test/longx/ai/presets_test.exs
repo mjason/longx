@@ -116,8 +116,8 @@ defmodule Longx.AI.PresetsTest do
       assert "gpt-5.6-sol" in Enum.map(models, & &1.slug)
       # the subscription's models draw (OpenAI's hosted image_generation tool)
       assert Enum.all?(models, & &1.image_generation)
-      # and answer short, as codex asks gpt-5.x to (text.verbosity low)
-      assert Enum.all?(models, &(&1.verbosity == "low"))
+      # no verbosity by default anywhere: the person picks it per model
+      assert Enum.all?(models, &is_nil(&1.verbosity))
 
       # the models' slugs are the plain ones when free, else prefixed (the openai preset took them?)
       assert Enum.all?(models, &(&1.provider_id == provider.id))

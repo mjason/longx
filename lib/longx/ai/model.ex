@@ -227,8 +227,9 @@ defmodule Longx.AI.Model do
     end
 
     # OpenAI's `text.verbosity` — how much the answer says (codex sends `low`
-    # to gpt-5.x); nil sends nothing. Other providers accept and ignore it
-    # (DeepSeek and Qwen echo it back, measured 2026-09-21)
+    # to gpt-5.x); nil sends nothing, and nil is the default everywhere: the
+    # person picks it per model. Other providers accept and ignore it (DeepSeek
+    # and Qwen echo it back, measured 2026-09-21)
     attribute :verbosity, :string do
       public? true
       constraints match: ~r/^(low|medium|high)$/

@@ -244,8 +244,6 @@ defmodule Longx.AI.Presets do
             image: true,
             # OpenAI's Responses API draws on its side (the image_generation tool)
             image_generation: true,
-            # codex's default for gpt-5.x: short answers
-            verbosity: "low",
             recommended: recommended
           }
         end
@@ -278,7 +276,6 @@ defmodule Longx.AI.Presets do
             reasoning_effort: effort,
             image: true,
             image_generation: true,
-            verbosity: "low",
             recommended: recommended
           }
         end

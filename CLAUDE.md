@@ -718,9 +718,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `context_window`, one `default`, `reasoning_levels` (ordered; DeepSeek / GLM `low /
     high / max`), optional `reasoning_effort` (one of the levels — `EffortInLevels`),
     `reasoning_summary`, `verbosity` — OpenAI's `text.verbosity` `low` / `medium` / `high`,
-    nil sends nothing; the `openai` / `chatgpt` presets set `low` as codex does for
-    gpt-5.x; DeepSeek and Qwen accept and ignore it (measured 2026-09-21: 200, echoed,
-    the length unchanged); the model dialog's 回答详略 —, `max_output_tokens`,
+    nil sends nothing and every preset leaves it nil — the person picks it per model
+    (codex sends `low` to gpt-5.x); DeepSeek and Qwen accept and ignore it (measured
+    2026-09-21: 200, echoed, the length unchanged); the model dialog's 回答详略 —,
+    `max_output_tokens`,
     `hosted_web_search`). `AI.check_effort/2`
     refuses a level the model does not declare; unknown slugs are refused in
     `Longx.Projects`. `resolve_target/1` (`longx` = the default model) = model + its
