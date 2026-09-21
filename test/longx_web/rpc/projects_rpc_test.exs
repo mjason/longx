@@ -543,25 +543,27 @@ defmodule LongxWeb.ProjectsRpcTest do
       {thread_id, kernel_id} = start!(conn, project)
       :ok = ThreadState.subscribe(kernel_id)
 
+      # paused: an active goal on an idle thread starts a turn, and no model plays here
       assert %{
                "success" => true,
-               "data" => %{"objective" => "ship it", "status" => "active", "tokenBudget" => 100}
+               "data" => %{"objective" => "ship it", "status" => "paused", "tokenBudget" => 100}
              } =
                rpc(conn, "set_goal", %{
                  "fields" => ["objective", "status", "tokenBudget", "tokensUsed"],
                  "input" => %{
                    "threadId" => thread_id,
                    "objective" => "ship it",
-                   "tokenBudget" => 100
+                   "tokenBudget" => 100,
+                   "status" => "paused"
                  }
                })
 
       assert_receive {:thread, _, "thread/goal/updated", _}, 5_000
 
-      assert %{"success" => true, "data" => %{"status" => "paused"}} =
+      assert %{"success" => true, "data" => %{"status" => "blocked"}} =
                rpc(conn, "set_goal", %{
                  "fields" => ["status"],
-                 "input" => %{"threadId" => thread_id, "status" => "paused"}
+                 "input" => %{"threadId" => thread_id, "status" => "blocked"}
                })
 
       assert %{"success" => true, "data" => %{"cleared" => true}} =

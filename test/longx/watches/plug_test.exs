@@ -172,4 +172,51 @@ defmodule Longx.Watches.PlugTest do
     assert %Watches.Watch{kind: :once, enabled: true} =
              Watches.get_watch!(project.id, Path.basename(path, ".exs"))
   end
+
+  test "wait_until refuses an instant already past and says what time it is (the agent has no clock: it once asked for 11:00 at 17:17)",
+       %{bypass: bypass, dir: dir, project: project} do
+    script!(bypass, [
+      ResponsesFixture.function_call("wait_until", nil, %{
+        "at" => "2020-01-01T09:00:00+08:00",
+        "message" => "look again"
+      }),
+      ResponsesFixture.assistant_message("ok")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project, handle: "main")
+    {:ok, turn} = Projects.send_message(thread, "wait a bit")
+    eventually(fn -> Ash.get!(Turn, turn.id).status == :completed end)
+
+    assert_receive {:request, _first}
+    assert_receive {:request, second}
+    assert [refused] = outputs(second)
+    assert refused =~ "in the past"
+    assert refused =~ "now is 20"
+    assert [] == Path.wildcard(Path.join(dir, ".longx/local/watches/wait-*.exs"))
+  end
+
+  test "wait_until puts the session on duty: it asked to be woken, so its own watch may wake it (a plain conversation's alarm was once refused as off duty, silently)",
+       %{bypass: bypass, dir: dir, project: project} do
+    script!(bypass, [
+      ResponsesFixture.function_call("wait_until", nil, %{
+        "at" => "2030-01-01T09:00:00+08:00",
+        "message" => "look again"
+      }),
+      ResponsesFixture.assistant_message("later")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    refute Projects.on_duty?(thread)
+    {:ok, turn} = Projects.send_message(thread, "wait a bit")
+    eventually(fn -> Ash.get!(Turn, turn.id).status == :completed end)
+
+    assert_receive {:request, _first}
+    assert_receive {:request, second}
+    assert [written] = outputs(second)
+    assert written =~ "on duty"
+    assert %Thread{on_duty: true} = thread = Ash.get!(Thread, thread.id)
+    assert Projects.on_duty?(thread)
+    [path] = Path.wildcard(Path.join(dir, ".longx/local/watches/wait-*.exs"))
+    assert File.read!(path) =~ ~s(send(ctx, "#{Projects.agent_name(thread)}", )
+  end
 end

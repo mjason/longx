@@ -166,7 +166,8 @@ defmodule Longx.Agent.Plugs.Watches do
       case Watches.get_watch(project_id, name) do
         {:ok, %{enabled: true, next_due_at: next}} ->
           {:ok,
-           "watch #{name} written: at #{next || args["every"]} the message comes back to you as a new turn — end your turn now, saying when you will look again"}
+           "watch #{name} written: at #{next || args["every"]} the message comes back to you as a new turn — end your turn now, saying when you will look again" <>
+             on_duty_note(thread)}
 
         {:ok, %{load_error: error}} ->
           {:error, "the watch could not load: #{error}"}
@@ -181,6 +182,22 @@ defmodule Longx.Agent.Plugs.Watches do
   end
 
   def wait_until(_args, _ctx), do: {:error, "not inside a project"}
+
+  # a session that asked to be woken is on duty from now on: only a session on
+  # duty may be woken by a watch, and a plain conversation's own alarm was once
+  # refused as off duty, silently
+  defp on_duty_note(thread) do
+    cond do
+      Projects.on_duty?(thread) ->
+        ""
+
+      match?({:ok, _}, Projects.set_on_duty(thread, true)) ->
+        "; this session is on duty now (the Agents window's 值班 switch), so its watch may wake it"
+
+      true ->
+        ""
+    end
+  end
 
   def notify(%{"title" => title} = args, %{thread_id: thread_id}) when is_binary(thread_id) do
     case Projects.get_thread_by_kernel_id(thread_id) do
@@ -197,8 +214,18 @@ defmodule Longx.Agent.Plugs.Watches do
 
   ## helpers
 
-  defp schedule_of(%{"at" => at}) when is_binary(at) and at != "",
-    do: {:ok, ~s(once #{inspect(at)})}
+  # a past instant is refused with the clock: the agent has none of its own (the
+  # environment names the date) — one asked for 11:00 at 17:17 and its watch
+  # fired at once
+  defp schedule_of(%{"at" => at}) when is_binary(at) and at != "" do
+    with {:ok, instant} <- Longx.Agent.Watch.parse_instant(at) do
+      if DateTime.compare(instant, DateTime.utc_now()) == :gt,
+        do: {:ok, ~s(once #{inspect(at)})},
+        else:
+          {:error,
+           "at #{at} is in the past — now is #{Longx.Agent.Watch.local_now_iso8601()} (the machine's local time); give a later instant"}
+    end
+  end
 
   defp schedule_of(%{"every" => cron} = args) when is_binary(cron) and cron != "" do
     expires =

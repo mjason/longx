@@ -117,6 +117,14 @@ defmodule Longx.AgentTest do
     end
   end
 
+  # the goal event that brings this status, the charges before it skipped
+  defp await_goal_status(status) do
+    case await("thread/goal/updated") do
+      %{"goal" => %{"status" => ^status}} = params -> params
+      _ -> await_goal_status(status)
+    end
+  end
+
   # what the mailbox held when an await ran out: the events, summarised
   defp mailbox_summary do
     {:messages, msgs} = Process.info(self(), :messages)
@@ -1320,6 +1328,26 @@ defmodule Longx.AgentTest do
            ] = third["input"]
   end
 
+  test "a manual compact whose model chain is spent leaves the agent alive and idle, the failure named (the tuple once crashed the process)",
+       %{bypass: bypass, dir: dir} do
+    id = compacting_agent(dir, DefaultCompaction)
+    script!(bypass, [ResponsesFixture.assistant_message("first")])
+    {:ok, _} = Agent.send(id, "one")
+    await_turn_end()
+
+    # every later call (the summary) fails for good: 503 through the retries, the chain spent
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      Plug.Conn.send_resp(conn, 503, "down")
+    end)
+
+    assert :ok = Agent.compact(id)
+    assert %{"progress" => %{"kind" => "compaction"}} = await("turn/progress")
+    assert %{"progress" => nil} = await("turn/progress", 15_000)
+    assert Agent.status(id) == :idle
+    assert Enum.all?(ThreadState.snapshot(id).items, &(&1["type"] != "contextCompaction"))
+    assert is_pid(Agent.whereis(id))
+  end
+
   test "get_context_remaining answers from the step's usage; new_context_window asks for a compaction" do
     [remaining, fresh] =
       Enum.filter(
@@ -2255,7 +2283,16 @@ defmodule Longx.AgentTest do
     assert %{"goal" => %{"objective" => "make it green", "status" => "active"}} =
              await("thread/goal/updated")
 
-    assert %{"goal" => %{"status" => "complete"}} = await("thread/goal/updated")
+    # every model call charges the goal and the page hears of it at once — the
+    # bar once read 0 · 0 秒 for a whole goal and jumped to 1.7M · 12 min at its end
+    assert %{"goal" => %{"status" => "active", "tokensUsed" => 17, "timeUsedSeconds" => t}} =
+             await("thread/goal/updated")
+
+    assert is_integer(t)
+
+    assert %{"goal" => %{"status" => "complete", "tokensUsed" => 32}} =
+             await_goal_status("complete")
+
     assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
 
     requests = collect_requests([])
@@ -2283,6 +2320,45 @@ defmodule Longx.AgentTest do
     assert {:ok, true} = Agent.clear_goal(id)
     assert %{} = await("thread/goal/cleared")
     assert ThreadState.snapshot(id).goal == nil
+  end
+
+  test "a goal set by hand on an idle agent starts a turn by itself — codex: an active goal starts an idle turn — and a paused one waits",
+       %{bypass: bypass, dir: dir} do
+    id = agent!("goalstart-#{System.unique_integer([:positive])}", dir, [])
+
+    route!(bypass, fn body ->
+      last = List.last(body["input"])
+
+      if last["type"] == "message" and
+           hd(last["content"])["text"] =~ "Continue working toward the active thread goal",
+         do: ResponsesFixture.function_call("update_goal", nil, %{"status" => "complete"}),
+         else: ResponsesFixture.assistant_message("done")
+    end)
+
+    # paused: shown, nothing runs (the person set it aside; a goal once set from
+    # the page sat idle until a child's report happened to wake the thread)
+    assert {:ok, %{"status" => "paused"}} =
+             Agent.set_goal(id, %{"objective" => "make it green", "status" => "paused"})
+
+    assert %{"goal" => %{"status" => "paused"}} = await("thread/goal/updated")
+    refute_receive {:thread, _, "turn/started", _}, 300
+
+    # active: a turn of its own, the continuation as its words, marked as the kernel's
+    assert {:ok, %{"status" => "active"}} = Agent.set_goal(id, %{"status" => "active"})
+    assert %{"turn" => %{"id" => turn_id}} = await("turn/started")
+
+    assert %{"origin" => %{"kind" => "goal", "round" => 1}, "content" => [%{"text" => text}]} =
+             await_user_message_matching(~r/Continue working toward the active thread goal/)
+
+    assert text =~ "make it green"
+    assert %{"goal" => %{"status" => "complete"}} = await_goal_status("complete")
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+    # the round the started turn used is not spent again by the turn's end
+    assert 1 ==
+             Enum.count(
+               ThreadState.snapshot(id).items,
+               &(get_in(&1, ["origin", "kind"]) == "goal")
+             )
   end
 
   defmodule Budget do

@@ -171,6 +171,24 @@ defmodule Longx.Agent.Watch do
     end
   end
 
+  @doc "An ISO 8601 instant as a watch head reads it (no offset: the machine's local time)."
+  @spec parse_instant(String.t()) :: {:ok, DateTime.t()} | {:error, String.t()}
+  def parse_instant(text), do: instant(text, "at")
+
+  @doc "The machine's clock now, ISO 8601 with its offset — the agent has no clock of its own."
+  @spec local_now_iso8601() :: String.t()
+  def local_now_iso8601 do
+    offset = local_offset_seconds()
+    sign = if offset < 0, do: "-", else: "+"
+    hours = offset |> abs() |> div(3600) |> Integer.to_string() |> String.pad_leading(2, "0")
+
+    minutes =
+      offset |> abs() |> div(60) |> rem(60) |> Integer.to_string() |> String.pad_leading(2, "0")
+
+    naive = NaiveDateTime.local_now() |> NaiveDateTime.truncate(:second)
+    NaiveDateTime.to_iso8601(naive) <> sign <> hours <> ":" <> minutes
+  end
+
   defp instant(nil, _field), do: {:ok, nil}
 
   defp instant(text, field) when is_binary(text) do
@@ -356,12 +374,15 @@ defmodule Longx.Agent.Watch do
     """
     @spec send(map, String.t() | :self, String.t(), keyword) :: :ok | {:error, term}
     def send(ctx, to, text, opts \\ []) when is_binary(text) do
-      record(ctx, :sends, %{to: to, text: text, opts: opts})
+      result =
+        case ctx.deliver do
+          :dry -> :ok
+          fun when is_function(fun, 3) -> fun.(to, text, opts)
+        end
 
-      case ctx.deliver do
-        :dry -> :ok
-        fun when is_function(fun, 3) -> fun.(to, text, opts)
-      end
+      # the result rides along: a refused send is the run's error, not a secret
+      record(ctx, :sends, %{to: to, text: text, opts: opts, result: result})
+      result
     end
 
     @doc "A line the person sees in the watch's last output (2 KB kept)."

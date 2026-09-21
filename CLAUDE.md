@@ -637,7 +637,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     task (`priv/agent/compact/prompt.md`, no tools), appends a `:compaction` item
     (`summary_prefix.md` + the summary as a user message), emits the `contextCompaction`
     marker, reloads the context and continues the step. A failed summary: the step goes on
-    without folding, or fails the turn when the provider had refused the length.
+    without folding, or fails the turn when the provider had refused the length; the
+    failure is `describe_failure/1`'d first — a spent chain's `{:model_failed, slug, why}`
+    interpolated into a string once crashed the agent process.
   - **Watches — scripts Oban runs, sessions' mailboxes as the outlet** (`Longx.Watches`,
     `Longx.Agent.Watch`, `docs/watches-design.md`). A watch is a file
     `.longx/local/watches/<name>.exs` (or `shared/watches/`, behind the trust switch):
@@ -652,6 +654,15 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     log; `deliver: :dry` for a dry run). **No policy in the runtime**: what changed,
     whom to tell, is the script's `if`. The definition loader compiles `watches/` with
     the plugs (`loaded.watches`; a bad head is an error naming the file → a notice);
+    A script's `send` result rides in the collected `sends` (`result:`), and **a send the
+    target refused is the run's error**: `last_error` "could not wake ~342400: off duty …",
+    the output line "(refused: …)", a `Longx.Notify` "watch X 没能叫醒 Y" — an agent's own
+    alarm once vanished without a trace: the plain conversation that wrote it was off
+    duty, the script ignored `send`'s answer, the once file was consumed. `wait_until`
+    now **puts its session on duty** (`Projects.set_on_duty`; the reply says so) and
+    **refuses an instant already past** with the machine's clock
+    (`Longx.Agent.Watch.local_now_iso8601/0`; the agent has no clock — the environment
+    names the date — and one asked for 11:00 at 17:17).
     `Longx.Watches.Watch` rows (table `watches`, unique per project and name) are the
     state — `Watches.reconcile_project/1` upserts / resyncs / drops rows from the files
     (a broken file: `disabled_reason: :load_error`), `run/2` (in
@@ -708,7 +719,18 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `update_goal`'s `reason`), shown beside 卡住了.
     `Agent.set_goal/2` (RPC `set_goal` / `clear_goal`, the `/goal` command, `GoalBar` —
     gone once the goal is `complete`; a blocked one stays with its reason until cleared)
-    sets the same goal; `thread/goal/updated` is the view's `goal`.
+    sets the same goal; `thread/goal/updated` is the view's `goal`. **An active goal set
+    on an idle agent starts a turn by itself** — codex's "Active goals can immediately
+    inject an objective or start an idle turn" (`thread_goal_processor.rs`): the
+    continuation (`Kernel.Goal.continuation/2`, the plug delegates to it) as the turn's
+    words with `origin` round 1, `turn_state: %{goal_rounds: 1}` so the turn's end
+    continues with round 2, the row `（目标续跑）<objective>`; a paused goal waits; a
+    running turn takes the goal up at its end as before (a goal set from the page once
+    sat idle until a child's report happened to wake the thread). **The counters reach the
+    page per model call**: `Goal.charge_goal` refreshes `timeUsedSeconds` and emits
+    `thread/goal/updated` (the bar once read 0 · 0 秒 for a whole goal and jumped to
+    1.7M · 12 min at its end); `Goal.restore/1` gives a goal read back from the view a
+    `startedAt` so the clock resumes.
   - **Bytes that are not UTF-8 never reach the view or the transcript** — `Longx.Agent.Text`
     (`utf8/1`, `deep/1`, U+FFFD per invalid sequence) at three doors: a shell chunk and the
     clipped result (`Plugs.Shell`; a clip can cut a character), every tool result in
@@ -1353,7 +1375,9 @@ Where tests live / what to use:
   (a file written and run, the rows and the badge, a second turn from the composer),
   `03-stop` (a `sleep` stopped from the page, the next message taken), `04-exchange` (two
   sessions: on duty asked and answered, off duty refused, the Agents window's switches),
-  `05-goal` (the bar: paused, gone once complete). A model that refuses an instruction
+  `05-goal` (the bar: paused, gone once complete; an active goal on an idle thread starts
+  a turn named after it), `06-wait` (`wait_until`: the session on duty, the alarm back as
+  a `（定时触发）` turn within the tick — up to four minutes). A model that refuses an instruction
   fails a scenario — that is the point; run it before a release and after a change to the
   kernel, the prompts or the chat.
 - TypeScript/React → also test-first: vitest + testing-library in `assets/` (`npm test`).

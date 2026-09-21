@@ -444,7 +444,10 @@ defmodule Longx.Projects.ThreadsTest do
     # its answer wakes the asker — a conversation itself, off duty: a reply is not a call
     script!(bypass, [
       ResponsesFixture.assistant_message("yes, mine"),
-      ResponsesFixture.assistant_message("noted")
+      ResponsesFixture.assistant_message("noted"),
+      # the goal set below starts a turn on `driven`; its model completes the goal
+      ResponsesFixture.function_call("update_goal", nil, %{"status" => "complete"}),
+      ResponsesFixture.assistant_message("done")
     ])
 
     assert {:ok, %Thread{id: id}} =
@@ -464,11 +467,16 @@ defmodule Longx.Projects.ThreadsTest do
 
     assert {:ok, %Thread{on_duty: false}} = Projects.set_on_duty(plain, false)
 
-    # an active goal is a duty as well
+    # an active goal is a duty as well (read at once: the turn it starts is
+    # still on its way to the model, whose answer completes the goal)
     {:ok, _} = Agent.set_goal(driven.kernel_thread_id, %{"objective" => "keep the build green"})
 
     assert %{on_duty: true} =
              Enum.find(Projects.directory(project.id), &(&1.thread_id == driven.id))
+
+    assert_eventually_ok(fn ->
+      match?([%Turn{status: :completed}], Projects.list_turns!(driven))
+    end)
   end
 
   test "the Agents plug: the prompt names this session and the others; agents_directory, claim_handle and send_message by address",
@@ -1037,24 +1045,43 @@ defmodule Longx.Projects.ThreadsTest do
     assert {:error, :thread_archived} = Projects.compact_thread(thread)
   end
 
-  test "a goal is set, changed and cleared through the thread; the view carries it", %{
-    project: project
-  } do
+  test "a goal is set, changed and cleared through the thread; the view carries it; set active on an idle thread it starts a turn named after it",
+       %{bypass: bypass, project: project} do
     {:ok, thread} = Projects.start_thread(project)
     :ok = ThreadState.subscribe(thread.kernel_thread_id)
 
-    assert {:ok, %{"objective" => "keep going", "status" => "active", "tokenBudget" => 5000}} =
-             Projects.set_goal(thread, %{objective: "keep going", token_budget: 5000})
+    # paused: kept, shown, nothing runs
+    assert {:ok, %{"objective" => "keep going", "status" => "paused", "tokenBudget" => 5000}} =
+             Projects.set_goal(thread, %{
+               objective: "keep going",
+               token_budget: 5000,
+               status: :paused
+             })
 
     assert_receive {:thread, _, "thread/goal/updated",
                     %{"goal" => %{"objective" => "keep going"}}},
                    5_000
 
     assert %{"objective" => "keep going"} = ThreadState.snapshot(thread.kernel_thread_id).goal
+    assert Projects.list_turns!(thread) == []
 
-    assert {:ok, %{"status" => "paused", "objective" => "keep going"}} =
-             Projects.set_goal(thread, %{status: :paused})
+    # active on an idle thread: a turn of its own, the row named after the goal
+    script!(bypass, [
+      ResponsesFixture.function_call("update_goal", nil, %{"status" => "complete"}),
+      ResponsesFixture.assistant_message("done")
+    ])
 
+    assert {:ok, %{"status" => "active", "objective" => "keep going"}} =
+             Projects.set_goal(thread, %{status: :active})
+
+    assert_eventually_ok(fn ->
+      match?(
+        [%Turn{status: :completed, user_text: "（目标续跑）keep going"}],
+        Projects.list_turns!(thread)
+      )
+    end)
+
+    assert {:ok, %{"status" => "complete"}} = Agent.get_goal(thread.kernel_thread_id)
     assert {:ok, true} = Projects.clear_goal(thread)
     assert_receive {:thread, _, "thread/goal/cleared", _}, 5_000
     assert ThreadState.snapshot(thread.kernel_thread_id).goal == nil

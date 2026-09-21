@@ -303,7 +303,7 @@ defmodule Longx.Agent do
       inherited_model: Keyword.get(opts, :inherited_model),
       inherited_effort: Keyword.get(opts, :inherited_effort),
       # the goal outlives the process in the view
-      goal: ThreadState.Store.meta(thread_id).goal
+      goal: Goal.restore(ThreadState.Store.meta(thread_id).goal)
     }
 
     {:ok, :loading, state, [{:next_event, :internal, :load}]}
@@ -523,9 +523,28 @@ defmodule Longx.Agent do
     end
   end
 
+  # an active goal on an idle agent starts a turn of its own with the
+  # continuation as its words — codex: "Active goals can immediately inject an
+  # objective or start an idle turn" (app-server thread_goal_processor.rs); a
+  # goal set from the page once sat idle until a child's report happened to wake
+  # the thread. A running turn takes the goal up at its end as before.
   defp on_call(state, {:set_goal, attrs}, _from) do
     state = Goal.update_goal(touch(state), attrs)
-    {:reply, {:ok, state.goal}, state}
+
+    case state do
+      %State{phase: :idle, goal: %{"status" => "active"} = goal} ->
+        {_turn_id, state} =
+          start_turn(state, Goal.continuation(goal, 1),
+            origin: %{"kind" => "goal", "round" => 1, "objective" => goal["objective"]},
+            # the round this turn already is: its end continues with the next
+            turn_state: %{goal_rounds: 1}
+          )
+
+        {:reply, {:ok, state.goal}, state, {:continue, :step}}
+
+      _ ->
+        {:reply, {:ok, state.goal}, state}
+    end
   end
 
   defp on_call(state, :get_goal, _from), do: {:reply, {:ok, state.goal}, state}
@@ -602,7 +621,7 @@ defmodule Longx.Agent do
           turn_started_at: System.system_time(:millisecond),
           continues: 0,
           steps: 0,
-          turn_state: %{}
+          turn_state: Keyword.get(opts, :turn_state, %{})
       }
       |> tap(
         &emit(&1, "turn/started", %{
@@ -617,7 +636,11 @@ defmodule Longx.Agent do
         })
       )
       |> Team.with_activity(Keyword.get(opts, :activity))
-      |> append_user(text, Keyword.get(opts, :images, []), from: from, kind: kind_of(opts))
+      |> append_user(text, Keyword.get(opts, :images, []),
+        from: from,
+        kind: kind_of(opts),
+        origin: Keyword.get(opts, :origin)
+      )
 
     {turn_id, state}
   end
@@ -934,6 +957,9 @@ defmodule Longx.Agent do
     state
   end
 
+  defp describe_failure({:model_failed, slug, why}), do: "#{slug}: #{describe(why)}"
+  defp describe_failure(other), do: describe(other)
+
   # what every phase takes from the step it ran: `step.state`, and the
   # children the plugs asked for (a failure to start one is a message from it)
   defp take_effects(%State{} = state, %Step{state: st, effects: effects}) do
@@ -1198,10 +1224,13 @@ defmodule Longx.Agent do
       else: {:noreply, %{state | phase: :idle}}
   end
 
+  # `message` is a provider's words, or `{:model_failed, slug, why}` once the
+  # chain is spent — a tuple in a string once crashed the process
   defp compaction_event(
          {:failed, message},
          %State{compacting: c, context_overflow: overflow?} = state
        ) do
+    message = describe_failure(message)
     Logger.warning("agent #{state.thread_id}: compaction failed: #{message}")
     state = Compaction.show_progress(state, nil)
     state = %{state | compacting: nil, model_task: nil, compact_requested: false}

@@ -95,34 +95,9 @@ defmodule Longx.Agent.Plugs.Goal do
 
   def call(step, _opts), do: step
 
-  # codex's continuation steering item (templates/goals/continuation.md, the
-  # update_plan paragraph left out as codex does without that tool); the
-  # objective is user data inside <objective>, so its angle brackets are escaped
-  @continuation File.read!(Path.join(:code.priv_dir(:longx), "agent/goal/continuation.md"))
-  @external_resource Path.join(:code.priv_dir(:longx), "agent/goal/continuation.md")
-
-  defp continuation(goal, _round) do
-    used = goal["tokensUsed"] || 0
-    budget = goal["tokenBudget"]
-
-    {budget_text, remaining} =
-      if is_integer(budget),
-        do: {Integer.to_string(budget), Integer.to_string(max(budget - used, 0))},
-        else: {"none", "unbounded"}
-
-    @continuation
-    |> String.replace("{{ objective }}", escape_xml(goal["objective"] || ""))
-    |> String.replace("{{ tokens_used }}", Integer.to_string(used))
-    |> String.replace("{{ token_budget }}", budget_text)
-    |> String.replace("{{ remaining_tokens }}", remaining)
-  end
-
-  defp escape_xml(text),
-    do:
-      text
-      |> String.replace("&", "&amp;")
-      |> String.replace("<", "&lt;")
-      |> String.replace(">", "&gt;")
+  # the words are the kernel's (`Kernel.Goal.continuation/2`): a goal set by
+  # hand on an idle agent starts a turn with the same text
+  defp continuation(goal, round), do: Longx.Agent.Kernel.Goal.continuation(goal, round)
 
   ## The tools — codex's answers: the goal as JSON with `remainingTokens`,
   ## and on completion the report the model owes the person

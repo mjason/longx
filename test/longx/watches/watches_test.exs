@@ -238,6 +238,34 @@ defmodule Longx.WatchesTest do
     assert title =~ "暂停"
   end
 
+  test "a send the target refuses — a conversation not on duty — is not silent: the row's last_error and a notify (an agent's own alarm once vanished without a trace)",
+       %{dir: dir, project: project} do
+    # no model expectation: nothing may start a turn here
+    {:ok, plain} = Projects.start_thread(project)
+    refute Projects.on_duty?(plain)
+    :ok = Phoenix.PubSub.subscribe(Longx.PubSub, Longx.Notify.topic())
+
+    write!(dir, "nudge", """
+    defmodule Nudge do
+      use Longx.Agent.Watch
+      every "*/10 * * * *"
+      def run(ctx) do
+        send(ctx, #{inspect(Projects.agent_name(plain))}, "wake up")
+        {:ok, %{}}
+      end
+    end
+    """)
+
+    :ok = Watches.reconcile_project(project)
+    assert {:ok, %Watch{} = ran} = Watches.run(Watches.get_watch!(project.id, "nudge"))
+    assert ran.sends == 0
+    assert ran.last_error =~ "off duty"
+    assert_receive {:notify, %{kind: "watch", title: title, body: body}}, 5_000
+    assert title =~ "没能叫醒"
+    assert body =~ "值班"
+    assert [] == Projects.list_turns!(plain)
+  end
+
   test "send(:self) is the session named after the watch, started when there is none; a once watch is consumed with its file",
        %{bypass: bypass, dir: dir, project: project} do
     model!(bypass, [ResponsesFixture.assistant_message("on duty")])

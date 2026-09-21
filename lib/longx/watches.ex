@@ -326,11 +326,33 @@ defmodule Longx.Watches do
           _ = disable(Ash.get!(Watch, id), :budget, nil)
           error
 
-        {:error, _} = error ->
+        {:error, reason} = error ->
+          Projects.notify_project(project.id, "watch",
+            title: "watch #{name} 没能叫醒 #{address_text(to)}",
+            body: refusal_zh(reason)
+          )
+
           error
       end
     end
   end
+
+  defp address_text(to) when is_binary(to), do: to
+  defp address_text(to), do: inspect(to)
+
+  defp refusal(:off_duty),
+    do:
+      "off duty — a conversation the person had, not on duty; the Agents window's 值班 switch puts it on duty"
+
+  defp refusal(:not_found), do: "no session at that address"
+  defp refusal(:self), do: "that is the watch's own session"
+  defp refusal(other), do: inspect(other)
+
+  defp refusal_zh(:off_duty),
+    do: "对方不在值班：人的普通会话不能被 watch 叫醒；在 Agent 与会话窗口打开它的值班开关"
+
+  defp refusal_zh(:not_found), do: "没有这个地址的会话"
+  defp refusal_zh(other), do: "投递失败：#{inspect(other)}"
 
   # the hour's window rolls with the first send; at the budget the row is off
   defp within_budget(%Watch{} = watch) do
@@ -362,16 +384,30 @@ defmodule Longx.Watches do
     %{result: result, sends: sends, log: log} = outcome
     definition = loaded.definition
 
+    # a send the target refused (off duty, no such address) is the run's error
+    # even when the script went on regardless — an agent's own alarm once
+    # vanished without a trace
+    refused =
+      for %{to: to, result: {:error, reason}} <- sends,
+          do: "could not wake #{address_text(to)}: #{refusal(reason)}"
+
     {state, error} =
       case result do
-        {:ok, state} -> {state, nil}
+        {:ok, state} -> {state, if(refused == [], do: nil, else: Enum.join(refused, "\n"))}
         {:error, message} -> {fresh.state, message}
       end
 
     if error, do: Longx.System.Faults.record(:watch, watch.name, error)
 
     output =
-      (log ++ Enum.map(sends, &"→ #{inspect(&1.to)}: #{String.slice(&1.text, 0, 200)}"))
+      (log ++
+         Enum.map(sends, fn send ->
+           "→ #{inspect(send.to)}: #{String.slice(send.text, 0, 200)}" <>
+             case send[:result] do
+               {:error, reason} -> " (refused: #{refusal(reason)})"
+               _ -> ""
+             end
+         end))
       |> Enum.join("\n")
       |> String.slice(0, @output_bytes)
 
