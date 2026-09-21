@@ -1201,7 +1201,13 @@ Key patterns:
   composer slots), `tool-call`, `terminal-block`, `code-diff`, `file-tree`, `web-search`,
   `elicitation-form`, `agent-status`, `background-inbox`,
   `context-display`, `model-selector` / `model-picker`, `reasoning-panel`,
-  `markdown-text` with `shiki-highlighter` and `mermaid-diagram`, `thread-list.aui`,
+  `markdown-text` with `shiki-highlighter` and `mermaid-diagram` (**LaTeX** as
+  assistant-ui's guide: `remark-math` + `rehype-katex`, `katex.min.css` imported in
+  `index.tsx`; `preprocessMath` = `normalizeMathDelimiters` (`\(…\)` / `\[…\]` →
+  `$…$` / `$$…$$`) → `blockMathOnItsOwnLines` (a line that is only `$$…$$` gets its
+  fences on their own lines — remark-math reads the one-line form as inline) →
+  `escapeCurrencyDollars` (`$5 到 $7` is not math); `MarkdownPreview` uses the same
+  three), `thread-list.aui`,
   `message-timing.aui`, `composer-trigger-popover.aui`, `directive-text`, `message-queue`,
   `surfaces` and `../utils/range.ts` as shared helpers.
 - Tool UI: toolkit `render` per item type; `display: "standalone"` keeps a tool out of the
