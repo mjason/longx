@@ -318,7 +318,8 @@ defmodule Longx.Agent.ThreadStateTest do
             "delta" => "ok"
           })
 
-          assert_receive {:thread, 2, "item/agentMessage/delta", %{"itemId" => "m2"}}, 2_000
+          # generous: under a loaded suite the writer once took more than two seconds
+          assert_receive {:thread, 2, "item/agentMessage/delta", %{"itemId" => "m2"}}, 10_000
         end)
 
       assert log =~ "could not fold item/agentMessage/delta"
