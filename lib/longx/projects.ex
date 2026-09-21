@@ -795,9 +795,14 @@ defmodule Longx.Projects do
     roots
     |> Map.values()
     |> Enum.filter(&is_nil(&1.parent_thread_id))
+    # newest activity first; a tuple key sorts by term order, so the times go
+    # in as integers (a tuple under DateTime's comparator raised with two rows)
     |> Enum.sort_by(
-      &{&1.last_activity_at || ~U[1970-01-01 00:00:00Z], &1.inserted_at},
-      {:desc, DateTime}
+      &{
+        DateTime.to_unix(&1.last_activity_at || ~U[1970-01-01 00:00:00Z], :microsecond),
+        DateTime.to_unix(&1.inserted_at, :microsecond)
+      },
+      :desc
     )
     |> Enum.map(fn %Thread{} = thread ->
       agents = Map.get(working, thread.id, [])

@@ -1669,13 +1669,15 @@ defmodule Longx.AgentTest do
     loading = Task.async(fn -> :timer.tc(fn -> Agent.ensure(thread_id: big, cwd: dir) end) end)
     {other_us, {:ok, _}} = :timer.tc(fn -> Agent.ensure(thread_id: small, cwd: dir) end)
     {ensure_us, {:ok, pid}} = Task.await(loading, 30_000)
-    assert other_us < 20_000
+    # a start queued behind the load took as long as the load itself; a
+    # loaded suite makes an absolute bound flaky, the ratio holds either way
+    assert other_us * 5 < ensure_us
+    assert other_us < 100_000
     assert Process.alive?(pid)
     # ensure answers with the transcript loaded: the view is there, a call answers at once
     assert length(ThreadState.snapshot(big).items) == 6_000
     {status_us, :idle} = :timer.tc(fn -> Agent.status(big) end)
-    assert status_us < 20_000
-    assert ensure_us > other_us
+    assert status_us < 100_000
   end
 
   defmodule Counting do

@@ -785,6 +785,28 @@ defmodule Longx.Projects.ThreadsTest do
     assert_eventually_ok(fn -> turn!(next.id).status == :completed end)
   end
 
+  test "two threads running at once are both on the welcome page, the most recently active first (sorting them once raised: a tuple key under DateTime's comparator)",
+       %{bypass: bypass, project: project} do
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("one")),
+      held(ResponsesFixture.assistant_message("two"))
+    ])
+
+    {:ok, first} = Projects.start_thread(project)
+    {:ok, second} = Projects.start_thread(project)
+    {:ok, _} = Projects.send_message(first, "a")
+    assert_receive {:held, h1}, 5_000
+    {:ok, _} = Projects.send_message(second, "b")
+    assert_receive {:held, h2}, 5_000
+
+    assert [%{id: newest}, %{id: older}] = Projects.running_threads()
+    assert {newest, older} == {second.id, first.id}
+
+    send(h1, :go)
+    send(h2, :go)
+    assert_eventually_ok(fn -> Projects.running_threads() == [] end)
+  end
+
   test "a thread whose sub-agent is still working counts as running on the welcome page, naming the agent",
        %{bypass: bypass, project: project} do
     script!(bypass, [
