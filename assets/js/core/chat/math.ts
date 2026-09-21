@@ -9,7 +9,32 @@ import { escapeCurrencyDollars, normalizeMathDelimiters } from "@assistant-ui/re
  * name inside math wrapped in `\mathrm{}`, and a price kept out of math.
  */
 export function preprocessMath(text: string): string {
-  return escapeCurrencyDollars(mapMath(blockMathOnItsOwnLines(normalizeMathDelimiters(text)), wrapIdentifiers));
+  return holdOpenBlockMath(
+    escapeCurrencyDollars(mapMath(blockMathOnItsOwnLines(normalizeMathDelimiters(text)), wrapIdentifiers)),
+  );
+}
+
+/**
+ * A display block whose closing `$$` has not arrived yet — the text is the
+ * streamed prefix (assistant-ui's `preprocess` runs on what `useSmooth` has
+ * revealed) — is held back whole: remark-math reads an unclosed fence to the
+ * end of the text, and KaTeX drew each half-written line as an error, then
+ * again as the formula, a flicker a character at a time. The block shows
+ * once it is closed. A `$$` line inside a code fence is code.
+ */
+export function holdOpenBlockMath(text: string): string {
+  const lines = text.split("\n");
+  let inCode = false;
+  let open: number | null = null;
+  // a line with an odd number of `$$` opens or closes a block (`$$` alone,
+  // `$$ x = …` opening with content, `… $$` closing at a line's end);
+  // an even count (`$$x$$` inline) leaves the state alone
+  lines.forEach((line, i) => {
+    const t = line.trim();
+    if (/^(```|~~~)/.test(t)) inCode = !inCode;
+    else if (!inCode && (t.match(/\$\$/g)?.length ?? 0) % 2 === 1) open = open === null ? i : null;
+  });
+  return open === null ? text : lines.slice(0, open).join("\n");
 }
 
 // a line that is nothing but `$$…$$`: its fences on lines of their own

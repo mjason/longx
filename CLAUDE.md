@@ -1237,8 +1237,16 @@ Key patterns:
   lines — remark-math reads the one-line form as inline) → `wrapIdentifiers` (a run of
   3+ letters or two capitals inside math, not a macro or a macro's text argument,
   becomes `\mathrm{}` — TeX set `TotalVolume` as ten italic variables with spacing
-  between) → `escapeCurrencyDollars` (`$5 到 $7` is not math); `MarkdownPreview` uses
-  the same pipeline), `thread-list.aui`,
+  between) → `escapeCurrencyDollars` (`$5 到 $7` is not math) → `holdOpenBlockMath` (a
+  display block whose closing `$$` has not streamed in yet is held back whole —
+  `preprocess` runs on the revealed prefix, remark-math reads an unclosed fence to the
+  end, and KaTeX drew every half-written line red then redrew it, a flicker a character
+  at a time; the block shows once closed) — and **no smooth reveal** (`smooth={false}`
+  on the primitive: it runs `preprocess` on the whole text and then reveals the result
+  character by character, so the reveal re-opened every closed block and no preprocess
+  could hold it; the kernel's deltas already land once per animation frame; checked
+  with two streamed derivations, 137 samples, zero `.katex-error`); `MarkdownPreview`
+  uses the same pipeline), `thread-list.aui`,
   `message-timing.aui`, `composer-trigger-popover.aui`, `directive-text`, `message-queue`,
   `surfaces` and `../utils/range.ts` as shared helpers.
 - Tool UI: toolkit `render` per item type; `display: "standalone"` keeps a tool out of the

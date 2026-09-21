@@ -31,3 +31,20 @@ describe("preprocessMath", () => {
     expect(preprocessMath("费用 $5 到 $7。\n\n$$E = mc^2$$")).toBe("费用 \\$5 到 \\$7。\n\n$$\nE = mc^2\n$$");
   });
 });
+
+describe("holdOpenBlockMath", () => {
+  test("a display block still being streamed (its closing $$ not in yet) is held back instead of parsed: KaTeX drew every half-written line red, then redrew it, a flicker a character at a time", () => {
+    // mid-stream: the block opened, its content half in — nothing of it reaches the parser
+    expect(preprocessMath("Text before\n\n$$\n\\frac{a}{")).toBe("Text before\n");
+    expect(preprocessMath("Text\n\n$$")).toBe("Text\n");
+    // closed: untouched
+    expect(preprocessMath("Text\n\n$$\na + b\n$$\n\nAfter")).toBe("Text\n\n$$\na + b\n$$\n\nAfter");
+    // a second block opening after a closed one: only the open tail goes
+    expect(preprocessMath("$$\na\n$$\n\nthen\n\n$$\n\\sqrt{")).toBe("$$\na\n$$\n\nthen\n");
+    // the block opened with content on the same line (`$$ x = …`), closed later: held from that line
+    expect(preprocessMath("x\n\n$$ \\frac{a}{")).toBe("x\n");
+    expect(preprocessMath("x\n\n$$ a = b\nc = d $$\n\nafter")).toBe("x\n\n$$ a = b\nc = d $$\n\nafter");
+    // a $$ line inside a code fence is code, not a fence
+    expect(preprocessMath("```\n$$\n```\n\nx")).toBe("```\n$$\n```\n\nx");
+  });
+});

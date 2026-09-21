@@ -62,6 +62,12 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
       components={markdownComponents}
       componentsByLanguage={BY_LANGUAGE}
       defer
+      // Longx: no character-by-character reveal. The primitive runs `preprocess`
+      // on the whole text and smooths the result, so the reveal re-opened every
+      // closed `$$` block and KaTeX drew each half-line red; the kernel's deltas
+      // already land once per animation frame (`useThreadView`), and
+      // `holdOpenBlockMath` keeps a block still streaming off the parser
+      smooth={false}
     />
   );
 };
