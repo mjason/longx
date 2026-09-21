@@ -5,7 +5,7 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
+import { useMathjax } from "@/ui/math/useMathjax";
 import { preprocessMath } from "@/core/chat/math";
 import { markdownComponents } from "@/ui/components/assistant-ui/elements/generative-ui";
 
@@ -37,9 +37,10 @@ const components: Components = {
 };
 
 export function MarkdownPreview({ source, className }: { source: string; className?: string }) {
+  const mathPlugins = useMathjax();
   return (
     <div className={`text-foreground mx-auto w-full max-w-3xl px-6 py-5 text-[15px] leading-relaxed wrap-break-word ${className ?? ""}`} data-testid="markdown-preview">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={mathPlugins} components={components}>
         {preprocessMath(source)}
       </ReactMarkdown>
     </div>

@@ -257,3 +257,24 @@
 /* assistant-ui elements: open/closed state variants (Radix data-state or Base UI data-open) */
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
+
+/* MathJax 4's SVG output (ui/math): the formula in the text's colour, a
+   display formula centred on its own line and scrollable when wider than
+   the column */
+mjx-container {
+  display: inline-block;
+  line-height: 0;
+  vertical-align: baseline;
+}
+mjx-container[display="true"] {
+  display: block;
+  text-align: center;
+  margin: 1em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+mjx-container svg {
+  fill: currentColor;
+  stroke: currentColor;
+  display: inline-block;
+}

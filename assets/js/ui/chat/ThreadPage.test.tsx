@@ -663,7 +663,7 @@ describe("ThreadPage", () => {
     await waitFor(() => expect(screen.queryByTestId("message-queue")).not.toBeInTheDocument());
   });
 
-  test("LaTeX in a reply is drawn by KaTeX: $…$ inline, $$…$$ display, and the \\(…\\) / \\[…\\] delimiters models emit; a price is not math", async () => {
+  test("LaTeX in a reply is drawn by MathJax as SVG: $…$ inline, $$…$$ display, and the \\(…\\) / \\[…\\] delimiters models emit; a price is not math", async () => {
     await open();
     act(() =>
       channel.deliver("event", {
@@ -675,10 +675,10 @@ describe("ThreadPage", () => {
         },
       }),
     );
-    const math = await screen.findAllByText((_, el) => el?.classList.contains("katex") === true);
-    // two inline, two display
-    expect(math.length).toBe(4);
-    expect(document.querySelectorAll(".katex-display").length).toBe(2);
+    // the renderer loads on demand; until then the TeX shows as text
+    await waitFor(() => expect(document.querySelectorAll("mjx-container").length).toBe(4), { timeout: 15_000 });
+    expect(document.querySelectorAll('mjx-container[display="true"]').length).toBe(2);
+    expect(document.querySelectorAll("mjx-container svg").length).toBe(4);
     expect(screen.getByText(/费用 \$5 到 \$7/)).toBeInTheDocument();
   });
 
