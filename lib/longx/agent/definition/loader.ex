@@ -378,14 +378,25 @@ defmodule Longx.Agent.Definition.Loader do
       (descriptions ++ plugs ++ roles ++ watches)
       |> Enum.filter(&File.regular?/1)
       |> Enum.sort()
-      # mtime and size: a rewrite within the same second still counts when the size moved
-      |> Enum.map(fn path ->
-        %{mtime: mtime, size: size} = File.stat!(path, time: :posix)
-        {path, {mtime, size}}
-      end)
+      |> stamps()
     else
       []
     end
+  end
+
+  # mtime and size per file: a rewrite within the same second still counts
+  # when the size moved. A file gone since the listing (a once watch consumed
+  # by its run, a plug the agent removed) is left out — a raise here ended
+  # an agent mid-turn
+  @doc false
+  @spec stamps([Path.t()]) :: [{Path.t(), {integer, non_neg_integer}}]
+  def stamps(paths) do
+    Enum.flat_map(paths, fn path ->
+      case File.stat(path, time: :posix) do
+        {:ok, %{mtime: mtime, size: size}} -> [{path, {mtime, size}}]
+        {:error, _} -> []
+      end
+    end)
   end
 
   defp description?(path), do: Path.basename(path) == "agent.exs"

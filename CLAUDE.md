@@ -448,7 +448,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `agent.exs` + `plugs/**/*.exs` + `agents/<name>/agent.exs`; every `defmodule` of a layer
     and every reference to it is renamed under `Longx.Agent.Local.<tag>` before
     `Code.compile_quoted`, so two projects may both define `Deploy`; cached per layer by the
-    files' mtimes and sizes (`Loader.Cache`), recompiled on change; a file that fails to
+    files' mtimes and sizes (`Loader.Cache`; `Loader.stamps/1` leaves out a file gone
+    since the listing — a once watch its run consumed, a plug the agent removed — where
+    a `File.stat!` once ended an agent mid-turn), recompiled on change; a file that fails to
     load leaves the layer below in force and becomes a **notice** in front of the model
     (`⚠ … failed to load …`), as does an outdated version, a plug nobody defines, and a
     description naming a model Longx does not have (the default runs instead —

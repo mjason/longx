@@ -106,6 +106,16 @@ defmodule Longx.Agent.Definition.LoaderTest do
     assert {:ok, "shipped to x"} = mb.deploy(%{"env" => "x"}, %{})
   end
 
+  test "a file that vanishes between the listing and its stat (a once watch consumed, a plug the agent removed) is left out, never a crash",
+       %{root: root} do
+    write!(root, ".longx/local/watches/gone.exs", "x")
+    write!(root, ".longx/local/watches/kept.exs", "x")
+    path = Path.join(root, ".longx/local/watches/gone.exs")
+    kept = Path.join(root, ".longx/local/watches/kept.exs")
+    File.rm!(path)
+    assert [{^kept, {_mtime, 1}}] = Loader.stamps([path, kept])
+  end
+
   test "a change on disk is picked up on the next load", %{root: root, tag: tag} do
     write!(root, ".longx/plugs/deploy.exs", @deploy)
     write!(root, ".longx/agent.exs", "import Longx.Agent.Config\nagent do\n  plug Deploy\nend\n")
