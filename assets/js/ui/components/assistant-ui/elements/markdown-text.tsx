@@ -11,7 +11,7 @@ import {
 import { preprocessMath } from "@/core/chat/math";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { useMathjax } from "@/ui/math/useMathjax";
+import rehypeKatex from "rehype-katex";
 import { type FC, memo, useMemo, useRef } from "react";
 import type { TextMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
@@ -43,7 +43,6 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
 };
 
 const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
-  const mathPlugins = useMathjax();
   const stableComponents = useShallowStable(components);
   const markdownComponents = useMemo(() => {
     if (!stableComponents) return defaultComponents;
@@ -56,7 +55,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
   return (
     <MarkdownTextPrimitive
       remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={mathPlugins}
+      rehypePlugins={[rehypeKatex]}
       preprocess={preprocessMath}
       className="aui-md"
       components={markdownComponents}
@@ -66,10 +65,9 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
   );
 };
 
-// Longx: LaTeX as assistant-ui's guide (remark-math, then a rehype renderer)
-// over our preprocessing (`core/chat/math.ts`: the delimiters models emit,
-// block math on its own lines, multi-letter names as \mathrm, prices kept
-// out); the renderer is MathJax 4 with Fira Math (`ui/math`), a lazy chunk
+// Longx: LaTeX as assistant-ui's guide (remark-math + rehype-katex) over our
+// preprocessing (`core/chat/math.ts`: the delimiters models emit, block math
+// on its own lines, multi-letter names as \mathrm, prices kept out)
 export { preprocessMath };
 
 // Longx: fenced code tokenises with shiki once the part settles; a `mermaid`

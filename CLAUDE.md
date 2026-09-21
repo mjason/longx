@@ -1203,25 +1203,13 @@ Key patterns:
   composer slots), `tool-call`, `terminal-block`, `code-diff`, `file-tree`, `web-search`,
   `elicitation-form`, `agent-status`, `background-inbox`,
   `context-display`, `model-selector` / `model-picker`, `reasoning-panel`,
-  `markdown-text` with `shiki-highlighter` and `mermaid-diagram` (**LaTeX**: assistant-ui's
-  guide is `remark-math` + a rehype renderer; ours is **MathJax 4 with the Fira Math
-  font** (`ui/math/`: `mathjax.ts` — TeX in, SVG out through MathJax's DOM-less
-  adaptor, so the same module renders in vitest; `rehype-mathjax.ts` swaps remark-math's
-  `code.math-inline` / `pre > code.math-display` for the `mjx-container`; `useMathjax`
-  loads it as a lazy chunk (1.8 MB, 632 KB gzip) the first time a MarkdownText mounts
-  and re-renders when it is in — a formula shows as its TeX until then; the font's
-  glyph ranges beyond the core set are `import.meta.glob`bed and preloaded at init
-  since react-markdown runs rehype synchronously; inline line-breaking off, a wide
-  display formula scrolls; STIX Two / Latin Modern are the sibling packages, swap
-  `MATH_FONT`) — KaTeX rendered Computer Modern only, whose italic serif fought the
-  page; `css/app.css` styles `mjx-container` (currentColor, display centred). Before
-  the renderer, `core/chat/math.ts` (unit-tested, DOM-free): `normalizeMathDelimiters`
-  (`\(…\)` / `\[…\]` → `$…$` / `$$…$$`) → `blockMathOnItsOwnLines` (a line that is
-  only `$$…$$` gets its fences on their own lines — remark-math reads the one-line form
-  as inline) → `wrapIdentifiers` (a run of 3+ letters or two capitals inside math,
-  not a macro or a macro's text argument, becomes `\mathrm{}` — TeX set `TotalVolume`
-  as ten italic variables with spacing between) → `escapeCurrencyDollars` (`$5 到 $7`
-  is not math); `MarkdownPreview` uses the same pipeline), `thread-list.aui`,
+  `markdown-text` with `shiki-highlighter` and `mermaid-diagram` (**LaTeX** as
+  assistant-ui's guide: `remark-math` + `rehype-katex`, `katex.min.css` imported in
+  `index.tsx`; `preprocessMath` = `normalizeMathDelimiters` (`\(…\)` / `\[…\]` →
+  `$…$` / `$$…$$`) → `blockMathOnItsOwnLines` (a line that is only `$$…$$` gets its
+  fences on their own lines — remark-math reads the one-line form as inline) →
+  `escapeCurrencyDollars` (`$5 到 $7` is not math); `MarkdownPreview` uses the same
+  three), `thread-list.aui`,
   `message-timing.aui`, `composer-trigger-popover.aui`, `directive-text`, `message-queue`,
   `surfaces` and `../utils/range.ts` as shared helpers.
 - Tool UI: toolkit `render` per item type; `display: "standalone"` keeps a tool out of the

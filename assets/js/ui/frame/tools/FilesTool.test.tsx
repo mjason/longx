@@ -82,13 +82,13 @@ describe("FilesTool", () => {
     await within(editor).findByTestId("markdown-preview");
   });
 
-  test("a markdown file's formulas are drawn by MathJax in the preview", async () => {
+  test("a markdown file's formulas are drawn by KaTeX in the preview", async () => {
     vi.mocked(readFile).mockResolvedValue(ok({ path: "README.md", content: "# 因子\n\n$$\\text{IC} = \\rho(f, r)$$\n\n行内 \\(\\alpha\\)。\n", size: 60, binary: false, truncated: false }) as never);
     const { user, panel } = await openFiles();
     await user.click(within(panel).getByRole("treeitem", { name: /README/ }));
     const preview = await screen.findByTestId("markdown-preview");
-    await waitFor(() => expect(preview.querySelectorAll("mjx-container").length).toBe(2), { timeout: 15_000 });
-    expect(preview.querySelectorAll('mjx-container[display="true"]').length).toBe(1);
+    await waitFor(() => expect(preview.querySelectorAll(".katex").length).toBe(2));
+    expect(preview.querySelectorAll(".katex-display").length).toBe(1);
   });
 
   test("a fenced block in the preview wraps its long lines instead of clipping them", async () => {

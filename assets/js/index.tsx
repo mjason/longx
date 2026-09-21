@@ -1,4 +1,6 @@
 import "../css/app.css";
+// KaTeX's stylesheet: formulas in chat replies and markdown files
+import "katex/dist/katex.min.css";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./ui/App";
