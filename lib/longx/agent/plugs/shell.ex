@@ -44,7 +44,8 @@ defmodule Longx.Agent.Plugs.Shell do
   tool :exec_command,
        "Runs a shell command in the working directory and returns its output (stdout and stderr interleaved) and exit code. The command runs to completion; it is killed after timeout_ms (default 120000, max 1800000). Long-running servers should be started in the background (nohup … &).",
        show: :command,
-       timeout: @max_timeout + 5_000 do
+       timeout: @max_timeout + 5_000,
+       prepare: &__MODULE__.normalize/1 do
     param :cmd, :string, "Shell command to execute.", required: true
     param :workdir, :string, "Working directory for the command. Defaults to the turn cwd."
 
@@ -140,6 +141,17 @@ defmodule Longx.Agent.Plugs.Shell do
   end
 
   def exec_command(args, ctx), do: exec_command(args, ctx, guards([]))
+
+  @doc """
+  The tool's `prepare:`: codex's own exec_command arguments object wrapped
+  under `cmd` by the model (`{"cmd": {"cmd": "…", "yield_time_ms": 1000}}` —
+  gpt-5.6 through the Codex backend did it once) is unwrapped, the outer keys
+  kept where the inner ones do not say otherwise.
+  """
+  def normalize(%{"cmd" => %{"cmd" => _} = inner} = args) when is_map(args),
+    do: Map.merge(Map.delete(args, "cmd"), inner)
+
+  def normalize(args), do: args
 
   @doc false
   def exec_command(%{"cmd" => command} = args, ctx, guards) do

@@ -501,6 +501,83 @@ defmodule Longx.AgentTest do
     assert %{"status" => "completed"} = await_turn_end()
   end
 
+  test "a malformed call never takes the agent down: exec_command's object wrapped under cmd is unwrapped, a cmd that is no string is that call's error (a child once died mid-turn on a map where a string was expected)",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [
+      # codex's own exec_command arguments object, wrapped under `cmd` by the model
+      ResponsesFixture.function_call("exec_command", nil, %{
+        "cmd" => %{
+          "cmd" => "echo unwrapped",
+          "max_output_tokens" => 5000,
+          "yield_time_ms" => 1000
+        }
+      }),
+      ResponsesFixture.function_call("exec_command", nil, %{"cmd" => %{"nope" => 1}}),
+      ResponsesFixture.assistant_message("done")
+    ])
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "go")
+
+    assert %{"item" => %{"command" => "echo unwrapped", "status" => "completed"} = first} =
+             await_item_completed_of_type("commandExecution")
+
+    assert first["aggregatedOutput"] =~ "unwrapped"
+
+    assert %{"item" => %{"status" => "failed", "command" => command}} =
+             await_item_completed_of_type("commandExecution")
+
+    assert command =~ "nope"
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+    assert is_pid(Agent.whereis(id))
+
+    [_, _, third] = collect_requests([])
+
+    # the schema's own refusal reaches the model (`#/cmd: Type mismatch. Expected String`)
+    assert Enum.any?(third["input"], fn item ->
+             item["type"] == "function_call_output" and item["output"] =~ ~r/cmd.*Expected String/
+           end)
+  end
+
+  defmodule BoomTool do
+    use Longx.Agent.Plug
+
+    tool :boom, "raises while preparing its arguments", prepare: &__MODULE__.explode/1 do
+      param :x, :string, "anything"
+    end
+
+    def explode(_args), do: raise("bad arguments")
+    def boom(_args, _ctx), do: {:ok, "never"}
+  end
+
+  defmodule BoomPipeline do
+    use Longx.Agent.Pipeline
+    plug BoomTool
+    plug Longx.Agent.Plugs.Request
+  end
+
+  test "a tool whose preparation raises fails that call only; the agent lives on", %{
+    bypass: bypass,
+    dir: dir
+  } do
+    id = agent!("boom-#{System.unique_integer([:positive])}", dir, pipeline: BoomPipeline)
+
+    script!(bypass, [
+      ResponsesFixture.function_call("boom", nil, %{"x" => "y"}),
+      ResponsesFixture.assistant_message("survived")
+    ])
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "go")
+    assert %{"item" => %{"status" => "failed"}} = await_item_completed_of_type("dynamicToolCall")
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+    assert is_pid(Agent.whereis(id))
+
+    [_, second] = collect_requests([])
+
+    assert Enum.any?(second["input"], fn item ->
+             item["type"] == "function_call_output" and item["output"] =~ "bad arguments"
+           end)
+  end
+
   test "a call's arguments streaming in is progress the thread shows: the tool's name and the bytes so far, gone once the call runs",
        %{bypass: bypass, thread_id: id} do
     script!(bypass, [

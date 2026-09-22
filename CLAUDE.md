@@ -161,6 +161,11 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   `agent/thread_state.ex` + `thread_state/store.ex`, `agent/transcript.ex` +
   `transcript/item.ex`, `context.ex`, `knowledge.ex`, `pipeline.ex`, `plug.ex`, `step.ex`,
   `tool.ex`.
+  - **A model's malformed call never ends the agent**: `Calls.prepare_call` rescues a
+    `prepare:` that trips or an item the UI cannot draw into that call's error ("the
+    call could not be prepared: …", a plain item), and `UI.arg/2` shows a map or list
+    where a string was expected as JSON instead of `to_string`ing it — a child once died
+    mid-turn ("exited: Protocol.UndefinedError … String.Chars") on a wrapped `cmd`.
   - `Longx.Agent` — one **`:gen_statem`** per thread (`Longx.Agent.Registry`, under
     `Longx.Agent.Supervisor`, `restart: :temporary`; states `:loading` — `init` does
     nothing slow (the DynamicSupervisor runs every start through it one after the other,
@@ -344,6 +349,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     the shim), `timeout_ms` (default 2 min — `options Shell, timeout_ms:` sets a
     description's default —, max 30 min; the command runs to completion —
     `write_stdin` sessions are not offered), `max_output_tokens`, `shell`, `login`;
+    **`Shell.normalize/1` is the tool's `prepare:`** — codex's whole
+    exec_command object wrapped under `cmd` by the model (`{"cmd": {"cmd": "…",
+    "yield_time_ms": 1000}}`, gpt-5.6 through the Codex backend once) is unwrapped; a
+    `cmd` that is still no string is refused by the schema (`#/cmd: Type mismatch`);
     the result in codex's `format_exec_output_for_model` shape — `Exit code:` / `Wall
     time:` / `Total output lines:` when clipped / `Output:` then stdout+stderr
     interleaved, head+tail kept around `…N tokens truncated…`, a timeout as "command

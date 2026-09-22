@@ -15,8 +15,7 @@ defmodule Longx.Agent.Kernel.Calls do
   def start_call(state, %{"call_id" => call_id, "name" => name} = call, tools) do
     tool = Map.get(tools, name)
     item_id = new_id("item")
-    arguments = arguments_of(call, tool)
-    ui = UI.started_ui(tool, name, item_id, arguments, state)
+    {arguments, ui} = prepare_call(call, tool, name, item_id, state)
 
     emit(state, "item/started", %{"item" => ui, "turnId" => state.turn_id})
     state = append(state, :function_call, call, ui, show?: false)
@@ -55,6 +54,19 @@ defmodule Longx.Agent.Kernel.Calls do
     }
 
     %{state | tasks: Map.put(state.tasks, task.ref, entry)}
+  end
+
+  # the arguments as the tool wants them and the item the page shows — or,
+  # when either raises on what the model sent (a `prepare:` that trips, a
+  # shape the UI cannot draw), an error the model reads on a plain item: a
+  # raise here ran inside the kernel's callback and ended the agent process
+  defp prepare_call(call, tool, name, item_id, state) do
+    arguments = arguments_of(call, tool)
+    {arguments, UI.started_ui(tool, name, item_id, arguments, state)}
+  rescue
+    e ->
+      message = "the call could not be prepared: " <> Exception.message(e)
+      {{:error, message}, UI.started_ui(tool, name, item_id, %{}, state)}
   end
 
   @doc false

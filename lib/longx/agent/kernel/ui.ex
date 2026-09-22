@@ -276,6 +276,17 @@ defmodule Longx.Agent.Kernel.UI do
 
   def changes_from(_args, _cwd), do: []
 
-  def arg(args, key) when is_map(args), do: to_string(Map.get(args, key, ""))
+  # a map or a list where a string was expected (a model once wrapped codex's
+  # whole exec_command object under `cmd`) is shown as JSON, never to_string'd:
+  # that raise inside the kernel's callback took the agent process down
+  def arg(args, key) when is_map(args) do
+    case Map.get(args, key, "") do
+      nil -> ""
+      value when is_binary(value) -> value
+      value when is_number(value) or is_atom(value) -> to_string(value)
+      value -> Jason.encode!(value)
+    end
+  end
+
   def arg(_args, _key), do: ""
 end
