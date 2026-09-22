@@ -1097,7 +1097,25 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     above the composer (the `message-queue` element: 取消 / 插入) and goes out as a new
     turn when the turn ends, 插入 → `insertQueued` steers it into the running turn now),
     `mentions.ts`,
-    `fileAttachments.ts`, `reasoningSteps.ts`.
+    `fileAttachments.ts`, `reasoningSteps.ts`. **A long thread opens on its tail**
+    (assistant-ui's windowed-history shape: the runtime renders whatever `messages`
+    holds, so the window is the last `HISTORY_WINDOW` (20) turns of `toMessages(view,
+    subviews, window)` — `turnIds/1` counts the turns, an item with no turn follows its
+    neighbour — and showing more is widening it; `runtime.ts`'s `history` `{hiddenTurns,
+    showEarlier}`, reset per thread; the view itself stays whole for the agents panel,
+    the timing and the state). `chat/HistoryEdge` (the `HistoryEdge` slot of `thread.aui`,
+    above the messages, `HistoryContext` provided by `ThreadPage` and by `AgentTab` for a
+    child's conversation): 还有 N 轮更早的对话 · 显示更早 20 轮 · 显示全部, the viewport's
+    `scrollTop` moved by the height the earlier turns added so the reader's place holds.
+    Measured on a 1714-item thread (223 messages, a 3.2 MB snapshot): the thread's own
+    cost fell from ~2.5 s to ~0.7 s, the DOM from 32k to 5.5k nodes, the heap from 250 to
+    66 MB; what is left of the ~4 s open is the app's boot (3.5 s: 3.9 MB of scripts and
+    a 1.1 s main-chunk task, the same on a 54-item thread). The viewports have no
+    `scroll-smooth` any more (the registry's default animated every jump to the bottom
+    and the thread re-laid out several times while opening — lazy shiki and KaTeX,
+    content-visibility sizing — so the reader watched it slide). Virtualization
+    (`/docs/guides/virtualization`, `Unstable_MessageById` + react-virtual, own scroll
+    container) is the next step if a window itself is ever too heavy.
   - `js/ui/` — React DOM, **shaped like an IDE with the chat where the editor would be**.
     `routes.tsx`: `/` (`pages/WelcomePage`: recent projects, what is running now —
     `useRunningThreads`, waiting ones first and amber), `/new` (`pages/ProjectWizard`:

@@ -84,13 +84,38 @@ export function subagentsOf(view: ThreadView): Map<string, SubAgent> {
   return agents;
 }
 
+/** The thread's turns in order (distinct turn ids over the items). */
+export function turnIds(view: ThreadView): string[] {
+  const ids: string[] = [];
+  let last: string | undefined;
+  for (const item of view.items) {
+    if (item.turnId && item.turnId !== last && !ids.includes(item.turnId)) ids.push(item.turnId);
+    if (item.turnId) last = item.turnId;
+  }
+  return ids;
+}
+
+export function turnCount(view: ThreadView): number {
+  return turnIds(view).length;
+}
+
+/**
+ * `window`: build only the last that many turns — a 1700-item thread once took
+ * six seconds to open because every message was rendered at once. The view
+ * stays whole (the agents panel, the timing, the state read all of it); only
+ * what is handed to the runtime is the tail. An item with no turn (an activity)
+ * follows the item before it.
+ */
 export function toMessages(
   view: ThreadView,
   subviews: SubViews = {},
+  window?: number,
 ): ThreadMessageLike[] {
   const running = runningTurnId(view);
   const agents = subagentsOf(view);
   const out: ThreadMessageLike[] = [];
+  const shown = window === undefined ? null : new Set(turnIds(view).slice(-window));
+  let visible = shown === null || shown.size === turnCount(view);
   let current: { turnId: string | undefined; parts: Part[] } | null = null;
   // a message steered into a running turn splits its assistant message: the
   // segments after the first get an index, or they would share one id and
@@ -120,6 +145,10 @@ export function toMessages(
   };
 
   for (const item of view.items) {
+    if (shown !== null) {
+      if (item.turnId) visible = shown.has(item.turnId);
+      if (!visible) continue;
+    }
     if (item.type === "userMessage" && isGoalContinuation(item)) {
       // the kernel's own words (a goal's next round): a marker inside the turn, never a
       // bubble in the person's voice — the model reads the text, the page names the round

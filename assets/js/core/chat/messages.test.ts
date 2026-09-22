@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { displayCommand, toMessages, userText } from "./messages";
+import { displayCommand, toMessages, turnCount, userText } from "./messages";
 import { emptyView, type ThreadView } from "./thread";
 import type { ThreadMessageLike } from "@assistant-ui/react";
 
@@ -87,6 +87,21 @@ describe("toMessages", () => {
     expect(msgs[3]!.content).toEqual([{ type: "text", text: "mine" }]);
     expect(msgs[4]!.metadata).toMatchObject({ custom: { from: "coder-3", kind: "answer" } });
     expect(msgs[5]!.metadata?.custom?.["kind"]).toBeUndefined();
+  });
+
+  test("a window builds only the last N turns — the rest is counted, never rendered (a 1700-item thread took six seconds to open); an item with no turn follows its neighbour", () => {
+    const items: Record<string, unknown>[] = [];
+    for (let i = 1; i <= 5; i++) {
+      items.push({ id: `u${i}`, type: "userMessage", turnId: `t${i}`, content: [{ type: "text", text: `q${i}` }] });
+      items.push({ id: `a${i}`, type: "agentMessage", turnId: `t${i}`, text: `a${i}` });
+      if (i === 3) items.push({ id: "stray", type: "agentMessage", text: "no turn" });
+    }
+    const v = view({ items: items as ThreadView["items"] });
+    expect(turnCount(v)).toBe(5);
+    expect(toMessages(v, {}, 2).map((m) => m.id)).toEqual(["u4", "turn:t4", "u5", "turn:t5"]);
+    // the window covers the thread: everything, the stray included
+    expect(toMessages(v, {}, 5).length).toBe(toMessages(v).length);
+    expect(toMessages(v, {}, 99).length).toBe(toMessages(v).length);
   });
 
   test("the turn in flight is running; a streaming command has no result yet", () => {

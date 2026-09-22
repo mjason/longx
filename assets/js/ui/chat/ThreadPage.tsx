@@ -8,6 +8,7 @@ import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 import { FileMentions, FileMentionText } from "./FileMentions";
 import { AgentLabel } from "./AgentLabel";
+import { HistoryContext, HistoryEdge } from "./HistoryEdge";
 import { AgentsPanel, AgentsPill } from "./AgentsPanel";
 import { GoalBar } from "./GoalBar";
 import { ModelFailedBanner } from "./ModelFailedBanner";
@@ -38,7 +39,7 @@ const ComposerQueue = () => {
   return <MessageQueue onInsert={(id) => void insertQueued(id)} insertLabel={t.queueInsert} removeLabel={t.queueRemove} hint={t.queueHint} />;
 };
 
-const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers, ComposerQueue, UserText: FileMentionText, AgentLabel, ReasoningGroup: ReasoningSteps };
+const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers, ComposerQueue, UserText: FileMentionText, AgentLabel, ReasoningGroup: ReasoningSteps, HistoryEdge };
 
 /**
  * The centre of the project window: assistant-ui's Thread element over the
@@ -81,7 +82,9 @@ export function ThreadPage() {
       <ModelFailedBanner />
       <div className="relative min-h-0 flex-1">
         {viewport === "phone" ? <AgentsPill /> : <AgentsPanel />}
-        <Thread components={THREAD_COMPONENTS} autoFocus={false} />
+        <HistoryContext.Provider value={chat.history}>
+          <Thread components={THREAD_COMPONENTS} autoFocus={false} />
+        </HistoryContext.Provider>
       </div>
     </div>
   );

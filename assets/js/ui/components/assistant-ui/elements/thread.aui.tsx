@@ -90,6 +90,8 @@ export type ThreadComponents = {
   UserText?: TextMessagePartComponent | undefined;
   /** Longx: the label over another agent's message (a team name, or a session's address resolved to its title) */
   AgentLabel?: ComponentType<{ from: string }> | undefined;
+  /** Longx: the edge above a long thread's window — the earlier turns waiting there (chat/HistoryEdge) */
+  HistoryEdge?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
   ToolGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
@@ -166,8 +168,9 @@ export const ReadOnlyThread: FC<{ components?: ThreadComponents | undefined }> =
 }) => (
   <ThreadComponentsContext.Provider value={components}>
     <ThreadPrimitive.Root className="aui-root aui-thread-root bg-background @container flex h-full flex-col" style={{ ["--thread-max-width" as string]: "44rem" }}>
-      <ThreadPrimitive.Viewport data-slot="aui_thread-viewport" className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth">
+      <ThreadPrimitive.Viewport data-slot="aui_thread-viewport" className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll">
         <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
+          {components.HistoryEdge ? <components.HistoryEdge /> : null}
           <div data-slot="aui_message-group" className="mb-6 flex flex-col gap-y-6 empty:hidden">
             <ThreadPrimitive.Messages>{() => <ThreadMessage />}</ThreadPrimitive.Messages>
           </div>
@@ -184,7 +187,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
   isEmpty,
   autoFocus,
 }) => {
-  const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
+  const { Welcome = ThreadWelcome, HistoryEdge } = useContext(ThreadComponentsContext);
 
   return (
     <ThreadPrimitive.Root
@@ -200,9 +203,13 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
           the viewport's auto-scroll off, so a long turn (a streaming command, the
           thinking panel growing) ran below the fold — here the viewport follows the
           bottom while the reader is there and stops when they scroll up */}
+      {/* Longx: no `scroll-smooth` — the registry's default animated every jump to the
+          bottom, and a long thread re-laid out several times while it opened (lazy
+          shiki and KaTeX, content-visibility sizing), so the reader watched it slide
+          for seconds */}
       <ThreadPrimitive.Viewport
         data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
+        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll"
       >
         <div
           className={cn(
@@ -218,6 +225,8 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
           <AuiIf condition={isHistoryLoadingView}>
             <ThreadHistorySkeleton />
           </AuiIf>
+
+          {HistoryEdge ? <HistoryEdge /> : null}
 
           <div
             data-slot="aui_message-group"

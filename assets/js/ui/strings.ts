@@ -341,6 +341,12 @@ export const t = {
     items: "条目",
   },
   stalledFor: (s: number) => `${s} 秒没有新输出`,
+  // chat: the part of a long thread above the window it opened on
+  history: {
+    hidden: (turns: number) => `还有 ${turns} 轮更早的对话`,
+    more: (turns: number) => `显示更早 ${turns} 轮`,
+    all: "显示全部",
+  },
   // chat: goal mode
   goal: {
     title: "目标",

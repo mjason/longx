@@ -92,6 +92,32 @@ describe("ThreadPage", () => {
     setViewport(1280);
   });
 
+  test("a long thread opens on its last 20 turns; the edge above says how many more there are and shows them on request, all of them or 20 at a time", async () => {
+    const items: Record<string, unknown>[] = [];
+    for (let i = 1; i <= 45; i++) {
+      items.push({ id: `u${i}`, type: "userMessage", turnId: `turn_${i}`, content: [{ type: "text", text: `问题 ${i}` }] });
+      items.push({ id: `a${i}`, type: "agentMessage", turnId: `turn_${i}`, text: `回答 ${i}` });
+    }
+    renderAt("/p/app-1/t/t1");
+    await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
+    act(() => channel.reply("ok", { ...snapshot, items }));
+    await screen.findByText("问题 45");
+    expect(screen.queryByText("问题 25")).not.toBeInTheDocument();
+    expect(screen.getByText("问题 26")).toBeInTheDocument();
+    const edge = screen.getByTestId("history-edge");
+    expect(edge).toHaveTextContent("还有 25 轮更早的对话");
+
+    const user = userEvent.setup();
+    await user.click(within(edge).getByRole("button", { name: /显示更早 20 轮/ }));
+    await screen.findByText("问题 6");
+    expect(screen.queryByText("问题 5")).not.toBeInTheDocument();
+    expect(screen.getByTestId("history-edge")).toHaveTextContent("还有 5 轮更早的对话");
+
+    await user.click(within(screen.getByTestId("history-edge")).getByRole("button", { name: /显示全部/ }));
+    await screen.findByText("问题 1");
+    expect(screen.queryByTestId("history-edge")).not.toBeInTheDocument();
+  });
+
   test("renders the snapshot: user message, command block, markdown reply", async () => {
     await open();
     expect(screen.getByTestId("tool-command")).toHaveTextContent("mix test");

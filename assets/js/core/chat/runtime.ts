@@ -24,7 +24,7 @@ import {
   buildAdapter,
   type ThreadTarget,
 } from "./adapter";
-import { subagentsOf, type SubViews } from "./messages";
+import { subagentsOf, turnCount, type SubViews } from "./messages";
 import { runningTurnId, type ThreadView } from "./thread";
 import { csrfToken } from "@/core/rpcHooks";
 import { FileUploadAttachmentAdapter } from "./fileAttachments";
@@ -52,6 +52,15 @@ export type LongxRuntimeOptions = {
 /** `compacting`: a context fold between turns — no turn runs, but the kernel is busy and the page says so */
 export type TurnState = "idle" | "running" | "waiting" | "compacting";
 
+/** how many turns a thread opens on; the edge above them shows more on request */
+export const HISTORY_WINDOW = 20;
+
+/** the part of the thread above the window: how many turns wait there, and how to show them */
+export type ThreadHistory = {
+  hiddenTurns: number;
+  showEarlier: (turns: number | "all") => void;
+};
+
 export type LongxRuntime = {
   runtime: AssistantRuntime;
   projectId: string;
@@ -64,6 +73,7 @@ export type LongxRuntime = {
   ready: boolean;
   error: string | null;
   state: TurnState;
+  history: ThreadHistory;
   /** why the thread cannot take messages, if so */
   disabledReason: string | null;
   /** the project's default model id, for the rail to name what a new chat starts on */
@@ -270,12 +280,26 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     [invalidate, threadId, onOpenThread],
   );
 
+  // a long thread opens on its tail; another thread starts over
+  const [windowTurns, setWindowTurns] = useState(HISTORY_WINDOW);
+  useEffect(() => setWindowTurns(HISTORY_WINDOW), [threadId]);
+  const totalTurns = useMemo(() => turnCount(view), [view]);
+  const history = useMemo<ThreadHistory>(
+    () => ({
+      hiddenTurns: Math.max(0, totalTurns - windowTurns),
+      showEarlier: (turns) =>
+        setWindowTurns((w) => (turns === "all" ? Number.MAX_SAFE_INTEGER : w + turns)),
+    }),
+    [totalTurns, windowTurns],
+  );
+
   const adapter = useMemo(
     () =>
       buildAdapter({
         target,
         view,
         subviews,
+        window: windowTurns,
         model,
         effort,
         disabled: disabledReason !== null,
@@ -296,6 +320,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       target?.kernelThreadId,
       view,
       subviews,
+      windowTurns,
       model,
       effort,
       disabledReason,
@@ -339,6 +364,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     ready,
     error,
     state,
+    history,
     disabledReason,
     defaultModelId,
     definitionModel,
