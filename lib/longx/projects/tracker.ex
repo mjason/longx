@@ -393,7 +393,9 @@ defmodule Longx.Projects.Tracker do
           error: "no progress for #{div(stall_after, 1000)} seconds; interrupted"
         })
 
-        case Projects.interrupt_turn(thread, turn.kernel_turn_id) do
+        case Projects.interrupt_turn(thread, turn.kernel_turn_id,
+               by: {:watchdog, div(stall_after, 1000)}
+             ) do
           # nothing to interrupt: the row outlived its agent (a crash nobody
           # saw, a Tracker restart) — settle it here, or the thread stays
           # "active" and refuses every message until the next boot

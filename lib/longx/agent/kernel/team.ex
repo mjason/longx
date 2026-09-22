@@ -10,6 +10,16 @@ defmodule Longx.Agent.Kernel.Team do
   def with_activity(state, nil), do: state
   def with_activity(state, {child_id, name, kind}), do: activity(state, child_id, name, kind)
 
+  # how a child's report marks it in the team and on the page: a finished turn
+  # is done, a stopped one stopped (not finished), a failed one failed
+  def member_status("completed"), do: :done
+  def member_status("interrupted"), do: :stopped
+  def member_status("failed"), do: :failed
+  def member_status(_), do: :done
+
+  def activity_kind("completed"), do: "completed"
+  def activity_kind(_), do: "interrupted"
+
   # what the parent's view shows of a child: codex's subAgentActivity
   def activity(%State{} = state, child_id, name, kind) do
     ui = %{
@@ -352,6 +362,8 @@ defmodule Longx.Agent.Kernel.Team do
     report =
       case {status, error} do
         {"completed", _} -> last_answer(state) || "(no answer)"
+        # a stop with its cause (`Agent.interrupt/2` `by:`) is said as it is
+        {"interrupted", "stopped by " <> _} -> error
         {other, %{"message" => message}} -> "#{other}:\n```\n#{message}\n```"
         {other, _} -> "#{other}:\n```\n#{error || "no details"}\n```"
       end
@@ -363,14 +375,19 @@ defmodule Longx.Agent.Kernel.Team do
 
     case Longx.Agent.whereis(target) do
       pid when is_pid(pid) ->
-        Kernel.send(pid, {:agent_message, name, report, kind})
+        Kernel.send(pid, {:agent_message, name, report, kind, status})
 
       nil ->
         # the asker left idle meanwhile: bring it back with the report — from a
         # task, since a GenServer.call from inside this callback could meet the
         # asker calling us (its stop asks children first) and wait 15 s for nothing
         Task.Supervisor.start_child(Longx.Agent.TaskSupervisor, fn ->
-          Longx.Agent.send(target, report, from: name, hops: hops + 1, kind: kind)
+          Longx.Agent.send(target, report,
+            from: name,
+            hops: hops + 1,
+            kind: kind,
+            activity: {state.thread_id, name, activity_kind(status)}
+          )
         end)
     end
 

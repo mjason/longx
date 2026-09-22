@@ -223,8 +223,15 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     starts a turn when idle and is a *steer* while one runs (into the context at the next
     step after the tool outputs, and shown then; a step is added when the model had already
     stopped) — or, with `deliver: :idle`, waits in the mailbox for the turn to end and
-    starts one of its own (answers `:ok`); `interrupt/1` kills the tasks (a command's shim tree dies with its task) and
-    ends the turn `interrupted`; `retract/2`; `compact/1`; `status/1`; `respond/3` answers
+    starts one of its own (answers `:ok`); `interrupt/2` kills the tasks (a command's shim tree dies with its task) and
+    ends the turn `interrupted` — **`by:` names who stopped it** (`:person` from the
+    page, `{:watchdog, seconds}` from the Tracker's stall watchdog): the row keeps the
+    words and a child's report to its parent says them ("stopped by the person from the
+    page; the task is not finished — do not start it again unless asked") — a bare
+    "interrupted: no details" once read to the parent as an environment failure and it
+    restarted the task the person had just stopped; a report carries the turn's status
+    (`{:agent_message, name, text, kind, status}`, `activity:` on the idle path), so a
+    stopped child's row says 已中断 and the member is `stopped`, not `done`; `retract/2`; `compact/1`; `status/1`; `respond/3` answers
     an ask; `set_goal/2` / `clear_goal/1`. Guards: `max_steps` per turn (500, `config
     :longx, Longx.Agent, max_steps:`) and 20 continuations. **The process is light and
     leaves when idle** (`idle_ms:`, 30 min; `{:stop, :normal}`): `Longx.Agent.Kernel.Specs`
@@ -245,7 +252,8 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     completed / interrupted; `Agent.interacted/2`) are `:activity` transcript items — UI
     only, `append(…, context?: false)`, never in the model's context. **A finished child
     stays in the team** (`children/1`: `id`, `name`, `status` working / done / failed,
-    `role`, `task`, in the order made): its transcript is kept, so a follow-up
+    `role`, `task`, in the order made; `stopped` = its turn was stopped by the person or
+    the watchdog, not finished): its transcript is kept, so a follow-up
     `send/3` (`from:` the asker's name, `reply_to:` its thread id) continues it on the
     same prefix — the provider caches it, a fresh spawn would start from nothing — and
     the answer of the turn a message starts goes to `reply_to`, the parent otherwise.

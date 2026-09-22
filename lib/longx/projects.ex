@@ -1081,10 +1081,10 @@ defmodule Longx.Projects do
   stall watchdog). `{:error, :not_running}` when that turn is not the one
   running.
   """
-  @spec interrupt_turn(Thread.t(), String.t()) :: :ok | {:error, :not_running}
-  def interrupt_turn(%Thread{} = thread, kernel_turn_id) do
+  @spec interrupt_turn(Thread.t(), String.t(), keyword) :: :ok | {:error, :not_running}
+  def interrupt_turn(%Thread{} = thread, kernel_turn_id, opts \\ [by: :person]) do
     case agent_status(thread.kernel_thread_id) do
-      {:running, ^kernel_turn_id} -> Longx.Agent.interrupt(thread.kernel_thread_id)
+      {:running, ^kernel_turn_id} -> Longx.Agent.interrupt(thread.kernel_thread_id, opts)
       _ -> {:error, :not_running}
     end
   end

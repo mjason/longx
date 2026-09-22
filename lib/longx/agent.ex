@@ -157,7 +157,8 @@ defmodule Longx.Agent do
 
   @doc """
   The agent's team, in the order it was made: every agent it spawned, with
-  `status` `"working"` / `"done"` / `"failed"` — a finished one stays a
+  `status` `"working"` / `"done"` / `"stopped"` (the person or the watchdog
+  stopped its turn: not finished) / `"failed"` — a finished one stays a
   member (its transcript is kept; `send/3` continues it) until
   `forget_child/2`.
   """
@@ -232,7 +233,7 @@ defmodule Longx.Agent do
 
   @doc "Stops the running turn (its items end as they are)."
   @spec interrupt(String.t()) :: :ok | {:error, :not_running}
-  def interrupt(thread_id), do: call(thread_id, :interrupt, 15_000)
+  def interrupt(thread_id, opts \\ []), do: call(thread_id, {:interrupt, opts}, 15_000)
 
   @doc "Stops the running turn and drops it from the transcript and the view (`thread/reverted`)."
   @spec retract(String.t(), String.t()) :: :ok | {:error, :not_running}
@@ -620,11 +621,14 @@ defmodule Longx.Agent do
     {:reply, {:ok, goal != nil}, %{state | goal: nil}}
   end
 
-  defp on_call(%State{phase: :idle} = state, :interrupt, _from),
+  defp on_call(%State{phase: :idle} = state, {:interrupt, _opts}, _from),
     do: {:reply, {:error, :not_running}, state}
 
-  defp on_call(state, :interrupt, _from) do
-    {:reply, :ok, state |> stop_work() |> end_turn("interrupted", nil)}
+  # `by:` says who stopped the turn — the words the row keeps and the parent
+  # reads: a bare "interrupted: no details" once read as an environment failure
+  # and the parent restarted the task the person had just stopped
+  defp on_call(state, {:interrupt, opts}, _from) do
+    {:reply, :ok, state |> stop_work() |> end_turn("interrupted", interrupted_by(opts[:by]))}
   end
 
   defp on_call(%State{phase: phase, turn_id: turn_id} = state, {:retract, turn_id}, _from)
@@ -1157,12 +1161,16 @@ defmodule Longx.Agent do
     do: {:noreply, state, {:continue, :step}}
 
   # another agent (a child reporting back, a teammate answering) speaks:
-  # into the mailbox, like the person; `kind` is what the message is
-  defp on_info(state, {:agent_message, from, text, kind}) do
+  # into the mailbox, like the person; `kind` is what the message is, `status`
+  # how the child's turn ended (a stopped child is not a finished one)
+  defp on_info(state, {:agent_message, from, text, kind}),
+    do: on_info(state, {:agent_message, from, text, kind, "completed"})
+
+  defp on_info(state, {:agent_message, from, text, kind, status}) do
     case Enum.find(state.children, fn {_id, c} -> c.name == from end) do
       {id, _} ->
-        state = state |> Team.rewatch(id) |> Team.mark(id, :done)
-        deliver(state, text, from, {id, from, "completed"}, kind)
+        state = state |> Team.rewatch(id) |> Team.mark(id, Team.member_status(status))
+        deliver(state, text, from, {id, from, Team.activity_kind(status)}, kind)
 
       nil ->
         deliver(state, text, from, nil, kind)
@@ -1246,6 +1254,15 @@ defmodule Longx.Agent do
 
   defp stop_turn(%State{phase: :idle} = state), do: state
   defp stop_turn(state), do: state |> stop_work() |> end_turn("interrupted", nil)
+
+  defp interrupted_by(:person),
+    do:
+      "stopped by the person from the page; the task is not finished — do not start it again unless asked"
+
+  defp interrupted_by({:watchdog, seconds}) when is_integer(seconds),
+    do: "stopped by Longx: no progress for #{div(seconds, 60)} minutes; the task is not finished"
+
+  defp interrupted_by(_), do: nil
 
   defp model_event({:completed, response, %{context_window: window}}, state) do
     state = state |> Stream.close_open_items() |> Stream.record_usage(response["usage"], window)

@@ -1945,6 +1945,49 @@ defmodule Longx.AgentTest do
     Bypass.pass(bypass)
   end
 
+  # a plain "interrupted: no details" once read as an environment failure and the parent restarted the task
+  test "a child stopped by the person: the parent is told who stopped it and that the task is unfinished, the row says interrupted, the member is stopped",
+       %{bypass: bypass, dir: dir} do
+    parent = agent!("parent-#{System.unique_integer([:positive])}", dir, name: "main")
+
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("never")),
+      ResponsesFixture.assistant_message("noted")
+    ])
+
+    {:ok, child} = Agent.spawn(parent, "helper", "hold on", model: nil)
+    :ok = ThreadState.subscribe(child)
+    assert_receive {:held, _handler}, 5_000
+    drain_activities()
+
+    assert :ok = Agent.interrupt(child, by: :person)
+    Bypass.pass(bypass)
+
+    assert %{"turn" => %{"status" => "interrupted", "error" => %{"message" => reason}}} =
+             await_on(child, "turn/completed")
+
+    assert reason =~ "stopped by the person"
+
+    assert %{"turn" => %{"id" => woke}} = await_on(parent, "turn/started")
+
+    assert %{
+             "item" => %{
+               "type" => "subAgentActivity",
+               "kind" => "interrupted",
+               "agentThreadId" => ^child
+             }
+           } =
+             await_item_completed_of_type("subAgentActivity")
+
+    assert %{"turnId" => ^woke} =
+             await_user_message_matching(
+               ~r/\[agent helper\] stopped by the person from the page; the task is not finished — do not start it again unless asked/
+             )
+
+    await_on(parent, "turn/completed")
+    assert [%{id: ^child, name: "helper", status: "stopped"}] = Agent.children(parent)
+  end
+
   test "a child crashing past its guard's budget is gone for good: the parent hears it exited, the member is failed",
        %{bypass: bypass, dir: dir} do
     parent = agent!("parent-#{System.unique_integer([:positive])}", dir, name: "main")
