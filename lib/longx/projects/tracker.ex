@@ -125,6 +125,7 @@ defmodule Longx.Projects.Tracker do
   end
 
   def handle_info(:tick, state) do
+    reconcile_views()
     {:noreply, state |> check_stalls() |> schedule_tick()}
   end
 
@@ -188,6 +189,32 @@ defmodule Longx.Projects.Tracker do
     end
   end
 
+  # a view still showing a turn in flight whose row is settled — the agent died
+  # and its guard gave up, a restart nobody saw — is brought to the row: the
+  # view is what the page and the parent's sub-agent row read, and a crashed
+  # child once showed as working for ever
+  defp reconcile_views do
+    for id <- Longx.Agent.ThreadState.Store.running(),
+        %{"id" => turn_id} <- [Longx.Agent.ThreadState.Store.meta(id).turn],
+        {:ok, %Turn{status: status} = row} <- [Projects.get_turn_by_kernel_id(turn_id)],
+        status != :in_progress do
+      Longx.Agent.ThreadState.ingest(id, "turn/completed", %{
+        "threadId" => id,
+        "turn" =>
+          %{
+            "id" => turn_id,
+            "status" => Atom.to_string(status),
+            "completedAt" =>
+              row.completed_at && DateTime.to_unix(row.completed_at, :millisecond) / 1000
+          }
+          |> then(&if(row.error, do: Map.put(&1, "error", %{"message" => row.error}), else: &1))
+          |> Map.reject(fn {_k, v} -> is_nil(v) end)
+      })
+    end
+
+    :ok
+  end
+
   # a turn no agent will ever complete: failed with the reason, the thread idle
   defp settle(%Thread{} = thread, %Turn{} = turn, error) do
     Projects.touch_thread!(thread, %{status: :idle, last_activity_at: DateTime.utc_now()})
@@ -230,7 +257,9 @@ defmodule Longx.Projects.Tracker do
       # turn: that row is out of the history already, its ending is no news
       if row.status != :reverted do
         status = turn_status(turn["status"])
-        error = get_in(turn, ["error", "message"]) || row.error
+        # a row the monitor already failed keeps its reason (the crash): the
+        # restarted agent's own event only knows it was cut
+        error = row.error || get_in(turn, ["error", "message"])
 
         Projects.complete_turn!(row, %{
           status: status,

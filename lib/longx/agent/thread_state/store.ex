@@ -67,6 +67,12 @@ defmodule Longx.Agent.ThreadState.Store do
     end
   end
 
+  @doc "Every thread whose view shows a turn in flight — what the Tracker's watchdog reconciles with the rows."
+  @spec running() :: [String.t()]
+  def running do
+    :ets.select(@meta, [{{:"$1", %{turn: %{"status" => "inProgress"}}}, [], [:"$1"]}])
+  end
+
   @doc "The rows' turns under the store's own (what the store saw since is newer)."
   @spec seed_turns(String.t(), %{optional(String.t()) => map}) :: :ok
   def seed_turns(thread_id, turns) when is_map(turns) do

@@ -720,6 +720,54 @@ defmodule Longx.Projects.ThreadsTest do
     assert_eventually_ok(fn -> thread.kernel_thread_id not in Projects.Tracker.in_flight() end)
   end
 
+  test "the watchdog reconciles a view still showing a turn in flight whose row is settled (a crashed child's row was failed while its view said working for ever)",
+       %{project: project} do
+    previous = Application.get_env(:longx, Projects.Tracker, [])
+    Application.put_env(:longx, Projects.Tracker, stall_after: 60_000, tick: 100)
+    on_exit(fn -> Application.put_env(:longx, Projects.Tracker, previous) end)
+
+    {:ok, thread} = Projects.start_thread(project)
+    id = thread.kernel_thread_id
+    :ok = ThreadState.subscribe(id)
+    # the view says a turn is in flight…
+    turn_id = "turn_" <> Ash.UUID.generate()
+
+    ThreadState.ingest(id, "turn/started", %{
+      "threadId" => id,
+      "turn" => %{"id" => turn_id, "status" => "inProgress"}
+    })
+
+    assert_receive {:thread, _, "turn/started", _}, 5_000
+
+    assert_eventually_ok(fn ->
+      match?([%Turn{status: :in_progress}], Projects.list_turns!(thread))
+    end)
+
+    # …while its row was settled behind it (the agent died, the Tracker's monitor failed the row)
+    [row] = Projects.list_turns!(thread)
+
+    Projects.complete_turn!(row, %{
+      status: :failed,
+      completed_at: DateTime.utc_now(),
+      error: "the agent died mid-turn: boom"
+    })
+
+    Projects.touch_thread!(thread!(thread.id), %{status: :idle})
+
+    # the next tick brings the view to the row
+    assert_receive {:thread, _, "turn/completed",
+                    %{
+                      "turn" => %{
+                        "id" => ^turn_id,
+                        "status" => "failed",
+                        "error" => %{"message" => "the agent died mid-turn: boom"}
+                      }
+                    }},
+                   5_000
+
+    assert %{"status" => "failed"} = ThreadState.snapshot(id).turn
+  end
+
   test "a Tracker that restarts mid-turn recovers what is in flight from the rows: the running turn still completes, an orphaned row is settled",
        %{bypass: bypass, project: project} do
     script!(bypass, [held(ResponsesFixture.assistant_message("one"))])

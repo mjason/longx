@@ -68,15 +68,37 @@ defmodule Longx.Agent do
   def ensure(opts) do
     Longx.Agent.Kernel.Specs.put(Keyword.fetch!(opts, :thread_id), opts)
 
-    # the start returns as soon as the process is up; the caller — not the
-    # supervisor, which starts every agent one after the other — then waits
-    # for the transcript to be loaded (a `:loaded?` call is postponed until it is)
-    case DynamicSupervisor.start_child(@supervisor, {__MODULE__, opts}) do
-      {:ok, pid} -> loaded(pid)
-      {:error, {:already_started, pid}} -> loaded(pid)
+    # the agent under a guard of its own (`Longx.Agent.Guard`: restarted when
+    # it crashes, gone with it when it leaves idle); the start returns as soon
+    # as the process is up; the caller — not the supervisor, which starts every
+    # agent one after the other — then waits for the transcript to be loaded
+    # (a `:loaded?` call is postponed until it is)
+    thread_id = Keyword.fetch!(opts, :thread_id)
+
+    case DynamicSupervisor.start_child(@supervisor, {Longx.Agent.Guard, opts}) do
+      {:ok, _guard} -> loaded(await_pid(thread_id))
+      {:error, {:already_started, _guard}} -> loaded(await_pid(thread_id))
       other -> other
     end
   end
+
+  # the agent's pid under its guard — a guard found already running may be
+  # between a crash and the restart for a moment
+  defp await_pid(thread_id, tries \\ 50) do
+    case whereis(thread_id) do
+      pid when is_pid(pid) ->
+        pid
+
+      nil when tries > 0 ->
+        Process.sleep(20)
+        await_pid(thread_id, tries - 1)
+
+      nil ->
+        nil
+    end
+  end
+
+  defp loaded(nil), do: {:error, :not_started}
 
   defp loaded(pid) do
     :gen_statem.call(pid, :loaded?, 60_000)
@@ -248,16 +270,30 @@ defmodule Longx.Agent do
     with {:ok, _pid} <- ensure_alive(thread_id), do: call(thread_id, :clear_goal)
   end
 
-  def start_link(opts) do
+  # a restart right after a crash can meet the dead process's name still in
+  # the Registry (its DOWN not yet processed): a short wait, then again
+  def start_link(opts, tries \\ 10) do
     thread_id = Keyword.fetch!(opts, :thread_id)
-    :gen_statem.start_link(via(thread_id), __MODULE__, opts, [])
+
+    case :gen_statem.start_link(via(thread_id), __MODULE__, opts, []) do
+      {:error, {:already_started, pid}} when tries > 0 ->
+        if Process.alive?(pid) do
+          {:error, {:already_started, pid}}
+        else
+          Process.sleep(20)
+          start_link(opts, tries - 1)
+        end
+
+      other ->
+        other
+    end
   end
 
   def child_spec(opts) do
     %{
       id: {__MODULE__, Keyword.fetch!(opts, :thread_id)},
       start: {__MODULE__, :start_link, [opts]},
-      restart: :temporary
+      restart: :transient
     }
   end
 
@@ -321,6 +357,7 @@ defmodule Longx.Agent do
 
     {:ok, _} = ThreadState.ensure(thread_id)
     replay(state, items)
+    settle_stale_turn(state)
     state = Team.restore_children(state)
     # a child goes when its parent goes
     with parent when is_binary(parent) <- state.parent, pid when is_pid(pid) <- whereis(parent) do
@@ -328,6 +365,35 @@ defmodule Longx.Agent do
     end
 
     state
+  end
+
+  # a turn the view still shows in flight is one this process's predecessor
+  # was running when it crashed (the guard restarted it): the view is settled
+  # here — the row by the Tracker's monitor — and the parent told the task
+  # was not finished; recovery is the restarted process's own job
+  defp settle_stale_turn(%State{thread_id: id} = state) do
+    case ThreadState.snapshot(id).turn do
+      %{"id" => turn_id, "status" => "inProgress"} ->
+        emit(state, "turn/completed", %{
+          "turn" => %{
+            "id" => turn_id,
+            "status" => "failed",
+            "completedAt" => System.system_time(:millisecond) / 1000,
+            "error" => %{
+              "message" =>
+                "the agent crashed mid-turn and was restarted; the turn was not finished"
+            }
+          }
+        })
+
+        Team.notify_parent(
+          state,
+          "restarted after a crash mid-turn; the task was not finished — ask again or take it over"
+        )
+
+      _ ->
+        :ok
+    end
   end
 
   @default_idle_ms 30 * 60_000
@@ -1094,8 +1160,12 @@ defmodule Longx.Agent do
   # into the mailbox, like the person; `kind` is what the message is
   defp on_info(state, {:agent_message, from, text, kind}) do
     case Enum.find(state.children, fn {_id, c} -> c.name == from end) do
-      {id, _} -> deliver(Team.mark(state, id, :done), text, from, {id, from, "completed"}, kind)
-      nil -> deliver(state, text, from, nil, kind)
+      {id, _} ->
+        state = state |> Team.rewatch(id) |> Team.mark(id, :done)
+        deliver(state, text, from, {id, from, "completed"}, kind)
+
+      nil ->
+        deliver(state, text, from, nil, kind)
     end
   end
 
@@ -1104,22 +1174,46 @@ defmodule Longx.Agent do
   # for the model, the child a failed member it may ask again or close. The
   # parent gone takes this agent along.
   defp on_info(state, {:DOWN, ref, :process, pid, reason}) do
-    case Enum.find(state.children, fn {_id, c} -> c.ref == ref end) do
-      {id, %{name: name, status: status}} ->
-        # :noproc — a monitor set on a process that had just left (a revived
-        # parent watching a child that went idle meanwhile) — is a normal leave
-        if reason in [:normal, :shutdown, :noproc] or match?({:shutdown, _}, reason) do
-          {:noreply, Team.mark(state, id, if(status == :working, do: :done, else: status), nil)}
-        else
+    case Enum.find(state.children, fn {_id, c} -> c.ref == ref or c[:guard_ref] == ref end) do
+      {id, %{name: name, status: status, guard_ref: ^ref} = child} ->
+        # the child's guard ended: with a crash on record it gave up (the budget
+        # spent), else the child left idle — both exit `:shutdown`
+        if child[:crashed] do
           state = Team.mark(state, id, :failed, nil)
 
           deliver(
             state,
-            "exited:\n```\n#{exit_text(reason)}\n```",
+            "exited: crashed repeatedly and was given up after #{Longx.Agent.Guard.max_restarts()} restarts in a minute — the turn's failure names the reason; spawn it anew if the work is still wanted",
             name,
             {id, name, "interrupted"},
             nil
           )
+        else
+          {:noreply, Team.mark(state, id, if(status == :working, do: :done, else: status), nil)}
+        end
+
+      {id, %{name: name, status: status} = child} ->
+        # :noproc — a monitor set on a process that had just left (a revived
+        # parent watching a child that went idle meanwhile) — is a normal leave
+        cond do
+          reason in [:normal, :shutdown, :noproc] or match?({:shutdown, _}, reason) ->
+            {:noreply, Team.mark(state, id, if(status == :working, do: :done, else: status), nil)}
+
+          # under a guard the child comes back on its own and reports itself
+          # when its turn was cut; the guard's end says whether it gave up
+          child[:guard_ref] != nil ->
+            {:noreply, Team.crashed(state, id)}
+
+          true ->
+            state = Team.mark(state, id, :failed, nil)
+
+            deliver(
+              state,
+              "exited:\n```\n#{exit_text(reason)}\n```",
+              name,
+              {id, name, "interrupted"},
+              nil
+            )
         end
 
       nil ->

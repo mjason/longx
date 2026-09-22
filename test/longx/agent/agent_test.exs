@@ -1902,7 +1902,92 @@ defmodule Longx.AgentTest do
              "[agent researcher] CHILD REPORT: 42"
   end
 
-  test "a parent can talk to its child; a crashed child is a message; a stopped parent takes its children along",
+  test "a child crashing mid-turn is restarted by its guard: the view's turn is settled, the parent hears it restarted, the member stays (the crash once left the child 'working' for ever)",
+       %{bypass: bypass, dir: dir} do
+    parent = agent!("parent-#{System.unique_integer([:positive])}", dir, name: "main")
+    # the child's one call is held (its turn stays in flight); the parent's, once told, answers
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("never")),
+      ResponsesFixture.assistant_message("fine")
+    ])
+
+    {:ok, child} = Agent.spawn(parent, "helper", "hold on", model: nil)
+    :ok = ThreadState.subscribe(child)
+    assert_receive {:held, _handler}, 5_000
+    # the child's turn began before the subscription: the view says it is in flight
+    assert %{"id" => turn_id, "status" => "inProgress"} = ThreadState.snapshot(child).turn
+
+    old_pid = Agent.whereis(child)
+    Process.exit(old_pid, :kill)
+    new_pid = await_restart(child, old_pid)
+    assert Process.alive?(new_pid)
+
+    # the restarted process settles the turn it found in flight in the view…
+    assert %{
+             "turn" => %{
+               "id" => ^turn_id,
+               "status" => "failed",
+               "error" => %{"message" => message}
+             }
+           } =
+             await_on(child, "turn/completed")
+
+    assert message =~ "crash"
+    assert Agent.status(child) == :idle
+    # …and tells its parent, which decides what to do (the task was not finished)
+    assert %{"turn" => %{"id" => woke}} = await_on(parent, "turn/started")
+
+    assert %{"turnId" => ^woke} =
+             await_user_message_matching(~r/\[agent helper\] restarted after a crash mid-turn/)
+
+    await_on(parent, "turn/completed")
+    assert [%{id: ^child, name: "helper", status: "done"}] = Agent.children(parent)
+    Bypass.pass(bypass)
+  end
+
+  test "a child crashing past its guard's budget is gone for good: the parent hears it exited, the member is failed",
+       %{bypass: bypass, dir: dir} do
+    parent = agent!("parent-#{System.unique_integer([:positive])}", dir, name: "main")
+    route!(bypass, fn _body -> ResponsesFixture.assistant_message("fine") end)
+    {:ok, child} = Agent.spawn(parent, "helper", "hold on", model: nil)
+    await_on(parent, "turn/started")
+    await_on(parent, "turn/completed")
+    drain_activities()
+
+    # three restarts in a minute is the budget; the fourth crash ends the guard
+    Enum.reduce(1..3, Agent.whereis(child), fn _, pid ->
+      Process.exit(pid, :kill)
+      await_restart(child, pid)
+    end)
+
+    Process.exit(Agent.whereis(child), :kill)
+    assert %{"turn" => %{"id" => woke}} = await_on(parent, "turn/started")
+
+    assert %{"turnId" => ^woke} =
+             await_user_message_matching(~r/\[agent helper\] exited:.*restart/s)
+
+    await_on(parent, "turn/completed")
+    assert [%{id: ^child, name: "helper", status: "failed"}] = Agent.children(parent)
+    assert Agent.whereis(child) == nil
+    assert Longx.Agent.Guard.whereis(child) == nil
+  end
+
+  # the agent back under a new pid after a crash (its guard restarts it at once)
+  defp await_restart(thread_id, old_pid, tries \\ 100) do
+    case Agent.whereis(thread_id) do
+      pid when is_pid(pid) and pid != old_pid ->
+        pid
+
+      _ when tries > 0 ->
+        Process.sleep(20)
+        await_restart(thread_id, old_pid, tries - 1)
+
+      _ ->
+        flunk("#{thread_id} did not come back")
+    end
+  end
+
+  test "a parent can talk to its child; a killed idle child comes back on its own; a stopped parent takes its children along",
        %{bypass: bypass, dir: dir} do
     parent = agent!("parent-#{System.unique_integer([:positive])}", dir, name: "main")
     route!(bypass, fn _body -> ResponsesFixture.assistant_message("fine") end)
@@ -1920,26 +2005,14 @@ defmodule Longx.AgentTest do
     await_on(parent, "turn/completed")
     drain_activities()
 
-    Process.exit(Agent.whereis(child), :kill)
-    assert %{"turn" => %{"id" => woke}} = await_on(parent, "turn/started")
-
-    assert %{
-             "item" => %{
-               "type" => "subAgentActivity",
-               "kind" => "interrupted",
-               "agentThreadId" => ^child
-             }
-           } =
-             await_item_completed_of_type("subAgentActivity")
-
-    # the reason sits in a code fence: a report is markdown, and a provider's words
-    # ("https://***.com/***") drew as bold and italics with the stars eaten
-    assert %{"turnId" => ^woke} =
-             await_user_message_matching(~r/\[agent helper\] exited:\n```\nkilled\n```/)
-
-    await_turn_end()
-    # a crashed child is still a member (its transcript is kept): ask it again or close it
-    assert [%{id: ^child, name: "helper", status: "failed"}] = Agent.children(parent)
+    # an idle child killed comes back under its guard on its own — nothing was
+    # lost, nobody is told; the member stays
+    old_pid = Agent.whereis(child)
+    Process.exit(old_pid, :kill)
+    new_pid = await_restart(child, old_pid)
+    assert Process.alive?(new_pid)
+    refute_receive {:thread, _, "turn/started", %{"threadId" => ^parent}}, 500
+    assert [%{id: ^child, name: "helper", status: "done"}] = Agent.children(parent)
 
     {:ok, child2} = Agent.spawn(parent, "helper2", "wait", model: nil)
     pid = Agent.whereis(child2)

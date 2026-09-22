@@ -54,13 +54,19 @@ defmodule Longx.Agent.Kernel.Team do
     end
   end
 
-  # a team member: its process when alive (monitored), what it is and what
-  # it was given; `n` keeps the order the team was made in
+  # a team member: its process when alive, what it is and what it was given;
+  # `n` keeps the order the team was made in. Two monitors: the agent's pid
+  # (`ref`) and its guard (`guard_ref`, `Longx.Agent.Guard`), which stands
+  # across the child's restarts — a crash is remembered (`crashed`) until the
+  # guard either brings the child back or gives up (both end in `:shutdown`,
+  # so the guard's exit alone cannot tell the two apart)
   defp member(%State{children: children}, name, pid, status, role, task) do
     %{
       name: name,
       pid: pid,
       ref: if(pid, do: Process.monitor(pid)),
+      guard_ref: if(pid, do: watch_guard(pid)),
+      crashed: false,
       status: status,
       role: role,
       task: task,
@@ -85,13 +91,70 @@ defmodule Longx.Agent.Kernel.Team do
       child ->
         child =
           case pid do
-            :keep -> %{child | status: status}
-            nil -> %{child | status: status, pid: nil, ref: nil}
-            pid -> %{child | status: status, pid: pid, ref: Process.monitor(pid)}
+            :keep ->
+              %{child | status: status}
+
+            nil ->
+              %{child | status: status, pid: nil, ref: nil}
+
+            pid ->
+              %{
+                child
+                | status: status,
+                  pid: pid,
+                  ref: Process.monitor(pid),
+                  guard_ref: child[:guard_ref] || watch_guard(pid),
+                  crashed: false
+              }
           end
 
         %{state | children: Map.put(children, child_id, child)}
     end
+  end
+
+  @doc "A crash of the child's process noted; its guard restarts it (or gives up: the guard's own exit)."
+  def crashed(%State{children: children} = state, child_id) do
+    case Map.get(children, child_id) do
+      nil ->
+        state
+
+      child ->
+        %{
+          state
+          | children: Map.put(children, child_id, %{child | crashed: true, pid: nil, ref: nil})
+        }
+    end
+  end
+
+  # the guard over an agent's pid when it has one (a test's bare agent has none)
+  defp watch_guard(pid) do
+    case Registry.keys(Longx.Agent.Registry, pid) do
+      [thread_id | _] when is_binary(thread_id) ->
+        case Longx.Agent.Guard.whereis(thread_id) do
+          guard when is_pid(guard) -> Process.monitor(guard)
+          nil -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc "A word to the parent from this agent itself (a restart after a crash): `[agent name] …` in its mailbox, or a turn of its own when it left."
+  def notify_parent(%State{parent: nil}, _text), do: :ok
+
+  def notify_parent(%State{parent: parent, name: name}, text) do
+    case Longx.Agent.whereis(parent) do
+      pid when is_pid(pid) ->
+        Kernel.send(pid, {:agent_message, name, text, "report"})
+
+      nil ->
+        Task.Supervisor.start_child(Longx.Agent.TaskSupervisor, fn ->
+          Longx.Agent.send(parent, text, from: name, kind: "report")
+        end)
+    end
+
+    :ok
   end
 
   # a child spoken to again: alive again (revived by `Longx.Agent.send/3`)
@@ -104,8 +167,11 @@ defmodule Longx.Agent.Kernel.Team do
       {%{pid: pid}, pid} when is_pid(pid) ->
         mark(state, child_id, :working)
 
-      {%{ref: ref}, new_pid} ->
+      {%{ref: ref} = child, new_pid} ->
         if ref, do: Process.demonitor(ref, [:flush])
+        # a new process may sit under a new guard (revived after its guard gave up)
+        if child[:guard_ref], do: Process.demonitor(child[:guard_ref], [:flush])
+        state = %{state | children: Map.put(children, child_id, %{child | guard_ref: nil})}
         mark(state, child_id, :working, new_pid)
     end
   end
@@ -115,8 +181,9 @@ defmodule Longx.Agent.Kernel.Team do
       {nil, _} ->
         state
 
-      {%{ref: ref}, rest} ->
+      {%{ref: ref} = child, rest} ->
         if ref, do: Process.demonitor(ref, [:flush])
+        if child[:guard_ref], do: Process.demonitor(child[:guard_ref], [:flush])
         %{state | children: rest}
     end
   end

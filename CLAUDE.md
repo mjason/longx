@@ -161,13 +161,43 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   `agent/thread_state.ex` + `thread_state/store.ex`, `agent/transcript.ex` +
   `transcript/item.ex`, `context.ex`, `knowledge.ex`, `pipeline.ex`, `plug.ex`, `step.ex`,
   `tool.ex`.
+  - **An agent crashes and comes back — OTP does the recovery** (`Longx.Agent.Guard`):
+    every agent runs under a supervisor of its own (`Supervisor`, `one_for_one`,
+    `max_restarts` 3 in 60 s — `config :longx, Longx.Agent, max_restarts:` —, itself
+    `:temporary` under the `Longx.Agent.Supervisor` DynamicSupervisor, whose restart
+    intensity is shared by every agent and must never see a restart) with the
+    `Longx.Agent` as its one `:transient`, `significant: true` child: a crash restarts the
+    agent at once from the same options (`ensure/1` starts the guard, `await_pid/1` finds
+    the agent under it; `start_link` retries a name the Registry has not yet released),
+    the idle exit (`:normal`) takes the guard down with it (`auto_shutdown:
+    :any_significant`) so the next `ensure` starts a fresh guard on fresh options, and
+    crashing past the budget ends the guard. **The restarted process recovers its own
+    state**: `load/1`'s `settle_stale_turn` finds the view's turn still `inProgress`,
+    emits `turn/completed` (failed, "crashed mid-turn and was restarted") and
+    `Team.notify_parent`s "[agent X] restarted after a crash mid-turn; the task was not
+    finished" — the parent's model decides to ask again or take over; the turn is never
+    re-run by itself (the same malformed output would crash it again). The Tracker's
+    monitor still fails the row with the crash reason, which the row keeps over the
+    restarted agent's generic message. **A parent monitors both the child's pid and its
+    guard** (`Team.member`: `ref` / `guard_ref`, `crashed`): an abnormal `:DOWN` of the
+    pid under a guard is only noted (`Team.crashed`) — the child comes back and reports
+    itself —; the guard's `:DOWN` is `:shutdown` whether the child left idle or the guard
+    gave up (OTP exits both ways alike), so `crashed` tells them apart: given up →
+    member `failed` and "exited: crashed repeatedly and was given up after 3 restarts in
+    a minute"; a child that speaks again is re-watched (`Team.rewatch`, a new guard too).
+    **The watchdog reconciles views with rows** each tick (`reconcile_views/0`,
+    `Store.running/0`: views whose turn is `inProgress` while the row is settled get the
+    row's `turn/completed`) — a crashed child once showed as working for ever because the
+    Tracker failed the row and nothing told the view. Tests: `agent_test` (a crash
+    mid-turn restarted and settled, an idle kill coming back silently, the budget spent),
+    `threads_test` (the tick reconciling a view).
   - **A model's malformed call never ends the agent**: `Calls.prepare_call` rescues a
     `prepare:` that trips or an item the UI cannot draw into that call's error ("the
     call could not be prepared: …", a plain item), and `UI.arg/2` shows a map or list
     where a string was expected as JSON instead of `to_string`ing it — a child once died
     mid-turn ("exited: Protocol.UndefinedError … String.Chars") on a wrapped `cmd`.
-  - `Longx.Agent` — one **`:gen_statem`** per thread (`Longx.Agent.Registry`, under
-    `Longx.Agent.Supervisor`, `restart: :temporary`; states `:loading` — `init` does
+  - `Longx.Agent` — one **`:gen_statem`** per thread (`Longx.Agent.Registry`, under its
+    `Longx.Agent.Guard` under `Longx.Agent.Supervisor`, `restart: :transient`; states `:loading` — `init` does
     nothing slow (the DynamicSupervisor runs every start through it one after the other,
     and a big transcript read there held up every other agent's start); the transcript
     read, the view's replay and the team's restore are the state's first event, every
