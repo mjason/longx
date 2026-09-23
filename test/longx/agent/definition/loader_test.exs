@@ -63,6 +63,8 @@ defmodule Longx.Agent.Definition.LoaderTest do
 
     assert names(loaded.plugs) == [
              Environment,
+             Longx.Agent.Plugs.AgentsMd,
+             Longx.Agent.Plugs.Prompt,
              Shell,
              deploy,
              Patch,
@@ -76,7 +78,6 @@ defmodule Longx.Agent.Definition.LoaderTest do
              Longx.Agent.Plugs.Watches,
              Longx.Agent.Plugs.Goal,
              Longx.Agent.Plugs.Compaction,
-             Longx.Agent.Plugs.Prompt,
              Longx.Agent.Plugs.Local,
              Request
            ]
@@ -311,6 +312,55 @@ defmodule Longx.Agent.Definition.LoaderTest do
              names(Longx.Agent.Pipelines.Default.plugs())
 
     assert empty.present? == false
+  end
+
+  # AGENTS.md is read by default, as codex does; a project that does not want it says so
+  test "the shipped pipeline reads AGENTS.md right after the base prompt; a description drops it with `drop AgentsMd`",
+       %{root: root, tag: tag} do
+    shipped = names(Longx.Agent.Pipelines.Default.plugs())
+
+    assert [Longx.Agent.Plugs.Base, Longx.Agent.Plugs.AgentsMd | _] =
+             Enum.drop_while(shipped, &(&1 != Longx.Agent.Plugs.Base))
+
+    write!(
+      root,
+      ".longx/local/agent.exs",
+      "import Longx.Agent.Config\nagent do\n  drop AgentsMd\nend\n"
+    )
+
+    loaded = Loader.load(root, tag: tag, trusted: false)
+    assert loaded.errors == []
+    refute Longx.Agent.Plugs.AgentsMd in names(loaded.plugs)
+    assert Longx.Agent.Plugs.Base in names(loaded.plugs)
+  end
+
+  test "a role that should not read AGENTS.md drops it in its own description — for itself only: the main agent and the other roles keep it",
+       %{root: root, tag: tag} do
+    write!(
+      root,
+      ".longx/local/agents/scout/agent.exs",
+      "import Longx.Agent.Config\nagent do\n  summary \"looks around\"\n  drop AgentsMd\n  prompt \"scout rules\"\nend\n"
+    )
+
+    write!(
+      root,
+      ".longx/local/agents/writer/agent.exs",
+      "import Longx.Agent.Config\nagent do\n  summary \"writes\"\nend\n"
+    )
+
+    main = Loader.load(root, tag: tag, trusted: false)
+    scout = Loader.load(root, tag: tag, trusted: false, agent: "scout")
+    writer = Loader.load(root, tag: tag, trusted: false, agent: "writer")
+    assert scout.errors == []
+    # the drop is the scout's own: the main agent and every other role still read AGENTS.md
+    assert Longx.Agent.Plugs.AgentsMd in names(main.plugs)
+    assert Longx.Agent.Plugs.AgentsMd in names(writer.plugs)
+    refute Longx.Agent.Plugs.AgentsMd in names(scout.plugs)
+
+    assert [Longx.Agent.Plugs.Base, Longx.Agent.Plugs.Prompt | _] =
+             Enum.drop_while(names(scout.plugs), &(&1 != Longx.Agent.Plugs.Base))
+
+    assert {Longx.Agent.Plugs.Prompt, [text: "scout rules"]} in scout.plugs
   end
 
   test "shared and local are two layers; local wins; the old flat plugs/ still counts as shared",

@@ -666,22 +666,59 @@ defmodule Longx.Agent.PlugsTest do
     end
   end
 
+  # codex's AGENTS.md: core/src/agents_md.rs (discovery, the shared budget) and
+  # context/user_instructions.rs (the wrapper) — read by default, `drop AgentsMd` in a
+  # description turns it off
   describe "AgentsMd" do
-    test "collects AGENTS.md from the root down to the cwd, nearest last", %{dir: dir} do
-      child = Path.join(dir, "sub")
+    test "codex's discovery: the project root (the nearest .git) down to the cwd, root first, never above; AGENTS.override.md wins in its directory; a blank file is skipped; codex's wrapper",
+         %{dir: dir} do
+      repo = Path.join(dir, "repo")
+      child = Path.join(repo, "pkg/sub")
+      File.mkdir_p!(Path.join(repo, ".git"))
       File.mkdir_p!(child)
-      File.write!(Path.join(dir, "AGENTS.md"), "parent rules")
+      File.write!(Path.join(dir, "AGENTS.md"), "above the root")
+      File.write!(Path.join(repo, "AGENTS.md"), "root rules")
+      File.write!(Path.join(repo, "pkg/AGENTS.md"), "  \n")
       File.write!(Path.join(child, "AGENTS.md"), "child rules")
+      File.write!(Path.join(child, "AGENTS.override.md"), "child override")
 
-      step = AgentsMd.call(Step.new(cwd: child), [])
-      [parent, kid] = step.instructions
-      assert parent =~ "parent rules"
-      assert kid =~ "child rules"
-      assert kid =~ Path.join(child, "AGENTS.md")
+      assert [text] = AgentsMd.call(Step.new(cwd: child), AgentsMd.init([])).instructions
+
+      assert text ==
+               "# AGENTS.md instructions for #{child}\n\n<INSTRUCTIONS>\nroot rules\n\nchild override\n</INSTRUCTIONS>"
+    end
+
+    # a marker no ancestor on this machine has (a stray `.git` above the tmp dir
+    # would be a root to codex too)
+    test "no project root: only the cwd's own", %{dir: dir} do
+      loose = Path.join(dir, "loose")
+      File.mkdir_p!(loose)
+      File.write!(Path.join(dir, "AGENTS.md"), "a parent's")
+      File.write!(Path.join(loose, "AGENTS.md"), "its own")
+      opts = AgentsMd.init(root_markers: [".longx-no-such-root-marker"])
+
+      assert [text] = AgentsMd.call(Step.new(cwd: loose), opts).instructions
+      assert text =~ "<INSTRUCTIONS>\nits own\n</INSTRUCTIONS>"
+      refute text =~ "a parent's"
+    end
+
+    test "the budget is shared by every file (codex's project_doc_max_bytes, 32 KiB): the one that passes it is cut, the rest left out",
+         %{dir: dir} do
+      child = Path.join(dir, "sub")
+      File.mkdir_p!(Path.join(dir, ".git"))
+      File.mkdir_p!(child)
+      File.write!(Path.join(dir, "AGENTS.md"), "0123456789ABC")
+      File.write!(Path.join(child, "AGENTS.md"), "never read")
+
+      assert [text] =
+               AgentsMd.call(Step.new(cwd: child), AgentsMd.init(max_bytes: 10)).instructions
+
+      assert text =~ "<INSTRUCTIONS>\n0123456789\n</INSTRUCTIONS>"
+      refute text =~ "never read"
     end
 
     test "nothing when there is none", %{dir: dir} do
-      assert AgentsMd.call(Step.new(cwd: dir), []).instructions == []
+      assert AgentsMd.call(Step.new(cwd: dir), AgentsMd.init([])).instructions == []
     end
   end
 

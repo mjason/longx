@@ -2,7 +2,7 @@ defmodule Longx.Agent.Definition.ConfigTest do
   use ExUnit.Case, async: true
 
   alias Longx.Agent.Config
-  alias Longx.Agent.Plugs.{Base, Environment, Patch, Request, Shell}
+  alias Longx.Agent.Plugs.{AgentsMd, Base, Environment, Patch, Prompt, Request, Shell}
 
   import Longx.Agent.Config
 
@@ -79,6 +79,43 @@ defmodule Longx.Agent.Definition.ConfigTest do
              {Patch, []},
              {MyDeploy, [env: "staging"]},
              {Longx.Agent.Plugs.Prompt, [text: "extra"]},
+             {Request, []}
+           ]
+  end
+
+  # a description's prompt is codex's developer instructions: raw text, beside the
+  # project's AGENTS.md and after it (in one instructions string the later has the
+  # last word, as codex's developer role outranks AGENTS.md's user message)
+  test "a description's prompt stands right after AgentsMd (else Base), each layer's after the one below; a role that drops AgentsMd keeps its prompt there" do
+    base = [{Environment, []}, {Base, []}, {AgentsMd, []}, {Shell, []}, {Request, []}]
+    project = agent(do: prompt("project rules"))
+    local = agent(do: prompt("local rules"))
+
+    role =
+      agent do
+        drop AgentsMd
+        prompt "role rules"
+      end
+
+    main = base |> Config.resolve(project) |> Config.resolve(local)
+
+    assert main == [
+             {Environment, []},
+             {Base, []},
+             {AgentsMd, []},
+             {Prompt, [text: "project rules"]},
+             {Prompt, [text: "local rules"]},
+             {Shell, []},
+             {Request, []}
+           ]
+
+    assert Config.resolve(main, role) == [
+             {Environment, []},
+             {Base, []},
+             {Prompt, [text: "project rules"]},
+             {Prompt, [text: "local rules"]},
+             {Prompt, [text: "role rules"]},
+             {Shell, []},
              {Request, []}
            ]
   end

@@ -26,7 +26,7 @@ defmodule Longx.Agent.Config do
   an older one is flagged (`outdated?/1`) so the agent can update it.
   """
 
-  alias Longx.Agent.Plugs.{Prompt, Request}
+  alias Longx.Agent.Plugs.{AgentsMd, Base, Prompt, Request}
 
   @current_version 1
 
@@ -206,10 +206,31 @@ defmodule Longx.Agent.Config do
     end
   end
 
-  # the description's prompt text rides as a plug before Request
+  # the description's prompt is codex's developer instructions (raw text): it stands
+  # with the project's instructions — right after AgentsMd (else Base), behind the
+  # prompts already there, so a later layer (local, a role) has the last word; before
+  # Request only when neither is in the pipeline. It sat before Request once, after
+  # every plug's text, away from the AGENTS.md it goes with
   defp with_prompts(plugs, %__MODULE__{prompts: []}), do: plugs
 
   defp with_prompts(plugs, %__MODULE__{prompts: prompts}) do
-    Enum.reduce(prompts, plugs, &insert(&2, {Prompt, [text: &1]}, {:before, Request}))
+    Enum.reduce(prompts, plugs, fn text, acc ->
+      case prompt_slot(acc) do
+        nil -> insert(acc, {Prompt, [text: text]}, {:before, Request})
+        i -> List.insert_at(acc, i, {Prompt, [text: text]})
+      end
+    end)
+  end
+
+  # after AgentsMd (else Base) and the prompts that already follow it
+  defp prompt_slot(plugs) do
+    anchor =
+      Enum.find_index(plugs, &match?({AgentsMd, _}, &1)) ||
+        Enum.find_index(plugs, &match?({Base, _}, &1))
+
+    if anchor do
+      following = plugs |> Enum.drop(anchor + 1) |> Enum.take_while(&match?({Prompt, _}, &1))
+      anchor + 1 + length(following)
+    end
   end
 end

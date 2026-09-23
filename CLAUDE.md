@@ -526,10 +526,13 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     end` — a description records the **difference** to the layer below (`Config.resolve/2`
     applies the ops; a short name means the shipped plug, `Config.builtin/1`), so a release
     that changes the shipped pipeline (`Longx.Agent.Pipelines.Default.config/0`:
-    Environment, Base, Shell, Patch, ViewImage, Present, Knowledge, WebSearch, Browser,
+    Environment, Base, AgentsMd, Shell, Patch, ViewImage, Present, Knowledge, WebSearch, Browser,
     Credentials, Agents, Watches, Goal, Compaction, Request; a description's `prompt`
-    becomes a `Plugs.Prompt` after them —
-    `Config.with_prompts/2`) reaches every project; an
+    becomes a `Plugs.Prompt` — codex's developer instructions, raw text — right after
+    AgentsMd (else Base), each layer's behind the one below so local and a role have the
+    last word, before Request only when neither is there — `Config.with_prompts/2`; it
+    sat before Request once, after every plug's text, away from the AGENTS.md it goes
+    with; a role that should not read AGENTS.md says `drop AgentsMd` — for itself only: a role's description is stacked only when that role is loaded, so the main agent and the other roles keep it) reaches every project; an
     explicit `pipeline do … end` replaces the base and freezes it. `version` is the format
     version (`current_version/0`, `outdated?/1` → a notice). The DSL words are paren-free in
     `.formatter.exs`. **Layers** (`Longx.Agent.Definition.Loader`): the shipped default →
@@ -595,8 +598,16 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     go into every prompt (`always_cap:` 16 KB), the rest as an index line each
     (`index_cap:` 200); tools `knowledge_read`, `knowledge_search`, `knowledge_write`
     (front matter required; `longx/` refused; paths stay inside their root);
-    `Knowledge.promote/2` moves local → project. Skills are docs; AGENTS.md is not read
-    (`Plugs.AgentsMd` exists, out of the shipped pipeline).
+    `Knowledge.promote/2` moves local → project. Skills are docs. **AGENTS.md is read by
+    default, as codex reads it** (`Plugs.AgentsMd`, after Base; `drop AgentsMd` in a
+    description turns it off): the project root is the nearest ancestor with a `.git`
+    (none: the cwd alone), every directory from there down to the cwd gives its
+    `AGENTS.override.md` else its `AGENTS.md`, root first, one 32 KiB budget for all
+    (`agents_md.rs`); the block is codex's `# AGENTS.md instructions for <cwd>` +
+    `<INSTRUCTIONS>…</INSTRUCTIONS>` (`user_instructions.rs`), as instructions like
+    Environment's. Read in an untrusted project too — the trust switch guards code, not
+    text (codex skips an untrusted project's). It had been out of the pipeline since
+    the codex tool set (2026-09-17) and a project's AGENTS.md reached no model.
   - **Models are named by tier or alias, never hard-wired** — `Longx.AI.Aliases`: three
     tiers `ultra` (旗舰) / `pro` (高级) / `plus` (普通), case-insensitive, plus custom
     aliases (青龙…), each mapping to a **chain** of slugs (`resolve_targets/1`); a
