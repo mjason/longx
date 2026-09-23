@@ -21,8 +21,12 @@ describe("joinProjectChannel", () => {
     const onChanged = vi.fn();
     const onFiles = vi.fn();
     const onWatches = vi.fn();
+    const onDefinition = vi.fn();
 
-    const leave = joinProjectChannel(socket as never, "abc", { onChanged, onFiles, onWatches });
+    const onGit = vi.fn();
+    const onWatch = vi.fn();
+
+    const leave = joinProjectChannel(socket as never, "abc", { onChanged, onFiles, onWatches, onDefinition, onGit, onWatch });
 
     expect(socket.channel).toHaveBeenCalledWith("project:abc", {});
     expect(channel.join).toHaveBeenCalled();
@@ -35,7 +39,16 @@ describe("joinProjectChannel", () => {
     // the watches changed (a run began or ended): refetch
     handlers["watches"]!({});
     expect(onWatches).toHaveBeenCalledTimes(1);
-    expect(Object.keys(handlers).sort()).toEqual(["changed", "files", "watches"]);
+    // the agent description changed on disk: the page rereads it
+    handlers["definition"]!({});
+    expect(onDefinition).toHaveBeenCalledTimes(1);
+    // HEAD, the index or a ref moved: the git window refetches
+    handlers["git"]!({});
+    expect(onGit).toHaveBeenCalledTimes(1);
+    // the file watcher's state: whether the tree follows the disk by itself
+    handlers["watch"]!({ watching: false, error: "the file watcher stopped (exit 137)" });
+    expect(onWatch).toHaveBeenCalledWith({ watching: false, error: "the file watcher stopped (exit 137)" });
+    expect(Object.keys(handlers).sort()).toEqual(["changed", "definition", "files", "git", "watch", "watches"]);
 
     leave();
     expect(channel.leave).toHaveBeenCalled();

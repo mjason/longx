@@ -2798,6 +2798,74 @@ export async function validateDeleteEntry(
 }
 
 
+export type IgnoredPathsInput = {
+  projectId: UUID;
+};
+
+export type InferIgnoredPathsResult = Array<string>;
+
+export type IgnoredPathsResult = | { success: true; data: InferIgnoredPathsResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Files
+ *
+ * @ashActionType :action
+ */
+export async function ignoredPaths(
+  config: {
+  tenant?: string;
+  input: IgnoredPathsInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<IgnoredPathsResult> {
+  const payload = {
+    action: "ignored_paths",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<IgnoredPathsResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Files
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateIgnoredPaths(
+  config: {
+  tenant?: string;
+  input: IgnoredPathsInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "ignored_paths",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type ListFilesInput = {
   projectId: UUID;
   path: string;
@@ -3940,6 +4008,7 @@ export type UpdateProjectInput = {
   modelId?: UUID | null;
   trustLocalAgent?: boolean;
   agentSettings?: Record<string, any> | null;
+  fileRules?: Record<string, any>;
 };
 
 export type UpdateProjectFields = UnifiedFieldSelection<ProjectResourceSchema>[];
@@ -7327,6 +7396,72 @@ export async function validateDependencies(
 }
 
 
+export type FileRulesFields = UnifiedFieldSelection<{ignore: string, watch: string, builtinIgnore: Array<string>, builtinWatch: Array<string>, __type: "TypedMap", __primitiveFields: "ignore" | "watch" | "builtinIgnore" | "builtinWatch"}>[];
+
+export type InferFileRulesResult<
+  Fields extends FileRulesFields | undefined,
+> = InferResult<{ignore: string, watch: string, builtinIgnore: Array<string>, builtinWatch: Array<string>, __type: "TypedMap", __primitiveFields: "ignore" | "watch" | "builtinIgnore" | "builtinWatch"}, Fields>;
+
+export type FileRulesResult<Fields extends FileRulesFields | undefined = undefined> = | { success: true; data: InferFileRulesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function fileRules<Fields extends FileRulesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<FileRulesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "file_rules",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<FileRulesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateFileRules(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "file_rules",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type GatewayRequestsInput = {
   limit?: number | null;
 };
@@ -8302,6 +8437,81 @@ export async function validateSetBrowserPrivateNetwork(
 ): Promise<ValidationResult> {
   const payload = {
     action: "set_browser_private_network",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetFileRulesInput = {
+  ignore?: string | null;
+  watch?: string | null;
+};
+
+export type SetFileRulesFields = UnifiedFieldSelection<{ignore: string, watch: string, builtinIgnore: Array<string>, builtinWatch: Array<string>, __type: "TypedMap", __primitiveFields: "ignore" | "watch" | "builtinIgnore" | "builtinWatch"}>[];
+
+export type InferSetFileRulesResult<
+  Fields extends SetFileRulesFields | undefined,
+> = InferResult<{ignore: string, watch: string, builtinIgnore: Array<string>, builtinWatch: Array<string>, __type: "TypedMap", __primitiveFields: "ignore" | "watch" | "builtinIgnore" | "builtinWatch"}, Fields>;
+
+export type SetFileRulesResult<Fields extends SetFileRulesFields | undefined = undefined> = | { success: true; data: InferSetFileRulesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Status
+ *
+ * @ashActionType :action
+ */
+export async function setFileRules<Fields extends SetFileRulesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input?: SetFileRulesInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetFileRulesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_file_rules",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetFileRulesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Status
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetFileRules(
+  config: {
+  tenant?: string;
+  input?: SetFileRulesInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_file_rules",
     ...(config.tenant !== undefined && { tenant: config.tenant }),
     input: config.input
   };

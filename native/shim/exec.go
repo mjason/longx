@@ -31,6 +31,12 @@ type config struct {
 	// stderr are the terminal, the master is the one output stream and the
 	// input sink; there is no separate stderr and no EOF on stdin.
 	PTY bool
+	// NoStdin gives the child the null device as stdin — a command run from a
+	// script with nothing to read — instead of a pipe the host feeds: ripgrep
+	// with no path searches a piped stdin, not the directory (codex's shell
+	// tool spawns with Stdio::null for the same reason). No input credit is
+	// offered; Input and CloseInput from the host are ignored. Not with PTY.
+	NoStdin bool
 }
 
 // frameWriter serialises packets to the host. Any write error means the host
@@ -141,7 +147,10 @@ func run(hostIn io.Reader, hostOut io.Writer, cfg config) int {
 	hostGone := make(chan struct{})
 	waitDone := make(chan struct{})
 
-	go child.feedStdin(inputCh, out)
+	// no stdin to feed (NoStdin): no credit is ever offered, Input is dropped
+	if child.stdin != nil {
+		go child.feedStdin(inputCh, out)
+	}
 
 	var streams sync.WaitGroup
 	streamsDone := make(chan struct{})
@@ -346,15 +355,19 @@ func startChild(cfg config, env []string) (*child, error) {
 	}
 	setProcessGroup(proc)
 
-	stdinR, stdinW, err := os.Pipe()
-	if err != nil {
-		return nil, err
+	// a nil Stdin is the null device to os/exec (/dev/null, NUL on Windows)
+	var stdinR, stdinW *os.File
+	if !cfg.NoStdin || cfg.PTY {
+		stdinR, stdinW, err = os.Pipe()
+		if err != nil {
+			return nil, err
+		}
+		proc.Stdin = stdinR
 	}
 	stdoutR, stdoutW, err := os.Pipe()
 	if err != nil {
 		return nil, err
 	}
-	proc.Stdin = stdinR
 	proc.Stdout = stdoutW
 
 	c := &child{proc: proc, stdin: stdinW}
@@ -395,13 +408,17 @@ func startChild(cfg config, env []string) (*child, error) {
 	}
 	err = proc.Start()
 	// The child holds its own copies now; ours must go so EOF can propagate.
-	stdinR.Close()
+	if stdinR != nil {
+		stdinR.Close()
+	}
 	stdoutW.Close()
 	if stderrW != nil {
 		stderrW.Close()
 	}
 	if err != nil {
-		stdinW.Close()
+		if stdinW != nil {
+			stdinW.Close()
+		}
 		for _, s := range c.streams {
 			s.r.Close()
 		}

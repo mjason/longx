@@ -406,6 +406,29 @@ defmodule Longx.Git do
     String.contains?(head, <<0>>) or not String.valid?(head)
   end
 
+  @doc """
+  The lines of the person's global excludes file (`core.excludesfile`, else
+  `$XDG_CONFIG_HOME/git/ignore`) — the lowest layer of what git ignores.
+  """
+  @spec global_excludes() :: [String.t()]
+  def global_excludes do
+    path =
+      case run(["config", "--global", "--path", "--get", "core.excludesfile"],
+             cd: System.tmp_dir!()
+           ) do
+        {:ok, %{stdout: out}} when out != "" ->
+          String.trim(out)
+
+        _ ->
+          Path.join(System.get_env("XDG_CONFIG_HOME") || Path.expand("~/.config"), "git/ignore")
+      end
+
+    case File.read(path) do
+      {:ok, text} -> String.split(text, ["\r\n", "\n"])
+      {:error, _} -> []
+    end
+  end
+
   @doc "What `.gitignore` hides, ignored directories as a whole (`build/`)."
   @spec ignored(Path.t()) :: [String.t()]
   def ignored(dir) do

@@ -16,7 +16,7 @@ import (
 )
 
 // ProtocolVersion must match Longx.Shim.Proto on the Elixir side.
-const ProtocolVersion = "3"
+const ProtocolVersion = "4"
 
 // Packets sent by the host to the shim.
 const (

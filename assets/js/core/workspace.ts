@@ -24,12 +24,14 @@ import {
   gitSwitch,
   gitAbortMerge,
   gitUndoCommit,
+  ignoredPaths,
   listFiles,
   readFile,
   renameEntry,
   writeFile,
 } from "@/ash_rpc";
-import { unwrap } from "./projects";
+import type { WatchStatus } from "./projectChannel";
+import { queryKeys, unwrap } from "./projects";
 
 export type FileEntry = { name: string; path: string; kind: "file" | "dir"; size: number };
 export type FileContent = { path: string; content: string | null; size: number; binary: boolean; truncated: boolean };
@@ -43,7 +45,7 @@ export type GitChanges = {
   behind: number | null;
   remotes: { name: string; url: string }[];
   lfs: boolean;
-  /** what .gitignore hides; directories end with "/" */
+  /** what .gitignore hides; directories end with "/" (the tree reads useIgnored, which stacks every rule) */
   ignored: string[];
   /** a pull / merge stopped on conflicts */
   merging: boolean;
@@ -58,6 +60,10 @@ export type FileVersions = { before: string | null; after: string | null; binary
 export const wsKeys = {
   files: (id: string, path: string) => ["files", id, path] as const,
   filesOf: (id: string) => ["files", id] as const,
+  /** under filesOf: a change on disk refetches it with the tree */
+  ignored: (id: string) => ["files", id, { ignored: true }] as const,
+  /** the file watcher's state, set from the project channel */
+  watch: (id: string) => ["project", id, "watch"] as const,
   file: (id: string, path: string) => ["file", id, path] as const,
   git: (id: string) => ["git", id] as const,
   changes: (id: string) => ["git", id, "changes"] as const,
@@ -77,6 +83,24 @@ export function useFiles(projectId: string, path: string, enabled = true) {
   });
 }
 
+/** What the tree dims (the ignore rules: built in, global, the project's, .gitignore, .longxignore). A directory ends with "/"; one a `!` rule reaches into is listed without it — only itself is dimmed. */
+export function useIgnored(projectId: string) {
+  return useQuery({
+    queryKey: wsKeys.ignored(projectId),
+    queryFn: async () => unwrap(await ignoredPaths({ input: { projectId } })) as string[],
+  });
+}
+
+/** The file watcher's state as the project channel last said it; null until it has. */
+export function useWatchStatus(projectId: string) {
+  return useQuery<WatchStatus | null>({
+    queryKey: wsKeys.watch(projectId),
+    queryFn: () => null,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}
+
 export function useFileContent(projectId: string, path: string | null) {
   return useQuery({
     queryKey: wsKeys.file(projectId, path ?? ""),
@@ -90,6 +114,14 @@ export function useFileContent(projectId: string, path: string | null) {
 export function invalidateFiles(client: QueryClient, projectId: string) {
   void client.invalidateQueries({ queryKey: wsKeys.filesOf(projectId) });
   void client.invalidateQueries({ queryKey: wsKeys.changes(projectId) });
+  // the status strip's HEAD and dirty count
+  void client.invalidateQueries({ queryKey: queryKeys.git(projectId) });
+}
+
+/** HEAD, the index or a ref moved: every git query, the status strip's too */
+export function invalidateGit(client: QueryClient, projectId: string) {
+  void client.invalidateQueries({ queryKey: wsKeys.git(projectId) });
+  void client.invalidateQueries({ queryKey: queryKeys.git(projectId) });
 }
 
 export function useSaveFile(projectId: string) {
@@ -136,11 +168,18 @@ export function useDeleteEntry(projectId: string) {
 export const changesFields = ["repository", "branch", "head", "changes", "ahead", "behind", "remotes", "lfs", "ignored", "merging"] as const;
 
 /** The changes view; polled while shown — the agent edits files without telling us. */
+/** The git window polls only while nothing watches the files; a watcher sends HEAD, the index and the files as events. */
+export function gitPollInterval(poll: boolean, watch: WatchStatus | null | undefined): number | false {
+  if (!poll) return false;
+  return watch?.watching && !watch.error ? false : 10_000;
+}
+
 export function useGitChanges(projectId: string, opts: { poll?: boolean } = {}) {
+  const watch = useWatchStatus(projectId).data;
   return useQuery({
     queryKey: wsKeys.changes(projectId),
     queryFn: async () => unwrap(await gitChanges({ fields: [...changesFields], input: { projectId } })) as GitChanges,
-    refetchInterval: opts.poll ? 10_000 : false,
+    refetchInterval: gitPollInterval(!!opts.poll, watch),
     refetchOnWindowFocus: true,
   });
 }

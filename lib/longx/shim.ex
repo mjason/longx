@@ -47,6 +47,7 @@ defmodule Longx.Shim do
           | {:memory_limit, pos_integer}
           | {:env_clear, boolean}
           | {:pty, boolean}
+          | {:stdin, :pipe | :null}
 
   @type read_result :: {:ok, binary} | :eof | {:error, :pending_read | :closed}
 
@@ -113,6 +114,11 @@ defmodule Longx.Shim do
         # the terminal (stderr merged, `read_stderr` answers eof at once) and
         # stdin never reaches EOF — `close_stdin` only stops feeding it
         pty: Keyword.get(opts, :pty, false) == true,
+        # `stdin: :null` — the child reads the null device, as a command run from
+        # a script with nothing to read: no pipe (ripgrep with no path searches a
+        # piped stdin instead of the directory — codex spawns its shell tool with
+        # Stdio::null for that), EOF at once; `write` answers `{:error, :closed}`
+        null_stdin: Keyword.get(opts, :stdin, :pipe) == :null,
         caller: self()
       }
 
@@ -269,7 +275,8 @@ defmodule Longx.Shim do
       {^port, {:data, data}} ->
         case Proto.decode(data) do
           {:pid, os_pid} ->
-            {:ok, %State{port: port, os_pid: os_pid, owner: spec.caller}}
+            stdin = if spec.null_stdin and not spec.pty, do: :closed, else: :open
+            {:ok, %State{port: port, os_pid: os_pid, owner: spec.caller, stdin: stdin}}
 
           {:start_error, reason} ->
             send(spec.caller, {__MODULE__, :start_error, reason})
@@ -605,6 +612,7 @@ defmodule Longx.Shim do
         if(spec.memory_limit, do: ["-memory_limit", "#{spec.memory_limit}"], else: []) ++
         if(spec.env_clear, do: ["-clean_env"], else: []) ++
         if(spec.pty, do: ["-pty"], else: []) ++
+        if(spec.null_stdin, do: ["-no_stdin"], else: []) ++
         ["--" | spec.cmd]
 
     Port.open({:spawn_executable, executable()}, [

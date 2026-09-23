@@ -989,6 +989,40 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "low, high"
   end
 
+  test "the description's level stands under a level its model does not declare (a new thread once froze the default model's level and ran the description's model at it)",
+       %{bypass: bypass, dir: dir, model: model} do
+    described =
+      AI.create_model!(%{
+        name: "Described",
+        upstream_id: "real-model-d",
+        slug: "described-#{System.unique_integer([:positive])}",
+        provider_id: model.provider_id,
+        reasoning_levels: ["low", "medium", "xhigh"],
+        reasoning_effort: "xhigh"
+      })
+
+    File.mkdir_p!(Path.join(dir, ".longx/local"))
+
+    File.write!(
+      Path.join(dir, ".longx/local/agent.exs"),
+      "import Longx.Agent.Config\nagent do\n  model #{inspect(described.slug)}, effort: \"low\"\nend\n"
+    )
+
+    # the default model's level, frozen onto the thread: not one of the described model's
+    id =
+      agent!("level-#{System.unique_integer([:positive])}", dir,
+        effort: "high",
+        models: &AI.model_choices/0
+      )
+
+    script!(bypass, [ResponsesFixture.assistant_message("ok")])
+    {:ok, _} = Agent.send(id, "hi")
+    assert %{"status" => "completed"} = await_turn_end()
+    assert_receive {:request, body}
+    assert body["model"] == "real-model-d"
+    assert body["reasoning"]["effort"] == "low"
+  end
+
   test "a model chain: the first model's quota is gone, the turn goes on with the next and the view says so",
        %{bypass: bypass, dir: dir, model: model} do
     second =

@@ -6,7 +6,7 @@ import { Workbench } from "@/ui/workbench/Workbench";
 import { TOOLS, toolForShortcut, useFrame, type Tool } from "@/core/frame";
 import { joinProjectChannel } from "@/core/projectChannel";
 import { queryKeys, useProject } from "@/core/projects";
-import { invalidateFiles } from "@/core/workspace";
+import { invalidateFiles, invalidateGit, wsKeys } from "@/core/workspace";
 import { getSocket } from "@/core/socket";
 import { useViewport } from "@/core/viewport";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/ui/sheet";
@@ -60,6 +60,11 @@ export function ProjectWindow() {
       },
       onFiles: () => invalidateFiles(client, id),
       onWatches: () => client.invalidateQueries({ queryKey: ["watches"] }),
+      // the description the composer shows and a new chat starts from: reread
+      // when its files change (a new chat once ran with the one the page loaded)
+      onDefinition: () => client.invalidateQueries({ queryKey: ["project", id, "agent-definition"] }),
+      onGit: () => invalidateGit(client, id),
+      onWatch: (status) => client.setQueryData(wsKeys.watch(id), status),
     });
   }, [client, id]);
 

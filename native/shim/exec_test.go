@@ -224,6 +224,38 @@ func TestCatRoundTripAndCloseInput(t *testing.T) {
 	h.waitRun()
 }
 
+// NoStdin: the child reads /dev/null, as a command from a script with nothing to
+// read — no pipe (ripgrep with no path searches a piped stdin instead of the
+// directory, and found nothing in an empty one), EOF at once, no input credit
+func TestNoStdinGivesTheChildDevNull(t *testing.T) {
+	h := newHarness(t, config{
+		Args:    []string{"sh", "-c", "[ -p /dev/stdin ] && echo pipe || echo none; cat; echo done"},
+		Stderr:  "stream",
+		Grace:   time.Second,
+		NoStdin: true,
+	}, nil)
+	h.expect(TagPid)
+	var out []byte
+	for {
+		p := h.readOut(1024)
+		if p.Tag == TagOutputEOF {
+			break
+		}
+		if p.Tag != TagOutput {
+			t.Fatalf("got tag %d (%q)", p.Tag, p.Data)
+		}
+		out = append(out, p.Data...)
+	}
+	if string(out) != "none\ndone\n" {
+		t.Fatalf("output %q", out)
+	}
+	h.expectExit(0)
+	if h.credit != 0 {
+		t.Fatalf("input credit offered with no stdin: %d", h.credit)
+	}
+	h.waitRun()
+}
+
 func TestOutputRespectsMaxSize(t *testing.T) {
 	h := start(t, "echo", "0123456789")
 	p := h.readOut(4)

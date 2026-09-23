@@ -279,6 +279,14 @@ defmodule Longx.Projects.ThreadsTest do
     assert {:ok, [%{path: "a.txt"} | _]} = Projects.search_files(project, "a")
     assert {:ok, []} = Projects.search_files(project, "zzz")
     assert {:ok, []} = Projects.search_files(project, "")
+
+    # what the tree dims stays out: a built-in ignore, a .longxignore line
+    File.mkdir_p!(Path.join(dir, "node_modules/helper"))
+    File.write!(Path.join(dir, "node_modules/helper/math_helper.js"), "")
+    File.write!(Path.join(dir, "lib/deep/math_helper.gen.ex"), "")
+    File.write!(Path.join(dir, ".longxignore"), "*.gen.ex\n")
+
+    assert {:ok, [%{path: "lib/deep/math_helper.ex"}]} = Projects.search_files(project, "mhelp")
   end
 
   test "the project's own agent definition is loaded only once trusted; the settings page sees it",
@@ -718,6 +726,13 @@ defmodule Longx.Projects.ThreadsTest do
     send(h, :go)
     assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
     assert_eventually_ok(fn -> thread.kernel_thread_id not in Projects.Tracker.in_flight() end)
+  end
+
+  test "a new thread on the default model keeps no level of its own: the default's level would outrank the description's (a thread once ran the description's model at the default's `high`)",
+       %{project: project} do
+    {:ok, thread} = Projects.start_thread(project)
+    assert thread.model_slug == nil
+    assert thread.reasoning_effort == nil
   end
 
   test "the watchdog reconciles a view still showing a turn in flight whose row is settled (a crashed child's row was failed while its view said working for ever)",
@@ -1182,8 +1197,9 @@ defmodule Longx.Projects.ThreadsTest do
         ResponsesFixture.assistant_message("c")
       ])
 
+      # on the default model the row keeps no level (the kernel sends the model's own)
       {:ok, thread} = Projects.start_thread(project)
-      assert thread.reasoning_effort == "low"
+      assert thread.reasoning_effort == nil
 
       {:ok, turn} = Projects.send_message(thread, "say a", effort: "high")
       assert turn.reasoning_effort == "high"

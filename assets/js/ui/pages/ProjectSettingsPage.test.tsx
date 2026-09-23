@@ -149,6 +149,21 @@ describe("ProjectSettingsPage", () => {
     }
   });
 
+  test("the project's file rules: what to ignore and what to watch anyway, saved on their own; .longxignore is named", async () => {
+    const user = userEvent.setup();
+    renderAt("/p/app-1/settings");
+    const card = await screen.findByTestId("project-file-rules");
+    expect(card).toHaveTextContent(".longxignore");
+    await user.type(within(card).getByLabelText("忽略"), "data/");
+    await user.type(within(card).getByLabelText("始终监控"), "data/keep/");
+    await user.click(within(card).getByRole("button", { name: "保存规则" }));
+    await waitFor(() =>
+      expect(updateProject).toHaveBeenCalledWith(
+        expect.objectContaining({ identity: "id-1", input: { fileRules: { ignore: "data/", watch: "data/keep/" } } }),
+      ),
+    );
+  });
+
   test("deleting the project asks for its name, then removes it and leaves", async () => {
     const user = userEvent.setup();
     const { router } = renderAt("/p/app-1/settings");

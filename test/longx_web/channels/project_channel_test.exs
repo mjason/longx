@@ -42,6 +42,65 @@ defmodule LongxWeb.ProjectChannelTest do
     assert_push "files", %{paths: ["/p/a.txt"]}
   end
 
+  test "a changed agent description is announced so the page rereads it (a new chat once ran with the description the page loaded)",
+       %{project: project} do
+    File.mkdir_p!(Path.join(project.root_path, ".longx/local"))
+
+    File.write!(
+      Path.join(project.root_path, ".longx/local/agent.exs"),
+      "import Longx.Agent.Config\nagent do\n  model \"x\"\nend\n"
+    )
+
+    assert_push "definition", %{}, 3_000
+
+    # nothing changed since: no second push
+    refute_push "definition", %{}, 300
+  end
+
+  describe "the file watcher" do
+    alias Longx.Projects.Watcher
+
+    test "runs while the page is open: files, git and the description are pushed, and it leaves with the page",
+         %{project: project, socket: socket} do
+      assert_push "watch", %{watching: true, error: nil}, 3_000
+      watcher = Watcher.whereis(project.id)
+      assert is_pid(watcher)
+
+      File.write!(Path.join(project.root_path, "a.txt"), "a")
+      assert_push "files", %{paths: ["a.txt"]}, 3_000
+
+      Longx.Git.init(project.root_path)
+      assert_push "files", %{paths: []}, 3_000
+      File.write!(Path.join(project.root_path, ".git/HEAD"), "ref: refs/heads/other\n")
+      assert_push "git", %{}, 3_000
+
+      ref = Process.monitor(watcher)
+      Process.unlink(socket.channel_pid)
+      close(socket)
+      assert_receive {:DOWN, ^ref, :process, _, :normal}, 3_000
+      assert Watcher.whereis(project.id) == nil
+    end
+
+    test "a watcher that dies is started again for the page", %{project: project} do
+      assert_push "watch", %{watching: true}, 3_000
+      Process.exit(Watcher.whereis(project.id), :kill)
+      assert_push "watch", %{watching: true}, 5_000
+      assert is_pid(Watcher.whereis(project.id))
+    end
+
+    test "while the watcher is down the description is polled (a stopped shim)",
+         %{project: project} do
+      assert_push "watch", %{watching: true}, 3_000
+      System.cmd("kill", ["-9", "#{Watcher.os_pid(project.id)}"])
+      assert_push "watch", %{watching: false, error: error}, 3_000
+      assert error =~ "stopped"
+
+      File.mkdir_p!(Path.join(project.root_path, ".longx/local"))
+      File.write!(Path.join(project.root_path, ".longx/local/agent.exs"), "agent do end\n")
+      assert_push "definition", %{}, 3_000
+    end
+  end
+
   test "joining an unknown project is refused" do
     assert {:error, %{reason: "unknown project"}} = join!(Ash.UUID.generate())
   end

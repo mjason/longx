@@ -79,8 +79,8 @@ defmodule Longx.Shim.ProtoTest do
                {:stats, %{processes: 3, rss_bytes: 1_048_576, cpu_ms: 250}}
     end
 
-    test "the protocol version is 3 (stats, resource guards)" do
-      assert Proto.version() == "3"
+    test "the protocol version is 4 (stats, resource guards, a null stdin)" do
+      assert Proto.version() == "4"
     end
 
     test "unknown tags are reported, not crashed on" do

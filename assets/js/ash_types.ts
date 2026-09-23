@@ -224,10 +224,11 @@ export type ProjectFilesAttributesOnlySchema = {
 // Project Schema
 export type ProjectResourceSchema = {
   __type: "Resource";
-  __primitiveFields: "agentSettings" | "archivedAt" | "description" | "id" | "insertedAt" | "modelId" | "name" | "rootPath" | "slug" | "trustLocalAgent" | "updatedAt" | "webSearch";
+  __primitiveFields: "agentSettings" | "archivedAt" | "description" | "fileRules" | "id" | "insertedAt" | "modelId" | "name" | "rootPath" | "slug" | "trustLocalAgent" | "updatedAt" | "webSearch";
   agentSettings: Record<string, any> | null;
   archivedAt: UtcDateTimeUsec | null;
   description: string | null;
+  fileRules: Record<string, any>;
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   modelId: UUID | null;
@@ -244,10 +245,11 @@ export type ProjectResourceSchema = {
 
 export type ProjectAttributesOnlySchema = {
   __type: "Resource";
-  __primitiveFields: "agentSettings" | "archivedAt" | "description" | "id" | "insertedAt" | "modelId" | "name" | "rootPath" | "slug" | "trustLocalAgent" | "updatedAt" | "webSearch";
+  __primitiveFields: "agentSettings" | "archivedAt" | "description" | "fileRules" | "id" | "insertedAt" | "modelId" | "name" | "rootPath" | "slug" | "trustLocalAgent" | "updatedAt" | "webSearch";
   agentSettings: Record<string, any> | null;
   archivedAt: UtcDateTimeUsec | null;
   description: string | null;
+  fileRules: Record<string, any>;
   id: UUIDv7;
   insertedAt: UtcDateTimeUsec;
   modelId: UUID | null;
@@ -1257,6 +1259,16 @@ export type ProjectFilterInput = {
     stringStartsWith?: string;
   };
 
+  fileRules?: {
+    eq?: Record<string, any>;
+    notEq?: Record<string, any>;
+    in?: Array<Record<string, any>>;
+    lessThan?: Record<string, any>;
+    greaterThan?: Record<string, any>;
+    lessThanOrEqual?: Record<string, any>;
+    greaterThanOrEqual?: Record<string, any>;
+  };
+
   id?: {
     eq?: UUIDv7;
     notEq?: UUIDv7;
@@ -2090,7 +2102,7 @@ export const credentialFilterFields = ["allowedHosts", "authorizeParams", "autho
 export type CredentialFilterField = (typeof credentialFilterFields)[number];
 
 
-export const projectFilterFields = ["agentSettings", "archivedAt", "description", "id", "insertedAt", "modelId", "name", "rootPath", "slug", "trustLocalAgent", "updatedAt", "webSearch", "model"] as const;
+export const projectFilterFields = ["agentSettings", "archivedAt", "description", "fileRules", "id", "insertedAt", "modelId", "name", "rootPath", "slug", "trustLocalAgent", "updatedAt", "webSearch", "model"] as const;
 export type ProjectFilterField = (typeof projectFilterFields)[number];
 
 
@@ -2119,7 +2131,7 @@ export const credentialSortFields = ["allowedHosts", "authorizeParams", "authori
 export type CredentialSortField = (typeof credentialSortFields)[number];
 
 
-export const projectSortFields = ["agentSettings", "archivedAt", "description", "id", "insertedAt", "modelId", "name", "rootPath", "slug", "trustLocalAgent", "updatedAt", "webSearch"] as const;
+export const projectSortFields = ["agentSettings", "archivedAt", "description", "fileRules", "id", "insertedAt", "modelId", "name", "rootPath", "slug", "trustLocalAgent", "updatedAt", "webSearch"] as const;
 export type ProjectSortField = (typeof projectSortFields)[number];
 
 

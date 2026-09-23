@@ -9,6 +9,7 @@ defmodule Longx.Projects do
   use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
 
   alias Longx.Git
+  alias Longx.Projects.FileRules
   alias Longx.Projects.Project
 
   # The SPA's typed client (assets/js/ash_rpc.ts, `mix ash_typescript.codegen`)
@@ -57,6 +58,7 @@ defmodule Longx.Projects do
       rpc_action :create_entry, :create_entry
       rpc_action :rename_entry, :rename_entry
       rpc_action :delete_entry, :delete_entry
+      rpc_action :ignored_paths, :ignored_paths
     end
 
     resource Longx.Projects.Repo do
@@ -173,9 +175,13 @@ defmodule Longx.Projects do
     model_slug = Keyword.get(opts, :model) || (project.model && project.model.slug)
     web_search = Keyword.get(opts, :web_search, project.web_search)
 
+    # a level belongs to a model: a thread on a chosen model starts on that
+    # model's default level; one on the default keeps none, so the project's
+    # description (its model and level) stands — the default's level frozen
+    # here once outranked the description's and ran its model at `high`
     with {:ok, model_opts} <- Longx.AI.thread_options(model_slug),
          :ok <- Longx.AI.check_effort(model_slug, opts[:effort]),
-         effort = opts[:effort] || model_opts[:reasoning_effort],
+         effort = opts[:effort] || (model_slug && model_opts[:reasoning_effort]),
          id = "native_" <> Ash.UUID.generate(),
          {:ok, _pid} <-
            Longx.Agent.ensure(
@@ -1252,20 +1258,27 @@ defmodule Longx.Projects do
         }
 
   @doc """
-  Fuzzy file matches under the project root: a walk of the tree (`.git`
-  and build trees skipped), the query's characters matched in order (a
+  Fuzzy file matches under the project root: the files the ignore rules
+  keep (`Longx.Projects.FileRules.files/2` — what the tree dims stays out),
+  the query's characters matched in order (a
   subsequence), shortest paths first; paths relative to the root. An empty
   query matches nothing.
   """
   @spec search_files(Project.t(), String.t()) :: {:ok, [file_match]}
   def search_files(%Project{}, ""), do: {:ok, []}
 
-  def search_files(%Project{root_path: root}, query) when is_binary(query) do
+  def search_files(%Project{root_path: root} = project, query) when is_binary(query) do
     needle = String.downcase(query)
 
+    # the files the rules keep (Longx.Projects.FileRules); our own walk when the shim fails
+    files =
+      case FileRules.files(project, @file_walk_cap) do
+        {:ok, files} -> files
+        {:error, _} -> walk_files(root, @file_walk_cap)
+      end
+
     matches =
-      root
-      |> walk_files(@file_walk_cap)
+      files
       |> Enum.filter(&subsequence?(String.downcase(&1), needle))
       |> Enum.sort_by(&{String.length(&1), &1})
       |> Enum.take(@file_matches)

@@ -15,13 +15,15 @@ it builds: git is the machine's, the headless browser is downloaded on first use
 - `lib/longx/shim.ex` + `native/shim/` (Go) — `Longx.Shim`: runs external programs through
   our own port middleware (adapted from ex_cmd/odu, see `NOTICE`). Back-pressured
   stdin/stdout, a separate stderr stream, `close_stdin` independent of stdout, a pty
-  (`pty: true`, Linux/macOS), and clean termination: `kill/2` SIGTERMs the child's whole
+  (`pty: true`, Linux/macOS), `stdin: :null` (`-no_stdin`: the null device instead of a
+  pipe, no input credit — what `exec_command` and a watch's `shell/3` use), and clean
+  termination: `kill/2` SIGTERMs the child's whole
   process group then SIGKILLs after a grace period; if the owner or the BEAM dies the shim
   sees its stdin close and does the same. Output is pull-based (a chunk per `read` credit),
   so `await_exit` closes what nobody read — except with `close_streams: false`, which
   `run/2` uses (its drain tasks may not have asked yet when a fast child is already gone).
   Protocol defined twice — `native/shim/proto.go` and `lib/longx/shim/proto.ex` — keep them
-  in sync and bump the version in both when it changes (now 3). Built by
+  in sync and bump the version in both when it changes (now 4). Built by
   `Mix.Tasks.Compile.Shim` into `priv/bin/` (gitignored) on `mix compile`; **Go must be on
   PATH**. `mix precommit` runs `gofmt`, `go vet`, `go test` in `native/shim`; Windows/macOS
   code is `GOOS=windows|darwin go vet`-checked (no machine here to run it). Windows: process
@@ -30,6 +32,13 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   Linux `oom_score_adj` is written to the shim so the whole tree inherits it; `memory_limit`
   is `RLIMIT_AS` (Linux) or the Job's limit (Windows), ignored on macOS — RLIMIT_AS counts
   address space, so runtimes that reserve it (BEAM, JVM, Go) need generous caps.
+  **Subcommands** besides the port protocol (`native/shim/{watch,rules}.go`, JSON over
+  stdio, config on the first line): `shim watch` (fsnotify v1.10 — inotify / kqueue /
+  ReadDirectoryChangesW; one watch per directory the rules keep, new ones followed, a
+  batch per 200 ms `{"paths", "more", "git", "rules", "overflow", "repo"}`, exits when
+  stdin closes), `shim ignored` (what the tree dims: an ignored dir with `/`, a *bridge*
+  — ignored but walked for a `!` rule below it — without) and `shim files` (the files the
+  rules keep, for `@`). The matching is go-git's `plumbing/format/gitignore` (pure Go).
 - **Git is the machine's git** — `Longx.Git` runs whatever `git` is on PATH (`LONGX_GIT`
   overrides; `Longx.Git.available?/0`) via `Longx.Shim.run/2` with `GIT_TERMINAL_PROMPT=0`,
   `LC_ALL=C` and, for anything that may commit, the Longx identity as `-c user.*` when the
@@ -134,7 +143,36 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `git_stash_pop`, `git_set_remote`, `git_fetch` / `git_pull` / `git_push`). git's own
     words come back as the error on the argument they concern; no repository →
     `repository: false` on `git_changes`, an error on `project_id` for the rest.
-    `search_files/3` walks the tree (the query as a subsequence, 20 best) for `@` mentions.
+    `search_files/3` matches the files the rules keep (`FileRules.files/2`, `shim files`;
+    our own walk if the shim fails) — the query as a subsequence, 20 best — for `@`
+    mentions.
+  - **The file watcher — only while a page has the project open**
+    (`Longx.Projects.Watcher`, `Longx.Projects.FileRules`). The `ProjectChannel`
+    subscribes after its join (`Watcher.subscribe/2` answers once the shim's watches are
+    in place), monitors the watcher and subscribes again a second after it dies; the last
+    subscriber gone, the watcher leaves after `grace_ms` (30 s — a reload does not restart
+    it; 100 ms in tests), its port closes, the shim exits. No page, no watcher, no cost
+    (measured on the Spark: 42 watches in 1 ms, idle CPU nil, 15–23 µs per event, 400k
+    events without overflow). One `:temporary` GenServer per project
+    (`WatcherSupervisor` + `WatcherRegistry`) running `shim watch`; a batch becomes
+    `{:files_changed, id, paths}` (`[]` = refetch everything: the rules changed, the kernel
+    dropped events, more than 500 paths), `{:definition_changed, id}` (anything under
+    `.longx`), `{:git_changed, id}` (HEAD, the index, a ref) and `{:watch_status, id,
+    %{watching, error}}` (the inotify limit hit: watching with an error, the rest still
+    watched) on `Projects.topic/1`; `.git` appearing or going restarts the shim with the
+    other config. **The ignore rules stack, gitignore syntax, the last match wins**: 1
+    ignore — built in (`node_modules/ .venv/ _build/ deps/ dist/ build/ target/ …`), global
+    (Settings → 文件监控, `Setting` `file_rules`), the project's (`Project.file_rules`
+    `%{"ignore", "watch"}`); 2 `.gitignore` in a git repository (the global excludesfile
+    `Git.global_excludes/0`, `.git/info/exclude`, every `.gitignore`); 3 watch — always
+    watched though ignored (built in `.longx/ .gitignore .longxignore`, global, the
+    project's), each line a `!` rule; 4 `.longxignore` at the root, above all
+    (`!target/reports/` brings back what `.gitignore` hides). `.git` itself is never
+    walked. A change to the rules (a setting — `Watcher.reload/1` / `reload_all/0` —, an
+    ignore file on disk) re-syncs the watches. RPC `ignored_paths` (Files), `file_rules` /
+    `set_file_rules` (System), `update_project` `fileRules`. Tests:
+    `test/longx/projects/file_watch_test.exs`, `project_channel_test`,
+    `file_rules_rpc_test`, `native/shim/watch_test.go`, e2e `08-files`.
   - **Attachments** (`Longx.Projects.Attachments`, `POST /attachments/:project_id`,
     `LongxWeb.AttachmentController`, multipart, 512 MB): a non-image, non-text file dropped
     on the composer is stored as `<stamp>-<name>` under `<attachments dir>/<project id>/`
@@ -387,6 +425,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     the shim), `timeout_ms` (default 2 min — `options Shell, timeout_ms:` sets a
     description's default —, max 30 min; the command runs to completion —
     `write_stdin` sessions are not offered), `max_output_tokens`, `shell`, `login`;
+    **stdin is the null device** without `tty` (`stdin: :null`, as codex's
+    `spawn_process_no_stdin`): ripgrep with no path searches a piped stdin instead of
+    the directory, and every `rg pattern` an agent ran read the empty pipe — exit 1,
+    nothing (prod, jbt-alab);
     **`Shell.normalize/1` is the tool's `prepare:`** — codex's whole
     exec_command object wrapped under `cmd` by the model (`{"cmd": {"cmd": "…",
     "yield_time_ms": 1000}}`, gpt-5.6 through the Codex backend once) is unwrapped; a
@@ -515,7 +557,20 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     later session followed the doc). `Layout.promote/2` (`Projects.promote_local/2`, RPC
     `promote_local`) moves a local file into `shared/`. `Projects.agent_definition/1` (RPC
     `agent_definition`) lists the files, the resolved plugs, the notices and the
-    description's model (`definitionModel`, what the composer shows). `Longx.Agent` loads
+    description's model (`definitionModel`, what the composer shows). **The page rereads
+    it when its files change**: the file watcher's `{:definition_changed, id}` →
+    `LongxWeb.ProjectChannel` pushes `"definition"` and `ProjectWindow` invalidates the
+    query — whoever edits the file; a new chat once showed and started from the
+    description the page had loaded. While the watcher is not watching (a crash, no
+    shim) the channel polls `Loader.fingerprint/1` instead (the `.longx/` and `local/`
+    code files' mtimes and sizes, every `definition_poll_ms` — 2 s, 100 ms in tests),
+    its baseline taken before the page is told.
+    **A level belongs to a model**: `start_thread` stores a level only for a chosen model
+    (one on the default keeps none — the default's `high`, frozen onto every new row,
+    outranked the description's level and ran its model at a level it does not even
+    declare); the kernel's `description_effort/4` drops a chosen level the described
+    model does not declare (rows frozen before the fix), and with nothing chosen or
+    described the request carries the model's own default level (`in_force/2`'s). `Longx.Agent` loads
     per step when no `pipeline:` module is given (tests give one).
   - **Knowledge instead of memory — `Plugs.Knowledge` over `Longx.Agent.Knowledge`** (the
     prompt is codex's memory decision boundary — `ext/memories/templates/memories/
@@ -1102,7 +1157,13 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     join → `Projects.host_thread/1` starts the agent again after a restart) replies with
     the snapshot (`seq`), then pushes `"event"` `%{seq, method, params}`, `"snapshot"` on
     demand. `LongxWeb.ProjectChannel` (`project:<id>`) pushes `"changed"` (rows changed →
-    refetch; `Projects.broadcast_changed/1`) and `"files"` (`broadcast_files_changed/2`).
+    refetch; `Projects.broadcast_changed/1`), `"files"` / `"git"` / `"definition"` /
+    `"watch"` (the file watcher, above; the client invalidates the tree, the ignored
+    list, every git query — the status strip's HEAD too — and keeps the watch status
+    under `wsKeys.watch`: the Files window says when nothing follows the disk, the Git
+    window polls only then) and `"watches"`. **A channel is already subscribed to its own
+    topic** (Phoenix does it at join, `Channel.Server`): the project channel's topic *is*
+    `Projects.topic/1`, and a second `PubSub.subscribe` delivered every message twice.
     `LongxWeb.NotifyChannel` above. Tests: `LongxWeb.ChannelCase`.
   - **Vite ↔ Phoenix is ours** (`LongxWeb.Vite`, `LongxWeb.Vite.Watcher`; phoenix_vite was
     rejected as immature). `<LongxWeb.Vite.assets />` renders, in dev, the React Fast
@@ -1442,7 +1503,10 @@ Where tests live / what to use:
   sessions: on duty asked and answered, off duty refused, the Agents window's switches),
   `05-goal` (the bar: paused, gone once complete; an active goal on an idle thread starts
   a turn named after it), `06-wait` (`wait_until`: the session on duty, the alarm back as
-  a `（定时触发）` turn within the tick — up to four minutes). A model that refuses an instruction
+  a `（定时触发）` turn within the tick — up to four minutes), `07-description` (a
+  `local/agent.exs` naming another model and level written while the page is open: the
+  composer names it without a reload, the new chat's requests run on it at that level —
+  read from `gateway_requests`; skipped on a server with no second keyed model). A model that refuses an instruction
   fails a scenario — that is the point; run it before a release and after a change to the
   kernel, the prompts or the chat.
 - TypeScript/React → also test-first: vitest + testing-library in `assets/` (`npm test`).

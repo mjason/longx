@@ -170,9 +170,13 @@ defmodule Longx.Agent.Plugs.Shell do
 
     # the person's own shell environment (a snapshot of their interactive login
     # shell), nothing of the BEAM's: Go, brew, nvm are where their .zshrc put them
+    # no pipe for stdin without a tty: the null device, as codex spawns its
+    # exec_command (`spawn_process_no_stdin`) — ripgrep with no path searches a
+    # piped stdin instead of the directory, and an agent's `rg pattern` found
+    # nothing in the empty pipe
     opts =
       [cd: cwd, env: ShellEnv.env_list(), env_clear: true] ++
-        if(tty?, do: [pty: true], else: [stderr: :stream]) ++
+        if(tty?, do: [pty: true], else: [stderr: :stream, stdin: :null]) ++
         if(guards.oom_score_adj, do: [oom_score_adj: guards.oom_score_adj], else: []) ++
         if(guards.memory_limit, do: [memory_limit: guards.memory_limit], else: [])
 

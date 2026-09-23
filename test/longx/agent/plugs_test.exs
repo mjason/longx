@@ -727,6 +727,30 @@ defmodule Longx.Agent.PlugsTest do
       assert Enum.join(collect_out([])) =~ dir
     end
 
+    # ripgrep with no path searches a piped stdin, not the directory: an agent's
+    # `rg pattern` read the empty pipe and answered exit 1 with nothing (prod,
+    # jbt-alab) — codex's exec_command spawns without stdin, the null device
+    test "a command's stdin is the null device, not a pipe — `rg pattern` with no path searches the directory",
+         %{dir: dir} do
+      ctx = %Context{cwd: dir, emit: fn _ -> :ok end}
+      tool = tool!(Shell, "exec_command")
+      probe = "[ -p /dev/stdin ] && echo piped || echo not piped; cat; echo end"
+
+      assert {:ok, output, %{"exitCode" => 0}} =
+               Tool.call(tool, %{"cmd" => probe, "login" => false}, ctx)
+
+      assert output =~ "not piped\nend"
+
+      if System.find_executable("rg") do
+        File.write!(Path.join(dir, "needle.txt"), "a needle here\n")
+
+        assert {:ok, found, %{"exitCode" => 0}} =
+                 Tool.call(tool, %{"cmd" => "rg -l needle", "login" => false}, ctx)
+
+        assert found =~ "needle.txt"
+      end
+    end
+
     test "commands see the person's shell environment, not the BEAM's", %{ctx: ctx} do
       assert {:ok, output, %{"exitCode" => 0}} =
                Tool.call(

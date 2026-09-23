@@ -13,6 +13,19 @@ import (
 const usage = "usage: shim [flags] -- <program> [args...]"
 
 func main() {
+	// the project's file watcher and its ignore listing (watch.go, rules.go):
+	// subcommands of their own, no port protocol
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "watch":
+			os.Exit(watchMain())
+		case "ignored":
+			os.Exit(listMain("ignored", listIgnored))
+		case "files":
+			os.Exit(listMain("files", listFiles))
+		}
+	}
+
 	dir := flag.String("cd", "", "working directory for the child")
 	stderr := flag.String("stderr", "stream", "stderr handling: stream|console|disable|redirect_to_stdout")
 	logTarget := flag.String("log", "", "shim diagnostics: stderr or a file path")
@@ -21,6 +34,7 @@ func main() {
 	memoryLimit := flag.Uint64("memory_limit", 0, "cap the child tree's memory in bytes (0 = none)")
 	cleanEnv := flag.Bool("clean_env", false, "give the child only the environment sent by the host, nothing of the shim's own")
 	pty := flag.Bool("pty", false, "run the child on a pseudo-terminal: one output stream, stdin stays open (unix only)")
+	noStdin := flag.Bool("no_stdin", false, "give the child the null device as stdin instead of a pipe (not with -pty)")
 	protocol := flag.String("protocol_version", "", "protocol version expected by the host")
 	version := flag.Bool("v", false, "print protocol version and exit")
 	flag.Parse()
@@ -49,6 +63,7 @@ func main() {
 		MemoryLimit: *memoryLimit,
 		CleanEnv:    *cleanEnv,
 		PTY:         *pty,
+		NoStdin:     *noStdin,
 	}
 	os.Exit(run(os.Stdin, os.Stdout, cfg))
 }

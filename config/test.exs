@@ -80,3 +80,8 @@ config :longx, Longx.Agent.Knowledge,
 
 # no report leaves the suite unless a test points the DSN at its Bypass
 config :sentry, dsn: nil, environment_name: :test
+
+# the page rereads a changed agent description (the channel polls its files
+# only when the watcher is unavailable); the watcher leaves soon after the last page
+config :longx, LongxWeb.ProjectChannel, definition_poll_ms: 100
+config :longx, Longx.Projects.Watcher, grace_ms: 100

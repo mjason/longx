@@ -8,7 +8,7 @@ import { channel, ok } from "@/ui/test-mocks";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { createEntry, deleteEntry, gitChanges, listFiles, readFile, renameEntry, writeFile } from "@/ash_rpc";
+import { createEntry, deleteEntry, gitChanges, ignoredPaths, listFiles, readFile, renameEntry, writeFile } from "@/ash_rpc";
 
 const tree: Record<string, { name: string; path: string; kind: "file" | "dir"; size: number }[]> = {
   "": [
@@ -37,9 +37,10 @@ describe("FilesTool", () => {
     channel.reset();
     vi.mocked(listFiles).mockImplementation(async ({ input }: { input: { path: string } }) => ok(tree[input.path] ?? []) as never);
     vi.mocked(gitChanges).mockResolvedValue(
-      ok({ repository: true, branch: "main", head: "abc", changes: [{ path: "lib/a.ex", status: "modified" }, { path: "new.txt", status: "untracked" }], ahead: 0, behind: 0, remotes: [], lfs: false, ignored: ["node_modules/", "README.md"], merging: false }) as never,
+      ok({ repository: true, branch: "main", head: "abc", changes: [{ path: "lib/a.ex", status: "modified" }, { path: "new.txt", status: "untracked" }], ahead: 0, behind: 0, remotes: [], lfs: false, ignored: [], merging: false }) as never,
     );
     vi.mocked(readFile).mockResolvedValue(ok({ path: "lib/a.ex", content: "defmodule A do\nend\n", size: 12, binary: false, truncated: false }) as never);
+    vi.mocked(ignoredPaths).mockResolvedValue(ok(["README.md", "node_modules/"]) as never);
   });
 
   test("⌘4 shows the tree: folders first, lazy children, git status on files and their folders; a file opens in the editor", async () => {
@@ -62,6 +63,33 @@ describe("FilesTool", () => {
     // the chat is still there, behind
     await user.click(within(tabs).getByRole("tab", { name: /会话/ }));
     expect(screen.getByTestId("chat-area")).toBeVisible();
+  });
+
+  test("the tree follows the disk while the watcher runs; a watcher that stopped is said, and 刷新 still works", async () => {
+    const { panel } = await openFiles();
+    expect(within(panel).queryByTestId("watch-hint")).toBeNull();
+    const before = vi.mocked(listFiles).mock.calls.length;
+    vi.mocked(listFiles).mockImplementation(async ({ input }: { input: { path: string } }) =>
+      ok(input.path === "" ? [...tree[""]!, { name: "new.txt", path: "new.txt", kind: "file", size: 1 }] : (tree[input.path] ?? [])) as never,
+    );
+    act(() => channel.deliverTo("project:id-1", "files", { paths: ["new.txt"] }));
+    await within(panel).findByRole("treeitem", { name: /new\.txt/ });
+    expect(vi.mocked(listFiles).mock.calls.length).toBeGreaterThan(before);
+
+    act(() => channel.deliverTo("project:id-1", "watch", { watching: false, error: "the file watcher stopped (exit 137)" }));
+    expect(await within(panel).findByTestId("watch-hint")).toHaveTextContent("文件监控");
+    act(() => channel.deliverTo("project:id-1", "watch", { watching: true, error: null }));
+    await waitFor(() => expect(within(panel).queryByTestId("watch-hint")).toBeNull());
+  });
+
+  test("a folder a `!` rule reaches into is dimmed itself, not what is brought back inside it", async () => {
+    vi.mocked(ignoredPaths).mockResolvedValue(ok(["lib", "lib/b.o"]) as never);
+    const user = userEvent.setup();
+    const { panel } = await openFiles();
+    await waitFor(() => expect(within(panel).getByRole("treeitem", { name: /lib/ })).toHaveAttribute("data-ignored", "true"));
+    expect(within(panel).getByRole("treeitem", { name: /README/ })).not.toHaveAttribute("data-ignored");
+    await user.click(within(panel).getByRole("treeitem", { name: /lib/ }));
+    expect(await within(panel).findByRole("treeitem", { name: /a\.ex/ })).not.toHaveAttribute("data-ignored");
   });
 
   test("a markdown file opens rendered, not in the editor; 编辑 switches to the editor and 预览 back", async () => {

@@ -359,6 +359,18 @@ defmodule Longx.Agent.Definition.Loader do
   defp watch_dirs(:project, dir), do: [Path.join(dir, "shared/watches")]
   defp watch_dirs(_name, dir), do: [Path.join(dir, "watches")]
 
+  @doc """
+  What the resolved description of `root` depends on, as data to compare:
+  every code file of `.longx/` and `.longx/local/` with its mtime and size.
+  Cheap (a stat per file): the project channel polls it while a page is open
+  and tells the page when it moved.
+  """
+  @spec fingerprint(Path.t()) :: term
+  def fingerprint(root) do
+    project_dir = Path.join(root, ".longx")
+    {files(:project, project_dir), files(:local, Path.join(project_dir, "local"))}
+  end
+
   # every code file of the layer with its mtime (the cache key)
   defp files(name, dir) do
     if File.dir?(dir) do

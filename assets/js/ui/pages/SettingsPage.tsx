@@ -15,8 +15,9 @@ import { RequestsSection } from "./settings/RequestsSection";
 import { UpdateSection } from "./settings/UpdateSection";
 import { WatchesSection } from "./settings/WatchesSection";
 import { ProcessesSection } from "./settings/ProcessesSection";
+import { FileRulesSection } from "./settings/FileRulesSection";
 
-const SECTIONS = ["models", "dependencies", "knowledge", "agent", "credentials", "watches", "processes", "update", "requests", "appearance"] as const;
+const SECTIONS = ["models", "dependencies", "knowledge", "agent", "files", "credentials", "watches", "processes", "update", "requests", "appearance"] as const;
 type Section = (typeof SECTIONS)[number];
 
 /**
@@ -88,6 +89,8 @@ function SectionBody({ section }: { section: Section }) {
       return <KnowledgeSection />;
     case "agent":
       return <AgentKernelSection />;
+    case "files":
+      return <FileRulesSection />;
     case "credentials":
       return <CredentialsSection />;
     case "update":

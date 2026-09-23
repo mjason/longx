@@ -93,6 +93,23 @@ defmodule Longx.Projects.Files do
       end
     end
 
+    # what the tree dims (Longx.Projects.FileRules: built in, global, the project's,
+    # .gitignore, .longxignore): an ignored directory ends with "/"
+    action :ignored_paths, {:array, :string} do
+      argument :project_id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        case Ash.get(Longx.Projects.Project, input.arguments.project_id) do
+          {:ok, project} ->
+            with {:ok, paths} <- Longx.Projects.FileRules.ignored(project),
+                 do: {:ok, Enum.sort(paths)}
+
+          {:error, _} ->
+            wrap({:error, :unknown_project}, :project_id)
+        end
+      end
+    end
+
     action :delete_entry do
       argument :project_id, :uuid, allow_nil?: false
       argument :path, :string, allow_nil?: false
@@ -114,7 +131,8 @@ defmodule Longx.Projects.Files do
     not_found: "does not exist",
     not_a_file: "is not a file",
     not_a_directory: "is not a directory",
-    exists: "already exists"
+    exists: "already exists",
+    unknown_project: "is not a project"
   }
 
   defp wrap(:ok, _field), do: :ok

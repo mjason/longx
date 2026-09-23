@@ -191,6 +191,20 @@ defmodule Longx.ShimTest do
       assert {:error, :closed} = Shim.write(shim, "late")
       assert {:ok, 0} = Shim.await_exit(shim)
     end
+
+    # ripgrep with no path searches a piped stdin, not the directory: an agent's
+    # `rg pattern` found nothing in the empty pipe (codex spawns with Stdio::null)
+    test "stdin: :null gives the child the null device — no pipe, EOF at once, nothing to write" do
+      probe = sh("[ -p /dev/stdin ] && echo pipe || echo none; cat; echo done")
+      assert {:ok, %{status: 0, stdout: "none\ndone\n"}} = Shim.run(probe, stdin: :null)
+      assert {:ok, %{stdout: "pipe\ndone\n"}} = Shim.run(probe)
+
+      {:ok, shim} = Shim.start_link(["cat"], stdin: :null)
+      assert {:error, :closed} = Shim.write(shim, "x")
+      assert :ok = Shim.close_stdin(shim)
+      assert :eof = Shim.read(shim)
+      assert {:ok, 0} = Shim.await_exit(shim)
+    end
   end
 
   describe "stderr" do

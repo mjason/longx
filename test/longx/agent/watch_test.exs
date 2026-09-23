@@ -110,4 +110,14 @@ defmodule Longx.Agent.WatchTest do
     assert %{result: {:error, message}} = Watch.run(Crashes, ctx)
     assert message =~ "boom"
   end
+
+  # like exec_command: nothing to read — `rg pattern` with no path searches the
+  # directory instead of an empty pipe
+  test "shell/3 gives the command the null device as stdin, not a pipe" do
+    assert {0, "not piped\nend\n"} =
+             Watch.Helpers.shell(
+               %{project_root: System.tmp_dir!()},
+               "[ -p /dev/stdin ] && echo piped || echo not piped; cat; echo end"
+             )
+  end
 end

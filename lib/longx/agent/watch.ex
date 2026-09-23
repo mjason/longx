@@ -322,7 +322,8 @@ defmodule Longx.Agent.Watch do
       cwd = Keyword.get(opts, :cwd) || ctx.project_root
       timeout = Keyword.get(opts, :timeout, 25_000)
 
-      case Longx.Shim.run(["bash", "-lc", cmd], cd: cwd, timeout: timeout) do
+      # stdin the null device, like exec_command (ripgrep reads a piped stdin)
+      case Longx.Shim.run(["bash", "-lc", cmd], cd: cwd, timeout: timeout, stdin: :null) do
         {:ok, %{status: status, stdout: out, stderr: err}} ->
           {status, Longx.Agent.Text.utf8(out <> err)}
 

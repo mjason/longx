@@ -8,7 +8,7 @@ defmodule Longx.Shim.Proto do
   `version/0` when the format changes.
   """
 
-  @version "3"
+  @version "4"
 
   # host -> shim
   @input 1

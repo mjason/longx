@@ -13,7 +13,7 @@ import { useWorkbench } from "@/core/workbench";
 import { searchFiles } from "@/ash_rpc";
 import { unwrap } from "@/core/projects";
 import { useQuery } from "@tanstack/react-query";
-import { useCreateEntry, useDeleteEntry, useFiles, useGitChanges, useRenameEntry, wsKeys, type FileEntry } from "@/core/workspace";
+import { useCreateEntry, useDeleteEntry, useFiles, useGitChanges, useIgnored, useRenameEntry, useWatchStatus, wsKeys, type FileEntry } from "@/core/workspace";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/ui/components/ui/alert-dialog";
 import { Button } from "@/ui/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/ui/components/ui/dropdown-menu";
@@ -25,10 +25,10 @@ import type { ProjectContext } from "../ProjectWindow";
 type GitStatus = Map<string, string>;
 type Ignored = string[];
 
-/** `.gitignore` hides it: the path, or a directory above it, is in the ignored list. */
+/** The rules hide it: the path, or a directory above it, is in the ignored list; a directory listed without "/" (a `!` rule reaches into it) is dimmed itself only. */
 function ignoredEntry(ignored: Ignored, entry: FileEntry): boolean {
   const path = entry.kind === "dir" ? entry.path + "/" : entry.path;
-  return ignored.some((i) => path === i || (i.endsWith("/") && path.startsWith(i)));
+  return ignored.some((i) => path === i || entry.path === i || (i.endsWith("/") && path.startsWith(i)));
 }
 
 const GIT_COLOR: Record<string, string> = {
@@ -55,7 +55,8 @@ export function FilesTool({ ctx }: { ctx: ProjectContext }) {
   const client = useQueryClient();
   const changes = useGitChanges(projectId);
   const git = useMemo<GitStatus>(() => new Map((changes.data?.changes ?? []).map((c) => [c.path, c.status])), [changes.data]);
-  const ignored = changes.data?.ignored ?? [];
+  const ignored = useIgnored(projectId).data ?? [];
+  const watch = useWatchStatus(projectId).data;
   const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [editing, setEditing] = useState<Editing>(null);
@@ -97,6 +98,11 @@ export function FilesTool({ ctx }: { ctx: ProjectContext }) {
           <RefreshCw />
         </Button>
       </div>
+      {watch && (!watch.watching || watch.error) ? (
+        <p className="text-muted-foreground rounded-md border border-dashed px-2 py-1.5 text-xs" data-testid="watch-hint" title={watch.error ?? undefined}>
+          {watch.watching ? t.watchPartial : t.watchOff}
+        </p>
+      ) : null}
       <Input type="search" role="searchbox" aria-label={t.filterFiles} placeholder={t.filterFiles} value={filter} onChange={(e) => setFilter(e.target.value)} className="h-8 text-sm" autoCapitalize="none" spellCheck={false} />
       {filter.trim() ? (
         <FilterResults projectId={projectId} query={filter.trim()} git={git} />

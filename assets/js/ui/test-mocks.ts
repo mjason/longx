@@ -37,6 +37,14 @@ export const dependencyReport = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
+/** the global file rules as the wire gives them */
+export const fileRulesData = () => ({
+  ignore: "",
+  watch: "",
+  builtinIgnore: ["node_modules/", "_build/", "target/"],
+  builtinWatch: [".longx/", ".gitignore", ".longxignore"],
+});
+
 /** a credential row as the wire lists it: never a value, only "has one" */
 export const credential = (name: string, extra: Record<string, unknown> = {}) => ({
   id: `cred-${name}`,
@@ -106,6 +114,7 @@ export const project = (n: number) => ({
   modelId: null,
   trustLocalAgent: false,
   agentSettings: null,
+  fileRules: {},
   archivedAt: null,
   updatedAt: "2026-09-12T00:00:00Z",
 });
@@ -377,6 +386,9 @@ export function rpcMock() {
       }),
     ),
     deleteEntry: vi.fn(async () => ok(null)),
+    ignoredPaths: vi.fn(async () => ok([])),
+    fileRules: vi.fn(async () => ok(fileRulesData())),
+    setFileRules: vi.fn(async ({ input }: { input: { ignore?: string; watch?: string } }) => ok({ ...fileRulesData(), ...input })),
     gitChanges: vi.fn(async () =>
       ok({
         repository: false,

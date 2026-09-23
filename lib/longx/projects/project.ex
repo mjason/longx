@@ -98,10 +98,27 @@ defmodule Longx.Projects.Project do
         :web_search,
         :model_id,
         :trust_local_agent,
-        :agent_settings
+        :agent_settings,
+        :file_rules
       ]
 
       validate Validations.AgentSettings
+
+      # the watcher of an open page reads the new rules
+      change fn changeset, _ ->
+        if Ash.Changeset.changing_attribute?(changeset, :file_rules) do
+          Ash.Changeset.after_transaction(changeset, fn
+            _cs, {:ok, project} ->
+              Longx.Projects.Watcher.reload(project.id)
+              {:ok, project}
+
+            _cs, other ->
+              other
+          end)
+        else
+          changeset
+        end
+      end
     end
 
     update :archive do
@@ -232,6 +249,11 @@ defmodule Longx.Projects.Project do
     # untyped on the wire so the client selects it by name (a typed map inside
     # the resource's field list broke ash_typescript 0.18's selection type)
     attribute :agent_settings, :map, public?: true
+
+    # what the file watcher and the tree ignore beyond the built-in lists and the
+    # global setting: %{"ignore" => text, "watch" => text}, gitignore syntax
+    # (`Longx.Projects.FileRules`)
+    attribute :file_rules, :map, public?: true, allow_nil?: false, default: %{}
 
     attribute :archived_at, :utc_datetime_usec, public?: true
 

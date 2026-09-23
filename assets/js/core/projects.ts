@@ -35,6 +35,7 @@ export const projectFields = [
   "modelId",
   "trustLocalAgent",
   "agentSettings",
+  "fileRules",
   "archivedAt",
   "updatedAt",
 ] as const;

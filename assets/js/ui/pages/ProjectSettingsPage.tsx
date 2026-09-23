@@ -20,6 +20,8 @@ import { Textarea } from "@/ui/components/ui/textarea";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { t } from "@/ui/strings";
 import { ProjectWatches } from "./settings/ProjectWatches";
+import { projectFileRules, useSaveProjectFileRules, type FileRules } from "@/core/fileRules";
+import { FileRulesFields } from "@/ui/components/FileRulesFields";
 
 type Form = Required<Pick<UpdateProjectInput, "name" | "webSearch" | "trustLocalAgent">> & {
   description: string;
@@ -161,6 +163,8 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
 
       <AgentSection projectId={project.id} trusted={form.trustLocalAgent} onTrust={(v) => set("trustLocalAgent", v)} overrides={form.agentOverrides} onOverrides={(v) => set("agentOverrides", v)} />
 
+      <ProjectFileRules projectId={project.id} slug={slug} initial={projectFileRules(project.fileRules)} />
+
       <ProjectWatches projectId={project.id} rootPath={project.rootPath} trusted={form.trustLocalAgent} sharedFiles={definitionFiles.data?.files ?? []} />
 
       <section className="space-y-3">
@@ -298,6 +302,27 @@ function AgentSection({
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+/** the project's own ignore / watch rules, saved on their own (the watcher reloads) */
+function ProjectFileRules({ projectId, slug, initial }: { projectId: string; slug: string; initial: FileRules }) {
+  const [value, setValue] = useState(initial);
+  const save = useSaveProjectFileRules(projectId, slug);
+  const dirty = value.ignore !== initial.ignore || value.watch !== initial.watch;
+  return (
+    <section className="space-y-4" data-testid="project-file-rules">
+      <h2 className="text-lg font-medium">{t.fileRules.project}</h2>
+      <p className="text-muted-foreground text-sm">{t.fileRules.projectHint}</p>
+      <FileRulesFields idPrefix="ps-rules" value={value} onChange={setValue} />
+      <Button
+        variant="outline"
+        disabled={!dirty || save.isPending}
+        onClick={() => save.mutate(value, { onSuccess: () => toast.success(t.saved), onError: (e: Error) => toast.error(e.message) })}
+      >
+        {t.fileRules.save}
+      </Button>
     </section>
   );
 }

@@ -904,19 +904,21 @@ defmodule Longx.Agent do
     # file that failed to load, an old format) lead the prompt.
     models = (step.assigns[:models_fun] || fn -> nil end).()
     {model, effort, notices} = description_model(step, loaded, models)
+    # what this step runs on, for the request, the Environment plug and the
+    # turn's event: with no level chosen or described, the model's own default
+    in_force = in_force(model, effort)
 
     step = %{
       step
       | model: model,
-        effort: effort,
+        effort: effort || (in_force && in_force[:effort]),
         instructions: Enum.map(notices, &("⚠ " <> &1)) ++ step.instructions,
         assigns:
           Map.merge(step.assigns, %{
             agents: loaded.agents,
             allowed: loaded.allowed,
             models: models,
-            # what this step runs on, for the Environment plug and the turn's event
-            model_in_force: in_force(model, effort)
+            model_in_force: in_force
           })
     }
 
@@ -941,7 +943,7 @@ defmodule Longx.Agent do
     known = models && Enum.map(models, & &1.slug)
 
     if known == nil or slug in known do
-      {slug, step.effort || loaded.effort, loaded.notices}
+      {slug, description_effort(step.effort, loaded.effort, slug, models), loaded.notices}
     else
       notice =
         "The agent description names model #{inspect(slug)}, which is not configured in Longx; " <>
@@ -949,6 +951,18 @@ defmodule Longx.Agent do
           Enum.join(known, ", ") <> ". Fix the description (model \"<slug>\")."
 
       {nil, step.effort, loaded.notices ++ [notice]}
+    end
+  end
+
+  # the level the person chose stands when the description's model has it; one
+  # it does not declare (a thread row that froze another model's default) gives
+  # way to the description's own level
+  defp description_effort(nil, described, _slug, _models), do: described
+
+  defp description_effort(chosen, described, slug, models) do
+    case models && Enum.find(models, &(&1.slug == slug)) do
+      %{levels: [_ | _] = levels} -> if chosen in levels, do: chosen, else: described
+      _ -> chosen
     end
   end
 

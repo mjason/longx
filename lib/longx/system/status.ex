@@ -75,6 +75,13 @@ defmodule Longx.System.Status do
     child_effort: [type: :string]
   ]
 
+  @file_rules_fields [
+    ignore: [type: :string, allow_nil?: false, constraints: [allow_empty?: true, trim?: false]],
+    watch: [type: :string, allow_nil?: false, constraints: [allow_empty?: true, trim?: false]],
+    builtin_ignore: [type: {:array, :string}, allow_nil?: false],
+    builtin_watch: [type: {:array, :string}, allow_nil?: false]
+  ]
+
   @sentry_fields [
     enabled: [type: :boolean, allow_nil?: false],
     dsn: [type: :string],
@@ -270,6 +277,24 @@ defmodule Longx.System.Status do
 
       run fn _input, _ ->
         {:ok, %{url: Longx.System.public_url(), setting: Longx.System.public_url_setting()}}
+      end
+    end
+
+    # what Longx ignores in every project (Longx.Projects.FileRules): the global
+    # texts, gitignore syntax, beside the built-in lists they stack on
+    action :file_rules, :map do
+      constraints fields: @file_rules_fields
+      run fn _input, _ -> {:ok, file_rules()} end
+    end
+
+    action :set_file_rules, :map do
+      constraints fields: @file_rules_fields
+      argument :ignore, :string, constraints: [allow_empty?: true, trim?: false]
+      argument :watch, :string, constraints: [allow_empty?: true, trim?: false]
+
+      run fn input, _ ->
+        with {:ok, _} <- Longx.Projects.FileRules.put_global(input.arguments),
+             do: {:ok, file_rules()}
       end
     end
 
@@ -505,6 +530,18 @@ defmodule Longx.System.Status do
         end
       end
     end
+  end
+
+  defp file_rules do
+    builtin = Longx.Projects.FileRules.builtin()
+    global = Longx.Projects.FileRules.global()
+
+    %{
+      ignore: global.ignore,
+      watch: global.watch,
+      builtin_ignore: builtin.ignore,
+      builtin_watch: builtin.watch
+    }
   end
 
   defp browser_status do

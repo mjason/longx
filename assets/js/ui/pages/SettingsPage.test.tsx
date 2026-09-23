@@ -9,6 +9,7 @@ vi.mock("@/core/socket", async () =>
   (await import("@/ui/test-mocks")).socketMock(),
 );
 import {
+  setFileRules,
   setAgentSettings,
   dependencies,
   checkDependencies,
@@ -49,6 +50,18 @@ import { page } from "@/core/upgrade";
 import { within } from "@testing-library/react";
 
 describe("SettingsPage", () => {
+  test("files: the global rules beside the built-in lists they stack on; saved", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings/files");
+    const section = await screen.findByTestId("section-files");
+    // the built-in lists are shown, read-only
+    expect(section).toHaveTextContent("node_modules/");
+    expect(section).toHaveTextContent(".longx/");
+    await user.type(within(section).getByLabelText("忽略"), "logs/");
+    await user.click(within(section).getByRole("button", { name: "保存规则" }));
+    await waitFor(() => expect(setFileRules).toHaveBeenCalledWith(expect.objectContaining({ input: { ignore: "logs/", watch: "" } })));
+  });
+
   test("phone: a list of sections, then the section", async () => {
     setViewport(390);
     const user = userEvent.setup();

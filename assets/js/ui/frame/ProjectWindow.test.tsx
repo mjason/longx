@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
@@ -36,6 +36,27 @@ describe("ProjectWindow", () => {
     for (const item of Array.from(strip.children)) {
       expect(item).toHaveClass("whitespace-nowrap", "shrink-0");
     }
+  });
+
+  test("the status strip follows the disk: the watcher's git and files events refetch HEAD and the dirty count", async () => {
+    setViewport(1280);
+    channel.reset();
+    const { gitInfo } = await import("@/ash_rpc");
+    const original = vi.mocked(gitInfo).getMockImplementation()!;
+    const repo = (head: string | null, changes: number) => ok({ repository: head !== null, branch: head ? "main" : null, head, clean: changes === 0, changes }) as never;
+    vi.mocked(gitInfo).mockResolvedValue(repo(null, 0));
+    renderAt("/p/app-1/t/t1");
+    const strip = await screen.findByTestId("status-strip");
+    await waitFor(() => expect(strip).toHaveTextContent("no git"));
+
+    vi.mocked(gitInfo).mockResolvedValue(repo("c0ffee0000", 0));
+    act(() => channel.deliverTo("project:id-1", "git", {}));
+    await waitFor(() => expect(strip).toHaveTextContent("c0ffee00"));
+
+    vi.mocked(gitInfo).mockResolvedValue(repo("c0ffee0000", 2));
+    act(() => channel.deliverTo("project:id-1", "files", { paths: ["a.txt"] }));
+    await waitFor(() => expect(strip).toHaveTextContent("·2"));
+    vi.mocked(gitInfo).mockImplementation(original);
   });
 
   test("the status strip counts the server's faults of the last hour and links to the record", async () => {

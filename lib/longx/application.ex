@@ -48,6 +48,9 @@ defmodule Longx.Application do
       {DynamicSupervisor, name: Longx.Agent.Supervisor, strategy: :one_for_one},
       # keeps project thread/turn rows in step with the agents' events
       Longx.Projects.Tracker,
+      # a project's file watcher, only while a page has it open
+      {Registry, keys: :unique, name: Longx.Projects.WatcherRegistry},
+      {DynamicSupervisor, name: Longx.Projects.WatcherSupervisor, strategy: :one_for_one},
       # OAuth2 logins in flight (Longx.Credentials), and the token refresh jobs (Oban)
       Longx.Credentials.Logins,
       # the watches' scripts run here, one task per run (Longx.Watches)
