@@ -250,6 +250,8 @@ export const t = {
   subagentPage: "到它的页面去对话 →",
   turnWriting: (tool: string, bytes: string) => `正在写 ${tool} 的参数（${bytes}）`,
   turnRetrying: (why: string) => `连接中断，正在重试：${why}`,
+  turnWaitingOn: (model: string) => `等 ${model} 回应`,
+  upstreamQuiet: (seconds: number) => `上游 ${seconds} 秒没有数据`,
   // the context fold (/compact, or the window nearly full): the summary's bytes so far
   turnCompacting: (bytes: string | null) => (bytes ? `正在压缩上下文（摘要 ${bytes}）` : "正在压缩上下文…"),
   modelFailed: {
@@ -710,6 +712,8 @@ export const t = {
     promptCacheKeyHint: "请求里带上会话 id 作为 prompt_cache_key，让服务端按会话缓存前缀（OpenAI 的参数；Codex CLI 也这么发）。自动 = OpenAI 发、兼容服务不发；别的服务支持的话手动打开。",
     promptCacheKeyOptions: { auto: "自动（按类型）", on: "发送", off: "不发" } as Record<string, string>,
     timeout: "请求超时（秒）",
+    idleTimeout: "流静默超时（秒）",
+    idleTimeoutHint: "回答已经开始后，上游多久不发数据就算卡住、重新请求（codex 默认 300 秒）",
     concurrency: "并发上限",
     unlimited: "不限",
     lastError: "最近错误",

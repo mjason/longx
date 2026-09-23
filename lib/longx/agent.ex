@@ -1130,7 +1130,7 @@ defmodule Longx.Agent do
          %State{phase: :streaming, model_task: %{ref: ref}} = state,
          {:model, ref, {:restart, why}}
        ) do
-    state = Stream.discard_open_items(state)
+    state = %{Stream.discard_open_items(state) | quiet: nil}
 
     emit(state, "turn/progress", %{
       "turnId" => state.turn_id,
@@ -1397,6 +1397,10 @@ defmodule Longx.Agent do
     end
   end
 
+  # the summary's model has sent nothing for a while: said on the fold's progress
+  defp compaction_event({:quiet, ms}, %State{compacting: c} = state),
+    do: {:noreply, Compaction.show_progress(%{state | quiet: ms}, byte_size(c.text))}
+
   defp compaction_event(_event, state), do: {:noreply, state}
 
   ## Turn end
@@ -1443,7 +1447,8 @@ defmodule Longx.Agent do
         context_overflow: false,
         compact_requested: false,
         pending_images: [],
-        progress: nil
+        progress: nil,
+        quiet: nil
     }
   end
 

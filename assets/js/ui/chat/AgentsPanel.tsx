@@ -11,7 +11,7 @@ import { useContext, useState } from "react";
 import { toast } from "sonner";
 import { ACTION_REQUEST, subagentsOf } from "@/core/chat/messages";
 import { runningTurnId, type ThreadView } from "@/core/chat/thread";
-import { formatBytes } from "@/core/format";
+import { progressLabel } from "./progressLabel";
 import { useFrame } from "@/core/frame";
 import { Button } from "@/ui/components/ui/button";
 import { t } from "@/ui/strings";
@@ -36,12 +36,7 @@ export function agentSummaries(view: ThreadView, subviews: Record<string, Thread
     const pending = sub?.requests.find((r) => r.method === ACTION_REQUEST);
     const running = sub ? runningTurnId(sub) !== null : agent.kind === "started" || agent.kind === "interacted";
     const progress = sub?.progress;
-    const doing =
-      progress?.kind === "retry"
-        ? t.turnRetrying(progress.name)
-        : progress?.kind === "toolCall"
-          ? t.turnWriting(progress.name, formatBytes(progress.bytes))
-          : t.subagentState["interacted"]!;
+    const doing = progressLabel(progress, t.subagentState["interacted"]!);
     const state: AgentSummary["state"] = pending ? "waiting" : running ? "working" : "done";
     out.push({
       threadId: agent.threadId,

@@ -27,6 +27,20 @@ defmodule Longx.Application do
       {Phoenix.PubSub, name: Longx.PubSub},
       # per-provider in-flight counters (Provider.max_concurrent_requests)
       Longx.AI.Gateway.Limiter,
+      # the model requests' own HTTP pool: a connection idle past
+      # `conn_max_idle_time` is replaced at checkout, never reused — an upstream
+      # (or a proxy) may have dropped it without the close reaching us, and one
+      # reused after ten idle minutes answered "socket closed"
+      {Finch,
+       name: Longx.AI.Finch,
+       pools: %{
+         default: [
+           conn_max_idle_time:
+             :longx
+             |> Application.get_env(Longx.AI.Finch, [])
+             |> Keyword.get(:conn_max_idle_time, 30_000)
+         ]
+       }},
       Longx.AI.Gateway.Log,
       # the server's recent faults, for the settings page and the status strip
       Longx.System.Faults,

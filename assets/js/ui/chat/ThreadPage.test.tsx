@@ -323,6 +323,28 @@ describe("ThreadPage", () => {
     expect(bar).not.toHaveTextContent("重试");
   });
 
+  // the ChatGPT backend once stopped mid-call with the connection open: the bar said
+  // 正在写 apply_patch 的参数（255 B） for ten minutes, as if Longx hung
+  test("the turn bar says when the upstream has sent nothing for a while — on the call being written, or as a wait on the model", async () => {
+    await open();
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", { seq: 5, method: "turn/progress", params: { turnId: "turn_2", progress: { kind: "toolCall", name: "apply_patch", bytes: 255, quiet: 45 } } });
+    });
+    const bar = screen.getByTestId("turn-bar");
+    expect(bar).toHaveTextContent("正在写 apply_patch 的参数");
+    expect(bar).toHaveTextContent("上游 45 秒没有数据");
+    act(() => {
+      channel.deliver("event", { seq: 6, method: "turn/progress", params: { turnId: "turn_2", progress: { kind: "toolCall", name: "apply_patch", bytes: 300 } } });
+    });
+    expect(bar).not.toHaveTextContent("没有数据");
+    act(() => {
+      channel.deliver("event", { seq: 7, method: "turn/progress", params: { turnId: "turn_2", progress: { kind: "waiting", name: "gpt-6-luna", bytes: 0, quiet: 90 } } });
+    });
+    expect(bar).toHaveTextContent("等 gpt-6-luna 回应");
+    expect(bar).toHaveTextContent("上游 90 秒没有数据");
+  });
+
   test("the turn bar shows a context fold while it runs — between turns too, where no turn spins — and clears when it is over", async () => {
     await open();
     // /compact between turns: no turn/started, only the kernel's progress

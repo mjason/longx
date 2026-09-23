@@ -23,6 +23,7 @@ defmodule Longx.AI.Target do
     # with their encrypted_content (see Longx.AI.Gateway)
     kind: :openai_compatible,
     request_timeout_ms: 600_000,
+    stream_idle_timeout_ms: 300_000,
     max_concurrent_requests: nil,
     max_output_tokens: nil,
     # a ChatGPT subscription through the Codex backend: the key is an OAuth access
@@ -48,6 +49,7 @@ defmodule Longx.AI.Target do
           prompt_cache_key?: boolean,
           kind: :openai | :openai_compatible,
           request_timeout_ms: pos_integer,
+          stream_idle_timeout_ms: pos_integer,
           max_concurrent_requests: pos_integer | nil,
           max_output_tokens: pos_integer | nil,
           chatgpt?: boolean,

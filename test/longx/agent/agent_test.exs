@@ -612,6 +612,83 @@ defmodule Longx.AgentTest do
     assert ThreadState.snapshot(id).progress == nil
   end
 
+  # the quiet notices' cadence, shortened for one test (restored after it)
+  defp quiet_config(after_ms, tick_ms) do
+    previous = Application.get_env(:longx, Longx.Agent.Model, [])
+
+    Application.put_env(
+      :longx,
+      Longx.Agent.Model,
+      Keyword.merge(previous, quiet_after_ms: after_ms, quiet_tick_ms: tick_ms)
+    )
+
+    on_exit(fn -> Application.put_env(:longx, Longx.Agent.Model, previous) end)
+  end
+
+  # a stream that pauses after `head` chunks, then goes on
+  defp pausing!(bypass, first, head, pause_ms) do
+    {:ok, counter} = Elixir.Agent.start_link(fn -> 0 end)
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      if Elixir.Agent.get_and_update(counter, &{&1 + 1, &1 + 1}) == 1 do
+        {now, later} = Enum.split(first, head)
+        conn = sse(conn, now)
+        Process.sleep(pause_ms)
+        Enum.reduce(later, conn, fn chunk, c -> elem(Plug.Conn.chunk(c, chunk), 1) end)
+      else
+        sse(conn, ResponsesFixture.assistant_message("done"))
+      end
+    end)
+  end
+
+  # the ChatGPT backend once stopped mid-call with the connection open: the page
+  # said 正在写 apply_patch 的参数（255 B） for ten minutes, as if Longx were stuck
+  test "an upstream silent mid-call is said on the call's progress (quiet, in seconds) and unsaid when it resumes",
+       %{bypass: bypass, thread_id: id} do
+    quiet_config(100, 50)
+    call = ResponsesFixture.function_call("exec_command", nil, %{"cmd" => "echo hi"})
+    pausing!(bypass, call, 3, 400)
+
+    {:ok, _} = Agent.send(id, "run it")
+
+    assert_receive {:thread, _, "turn/progress",
+                    %{
+                      "progress" => %{
+                        "kind" => "toolCall",
+                        "name" => "exec_command",
+                        "quiet" => q
+                      }
+                    }},
+                   5_000
+
+    assert is_integer(q)
+
+    # data again: the call's progress without the quiet
+    assert_receive {:thread, _, "turn/progress", %{"progress" => progress}}
+                   when is_map(progress) and not is_map_key(progress, "quiet"),
+                   5_000
+
+    assert %{"kind" => "toolCall"} = progress
+    assert %{"status" => "completed"} = await_turn_end()
+    assert ThreadState.snapshot(id).progress == nil
+  end
+
+  test "an upstream silent before it writes anything is a waiting progress naming the model, gone when it speaks",
+       %{bypass: bypass, thread_id: id, model: model} do
+    quiet_config(100, 50)
+    pausing!(bypass, ResponsesFixture.assistant_message("late words"), 1, 400)
+
+    {:ok, _} = Agent.send(id, "hi")
+
+    assert_receive {:thread, _, "turn/progress",
+                    %{"progress" => %{"kind" => "waiting", "name" => name, "quiet" => q}}},
+                   5_000
+
+    assert name == model.slug and is_integer(q)
+    assert_receive {:thread, _, "turn/progress", %{"progress" => nil}}, 5_000
+    assert %{"status" => "completed"} = await_turn_end()
+  end
+
   test "a stream that breaks mid-turn is retried: the person sees the retry as progress and the turn completes; past the retries the turn fails naming the model so another can take over",
        %{bypass: bypass, dir: dir, model: model} do
     settings = Map.put(Longx.Agent.Definition.Settings.defaults(), :model_retries, 1)
@@ -1398,6 +1475,39 @@ defmodule Longx.AgentTest do
     assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
     assert [_, summary_request, _] = collect_requests([])
     assert summary_request["instructions"] =~ "CONTEXT CHECKPOINT"
+  end
+
+  test "a summary's model silent past the threshold is said on the fold's progress",
+       %{bypass: bypass, dir: dir} do
+    id = compacting_agent(dir, DefaultCompaction)
+    quiet_config(100, 50)
+    {:ok, counter} = Elixir.Agent.start_link(fn -> 0 end)
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      case Elixir.Agent.get_and_update(counter, &{&1 + 1, &1 + 1}) do
+        1 ->
+          sse(conn, ResponsesFixture.assistant_message("first"))
+
+        # the summary: a pause after its first event
+        2 ->
+          [created | rest] = ResponsesFixture.assistant_message("HANDOFF")
+          conn = sse(conn, [created])
+          Process.sleep(400)
+          Enum.reduce(rest, conn, fn chunk, c -> elem(Plug.Conn.chunk(c, chunk), 1) end)
+      end
+    end)
+
+    {:ok, _} = Agent.send(id, "one")
+    await_turn_end()
+    assert :ok = Agent.compact(id)
+
+    assert_receive {:thread, _, "turn/progress",
+                    %{"progress" => %{"kind" => "compaction", "quiet" => q}}},
+                   5_000
+
+    assert is_integer(q)
+    await_item_completed_of_type("contextCompaction")
+    assert Agent.status(id) == :idle
   end
 
   test "a manual compact between turns folds the thread and the next turn starts from the summary",

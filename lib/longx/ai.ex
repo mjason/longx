@@ -251,6 +251,7 @@ defmodule Longx.AI do
          reasoning_summary: model.reasoning_summary,
          verbosity: model.verbosity,
          request_timeout_ms: provider.request_timeout_ms,
+         stream_idle_timeout_ms: provider.stream_idle_timeout_ms,
          max_concurrent_requests: provider.max_concurrent_requests,
          max_output_tokens: model.max_output_tokens
        }}

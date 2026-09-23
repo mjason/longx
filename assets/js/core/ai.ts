@@ -99,6 +99,8 @@ export type Provider = {
   hasApiKey: boolean;
   supportsHostedWebSearch: boolean;
   requestTimeoutMs: number;
+  /** how long a begun stream may say nothing before it is asked again (codex's stream_idle_timeout_ms) */
+  streamIdleTimeoutMs: number;
   maxConcurrentRequests: number | null;
   lastCheckedAt: string | null;
   lastError: string | null;
@@ -180,6 +182,7 @@ const providerFields = [
   "hasApiKey",
   "supportsHostedWebSearch",
   "requestTimeoutMs",
+  "streamIdleTimeoutMs",
   "maxConcurrentRequests",
   "lastCheckedAt",
   "lastError",

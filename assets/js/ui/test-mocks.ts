@@ -656,6 +656,7 @@ export const provider = (n: number, extra: Record<string, unknown> = {}) => ({
   hasApiKey: n === 1,
   supportsHostedWebSearch: false,
   requestTimeoutMs: 600000,
+  streamIdleTimeoutMs: 300000,
   maxConcurrentRequests: null,
   lastCheckedAt: null,
   lastError: n === 2 ? "401 Authentication Fails" : null,

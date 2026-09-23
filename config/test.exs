@@ -85,3 +85,6 @@ config :sentry, dsn: nil, environment_name: :test
 # only when the watcher is unavailable); the watcher leaves soon after the last page
 config :longx, LongxWeb.ProjectChannel, definition_poll_ms: 100
 config :longx, Longx.Projects.Watcher, grace_ms: 100
+
+# the model requests' pool replaces a connection idle this long (30 s in prod)
+config :longx, Longx.AI.Finch, conn_max_idle_time: 200

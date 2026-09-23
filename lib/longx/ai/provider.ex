@@ -84,6 +84,7 @@ defmodule Longx.AI.Provider do
         :supports_hosted_web_search,
         :prompt_cache_key,
         :request_timeout_ms,
+        :stream_idle_timeout_ms,
         :max_concurrent_requests
       ]
 
@@ -102,6 +103,7 @@ defmodule Longx.AI.Provider do
         :supports_hosted_web_search,
         :prompt_cache_key,
         :request_timeout_ms,
+        :stream_idle_timeout_ms,
         :max_concurrent_requests
       ]
     end
@@ -183,6 +185,18 @@ defmodule Longx.AI.Provider do
       public? true
       default 600_000
       constraints min: 1_000
+    end
+
+    # How long a stream that has begun may say nothing before it counts as stuck and
+    # is asked again — codex's `stream_idle_timeout_ms` (model-provider-info,
+    # DEFAULT_STREAM_IDLE_TIMEOUT_MS, 5 min), apart from the request timeout: the
+    # ChatGPT backend once stopped mid-call with the connection open and the ten
+    # minutes of request_timeout_ms were waited in full
+    attribute :stream_idle_timeout_ms, :integer do
+      allow_nil? false
+      public? true
+      default 300_000
+      constraints min: 100
     end
 
     # Requests allowed in flight at once against this provider; nil = no cap.

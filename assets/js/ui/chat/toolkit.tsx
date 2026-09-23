@@ -25,6 +25,7 @@ import {
 import { AppWindow, Bot, Download, FileCode2, GitCompareArrows, Image as ImageIcon, Loader2 } from "lucide-react";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { formatBytes, formatDuration } from "@/core/format";
+import { progressLabel } from "./progressLabel";
 import type { Tab } from "@/core/workbench";
 import { toast } from "sonner";
 import type { ThreadExtras } from "@/core/chat/adapter";
@@ -806,12 +807,7 @@ export const SubagentTool: ToolCallMessagePartComponent<
   const progress = done ? null : (childView?.progress ?? null);
   const childModel = childView?.turn ? modelOf(childView.turn) : undefined;
   const onModel = childModel ? `${childModel.slug}${childModel.effort ? ` · ${childModel.effort}` : ""}` : null;
-  const doing =
-    progress?.kind === "retry"
-      ? t.turnRetrying(progress.name)
-      : progress?.kind === "toolCall"
-        ? t.turnWriting(progress.name, formatBytes(progress.bytes))
-        : (t.subagentState[kind] ?? kind);
+  const doing = progressLabel(progress, t.subagentState[kind] ?? kind);
   const label = waiting ? (pending ? String(pending.params["title"] ?? "") : p.args.request?.title) || t.subagentNeedsAction : onModel ? `${doing} · ${onModel}` : doing;
   // its last words, for the row
   const excerpt = lastWords(childView);

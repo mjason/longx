@@ -46,6 +46,18 @@ defmodule LongxWeb.AiRpcTest do
                "input" => %{"requestTimeoutMs" => 30000}
              })
 
+    # how long a stream may say nothing before it is asked again: codex's 5 min by default
+    assert %{"success" => true, "data" => %{"streamIdleTimeoutMs" => 300_000}} =
+             rpc(conn, "list_providers", %{"fields" => ["streamIdleTimeoutMs"]})
+             |> then(&%{&1 | "data" => hd(&1["data"])})
+
+    assert %{"success" => true, "data" => %{"streamIdleTimeoutMs" => 120_000}} =
+             rpc(conn, "update_provider", %{
+               "fields" => ["streamIdleTimeoutMs"],
+               "identity" => id,
+               "input" => %{"streamIdleTimeoutMs" => 120_000}
+             })
+
     assert %{"success" => false} =
              rpc(conn, "list_providers", %{"fields" => ["id", "apiKey"]})
 

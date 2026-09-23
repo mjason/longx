@@ -77,7 +77,11 @@ defmodule Longx.Agent.Kernel.Compaction do
   def show_progress(%State{compacting: c} = state, bytes) when is_integer(bytes) do
     emit(state, "turn/progress", %{
       "turnId" => state.turn_id,
-      "progress" => %{"kind" => "compaction", "name" => c.model, "bytes" => bytes}
+      "progress" =>
+        Longx.Agent.Kernel.Stream.with_quiet(
+          %{"kind" => "compaction", "name" => c.model, "bytes" => bytes},
+          state.quiet
+        )
     })
 
     state
@@ -85,7 +89,7 @@ defmodule Longx.Agent.Kernel.Compaction do
 
   def show_progress(%State{} = state, nil) do
     emit(state, "turn/progress", %{"turnId" => state.turn_id, "progress" => nil})
-    state
+    %{state | quiet: nil}
   end
 
   # the summary's bytes as they stream: the first at once, then once a second

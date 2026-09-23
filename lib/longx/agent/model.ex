@@ -193,12 +193,21 @@ defmodule Longx.Agent.Model do
         json: up.body,
         retry: false,
         receive_timeout: up.receive_timeout,
+        finch: [name: Longx.AI.Finch],
         into: :self
       )
 
     case Req.post(request) do
       {:ok, %Req.Response{status: 200} = resp} ->
-        relay(resp, target, owner, ref, "", false, up.receive_timeout)
+        now = now_ms()
+
+        relay(resp, target, owner, ref, %{
+          buffer: "",
+          completed?: false,
+          idle: up.idle_timeout,
+          last: now,
+          told: nil
+        })
 
       {:ok, %Req.Response{status: status} = resp} ->
         message = "upstream answered #{status}: #{resp |> collect() |> error_message()}"
@@ -219,27 +228,36 @@ defmodule Longx.Agent.Model do
   end
 
   # the event loop: chunks parsed as SSE, each event relayed; ends with the
-  # stream, a completion, a failure, silence past the timeout or the owner's death
-  # only this response's messages (`{req_ref, …}`) and the owner's death: a
-  # catch-all would eat unrelated messages — the events we send to the owner
-  # itself when it is this very process (tests), for one
+  # stream, a completion, a failure, silence past the idle timeout or the owner's
+  # death — only this response's messages (`{req_ref, …}`) and the owner's death:
+  # a catch-all would eat unrelated messages — the events we send to the owner
+  # itself when it is this very process (tests), for one.
+  #
+  # Silence is watched, not only waited out: past `quiet_after_ms` (30 s) the
+  # owner hears `{:quiet, ms}` every `quiet_tick_ms` (15 s) — the page says the
+  # upstream has sent nothing for so long — and `{:quiet, nil}` once data comes
+  # again; past the provider's `stream_idle_timeout_ms` the response is cancelled
+  # (its connection closed, not left held by a stuck stream) and asked again.
+  # `st`: buffer, completed?, idle (ms), last (when data last came), told (the
+  # quiet last told, ms)
   defp relay(
          %Req.Response{body: %Req.Response.Async{ref: req_ref}} = resp,
          target,
          owner,
          ref,
-         buffer,
-         completed?,
-         timeout
+         st
        ) do
     receive do
       {:DOWN, _ref, :process, ^owner, _reason} ->
         exit(:normal)
 
       {^req_ref, _} = message ->
+        if st.told, do: send(owner, {:model, ref, {:quiet, nil}})
+        st = %{st | last: now_ms(), told: nil}
+
         case Req.parse_message(resp, message) do
           {:ok, chunks} ->
-            Enum.reduce_while(chunks, {:cont, buffer, completed?}, fn
+            Enum.reduce_while(chunks, {:cont, st.buffer, st.completed?}, fn
               {:data, data}, {:cont, buf, done?} ->
                 {events, rest} = SSE.parse(buf, data)
 
@@ -256,23 +274,70 @@ defmodule Longx.Agent.Model do
                 {:cont, acc}
             end)
             |> case do
-              {:cont, rest, done?} -> relay(resp, target, owner, ref, rest, done?, timeout)
-              {:ended, true} -> {:done, 200}
-              {:ended, false} -> {:retry, 200, "the stream ended without a response"}
-              {:retry_stream, why} -> {:retry, 200, why}
-              {:failed, why} -> {:failed, 200, why}
+              {:cont, rest, done?} ->
+                relay(resp, target, owner, ref, %{st | buffer: rest, completed?: done?})
+
+              {:ended, true} ->
+                {:done, 200}
+
+              {:ended, false} ->
+                {:retry, 200, "the stream ended without a response"}
+
+              {:retry_stream, why} ->
+                cancel(resp)
+                {:retry, 200, why}
+
+              {:failed, why} ->
+                cancel(resp)
+                {:failed, 200, why}
             end
 
           {:error, reason} ->
+            cancel(resp)
             {:retry, 200, "the stream broke: #{inspect(reason)}"}
 
           :unknown ->
-            relay(resp, target, owner, ref, buffer, completed?, timeout)
+            relay(resp, target, owner, ref, st)
         end
     after
-      timeout -> {:retry, 200, "upstream went silent for #{timeout} ms"}
+      wake_in(st) ->
+        quiet = now_ms() - st.last
+
+        cond do
+          quiet >= st.idle ->
+            cancel(resp)
+            {:retry, 200, "upstream went silent for #{st.idle} ms"}
+
+          quiet >= quiet_after() and (st.told == nil or quiet - st.told >= quiet_tick()) ->
+            send(owner, {:model, ref, {:quiet, quiet}})
+            relay(resp, target, owner, ref, %{st | told: quiet})
+
+          true ->
+            relay(resp, target, owner, ref, st)
+        end
     end
   end
+
+  # until the next thing to do about the silence: tell it, or give up on it
+  defp wake_in(st) do
+    quiet = now_ms() - st.last
+    tell_at = if st.told, do: st.told + quiet_tick(), else: quiet_after()
+    max(0, min(st.idle, tell_at) - quiet)
+  end
+
+  defp cancel(resp) do
+    Req.cancel_async_response(resp)
+  catch
+    _, _ -> :ok
+  end
+
+  defp now_ms, do: System.monotonic_time(:millisecond)
+
+  defp quiet_after,
+    do: :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:quiet_after_ms, 30_000)
+
+  defp quiet_tick,
+    do: :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:quiet_tick_ms, 15_000)
 
   defp dispatch([], _target, _owner, _ref, done?), do: {:ok, done?}
 

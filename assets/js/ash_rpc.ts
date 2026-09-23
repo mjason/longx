@@ -1198,6 +1198,7 @@ export type CreateProviderInput = {
   supportsHostedWebSearch?: boolean;
   promptCacheKey?: boolean | null;
   requestTimeoutMs?: number;
+  streamIdleTimeoutMs?: number;
   maxConcurrentRequests?: number | null;
   apiKey?: string | null;
 };
@@ -1519,6 +1520,7 @@ export type UpdateProviderInput = {
   supportsHostedWebSearch?: boolean;
   promptCacheKey?: boolean | null;
   requestTimeoutMs?: number;
+  streamIdleTimeoutMs?: number;
   maxConcurrentRequests?: number | null;
   apiKey?: string | null;
 };

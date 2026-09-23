@@ -55,6 +55,9 @@ defmodule Longx.Agent.Kernel.State do
             pending_images: [],
             # a call the model is still writing (`turn/progress`): %{item, name, bytes, shown_at}
             progress: nil,
+            # how long the upstream has sent nothing (ms, Longx.Agent.Model's `{:quiet, ms}`)
+            # while it lasts past the threshold; nil once data comes again
+            quiet: nil,
             # what the turn runs on as last told (`turn/model`): %{"model", "name", "effort"}
             turn_model: nil,
             # a child's inheritance: the session's model and level it was spawned from,

@@ -9,6 +9,7 @@ vi.mock("@/core/socket", async () =>
   (await import("@/ui/test-mocks")).socketMock(),
 );
 import {
+  updateProvider,
   setFileRules,
   setAgentSettings,
   dependencies,
@@ -300,6 +301,23 @@ describe("SettingsPage", () => {
       vi.mocked(listCredentials).mockResolvedValue(ok([credential("svc")]) as never);
     }
   }, 20_000);
+
+  test("models: a provider's stream idle timeout — how long a begun stream may say nothing before it is asked again — is set in its advanced options (codex's 5 min by default)", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/models");
+    const card = await screen.findByTestId("provider-p1");
+    await user.click(within(card).getByRole("button", { name: "Prov 的操作" }));
+    await user.click(await screen.findByRole("menuitem", { name: "编辑 Provider" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByText("高级"));
+    const idle = within(dialog).getByLabelText("流静默超时（秒）");
+    expect(idle).toHaveValue(300);
+    await user.clear(idle);
+    await user.type(idle, "120");
+    await user.click(within(dialog).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(updateProvider).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ streamIdleTimeoutMs: 120_000, requestTimeoutMs: 600_000 }) })));
+  });
 
   test("models: a reasoning level the list does not know is typed and added", async () => {
     setViewport(1280);

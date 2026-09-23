@@ -606,7 +606,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     retry), a rejected key or a dead upstream moves to the next target and emits
     `{:fallback, from, to, why}` → `model/rerouted` (a toast "模型已切换"). Other 429 / 5xx /
     transport errors — and **a stream that breaks, ends without a completion or goes
-    silent past the provider's `request_timeout_ms`** — are retried on the same model
+    silent past the provider's `stream_idle_timeout_ms`** (codex's own setting and
+    default, 5 min — apart from `request_timeout_ms`: the ChatGPT backend once stopped
+    mid-call with its connection open and the ten request minutes were waited in full;
+    the stuck response is cancelled, its connection closed) — are retried on the same model
     (`retry_ms:` `[5_000, 15_000, 30_000]`, `[10, 10]` in tests; how many times is the
     settings' `model_retries`, 3, global or per project, through `Model.prepare(request,
     retries:)`; a retry of a stream that had begun tells the kernel `{:restart, why}` —
@@ -619,7 +622,16 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     (`response.failed`, `error`) is retried the same way when it is passing — by type
     (`server_error`, `overloaded`, rate limits…) or by its words ("retry", "try again",
     "temporar", "unavailable"…; `transient?/1`) — and final otherwise. A 4xx is final. **A call's arguments streaming in
-    are progress**: `response.function_call_arguments.delta` /
+    are progress**, and **so is silence**: past `quiet_after_ms` (30 s) the model task
+    tells the kernel `{:quiet, ms}` every `quiet_tick_ms` (15 s) and `{:quiet, nil}` when
+    data comes again; the progress carries `quiet` (seconds) — on the call being
+    written, on a fold, or as its own `waiting` naming the model — and the page says
+    `… · 上游 N 秒没有数据` (`ui/chat/progressLabel.ts`, shared by the turn bar, a
+    sub-agent's row and the Agents panel): a stuck provider once read as Longx hanging.
+    The model requests go through their own pool (`Longx.AI.Finch`,
+    `conn_max_idle_time` 30 s): a connection idle longer is never reused — one reused
+    after ten idle minutes answered "socket closed". A call's arguments streaming in:
+    `response.function_call_arguments.delta` /
     `custom_tool_call_input.delta` → `{:arguments_delta, id, delta}` → `turn/progress`
     `%{"progress" => %{"kind" => "toolCall", "name", "bytes"} | nil}` (the first bytes at
     once, then once a second; nil when the call is whole), kept as `progress` in the
@@ -868,7 +880,8 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   - `Provider` (base_url + `api_key` encrypted at rest via `AshCloak` + `Longx.Vault`; key
     from `LONGX_CLOAK_KEY` in prod, fixed keys in dev/test; `kind` `:openai` |
     `:openai_compatible` derived from the base_url unless given; `request_timeout_ms` (10
-    min) and `max_concurrent_requests`; `last_error` / `last_error_at` / `last_checked_at`
+    min), `stream_idle_timeout_ms` (5 min, the dialog's 流静默超时) and
+    `max_concurrent_requests`; `last_error` / `last_error_at` / `last_checked_at`
     written by `check_model/1` and on upstream 401/403) and `Model` (`upstream_id`, `slug`,
     `context_window`, one `default`, `reasoning_levels` (ordered; DeepSeek / GLM `low /
     high / max`), optional `reasoning_effort` (one of the levels — `EffortInLevels`),

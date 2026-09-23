@@ -53,7 +53,13 @@ export type ThreadSnapshot = {
  * retry after a broken stream, or the context fold's summary (`compaction` —
  * between turns too, with no turn behind it: `/compact` on an idle thread).
  */
-export type TurnProgress = { kind: "toolCall" | "retry" | "compaction"; name: string; bytes: number };
+export type TurnProgress = {
+  kind: "toolCall" | "retry" | "compaction" | "waiting";
+  name: string;
+  bytes: number;
+  /** seconds the upstream has sent nothing (past the kernel's threshold); absent while data comes */
+  quiet?: number;
+};
 
 export type ThreadEvent = {
   seq: number;

@@ -31,7 +31,20 @@ defmodule Longx.Agent.ModelTest do
       })
 
     AI.make_default_model!(model)
-    %{bypass: bypass, model: model}
+    %{bypass: bypass, model: model, provider: provider}
+  end
+
+  # the quiet notices' cadence, shortened for one test (restored after it)
+  defp quiet_config(after_ms, tick_ms) do
+    previous = Application.get_env(:longx, Model, [])
+
+    Application.put_env(
+      :longx,
+      Model,
+      Keyword.merge(previous, quiet_after_ms: after_ms, quiet_tick_ms: tick_ms)
+    )
+
+    on_exit(fn -> Application.put_env(:longx, Model, previous) end)
   end
 
   defp sse(conn, chunks) do
@@ -263,6 +276,102 @@ defmodule Longx.Agent.ModelTest do
     assert slug == model.slug
     assert message =~ "Unsupported parameter"
     refute_received {:model, ^ref2, {:restart, _}}
+  end
+
+  # the ChatGPT backend once stopped mid-call (300 bytes of an apply_patch) and
+  # kept the connection open: the silence limit was the request timeout, ten
+  # minutes, and the retry then took a pooled connection the server had closed
+  # meanwhile ("socket closed", 15 s more)
+  test "a stream silent past the provider's stream idle timeout — not its request timeout — is retried: the stuck response is cancelled, the owner told how long it was quiet",
+       %{bypass: bypass, provider: provider} do
+    AI.update_provider!(provider, %{stream_idle_timeout_ms: 400})
+    assert provider |> Ash.reload!() |> Map.get(:request_timeout_ms) == 600_000
+    quiet_config(100, 50)
+    me = self()
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+    [created, added, delta | _] = ResponsesFixture.assistant_message("hello there")
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      if Agent.get_and_update(counter, &{&1 + 1, &1 + 1}) == 1 do
+        # a few events, then nothing — the connection held open
+        conn = sse(conn, [created, added, delta])
+        send(me, {:stuck, self()})
+
+        receive do
+          :never -> conn
+        end
+      else
+        sse(conn, ResponsesFixture.assistant_message("hello there"))
+      end
+    end)
+
+    ref = make_ref()
+    task = Task.async(fn -> Model.stream(@request, me, ref) end)
+    assert_receive {:stuck, handler}, 5_000
+    watch = Process.monitor(handler)
+    # quiet past 100 ms: said, and said again while it lasts
+    assert_receive {:model, ^ref, {:quiet, ms}}, 2_000
+    assert ms >= 100
+    assert_receive {:model, ^ref, {:quiet, later}}, 2_000
+    assert later > ms
+    assert_receive {:model, ^ref, {:restart, why}}, 2_000
+    assert why =~ "silent for 400 ms"
+    # the stuck response is cancelled: its connection closes, the server's handler goes
+    assert_receive {:DOWN, ^watch, :process, ^handler, _}, 2_000
+    assert_receive {:model, ^ref, {:completed, _, _}}, 5_000
+    assert :ok = Task.await(task, 5_000)
+    Bypass.pass(bypass)
+  end
+
+  test "a pause shorter than the idle timeout is said when it passes the quiet threshold and unsaid when the stream resumes",
+       %{bypass: bypass, provider: provider} do
+    AI.update_provider!(provider, %{stream_idle_timeout_ms: 5_000})
+    quiet_config(100, 50)
+    [created, added, delta | rest] = ResponsesFixture.assistant_message("hello there")
+
+    Bypass.expect_once(bypass, "POST", "/v1/responses", fn conn ->
+      conn = sse(conn, [created, added, delta])
+      Process.sleep(300)
+      Enum.reduce(rest, conn, fn chunk, c -> elem(Plug.Conn.chunk(c, chunk), 1) end)
+    end)
+
+    ref = make_ref()
+    assert :ok = Model.stream(@request, self(), ref)
+    assert_received {:model, ^ref, {:quiet, ms}} when ms >= 100
+    assert_received {:model, ^ref, {:quiet, nil}}
+    assert_received {:model, ^ref, {:completed, _, _}}
+    refute_received {:model, ^ref, {:restart, _}}
+  end
+
+  # an upstream (or a proxy on the way) may drop a keep-alive connection without
+  # the close reaching us: reused after ten idle minutes it answered "socket
+  # closed" — the model requests' pool opens a fresh one past `conn_max_idle_time`
+  # (30 s; config/test.exs: 200 ms)
+  test "a pooled connection idle past the limit is not reused: the next request opens a fresh one",
+       %{bypass: bypass} do
+    me = self()
+
+    Bypass.stub(bypass, "POST", "/v1/responses", fn conn ->
+      send(me, {:peer, Plug.Conn.get_peer_data(conn).port})
+      sse(conn, ResponsesFixture.assistant_message("hi"))
+    end)
+
+    run = fn ->
+      ref = make_ref()
+      assert :ok = Model.stream(@request, me, ref)
+      assert_received {:model, ^ref, {:completed, _, _}}
+      assert_receive {:peer, port}, 1_000
+      port
+    end
+
+    first = run.()
+
+    receive do
+    after
+      400 -> :ok
+    end
+
+    refute run.() == first
   end
 
   test "a stream that breaks mid-way is retried on the same model — the owner told to start over — and completes; past the retries the failure is final and structured",

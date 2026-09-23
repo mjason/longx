@@ -187,20 +187,51 @@ defmodule Longx.Agent.Kernel.Stream do
 
   def fold(state, {:item_done, _item}), do: state
 
-  @doc "Tells the thread what the model is writing (`turn/progress`), or that nothing is (nil)."
-  def show_progress(%State{progress: nil} = state) do
+  # the upstream's silence past the threshold (`Longx.Agent.Model`): on the call's
+  # progress when one is being written, else a waiting of its own naming the model;
+  # nil when data comes again. A backend once stopped mid-call with its connection
+  # open and the page said 正在写 apply_patch 的参数 for ten minutes, as if Longx hung
+  def fold(state, {:quiet, ms}), do: show_progress(%{state | quiet: ms})
+
+  @doc """
+  Tells the thread what the model is writing (`turn/progress`), that it is
+  waiting on an upstream that has sent nothing for `quiet` seconds, or that
+  nothing is (nil).
+  """
+  def show_progress(%State{progress: nil, quiet: nil} = state) do
     emit(state, "turn/progress", %{"turnId" => state.turn_id, "progress" => nil})
+    state
+  end
+
+  def show_progress(%State{progress: nil, quiet: ms} = state) do
+    model = (state.turn_model && state.turn_model[:slug]) || "the model"
+
+    emit(state, "turn/progress", %{
+      "turnId" => state.turn_id,
+      "progress" => %{
+        "kind" => "waiting",
+        "name" => model,
+        "bytes" => 0,
+        "quiet" => div(ms, 1000)
+      }
+    })
+
     state
   end
 
   def show_progress(%State{progress: %{name: name, bytes: bytes}} = state) do
     emit(state, "turn/progress", %{
       "turnId" => state.turn_id,
-      "progress" => %{"kind" => "toolCall", "name" => name, "bytes" => bytes}
+      "progress" =>
+        with_quiet(%{"kind" => "toolCall", "name" => name, "bytes" => bytes}, state.quiet)
     })
 
     state
   end
+
+  @doc "A progress map with the upstream's silence (seconds) when there is one."
+  def with_quiet(progress, nil), do: progress
+  def with_quiet(progress, ms), do: Map.put(progress, "quiet", div(ms, 1000))
 
   ## The response is over
 
@@ -264,7 +295,7 @@ defmodule Longx.Agent.Kernel.Stream do
           drop_item(acc, id)
       end)
 
-    %{state | calls: [], progress: nil}
+    %{state | calls: [], progress: nil, quiet: nil}
   end
 
   def record_usage(state, nil, _window), do: state

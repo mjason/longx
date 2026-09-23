@@ -724,6 +724,7 @@ function ProviderDialog({
     timeoutS: String(
       Math.round((provider?.requestTimeoutMs ?? 600_000) / 1000),
     ),
+    idleS: String(Math.round((provider?.streamIdleTimeoutMs ?? 300_000) / 1000)),
     concurrency: provider?.maxConcurrentRequests
       ? String(provider.maxConcurrentRequests)
       : "",
@@ -741,6 +742,7 @@ function ProviderDialog({
       supportsHostedWebSearch: form.supportsHostedWebSearch,
       promptCacheKey: form.promptCacheKey === "on" ? true : form.promptCacheKey === "off" ? false : null,
       requestTimeoutMs: Math.max(1, Number(form.timeoutS) || 600) * 1000,
+      streamIdleTimeoutMs: Math.max(1, Number(form.idleS) || 300) * 1000,
       maxConcurrentRequests: form.concurrency ? Number(form.concurrency) : null,
       ...(form.apiKey ? { apiKey: form.apiKey } : {}),
     };
@@ -863,6 +865,15 @@ function ProviderDialog({
                     min={1}
                     value={form.timeoutS}
                     onChange={(e) => set("timeoutS", e.target.value)}
+                  />
+                </Field>
+                <Field id="pv-idle" label={s.idleTimeout} hint={s.idleTimeoutHint}>
+                  <Input
+                    id="pv-idle"
+                    type="number"
+                    min={1}
+                    value={form.idleS}
+                    onChange={(e) => set("idleS", e.target.value)}
                   />
                 </Field>
                 <Field id="pv-conc" label={s.concurrency}>

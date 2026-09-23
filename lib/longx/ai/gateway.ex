@@ -24,6 +24,8 @@ defmodule Longx.AI.Gateway do
       kind: :openai_compatible,
       degraded?: false,
       receive_timeout: :timer.minutes(10),
+      # a stream that has begun and says nothing this long is stuck (Longx.Agent.Model)
+      idle_timeout: :timer.minutes(5),
       max_concurrent: nil
     ]
 
@@ -35,6 +37,7 @@ defmodule Longx.AI.Gateway do
             kind: :openai | :openai_compatible,
             degraded?: boolean,
             receive_timeout: pos_integer,
+            idle_timeout: pos_integer,
             max_concurrent: pos_integer | nil
           }
   end
@@ -96,6 +99,7 @@ defmodule Longx.AI.Gateway do
        provider_slug: target.provider_slug,
        kind: target.kind,
        receive_timeout: target.request_timeout_ms,
+       idle_timeout: target.stream_idle_timeout_ms,
        max_concurrent: target.max_concurrent_requests
      }}
   end
