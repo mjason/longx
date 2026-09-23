@@ -206,7 +206,11 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     intensity is shared by every agent and must never see a restart) with the
     `Longx.Agent` as its one `:transient`, `significant: true` child: a crash restarts the
     agent at once from the same options (`ensure/1` starts the guard, `await_pid/1` finds
-    the agent under it; `start_link` retries a name the Registry has not yet released),
+    the agent under it; `start_link` retries a name the Registry has not yet released;
+    **an `ensure` meeting a guard without its agent** waits for the agent — a restart after
+    a crash — or, when the guard dies instead — its wind-down after the idle exit —, starts
+    a fresh one: it once waited only for the agent and answered `:not_started`, a message
+    to an agent that had just left idle lost; CI's slower runner hit it),
     the idle exit (`:normal`) takes the guard down with it (`auto_shutdown:
     :any_significant`) so the next `ensure` starts a fresh guard on fresh options, and
     crashing past the budget ends the guard. **The restarted process recovers its own

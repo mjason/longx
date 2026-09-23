@@ -65,7 +65,9 @@ defmodule Longx.Agent do
   `config :longx, Longx.Agent, pipeline:` then the default).
   """
   @spec ensure(keyword) :: {:ok, pid} | {:error, term}
-  def ensure(opts) do
+  def ensure(opts), do: ensure(opts, 250)
+
+  defp ensure(opts, tries) do
     Longx.Agent.Kernel.Specs.put(Keyword.fetch!(opts, :thread_id), opts)
 
     # the agent under a guard of its own (`Longx.Agent.Guard`: restarted when
@@ -77,13 +79,35 @@ defmodule Longx.Agent do
 
     case DynamicSupervisor.start_child(@supervisor, {Longx.Agent.Guard, opts}) do
       {:ok, _guard} -> loaded(await_pid(thread_id))
-      {:error, {:already_started, _guard}} -> loaded(await_pid(thread_id))
+      {:error, {:already_started, guard}} -> joined(guard, opts, tries)
       other -> other
     end
   end
 
-  # the agent's pid under its guard — a guard found already running may be
-  # between a crash and the restart for a moment
+  # a guard already there is either restarting its agent after a crash (the
+  # agent comes back under it) or winding down after the agent's idle exit
+  # (auto_shutdown: it dies, and its name is free a moment later) — then a
+  # fresh guard. Waiting only for the agent met a guard on its way out, waited
+  # a second for an agent it would never start again and answered :not_started
+  # (a slow CI runner made the moment long enough). 20 ms a try, 5 s in all.
+  defp joined(guard, opts, tries) do
+    case whereis(Keyword.fetch!(opts, :thread_id)) do
+      pid when is_pid(pid) ->
+        loaded(pid)
+
+      nil when tries > 0 ->
+        Process.sleep(20)
+
+        if Process.alive?(guard),
+          do: joined(guard, opts, tries - 1),
+          else: ensure(opts, tries - 1)
+
+      nil ->
+        {:error, :not_started}
+    end
+  end
+
+  # the agent's pid under the guard just started (up by the time start_child returns)
   defp await_pid(thread_id, tries \\ 50) do
     case whereis(thread_id) do
       pid when is_pid(pid) ->

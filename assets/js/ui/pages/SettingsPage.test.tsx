@@ -252,6 +252,8 @@ describe("SettingsPage", () => {
     );
   });
 
+  // real timers: the login's poll every second (the vendor's interval, never under 1 s) — a
+  // slow CI runner took it past the 5 s default
   test("models: the ChatGPT-subscription template needs no key — it makes the credential and opens the device-code login; the card shows the login state and offers the browser way with a pasted address", async () => {
     setViewport(1280);
     const user = userEvent.setup();
@@ -297,7 +299,7 @@ describe("SettingsPage", () => {
       vi.mocked(listProviders).mockResolvedValue(ok([provider(1), provider(2)]) as never);
       vi.mocked(listCredentials).mockResolvedValue(ok([credential("svc")]) as never);
     }
-  });
+  }, 20_000);
 
   test("models: a reasoning level the list does not know is typed and added", async () => {
     setViewport(1280);
@@ -575,6 +577,7 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(within(card).getByRole("switch", { name: /私网|局域网/ })).toBeChecked());
   });
 
+  // real timers: the download's progress ticks — a slow CI runner nears the 5 s default
   test("agent kernel: the browser is downloaded from its card, with a progress bar, and a failure offers a retry", async () => {
     setViewport(1280);
     const user = userEvent.setup();
@@ -605,7 +608,7 @@ describe("SettingsPage", () => {
     } finally {
       vi.mocked(browserStatus).mockResolvedValue(ok({ ...browserIdle, stage: "installed", path: "/data/obscura/0.2.2/x86_64-linux/obscura" }) as never);
     }
-  });
+  }, 20_000);
 
   test("agent kernel: an older download offers an upgrade to the pinned version", async () => {
     setViewport(1280);

@@ -39,31 +39,45 @@ defmodule Longx.Agent.TranscriptTest do
   test "every append goes through one writer as an event: appended from many processes at once, written in batches, read back whole and in order; a read, a truncate or a delete flushes first" do
     alias Longx.Agent.Transcript.Writer
     threads = for n <- 1..8, do: "w-#{n}-#{System.unique_integer([:positive])}"
+    before = Writer.stats()
 
-    tasks =
-      for thread <- threads do
-        Task.async(fn ->
-          for seq <- 1..40 do
-            Transcript.append!(%{
-              thread_id: thread,
-              turn_id: "t1",
-              seq: seq,
-              kind: :user_message,
-              input: %{
-                "role" => "user",
-                "content" => [%{"type" => "input_text", "text" => "m#{seq}"}]
-              },
-              ui: %{"id" => "i#{seq}", "type" => "userMessage"}
-            })
-          end
-        end)
-      end
+    # the burst lands while the writer is busy (held here): the appends pile up in
+    # its mailbox and the one flush message behind them writes them all in one
+    # transaction. Left to timing — eight tasks against a writer free to drain —
+    # a slow CI runner wrote 331 batches for 320 items, and `< 8 * 40` against the
+    # writer's lifetime counter failed
+    :sys.suspend(Writer)
 
-    Enum.each(tasks, &Task.await/1)
-    # nothing was written by the appenders themselves: the writer wrote it, in few transactions
+    try do
+      tasks =
+        for thread <- threads do
+          Task.async(fn ->
+            for seq <- 1..40 do
+              Transcript.append!(%{
+                thread_id: thread,
+                turn_id: "t1",
+                seq: seq,
+                kind: :user_message,
+                input: %{
+                  "role" => "user",
+                  "content" => [%{"type" => "input_text", "text" => "m#{seq}"}]
+                },
+                ui: %{"id" => "i#{seq}", "type" => "userMessage"}
+              })
+            end
+          end)
+        end
+
+      # nothing was written by the appenders themselves: they only queued
+      Enum.each(tasks, &Task.await/1)
+    after
+      :sys.resume(Writer)
+    end
+
     assert Writer.flush() == :ok
-    assert Writer.stats().batches < 8 * 40
-    assert Writer.stats().written >= 8 * 40
+    stats = Writer.stats()
+    assert stats.batches - before.batches == 1
+    assert stats.written - before.written == 8 * 40
 
     for thread <- threads do
       assert Enum.map(Transcript.items!(thread), & &1.seq) == Enum.to_list(1..40)

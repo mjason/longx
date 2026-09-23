@@ -2049,6 +2049,48 @@ defmodule Longx.AgentTest do
     assert Longx.Agent.Guard.whereis(child) == nil
   end
 
+  # the idle exit ends the agent first and its guard a moment later
+  # (auto_shutdown): an ensure in between met the old guard, waited a second
+  # for an agent it would never start again and answered :not_started — a
+  # slow CI runner made the moment long enough to hit
+  test "an agent asked for while its guard still winds down after the idle exit comes back under a fresh guard",
+       %{dir: dir} do
+    id = agent!("wind-#{System.unique_integer([:positive])}", dir, idle_ms: 100)
+    guard = Longx.Agent.Guard.whereis(id)
+    pid = Agent.whereis(id)
+    # the guard held before it acts on the exit: the agent gone, the guard still there
+    :sys.suspend(guard)
+    ref = Process.monitor(pid)
+    assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 5_000
+    assert Process.alive?(guard)
+
+    task = Task.async(fn -> Agent.ensure_alive(id) end)
+    # the ask has met the old guard and waits
+    await_sleeping(task.pid)
+    guard_ref = Process.monitor(guard)
+    :sys.resume(guard)
+    assert_receive {:DOWN, ^guard_ref, :process, ^guard, _}, 5_000
+
+    assert {:ok, new_pid} = Task.await(task, 10_000)
+    assert new_pid != pid and Process.alive?(new_pid)
+    assert Longx.Agent.Guard.whereis(id) not in [nil, guard]
+  end
+
+  defp await_sleeping(pid, tries \\ 500) do
+    case Process.info(pid, :current_function) do
+      {:current_function, {Process, :sleep, 1}} ->
+        :ok
+
+      _ when tries > 0 ->
+        receive do
+        after
+          5 -> :ok
+        end
+
+        await_sleeping(pid, tries - 1)
+    end
+  end
+
   # the agent back under a new pid after a crash (its guard restarts it at once)
   defp await_restart(thread_id, old_pid, tries \\ 100) do
     case Agent.whereis(thread_id) do
