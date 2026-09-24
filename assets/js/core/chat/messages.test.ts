@@ -169,6 +169,22 @@ describe("toMessages", () => {
     expect(ps[2]).toMatchObject({ type: "text", text: "step two" });
   });
 
+  test("a job's end the kernel woke the agent with opens the turn as a marker, never the person's bubble", () => {
+    const notice = "[job batch] finished with exit code 2 after 3 s.\nCommand: `make`\nIts last lines:\n```\nboom\n```";
+    const msgs = toMessages(
+      view({
+        items: [
+          { id: "u1", type: "userMessage", turnId: "t8", content: [{ type: "text", text: notice }], origin: { kind: "job", name: "batch", status: "exited", exitCode: 2, durationMs: 3000 } },
+          { id: "a1", type: "agentMessage", turnId: "t8", text: "it failed" },
+        ],
+      }),
+    );
+    expect(msgs.map((m) => m.role)).toEqual(["assistant"]);
+    const ps = parts(msgs[0]!);
+    expect(ps[0]).toEqual({ type: "data-job", data: { id: "u1", name: "batch", status: "exited", exitCode: 2, durationMs: 3000, text: notice } });
+    expect(ps[1]).toMatchObject({ type: "text", text: "it failed" });
+  });
+
   test("a continuation written before it carried an origin is recognised by its text", () => {
     const text = "（目标续跑）Your goal is still active (round 3): 以「市值排序」为核心的改进路径\n\nContinue working toward it. When it is achieved, call update_goal…";
     const msgs = toMessages(

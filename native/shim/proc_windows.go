@@ -40,6 +40,11 @@ func hardKillTree(p *os.Process) {
 	}
 }
 
+// reapLeftovers: the command is done, and what it left running in its Job goes
+// with it (the Job would take them only when the shim exits — and a leftover
+// holding the output kept the shim from exiting)
+func (c *child) reapLeftovers() { c.guard.kill() }
+
 // signal maps POSIX numbers onto what Windows can do: SIGINT/SIGTERM become
 // CTRL_BREAK, anything else is a hard kill.
 func (c *child) signal(sig int) {

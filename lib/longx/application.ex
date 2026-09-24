@@ -63,6 +63,10 @@ defmodule Longx.Application do
       # keeps project thread/turn rows in step with the agents' events
       Longx.Projects.Tracker,
       # a project's file watcher, only while a page has it open
+      # the agents' background jobs (Longx.Jobs): each its own process, outliving
+      # the tool call, the turn and the agent's idle exit
+      {Registry, keys: :unique, name: Longx.Jobs.Registry},
+      {DynamicSupervisor, name: Longx.Jobs.Supervisor, strategy: :one_for_one},
       {Registry, keys: :unique, name: Longx.Projects.WatcherRegistry},
       {DynamicSupervisor, name: Longx.Projects.WatcherSupervisor, strategy: :one_for_one},
       # OAuth2 logins in flight (Longx.Credentials), and the token refresh jobs (Oban)
@@ -76,6 +80,8 @@ defmodule Longx.Application do
          fn ->
            Longx.Projects.settle_after_restart()
            Longx.Watches.settle_after_restart()
+           # the jobs a previous run left running died with it: lost, said so
+           Longx.Jobs.settle_after_restart()
          end},
         id: :settle_after_restart,
         restart: :temporary

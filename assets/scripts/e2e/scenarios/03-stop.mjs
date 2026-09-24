@@ -5,7 +5,8 @@ import { expect, sleep } from "../lib.mjs";
 export async function run(h) {
   await h.project();
   const t = await h.thread();
-  await h.send(t.id, "运行 `sleep 120` 这条命令（不要改成别的），等它结束后说“done”。");
+  // in the foreground: a long command is a background job otherwise (start_job)
+  await h.send(t.id, "用 exec_command 在前台直接运行 `sleep 120`（不要用 start_job，不要改成别的命令），等它结束后说“done”。");
   const page = h.page;
   await h.open(page, `/p/${h.slug}/t/${t.id}`);
   // the command row appears, then the composer's stop

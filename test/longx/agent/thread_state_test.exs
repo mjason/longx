@@ -357,6 +357,8 @@ defmodule Longx.Agent.ThreadStateTest do
     end
 
     test "subscribe-then-snapshot never loses or duplicates events", %{thread_id: thread_id} do
+      me = self()
+
       producer =
         Task.async(fn ->
           for i <- 1..50 do
@@ -365,11 +367,14 @@ defmodule Longx.Agent.ThreadStateTest do
               "delta" => "#{i},"
             })
 
+            # the page joins mid-stream: once the first deltas are in (a fixed
+            # sleep here once lost the race on a loaded machine — no item yet)
+            if i == 5, do: send(me, :streaming)
             if rem(i, 10) == 0, do: Process.sleep(5)
           end
         end)
 
-      Process.sleep(12)
+      assert_receive :streaming, 5_000
       ThreadState.subscribe(thread_id)
       snapshot = ThreadState.snapshot(thread_id)
       Task.await(producer)

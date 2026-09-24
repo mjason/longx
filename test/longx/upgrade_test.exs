@@ -143,6 +143,15 @@ defmodule Longx.UpgradeTest do
     end
   end
 
+  # config.exs once set the upgrade's clock after importing test.exs, so the
+  # suite ran a 6 h tick: a real GitHub check a minute after boot, and a
+  # crash (send_after(nil)) whenever it landed inside a test of this module
+  test "the suite's config keeps the periodic check off: an env file's word stands" do
+    config = Config.Reader.read!("config/config.exs", env: :test, target: :host)
+    assert get_in(config, [:longx, Upgrade, :tick]) == nil
+    assert get_in(config, [:longx, Oban, :testing]) == :manual
+  end
+
   describe "apply/0" do
     test "downloads, verifies, backs the database up, swaps the app directory and restarts",
          %{bypass: bypass, root: root, app: app, marker: marker} do

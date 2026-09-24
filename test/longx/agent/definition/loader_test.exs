@@ -67,6 +67,7 @@ defmodule Longx.Agent.Definition.LoaderTest do
              Longx.Agent.Plugs.Prompt,
              Shell,
              deploy,
+             Longx.Agent.Plugs.Jobs,
              Patch,
              Longx.Agent.Plugs.ViewImage,
              Longx.Agent.Plugs.Present,

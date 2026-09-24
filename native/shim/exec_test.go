@@ -5,6 +5,8 @@ package main
 import (
 	"io"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -390,6 +392,47 @@ func TestKillTakesWholeProcessGroup(t *testing.T) {
 	}
 	if groupAlive(h.pid) {
 		t.Fatal("process group still alive after kill")
+	}
+}
+
+// what a command leaves running in its process group dies with it, as codex kills
+// the group when a command's handle goes: `cmd &` holding the output no longer
+// holds the command open, and `nohup cmd > file &` no longer escapes as an orphan
+// nobody sees or can stop (an agent started twenty such jobs and polled their logs)
+func TestLeftoversInTheGroupDieWithTheCommand(t *testing.T) {
+	for _, script := range []string{
+		"sleep 30 & echo $!",
+		"nohup sleep 30 >/dev/null 2>&1 & echo $!",
+	} {
+		began := time.Now()
+		h := start(t, "sh", "-c", script)
+		var out []byte
+		for {
+			p := h.readOut(1024)
+			if p.Tag == TagOutputEOF {
+				break
+			}
+			if p.Tag != TagOutput {
+				t.Fatalf("%q: tag %d (%q)", script, p.Tag, p.Data)
+			}
+			out = append(out, p.Data...)
+		}
+		h.expectExit(0)
+		h.waitRun()
+		if took := time.Since(began); took > 3*time.Second {
+			t.Fatalf("%q held the command for %v", script, took)
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(out)))
+		if err != nil {
+			t.Fatalf("%q: no pid in %q", script, out)
+		}
+		deadline := time.Now().Add(2 * time.Second)
+		for processAlive(pid) && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if processAlive(pid) {
+			t.Fatalf("%q left %d running", script, pid)
+		}
 	}
 }
 

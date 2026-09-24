@@ -117,7 +117,7 @@ defmodule Longx.Agent.Kernel.Compaction do
   @doc "The summary is in: a `:compaction` item appended, the marker emitted, the context reloaded."
   def fold_summary(%State{} = state, c) do
     turn_id = state.turn_id || last_turn_id(state)
-    summary = String.trim(c.text)
+    summary = String.trim(c.text) <> jobs_note(state.thread_id)
 
     input = %{
       "type" => "message",
@@ -151,5 +151,18 @@ defmodule Longx.Agent.Kernel.Compaction do
         context_overflow: false,
         compact_requested: false
     }
+  end
+
+  # the jobs still running: the agent's memory of them goes with the fold, Longx's
+  # does not — named here they are never lost, nor a pid guessed at
+  defp jobs_note(thread_id) do
+    case Longx.Jobs.running(thread_id) do
+      [] ->
+        ""
+
+      jobs ->
+        "\n\nBackground jobs still running in this conversation (Longx keeps them; job_output reads one, stop_job stops it, and each one's end wakes you):\n" <>
+          Enum.map_join(jobs, "\n", &"- #{&1.name}: `#{&1.cmd}` (since #{&1.started_at})")
+    end
   end
 end

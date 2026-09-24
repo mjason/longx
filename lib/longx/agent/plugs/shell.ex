@@ -42,7 +42,7 @@ defmodule Longx.Agent.Plugs.Shell do
   @emit_cap 256 * 1024
 
   tool :exec_command,
-       "Runs a shell command in the working directory and returns its output (stdout and stderr interleaved) and exit code. The command runs to completion; it is killed after timeout_ms (default 120000, max 1800000). Long-running servers should be started in the background (nohup … &).",
+       "Runs a shell command in the working directory and returns its output (stdout and stderr interleaved) and exit code. The command runs to completion; it is killed after timeout_ms (default 120000, max 1800000). A server, or a batch that runs for minutes or hours: start it with start_job instead — it keeps running after this turn and wakes you when it ends. Never background a command here (nohup, &, setsid): what it leaves running is ended with it.",
        show: :command,
        timeout: @max_timeout + 5_000,
        prepare: &__MODULE__.normalize/1 do
@@ -337,7 +337,9 @@ defmodule Longx.Agent.Plugs.Shell do
 
   # the head and the tail are kept whole; the middle is dropped once past the cap
   # with codex's marker (its unit is tokens, ~4 bytes each)
-  defp clip(whole, max_bytes) do
+  @doc false
+  # the head and the tail kept around codex's marker (job_output clips the same way)
+  def clip(whole, max_bytes) do
     size = byte_size(whole)
 
     # scrubbed after the clip: the cut may fall inside a multibyte character,

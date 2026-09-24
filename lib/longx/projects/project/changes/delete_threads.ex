@@ -23,6 +23,7 @@ defmodule Longx.Projects.Project.Changes.DeleteThreads do
       for %{kernel_thread_id: id} <- threads(project_id) do
         Longx.Agent.Kernel.Specs.delete(id)
         Longx.Agent.stop(id)
+        Longx.Jobs.delete(id)
       end
 
       changeset

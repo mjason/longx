@@ -22,7 +22,7 @@ import {
   type ToolCallMessagePartComponent,
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
-import { AppWindow, Bot, Download, FileCode2, GitCompareArrows, Image as ImageIcon, Loader2 } from "lucide-react";
+import { AppWindow, Bot, ChevronDown, Download, FileCode2, GitCompareArrows, Image as ImageIcon, Loader2 } from "lucide-react";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { formatBytes, formatDuration } from "@/core/format";
 import { progressLabel } from "./progressLabel";
@@ -902,6 +902,30 @@ export function GoalContinuationView({ round, objective }: { round: number | nul
     </div>
   );
 }
+
+// ---- a background job ended and woke the agent (the kernel's words, not the person's)
+
+export function JobNoticeView({ name, status, exitCode, durationMs, text }: { name: string; status: string; exitCode: number | null; durationMs: number | null; text: string }) {
+  const [open, setOpen] = useState(false);
+  const how = status === "exited" ? t.jobEnded(name) : t.jobStopped(name);
+  const bits = [how, exitCode !== null ? t.jobExitCode(exitCode) : null, durationMs !== null ? formatDuration(durationMs) : null].filter(Boolean).join(" · ");
+  return (
+    <div className="my-2 flex min-w-0 flex-col gap-1" data-testid="job-notice">
+      <button type="button" className="text-muted-foreground flex min-w-0 items-center gap-2 text-left text-[11px]" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span className="bg-border h-px w-6 shrink-0" />
+        <span className={cn("min-w-0 truncate", status === "exited" && exitCode === 0 ? "" : "text-warning")}>{bits}</span>
+        <ChevronDown className={cn("size-3 shrink-0 transition-transform", open && "rotate-180")} aria-hidden />
+        <span className="bg-border h-px flex-1" />
+      </button>
+      {open ? <pre className="bg-muted/50 text-muted-foreground overflow-x-auto rounded-md p-2 text-[11px] whitespace-pre-wrap">{text}</pre> : null}
+    </div>
+  );
+}
+
+export const JobNoticeUI = makeAssistantDataUI<{ id: string; name: string; status: string; exitCode: number | null; durationMs: number | null; text: string }>({
+  name: "job",
+  render: ({ data }) => <JobNoticeView name={data.name} status={data.status} exitCode={data.exitCode} durationMs={data.durationMs} text={data.text} />,
+});
 
 export const GoalContinuationUI = makeAssistantDataUI<{ id: string; round: number | null; objective: string | null }>({
   name: "goal",

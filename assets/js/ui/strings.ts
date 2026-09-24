@@ -420,6 +420,9 @@ export const t = {
   // chat: agents
   compacted: "上下文已压缩",
   goalRound: (round: number) => `目标续跑 · 第 ${round} 轮`,
+  jobEnded: (name: string) => `后台任务 ${name} 结束`,
+  jobStopped: (name: string) => `后台任务 ${name} 被停止`,
+  jobExitCode: (code: number) => `退出码 ${code}`,
   goalRoundUnknown: "目标续跑",
   subagent: "子 agent",
   subagentWorking: "子 agent 工作中",

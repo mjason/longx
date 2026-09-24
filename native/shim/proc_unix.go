@@ -24,6 +24,12 @@ func killGroup(p *os.Process, sig syscall.Signal) {
 func softKillTree(p *os.Process) { killGroup(p, syscall.SIGTERM) }
 func hardKillTree(p *os.Process) { killGroup(p, syscall.SIGKILL) }
 
+// reapLeftovers: the command is done, and what it left running in its group
+// goes with it — codex kills the group when a command's handle goes. A `cmd &`
+// holding the output kept the command open; `nohup cmd > file &` escaped as an
+// orphan nobody saw or could stop. (`setsid` leaves the group and is not reached.)
+func (c *child) reapLeftovers() { killGroup(c.proc.Process, syscall.SIGKILL) }
+
 // signal forwards a host-requested signal to the process group.
 func (c *child) signal(sig int) {
 	killGroup(c.proc.Process, syscall.Signal(sig))

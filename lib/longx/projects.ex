@@ -959,6 +959,7 @@ defmodule Longx.Projects do
     text =
       case {Keyword.get(opts, :from), goal} do
         {"watch-" <> name, _} -> "（定时触发）" <> name
+        {"job:" <> name, _} -> "（后台任务结束）" <> name
         {from, _} when is_binary(from) -> "（agent 消息）"
         {nil, %{"objective" => objective}} when is_binary(objective) -> "（目标续跑）" <> objective
         _ -> "（agent 消息）"
@@ -1142,6 +1143,8 @@ defmodule Longx.Projects do
   defp delete_rows(%Thread{} = thread) do
     Longx.Agent.Kernel.Specs.delete(thread.kernel_thread_id)
     Longx.Agent.stop(thread.kernel_thread_id)
+    # its background jobs stop, their logs go
+    Longx.Jobs.delete(thread.kernel_thread_id)
     Longx.Agent.Transcript.delete!(thread.kernel_thread_id)
 
     Ash.bulk_destroy!(Ash.Query.filter(Turn, thread_id == ^thread.id), :destroy, %{},

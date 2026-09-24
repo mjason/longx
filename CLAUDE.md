@@ -19,7 +19,11 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   pipe, no input credit — what `exec_command` and a watch's `shell/3` use), and clean
   termination: `kill/2` SIGTERMs the child's whole
   process group then SIGKILLs after a grace period; if the owner or the BEAM dies the shim
-  sees its stdin close and does the same. Output is pull-based (a chunk per `read` credit),
+  sees its stdin close and does the same. **What a command leaves in its group dies when it
+  exits** (`reapLeftovers`: SIGKILL to the group on unix, the Job terminated on Windows) — a
+  `nohup … &` or `setsid`-less `&` inside `exec_command` no longer outlives it (an agent once
+  left twenty backtests running that way, no ledger listing them); a long command is a job
+  (`Longx.Jobs`, below). Output is pull-based (a chunk per `read` credit),
   so `await_exit` closes what nobody read — except with `close_streams: false`, which
   `run/2` uses (its drain tasks may not have asked yet when a fast child is already gone).
   Protocol defined twice — `native/shim/proto.go` and `lib/longx/shim/proto.ex` — keep them
@@ -274,8 +278,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     restarted the task the person had just stopped; a report carries the turn's status
     (`{:agent_message, name, text, kind, status}`, `activity:` on the idle path), so a
     stopped child's row says 已中断 and the member is `stopped`, not `done`; `retract/2`; `compact/1`; `status/1`; `respond/3` answers
-    an ask; `set_goal/2` / `clear_goal/1`. Guards: `max_steps` per turn (500, `config
-    :longx, Longx.Agent, max_steps:`) and 20 continuations. **The process is light and
+    an ask; `set_goal/2` / `clear_goal/1`. **No cap on a turn's steps**, as codex
+    has none — a long task runs until the model ends it or the person stops it (the
+    500-step `max_steps` cut a two-hour migration mid-way, saying nothing of what was
+    left); only a `:turn_end` plug's continuations are capped (20). **The process is light and
     leaves when idle** (`idle_ms:`, 30 min; `{:stop, :normal}`): `Longx.Agent.Kernel.Specs`
     (ETS, in the tree) keeps what every agent was `ensure`d with, `ensure_alive/1` starts
     it again from that and its transcript, `send/3` does so by itself. `Agent.stop/1` is a
@@ -428,7 +434,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     as they know them: `exec_command` (`Plugs.Shell`: `cmd`, `workdir`, `tty` (a pty through
     the shim), `timeout_ms` (default 2 min — `options Shell, timeout_ms:` sets a
     description's default —, max 30 min; the command runs to completion —
-    `write_stdin` sessions are not offered), `max_output_tokens`, `shell`, `login`;
+    `write_stdin` sessions are not offered; the description says a server or an hour-long
+    batch is a `start_job`, never `nohup` / `&` / `setsid`), `max_output_tokens`, `shell`,
+    `login`;
     **stdin is the null device** without `tty` (`stdin: :null`, as codex's
     `spawn_process_no_stdin`): ripgrep with no path searches a piped stdin instead of
     the directory, and every `rg pattern` an agent ran read the empty pipe — exit 1,
@@ -533,7 +541,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     end` — a description records the **difference** to the layer below (`Config.resolve/2`
     applies the ops; a short name means the shipped plug, `Config.builtin/1`), so a release
     that changes the shipped pipeline (`Longx.Agent.Pipelines.Default.config/0`:
-    Environment, Base, AgentsMd, Shell, Patch, ViewImage, Present, Knowledge, WebSearch, Browser,
+    Environment, Base, AgentsMd, Shell, Jobs, Patch, ViewImage, Present, Knowledge, WebSearch, Browser,
     Credentials, Agents, Watches, Goal, Compaction, Request; a description's `prompt`
     becomes a `Plugs.Prompt` — codex's developer instructions, raw text — right after
     AgentsMd (else Base), each layer's behind the one below so local and a role have the
@@ -755,6 +763,34 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     replays the history and one picture is a megabyte. `agent_test` "hosted image
     generation" folds a fixture stream; the real thing was checked once through the
     subscription (a 877 KB png back for a red circle).
+  - **Background jobs — `Longx.Jobs`, `Plugs.Jobs`** (in the shipped pipeline right after
+    Shell, the same guards through the settings layer's `options Jobs, …`): a long command
+    — a server, a backtest — is a **named job of the thread**, never a pid the agent must
+    remember across a compaction or a `kill` aimed by guess. Tools `start_job(name, cmd,
+    workdir, notify)`, `jobs`, `job_output(name, tail, grep, max_output_tokens)`,
+    `wait_job(name, timeout_ms ≤ 10 min)`, `stop_job(name)`. `{thread_id, name}` is one job
+    at a time (a running one refuses a start; a finished one is replaced). Each job is a
+    `Longx.Jobs.Job` (`:temporary` under `Longx.Jobs.Supervisor`, `Longx.Jobs.Registry`)
+    holding the shim with `stdin: :null`, so it outlives the call, the turn and the agent's
+    idle exit; it registers in the command ledger (`Pressure`: Settings → 进程 lists and
+    ends it, the memory watchdog guards it — `[job name] cmd`). Its directory
+    `<dir>/<thread>/<name>/` (`config :longx, Longx.Jobs, dir:` — dev `data/jobs`, prod
+    `$LONGX_DATA_DIR/jobs`) keeps `job.json` and **a bounded log** (`Longx.Jobs.Log`: the
+    first 64 KB, then two rolling 1 MB segments of the latest lines and a partial line, `\r`
+    progress collapsed to its last state, ANSI stripped on read, the bytes and lines dropped
+    from the middle counted and said — a job printing for days stays ~2 MB). **Its end
+    wakes the agent** (`notify`, default on): `Longx.Agent.job_exited/2` → a cast the
+    running agent postpones (gen_statem) and the idle one turns into a turn — `[job name]
+    finished with exit code N after …`, the command, the last lines, `origin` `%{"kind" =>
+    "job", …}` (the page draws a marker 后台任务 X 结束 · 退出码 · 用时, `JobNoticeUI`, the
+    notice folded under it), the row `（后台任务结束）<name>` — unless the agent already saw
+    the end (`wait_job` / `job_output` that returned it, `stop_job`: `observed`). A fold's
+    summary lists the jobs still running (`Kernel.Compaction`). A thread keeps its finished
+    jobs 7 days, at most 20; archiving a thread stops its jobs, deleting one removes them;
+    a boot marks what was running `lost` (`settle_after_restart/0`). **No cap on a turn's
+    steps** (codex has none; the 500 `max_steps` once stopped an agent polling nohup logs).
+    Tests: `test/longx/jobs/{log,jobs,plug}_test`, `agent_test` (a job's end waking the
+    agent; the fold naming running jobs), `threads_test`, the shim's leftover tests.
   - **Compaction, codex's shape** (`Plugs.Compaction` policy; `Kernel.Compaction`
     execution): the kernel folds on its own when the person types `/compact`
     (`Agent.compact/1`: at once when idle, before the next step when running) and when the
@@ -1541,7 +1577,10 @@ Where tests live / what to use:
   a `（定时触发）` turn within the tick — up to four minutes), `07-description` (a
   `local/agent.exs` naming another model and level written while the page is open: the
   composer names it without a reload, the new chat's requests run on it at that level —
-  read from `gateway_requests`; skipped on a server with no second keyed model). A model that refuses an instruction
+  read from `gateway_requests`; skipped on a server with no second keyed model), `09-job`
+  (`start_job` by name, the turn ended; the job's end wakes the agent as a turn of its own,
+  the page's marker 后台任务 tally 结束 · 退出码 3 with the notice under it; `03-stop` asks
+  for a foreground `exec_command` — a model now takes `sleep 120` for a job). A model that refuses an instruction
   fails a scenario — that is the point; run it before a release and after a change to the
   kernel, the prompts or the chat.
 - TypeScript/React → also test-first: vitest + testing-library in `assets/` (`npm test`).

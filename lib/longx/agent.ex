@@ -50,11 +50,11 @@ defmodule Longx.Agent do
 
   @interrupted "[interrupted]"
 
-  # a turn-end plug may continue a turn this many times before it ends anyway
+  # a turn-end plug may continue a turn this many times before it ends anyway.
+  # There is no cap on a turn's steps, as codex has none: a long task runs until
+  # the model ends it or the person stops it (500 steps cut a two-hour migration
+  # mid-way with nothing said of what was left)
   @max_continues 20
-  # and no turn runs more model steps than this (`config :longx, Longx.Agent,
-  # max_steps:`): a response plug re-adding a call for ever, a model looping
-  @default_max_steps 500
 
   ## API
 
@@ -151,6 +151,16 @@ defmodule Longx.Agent do
   @spec spawn(String.t(), String.t(), String.t(), keyword) :: {:ok, String.t()} | {:error, term}
   def spawn(parent_id, name, task, opts \\ []),
     do: call(parent_id, {:spawn, name, task, opts})
+
+  @doc """
+  A background job of this thread ended (`Longx.Jobs`): the agent is woken with
+  what happened (a turn of its own once idle), unless it saw the end meanwhile.
+  """
+  @spec job_exited(String.t(), map) :: :ok | {:error, :unknown}
+  def job_exited(thread_id, notice) do
+    with {:ok, pid} <- ensure_alive(thread_id),
+         do: :gen_statem.cast(pid, {:job_exited, notice})
+  end
 
   @doc "A card for the person from a tool (`Context.present/2`): shown on the thread, never model input."
   @spec present(String.t(), map) :: :ok
@@ -457,6 +467,32 @@ defmodule Longx.Agent do
     {:next_state, :running, data, [{:next_event, :internal, :step}]}
   end
 
+  # a background job of this thread ended (Longx.Jobs): it waits for idle like
+  # a message, and is dropped when the agent saw the end meanwhile (a
+  # job_output or a wait_job that returned it, a stop_job)
+  def handle_event(:cast, {:job_exited, _notice}, :running, _data),
+    do: {:keep_state_and_data, :postpone}
+
+  def handle_event(:cast, {:job_exited, notice}, :idle, data) do
+    if Longx.Jobs.observed?(data.thread_id, notice.name, notice.run) do
+      :keep_state_and_data
+    else
+      {_turn_id, data} =
+        start_turn(data, job_notice(notice),
+          source: "job:" <> notice.name,
+          origin: %{
+            "kind" => "job",
+            "name" => notice.name,
+            "status" => notice.status,
+            "exitCode" => notice.exit_code,
+            "durationMs" => notice.duration_ms
+          }
+        )
+
+      {:next_state, :running, data, [{:next_event, :internal, :step}]}
+    end
+  end
+
   def handle_event({:call, from}, request, state, data),
     do: data |> on_call(request, from) |> transition(state, data, from)
 
@@ -726,7 +762,13 @@ defmodule Longx.Agent do
               "startedAt" => &1.turn_started_at / 1000
             }
             # who started it, when not the person: the row names the turn after it
-            |> then(fn turn -> if from, do: Map.put(turn, "from", from), else: turn end)
+            # (`source:` names a sender whose words carry no `[agent …]` prefix)
+            |> then(fn turn ->
+              case from || Keyword.get(opts, :source) do
+                nil -> turn
+                from -> Map.put(turn, "from", from)
+              end
+            end)
         })
       )
       |> Team.with_activity(Keyword.get(opts, :activity))
@@ -747,6 +789,27 @@ defmodule Longx.Agent do
     ui = user_ui(new_id("item"), turn_id, text, images, from: from, kind: kind_of(opts))
     %{touch(state) | steers: state.steers ++ [{user_input(text, images), ui}]}
   end
+
+  # what the agent reads when a job it left running ends
+  defp job_notice(%{name: name} = n) do
+    took = format_ms(n.duration_ms)
+
+    how =
+      case n.status do
+        "exited" -> "finished with exit code #{n.exit_code} after #{took}"
+        _ -> "was stopped after #{took} (exit code #{n.exit_code}): #{n.reason}"
+      end
+
+    tail = String.trim_trailing(n.tail || "")
+
+    "[job #{name}] #{how}.\nCommand: `#{n.cmd}`\n" <>
+      if(tail == "", do: "It printed nothing.", else: "Its last lines:\n```\n#{tail}\n```") <>
+      "\nThe output it kept: job_output(name: \"#{name}\")."
+  end
+
+  defp format_ms(ms) when ms < 60_000, do: "#{div(ms, 1000)} s"
+  defp format_ms(ms) when ms < 3_600_000, do: "#{div(ms, 60_000)} min #{rem(div(ms, 1000), 60)} s"
+  defp format_ms(ms), do: "#{div(ms, 3_600_000)} h #{rem(div(ms, 60_000), 60)} min"
 
   # a message from another agent is a user message that says who: the
   # Responses API has no agent role every provider reads
@@ -786,17 +849,9 @@ defmodule Longx.Agent do
   ## The loop
 
   defp on_step(%State{steps: steps} = state) do
-    if steps >= max_steps() do
-      {:noreply, end_turn(state, "failed", "the turn ran #{steps} steps; stopped (max_steps)")}
-    else
-      state = fold_steers(%{state | steps: steps + 1})
-      run_request_phase(state)
-    end
+    state = fold_steers(%{state | steps: steps + 1})
+    run_request_phase(state)
   end
-
-  defp max_steps,
-    do:
-      :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:max_steps, @default_max_steps)
 
   defp run_request_phase(%State{} = state, opts \\ []) do
     case run_pipeline(state.pipeline, build_step(state, :request)) do

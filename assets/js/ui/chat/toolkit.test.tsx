@@ -372,6 +372,18 @@ describe("agents", () => {
     expect(within(row).getByText("已启动")).toBeInTheDocument();
   });
 
+  test("a job's end is a marker naming the job, how it ended and how long it ran; the notice opens under it", async () => {
+    const { JobNoticeView } = await import("./toolkit");
+    render(<JobNoticeView name="batch" status="exited" exitCode={2} durationMs={754_000} text={"[job batch] finished with exit code 2\nboom"} />);
+    const marker = screen.getByTestId("job-notice");
+    expect(marker).toHaveTextContent("后台任务 batch 结束");
+    expect(marker).toHaveTextContent("退出码 2");
+    expect(marker).toHaveTextContent("12 min 34 s");
+    expect(screen.queryByText(/boom/)).not.toBeInTheDocument();
+    fireEvent.click(within(marker).getByRole("button"));
+    expect(screen.getByText(/boom/)).toBeInTheDocument();
+  });
+
   test("a goal's next round is a quiet marker naming the round and the objective", async () => {
     const { GoalContinuationView } = await import("./toolkit");
     render(<GoalContinuationView round={3} objective="以「市值排序」为核心的改进路径" />);

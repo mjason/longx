@@ -146,8 +146,6 @@ config :sentry,
   before_send: {Longx.Sentry, :before_send},
   send_result: :none
 
-import_config "#{config_env()}.exs"
-
 # Self-upgrade from GitHub releases (Longx.Upgrade): where to look, how often
 config :longx, Longx.Upgrade, repo: "mjason/longx", tick: :timer.hours(6)
 
@@ -168,3 +166,6 @@ config :longx, Oban,
      ]},
     {Oban.Plugins.Pruner, max_age: 7 * 24 * 60 * 60}
   ]
+
+# last: an env file overrides what is above (test.exs turns the upgrade's clock off)
+import_config "#{config_env()}.exs"

@@ -313,6 +313,18 @@ defmodule Longx.ShimTest do
   end
 
   describe "termination" do
+    # a command's leftovers die with it (codex kills the group): an agent's
+    # `nohup job > log &` ran on as an orphan no ledger listed and nobody could
+    # stop, and a `job &` holding the output held the command open
+    test "what a command leaves running in its group dies when it exits" do
+      for script <- ["sleep 30 & echo $!", "nohup sleep 30 >/dev/null 2>&1 & echo $!"] do
+        {micros, {:ok, %{status: 0, stdout: out}}} = :timer.tc(fn -> Shim.run(sh(script)) end)
+        assert micros < 3_000_000, "#{script} held the command #{div(micros, 1000)} ms"
+        pid = out |> String.trim() |> String.to_integer()
+        assert eventually(fn -> not os_alive?(pid) end), "#{script} left #{pid} running"
+      end
+    end
+
     test "kill sends SIGTERM first" do
       {:ok, shim} = Shim.start_link(["sleep", "30"])
       :ok = Shim.kill(shim, 5_000)

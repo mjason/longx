@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { t } from "@/ui/strings";
 import { GoalProvider } from "./GoalBar";
 import { useWorkbench, type Tab } from "@/core/workbench";
-import { ActionAnswerContext, chatConfig, CompactionUI, GoalContinuationUI, SubagentContext, SurfaceContext } from "./toolkit";
+import { ActionAnswerContext, chatConfig, CompactionUI, GoalContinuationUI, JobNoticeUI, SubagentContext, SurfaceContext } from "./toolkit";
 
 const ChatContext = createContext<LongxRuntime | null>(null);
 
@@ -150,6 +150,7 @@ export function ChatProvider({
         <ComposerBridge composerRef={composerRef} />
         <CompactionUI />
         <GoalContinuationUI />
+        <JobNoticeUI />
         <SurfaceContext.Provider value={surface}>
       <ActionAnswerContext.Provider value={answerAction}>
         <SubagentContext.Provider value={subagentContext}>

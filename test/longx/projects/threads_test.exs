@@ -265,6 +265,26 @@ defmodule Longx.Projects.ThreadsTest do
     refute Agent.whereis(id)
   end
 
+  # a thread's background jobs go with it: archived, they are stopped; deleted,
+  # their logs go too
+  test "archiving a thread stops its jobs; deleting one removes them", %{
+    project: project,
+    dir: dir
+  } do
+    {:ok, kept} = Projects.start_thread(project, [])
+    {:ok, gone} = Projects.start_thread(project, [])
+    {:ok, _} = Longx.Jobs.start(kept.kernel_thread_id, "server", "sleep 30", cwd: dir)
+    {:ok, _} = Longx.Jobs.start(gone.kernel_thread_id, "batch", "sleep 30", cwd: dir)
+
+    Projects.archive_thread!(kept)
+    assert [%{name: "server", status: "stopped"}] = Longx.Jobs.list(kept.kernel_thread_id)
+
+    assert :ok = Projects.delete_thread(gone)
+    assert Longx.Jobs.list(gone.kernel_thread_id) == []
+    refute File.exists?(Path.join(Longx.Jobs.dir(), gone.kernel_thread_id))
+    Longx.Jobs.delete(kept.kernel_thread_id)
+  end
+
   test "search_files/2 walks the tree: the query as a subsequence, shortest paths first", %{
     project: project,
     dir: dir

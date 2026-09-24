@@ -211,6 +211,7 @@ func run(hostIn io.Reader, hostOut io.Writer, cfg config) int {
 		case <-waitCase:
 			waitCase = nil
 			exited = true
+			child.reapLeftovers()
 			out.write(TagExitStatus, encodeUint32(uint32(exitStatus(child.waitErr))))
 			if finished {
 				return 0

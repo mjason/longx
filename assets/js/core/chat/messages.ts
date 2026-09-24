@@ -149,6 +149,16 @@ export function toMessages(
       if (item.turnId) visible = shown.has(item.turnId);
       if (!visible) continue;
     }
+    if (item.type === "userMessage" && jobOrigin(item)) {
+      // a background job's end the kernel woke the agent with: a marker opening
+      // the turn (the model reads the notice, the page names the job)
+      if (!current || current.turnId !== item.turnId) {
+        flush();
+        current = { turnId: item.turnId, parts: [] };
+      }
+      current.parts.push({ type: "data-job", data: { id: item.id, ...jobOrigin(item)!, text: userText(item) } } as Part);
+      continue;
+    }
     if (item.type === "userMessage" && isGoalContinuation(item)) {
       // the kernel's own words (a goal's next round): a marker inside the turn, never a
       // bubble in the person's voice — the model reads the text, the page names the round
@@ -570,6 +580,19 @@ function goalOrigin(item: ThreadItem): { round: number | null; objective: string
   }
   const m = GOAL_TEXT.exec(userText(item));
   return m ? { round: Number(m[1]), objective: m[2]!.trim() } : null;
+}
+
+function jobOrigin(item: ThreadItem): { name: string; status: string; exitCode: number | null; durationMs: number | null } | null {
+  const origin = item["origin"];
+  if (typeof origin !== "object" || origin === null) return null;
+  const o = origin as Record<string, unknown>;
+  if (o["kind"] !== "job" || typeof o["name"] !== "string") return null;
+  return {
+    name: o["name"],
+    status: typeof o["status"] === "string" ? o["status"] : "exited",
+    exitCode: typeof o["exitCode"] === "number" ? o["exitCode"] : null,
+    durationMs: typeof o["durationMs"] === "number" ? o["durationMs"] : null,
+  };
 }
 
 function isGoalContinuation(item: ThreadItem): boolean {

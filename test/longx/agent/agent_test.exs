@@ -239,7 +239,7 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ "You are"
 
     assert Enum.map(body["tools"], & &1["name"]) |> Enum.sort() ==
-             ~w(apply_patch create_goal credential_create credential_login credential_rotate credentials_list exec_command get_context_remaining get_goal http_request knowledge_read knowledge_search knowledge_write new_context_window notify present prompt_user send_file show_diff show_file show_html update_goal view_image wait_until watch_enable watch_list watch_run web_fetch web_search)
+             ~w(apply_patch create_goal credential_create credential_login credential_rotate credentials_list exec_command get_context_remaining get_goal http_request job_output jobs knowledge_read knowledge_search knowledge_write new_context_window notify present prompt_user send_file show_diff show_file show_html start_job stop_job update_goal view_image wait_job wait_until watch_enable watch_list watch_run web_fetch web_search)
 
     refute Map.has_key?(body, "x-longx-custom-tools")
 
@@ -689,6 +689,31 @@ defmodule Longx.AgentTest do
     assert %{"status" => "completed"} = await_turn_end()
   end
 
+  # an agent that started a long job ends its turn instead of polling the log
+  # (seventy-two `tail`s once): the job's end wakes it with what happened
+  test "a background job that ends wakes the idle agent with its end; an end the agent saw does not",
+       %{bypass: bypass, thread_id: id, dir: dir} do
+    on_exit(fn -> Longx.Jobs.delete(id) end)
+    script!(bypass, [ResponsesFixture.assistant_message("noted")])
+
+    {:ok, _} = Longx.Jobs.start(id, "quick", "echo made it; exit 2", cwd: dir)
+    assert %{"turn" => %{"from" => "job:quick"}} = await("turn/started")
+
+    assert %{"origin" => %{"kind" => "job", "name" => "quick", "exitCode" => 2}} =
+             await_user_message_matching(~r/^\[job quick\] finished with exit code 2/)
+
+    assert %{"status" => "completed"} = await_turn_end()
+    [request] = collect_requests([])
+    asked = request["input"] |> List.last() |> get_in(["content", Access.at(0), "text"])
+    assert asked =~ "made it"
+    assert asked =~ ~s|job_output(name: "quick")|
+
+    # waited for (the agent saw it end): nothing more
+    {:ok, _} = Longx.Jobs.start(id, "seen", "sleep 0.2", cwd: dir)
+    {:ok, %{status: "exited"}} = Longx.Jobs.wait(id, "seen", 5_000)
+    refute_receive {:thread, _, "turn/started", _}, 500
+  end
+
   test "a stream that breaks mid-turn is retried: the person sees the retry as progress and the turn completes; past the retries the turn fails naming the model so another can take over",
        %{bypass: bypass, dir: dir, model: model} do
     settings = Map.put(Longx.Agent.Definition.Settings.defaults(), :model_retries, 1)
@@ -920,48 +945,6 @@ defmodule Longx.AgentTest do
              %{"role" => "assistant"},
              %{"role" => "user", "content" => [%{"text" => "one more"}]}
            ] = third["input"]
-  end
-
-  defmodule Forever do
-    use Longx.Agent.Plug
-
-    def call(%Step{phase: :response} = step, _),
-      do: Step.enqueue_call(step, "exec_command", %{"cmd" => "true"})
-
-    def call(step, _), do: step
-  end
-
-  defmodule ForeverPipeline do
-    use Longx.Agent.Pipeline
-    plug Longx.Agent.Plugs.Shell
-    plug Forever
-    plug Longx.Agent.Plugs.Request
-  end
-
-  test "a loop that never ends is cut at the step limit", %{bypass: bypass, dir: dir} do
-    previous = Application.get_env(:longx, Longx.Agent, [])
-    Application.put_env(:longx, Longx.Agent, Keyword.put(previous, :max_steps, 3))
-    on_exit(fn -> Application.put_env(:longx, Longx.Agent, previous) end)
-
-    id = "forever-#{System.unique_integer([:positive])}"
-    :ok = ThreadState.subscribe(id)
-
-    on_exit(fn ->
-      Agent.stop(id)
-      ThreadState.stop(id)
-      ThreadState.Store.delete(id)
-    end)
-
-    {:ok, _} = Agent.ensure(thread_id: id, cwd: dir, pipeline: ForeverPipeline)
-    script!(bypass, List.duplicate(ResponsesFixture.assistant_message("again"), 10))
-
-    {:ok, %{turn_id: turn_id}} = Agent.send(id, "go")
-
-    assert %{"id" => ^turn_id, "status" => "failed", "error" => %{"message" => message}} =
-             await_turn_end(15_000)
-
-    assert message =~ "3 steps"
-    assert length(collect_requests([])) == 3
   end
 
   test "with no pipeline given the layered definition is loaded per step; a trusted .longx shapes the prompt and the tools; a broken file becomes a notice",
@@ -1508,6 +1491,33 @@ defmodule Longx.AgentTest do
     assert is_integer(q)
     await_item_completed_of_type("contextCompaction")
     assert Agent.status(id) == :idle
+  end
+
+  # the agent's memory of the jobs it started goes with a fold; Longx's does not:
+  # the summary names the ones still running, so they are never lost or guessed at
+  test "a fold's summary names the thread's jobs still running", %{bypass: bypass, dir: dir} do
+    id = compacting_agent(dir, DefaultCompaction)
+    on_exit(fn -> Longx.Jobs.delete(id) end)
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("first"),
+      ResponsesFixture.assistant_message("HANDOFF"),
+      ResponsesFixture.assistant_message("second")
+    ])
+
+    {:ok, _} = Agent.send(id, "one")
+    await_turn_end()
+    {:ok, _} = Longx.Jobs.start(id, "server", "sleep 30", cwd: dir)
+    assert :ok = Agent.compact(id)
+    await_item_completed_of_type("contextCompaction")
+    {:ok, _} = Agent.send(id, "two")
+    await_turn_end()
+
+    [_, _, next] = collect_requests([])
+    texts = for %{"content" => c} <- next["input"], %{"text" => t} <- c, do: t
+    summary = Enum.find(texts, &(&1 =~ "HANDOFF"))
+    assert summary =~ "Background jobs still running"
+    assert summary =~ "server: `sleep 30`"
   end
 
   test "a manual compact between turns folds the thread and the next turn starts from the summary",

@@ -299,7 +299,19 @@ defmodule Longx.Projects.Thread do
     end
 
     update :archive do
+      # the jobs are stopped after the write: not an atomic update
+      require_atomic? false
       change set_attribute(:status, :archived)
+
+      # its background jobs stop with it (after the write: stopping waits on processes)
+      change after_transaction(fn
+               _changeset, {:ok, thread}, _context ->
+                 Longx.Jobs.stop_all(thread.kernel_thread_id)
+                 {:ok, thread}
+
+               _changeset, result, _context ->
+                 result
+             end)
     end
 
     # one row by id — a sub-agent's, which the project list hides, for its page

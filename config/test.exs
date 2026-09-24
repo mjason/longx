@@ -34,6 +34,7 @@ config :longx, Longx.Mailer, adapter: Swoosh.Adapters.Test
 config :swoosh, :api_client, false
 
 config :longx, Longx.Projects.Attachments, dir: Path.expand("../data/attachments_test", __DIR__)
+config :longx, Longx.Jobs, dir: Path.join(System.tmp_dir!(), "longx-jobs-test")
 
 # The headless browser is never the real one in the unit suite: unavailable
 # unless a test points `executable:` at test/support/fake_obscura.sh

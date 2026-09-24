@@ -24,6 +24,8 @@ defmodule Longx.Agent.Pipelines.Default do
         # the project's AGENTS.md, as codex reads it; `drop AgentsMd` turns it off
         plug Longx.Agent.Plugs.AgentsMd
         plug Longx.Agent.Plugs.Shell
+        # long commands in the background, by name (Longx.Jobs)
+        plug Longx.Agent.Plugs.Jobs
         plug Longx.Agent.Plugs.Patch
         plug Longx.Agent.Plugs.ViewImage
         plug Longx.Agent.Plugs.Present
