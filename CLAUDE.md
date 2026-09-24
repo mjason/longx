@@ -1329,7 +1329,14 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     as the theme, ⌘S; **a markdown file opens rendered** — `ui/editor/MarkdownPreview`,
     react-markdown + remark-gfm with the chat's markdown classes and shiki — 编辑 / 预览
     toggle in the tab's bar, the editor straight away when `show_file` named a line), `DiffTab` = `ui/editor/DiffView` (`@codemirror/merge`, side by side
-    or unified, collapsed unchanged stretches). `components/CommandPalette` (⌘K),
+    or unified, collapsed unchanged stretches; **VS Code's diff, not the package's**: the
+    merge view's own character diff gives up past `scanLimit` 500 × 64 characters of
+    changed region and a uv.lock changed all through came out as one block, so
+    `ui/editor/lineDiff.ts` is its `diffConfig.override` — lines matched first (each line
+    one character for the package's `diff`), characters compared only inside the gaps,
+    a gap of as many lines on each side line against line, a mostly-different gap marked
+    whole; VS Code's colours on our tokens: the line faint, the changed characters deeper,
+    no underline, diagonal stripes where the other side has lines this one lacks). `components/CommandPalette` (⌘K),
     `components/DownloadBar` (browser and upgrade), `ThemeToggle`, `Logo`; `strings.ts`
     (all UI copy, zh-CN); `core/theme.ts` follows the OS by default; `core/viewport.ts`
     (phone < 768 ≤ tablet < 1024 ≤ desktop). **The native-shell bridge**
