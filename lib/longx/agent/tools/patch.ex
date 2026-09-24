@@ -47,7 +47,8 @@ defmodule Longx.Agent.Tools.Patch do
     lines = text |> String.split(~r/\r?\n/) |> Enum.map(&String.trim_trailing(&1, "\r"))
 
     with {:ok, body} <- unwrap(lines) do
-      hunks(body, [])
+      # line numbers as codex counts them: `*** Begin Patch` is line 1
+      hunks(body, 2, [])
     end
   end
 
@@ -70,18 +71,24 @@ defmodule Longx.Agent.Tools.Patch do
     end
   end
 
-  defp hunks([], acc), do: {:ok, Enum.reverse(acc)}
+  defp hunks([], _n, acc), do: {:ok, Enum.reverse(acc)}
 
-  defp hunks([line | rest], acc) do
+  defp hunks([line | rest], n, acc) do
     cond do
       String.starts_with?(String.trim_leading(line), @add) ->
         {content, rest} = Enum.split_while(rest, &String.starts_with?(&1, "+"))
         path = after_marker(line, @add)
         text = content |> Enum.map_join("", &(String.slice(&1, 1..-1//1) <> "\n"))
-        hunks(rest, [{:add, path, text} | acc])
+        n = n + 1 + length(content)
+
+        # an empty line with the file's '+' lines going on after it is inside the new
+        # file: codex refuses it there (an empty line between two hunks is let pass)
+        if inside_new_file?(rest),
+          do: not_a_header("", n),
+          else: hunks(rest, n, [{:add, path, text} | acc])
 
       String.starts_with?(String.trim_leading(line), @delete) ->
-        hunks(rest, [{:delete, after_marker(line, @delete)} | acc])
+        hunks(rest, n + 1, [{:delete, after_marker(line, @delete)} | acc])
 
       String.starts_with?(String.trim_leading(line), @update) ->
         path = after_marker(line, @update)
@@ -98,18 +105,33 @@ defmodule Longx.Agent.Tools.Patch do
           end
 
         {body, rest} = Enum.split_while(rest, &(not marker?(&1)))
+        n = n + 1 + if(move, do: 1, else: 0) + length(body)
 
         with {:ok, chunks} <- chunks(body) do
-          hunks(rest, [{:update, path, move, chunks} | acc])
+          hunks(rest, n, [{:update, path, move, chunks} | acc])
         end
 
       String.trim(line) == "" ->
-        hunks(rest, acc)
+        hunks(rest, n + 1, acc)
 
       true ->
-        {:error, "unexpected line in patch: #{inspect(line)}"}
+        not_a_header(String.trim(line), n)
     end
   end
+
+  # empty lines, then the new file's '+' lines again
+  defp inside_new_file?([first | _] = rest) do
+    blank? = &(String.trim(&1) == "")
+    blank?.(first) and match?(["+" <> _ | _], Enum.drop_while(rest, blank?))
+  end
+
+  defp inside_new_file?([]), do: false
+
+  # codex's words (apply-patch/src/streaming_parser.rs, InvalidHunkError's display)
+  defp not_a_header(trimmed, n),
+    do:
+      {:error,
+       "invalid hunk at line #{n}, '#{trimmed}' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'"}
 
   defp marker?(line) do
     t = String.trim_leading(line)
@@ -186,8 +208,26 @@ defmodule Longx.Agent.Tools.Patch do
   """
   @spec apply([hunk], Path.t()) :: {:ok, [map]} | {:error, String.t()}
   def apply(hunks, cwd) do
-    with {:ok, plans} <- plan_all(hunks, cwd, []) do
+    with :ok <- once_each(hunks, cwd),
+         {:ok, plans} <- plan_all(hunks, cwd, []) do
       {:ok, Enum.map(plans, &execute/1)}
+    end
+  end
+
+  # one operation per file, as codex verifies before it applies anything
+  # (apply-patch/src/invocation.rs): every hunk was planned against the file as it
+  # was, so a second section of one file wrote over the first's change, reported done
+  defp once_each(hunks, cwd) do
+    hunks
+    |> Enum.map(&Path.expand(elem(&1, 1), cwd))
+    |> Enum.reduce_while(%{}, fn path, seen ->
+      if Map.has_key?(seen, path),
+        do: {:halt, {:error, "multiple operations target #{path}"}},
+        else: {:cont, Map.put(seen, path, true)}
+    end)
+    |> case do
+      {:error, _} = error -> error
+      _seen -> :ok
     end
   end
 

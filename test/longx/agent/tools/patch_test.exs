@@ -57,9 +57,87 @@ defmodule Longx.Agent.Tools.PatchTest do
       assert {:error, _} =
                Patch.parse("*** Begin Patch\n*** Update File: a\n~ weird\n*** End Patch\n")
     end
+
+    # codex's parser (apply-patch/src/streaming_parser.rs): a new file's lines all start
+    # with '+'; a bare empty line among them is refused where it stands — Longx once
+    # ended the file there and blamed the next line, and an agent concluded a lone '+'
+    # line broke the parser
+    test "a bare empty line inside a new file is refused at that line, in codex's words" do
+      patch = "*** Begin Patch\n*** Add File: probe.md\n+# 标题\n\n+用法\n*** End Patch\n"
+
+      assert Patch.parse(patch) ==
+               {:error,
+                "invalid hunk at line 4, '' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'"}
+
+      # a lone '+' is the file's empty line
+      assert {:ok, [{:add, "probe.md", "# 标题\n\n用法\n"}]} =
+               Patch.parse(
+                 "*** Begin Patch\n*** Add File: probe.md\n+# 标题\n+\n+用法\n*** End Patch\n"
+               )
+
+      # an empty line between two hunks is still let pass
+      assert {:ok, [{:add, "a.md", "a\n"}, {:delete, "b.md"}]} =
+               Patch.parse(
+                 "*** Begin Patch\n*** Add File: a.md\n+a\n\n*** Delete File: b.md\n*** End Patch\n"
+               )
+    end
+
+    test "a line where a hunk header belongs is refused in codex's words, with its line" do
+      assert Patch.parse("*** Begin Patch\n*** Delete File: x\nbad\n*** End Patch\n") ==
+               {:error,
+                "invalid hunk at line 3, 'bad' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'"}
+    end
   end
 
   describe "apply/2" do
+    # codex refuses a patch that names a file twice (apply-patch/src/invocation.rs:
+    # "multiple operations target <path>") before anything is written; Longx computed
+    # every hunk against the original file and the last one's write erased the earlier
+    # one's — two sections of one file reported done, the first silently lost
+    test "a patch naming one file in two sections is refused whole, in codex's words; nothing is written",
+         %{dir: dir} do
+      path = Path.join(dir, "m.py")
+      File.write!(path, "def a():\n    return 1\n\n\nprint(a())\n")
+      File.write!(Path.join(dir, "other.txt"), "x\n")
+
+      {:ok, hunks} =
+        Patch.parse("""
+        *** Begin Patch
+        *** Update File: other.txt
+        @@
+        -x
+        +y
+        *** Update File: m.py
+        @@
+         def a():
+             return 1
+        +
+        +
+        +def b():
+        +    return 2
+        *** Update File: m.py
+        @@
+        -print(a())
+        +print(a(), b())
+        *** End Patch
+        """)
+
+      assert Patch.apply(hunks, dir) == {:error, "multiple operations target #{path}"}
+      assert File.read!(path) == "def a():\n    return 1\n\n\nprint(a())\n"
+      assert File.read!(Path.join(dir, "other.txt")) == "x\n"
+
+      # an add and an update of one path count the same
+      {:ok, twice} =
+        Patch.parse(
+          "*** Begin Patch\n*** Add File: n.txt\n+a\n*** Delete File: n.txt\n*** End Patch\n"
+        )
+
+      assert Patch.apply(twice, dir) ==
+               {:error, "multiple operations target #{Path.join(dir, "n.txt")}"}
+
+      refute File.exists?(Path.join(dir, "n.txt"))
+    end
+
     test "adds, updates (in place and moved) and deletes files under the cwd", %{dir: dir} do
       File.write!(Path.join(dir, "a.ex"), "def one do\n  1\nend\n\ndef two do\n  2\nend\n")
       File.write!(Path.join(dir, "gone.txt"), "bye\n")

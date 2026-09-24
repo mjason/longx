@@ -469,7 +469,14 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `test/longx/system/{memory,pressure}_test`, the Shell guards in `plugs_test`),
     `apply_patch` (`Plugs.Patch` over
     `Longx.Agent.Tools.Patch`: codex's patch grammar parsed and applied in Elixir — all
-    hunks matched first, then written; **a miss says where the block stops matching** —
+    hunks matched first, then written; **a file named in two sections is refused whole**
+    (`multiple operations target <path>`, codex's check before it applies — every hunk
+    was planned against the file as it was and the last write erased the earlier
+    section's change, reported done), and **a bare empty line inside a new file is
+    refused at its line** in codex's words (`invalid hunk at line N, '' is not a valid
+    hunk header…`; Longx had ended the file there and blamed the next line, and an agent
+    wrote a knowledge doc saying a lone `+` line broke the parser); an empty line
+    between hunks is let pass; **a miss says where the block stops matching** —
     the context and deleted lines are one block matched line by line, and an error naming
     only the first line sent an agent chasing encodings when a blank line was missing from
     its context, so `explain_miss/3` reports the matched prefix, the diverging line on both
