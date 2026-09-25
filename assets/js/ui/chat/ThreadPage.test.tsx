@@ -462,6 +462,18 @@ describe("ThreadPage", () => {
     await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "继续" }) })));
   });
 
+  test("the top bar copies this conversation's API address (its JSON for another agent)", async () => {
+    // after setup: user-event installs a clipboard of its own
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await open();
+    await user.click(screen.getByRole("button", { name: "复制 API 地址" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/api/p/app-1/t/t1`));
+    expect(toast.success).toHaveBeenCalledWith("已复制 API 地址", expect.anything());
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+  });
+
   test("an unrecoverable thread cannot take messages", async () => {
     vi.mocked(listThreads).mockResolvedValueOnce({
       success: true,
@@ -488,6 +500,8 @@ describe("ThreadPage", () => {
     const { router } = renderAt("/p/app-1");
     await screen.findByText("让 agent 在这个项目里干活");
     expect(channel.topics.filter((t) => t.startsWith("thread:"))).toEqual([]);
+    // no conversation yet: no API address to copy
+    expect(screen.queryByRole("button", { name: "复制 API 地址" })).toBeNull();
     // no access mode to pick: the kernel runs as the person
     expect(screen.queryByTestId("mode-picker")).not.toBeInTheDocument();
     await user.type(

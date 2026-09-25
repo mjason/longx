@@ -16,6 +16,7 @@ import { TopBar } from "@/ui/shell/Shell";
 import { ThemeToggle } from "@/ui/components/ThemeToggle";
 import { ChatProvider } from "@/ui/chat/ChatProvider";
 import { t } from "@/ui/strings";
+import { CopyApiButton } from "./CopyApiButton";
 import { StatusStrip } from "./StatusStrip";
 import { AgentsTool } from "./tools/AgentsTool";
 import { FilesTool } from "./tools/FilesTool";
@@ -115,6 +116,7 @@ export function ProjectWindow() {
         back="/"
         actions={
           <>
+          <CopyApiButton slug={slug} />
           <ThemeToggle />
           <Link to={`/p/${slug}/settings`} aria-label={t.settings} className="touch-target flex items-center justify-center rounded-md">
             <Settings className="size-5" />

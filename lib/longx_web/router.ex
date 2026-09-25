@@ -55,10 +55,12 @@ defmodule LongxWeb.Router do
     get "/:project_id/*path", FileController, :show
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", LongxWeb do
-  #   pipe_through :api
-  # end
+  # a conversation as JSON for another agent (Longx.Projects.Report): the
+  # page's address with /api in front; no `:accepts` — always JSON
+  scope "/api", LongxWeb do
+    get "/p/:slug", ApiController, :project
+    get "/p/:slug/t/:id", ApiController, :thread
+  end
 
   # The React SPA: every remaining HTML path gets the shell (see
   # LongxWeb.PageController). Must stay last — after /ai, /rpc and /dev.

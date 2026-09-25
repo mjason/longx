@@ -1213,7 +1213,23 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   `LongxWeb.PageController.spa/2` serves the shell for `/` and, as the router's **last**
   route (`get "/*path"`, pipeline `:spa`), for every other HTML navigation; it answers 404
   for non-HTML `Accept`s and file-looking paths. `/rpc/*`, `/attachments/*`, `/callback/*`,
-  `/socket`, `/dev/*` are matched before it. No LiveView pages.
+  `/socket`, `/dev/*`, `/api/*` are matched before it. No LiveView pages.
+  - **A conversation as JSON for another agent** — the page's address with `/api` in
+    front: `GET /api/p/<slug>/t/<id>` (the row id, or the kernel's thread id; `?turns=N`
+    — default 20 — or `all`, `?full=1`) and `GET /api/p/<slug>` (the project's root
+    conversations with each report's `api` address). `LongxWeb.ApiController` over
+    `Longx.Projects.Report`: the thread's row, `live` (agent alive / asleep, the running
+    turn, progress, goal, `waiting`, pending asks, token usage), sub-agents with their own
+    `api`, jobs, the thread's recent model requests (`Gateway.Log`, errors included), and
+    `turns` — each row's status / error / usage / model with the items the page shows for
+    it; read **without waking anything** (the live view when the agent has one, else the
+    transcript's UI items, a started and a completed version of an item folded into one),
+    strings past 2 000 characters trimmed to their start and end unless `full`. Always
+    JSON, whatever the client accepts (an agent's fetch tool asks for HTML; no
+    `:accepts`), `LongxWeb.Wire.clean`ed, a JSON 404 for an unknown project or thread; no
+    auth — the RPC's single-user boundary. The top bar of a conversation's page has
+    **复制 API 地址** (`frame/CopyApiButton`, `{}`: `copyText` + a toast naming the
+    address). Tests: `report_test`, `api_controller_test`, the ThreadPage copy test.
   - `LongxWeb.Actor` is the single place an actor comes from (RPC conn, socket params) —
     `nil` today; AshAuthentication plugs in there later without touching the client.
   - **RPC** = ash_typescript: domains `Longx.Projects`, `Longx.AI`, `Longx.System` declare

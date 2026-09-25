@@ -72,6 +72,10 @@ export const t = {
   queueSend: "加入队列",
   queueHint: "这一轮结束后发送",
   // what arrives from elsewhere while a turn runs (another agent, a session, a job, a watch)
+  // a conversation as JSON for another agent (/api/p/<slug>/t/<id>)
+  copyApi: "复制 API 地址",
+  apiCopied: "已复制 API 地址",
+  apiCopyFailed: "没能复制，地址在下面",
   waitingHint: "别处来的消息 · 本轮结束后处理",
   waitingPaused: "你停止了这一轮，这些消息等你继续再处理",
   waitingInsert: "立即插入",
