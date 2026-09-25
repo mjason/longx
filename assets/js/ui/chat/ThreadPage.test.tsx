@@ -474,6 +474,27 @@ describe("ThreadPage", () => {
     Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
   });
 
+  test("the column follows ChatGPT's: 40rem, 48rem once the chat area is 56rem wide; the margins outside it 1 / 1.5 / 4rem — the chat area's width, not the screen's", async () => {
+    await open();
+    const viewport = document.querySelector('[data-slot="aui_thread-viewport"]')!;
+    for (const token of [
+      "px-(--thread-margin)",
+      "[--thread-margin:1rem]",
+      "@min-[40rem]:[--thread-margin:1.5rem]",
+      "@min-[56rem]:[--thread-margin:4rem]",
+      "[--thread-max-width:40rem]",
+      "@min-[56rem]:[--thread-max-width:48rem]",
+    ])
+      expect(viewport.className.split(" ")).toContain(token);
+    // the margin is outside the column: the column itself has none
+    const column = viewport.firstElementChild!;
+    expect(column.className).toContain("max-w-(--thread-max-width)");
+    expect(column.className.split(" ")).not.toContain("px-4");
+    // the text shares the composer's left edge, as ChatGPT's does: no inset of its own
+    const content = await screen.findAllByText((_, el) => el?.getAttribute("data-slot") === "aui_assistant-message-content");
+    for (const el of content) expect(el.className.split(" ")).not.toContain("px-2");
+  });
+
   test("an unrecoverable thread cannot take messages", async () => {
     vi.mocked(listThreads).mockResolvedValueOnce({
       success: true,

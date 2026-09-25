@@ -1491,7 +1491,11 @@ Key patterns:
   `assets/` (answer "n" to overwriting existing shadcn files). Elements land in
   `js/ui/components/assistant-ui/elements/` (`*.aui.tsx` read the runtime, the rest are
   props-driven) and are **source we own and adapt**: `thread.aui` (zh-CN strings, our
-  composer slots), `tool-call`, `terminal-block`, `code-diff`, `file-tree`, `web-search`,
+  composer slots; **ChatGPT's column** — `THREAD_COLUMN`: the content 40rem, 48rem once
+  the chat area is 56rem wide, the margins outside it 1 / 1.5 / 4rem, by container query
+  on the thread root, so a docked tool panel counts — and the message text on the
+  composer's left edge, no `px-2` inset: a fixed 44rem with the margin inside once left
+  672px where ChatGPT gives 768 on the same screen), `tool-call`, `terminal-block`, `code-diff`, `file-tree`, `web-search`,
   `elicitation-form`, `agent-status`, `background-inbox`,
   `context-display`, `model-selector` / `model-picker`, `reasoning-panel`, `speaker-identity`
   (registry name `elements-speaker-identity`; the catalog's names differ from the registry's —

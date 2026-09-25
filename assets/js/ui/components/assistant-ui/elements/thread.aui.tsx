@@ -160,6 +160,15 @@ export const Thread: FC<ThreadProps> = ({
   );
 };
 
+// Longx: ChatGPT's column. The content is 40rem, 48rem once the chat area is
+// 56rem wide; the margins sit outside it — 1rem, 1.5rem from a 40rem chat area,
+// 4rem from 56rem. Measured on the chat area (the thread root is the
+// container), not the screen: a docked tool panel takes its share. A fixed
+// 44rem with the margin inside it once left 672px of text where ChatGPT gives
+// 768 on the same screen.
+const THREAD_COLUMN =
+  "px-(--thread-margin) [--thread-margin:1rem] @min-[40rem]:[--thread-margin:1.5rem] @min-[56rem]:[--thread-margin:4rem] [--thread-max-width:40rem] @min-[56rem]:[--thread-max-width:48rem]";
+
 /**
  * Longx: a conversation to read, not to write in — a sub-agent's, in a
  * workbench tab: the viewport, the messages and the way back down, no
@@ -169,9 +178,9 @@ export const ReadOnlyThread: FC<{ components?: ThreadComponents | undefined }> =
   components = EMPTY_COMPONENTS,
 }) => (
   <ThreadComponentsContext.Provider value={components}>
-    <ThreadPrimitive.Root className="aui-root aui-thread-root bg-background @container flex h-full flex-col" style={{ ["--thread-max-width" as string]: "44rem" }}>
-      <ThreadPrimitive.Viewport data-slot="aui_thread-viewport" className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll">
-        <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
+    <ThreadPrimitive.Root className="aui-root aui-thread-root bg-background @container flex h-full flex-col">
+      <ThreadPrimitive.Viewport data-slot="aui_thread-viewport" className={cn("relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll", THREAD_COLUMN)}>
+        <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col pt-4">
           {components.HistoryEdge ? <components.HistoryEdge /> : null}
           <div data-slot="aui_message-group" className="mb-6 flex flex-col gap-y-6 empty:hidden">
             <ThreadPrimitive.Messages>{() => <ThreadMessage />}</ThreadPrimitive.Messages>
@@ -195,7 +204,6 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
       style={{
-        ["--thread-max-width" as string]: "44rem",
         ["--composer-bg" as string]: "var(--color-card)",
         ["--composer-radius" as string]: "1.5rem",
         ["--composer-padding" as string]: "8px",
@@ -211,11 +219,11 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
           for seconds */}
       <ThreadPrimitive.Viewport
         data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll"
+        className={cn("relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll", THREAD_COLUMN)}
       >
         <div
           className={cn(
-            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
+            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col pt-4",
             // new chat: anchored below the top rather than vertically centred, so the
             // composer grows downward as lines are typed instead of re-centring
             isEmpty && "pt-[22dvh]",
@@ -526,7 +534,8 @@ const AssistantMessage: FC = () => {
     >
       <div
         data-slot="aui_assistant-message-content"
-        className="text-foreground px-2 leading-relaxed wrap-break-word"
+        // Longx: no inset — the text shares the composer's left edge, as ChatGPT's does
+        className="text-foreground leading-relaxed wrap-break-word"
       >
         <AssistantParts />
         <MessageError />
@@ -536,7 +545,7 @@ const AssistantMessage: FC = () => {
 
       <div
         data-slot="aui_assistant-message-footer"
-        className={cn("ms-2 flex items-center", ACTION_BAR_HEIGHT)}
+        className={cn("flex items-center", ACTION_BAR_HEIGHT)}
       >
         <BranchPicker />
         <AssistantActionBar />
@@ -625,7 +634,7 @@ const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
-      className="fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
+      className="fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
       data-role="user"
     >
       <UserMessageAttachments />
@@ -663,7 +672,7 @@ const AgentMessage: FC<{ from: string }> = ({ from }) => {
       data-slot="aui_agent-message-root"
       data-role="user"
       data-testid="agent-message"
-      className="fade-in slide-in-from-bottom-1 animate-in px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className="fade-in slide-in-from-bottom-1 animate-in duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
       <SpeakerRow
         kind="subagent"
@@ -699,7 +708,7 @@ const EditComposer: FC = () => {
   return (
     <MessagePrimitive.Root
       data-slot="aui_edit-composer-wrapper"
-      className="flex flex-col px-2 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className="flex flex-col [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
       <ComposerPrimitive.Root className="aui-edit-composer-root border-border/60 dark:border-muted-foreground/15 ms-auto flex w-full max-w-[85%] cursor-text flex-col rounded-(--composer-radius) border bg-(--composer-bg)">
         <ComposerPrimitive.Input
