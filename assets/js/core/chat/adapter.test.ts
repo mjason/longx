@@ -189,76 +189,25 @@ describe("chat adapter", () => {
     );
   });
 
-  test("onCancel while the turn did no I/O retracts it and hands the text back to the composer; once something ran, or waits to, it only interrupts", async () => {
+  test("onCancel only ever interrupts: the turn stays, nothing is taken back into the composer, whatever the turn did (a report's turn stopped early once put the report in the person's composer)", async () => {
     vi.mocked(interruptTurn).mockClear();
-    const onRetract = vi.fn();
+    vi.mocked(retractTurn).mockClear();
     const untouched = buildAdapter({
       target,
       view: {
         ...emptyView("thr_1"),
         turn: { id: "turn_9", status: "inProgress" },
-        items: [{ id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] }],
+        items: [{ id: "u9", type: "userMessage", turnId: "turn_9", from: "coder", content: [{ type: "text", text: "[agent coder] done" }] }],
       },
       model: null,
-      onRetract,
     });
     await untouched.onCancel!();
-    expect(retractTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", kernelTurnId: "turn_9" } }));
-    expect(onRetract).toHaveBeenCalledWith("look at it");
-    expect(interruptTurn).not.toHaveBeenCalled();
+    expect(interruptTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", kernelTurnId: "turn_9" } }));
+    expect(retractTurn).not.toHaveBeenCalled();
 
-    // thinking and a half-said answer are words, not side effects: still taken back
-    const answering = buildAdapter({
-      target,
-      view: {
-        ...emptyView("thr_1"),
-        turn: { id: "turn_9", status: "inProgress" },
-        items: [
-          { id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] },
-          { id: "r9", type: "reasoning", turnId: "turn_9", summary: ["thinking"] },
-          { id: "m9", type: "agentMessage", turnId: "turn_9", text: "Let me" },
-        ],
-      },
-      model: null,
-      onRetract,
-    });
-    await answering.onCancel!();
-    expect(interruptTurn).not.toHaveBeenCalled();
-    expect(onRetract).toHaveBeenCalledTimes(2);
-
-    // a command ran: only an interrupt
-    const ran = buildAdapter({
-      target,
-      view: {
-        ...emptyView("thr_1"),
-        turn: { id: "turn_9", status: "inProgress" },
-        items: [
-          { id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] },
-          { id: "c9", type: "commandExecution", turnId: "turn_9", command: "ls", status: "inProgress" },
-        ],
-      },
-      model: null,
-      onRetract,
-    });
-    await ran.onCancel!();
-    expect(interruptTurn).toHaveBeenCalledTimes(1);
-    expect(onRetract).toHaveBeenCalledTimes(2);
-
-    // a request waiting on the person (a tool's ask): the same
-    const asking = buildAdapter({
-      target,
-      view: {
-        ...emptyView("thr_1"),
-        turn: { id: "turn_9", status: "inProgress" },
-        items: [{ id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] }],
-        requests: [{ id: 7, method: "longx/action/request", params: { threadId: "thr_1", turnId: "turn_9", title: "登录" } }],
-      },
-      model: null,
-      onRetract,
-    });
-    await asking.onCancel!();
-    expect(interruptTurn).toHaveBeenCalledTimes(2);
-    expect(onRetract).toHaveBeenCalledTimes(2);
+    // the turn ended on its own while the stop was on its way: nothing to report
+    vi.mocked(interruptTurn).mockResolvedValueOnce({ success: false, errors: [{ type: "invalid", message: "not_running", shortMessage: "not_running", vars: {}, fields: ["kernelTurnId"], path: [], details: {} }] } as never);
+    await expect(untouched.onCancel!()).resolves.toBeUndefined();
   });
 
   test("without a thread, the first message creates one and lands there", async () => {

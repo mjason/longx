@@ -228,8 +228,17 @@ defmodule Longx.Agent.PlugsTest do
 
       assert team.tools["send_message"].description =~ "trigger a turn if it is idle"
 
+      # what arrives while an agent works waits for its turn to end (the page
+      # lists it; the person may send it in early) — codex delivers it
+      # promptly mid-turn, Longx does not
       assert team.tools["send_message"].description =~
-               "deliver the message promptly at message boundaries while sampling, or after the pending tool call completes"
+               "If the target is already running, the message waits and starts a turn once the running one ends."
+
+      refute team.tools["send_message"].description =~ "promptly"
+      refute Map.has_key?(team.tools["send_message"].schema["properties"], "deliver")
+
+      assert Enum.join(team.instructions, "\n") =~
+               "(it triggers a turn when the agent is idle; while it is running, it waits and starts a turn when that one ends)"
 
       assert team.tools["close_agent"].description =~
                "Close an agent and any open descendants when they are no longer needed, and return the target agent's previous status before shutdown was requested."

@@ -501,6 +501,221 @@ defmodule Longx.AgentTest do
     assert %{"status" => "completed"} = await_turn_end()
   end
 
+  # what arrives from elsewhere (another agent, a session, a job, a watch)
+  # while a turn runs waits in a list the page shows, and never jumps into
+  # the running turn: a stop before anything had run once took back a turn a
+  # child's report had started and put the report in the person's composer
+  test "a message from another agent while a turn runs waits in the list the page shows, and starts its own turn when the turn ends",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("one")),
+      ResponsesFixture.assistant_message("two")
+    ])
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "first")
+    assert_receive {:held, handler}, 5_000
+
+    assert {:ok, %{pending: true}} = Agent.send(id, "a finding", from: "coder", kind: "report")
+
+    assert %{
+             "waiting" => [
+               %{
+                 "id" => "waiting_" <> _,
+                 "from" => "coder",
+                 "kind" => "report",
+                 "text" => "a finding"
+               }
+             ],
+             "paused" => false
+           } = await("thread/waiting/updated")
+
+    assert %{waiting: %{"waiting" => [_], "paused" => false}} = ThreadState.snapshot(id)
+
+    send(handler, :go)
+    assert %{"id" => ^turn_id, "status" => "completed"} = await_turn_end()
+    assert %{"waiting" => []} = await("thread/waiting/updated")
+
+    assert_receive {:thread, _, "turn/started",
+                    %{"turn" => %{"id" => second, "from" => "coder"}}},
+                   5_000
+
+    assert second != turn_id
+    assert %{"id" => ^second, "status" => "completed"} = await_turn_end()
+
+    # the running turn never saw it; the next one did
+    assert_receive {:request, first}
+    assert_receive {:request, body}
+    assert last_text(first) == "first"
+    assert last_text(body) == "[agent coder] a finding"
+  end
+
+  test "what waited goes in together, one turn and one request, as Claude Code folds what arrives mid-turn; a question expecting an answer has a turn of its own",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("one")),
+      ResponsesFixture.assistant_message("both seen"),
+      ResponsesFixture.assistant_message("answered")
+    ])
+
+    {:ok, %{turn_id: t1}} = Agent.send(id, "first")
+    assert_receive {:held, handler}, 5_000
+    {:ok, %{pending: true}} = Agent.send(id, "tests pass", from: "coder", kind: "report")
+
+    {:ok, %{pending: true}} =
+      Agent.send(id, "what is left?", from: "lead", reply_to: "native_lead")
+
+    {:ok, %{pending: true}} = Agent.send(id, "sources found", from: "researcher", kind: "report")
+    assert %{"waiting" => [_]} = await("thread/waiting/updated")
+    assert %{"waiting" => [_, %{"question" => true}]} = await("thread/waiting/updated")
+    assert %{"waiting" => [_, _, _]} = await("thread/waiting/updated")
+
+    send(handler, :go)
+    assert %{"id" => ^t1} = await_turn_end()
+    # the two reports in one turn, the question left for the next
+    assert %{"waiting" => [%{"from" => "lead"}]} = await("thread/waiting/updated")
+
+    assert_receive {:thread, _, "turn/started", %{"turn" => %{"id" => t2, "from" => "coder"}}},
+                   5_000
+
+    assert %{"id" => ^t2, "status" => "completed"} = await_turn_end()
+    assert_receive {:thread, _, "turn/started", %{"turn" => %{"from" => "lead"}}}, 5_000
+    assert %{"status" => "completed"} = await_turn_end()
+
+    assert_receive {:request, _first}
+    assert_receive {:request, second}
+    assert_receive {:request, third}
+
+    texts = fn body ->
+      for %{"role" => "user", "content" => [%{"text" => t}]} <- body["input"], do: t
+    end
+
+    assert Enum.take(texts.(second), -2) == [
+             "[agent coder] tests pass",
+             "[agent researcher] sources found"
+           ]
+
+    assert List.last(texts.(third)) == "[agent lead] what is left?"
+  end
+
+  test "the person's stop pauses what waits: nothing starts by itself; the person's next message goes first, then what waited",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("one")),
+      ResponsesFixture.assistant_message("mine"),
+      ResponsesFixture.assistant_message("theirs")
+    ])
+
+    {:ok, %{turn_id: t1}} = Agent.send(id, "first")
+    assert_receive {:thread, _, "turn/started", %{"turn" => %{"id" => ^t1}}}, 5_000
+    assert_receive {:held, _handler}, 5_000
+    assert {:ok, %{pending: true}} = Agent.send(id, "news", from: "coder")
+    assert %{"paused" => false} = await("thread/waiting/updated")
+
+    assert :ok = Agent.interrupt(id, by: :person)
+    Bypass.pass(bypass)
+    # who stopped it, for the page's stopped-run card (and the row)
+    assert %{
+             "id" => ^t1,
+             "status" => "interrupted",
+             "error" => %{"by" => "person", "message" => "stopped by the person" <> _}
+           } =
+             await_turn_end()
+
+    assert %{"waiting" => [%{"from" => "coder"}], "paused" => true} =
+             await("thread/waiting/updated")
+
+    refute_receive {:thread, _, "turn/started", _}, 300
+    assert Agent.status(id) == :idle
+
+    {:ok, %{turn_id: t2, steered: false}} = Agent.send(id, "go on")
+    assert_receive {:thread, _, "turn/started", %{"turn" => %{"id" => ^t2} = turn}}, 5_000
+    refute Map.has_key?(turn, "from")
+    assert %{"id" => ^t2, "status" => "completed"} = await_turn_end()
+    assert_receive {:thread, _, "turn/started", %{"turn" => %{"from" => "coder"}}}, 5_000
+    assert %{"status" => "completed"} = await_turn_end()
+  end
+
+  test "a waiting message goes in on request: into the running turn, or as a turn of its own once the person stopped",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("one")),
+      ResponsesFixture.assistant_message("two"),
+      held(ResponsesFixture.assistant_message("three")),
+      ResponsesFixture.assistant_message("four")
+    ])
+
+    {:ok, %{turn_id: t1}} = Agent.send(id, "first")
+    assert_receive {:held, handler}, 5_000
+    {:ok, %{pending: true}} = Agent.send(id, "now please", from: "coder")
+    assert %{"waiting" => [%{"id" => wid}]} = await("thread/waiting/updated")
+
+    # running: a steer into this turn, shown when the kernel folds it in
+    assert :ok = Agent.release(id, wid)
+    assert %{"waiting" => []} = await("thread/waiting/updated")
+    send(handler, :go)
+    assert %{"turnId" => ^t1, "from" => "coder"} = await_user_message("[agent coder] now please")
+    assert %{"id" => ^t1, "status" => "completed"} = await_turn_end()
+    refute_receive {:thread, _, "turn/started", %{"turn" => %{"from" => "coder"}}}, 300
+
+    # paused by the person's stop: released, it starts its turn at once
+    {:ok, %{turn_id: t2}} = Agent.send(id, "second")
+    assert_receive {:held, _}, 5_000
+    {:ok, %{pending: true}} = Agent.send(id, "later", from: "coder")
+    assert %{"waiting" => [%{"id" => wid2}]} = await("thread/waiting/updated")
+    :ok = Agent.interrupt(id, by: :person)
+    Bypass.pass(bypass)
+    assert %{"id" => ^t2} = await_turn_end()
+    assert %{"paused" => true} = await("thread/waiting/updated")
+    assert :ok = Agent.release(id, wid2)
+    assert_receive {:thread, _, "turn/started", %{"turn" => %{"from" => "coder"}}}, 5_000
+    assert %{"status" => "completed"} = await_turn_end()
+    assert {:error, :not_found} = Agent.release(id, wid2)
+  end
+
+  test "a job that ends while a turn runs waits in the list as the job, and wakes the agent after the turn",
+       %{bypass: bypass, thread_id: id, dir: dir} do
+    on_exit(fn -> Longx.Jobs.delete(id) end)
+
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("one")),
+      ResponsesFixture.assistant_message("noted")
+    ])
+
+    {:ok, %{turn_id: t1}} = Agent.send(id, "first")
+    assert_receive {:held, handler}, 5_000
+    {:ok, _} = Longx.Jobs.start(id, "quick", "exit 2", cwd: dir)
+
+    assert %{"waiting" => [%{"source" => "job:quick", "text" => "[job quick] finished" <> _}]} =
+             await("thread/waiting/updated", 10_000)
+
+    send(handler, :go)
+    assert %{"id" => ^t1} = await_turn_end()
+    assert_receive {:thread, _, "turn/started", %{"turn" => %{"from" => "job:quick"}}}, 5_000
+    assert %{"status" => "completed"} = await_turn_end()
+  end
+
+  test "a stopped turn of the person's that ran nothing can be discarded afterwards; an earlier one cannot",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [
+      ResponsesFixture.assistant_message("kept"),
+      held(ResponsesFixture.assistant_message("never"))
+    ])
+
+    {:ok, %{turn_id: t1}} = Agent.send(id, "keep this")
+    assert %{"id" => ^t1, "status" => "completed"} = await_turn_end()
+    {:ok, %{turn_id: t2}} = Agent.send(id, "oops")
+    assert_receive {:held, _}, 5_000
+    :ok = Agent.interrupt(id, by: :person)
+    Bypass.pass(bypass)
+    assert %{"id" => ^t2, "status" => "interrupted"} = await_turn_end()
+
+    assert {:error, :not_last} = Agent.retract(id, t1)
+    assert :ok = Agent.retract(id, t2)
+    assert %{"turnIds" => [^t2]} = await("thread/reverted")
+    assert Enum.map(Transcript.items!(id), & &1.turn_id) |> Enum.uniq() == [t1]
+    assert Enum.all?(ThreadState.snapshot(id).items, &(&1["turnId"] == t1))
+  end
+
   test "a malformed call never takes the agent down: exec_command's object wrapped under cmd is unwrapped, a cmd that is no string is that call's error (a child once died mid-turn on a map where a string was expected)",
        %{bypass: bypass, thread_id: id} do
     script!(bypass, [

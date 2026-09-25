@@ -205,6 +205,19 @@ export function toMessages(
   }
   flush();
 
+  // a turn stopped before the model said anything still ends in an assistant
+  // message, empty and cancelled: the stopped-run card (继续 / 丢弃) goes there
+  const last = view.turn;
+  const lastId = typeof last?.["id"] === "string" ? last["id"] : undefined;
+  if (
+    lastId &&
+    last?.["status"] === "interrupted" &&
+    view.items.some((i) => i.turnId === lastId) &&
+    !out.some((m) => m.role === "assistant" && String(m.id).startsWith(`turn:${lastId}`))
+  ) {
+    out.push({ id: `turn:${lastId}`, role: "assistant", content: [], status: { type: "incomplete", reason: "cancelled" } });
+  }
+
   // a tool asking the person to act (a login, a code) — Context.ask — is a
   // standalone part the renderer answers through the runtime's extras
   for (const request of view.requests) {

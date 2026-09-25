@@ -6161,6 +6161,75 @@ export async function validateListRunningThreads(
 }
 
 
+export type ReleaseWaitingInput = {
+  threadId: UUID;
+  waitingId: string;
+};
+
+export type InferReleaseWaitingResult = {};
+
+export type ReleaseWaitingResult = | { success: true; data: InferReleaseWaitingResult; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Thread
+ *
+ * @ashActionType :action
+ */
+export async function releaseWaiting(
+  config: {
+  tenant?: string;
+  input: ReleaseWaitingInput;
+  hookCtx?: ActionHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ReleaseWaitingResult> {
+  const payload = {
+    action: "release_waiting",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeActionRpcRequest<ReleaseWaitingResult>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Thread
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateReleaseWaiting(
+  config: {
+  tenant?: string;
+  input: ReleaseWaitingInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "release_waiting",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type RenameThreadInput = {
   title?: string | null;
 };

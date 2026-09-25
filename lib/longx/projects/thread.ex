@@ -139,8 +139,27 @@ defmodule Longx.Projects.Thread do
       end
     end
 
-    # a stop right after sending: the turn is taken back and its text returned
-    # to the composer (has_output / not_running are errors on the argument)
+    # a message from elsewhere that waits for the turn to end (another agent,
+    # a session, a job's end, a watch) goes in now: the waiting row's 立即插入
+    action :release_waiting do
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :waiting_id, :string, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
+          case Longx.Projects.release_waiting(thread, input.arguments.waiting_id) do
+            :ok -> :ok
+            {:error, :not_found} -> argument_error(:waiting_id, "not_found")
+            {:error, reason} -> {:error, reason}
+          end
+        end
+      end
+    end
+
+    # a turn taken back: the running one, or the person's stopped last turn
+    # that ran nothing (the stopped turn's 丢弃) — has_output / not_running /
+    # not_yours (another agent, a job, a watch started it) / not_last are
+    # errors on the argument
     action :retract_turn, :map do
       constraints fields: [text: [type: :string, allow_nil?: false]]
       argument :thread_id, :uuid, allow_nil?: false
@@ -152,7 +171,7 @@ defmodule Longx.Projects.Thread do
              {:ok, result} <- Longx.Projects.retract_turn(thread, turn) do
           {:ok, result}
         else
-          {:error, reason} when reason in [:has_output, :not_running] ->
+          {:error, reason} when reason in [:has_output, :not_running, :not_yours, :not_last] ->
             {:error,
              Ash.Error.Invalid.exception(
                errors: [

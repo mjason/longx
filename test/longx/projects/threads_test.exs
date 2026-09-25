@@ -200,6 +200,85 @@ defmodule Longx.Projects.ThreadsTest do
            )
   end
 
+  test "a stopped turn of the person's that ran nothing is discarded afterwards (丢弃); one another agent started, or an earlier one, is not",
+       %{bypass: bypass, project: project} do
+    script!(bypass, [
+      ResponsesFixture.assistant_message("one"),
+      held(ResponsesFixture.assistant_message("never")),
+      held(ResponsesFixture.assistant_message("report read"))
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, turn1} = Projects.send_message(thread, "first")
+    assert_eventually_ok(fn -> turn!(turn1.id).status == :completed end)
+
+    {:ok, turn2} = Projects.send_message(thread, "oops")
+    assert_receive {:held, _}, 5_000
+    Bypass.pass(bypass)
+    assert :ok = Projects.interrupt_turn(thread, turn2.kernel_turn_id)
+    assert_eventually_ok(fn -> turn!(turn2.id).status == :interrupted end)
+
+    assert {:error, :not_running} = Projects.retract_turn(thread, turn1)
+    assert {:ok, _} = Projects.retract_turn(thread, turn2)
+    assert turn!(turn2.id).status == :reverted
+
+    refute Enum.any?(
+             Transcript.items!(thread.kernel_thread_id),
+             &(&1.turn_id == turn2.kernel_turn_id)
+           )
+
+    # a turn a report started is not the person's to throw away (the person's
+    # stop paused what arrives: the report waits until the person lets it in)
+    kernel_id = thread.kernel_thread_id
+    {:ok, %{pending: true}} = Longx.Agent.send(kernel_id, "done", from: "coder")
+    # the view is written by a cast: the list shows a moment later
+    assert_eventually_ok(fn ->
+      match?(%{"waiting" => [_]}, ThreadState.snapshot(kernel_id).waiting)
+    end)
+
+    assert %{"waiting" => [%{"id" => wid}], "paused" => true} =
+             ThreadState.snapshot(kernel_id).waiting
+
+    assert :ok = Projects.release_waiting(thread, wid)
+    assert_receive {:held, _}, 5_000
+    {:running, kid} = Projects.agent_status(kernel_id)
+    assert_eventually_ok(fn -> match?({:ok, _}, Projects.get_turn_by_kernel_id(kid)) end)
+    assert :ok = Projects.interrupt_turn(thread, kid)
+    {:ok, turn3} = Projects.get_turn_by_kernel_id(kid)
+    assert_eventually_ok(fn -> turn!(turn3.id).status == :interrupted end)
+    assert {:error, :not_yours} = Projects.retract_turn(thread, turn3)
+  end
+
+  test "a message waiting for the turn to end goes in now at the person's word",
+       %{bypass: bypass, project: project} do
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("one")),
+      ResponsesFixture.assistant_message("news taken")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, turn} = Projects.send_message(thread, "first")
+    assert_receive {:held, handler}, 5_000
+    kernel_id = thread.kernel_thread_id
+
+    {:ok, %{pending: true}} = Longx.Agent.send(kernel_id, "news", from: "coder")
+
+    assert_eventually_ok(fn ->
+      match?(%{"waiting" => [_]}, ThreadState.snapshot(kernel_id).waiting)
+    end)
+
+    assert %{"waiting" => [%{"id" => wid}]} = ThreadState.snapshot(kernel_id).waiting
+    assert {:error, :not_found} = Projects.release_waiting(thread, "waiting_nope")
+    assert :ok = Projects.release_waiting(thread, wid)
+
+    assert_eventually_ok(fn ->
+      match?(%{"waiting" => []}, ThreadState.snapshot(kernel_id).waiting)
+    end)
+
+    send(handler, :go)
+    assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
+  end
+
   test "an agent that dies mid-turn: the turn fails at once with the reason, the thread is idle again and takes the next message",
        %{bypass: bypass, project: project} do
     script!(bypass, [
@@ -534,8 +613,7 @@ defmodule Longx.Projects.ThreadsTest do
       ResponsesFixture.function_call("claim_handle", nil, %{"handle" => "main"}),
       ResponsesFixture.function_call("send_message", nil, %{
         "to" => "ops",
-        "message" => "服务还好吗？",
-        "deliver" => "idle"
+        "message" => "服务还好吗？"
       }),
       # the two sessions' requests race for the queue: the reply reads the request
       by_content,

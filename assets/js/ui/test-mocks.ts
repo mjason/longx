@@ -358,6 +358,7 @@ export function rpcMock() {
     compactThread: vi.fn(async () => ok(null)),
     interruptTurn: vi.fn(async () => ok(null)),
     retractTurn: vi.fn(async () => ok({ text: "look at pandas" })),
+    releaseWaiting: vi.fn(async () => ok(null)),
     steerTurn: vi.fn(async () => ok({ kernelTurnId: "turn_2" })),
     answerRequest: vi.fn(async () => ok(null)),
     deleteThread: vi.fn(async () => ok(null)),

@@ -11,7 +11,7 @@ import {
 } from "@assistant-ui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { archiveThread, deleteThread, renameThread, sendMessage, steerTurn } from "@/ash_rpc";
+import { archiveThread, deleteThread, releaseWaiting as releaseWaitingRpc, renameThread, retractTurn, sendMessage, steerTurn } from "@/ash_rpc";
 import { queryKeys, unwrap, useAgentDefinition, useStartThread, useThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
@@ -44,8 +44,6 @@ export type LongxRuntimeOptions = {
   onOpenThread: (threadId: string | null) => void;
   /** a thread event worth telling the person about as it happens (model/rerouted) */
   onSignal?: (method: string, params: Record<string, unknown>) => void;
-  /** a stop before anything came back: the message's text, to be put back in the composer */
-  onRetract?: (text: string) => void;
 };
 
 /** idle, a turn running, or a tool waiting on the person (an ask) */
@@ -87,6 +85,12 @@ export type LongxRuntime = {
   setEffort: (effort: string | null) => void;
   /** a queued message into the running turn now (a steer) */
   insertQueued: (queueItemId: string) => Promise<void>;
+  /** a message from elsewhere that waits for the turn to end, in now (立即插入) */
+  releaseWaiting: (waitingId: string) => Promise<void>;
+  /** words as the person's message (the stopped turn's 继续) */
+  sendText: (text: string) => Promise<void>;
+  /** the stopped last turn taken out of the thread (丢弃) — never into the composer */
+  discardTurn: (kernelTurnId: string) => Promise<void>;
 };
 
 // voice input is wired (WebSpeechDictationAdapter, the mic in the composer rail)
@@ -108,7 +112,6 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     threadId,
     onOpenThread,
     onSignal,
-    onRetract,
   } = opts;
   const client = useQueryClient();
   const threads = useThreads(projectId);
@@ -246,6 +249,37 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     },
     [queue, thread, invalidate, model, effort],
   );
+  // a waiting message in now; one that went meanwhile (the turn ended and took
+  // it up, another page sent it) is no error
+  const releaseWaiting = useCallback(
+    async (waitingId: string) => {
+      if (!thread) return;
+      const released = await releaseWaitingRpc({ input: { threadId: thread.id, waitingId } });
+      if (!released.success && !released.errors.some((e) => e.message === "not_found")) unwrap(released);
+    },
+    [thread],
+  );
+  const sendText = useCallback(
+    async (text: string) => {
+      if (!thread) return;
+      unwrap(
+        await sendMessage({
+          fields: ["id"],
+          input: { threadId: thread.id, text, ...(model ? { model } : {}), ...(effort ? { effort } : {}) },
+        }),
+      );
+      void invalidate();
+    },
+    [thread, model, effort, invalidate],
+  );
+  const discardTurn = useCallback(
+    async (kernelTurnId: string) => {
+      if (!thread) return;
+      unwrap(await retractTurn({ fields: ["text"], input: { threadId: thread.id, kernelTurnId } }));
+      void invalidate();
+    },
+    [thread, invalidate],
+  );
   // what the composer can take: images (to the model as data urls), text
   // files (inlined) and any other file (uploaded to the server, its path in
   // the message), and the browser's speech recognition where it exists —
@@ -307,7 +341,6 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
         loading: thread !== undefined && !ready && !error,
         createThread,
         onSent,
-        onRetract,
         refetch,
         threadList,
         queue: queue.adapter,
@@ -329,7 +362,6 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       error,
       createThread,
       onSent,
-      onRetract,
       refetch,
       threadList,
       queue,
@@ -373,5 +405,8 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     effort,
     setEffort,
     insertQueued,
+    releaseWaiting,
+    sendText,
+    discardTurn,
   };
 }

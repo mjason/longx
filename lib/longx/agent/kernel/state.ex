@@ -36,6 +36,12 @@ defmodule Longx.Agent.Kernel.State do
             # task ref → %{call, item_id, tool, started, output, timer}
             tasks: %{},
             steers: [],
+            # what arrived from elsewhere — another agent or session, a job's
+            # end, a watch — while a turn ran, or after the person stopped one:
+            # listed on the page (`thread/waiting/updated`), taken up once the
+            # agent is idle; `paused` from the person's stop until they speak
+            waiting: [],
+            paused: false,
             usage_total: %{},
             usage_last: nil,
             # when the turn began (epoch ms) — the turn's stamps for the UI's badge

@@ -100,10 +100,15 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     urls from the composer, passed through as `input_image` parts). A message while a turn
     runs is a **steer** (`steer_message/3` → `Agent.send/3` on a running thread; no new
     row; `{:error, :not_running}` once the turn is over). `interrupt_turn/2` kills the
-    tasks; `retract_turn/3` takes back a turn that had no side effect yet (only words in
-    its items, no pending ask — else `{:error, :has_output}`): row `:reverted` first, then
-    `Agent.retract/2` truncates the transcript and `ThreadState.drop_turns` (clients
-    re-snapshot), the text comes back to the composer. `compact_thread/2` = `/compact`.
+    tasks — **the stop button only ever interrupts**, the turn stays and the composer is
+    never written (a stop that took the turn back once put a child's report, which had
+    started that turn, in the person's composer); `retract_turn/3` is the stopped turn's
+    丢弃: the running turn or the person's stopped **last** turn, one the person started
+    (`{:error, :not_yours}` for a turn another agent, a job, a watch or the goal started)
+    that had no side effect (only words, no pending ask — else `{:error, :has_output}`):
+    row `:reverted` first, then `Agent.retract/2` truncates the transcript and
+    `ThreadState.drop_turns` (the current turn goes too; clients re-snapshot).
+    `release_waiting/2` sends a waiting message in now (below). `compact_thread/2` = `/compact`.
     `delete_thread/1` removes the row, its turns and its transcript (not while a turn runs).
   - `Longx.Projects.Tracker` (in the tree) follows every thread's `"thread:<id>"` topic:
     fills `status` / `completed_at` / `usage` from `turn/completed`, the
@@ -251,9 +256,8 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     so its caller (not the supervisor) blocks until the view is there —, `:idle` /
     `:running` read off the kernel's finer `phase`, `handle_event_function` + `state_enter`; the handlers keep
     their GenServer shapes as `on_call/on_cast/on_info/on_step` behind one translating
-    `handle_event/4`; the idle exit is the `:idle` state's `state_timeout`; a message sent
-    with `deliver: :idle` while a turn runs is **postponed by OTP in the mailbox** and
-    handed back the moment the agent is idle — no queue of our own; `GenServer.call` /
+    `handle_event/4`; the idle exit is the `:idle` state's `state_timeout` (never with
+    something waiting); `GenServer.call` /
     `:gen_statem.call` speak the same protocol, `call/3` in the module caps the wait at
     5 s), **the loop as OTP recursion**: a step
     runs the pipeline at `:request` (pure: prompt, tools, the request), the model streams
@@ -265,11 +269,25 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     call, then the pipeline runs at `:turn_end`. **Never a blocking receive or a
     synchronous model call in a callback**: the mailbox is how steer, interrupt and
     `/compact` get in. `send/3` (`turn_id:`, `model:`, `effort:`, `images:`, `from:`,
-    `reply_to:` / `reply_as:` / `hops:`, `deliver: :now | :idle`)
-    starts a turn when idle and is a *steer* while one runs (into the context at the next
-    step after the tool outputs, and shown then; a step is added when the model had already
-    stopped) — or, with `deliver: :idle`, waits in the mailbox for the turn to end and
-    starts one of its own (answers `:ok`); `interrupt/2` kills the tasks (a command's shim tree dies with its task) and
+    `reply_to:` / `reply_as:` / `hops:`, `deliver: :now | :idle` — `:idle` only makes it a
+    cast) starts a turn when idle; **the person's** message while one runs is a *steer*
+    (into the context at the next step after the tool outputs, and shown then; a step is
+    added when the model had already stopped). **What arrives from elsewhere never jumps
+    into a running turn** (`from:` — another agent or session —, a watch's `deliver` cast,
+    a job's end, a child's report or crash): it waits in `State.waiting` (explicit state,
+    not OTP's postpone: the page lists it, the person may send one in early, their stop
+    holds it), emitted as `thread/waiting/updated` `%{"waiting" => [%{"id", "text",
+    "from", "kind", "source", "origin", "question", "at"}], "paused"}` (the Store keeps it,
+    the snapshot's `waiting`); the `send` answers `{:ok, %{pending: true}}`. Once idle it is
+    taken up **all in one turn** — the first starts it, the rest are steered in before its
+    first step, one request, as Claude Code folds what arrives mid-turn — except a
+    question with `reply_to` (its turn's answer goes back to its asker), which has a turn
+    of its own; a job whose end the agent saw meanwhile is dropped. **The person's stop
+    pauses it** (`interrupt(by: :person)` → `paused`; the idle state keeps the agent
+    alive while something waits) until the person speaks, sends one in (`release/2`: a
+    steer into the running turn, else a turn of its own) or presses 继续; a restarted
+    agent's list is empty (`load/1` clears the view's). `retract/2` takes back the
+    running turn or, idle, only the last one (`{:error, :not_last}`). `interrupt/2` kills the tasks (a command's shim tree dies with its task) and
     ends the turn `interrupted` — **`by:` names who stopped it** (`:person` from the
     page, `{:watchdog, seconds}` from the Tracker's stall watchdog): the row keeps the
     words and a child's report to its parent says them ("stopped by the person from the
@@ -293,8 +311,8 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     effort:/cwd:/depth:/path:)`, or the `Step.spawn/4` effect from any phase) starts a
     child `Longx.Agent` (`parent:` + `name:` options; `info/1`, `children/1`; names made
     unique — `helper-2`) and sends it the task; the child's final message is its report,
-    **a message in the parent's mailbox**: a steer while the parent runs, a new turn when
-    it is idle (the Tracker gives it a row). Words between agents are **user messages
+    **a message in the parent's mailbox**: a new turn when the parent is idle (the Tracker
+    gives it a row), waiting for its turn to end while it runs (above). Words between agents are **user messages
     prefixed `[agent <name>] `** (the Responses API has no agent role every provider reads)
     with `"from"` on the UI item. `subAgentActivity` items (started / interacted /
     completed / interrupted; `Agent.interacted/2`) are `:activity` transcript items — UI
@@ -392,7 +410,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     project`, the sessions **on duty** with handles / titles / goals only — live state
     would break the cached prefix — and the rule that a conversation is not woken),
     offers `agents_directory` (every session, live state, `on duty` / `conversation`),
-    `send_message(to, message, deliver)` for a team name *or* an address (an
+    `send_message(to, message)` for a team name *or* an address (a target at work takes it
+    once its turn ends — the tool's words said "delivered promptly" as codex's do until
+    the person chose the wait; the `deliver` parameter is gone) (an
     off-duty target is refused with the reason), and `claim_handle` on a root session.
     The `turn/started` event carries `from` when an agent or a watch started the turn
     (the Tracker names the row `（定时触发）<name>` / `（agent 消息）`; the list's
@@ -1268,13 +1288,26 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     the person is, not at its spawn far above), `adapter.ts` (`buildAdapter` →
     `ExternalStoreAdapter`: `onNew` → `steerTurn` while `runningTurnId(view)`, else `sendMessage`;
     `/goal <objective>` typed past the popover
-    sets the goal; `onCancel` → `retractTurn` + `onRetract(text)` while `turnHadEffects`
-    is false, else `interruptTurn`; `extras.answerAction`), `threadList.ts`, `runtime.ts` (**`useLongxRuntime({ projectId, defaults, threadId,
+    sets the goal; `onCancel` → `interruptTurn`, always (`not_running` ignored), the
+    composer never written; `turnHadEffects` now decides only whether the stopped-run
+    card offers 丢弃; `extras.answerAction`), `threadList.ts`, `runtime.ts` (**`useLongxRuntime({ projectId, defaults, threadId,
     onOpenThread })`** — the whole thing as one hook; everything the adapter is built
     from must be referentially stable — `runtime.test.tsx`; assistant-ui's
     `createMessageQueue` is the runtime's queue: a message sent while a turn runs waits
     above the composer (the `message-queue` element: 取消 / 插入) and goes out as a new
-    turn when the turn ends, 插入 → `insertQueued` steers it into the running turn now),
+    turn when the turn ends, 插入 → `insertQueued` steers it into the running turn now;
+    a stop pauses it, as assistant-ui's queue does); above it **what arrives from
+    elsewhere** (`ui/chat/WaitingMessages`, the view's `waiting`): a dashed row per
+    message — the sender (an agent's name, 后台任务 X for a job) and its kind, the first
+    line, 立即插入 (`releaseWaiting` RPC) — under 别处来的消息 · 本轮结束后处理, or, after the
+    person's stop, 你停止了这一轮，这些消息等你继续再处理; **a stopped turn keeps its place**
+    with assistant-ui's **stopped-run** element under its last message (`elements/
+    stopped-run`, adapted: no words, our labels, 丢弃 only with a handler;
+    `ui/chat/StoppedTurn`'s `StoppedNotice` — the Thread's `StoppedNotice` slot):
+    你停止了这一轮 or 长时间没有进展，Longx 停止了这一轮 (the turn's `error.by`), 继续
+    (`sendText("继续")`) and, for the person's own turn that ran nothing, 丢弃
+    (`discardTurn` → `retract_turn`); `toMessages` closes a turn stopped before the model
+    said anything with an empty cancelled assistant message for it),
     `mentions.ts`,
     `fileAttachments.ts`, `reasoningSteps.ts`. **A long thread opens on its tail**
     (assistant-ui's windowed-history shape: the runtime renders whatever `messages`
@@ -1474,7 +1507,7 @@ Key patterns:
   with two streamed derivations, 137 samples, zero `.katex-error`); `MarkdownPreview`
   uses the same pipeline), `thread-list.aui`,
   `message-timing.aui`, `composer-trigger-popover.aui`, `directive-text`, `message-queue`,
-  `surfaces` and `../utils/range.ts` as shared helpers.
+  `stopped-run`, `surfaces` and `../utils/range.ts` as shared helpers.
 - Tool UI: toolkit `render` per item type; `display: "standalone"` keeps a tool out of the
   collapsible trace group (commands / file changes are "informing the user", not a trace).
 
@@ -1587,7 +1620,10 @@ Where tests live / what to use:
   read from `gateway_requests`; skipped on a server with no second keyed model), `09-job`
   (`start_job` by name, the turn ended; the job's end wakes the agent as a turn of its own,
   the page's marker 后台任务 tally 结束 · 退出码 3 with the notice under it; `03-stop` asks
-  for a foreground `exec_command` — a model now takes `sleep 120` for a job). A model that refuses an instruction
+  for a foreground `exec_command` — a model now takes `sleep 120` for a job), `10-waiting`
+  (a job ending while a foreground `sleep 60` runs: its row above the composer, the
+  composer empty; the stop → the stopped-run card, the list paused, no turn by itself;
+  立即插入 → the job's turn; a poem stopped mid-way and 丢弃'd — gone, composer empty). A model that refuses an instruction
   fails a scenario — that is the point; run it before a release and after a change to the
   kernel, the prompts or the chat.
 - TypeScript/React → also test-first: vitest + testing-library in `assets/` (`npm test`).

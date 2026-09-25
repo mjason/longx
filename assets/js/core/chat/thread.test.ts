@@ -108,7 +108,10 @@ describe("thread view", () => {
   test("thread/reverted drops the named turns' items", () => {
     let v = fromSnapshot(snapshot);
     v = applyEvent(v, { seq: 11, method: "item/completed", params: { turnId: "turn_2", item: { id: "a2", type: "agentMessage", text: "x" } } });
+    v = applyEvent(v, { seq: 11.5, method: "turn/completed", params: { turn: { id: "turn_2", status: "interrupted" } } });
     v = applyEvent(v, { seq: 12, method: "thread/reverted", params: { threadId: "thr_1", turnIds: ["turn_2"] } });
+    // the current turn was the one dropped: no stopped turn left to draw a card for
+    expect(v.turn).toBeNull();
     expect(v.items.map((i) => i.id)).toEqual(["u1", "a1"]);
   });
 });
@@ -124,5 +127,17 @@ describe("goal", () => {
     expect(v2.goal).toMatchObject({ status: "complete", tokensUsed: 900 });
     const v3 = applyEvent(v2, { seq: 12, method: "thread/goal/cleared", params: { threadId: "thr_1" } });
     expect(v3.goal).toBeNull();
+  });
+});
+
+describe("waiting", () => {
+  const waiting = { waiting: [{ id: "waiting_1", text: "tests pass", from: "coder", kind: "report", at: "2026-09-25T01:00:00Z" }], paused: false };
+
+  test("what waits for the turn to end comes with the snapshot and every update; none is an empty list", () => {
+    expect(fromSnapshot(snapshot).waiting).toEqual({ items: [], paused: false });
+    const v = fromSnapshot({ ...snapshot, waiting });
+    expect(v.waiting.items.map((w) => w.id)).toEqual(["waiting_1"]);
+    const v2 = applyEvent(v, { seq: 11, method: "thread/waiting/updated", params: { threadId: "thr_1", waiting: [], paused: true } });
+    expect(v2.waiting).toEqual({ items: [], paused: true });
   });
 });

@@ -71,6 +71,19 @@ export const t = {
   /** the composer's queue while a turn runs */
   queueSend: "加入队列",
   queueHint: "这一轮结束后发送",
+  // what arrives from elsewhere while a turn runs (another agent, a session, a job, a watch)
+  waitingHint: "别处来的消息 · 本轮结束后处理",
+  waitingPaused: "你停止了这一轮，这些消息等你继续再处理",
+  waitingInsert: "立即插入",
+  waitingJob: (name: string) => `后台任务 ${name}`,
+  waitingFrom: "消息",
+  // a stopped turn (assistant-ui's stopped-run element)
+  stoppedByPerson: "你停止了这一轮",
+  stoppedByWatchdog: "长时间没有进展，Longx 停止了这一轮",
+  stoppedContinue: "继续",
+  stoppedDiscard: "丢弃",
+  /** what 继续 sends: the words the person would type */
+  continueText: "继续",
   queueInsert: "插入",
   queueRemove: "取消",
   agentDefinition: {

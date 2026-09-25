@@ -92,6 +92,8 @@ export type ThreadComponents = {
   AgentLabel?: ComponentType<{ from: string }> | undefined;
   /** Longx: the edge above a long thread's window — the earlier turns waiting there (chat/HistoryEdge) */
   HistoryEdge?: ComponentType | undefined;
+  /** Longx: under a stopped turn's last message (the stopped-run element: 继续 / 丢弃) */
+  StoppedNotice?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
   ToolGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
@@ -511,6 +513,7 @@ export const AssistantParts: FC = () => {
 };
 
 const AssistantMessage: FC = () => {
+  const { StoppedNotice } = useContext(ThreadComponentsContext);
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`;
@@ -528,6 +531,7 @@ const AssistantMessage: FC = () => {
         <AssistantParts />
         <MessageError />
         <StalledHint />
+        {StoppedNotice ? <StoppedNotice /> : null}
       </div>
 
       <div

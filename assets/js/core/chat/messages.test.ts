@@ -169,6 +169,20 @@ describe("toMessages", () => {
     expect(ps[2]).toMatchObject({ type: "text", text: "step two" });
   });
 
+  test("a stopped turn with nothing said yet still ends in an assistant message marked cancelled (where the stopped card goes); a running one does not", () => {
+    const view = {
+      ...emptyView("thr_1"),
+      turn: { id: "turn_2", status: "interrupted" },
+      items: [{ id: "u2", type: "userMessage", turnId: "turn_2", content: [{ type: "text", text: "look at pandas" }] }],
+    };
+    const msgs = toMessages(view as never);
+    expect(msgs.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(msgs[1]).toMatchObject({ id: "turn:turn_2", content: [], status: { type: "incomplete", reason: "cancelled" } });
+
+    const running = { ...view, turn: { id: "turn_2", status: "inProgress" } };
+    expect(toMessages(running as never).map((m) => m.role)).toEqual(["user"]);
+  });
+
   test("a job's end the kernel woke the agent with opens the turn as a marker, never the person's bubble", () => {
     const notice = "[job batch] finished with exit code 2 after 3 s.\nCommand: `make`\nIts last lines:\n```\nboom\n```";
     const msgs = toMessages(

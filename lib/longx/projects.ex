@@ -38,6 +38,7 @@ defmodule Longx.Projects do
       rpc_action :interrupt_turn, :interrupt_turn
       rpc_action :steer_turn, :steer_turn
       rpc_action :retract_turn, :retract_turn
+      rpc_action :release_waiting, :release_waiting
       rpc_action :compact_thread, :compact_thread
       rpc_action :answer_request, :answer_request
       rpc_action :list_running_threads, :list_running
@@ -377,8 +378,9 @@ defmodule Longx.Projects do
   @doc """
   A message from one session (or a watch) to another, by address: the
   target is brought up if it left, tracked, and `Longx.Agent.send/3` puts
-  the text in its mailbox — a steer while it runs (`deliver: :now`, the
-  default) or a turn of its own once idle (`deliver: :idle`). `from_thread:`
+  the text in its mailbox — a turn of its own, once the turn it may be
+  running ends (it waits on its page meanwhile; `deliver: :idle` only makes
+  the send a cast). `from_thread:`
   is the sender's kernel id: the message is signed with its name and the
   target's answer comes back to it (signed with the target's address);
   `from:` names a sender that is no session (a watch). `{:error, :self}`
@@ -1045,9 +1047,33 @@ defmodule Longx.Projects do
           {:ok, %{text: turn.user_text || ""}}
 
         {:error, reason} ->
-          complete_turn!(turn, %{status: :in_progress})
+          complete_turn!(turn, %{status: turn.status})
           {:error, reason}
       end
+    end
+  end
+
+  @doc """
+  A message waiting for the turn to end (`thread/waiting/updated` — another
+  agent's, a session's, a job's end, a watch's) goes in now, at the person's
+  word: into the running turn, or a turn of its own when nothing runs.
+  `{:error, :not_found}` when it no longer waits.
+  """
+  @spec release_waiting(Thread.t(), String.t()) :: :ok | {:error, :not_found | term}
+  def release_waiting(%Thread{} = thread, waiting_id) when is_binary(waiting_id) do
+    # a turn it starts is the kernel's own: the Tracker gives it a row
+    Tracker.track(thread.kernel_thread_id)
+
+    case Longx.Agent.release(thread.kernel_thread_id, waiting_id) do
+      :ok ->
+        touch_thread!(thread, %{last_activity_at: DateTime.utc_now()})
+        :ok
+
+      {:error, :unknown} ->
+        {:error, :not_found}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -1102,13 +1128,23 @@ defmodule Longx.Projects do
   # so that turn is only interrupted.
   @harmless_items ~w(userMessage agentMessage reasoning plan)
 
-  defp retractable(%Turn{status: status}, _snapshot) when status != :in_progress,
-    do: {:error, :not_running}
+  # running, or stopped by the person (the stopped turn's 丢弃 — the kernel
+  # takes back only the last turn); only a turn the person started: one another
+  # agent, a job, a watch or the goal started is not theirs to throw away
+  defp retractable(%Turn{status: status}, _snapshot)
+       when status not in [:in_progress, :interrupted],
+       do: {:error, :not_running}
 
   defp retractable(%Turn{kernel_turn_id: turn_id}, %{items: items, pending_requests: requests}) do
+    opening = Enum.find(items, &(&1["turnId"] == turn_id and &1["type"] == "userMessage"))
     ran? = Enum.any?(items, &(&1["turnId"] == turn_id and &1["type"] not in @harmless_items))
     asked? = Enum.any?(requests, &(&1.params["turnId"] == turn_id))
-    if ran? or asked?, do: {:error, :has_output}, else: :ok
+
+    cond do
+      opening && (opening["from"] || opening["origin"]) -> {:error, :not_yours}
+      ran? or asked? -> {:error, :has_output}
+      true -> :ok
+    end
   end
 
   # every child row, archived ones included (what the team shows is `list_subagents!`)

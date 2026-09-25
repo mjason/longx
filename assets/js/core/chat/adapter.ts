@@ -11,7 +11,7 @@ import type {
   ExternalStoreThreadListAdapter,
     ThreadMessageLike,
 } from "@assistant-ui/react";
-import { answerRequest, interruptTurn, retractTurn, sendMessage, setGoal, steerTurn } from "@/ash_rpc";
+import { answerRequest, interruptTurn, sendMessage, setGoal, steerTurn } from "@/ash_rpc";
 import { unwrap } from "@/core/projects";
 import { toMessages, type SubViews } from "./messages";
 import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
@@ -54,8 +54,6 @@ export type AdapterOptions = {
   attachments?: AttachmentAdapter;
   /** voice input written into the composer (the browser's speech recognition) */
   dictation?: DictationAdapter;
-  /** a stop before anything came back took the turn out; its text comes back to the composer */
-  onRetract?: (text: string) => void;
 };
 
 export function textOf(message: AppendMessage): string {
@@ -175,21 +173,17 @@ export function buildAdapter(
       );
       opts.onSent?.(target);
     },
+    // a stop is an interrupt, whatever the turn did: the turn stays in the
+    // thread (the stopped-run card under it offers 继续 / 丢弃) and the composer
+    // is never written — a stop that took the turn back once put a child's
+    // report, which had started that turn, in the person's composer
     onCancel: async () => {
       const turnId = runningTurnId(view);
       const id = threadId();
       if (!turnId || !id) return;
-      // nothing ran yet: take the turn back, the text returns to the composer
-      if (!turnHadEffects(view, turnId) && opts.onRetract) {
-        const { text } = unwrap(
-          await retractTurn({ fields: ["text"], input: { threadId: id, kernelTurnId: turnId } }),
-        );
-        opts.onRetract(text);
-        return;
-      }
-      unwrap(
-        await interruptTurn({ input: { threadId: id, kernelTurnId: turnId } }),
-      );
+      const stopped = await interruptTurn({ input: { threadId: id, kernelTurnId: turnId } });
+      // "not_running": the turn ended on its own while the stop was on its way
+      if (!stopped.success && !stopped.errors.some((e) => e.message === "not_running")) unwrap(stopped);
     },
   };
 }

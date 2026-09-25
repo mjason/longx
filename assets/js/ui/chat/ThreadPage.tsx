@@ -16,6 +16,8 @@ import { ReasoningSteps } from "./ReasoningSteps";
 import { SlashCommands } from "./SlashCommands";
 import { ComposerLeading, ComposerTrailing } from "./TurnBar";
 import { MessageQueue } from "@/ui/components/assistant-ui/elements/message-queue";
+import { StoppedNotice } from "./StoppedTurn";
+import { WaitingMessages } from "./WaitingMessages";
 
 const Welcome = () => (
   <div className="mb-6 flex flex-col items-center px-4 text-center">
@@ -34,12 +36,19 @@ const ComposerPopovers = () => (
 
 // module scope: a new object per render would remount every message
 // what was typed while a turn runs: sent when it ends, or inserted into it now
+// above the composer: what arrived from elsewhere and waits for the turn to
+// end (its own rows, never the composer), then what the person typed meanwhile
 const ComposerQueue = () => {
   const { insertQueued } = useChat();
-  return <MessageQueue onInsert={(id) => void insertQueued(id)} insertLabel={t.queueInsert} removeLabel={t.queueRemove} hint={t.queueHint} />;
+  return (
+    <>
+      <WaitingMessages />
+      <MessageQueue onInsert={(id) => void insertQueued(id)} insertLabel={t.queueInsert} removeLabel={t.queueRemove} hint={t.queueHint} />
+    </>
+  );
 };
 
-const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers, ComposerQueue, UserText: FileMentionText, AgentLabel, ReasoningGroup: ReasoningSteps, HistoryEdge };
+const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers, ComposerQueue, UserText: FileMentionText, AgentLabel, ReasoningGroup: ReasoningSteps, HistoryEdge, StoppedNotice };
 
 /**
  * The centre of the project window: assistant-ui's Thread element over the

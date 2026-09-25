@@ -364,6 +364,7 @@ defmodule Longx.Agent.Kernel.Team do
         {"completed", _} -> last_answer(state) || "(no answer)"
         # a stop with its cause (`Agent.interrupt/2` `by:`) is said as it is
         {"interrupted", "stopped by " <> _} -> error
+        {"interrupted", %{"message" => "stopped by " <> _ = message}} -> message
         {other, %{"message" => message}} -> "#{other}:\n```\n#{message}\n```"
         {other, _} -> "#{other}:\n```\n#{error || "no details"}\n```"
       end

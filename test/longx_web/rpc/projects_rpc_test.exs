@@ -464,6 +464,46 @@ defmodule LongxWeb.ProjectsRpcTest do
                })
     end
 
+    test "release_waiting sends a waiting message in now; one no longer waiting is an error on waitingId",
+         %{conn: conn, dir: dir, bypass: bypass} do
+      script!(bypass, [
+        held(ResponsesFixture.assistant_message("one")),
+        ResponsesFixture.assistant_message("two")
+      ])
+
+      project = create!(conn, dir)
+      {thread_id, kernel_id} = start!(conn, project)
+
+      %{"success" => true} =
+        rpc(conn, "send_message", %{
+          "fields" => ["kernelTurnId"],
+          "input" => %{"threadId" => thread_id, "text" => "work"}
+        })
+
+      assert_receive {:held, handler}, 5_000
+      # the view is written by a cast: the list shows a moment later
+      :ok = ThreadState.subscribe(kernel_id)
+      {:ok, %{pending: true}} = Longx.Agent.send(kernel_id, "news", from: "coder")
+
+      assert_receive {:thread, _, "thread/waiting/updated", %{"waiting" => [%{"id" => wid}]}},
+                     5_000
+
+      assert %{"success" => true} =
+               rpc(conn, "release_waiting", %{
+                 "input" => %{"threadId" => thread_id, "waitingId" => wid}
+               })
+
+      assert %{
+               "success" => false,
+               "errors" => [%{"fields" => ["waitingId"], "message" => "not_found"}]
+             } =
+               rpc(conn, "release_waiting", %{
+                 "input" => %{"threadId" => thread_id, "waitingId" => wid}
+               })
+
+      send(handler, :go)
+    end
+
     test "list_running_threads and answer_request: a thread waiting on the person, then answered",
          %{conn: conn, dir: dir, bypass: bypass} do
       File.mkdir_p!(Path.join(dir, ".longx/local/plugs"))

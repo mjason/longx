@@ -90,14 +90,6 @@ export function ChatProvider({
     [openSurface],
   );
 
-  // a stop before anything came back: the message's text goes back into the
-  // composer (assistant-ui's composer lives under the runtime provider below)
-  const composerRef = useRef<((text: string) => void) | null>(null);
-  const onRetract = useCallback(
-    (text: string) => composerRef.current?.(text),
-    [],
-  );
-
   const chat = useLongxRuntime({
     projectId,
     ...(webSearch !== undefined ? { webSearch } : {}),
@@ -105,7 +97,6 @@ export function ChatProvider({
     threadId,
     onOpenThread,
     onSignal,
-    onRetract,
   });
 
   // a tool's ask (Context.ask) is answered on the thread on screen — the
@@ -147,7 +138,6 @@ export function ChatProvider({
   return (
     <ChatContext.Provider value={chat}>
       <AssistantRuntimeProvider runtime={chat.runtime} config={chatConfig}>
-        <ComposerBridge composerRef={composerRef} />
         <CompactionUI />
         <GoalContinuationUI />
         <JobNoticeUI />
@@ -163,22 +153,6 @@ export function ChatProvider({
       </AssistantRuntimeProvider>
     </ChatContext.Provider>
   );
-}
-
-// reaches the composer from outside the runtime provider (the adapter's onRetract)
-function ComposerBridge({
-  composerRef,
-}: {
-  composerRef: React.MutableRefObject<((text: string) => void) | null>;
-}) {
-  const aui = useAui();
-  useEffect(() => {
-    composerRef.current = (text) => aui.composer.setText(text);
-    return () => {
-      composerRef.current = null;
-    };
-  }, [aui, composerRef]);
-  return null;
 }
 
 /** The workbench tab a live surface item asks for, null for anything else. */

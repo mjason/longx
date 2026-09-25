@@ -26,8 +26,9 @@ defmodule Longx.Agent.Plugs.Agents do
   goals; nothing that changes per step, so the prefix stays cacheable),
   `agents_directory` answers with their live state, `send_message` takes an
   address as well as a team name (a handle, `~<id suffix>`,
-  `<project>:<handle>`; `deliver: "idle"` waits for the target to be idle
-  instead of steering), and a root session may `claim_handle` to be found.
+  `<project>:<handle>`; a target at work takes it once its turn ends —
+  the page lists it meanwhile), and a root session may `claim_handle` to be
+  found.
   Delivery is `Longx.Projects.deliver/4`: the answer of the turn a message
   starts comes back here as a message from the target.
   """
@@ -113,7 +114,7 @@ defmodule Longx.Agent.Plugs.Agents do
     """
     # Sessions in this project
 
-    Every conversation in this project is a session with an address, and sessions talk through their mailboxes: `send_message(to, message)` with an address instead of a team name reaches one **on duty** — a handle, `~` and the last six characters of its id, or `<project>:<handle>` for another project's. The message starts a turn there (or steers one in flight; `deliver: "idle"` waits for it to be idle instead) and **its answer comes back to you as a message from it** — never wait or poll. Before starting long-running work others may care about, look at the directory: a session on duty already doing it is asked, not duplicated. A session not on duty is a conversation the person had — `agents_directory` lists it as `conversation` so you know what happened in the project, but it is not a colleague: a message to it is refused, and what it worked on is the person's to tell you about. The person puts a session on duty in the Agents window; a handle or an active goal is a duty too.
+    Every conversation in this project is a session with an address, and sessions talk through their mailboxes: `send_message(to, message)` with an address instead of a team name reaches one **on duty** — a handle, `~` and the last six characters of its id, or `<project>:<handle>` for another project's. The message starts a turn there (after the one in flight, if any) and **its answer comes back to you as a message from it** — never wait or poll. Before starting long-running work others may care about, look at the directory: a session on duty already doing it is asked, not duplicated. A session not on duty is a conversation the person had — `agents_directory` lists it as `conversation` so you know what happened in the project, but it is not a colleague: a message to it is refused, and what it worked on is the person's to tell you about. The person puts a session on duty in the Agents window; a handle or an active goal is a duty too.
 
     #{you} #{listing}
     """
@@ -218,7 +219,7 @@ defmodule Longx.Agent.Plugs.Agents do
 
     #{listing}
 
-    You can use `spawn_agent` to create a new agent on a role and a task, and `send_message` to give an existing agent a follow-up task or a message (it triggers a turn when the agent is idle, and is delivered promptly while it is running).
+    You can use `spawn_agent` to create a new agent on a role and a task, and `send_message` to give an existing agent a follow-up task or a message (it triggers a turn when the agent is idle; while it is running, it waits and starts a turn when that one ends).
     `send_message` calls may be read by a human, so ensure they are legible. Always put proper spaces between words and/or numbers.
     Child agents can also spawn their own sub-agents.
     An agent sees nothing of this conversation: give a task everything it needs to know.
@@ -288,14 +289,13 @@ defmodule Longx.Agent.Plugs.Agents do
         __MODULE__,
         :send_message,
         # codex's followup_task and send_input in one (multi_agents_spec.rs): the
-        # mailbox does both, and an address of the directory is a target too
-        "Send a follow-up task or a message to an existing agent and trigger a turn if it is idle. If the target is already running, deliver the message promptly at message boundaries while sampling, or after the pending tool call completes. Reuse an agent this way when the task depends on the context of a previous one: a finished agent keeps everything it did and learned. Its answer arrives as a message from it. A session of the project addressed through the directory is reached the same way.",
+        # mailbox does both, and an address of the directory is a target too;
+        # unlike codex, a message to a running agent waits for its turn to end
+        # (the page lists it, the person may send it in early)
+        "Send a follow-up task or a message to an existing agent and trigger a turn if it is idle. If the target is already running, the message waits and starts a turn once the running one ends. Reuse an agent this way when the task depends on the context of a previous one: a finished agent keeps everything it did and learned. Its answer arrives as a message from it. A session of the project addressed through the directory is reached the same way.",
         [
           to,
-          {:message, :string, "Message text to send to the target agent.", required: true},
-          {:deliver, {:enum, ["now", "idle"]},
-           "now (default): a session at work is steered at once; idle: the message waits in its mailbox until it is idle and starts a turn then",
-           []}
+          {:message, :string, "Message text to send to the target agent.", required: true}
         ],
         timeout: 30_000
       )
@@ -355,7 +355,7 @@ defmodule Longx.Agent.Plugs.Agents do
   def send_message(%{"agent" => name} = args, ctx),
     do: send_message(args |> Map.delete("agent") |> Map.put("to", name), ctx)
 
-  def send_message(%{"to" => name, "message" => text} = args, ctx) do
+  def send_message(%{"to" => name, "message" => text}, ctx) do
     case teammate(ctx.thread_id, name) do
       {:ok, id, parent} ->
         with {:ok, _} <-
@@ -365,25 +365,18 @@ defmodule Longx.Agent.Plugs.Agents do
         end
 
       {:error, team_error} ->
-        send_by_address(name, text, args["deliver"], team_error, ctx)
+        send_by_address(name, text, team_error, ctx)
     end
   end
 
-  defp send_by_address(_address, _text, _deliver, team_error, %{project_id: nil}),
+  defp send_by_address(_address, _text, team_error, %{project_id: nil}),
     do: {:error, team_error}
 
-  defp send_by_address(address, text, deliver, _team_error, ctx) do
-    deliver = if deliver == "idle", do: :idle, else: :now
-
-    case Longx.Projects.deliver(ctx.project_id, address, text,
-           from_thread: ctx.thread_id,
-           deliver: deliver
-         ) do
+  defp send_by_address(address, text, _team_error, ctx) do
+    case Longx.Projects.deliver(ctx.project_id, address, text, from_thread: ctx.thread_id) do
       {:ok, _thread} ->
-        how = if deliver == :idle, do: " (it takes it once idle)", else: ""
-
         {:ok,
-         "delivered to #{address}#{how}; its answer will arrive as a message from it — carry on, do not wait"}
+         "delivered to #{address}; its answer will arrive as a message from it — carry on, do not wait"}
 
       {:error, :not_found} ->
         {:error, "no session at #{address}; agents_directory lists the addresses"}

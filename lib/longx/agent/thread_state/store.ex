@@ -34,6 +34,9 @@ defmodule Longx.Agent.ThreadState.Store do
     token_usage: nil,
     # goal mode: the thread's goal (objective, status, budget, usage) or nil
     goal: nil,
+    # what arrived from elsewhere and waits for the turn to end (or for the
+    # person, after their stop): `%{"waiting" => [...], "paused" => bool}`
+    waiting: nil,
     # what the model is writing right now (`turn/progress`): a call's name and bytes, or nil
     progress: nil,
     # an event's writes are in progress (see `event/2`)
@@ -232,7 +235,10 @@ defmodule Longx.Agent.ThreadState.Store do
       if MapSet.member?(turn_ids, item["turnId"]), do: :ets.delete(@items, key)
     end)
 
-    put_meta(thread_id, %{turns: Map.drop(meta(thread_id).turns, MapSet.to_list(turn_ids))})
+    meta = meta(thread_id)
+    # the current turn among them (a stopped turn discarded): no current turn now
+    turn = if meta.turn && MapSet.member?(turn_ids, meta.turn["id"]), do: nil, else: meta.turn
+    put_meta(thread_id, %{turns: Map.drop(meta.turns, MapSet.to_list(turn_ids)), turn: turn})
   end
 
   ## folding notifications
@@ -267,6 +273,9 @@ defmodule Longx.Agent.ThreadState.Store do
   # goal mode: one goal per thread, replaced whole on every update
   def fold(t, "thread/goal/updated", %{"goal" => goal}), do: put_meta(t, %{goal: goal})
   def fold(t, "thread/goal/cleared", _params), do: put_meta(t, %{goal: nil})
+
+  def fold(t, "thread/waiting/updated", params),
+    do: put_meta(t, %{waiting: Text.deep(Map.take(params, ["waiting", "paused"]))})
 
   # every item and delta scrubbed of bytes that are not UTF-8 (Longx.Agent.Text
   # says why): the snapshot and every event must encode to JSON
@@ -332,6 +341,7 @@ defmodule Longx.Agent.ThreadState.Store do
         status: meta.status,
         token_usage: meta.token_usage,
         goal: meta.goal,
+        waiting: meta.waiting,
         progress: meta.progress,
         items: items,
         pending_requests: requests

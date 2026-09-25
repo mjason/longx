@@ -32,6 +32,36 @@ export type ThreadGoal = {
   updatedAt: number;
 };
 
+/**
+ * A message from elsewhere — another agent or session, a job's end, a watch —
+ * waiting for the running turn to end (`thread/waiting/updated`): shown above
+ * the composer, never in it; `立即插入` sends it in early (`releaseWaiting`).
+ */
+export type WaitingMessage = {
+  id: string;
+  text: string;
+  at: string;
+  /** the agent or session it comes from (its name / address) */
+  from?: string;
+  /** what it is: report / question / answer */
+  kind?: string;
+  /** a sender without an agent name: `job:<name>` for a background job's end */
+  source?: string;
+  /** a question expecting an answer back: taken up in a turn of its own */
+  question?: boolean;
+};
+
+/** What waits, and whether the person's stop paused it (it waits for them then). */
+export type Waiting = { items: WaitingMessage[]; paused: boolean };
+
+const NO_WAITING: Waiting = { items: [], paused: false };
+
+function waitingOf(raw: unknown): Waiting {
+  if (typeof raw !== "object" || raw === null) return NO_WAITING;
+  const r = raw as { waiting?: unknown; paused?: unknown };
+  return { items: Array.isArray(r.waiting) ? (r.waiting as WaitingMessage[]) : [], paused: r.paused === true };
+}
+
 /** What ThreadChannel's join reply / "snapshot" carries (server-side key spelling). */
 export type ThreadSnapshot = {
   seq: number;
@@ -45,6 +75,7 @@ export type ThreadSnapshot = {
   items: ThreadItem[];
   pending_requests: PendingRequest[];
   goal?: ThreadGoal | null;
+  waiting?: { waiting: WaitingMessage[]; paused: boolean } | null;
   progress?: TurnProgress | null;
 };
 
@@ -78,6 +109,7 @@ export type ThreadView = {
   items: ThreadItem[];
   requests: PendingRequest[];
   goal: ThreadGoal | null;
+  waiting: Waiting;
   progress: TurnProgress | null;
 };
 
@@ -93,6 +125,7 @@ export function fromSnapshot(s: ThreadSnapshot): ThreadView {
     items: s.items,
     requests: s.pending_requests,
     goal: s.goal ?? null,
+    waiting: waitingOf(s.waiting),
     progress: s.progress ?? null,
   };
 }
@@ -109,6 +142,7 @@ export function emptyView(threadId: string): ThreadView {
     items: [],
     requests: [],
     goal: null,
+    waiting: NO_WAITING,
     progress: null,
   };
 }
@@ -178,6 +212,8 @@ function fold(
       };
     case "thread/goal/cleared":
       return { ...view, goal: null };
+    case "thread/waiting/updated":
+      return { ...view, waiting: waitingOf(params) };
     case "turn/progress":
       return { ...view, progress: (params["progress"] as TurnProgress | null | undefined) ?? null };
     case "turn/model": {
@@ -224,6 +260,8 @@ function fold(
         ...view,
         items: view.items.filter((i) => !i.turnId || !dropped.has(i.turnId)),
         turns: Object.fromEntries(Object.entries(view.turns).filter(([id]) => !dropped.has(id))),
+        // the current turn among them (a stopped turn discarded): none now
+        turn: view.turn && dropped.has(String(view.turn["id"])) ? null : view.turn,
       };
     }
     case "serverRequest/resolved": {

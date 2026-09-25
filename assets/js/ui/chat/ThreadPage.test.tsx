@@ -30,6 +30,7 @@ import {
   listSubagents,
   listThreads,
   interruptTurn,
+  releaseWaiting,
   retractTurn,
   steerTurn,
   searchFiles,
@@ -415,7 +416,7 @@ describe("ThreadPage", () => {
     expect(screen.getByTestId("turn-bar")).toHaveTextContent("进行中");
   });
 
-  test("stop before anything came back: the turn is taken back and its text is in the composer again, ready to edit", async () => {
+  test("a stop interrupts and never writes the composer; the stopped turn says so, with 继续 and 丢弃; what arrives from elsewhere waits above the composer with 立即插入", async () => {
     const user = userEvent.setup();
     await open();
     act(() => {
@@ -425,10 +426,40 @@ describe("ThreadPage", () => {
         method: "item/completed",
         params: { turnId: "turn_2", item: { id: "u2", type: "userMessage", turnId: "turn_2", content: [{ type: "text", text: "look at pandas" }] } },
       });
+      channel.deliver("event", {
+        seq: 6,
+        method: "thread/waiting/updated",
+        params: { waiting: [{ id: "w1", text: "tests pass", from: "coder", kind: "report", at: "2026-09-25T01:00:00Z" }], paused: false },
+      });
     });
+
+    // a report while the turn runs: its own row, not the composer
+    const row = await screen.findByTestId("waiting-message");
+    expect(row).toHaveTextContent("coder · 汇报");
+    const composer = screen.getByRole("textbox", { name: "随心输入" });
+    expect(composer).toHaveValue("");
+    await user.click(within(row).getByRole("button", { name: /立即插入/ }));
+    await waitFor(() => expect(releaseWaiting).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", waitingId: "w1" } })));
+
     await user.click(await screen.findByRole("button", { name: /停止/ }));
+    await waitFor(() => expect(interruptTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", kernelTurnId: "turn_2" } })));
+    expect(retractTurn).not.toHaveBeenCalled();
+    expect(composer).toHaveValue("");
+
+    act(() => {
+      channel.deliver("event", {
+        seq: 7,
+        method: "turn/completed",
+        params: { turn: { id: "turn_2", status: "interrupted", error: { message: "stopped by the person from the page", by: "person" } } },
+      });
+    });
+    const card = await screen.findByTestId("stopped-turn");
+    expect(card).toHaveTextContent("你停止了这一轮");
+    await user.click(within(card).getByRole("button", { name: "丢弃" }));
     await waitFor(() => expect(retractTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", kernelTurnId: "turn_2" } })));
-    await waitFor(() => expect(screen.getByRole("textbox", { name: "随心输入" })).toHaveValue("look at pandas"));
+    expect(composer).toHaveValue("");
+    await user.click(within(card).getByRole("button", { name: /继续/ }));
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "继续" }) })));
   });
 
   test("an unrecoverable thread cannot take messages", async () => {

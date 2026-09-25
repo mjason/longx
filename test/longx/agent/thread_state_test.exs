@@ -436,12 +436,19 @@ defmodule Longx.Agent.ThreadStateTest do
         "item" => %{"id" => "c", "type" => "userMessage"}
       })
 
+      ThreadState.ingest(thread_id, "turn/completed", %{
+        "turn" => %{"id" => "t3", "status" => "interrupted"}
+      })
+
       :ok = ThreadState.drop_turns(thread_id, ["t2", "t3"])
 
-      assert_receive {:thread, 4, "thread/reverted",
+      assert_receive {:thread, 5, "thread/reverted",
                       %{"threadId" => ^thread_id, "turnIds" => ["t2", "t3"]}}
 
       assert Enum.map(ThreadState.snapshot(thread_id).items, & &1["id"]) == ["a"]
+      # the current turn was one of them: gone too (a stopped turn discarded
+      # once left a ghost "stopped" card at the bottom of the thread)
+      assert ThreadState.snapshot(thread_id).turn == nil
     end
 
     test "backfill seeds the view", %{thread_id: thread_id} do
