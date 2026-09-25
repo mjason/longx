@@ -41,8 +41,10 @@ RUN apt-get update \
  # uv: Python interpreters, venvs and tools for the agent, no root needed
  && curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh \
  && rm -rf /var/lib/apt/lists/* \
- # the user the agent runs as; Ubuntu 24.04 ships an `ubuntu` user on uid 1000, replaced
- && userdel -r ubuntu 2>/dev/null || true \
+ # the user the agent runs as; Ubuntu 24.04 ships an `ubuntu` user on uid 1000, replaced.
+ # The braces keep `|| true` on userdel alone: bare, it caught any failure before it
+ # (a mirror's 404 for libexpat1 once) and the build died later as "UID 1000 is not unique"
+ && { userdel -r ubuntu 2>/dev/null || true; } \
  && useradd --uid 1000 --create-home --shell /bin/bash longx \
  && mkdir -p /data /workspace /opt/longx \
  && chown longx:longx /data /workspace /opt/longx
