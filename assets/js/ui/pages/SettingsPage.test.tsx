@@ -57,6 +57,9 @@ beforeAll(async () => {
   await import("./SettingsPage");
 });
 
+// a lazy route's page on CI's slower runner: more than the default second
+const LAZY = { timeout: 5_000 };
+
 describe("SettingsPage", () => {
   test("files: the global rules beside the built-in lists they stack on; saved", async () => {
     const user = userEvent.setup();
@@ -74,12 +77,11 @@ describe("SettingsPage", () => {
     setViewport(390);
     const user = userEvent.setup();
     const { router } = renderAt("/settings");
-    // the settings pages load when first visited (a lazy route)
-    await user.click(await screen.findByRole("link", { name: /外观/ }));
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe("/settings/appearance"),
-    );
-    expect(screen.getByTestId("section-appearance")).toBeInTheDocument();
+    // the settings pages load when first visited (a lazy route): the router's
+    // location moves before React has drawn the page, so the page is awaited
+    await user.click(await screen.findByRole("link", { name: /外观/ }, LAZY));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/appearance"), LAZY);
+    expect(await screen.findByTestId("section-appearance", undefined, LAZY)).toBeInTheDocument();
   });
 
   test("the theme follows the system unless chosen, and the toggle cycles", async () => {
@@ -773,13 +775,10 @@ describe("SettingsPage", () => {
   test("desktop: categories beside the content, models first", async () => {
     setViewport(1280);
     const { router } = renderAt("/settings");
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe("/settings/models"),
-    );
-    expect(
-      screen.getByRole("link", { name: "模型与 Provider" }),
-    ).toHaveAttribute("aria-current", "page");
-    expect(screen.getByTestId("section-models")).toBeInTheDocument();
+    // the page redirects once it is drawn (a lazy route): awaited, not read at once
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/models"), LAZY);
+    expect(await screen.findByTestId("section-models", undefined, LAZY)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "模型与 Provider" })).toHaveAttribute("aria-current", "page");
   });
 
   test("update: the version, a check finds a release, the token, the upgrade with its stages until the new version answers", async () => {
