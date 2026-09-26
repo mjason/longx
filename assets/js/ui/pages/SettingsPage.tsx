@@ -1,4 +1,5 @@
 import { ChevronRight } from "lucide-react";
+import { useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useTheme, type ThemePreference } from "@/core/theme";
 import { useViewport } from "@/core/viewport";
@@ -30,6 +31,14 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const current: Section | undefined = section && SECTIONS.includes(section) ? section : undefined;
 
+  // a desktop without a section opens the first one — from an effect: React
+  // Router drops a navigate() issued before the page has mounted, and one
+  // queued from the render (a microtask) once lost that race whenever the
+  // lazily loaded page committed late (CI's runner), leaving /settings as it was
+  useEffect(() => {
+    if (viewport !== "phone" && !current) navigate("/settings/models", { replace: true });
+  }, [viewport, current, navigate]);
+
   if (viewport === "phone") {
     if (!current) return <SectionList />;
     return (
@@ -41,7 +50,6 @@ export function SettingsPage() {
   }
 
   const active = current ?? "models";
-  if (!current) queueMicrotask(() => navigate("/settings/models", { replace: true }));
 
   return (
     <>
