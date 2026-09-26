@@ -9,6 +9,13 @@ vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
 import { agentDefinition, archiveProject, deleteProject, deleteWatch, dryRunWatch, promoteLocal, switchWatch, updateProject } from "@/ash_rpc";
 
+// the page opens through a lazy route (routes.tsx): its module in the cache
+// first, so the route resolves at once however slow the machine — CI's runner
+// once took past the tests' one-second waits
+beforeAll(async () => {
+  await import("./ProjectSettingsPage");
+});
+
 describe("ProjectSettingsPage", () => {
   beforeEach(() => {
     localStorage.clear();

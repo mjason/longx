@@ -8,6 +8,13 @@ vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
 import { createDirectory, createProject } from "@/ash_rpc";
 
+// the page opens through a lazy route (routes.tsx): its module in the cache
+// first, so the route resolves at once however slow the machine — CI's runner
+// once took past the tests' one-second waits
+beforeAll(async () => {
+  await import("./ProjectWizard");
+});
+
 describe("ProjectWizard", () => {
   test("browse to a directory, name defaults to its basename, git is offered, project created", async () => {
     vi.mocked(createProject).mockResolvedValue(ok(project(1)) as never);

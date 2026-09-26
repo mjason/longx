@@ -17,6 +17,13 @@ import {
   updateCredential,
 } from "@/ash_rpc";
 
+// the page opens through a lazy route (routes.tsx): its module in the cache
+// first, so the route resolves at once however slow the machine — CI's runner
+// once took past the tests' one-second waits
+beforeAll(async () => {
+  await import("../SettingsPage");
+});
+
 describe("Settings → 凭证", () => {
   beforeEach(() => {
     vi.clearAllMocks();

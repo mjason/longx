@@ -50,6 +50,13 @@ import { browserIdle, dependencyReport, dependencyTool, model, upgradeIdle } fro
 import { page } from "@/core/upgrade";
 import { within } from "@testing-library/react";
 
+// the page opens through a lazy route (routes.tsx): its module in the cache
+// first, so the route resolves at once however slow the machine — CI's runner
+// once took past the tests' one-second waits
+beforeAll(async () => {
+  await import("./SettingsPage");
+});
+
 describe("SettingsPage", () => {
   test("files: the global rules beside the built-in lists they stack on; saved", async () => {
     const user = userEvent.setup();
