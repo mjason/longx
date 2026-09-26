@@ -173,12 +173,26 @@ defmodule Longx.Sentry do
       Sentry.capture_message("turn failed: #{String.slice(error || "no details", 0, 200)}",
         level: :error,
         tags: %{thread: thread_id, turn: turn_id},
-        extra: %{error: error},
+        extra: %{error: error, model_requests: model_requests(thread_id, turn_id)},
         fingerprint: ["turn_failed", first_words(error)]
       )
     end
 
     :ok
+  end
+
+  # the turn's model requests as the request log keeps them (in memory, gone at a
+  # restart): what was sent in shape — model, provider, sizes, tools, status,
+  # error — never what it said. A provider's bare "Bad Request" (LONX-C) once
+  # said nothing of what it had been sent.
+  @request_fields [:at, :request_kind, :model, :upstream_id, :provider, :effort, :summary] ++
+                    [:tools, :input_items, :input_chars, :instructions_chars, :max_output_tokens] ++
+                    [:status, :duration_ms, :error]
+  defp model_requests(thread_id, turn_id) do
+    Longx.AI.Gateway.Log.recent(200)
+    |> Enum.filter(&(&1.thread_id == thread_id and &1.turn_id == turn_id))
+    |> Enum.take(5)
+    |> Enum.map(&Map.take(&1, @request_fields))
   end
 
   # a provider refusing the prompt (a content filter) or the account (a spent

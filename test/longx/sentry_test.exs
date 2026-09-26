@@ -45,22 +45,53 @@ defmodule Longx.SentryTest do
     assert Reporting.send_test() == {:error, "no DSN set"}
   end
 
+  # a provider's bare "Bad Request" said nothing of what was sent (LONX-C): the
+  # failed turn's report carries that turn's model requests as the request log
+  # keeps them (in memory, gone at a restart) — the shape, never the content
+  test "a failed turn's report carries its model requests: model, provider, sizes, tools, status, error",
+       %{dsn: dsn} do
+    {:ok, _} = Reporting.set_dsn(dsn)
+    Longx.AI.Gateway.Log.clear()
+
+    body = %{
+      "model" => "longx",
+      "input" => [
+        %{"role" => "user", "content" => [%{"type" => "input_text", "text" => "the secret plan"}]}
+      ],
+      "tools" => [%{"type" => "function", "name" => "exec_command"}],
+      "reasoning" => %{"effort" => "low"},
+      "client_metadata" => %{"thread_id" => "native_9", "turn_id" => "turn_9"}
+    }
+
+    id = Longx.AI.Gateway.Log.begin(body, %{upstream_id: "spark-x2.5", provider: "spark"})
+    :ok = Longx.AI.Gateway.Log.finish(id, %{status: 200, error: "the model failed: Bad Request"})
+
+    Reporting.turn_failed(
+      "native_9",
+      "turn_9",
+      "model spark-x2.5 failed: spark-x2.5 (spark): the model failed: Bad Request"
+    )
+
+    envelope = await_envelope(~r/turn_9/)
+    assert envelope =~ "model_requests"
+    assert envelope =~ "spark-x2.5"
+    assert envelope =~ "exec_command"
+    assert envelope =~ "input_items"
+    # the shape of what was sent, never what it said
+    refute envelope =~ "the secret plan"
+  end
+
   test "a test event, a fault and a failed turn reach the server named by the DSN", %{dsn: dsn} do
     {:ok, _} = Reporting.set_dsn(dsn)
 
     assert {:ok, _id} = Reporting.send_test()
-    assert_receive {:envelope, body}, 5_000
-    assert body =~ "Longx"
+    assert await_envelope(~r/Longx/)
 
     Reporting.fault(:socket_encode, "thread:x", "could not encode")
-    assert_receive {:envelope, body}, 5_000
-    assert body =~ "socket_encode"
-    assert body =~ "could not encode"
+    assert await_envelope(~r/socket_encode/) =~ "could not encode"
 
     Reporting.turn_failed("native_1", "turn_1", "the model call crashed: boom")
-    assert_receive {:envelope, body}, 5_000
-    assert body =~ "turn_1"
-    assert body =~ "boom"
+    assert await_envelope(~r/turn_1/) =~ "boom"
 
     # a provider's refusal of the prompt or the account (a content filter, a spent
     # quota) is the provider's word, not a bug of ours: the page tells the person,
@@ -77,7 +108,7 @@ defmodule Longx.SentryTest do
       "model x failed: upstream answered 429: quota exhausted"
     )
 
-    refute_receive {:envelope, _}, 300
+    refute_envelope(~r/turn_2|turn_3/)
 
     # a client's own protocol error (a connection opened and never used, a
     # malformed request, a closed socket) is not a bug of ours: dropped before
@@ -91,14 +122,40 @@ defmodule Longx.SentryTest do
       result: :sync
     )
 
-    refute_receive {:envelope, _}, 300
+    refute_envelope(~r/Read timeout|TransportError/)
     Sentry.capture_exception(%RuntimeError{message: "a real one"}, result: :sync)
-    assert_receive {:envelope, body}, 5_000
-    assert body =~ "a real one"
+    assert await_envelope(~r/a real one/)
 
     # off again: nothing goes out
     {:ok, nil} = Reporting.set_dsn("")
     Reporting.fault(:socket_encode, "thread:y", "quiet")
-    refute_receive {:envelope, _}, 300
+    refute_envelope(~r/thread:y/)
+  end
+
+  # no envelope saying this within the window; any other (a crash report of a
+  # process some earlier test left stopping — a Bypass instance, once — which
+  # the logger handler sends while a DSN is set) is not what is refused here
+  defp refute_envelope(pattern, deadline \\ System.monotonic_time(:millisecond) + 300) do
+    left = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    receive do
+      {:envelope, body} ->
+        refute body =~ pattern
+        refute_envelope(pattern, deadline)
+    after
+      left -> :ok
+    end
+  end
+
+  # the envelope that says this, whatever else the SDK sent first (the events
+  # go out from its own process; an earlier one can land after its test moved on)
+  defp await_envelope(pattern, deadline \\ System.monotonic_time(:millisecond) + 5_000) do
+    left = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    receive do
+      {:envelope, body} -> if body =~ pattern, do: body, else: await_envelope(pattern, deadline)
+    after
+      left -> flunk("no envelope matching #{inspect(pattern)}")
+    end
   end
 end

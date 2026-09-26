@@ -82,7 +82,13 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `after_transaction` — a project delete once stopped its agents inside the transaction,
     each stop waiting on an agent that was itself waiting for that write lock, and every
     other writer saw "database is locked" (busy_timeout 16 s) for the whole of it (prod,
-    2026-09-20).
+    2026-09-20). **Every transaction begins IMMEDIATE** (`default_transaction_mode:
+    :immediate`, `config.exs`): it takes the write lock first and a second writer waits
+    out the busy_timeout — SQLite refuses at once, with no wait, a deferred transaction
+    that read and then writes after another connection committed (a stale snapshot):
+    Oban's cron and pruner, read-then-write every minute on the minute, failed so in
+    production (Sentry LONX-D / LONX-E; `test/longx/repo_test.exs` replays it on a
+    scratch file).
   - `Thread` = kernel thread ↔ project (`kernel_thread_id`, `title`, `preview`, `cwd`,
     `model_slug`, `reasoning_effort`, `web_search`, `parent_thread_id` / `agent_path` for a
     sub-agent's row, `status`, `last_activity_at`). Statuses: `:idle`, `:active`,
@@ -1183,7 +1189,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     (`Sentry.LoggerHandler` attached once a DSN is set, crash reports only),
     `Longx.System.Faults.record/3` (`fault/3`, warnings), failed turns from the Tracker
     (`turn_failed/3`, errors tagged thread / turn, fingerprinted by the message's first
-    words — a provider's refusal of the prompt or the account (a content filter, a
+    words, with the turn's **model requests** as `extra` — the request log's entries for
+    that turn, in shape only: model, upstream, provider, effort, tools, input items and
+    sizes, status, error — a provider's bare "Bad Request" (LONX-C) said nothing of what
+    it had been sent — a provider's refusal of the prompt or the account (a content filter, a
     quota) is not sent: the person sees it on the page), and `send_test/0` from the page. RPC `sentry_status` / `set_sentry_dsn` /
     `sentry_test`; `before_send/1` drops Bandit's client-side protocol errors
     (`Bandit.HTTPError` — a connection opened and never used is a "Read timeout" logged

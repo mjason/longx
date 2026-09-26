@@ -31,7 +31,15 @@ config :ash_typescript,
   valibot_schema_suffix: "ValibotSchema",
   phoenix_import_path: "phoenix"
 
-config :longx, Longx.Repo, timeout: 15_000, busy_timeout: 16_000
+# Every transaction begins IMMEDIATE: it takes the write lock first, so a
+# second writer waits (busy_timeout) — a transaction that began by reading
+# (SQLite's default, deferred) and wrote after another connection committed
+# was refused at once, "Database busy", no wait: Oban's cron and pruner in
+# production (Sentry LONX-D / LONX-E, 2026-09-26; test/longx/repo_test.exs).
+config :longx, Longx.Repo,
+  timeout: 15_000,
+  busy_timeout: 16_000,
+  default_transaction_mode: :immediate
 
 # These enable behaviors that will become the default in the next major
 # version of Ash. Setting them now opts your application into the new
