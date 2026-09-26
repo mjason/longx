@@ -67,7 +67,8 @@ describe("SettingsPage", () => {
     setViewport(390);
     const user = userEvent.setup();
     const { router } = renderAt("/settings");
-    await user.click(screen.getByRole("link", { name: /外观/ }));
+    // the settings pages load when first visited (a lazy route)
+    await user.click(await screen.findByRole("link", { name: /外观/ }));
     await waitFor(() =>
       expect(router.state.location.pathname).toBe("/settings/appearance"),
     );

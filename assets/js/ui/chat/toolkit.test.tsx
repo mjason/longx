@@ -163,7 +163,7 @@ describe("FileChangeTool", () => {
 });
 
 describe("PresentTool", () => {
-  test("draws the model's tree from the vocabulary: a card with facts, a table, markdown with a code fence", () => {
+  test("draws the model's tree from the vocabulary: a card with facts, a table, markdown with a code fence", async () => {
     render(
       <PresentTool
         {...part({
@@ -182,7 +182,8 @@ describe("PresentTool", () => {
         })}
       />,
     );
-    expect(screen.getByText("Q3 收入")).toBeInTheDocument();
+    // the renderer loads with the first card
+    expect(await screen.findByText("Q3 收入")).toBeInTheDocument();
     expect(screen.getByText("Bookings")).toBeInTheDocument();
     expect(screen.getByText("$1.2M")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "名称" })).toBeInTheDocument();
@@ -246,7 +247,7 @@ describe("ActionTool", () => {
     expect(answerAction).toHaveBeenCalledWith("4", { done: true });
   });
 
-  test("an ask that carries a generative tree draws it; what the person fires answers as the action", () => {
+  test("an ask that carries a generative tree draws it; what the person fires answers as the action", async () => {
     answerAction.mockClear();
     render(
       <ActionAnswerContext.Provider value={answerAction}>
@@ -274,9 +275,9 @@ describe("ActionTool", () => {
         />
       </ActionAnswerContext.Provider>,
     );
-    // the vocabulary's form, not the elicitation fields
+    // the vocabulary's form, not the elicitation fields (the renderer loads with the first card)
+    fireEvent.change(await screen.findByRole("combobox"), { target: { value: "prod" } });
     expect(screen.queryByRole("button", { name: "已完成" })).not.toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "prod" } });
     fireEvent.click(screen.getByRole("button", { name: "就这个" }));
     expect(answerAction).toHaveBeenCalledWith("5", { action: { type: "pick", $input: { env: "prod" } } });
 

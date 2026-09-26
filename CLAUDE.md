@@ -1280,7 +1280,24 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `priv/static/assets/.vite/manifest.json`. The dev watcher runs `npm run dev` **through
     `Longx.Shim`** so Vite dies with the BEAM. `mix assets.build` = compile +
     `ash_typescript.codegen` + `npm run build` → `priv/static/assets/` (gitignored); no
-    `phx.digest`. PWA bits are committed static files.
+    `phx.digest`. PWA bits are committed static files. **What a weak network downloads**
+    (measured at 1.5 Mbps / 400 ms: 0.2.64's messages showed after 27 s, 21 of them the
+    3.7 MB entry sent raw — `gzip:` serves only a `.gz` that exists, and nothing wrote
+    one): `assets/js/build/plugins.ts` — `precompress()` writes a `.gz` and a `.br` beside
+    every text asset over 1 KB (node's zlib; browsers offer brotli only over https or
+    localhost, so a LAN's plain http gets the gzip) and `entryBudget` fails the build
+    when the entry chunk passes `ENTRY_BUDGET` (1.6 MB, `vite.config.ts`), naming its
+    heaviest packages. Loaded where used, never with the page: the diagram renderer
+    (beautiful-mermaid + elkjs, `mermaid-diagram`'s `useRenderer`), the code editor and
+    the diff (`Workbench`'s lazy `EditorTab` / `DiffTab`), the cards' renderer
+    (`toolkit`'s lazy `GenerativeTree`), the settings pages and the wizard (route
+    `lazy`). The endpoint serves `/assets` from its own `Plug.Static` — `gzip` and
+    `brotli`, `cache-control: public, max-age=31536000, immutable` (the names carry
+    their hash: no revalidation round trip per file on each load) — and the socket
+    compresses its frames (`compress: true`, permessage-deflate). After: the entry 1.58
+    MB raw / 479 KB gzip / 397 KB brotli, the weak network's first visit 7.9 s, a second
+    2.7 s with no asset bytes (`test/longx_web/static_assets_test.exs`,
+    `js/build/plugins.test.ts`).
 - `assets/` — Vite + TypeScript + React 19, tests with vitest/testing-library
   (`npm run check` = `tsc --noEmit` + `vitest run`, part of `mix precommit`). Layout:
   - `js/core/` — **DOM-free**, the part a React Native app will reuse: the generated client

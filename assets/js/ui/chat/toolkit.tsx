@@ -23,7 +23,7 @@ import {
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
 import { AppWindow, Bot, ChevronDown, Download, FileCode2, GitCompareArrows, Image as ImageIcon, Loader2 } from "lucide-react";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, lazy, Suspense, useContext, useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { formatBytes, formatDuration } from "@/core/format";
 import { progressLabel } from "./progressLabel";
 import type { Tab } from "@/core/workbench";
@@ -50,7 +50,17 @@ import {
   FileTree,
   type FileTreeNode,
 } from "@/ui/components/assistant-ui/elements/file-tree";
-import { GenerativeTree } from "@/ui/components/assistant-ui/elements/generative-ui";
+// the cards' renderer (assistant-ui's generative UI and its zod vocabulary,
+// ~300 KB of source) loads with the first card, not with every page
+const LazyGenerativeTree = lazy(async () => ({
+  default: (await import("@/ui/components/assistant-ui/elements/generative-ui")).GenerativeTree,
+}));
+type GenerativeTreeProps = ComponentProps<typeof LazyGenerativeTree>;
+const GenerativeTree = (props: GenerativeTreeProps) => (
+  <Suspense fallback={<ShimmerLabel className="text-xs">{t.presentDrawing}</ShimmerLabel>}>
+    <LazyGenerativeTree {...props} />
+  </Suspense>
+);
 import { TerminalBlock } from "@/ui/components/assistant-ui/elements/terminal-block";
 import { ToolCall } from "@/ui/components/assistant-ui/elements/tool-call";
 import { ToolError } from "@/ui/components/assistant-ui/elements/tool-error";

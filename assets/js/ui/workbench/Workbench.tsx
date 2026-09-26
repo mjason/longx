@@ -3,15 +3,19 @@
 // over whichever is active. The chat stays mounted behind a file so its
 // scroll and composer draft survive a look at the code.
 import { AppWindow, Bot, FileCode2, GitCompareArrows, MessagesSquare, X } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { useViewport } from "@/core/viewport";
 import { tabKey, useWorkbench, type Tab } from "@/core/workbench";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/ui/components/ui/alert-dialog";
 import { t } from "@/ui/strings";
 import { AgentTab } from "./AgentTab";
-import { DiffTab } from "./DiffTab";
-import { EditorTab } from "./EditorTab";
+import { Skeleton } from "@/ui/components/ui/skeleton";
+
+// the code editor and the diff (CodeMirror, ~1 MB of source) load when a file
+// or a diff is first opened, not with every page
+const EditorTab = lazy(async () => ({ default: (await import("./EditorTab")).EditorTab }));
+const DiffTab = lazy(async () => ({ default: (await import("./DiffTab")).DiffTab }));
 
 export function Workbench({ projectId, children }: { projectId: string; children: ReactNode }) {
   const wb = useWorkbench(projectId);
@@ -53,8 +57,10 @@ export function Workbench({ projectId, children }: { projectId: string; children
         </div>
       ) : null}
       <div className={`min-h-0 flex-1 flex-col ${active.kind === "chat" ? "flex" : "hidden"}`}>{children}</div>
-      {active.kind === "file" ? <EditorTab key={active.path} projectId={projectId} path={active.path} line={active.line} /> : null}
-      {active.kind === "diff" ? <DiffTab key={tabKey(active)} projectId={projectId} path={active.path} sha={active.sha} /> : null}
+      <Suspense fallback={<Skeleton className="m-4 h-32" />}>
+        {active.kind === "file" ? <EditorTab key={active.path} projectId={projectId} path={active.path} line={active.line} /> : null}
+        {active.kind === "diff" ? <DiffTab key={tabKey(active)} projectId={projectId} path={active.path} sha={active.sha} /> : null}
+      </Suspense>
       {active.kind === "artifact" && !phoneArtifact ? <ArtifactTab key={tabKey(active)} tab={active} /> : null}
       {active.kind === "agent" ? <AgentTab key={tabKey(active)} threadId={active.threadId} rowId={active.rowId} name={active.name} /> : null}
       <Sheet open={phoneArtifact !== null} onOpenChange={(open) => (open || !phoneArtifact ? null : wb.close(tabKey(phoneArtifact)))}>

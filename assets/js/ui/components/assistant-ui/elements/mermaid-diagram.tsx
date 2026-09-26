@@ -1,6 +1,5 @@
 "use client";
 
-import { renderMermaidSVG } from "beautiful-mermaid";
 import { Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react";
 import {
   type FC,
@@ -246,13 +245,36 @@ function MermaidZoom({ svg, children }: MermaidZoomProps) {
   );
 }
 
+// Longx: the renderer (beautiful-mermaid over elkjs, 1.9 MB of source — half
+// of what every page loaded) is fetched the first time a diagram shows; the
+// skeleton stands until then
+type Renderer = (typeof import("beautiful-mermaid"))["renderMermaidSVG"];
+let renderer: Renderer | null = null;
+let loading: Promise<Renderer> | null = null;
+const loadRenderer = () =>
+  (loading ??= import("beautiful-mermaid").then((m) => (renderer = m.renderMermaidSVG)));
+
+function useRenderer(): Renderer | null {
+  const [loaded, setLoaded] = useState<Renderer | null>(renderer);
+  useEffect(() => {
+    if (loaded) return;
+    let live = true;
+    void loadRenderer().then((r) => live && setLoaded(() => r));
+    return () => {
+      live = false;
+    };
+  }, [loaded]);
+  return loaded;
+}
+
 const MermaidDiagramImpl: FC<MermaidDiagramProps> = ({
   code,
   className,
   streaming = false,
 }) => {
+  const renderMermaidSVG = useRenderer();
   const result = useMemo(() => {
-    if (streaming) return null;
+    if (streaming || !renderMermaidSVG) return null;
     try {
       return {
         svg: renderMermaidSVG(code, {
@@ -271,7 +293,7 @@ const MermaidDiagramImpl: FC<MermaidDiagramProps> = ({
         error: err instanceof Error ? err : new Error(String(err)),
       };
     }
-  }, [streaming, code]);
+  }, [streaming, code, renderMermaidSVG]);
 
   if (!result) {
     return (
@@ -313,6 +335,7 @@ const MermaidDiagramImpl: FC<MermaidDiagramProps> = ({
     <MermaidZoom svg={result.svg}>
       <div
         data-slot="mermaid-diagram"
+        data-testid="mermaid-drawn"
         className={cn(
           "aui-mermaid-diagram bg-muted overflow-x-auto rounded-b-lg p-2 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full",
           className,
