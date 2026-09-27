@@ -223,9 +223,20 @@ func (s *watcher) handle(e fsnotify.Event) {
 		}
 	}
 
-	if !s.rules.ignored(rel, dir) {
+	// an entry the rules ignore is still reported when its parent is not — the
+	// tree draws it dimmed, so it must learn of a `target/` appearing at the
+	// root; what lands inside it stays unreported
+	if !s.rules.ignored(rel, dir) || !s.parentIgnored(rel) {
 		s.changed[rel] = true
 	}
+}
+
+func (s *watcher) parentIgnored(rel string) bool {
+	parent := path.Dir(rel)
+	if parent == "." || parent == "" {
+		return false
+	}
+	return s.rules.ignored(parent, true)
 }
 
 func (s *watcher) handleGit(e fsnotify.Event, rel string) {

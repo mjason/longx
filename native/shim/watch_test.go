@@ -196,6 +196,32 @@ func TestWatchReportsChangesOutsideTheIgnoredTrees(t *testing.T) {
 	}
 }
 
+// An ignored directory appearing at the root is reported — the tree draws it
+// dimmed, so it must learn of it — while what lands inside it stays unreported.
+func TestWatchReportsAnIgnoredDirectoryAppearing(t *testing.T) {
+	root := tree(t, map[string]string{
+		"src/a.py":   "",
+		".gitignore": "target/\n",
+		".git/HEAD":  "ref: refs/heads/main\n",
+	})
+	ch, stop := startWatch(t, ruleConfig{Root: root, Git: true})
+	defer stop()
+
+	if err := os.MkdirAll(filepath.Join(root, "target/reports"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "target/x.bin", "x")
+	paths, _ := collect(ch, 800*time.Millisecond)
+	if !slices.Contains(paths, "target") {
+		t.Fatalf("the ignored directory itself was not reported: %v", paths)
+	}
+	for _, p := range paths {
+		if p == "target/x.bin" || p == "target/reports" {
+			t.Fatalf("a path inside the ignored directory was reported: %v", paths)
+		}
+	}
+}
+
 func TestWatchFollowsNewDirectories(t *testing.T) {
 	root := tree(t, map[string]string{"src/a.py": ""})
 	ch, stop := startWatch(t, ruleConfig{Root: root})
