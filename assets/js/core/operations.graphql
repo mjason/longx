@@ -8,7 +8,7 @@ query ListCredentials($sort: [CredentialSortInput], $filter: CredentialFilterInp
 
 query CredentialRedirectUri($origin: String) { credentialRedirectUri(origin: $origin) { uri } }
 
-query ListChromeBrowsers { listChromeBrowsers { browsers { tabs { title threadId tabs } status origins name maxTabs lastSeenAt id device connected approvedAt aliases } } }
+query ListChromeBrowsers { listChromeBrowsers { browsers { tabs { title threadId tabs } status name maxTabs lastSeenAt id device connected approvedAt aliases } } }
 
 query ChromeAliases { chromeAliases { default aliases { name browsers } } }
 
@@ -131,10 +131,6 @@ mutation RevokeChromeBrowser($input: RevokeChromeBrowserInput!) { revokeChromeBr
 mutation RenameChromeBrowser($input: RenameChromeBrowserInput!) { renameChromeBrowser(input: $input) { ok } }
 
 mutation SetChromeBrowserMaxTabs($input: SetChromeBrowserMaxTabsInput!) { setChromeBrowserMaxTabs(input: $input) { ok } }
-
-mutation SetChromeOrigin($input: SetChromeOriginInput!) { setChromeOrigin(input: $input) { ok } }
-
-mutation DeleteChromeOrigin($input: DeleteChromeOriginInput!) { deleteChromeOrigin(input: $input) { ok } }
 
 mutation SetChromeAlias($input: SetChromeAliasInput!) { setChromeAlias(input: $input) { default aliases { name browsers } } }
 

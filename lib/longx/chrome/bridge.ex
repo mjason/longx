@@ -2,7 +2,7 @@ defmodule Longx.Chrome.Bridge do
   @moduledoc """
   A resource without data: the settings page's view of the person's browsers
   (`Longx.Chrome`) — the paired extensions with their live state, the
-  approvals, names, limits and origins, the aliases descriptions use, and
+  approvals, names and limits, the aliases descriptions use, and
   where the extension itself is downloaded from.
   """
 
@@ -75,32 +75,6 @@ defmodule Longx.Chrome.Bridge do
 
       run fn input, _ ->
         case Chrome.set_max_tabs(input.arguments.id, input.arguments.max_tabs) do
-          {:ok, _} -> {:ok, %{ok: true}}
-          {:error, _} -> argument_error(:id, "no such browser")
-        end
-      end
-    end
-
-    action :set_chrome_origin, Types.Ok do
-      argument :id, :string, allow_nil?: false
-      argument :origin, :string, allow_nil?: false
-      argument :access, :atom, allow_nil?: false, constraints: [one_of: [:allow, :deny]]
-
-      run fn input, _ ->
-        case Chrome.set_origin(input.arguments.id, input.arguments.origin, input.arguments.access) do
-          {:ok, _} -> {:ok, %{ok: true}}
-          {:error, message} when is_binary(message) -> argument_error(:origin, message)
-          {:error, _} -> argument_error(:id, "no such browser")
-        end
-      end
-    end
-
-    action :delete_chrome_origin, Types.Ok do
-      argument :id, :string, allow_nil?: false
-      argument :origin, :string, allow_nil?: false
-
-      run fn input, _ ->
-        case Chrome.delete_origin(input.arguments.id, input.arguments.origin) do
           {:ok, _} -> {:ok, %{ok: true}}
           {:error, _} -> argument_error(:id, "no such browser")
         end

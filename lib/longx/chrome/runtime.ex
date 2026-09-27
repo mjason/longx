@@ -58,8 +58,10 @@ defmodule Longx.Chrome.Runtime do
   def stop(rt), do: GenServer.stop(rt, :normal)
 
   @doc """
-  The running cell waits on the person (the session asks about an origin):
-  its deadline stops — the shim's and ours — until `resume/1`.
+  The running cell waits on something outside the browser (an ask put to the
+  person, say): its deadline stops — the shim's and ours — until `resume/1`.
+  Nothing in the shipped session holds today (the per-origin ask that did is
+  gone); the runtime keeps the capability for a plug that needs it.
   """
   def hold(rt), do: GenServer.cast(rt, :hold)
   def resume(rt), do: GenServer.cast(rt, :resume)

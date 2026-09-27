@@ -1227,9 +1227,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   `tabs.list` reconciles), the debugger attachments (`Runtime` / `Page` / `Log` enabled), a
   200-entry console buffer per tab (`longx.console`), the CDP proxy every cell call goes
   through (`tab:<id>` must be the session's; `Target.* / Fetch.* / Browser.* / Storage.*`
-  and the cookie commands are refused; `Page.navigate` passes `Longx.Chrome.Policy`: the
-  browser row's `origins`, the session's, the turn's — an unknown origin is an **Ask** with
-  本轮 / 这个会话 / 一直允许 / 拒绝, the deadline held meanwhile), the `longx` pseudo-methods
+  and the cookie commands are refused; `Page.navigate` takes any http(s) URL or
+  `about:blank` — **no site is asked about**: the browser is the person's and they paired
+  it; the per-origin ask 0.2.67 shipped (本轮 / 这个会话 / 一直允许 / 拒绝, a `Policy` module,
+  the browser row's `origins`) went the next day as one prompt too many), the `longx` pseudo-methods
   (`longx.tabs.open` — the project's `max_tabs` counts all its sessions through
   `Longx.Chrome.Tabs`' duplicate-key registry, the browser row's `max_tabs` every project —,
   `longx.tabs.list / close`, `longx.console`). The turn's end (`:turn_end`) **detaches** the
@@ -1242,14 +1243,13 @@ it builds: git is the machine's, the headless browser is downloaded on first use
   attachments drawn inline by the chat (`details.screenshots`, `JavascriptTool` in
   `toolkit.tsx`, a `TerminalBlock` for the console output, the code folded). **Prompt
   sources**: `prompt.md` is browser-use-pi's system prompt (MIT) adapted (no workspace /
-  finish / checkpoint; our tabs, console, origins paragraphs; when not to use the browser,
+  finish / checkpoint; our tabs and console paragraphs; when not to use the browser,
   from browser-harness); `policy.md` is codex's Computer/Browser Use Confirmation Policy
   (`models.json`) adapted (hand-off = say so and stop, the person continues in their own
   browser; a project's own dev server needs no confirmation). Settings → 浏览器
   (`BrowsersSection`, `core/chrome.ts`; RPC on the data-less `Longx.Chrome.Bridge`:
   `list_chrome_browsers`, `approve / reject / revoke / rename_chrome_browser`,
-  `set_chrome_browser_max_tabs`, `set / delete_chrome_origin`, `chrome_aliases`, `set /
-  delete_chrome_alias`, `set_chrome_default_alias`, `chrome_extension`). Tests:
+  `set_chrome_browser_max_tabs`, `chrome_aliases`, `set / delete_chrome_alias`, `set_chrome_default_alias`, `chrome_extension`). Tests:
   `native/shim/js_test.go`, `test/longx/chrome/{runtime,chrome,session}_test`,
   `test/longx_web/channels/chrome_channel_test`, `test/longx/agent/plugs/browser_test`
   (Bypass as the model, `Longx.Test.FakeChrome` as the extension: it joins the channel,
@@ -1804,9 +1804,8 @@ Where tests live / what to use:
   `priv/static/extension/unpacked`, so `mix assets.build` first — pairs through the popup,
   is allowed on Settings → 浏览器 and given the alias `e2e-chrome`; the project's
   `local/agent.exs` says `plug Browser, browser: "e2e-chrome", max_tabs: 2`; the agent
-  opens a page of the project served by `/files/…?inline=1`, the origin is asked on the
-  chat and 一直允许'd, the title read back through `page.info()`, the origin kept on the
-  browser row and the tab still open in that Chrome), `12-plug` (a fresh project with no
+  opens a page of the project served by `/files/…?inline=1` without an ask, the title
+  read back through `page.info()`, the tab still open in that Chrome), `12-plug` (a fresh project with no
   `.longx`: asked for a custom tool `greet(name)`, the agent reads `longx/writing-plugs.md`
   first — the Local paragraph names it, the reference no longer rides along —, writes
   `local/plugs/*.exs` + `local/agent.exs`, calls the tool at its next step and answers

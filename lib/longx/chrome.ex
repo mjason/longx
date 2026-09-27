@@ -36,8 +36,6 @@ defmodule Longx.Chrome do
       action Bridge, :revoke_chrome_browser, :revoke_chrome_browser
       action Bridge, :rename_chrome_browser, :rename_chrome_browser
       action Bridge, :set_chrome_browser_max_tabs, :set_chrome_browser_max_tabs
-      action Bridge, :set_chrome_origin, :set_chrome_origin
-      action Bridge, :delete_chrome_origin, :delete_chrome_origin
       action Bridge, :set_chrome_alias, :set_chrome_alias
       action Bridge, :delete_chrome_alias, :delete_chrome_alias
       action Bridge, :set_chrome_default_alias, :set_chrome_default_alias
@@ -173,24 +171,6 @@ defmodule Longx.Chrome do
     end
   end
 
-  @doc "Allows or denies an origin (`https://example.com`) in this browser for good."
-  @spec set_origin(String.t(), String.t(), :allow | :deny) :: {:ok, Browser.t()} | {:error, term}
-  def set_origin(id, origin, access) when access in [:allow, :deny] do
-    with {:ok, browser} <- get_browser(id),
-         {:ok, origin} <- Longx.Chrome.Policy.origin(origin) do
-      origins = Map.put(browser.origins, origin, %{"access" => Atom.to_string(access)})
-      Ash.update(browser, %{origins: origins}, action: :set_origins) |> tap(fn _ -> changed() end)
-    end
-  end
-
-  @spec delete_origin(String.t(), String.t()) :: {:ok, Browser.t()} | {:error, term}
-  def delete_origin(id, origin) do
-    with {:ok, browser} <- get_browser(id) do
-      Ash.update(browser, %{origins: Map.delete(browser.origins, origin)}, action: :set_origins)
-      |> tap(fn _ -> changed() end)
-    end
-  end
-
   @doc "Connected and approved."
   @spec online?(String.t()) :: boolean
   def online?(id), do: Connection.online?(id)
@@ -206,7 +186,6 @@ defmodule Longx.Chrome do
         status: Atom.to_string(browser.status),
         connected: Connection.connected?(browser.id),
         max_tabs: browser.max_tabs,
-        origins: browser.origins,
         last_seen_at: browser.last_seen_at,
         approved_at: browser.approved_at,
         tabs:

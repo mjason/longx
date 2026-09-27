@@ -43,7 +43,6 @@ defmodule Longx.Chrome.Types do
           status: [type: :string, allow_nil?: false],
           connected: [type: :boolean, allow_nil?: false],
           max_tabs: [type: :integer, allow_nil?: false],
-          origins: [type: :map, allow_nil?: false],
           last_seen_at: [type: :utc_datetime],
           approved_at: [type: :utc_datetime],
           tabs: [type: {:array, BrowserTabs}, allow_nil?: false, constraints: [nil_items?: false]],

@@ -1,12 +1,12 @@
 // Settings → 浏览器: the person's browsers reached through the Longx Chrome
 // extension — the extension to download and install unpacked, the pairing
 // requests to allow, every paired browser (name, device, online, the tabs
-// sessions hold in it, its tab limit, the origins the agent may open), and
+// sessions hold in it, its tab limit), and
 // the aliases a project's description names (`plug Browser, browser: "qa"`).
 import { useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { CheckCircle2, Circle, Download, Globe, X } from "lucide-react";
+import { CheckCircle2, Circle, Download } from "lucide-react";
 import {
   type ChromeBrowser,
   useApproveBrowser,
@@ -14,7 +14,6 @@ import {
   useChromeBrowsers,
   useChromeExtension,
   useDeleteChromeAlias,
-  useDeleteOrigin,
   useRejectBrowser,
   useRenameBrowser,
   useRevokeBrowser,
@@ -121,7 +120,6 @@ function deviceLine(b: ChromeBrowser) {
 function BrowserRow({ browser: b }: { browser: ChromeBrowser }) {
   const rename = useRenameBrowser();
   const limit = useSetBrowserMaxTabs();
-  const dropOrigin = useDeleteOrigin();
   const revoke = useRevokeBrowser();
   const [name, setName] = useState(b.name);
   const [maxTabs, setMaxTabs] = useState(String(b.maxTabs));
@@ -184,19 +182,6 @@ function BrowserRow({ browser: b }: { browser: ChromeBrowser }) {
         ) : (
           <span>{s.noTabs}</span>
         )}
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5 text-xs" data-testid="browser-origins">
-        <Globe className="text-muted-foreground size-3.5" />
-        {Object.keys(b.origins).length === 0 ? <span className="text-muted-foreground">{s.noOrigins}</span> : null}
-        {Object.entries(b.origins).map(([origin, rule]) => (
-          <span key={origin} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${rule.access === "deny" ? "border-destructive/40 text-destructive" : ""}`}>
-            <code className="font-mono">{origin}</code>
-            <span className="text-muted-foreground">{rule.access === "deny" ? s.denied : s.allowed}</span>
-            <button type="button" aria-label={s.removeOrigin(origin)} className="text-muted-foreground hover:text-foreground" onClick={() => dropOrigin.mutate({ id: b.id, origin }, { onError })}>
-              <X className="size-3" />
-            </button>
-          </span>
-        ))}
       </div>
       <AlertDialog open={revoking} onOpenChange={setRevoking}>
         <AlertDialogContent>

@@ -3,9 +3,9 @@ defmodule Longx.Chrome.Browser do
   One of the person's browsers, paired through the Longx Chrome extension:
   the extension's own `install_id`, a name (the device's, editable), the
   device, whether the person allowed it (`pending` → `approved` →
-  `revoked`), the sha256 of the token it connects with, how many tabs it
-  may hold for all projects together, and the origins the agent may open
-  in it (`%{"https://example.com" => %{"access" => "allow" | "deny"}}`).
+  `revoked`), the sha256 of the token it connects with, and how many tabs
+  it may hold for all projects together. Which sites the agent may open in
+  it is not a question: the browser is the person's and they paired it.
   """
 
   # No GraphQL type of its own: the page reads browsers through `Longx.Chrome.Bridge`'s
@@ -58,10 +58,6 @@ defmodule Longx.Chrome.Browser do
       accept [:max_tabs]
     end
 
-    update :set_origins do
-      accept [:origins]
-    end
-
     read :by_install_id do
       argument :install_id, :string, allow_nil?: false
       get? true
@@ -95,7 +91,6 @@ defmodule Longx.Chrome.Browser do
 
     attribute :token_hash, :string, sensitive?: true
     attribute :max_tabs, :integer, default: 6, allow_nil?: false, public?: true
-    attribute :origins, :map, default: %{}, allow_nil?: false, public?: true
     attribute :last_seen_at, :utc_datetime, public?: true
     attribute :approved_at, :utc_datetime, public?: true
 

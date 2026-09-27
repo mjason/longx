@@ -4,14 +4,14 @@ defmodule Longx.Chrome.Session do
   resolved on first use), its own **tab group** there (`Longx · <session>`;
   the tabs it opens go in, a tab the person drags in is handed over, one
   dragged out is taken back), the tabs' debugger attachments, a bounded
-  console buffer per tab, the origins the person allowed for this turn or
-  this session, and the JavaScript runtime (`Longx.Chrome.Runtime`) whose
-  cells drive it all.
+  console buffer per tab, and the JavaScript runtime (`Longx.Chrome.Runtime`)
+  whose cells drive it all.
 
   The runtime's host calls come here (`cdp/2`, from the runtime's task):
-  `tab:<id>` targets are checked (this session's tab, an allowed method,
-  an allowed origin for `Page.navigate` — the person is asked about a new
-  one) and then sent to the extension as `chrome.debugger.sendCommand`;
+  `tab:<id>` targets are checked (this session's tab, an allowed method, an
+  http(s) URL for `Page.navigate` — no site is asked about: the browser is
+  the person's and they paired it) and then sent to the extension as
+  `chrome.debugger.sendCommand`;
   `longx` targets are the session's own methods (`longx.tabs.open / list /
   close`, `longx.console`). Tabs are counted against the project's
   `max_tabs` (all its sessions together) and the browser's.
@@ -28,7 +28,7 @@ defmodule Longx.Chrome.Session do
   require Logger
 
   alias Longx.Chrome
-  alias Longx.Chrome.{Aliases, Connection, Policy, Runtime, Tabs}
+  alias Longx.Chrome.{Aliases, Connection, Runtime, Tabs}
 
   @registry Longx.Chrome.SessionRegistry
   @supervisor Longx.Chrome.SessionSupervisor
@@ -109,34 +109,11 @@ defmodule Longx.Chrome.Session do
 
   @doc "A host call from the runtime (`%{target, method, params, runtime}`), answered as the cell sees it."
   @spec cdp(pid, map) :: {:ok, term} | {:error, String.t()}
-  def cdp(session, %{target: target, method: method, params: params, runtime: rt}) do
+  def cdp(session, %{target: target, method: method, params: params, runtime: _rt}) do
     case GenServer.call(session, {:prepare, target, method, params}, 60_000) do
-      {:reply, value} ->
-        {:ok, value}
-
-      {:send, browser_id, args} ->
-        send_command(browser_id, args)
-
-      {:ask, browser_id, origin, url} ->
-        Runtime.hold(rt)
-        scope = ask_person(session, browser_id, origin)
-        Runtime.resume(rt)
-
-        case GenServer.call(session, {:allow, origin, scope}, 60_000) do
-          :ok ->
-            case GenServer.call(session, {:prepare, target, method, params}, 60_000) do
-              {:send, browser_id, args} -> send_command(browser_id, args)
-              {:reply, value} -> {:ok, value}
-              {:error, message} -> {:error, message}
-              {:ask, _, _, _} -> {:error, "navigation to #{origin} was not allowed"}
-            end
-
-          :denied ->
-            {:error, "the person did not allow opening #{origin} (#{url})"}
-        end
-
-      {:error, message} ->
-        {:error, message}
+      {:reply, value} -> {:ok, value}
+      {:send, browser_id, args} -> send_command(browser_id, args)
+      {:error, message} -> {:error, message}
     end
   catch
     :exit, _ -> {:error, "the browser session is gone"}
@@ -164,46 +141,6 @@ defmodule Longx.Chrome.Session do
     end
   end
 
-  # the person decides about an origin; a dismissal or a timeout is a no
-  defp ask_person(session, _browser_id, origin) do
-    thread_id = GenServer.call(session, :thread_id)
-
-    request = %{
-      title: "允许在你的浏览器里打开 #{origin}？",
-      text: "agent 想在你的 Chrome 里打开这个站点。允许一次（本轮）、这个会话内一直允许、以后都允许，或拒绝。",
-      url: nil,
-      fields: [],
-      spec: %{
-        "$type" => "Row",
-        "children" => [
-          %{"$type" => "Button", "label" => "本轮", "$action" => %{"type" => "turn"}},
-          %{"$type" => "Button", "label" => "这个会话", "$action" => %{"type" => "session"}},
-          %{"$type" => "Button", "label" => "一直允许", "$action" => %{"type" => "always"}},
-          %{
-            "$type" => "Button",
-            "label" => "拒绝",
-            "variant" => "outline",
-            "$action" => %{"type" => "deny"}
-          }
-        ]
-      },
-      meta: %{"origin" => origin},
-      callback?: false,
-      timeout: 600_000,
-      item_id: nil
-    }
-
-    case Longx.Agent.ask(thread_id, request) do
-      {:ok, %{"action" => %{"type" => scope}}} when scope in ~w(turn session always) ->
-        String.to_atom(scope)
-
-      _ ->
-        :deny
-    end
-  catch
-    :exit, _ -> :deny
-  end
-
   ## GenServer
 
   defstruct thread_id: nil,
@@ -215,10 +152,6 @@ defmodule Longx.Chrome.Session do
             group_id: nil,
             # tab id => %{attached, refused, url, title, console}
             tabs: %{},
-            # origin => %{"access" => "allow" | "deny"}, for the session
-            session_origins: %{},
-            # the same, gone at the turn's end
-            turn_origins: %{},
             runtime: nil,
             agent_ref: nil,
             close_timer: nil
@@ -251,8 +184,6 @@ defmodule Longx.Chrome.Session do
   end
 
   @impl true
-  def handle_call(:thread_id, _from, state), do: {:reply, state.thread_id, state}
-
   def handle_call(:runtime, _from, state) do
     state = watch_agent(state)
 
@@ -285,28 +216,6 @@ defmodule Longx.Chrome.Session do
     {:reply, reply, state}
   end
 
-  def handle_call({:allow, origin, scope}, _from, state) do
-    entry = %{"access" => "allow"}
-
-    state =
-      case scope do
-        :turn ->
-          %{state | turn_origins: Map.put(state.turn_origins, origin, entry)}
-
-        :session ->
-          %{state | session_origins: Map.put(state.session_origins, origin, entry)}
-
-        :always ->
-          if state.browser_id, do: Chrome.set_origin(state.browser_id, origin, :allow)
-          %{state | session_origins: Map.put(state.session_origins, origin, entry)}
-
-        :deny ->
-          %{state | turn_origins: Map.put(state.turn_origins, origin, %{"access" => "deny"})}
-      end
-
-    {:reply, if(scope == :deny, do: :denied, else: :ok), state}
-  end
-
   @impl true
   def handle_cast({:options, opts}, state), do: {:noreply, apply_options(state, opts)}
 
@@ -316,7 +225,7 @@ defmodule Longx.Chrome.Session do
         if tab.attached, do: detach(acc, id), else: acc
       end)
 
-    {:noreply, %{state | turn_origins: %{}}}
+    {:noreply, state}
   end
 
   @impl true
@@ -418,38 +327,26 @@ defmodule Longx.Chrome.Session do
   defp prepare(state, target, _method, _params),
     do: {{:error, "unknown target #{inspect(target)}: use \"tab:<id>\" or \"longx\""}, state}
 
+  # any http(s) page, or a blank one: the browser is the person's own, no site is asked about
   defp prepare_navigation(state, tab_id, %{"url" => url} = params) when is_binary(url) do
-    if Policy.blank?(url) do
+    if navigable?(url) do
       {{:send, state.browser_id, [%{"tabId" => tab_id}, "Page.navigate", params]}, state}
     else
-      case verdict(state, url) do
-        {:allow, _origin} ->
-          {{:send, state.browser_id, [%{"tabId" => tab_id}, "Page.navigate", params]}, state}
-
-        {:deny, origin} ->
-          {{:error, "opening #{origin} is not allowed in this browser (the person's settings)"},
-           state}
-
-        {:ask, origin} ->
-          {{:ask, state.browser_id, origin, url}, state}
-
-        {:error, message} ->
-          {{:error, message}, state}
-      end
+      {{:error, "not an http(s) URL: #{url}"}, state}
     end
   end
 
   defp prepare_navigation(state, _tab_id, _params),
     do: {{:error, "Page.navigate needs a url"}, state}
 
-  defp verdict(state, url) do
-    browser_origins =
-      case Chrome.get_browser(state.browser_id) do
-        {:ok, browser} -> browser.origins
-        _ -> %{}
-      end
+  defp navigable?(url) do
+    case URI.parse(String.trim(url)) do
+      %URI{scheme: scheme, host: host} when scheme in ["http", "https"] and is_binary(host) ->
+        host != ""
 
-    Policy.check(url, browser_origins, Map.merge(state.session_origins, state.turn_origins))
+      _ ->
+        String.trim(url) in ["about:blank", ""]
+    end
   end
 
   defp tab_id(id) do

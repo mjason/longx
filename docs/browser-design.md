@@ -14,8 +14,9 @@
   Extension 的形状，能上 Web Store）。
 - **提示词用别人的原文**：原语和配方用 browser-use-pi 的系统提示词（MIT），什么时候要问人用
   codex 的 Computer/Browser Use Confirmation Policy（`models.json`）；只改 Longx 不同的地方。
-- **边界在 Longx 这边**：哪个项目用哪个浏览器（描述文件）、哪些站点可去（每浏览器的 origins，
-  首次访问问人）、几个标签（项目 `max_tabs`、浏览器总上限）。
+- **边界在 Longx 这边**：哪个项目用哪个浏览器（描述文件）、几个标签（项目 `max_tabs`、浏览器
+  总上限）。哪些站点可去不设限：浏览器是本人的、本人配对的（0.2.67 的"首次访问问人"在 0.2.69
+  去掉了——多一次打断，没有换来什么）。
 
 ## 1. 一句话模型
 
@@ -78,12 +79,11 @@ channel 进程按 `id` 记 `pending`，`result` 回来 `GenServer.reply`；超�
 ```
 lib/longx/chrome.ex                 域（Ash）；pairing / aliases / directory 的门面函数
 lib/longx/chrome/browser.ex         Browser 行：install_id, name, device, status, token_hash,
-                                    max_tabs (6), origins (map), last_seen_at, approved_at
+                                    max_tabs (6), last_seen_at, approved_at
 lib/longx/chrome/aliases.ex         别名 → [browser_id]，默认别名；Setting `chrome_aliases`
 lib/longx/chrome/connection.ex      channel 进程注册表（Registry, 按 browser_id）+ call/4
-lib/longx/chrome/session.ex         每会话一个：标签组、标签、CDP 代理、策略、console 缓冲
+lib/longx/chrome/session.ex         每会话一个：标签组、标签、CDP 代理、console 缓冲
 lib/longx/chrome/runtime.ex         每会话一个 `shim js` 进程：execute / interrupt / 宿主调用
-lib/longx/chrome/policy.ex          origin 检查（allow / deny / ask）
 lib/longx/chrome/tabs.ex            配额：Registry 重复键 {:project, id} / {:browser, id}
 lib/longx_web/channels/chrome_socket.ex, chrome_channel.ex
 lib/longx_web/controllers/extension_controller.ex
@@ -123,10 +123,7 @@ native/shim/js.go                   `shim js`：goja + eventloop + JSON 行协�
   - **伪方法**（`target: "longx"`）：`longx.tabs.open {url}`、`longx.tabs.list`、
     `longx.tabs.close {id}`、`longx.console {tab, clear}`（缓冲的 `Runtime.consoleAPICalled` /
     `Log.entryAdded` / `Runtime.exceptionThrown`，每标签最近 200 条）。
-- **策略** `Policy.check(browser, url)`：`origins[origin].access` allow / deny；没有 → 一个
-  Ask（`Longx.Agent.ask/2`：「允许 agent 在你的 Chrome 里打开 github.com？本轮 / 这个会话 /
-  一直 / 拒绝」）；「一直」写回浏览器行，「这个会话」记在 Session，「本轮」记在 Session 到
-  回合结束。问人期间运行时的 cell 计时暂停。
+- **导航**：`Page.navigate` 只看 URL 的形状（http(s) 或 `about:blank`），不问人、不记站点。
 - **回合结束**：插件的 `:turn_end` → `Session.turn_ended/1` → 所有标签 `chrome.debugger.detach`
   （横幅消失），标签保留；下一回合按需再 attach。
 - **结束**：Session 监视这个线程的 `Longx.Agent` 进程；agent 退出（空闲）后 60 s 内没有新的
@@ -208,14 +205,14 @@ snapshot() / screenshot()    = page 的
 ## 4. 页面
 
 - **Settings → 浏览器**（`BrowsersSection`）：待批准（允许 / 拒绝）；已配对列表（名字可改、
-  设备、在线、几个会话在用、`max_tabs`、origins 列表可删、吊销）；别名卡（别名 → 浏览器们、
+  设备、在线、几个会话在用、`max_tabs`、吊销）；别名卡（别名 → 浏览器们、
   默认别名）；扩展卡（下载 zip、版本、安装步骤、需要 Chrome 118+）。
 - **项目设置**：定义卡里 `Browser` 插件出现时显示解析到哪台、是否在线（只读）。
 - **聊天**：`javascript` 是一个 tool-call 行：`title`、代码折叠、输出是终端块、截图内联。
 
 RPC（`Longx.Chrome.Bridge`，无数据资源）：`list_chrome_browsers`、`approve_chrome_browser`、
 `reject_chrome_browser`、`revoke_chrome_browser`、`rename_chrome_browser`、
-`set_chrome_browser_max_tabs`、`delete_chrome_origin`、`chrome_aliases`、`set_chrome_alias`、
+`set_chrome_browser_max_tabs`、`chrome_aliases`、`set_chrome_alias`、
 `delete_chrome_alias`、`set_chrome_default_alias`、`chrome_extension`（下载地址、版本）。
 页面每 3 秒重新拉一次列表（`useChromeBrowsers`：在线、在用的标签页都是活的状态）；`Longx.Notify`
 一条 `approval` 事件通知有浏览器请求接入。
@@ -235,7 +232,7 @@ RPC（`Longx.Chrome.Bridge`，无数据资源）：`list_chrome_browsers`、`app
 
 ## 6. 分期
 
-1. **本分支**：扩展 + 配对 + 中继；`shim js` + 运行时 + 会话 + 标签组 + 配额 + origins 询问；
+1. **本分支**：扩展 + 配对 + 中继；`shim js` + 运行时 + 会话 + 标签组 + 配额；
    `javascript` 工具与提示词；截图只留两张；Settings → 浏览器（含下载）；测试与 e2e。
 2. Fetch 拦截强制域名策略（重定向、链接也拦）、跨域 iframe（`sessionId`，Chrome ≥125）、
    对话框、下载、上传、`browser.waitFor(event)`、Web Store 上架。

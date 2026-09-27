@@ -40,7 +40,6 @@ import {
   sentryTest,
   killCommand,
   approveChromeBrowser,
-  deleteChromeOrigin,
   setChromeAlias,
   listProviders,
   listCredentials,
@@ -596,7 +595,7 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(killCommand).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "cmd_1" } })));
   });
 
-  test("browsers: the extension to download, a pairing request allowed, the paired browser's origins and alias", async () => {
+  test("browsers: the extension to download, a pairing request allowed, the paired browser's alias", async () => {
     setViewport(1280);
     const user = userEvent.setup();
     renderAt("/settings/browsers");
@@ -611,14 +610,11 @@ describe("SettingsPage", () => {
     expect(pending).toHaveTextContent("MJ 的 Windows · Chrome 153");
     await user.click(within(pending).getByRole("button", { name: "允许" }));
     await waitFor(() => expect(approveChromeBrowser).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "b1" } })));
-    // the paired one: online, its alias, the session using it, an origin rule removed
+    // the paired one: online, its alias, the session using it
     const row = within(section).getByTestId("browser-row");
     expect(row).toHaveTextContent("在线");
     expect(row).toHaveTextContent("qa-chrome");
     expect(row).toHaveTextContent("修登录页 · 2 个标签");
-    expect(within(row).getByTestId("browser-origins")).toHaveTextContent("https://github.com");
-    await user.click(within(row).getByRole("button", { name: "删除站点规则 https://github.com" }));
-    await waitFor(() => expect(deleteChromeOrigin).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "b2", origin: "https://github.com" } })));
     // aliases: the existing one is the default; a new one is saved with the picked browser
     const aliases = within(section).getByTestId("chrome-aliases");
     expect(within(aliases).getByTestId("alias-row")).toHaveTextContent("qa-chrome");

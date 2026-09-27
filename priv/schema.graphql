@@ -66,7 +66,6 @@ type ChromeBrowserTabs {
 type ChromeBrowser {
   tabs: [ChromeBrowserTabs!]!
   status: String!
-  origins: Json!
   name: String!
   maxTabs: Int!
   lastSeenAt: DateTime
@@ -2680,17 +2679,6 @@ input SetChromeAliasInput {
   browsers: [String!]!
 }
 
-input DeleteChromeOriginInput {
-  id: String!
-  origin: String!
-}
-
-input SetChromeOriginInput {
-  id: String!
-  origin: String!
-  access: String!
-}
-
 input SetChromeBrowserMaxTabsInput {
   id: String!
   maxTabs: Int!
@@ -4160,8 +4148,6 @@ type RootMutationType {
   revokeChromeBrowser(input: RevokeChromeBrowserInput!): Ok!
   renameChromeBrowser(input: RenameChromeBrowserInput!): Ok!
   setChromeBrowserMaxTabs(input: SetChromeBrowserMaxTabsInput!): Ok!
-  setChromeOrigin(input: SetChromeOriginInput!): Ok!
-  deleteChromeOrigin(input: DeleteChromeOriginInput!): Ok!
   setChromeAlias(input: SetChromeAliasInput!): ChromeAliases!
   deleteChromeAlias(input: DeleteChromeAliasInput!): ChromeAliases!
   setChromeDefaultAlias(input: SetChromeDefaultAliasInput): ChromeAliases!

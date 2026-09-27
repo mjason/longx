@@ -1,6 +1,6 @@
 // The person's browsers reached through the Longx Chrome extension
 // (Longx.Chrome): the paired extensions with their live state, the
-// approvals, names, limits and origins, the aliases descriptions name, and
+// approvals, names and limits, the aliases descriptions name, and
 // where the extension is downloaded from.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -8,7 +8,6 @@ import {
   chromeAliases,
   chromeExtension,
   deleteChromeAlias,
-  deleteChromeOrigin,
   listChromeBrowsers,
   rejectChromeBrowser,
   renameChromeBrowser,
@@ -16,7 +15,6 @@ import {
   setChromeAlias,
   setChromeBrowserMaxTabs,
   setChromeDefaultAlias,
-  setChromeOrigin,
 } from "@/core/api";
 import { unwrap } from "./projects";
 
@@ -27,7 +25,6 @@ export type ChromeBrowser = {
   status: "pending" | "approved" | "revoked";
   connected: boolean;
   maxTabs: number;
-  origins: Record<string, { access: "allow" | "deny" }>;
   lastSeenAt: string | null;
   approvedAt: string | null;
   tabs: { threadId: string; title: string; tabs: number }[];
@@ -99,16 +96,6 @@ export function useRenameBrowser() {
 
 export function useSetBrowserMaxTabs() {
   return useBrowsersMutation(async (input: { id: string; maxTabs: number }) => unwrap(await setChromeBrowserMaxTabs({ input })));
-}
-
-export function useSetOrigin() {
-  return useBrowsersMutation(async (input: { id: string; origin: string; access: "allow" | "deny" }) =>
-    unwrap(await setChromeOrigin({ input })),
-  );
-}
-
-export function useDeleteOrigin() {
-  return useBrowsersMutation(async (input: { id: string; origin: string }) => unwrap(await deleteChromeOrigin({ input })));
 }
 
 function useAliasesMutation<T>(fn: (input: T) => Promise<ChromeAliases>) {

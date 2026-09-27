@@ -2,7 +2,7 @@ defmodule Longx.ChromeTest do
   use Longx.DataCase, async: false
 
   alias Longx.Chrome
-  alias Longx.Chrome.{Aliases, Browser, Connection, Policy}
+  alias Longx.Chrome.{Aliases, Browser, Connection}
 
   @device %{"name" => "MJ 的 MacBook · Chrome 153", "platform" => "mac", "extension" => "0.1.0"}
 
@@ -58,15 +58,9 @@ defmodule Longx.ChromeTest do
                Chrome.connect("install-4", token, %{"name" => "Renamed device"})
     end
 
-    test "origins and max tabs are kept on the row" do
+    test "max tabs are kept on the row" do
       {:ok, b} = Chrome.connect("install-5", nil, @device)
-
-      assert {:ok, %Browser{origins: %{"https://github.com" => %{"access" => "allow"}}}} =
-               Chrome.set_origin(b.id, "https://GitHub.com/mjason/longx", :allow)
-
-      assert {:ok, %Browser{origins: %{}}} = Chrome.delete_origin(b.id, "https://github.com")
       assert {:ok, %Browser{max_tabs: 2}} = Chrome.set_max_tabs(b.id, 2)
-      assert {:error, _} = Chrome.set_origin(b.id, "ftp://x", :allow)
     end
 
     test "the directory says whether a browser is connected" do
@@ -166,27 +160,6 @@ defmodule Longx.ChromeTest do
 
       :ok = Aliases.set_default("qa")
       assert %{browser: %{alias: nil, state: "online"}} = Longx.Projects.agent_definition(project)
-    end
-  end
-
-  describe "policy" do
-    test "origins are normalised; the verdict comes from the browser, then the session, else ask" do
-      assert {:ok, "https://example.com"} = Policy.origin("https://Example.com/a/b?c")
-      assert {:ok, "http://localhost:7798"} = Policy.origin("http://localhost:7798/p/x")
-      assert {:ok, "https://x.test"} = Policy.origin("https://x.test:443/")
-      assert {:error, _} = Policy.origin("chrome://settings")
-      assert Policy.blank?("about:blank")
-
-      browser = %{
-        "https://a.test" => %{"access" => "allow"},
-        "https://b.test" => %{"access" => "deny"}
-      }
-
-      session = %{"https://c.test" => %{"access" => "allow"}}
-      assert {:allow, "https://a.test"} = Policy.check("https://a.test/page", browser, session)
-      assert {:deny, "https://b.test"} = Policy.check("https://b.test/", browser, session)
-      assert {:allow, "https://c.test"} = Policy.check("https://c.test/x", browser, session)
-      assert {:ask, "https://d.test"} = Policy.check("https://d.test/", browser, session)
     end
   end
 end

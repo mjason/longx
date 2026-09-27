@@ -1,5 +1,5 @@
 defmodule LongxWeb.ChromeRpcTest do
-  @moduledoc "The person's browsers on the wire: the directory, approvals, names, limits, origins, aliases, the extension."
+  @moduledoc "The person's browsers on the wire: the directory, approvals, names, limits, aliases, the extension."
   use LongxWeb.ConnCase, async: false
 
   alias Longx.Chrome
@@ -11,7 +11,7 @@ defmodule LongxWeb.ChromeRpcTest do
     :ok
   end
 
-  test "a pending browser is listed, approved, renamed, limited, given origins, and revoked", %{
+  test "a pending browser is listed, approved, renamed, limited, and revoked", %{
     conn: conn
   } do
     {:ok, b} = Chrome.connect("rpc-1", nil, %{"name" => "Test Chrome", "platform" => "linux"})
@@ -45,26 +45,13 @@ defmodule LongxWeb.ChromeRpcTest do
                "input" => %{"id" => id, "maxTabs" => 3}
              })
 
-    assert %{"success" => true} =
-             rpc(conn, "set_chrome_origin", %{
-               "fields" => ["ok"],
-               "input" => %{"id" => id, "origin" => "https://github.com/x", "access" => "allow"}
-             })
-
-    assert %{"success" => false, "errors" => [%{"fields" => ["origin"]}]} =
-             rpc(conn, "set_chrome_origin", %{
-               "fields" => ["ok"],
-               "input" => %{"id" => id, "origin" => "ftp://x", "access" => "allow"}
-             })
-
     assert %{
              "data" => %{
                "browsers" => [
                  %{
                    "name" => "qa 机",
                    "status" => "approved",
-                   "maxTabs" => 3,
-                   "origins" => %{"https://github.com" => %{"access" => "allow"}}
+                   "maxTabs" => 3
                  }
                ]
              }
@@ -72,15 +59,9 @@ defmodule LongxWeb.ChromeRpcTest do
              rpc(conn, "list_chrome_browsers", %{"fields" => ["browsers"]})
 
     assert %{"success" => true} =
-             rpc(conn, "delete_chrome_origin", %{
-               "fields" => ["ok"],
-               "input" => %{"id" => id, "origin" => "https://github.com"}
-             })
-
-    assert %{"success" => true} =
              rpc(conn, "revoke_chrome_browser", %{"fields" => ["ok"], "input" => %{"id" => id}})
 
-    assert %{"data" => %{"browsers" => [%{"status" => "revoked", "origins" => %{}}]}} =
+    assert %{"data" => %{"browsers" => [%{"status" => "revoked"}]}} =
              rpc(conn, "list_chrome_browsers", %{"fields" => ["browsers"]})
 
     assert %{"success" => false, "errors" => [%{"fields" => ["id"]}]} =

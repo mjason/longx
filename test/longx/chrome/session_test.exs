@@ -1,6 +1,6 @@
 defmodule Longx.Chrome.SessionTest do
   # a conversation's browser session against the fake extension: tabs in the
-  # session's group, the quota, the origin policy, the console buffer, the
+  # session's group, the quota, what a navigation may open, the console buffer, the
   # turn's end, the close
   use LongxWeb.ChannelCase, async: false
 
@@ -48,9 +48,8 @@ defmodule Longx.Chrome.SessionTest do
     FakeChrome.serve_task(ctx.socket, ctx.responder, task)
   end
 
-  test "a cell opens a tab in the session's group, navigates to an allowed origin and reads the page",
+  test "a cell opens a tab in the session's group, navigates and reads the page",
        ctx do
-    {:ok, _} = Chrome.set_origin(ctx.browser_id, "http://site.test", :allow)
     ensure!(ctx.thread)
 
     assert {:ok,
@@ -93,7 +92,6 @@ defmodule Longx.Chrome.SessionTest do
   end
 
   test "the project's tab limit counts, and tabs.close frees a slot", ctx do
-    {:ok, _} = Chrome.set_origin(ctx.browser_id, "http://site.test", :allow)
     ensure!(ctx.thread, max_tabs: 1)
     assert {:ok, %{error: nil}} = run(ctx, "await page.goto('http://site.test/')")
 
@@ -111,24 +109,22 @@ defmodule Longx.Chrome.SessionTest do
              )
   end
 
-  test "an origin nobody allowed is refused when no one can be asked; a denied origin is refused outright",
+  test "a site is opened without asking anyone; only http(s) URLs and about:blank navigate",
        ctx do
-    {:ok, _} = Chrome.set_origin(ctx.browser_id, "http://bad.test", :deny)
     ensure!(ctx.thread)
-    # no agent process for this thread: the ask cannot be put to anyone, so it is a no
-    assert {:ok, %{error: error}} = run(ctx, "await page.goto('http://unknown.test/')")
-    assert error =~ "did not allow opening http://unknown.test"
-    assert {:ok, %{error: error}} = run(ctx, "await page.goto('http://bad.test/')")
-    assert error =~ "not allowed in this browser"
-    # nothing was navigated
-    refute Enum.any?(FakeChrome.commands(ctx.state, "chrome.debugger.sendCommand"), fn {_,
-                                                                                        [_, m, _]} ->
-             m == "Page.navigate"
-           end)
+    assert {:ok, %{error: nil}} = run(ctx, "await page.goto('http://unknown.test/')")
+    assert {:ok, %{error: error}} = run(ctx, "await page.goto('chrome://settings')")
+    assert error =~ "not an http(s) URL: chrome://settings"
+    # the one navigation, no ask
+    navigations =
+      Enum.filter(FakeChrome.commands(ctx.state, "chrome.debugger.sendCommand"), fn {_, [_, m, _]} ->
+        m == "Page.navigate"
+      end)
+
+    assert [_] = navigations
   end
 
   test "managed CDP domains and cookies are refused; other tab commands pass", ctx do
-    {:ok, _} = Chrome.set_origin(ctx.browser_id, "http://site.test", :allow)
     ensure!(ctx.thread)
     assert {:ok, %{error: nil}} = run(ctx, "await page.goto('http://site.test/')")
 
@@ -150,7 +146,6 @@ defmodule Longx.Chrome.SessionTest do
 
   test "the tab's console is buffered from the extension's events and read with page.console()",
        ctx do
-    {:ok, _} = Chrome.set_origin(ctx.browser_id, "http://site.test", :allow)
     ensure!(ctx.thread)
     assert {:ok, %{error: nil}} = run(ctx, "await page.goto('http://site.test/')")
     [tab_id] = ctx.state |> FakeChrome.tabs() |> Map.keys()
@@ -196,7 +191,6 @@ defmodule Longx.Chrome.SessionTest do
   end
 
   test "the turn's end detaches the debugger from every tab; the next cell attaches again", ctx do
-    {:ok, _} = Chrome.set_origin(ctx.browser_id, "http://site.test", :allow)
     ensure!(ctx.thread)
     assert {:ok, %{error: nil}} = run(ctx, "await page.goto('http://site.test/')")
 
@@ -215,7 +209,6 @@ defmodule Longx.Chrome.SessionTest do
 
   test "a tab the person drags into the group is the session's; one dragged out is not; closing removes the session's own",
        ctx do
-    {:ok, _} = Chrome.set_origin(ctx.browser_id, "http://site.test", :allow)
     ensure!(ctx.thread, max_tabs: 3)
     assert {:ok, %{error: nil}} = run(ctx, "await page.goto('http://site.test/')")
     [own] = ctx.state |> FakeChrome.tabs() |> Map.keys()

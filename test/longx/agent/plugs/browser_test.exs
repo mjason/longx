@@ -123,7 +123,7 @@ defmodule Longx.Agent.Plugs.BrowserTest do
     assert tool.schema["required"] == ["title", "code"]
   end
 
-  test "a cell opens the person's browser after they allow the origin; the screenshot reaches the next request; the turn's end detaches",
+  test "a cell opens the person's browser without asking; the screenshot reaches the next request; the turn's end detaches",
        ctx do
     code =
       "const info = await page.goto('http://site.test/x'); console.log('at', info.url); await screenshot(); return info.url"
@@ -144,15 +144,11 @@ defmodule Longx.Agent.Plugs.BrowserTest do
 
     {:ok, _} = Agent.send(ctx.thread_id, "look at the page")
 
-    # the fake extension serves while the agent runs; the person answers the origin ask
+    # the fake extension serves while the agent runs; nobody is asked before the site opens
     completed =
       FakeChrome.serve(ctx.socket, ctx.responder, fn
-        {:thread, _, "longx/action/request",
-         %{"requestId" => rid, "spec" => spec, "title" => title}} ->
-          assert title =~ "http://site.test"
-          assert %{"children" => [%{"$type" => "Button", "label" => "本轮"} | _]} = spec
-          :ok = Agent.respond(ctx.thread_id, rid, %{"action" => %{"type" => "always"}})
-          :cont
+        {:thread, _, "longx/action/request", params} ->
+          flunk("an ask before opening a site: #{inspect(params)}")
 
         {:thread, _, "turn/completed", params} ->
           {:halt, params}
@@ -162,10 +158,6 @@ defmodule Longx.Agent.Plugs.BrowserTest do
       end)
 
     assert %{"turn" => %{"status" => "completed"}} = completed
-
-    # the person's "always" is on the browser row
-    assert {:ok, %{origins: %{"http://site.test" => %{"access" => "allow"}}}} =
-             Chrome.get_browser(ctx.browser_id)
 
     # the model read the console line, the value and the screenshot note; the image followed as a screenshot message
     assert [_first, %{"input" => input} = second] = requests(requests)
@@ -225,9 +217,9 @@ defmodule Longx.Agent.Plugs.BrowserTest do
     assert %{tabs: [%{attached: false}]} = Session.info(ctx.thread_id)
   end
 
-  test "a refused origin is an error the model reads, and nothing is navigated", ctx do
+  test "a URL that is not http(s) is an error the model reads, and nothing is navigated", ctx do
     code =
-      "try { await page.goto('http://nope.test/') } catch (e) { return 'refused: ' + e.message }"
+      "try { await page.goto('chrome://settings') } catch (e) { return 'refused: ' + e.message }"
 
     requests =
       route!(ctx.bypass, fn body ->
@@ -246,27 +238,17 @@ defmodule Longx.Agent.Plugs.BrowserTest do
     {:ok, _} = Agent.send(ctx.thread_id, "go")
 
     FakeChrome.serve(ctx.socket, ctx.responder, fn
-      {:thread, _, "longx/action/request", %{"requestId" => rid}} ->
-        :ok = Agent.respond(ctx.thread_id, rid, %{"action" => %{"type" => "deny"}})
-        :cont
-
-      {:thread, _, "turn/completed", params} ->
-        {:halt, params}
-
-      _ ->
-        :cont
+      {:thread, _, "turn/completed", params} -> {:halt, params}
+      _ -> :cont
     end)
 
     assert [_first, second] = requests(requests)
-    assert output_of(second) =~ "refused: the person did not allow opening http://nope.test"
+    assert output_of(second) =~ "refused: not an http(s) URL: chrome://settings"
 
     refute Enum.any?(FakeChrome.commands(ctx.state, "chrome.debugger.sendCommand"), fn {_,
                                                                                         [_, m, _]} ->
              m == "Page.navigate"
            end)
-
-    # the browser row learned nothing lasting
-    assert {:ok, %{origins: %{}}} = Chrome.get_browser(ctx.browser_id)
   end
 
   test "the tool describes what the model must know", _ctx do

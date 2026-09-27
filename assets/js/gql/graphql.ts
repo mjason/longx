@@ -666,11 +666,6 @@ export type DeleteChromeAliasInput = {
   name: string;
 };
 
-export type DeleteChromeOriginInput = {
-  id: string;
-  origin: string;
-};
-
 export type DeleteEntryInput = {
   path: string;
   projectId: string | number;
@@ -1896,12 +1891,6 @@ export type SetChromeBrowserMaxTabsInput = {
 
 export type SetChromeDefaultAliasInput = {
   name?: string | null | undefined;
-};
-
-export type SetChromeOriginInput = {
-  access: string;
-  id: string;
-  origin: string;
 };
 
 export type SetDefaultModelInput = {
@@ -3261,7 +3250,7 @@ export type CredentialRedirectUriQuery = { credentialRedirectUri: { uri: string 
 export type ListChromeBrowsersQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type ListChromeBrowsersQuery = { listChromeBrowsers: { browsers: Array<{ status: string, origins: unknown, name: string, maxTabs: number, lastSeenAt: string | null, id: string, device: unknown, connected: boolean, approvedAt: string | null, aliases: Array<string>, tabs: Array<{ title: string, threadId: string, tabs: number }> }> } };
+export type ListChromeBrowsersQuery = { listChromeBrowsers: { browsers: Array<{ status: string, name: string, maxTabs: number, lastSeenAt: string | null, id: string, device: unknown, connected: boolean, approvedAt: string | null, aliases: Array<string>, tabs: Array<{ title: string, threadId: string, tabs: number }> }> } };
 
 export type ChromeAliasesQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -3683,20 +3672,6 @@ export type SetChromeBrowserMaxTabsMutationVariables = Exact<{
 
 
 export type SetChromeBrowserMaxTabsMutation = { setChromeBrowserMaxTabs: { ok: boolean } };
-
-export type SetChromeOriginMutationVariables = Exact<{
-  input: SetChromeOriginInput;
-}>;
-
-
-export type SetChromeOriginMutation = { setChromeOrigin: { ok: boolean } };
-
-export type DeleteChromeOriginMutationVariables = Exact<{
-  input: DeleteChromeOriginInput;
-}>;
-
-
-export type DeleteChromeOriginMutation = { deleteChromeOrigin: { ok: boolean } };
 
 export type SetChromeAliasMutationVariables = Exact<{
   input: SetChromeAliasInput;
@@ -4291,7 +4266,6 @@ export const ListChromeBrowsersDocument = new TypedDocumentString(`
         tabs
       }
       status
-      origins
       name
       maxTabs
       lastSeenAt
@@ -5254,20 +5228,6 @@ export const SetChromeBrowserMaxTabsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetChromeBrowserMaxTabsMutation, SetChromeBrowserMaxTabsMutationVariables>;
-export const SetChromeOriginDocument = new TypedDocumentString(`
-    mutation SetChromeOrigin($input: SetChromeOriginInput!) {
-  setChromeOrigin(input: $input) {
-    ok
-  }
-}
-    `) as unknown as TypedDocumentString<SetChromeOriginMutation, SetChromeOriginMutationVariables>;
-export const DeleteChromeOriginDocument = new TypedDocumentString(`
-    mutation DeleteChromeOrigin($input: DeleteChromeOriginInput!) {
-  deleteChromeOrigin(input: $input) {
-    ok
-  }
-}
-    `) as unknown as TypedDocumentString<DeleteChromeOriginMutation, DeleteChromeOriginMutationVariables>;
 export const SetChromeAliasDocument = new TypedDocumentString(`
     mutation SetChromeAlias($input: SetChromeAliasInput!) {
   setChromeAlias(input: $input) {
