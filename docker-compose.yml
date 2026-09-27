@@ -13,6 +13,8 @@ services:
     restart: unless-stopped
     ports:
       - "7788:7788"
+      # HTTPS, once Settings → HTTPS obtained a certificate for your domain
+      - "7443:7443"
     environment:
       # the address the browser reaches Longx by — OAuth2 logins send the
       # browser back to <LONGX_PUBLIC_URL>/callback/…; an https one (a TLS

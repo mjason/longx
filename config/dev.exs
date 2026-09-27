@@ -69,6 +69,11 @@ config :longx, Longx.Agent.Knowledge, global_dir: Path.expand("../data/agent/kno
 # the headless browser is downloaded here on first use (Longx.Browser.Installer)
 config :longx, Longx.Browser, dir: Path.expand("../data/obscura", __DIR__)
 
+# HTTPS (Longx.Tls): the certificate, and longx-cert downloaded on first use
+config :longx, Longx.Tls,
+  dir: Path.expand("../data/tls", __DIR__),
+  tool_dir: Path.expand("../data/longx-cert", __DIR__)
+
 # Enable dev routes for dashboard and mailbox
 config :longx, dev_routes: true
 

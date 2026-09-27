@@ -47,8 +47,12 @@ import {
   credentialDevicePoll,
   credentialLoginUrl,
   credentialCompleteUrl,
+  setTls,
+  tlsIssue,
+  tlsDisable,
+  tlsStatus,
 } from "@/core/api";
-import { browserIdle, dependencyReport, dependencyTool, model, upgradeIdle } from "@/ui/test-mocks";
+import { browserIdle, dependencyReport, dependencyTool, model, tlsIdle, upgradeIdle } from "@/ui/test-mocks";
 import { page } from "@/core/upgrade";
 import { within } from "@testing-library/react";
 
@@ -63,6 +67,88 @@ beforeAll(async () => {
 const LAZY = { timeout: 5_000 };
 
 describe("SettingsPage", () => {
+  test("https: off at first; the names, a provider and its keys saved, a certificate asked for", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/https");
+    const section = await screen.findByTestId("section-https", {}, LAZY);
+    expect(await within(section).findByTestId("tls-state")).toHaveTextContent("未开启");
+    // the A record to add names this machine
+    expect(section).toHaveTextContent("192.168.2.70");
+
+    await user.type(within(section).getByLabelText("域名"), "lx.example.com");
+    await user.click(within(section).getByRole("combobox", { name: "DNS 服务商" }));
+    // the common ones first, by their Chinese names; the rest searchable
+    await user.click(await screen.findByRole("option", { name: /腾讯云 DNSPod/ }));
+    await user.type(await within(section).findByLabelText("TENCENTCLOUD_SECRET_ID"), "AKID");
+    await user.type(within(section).getByLabelText("TENCENTCLOUD_SECRET_KEY"), "s3cret");
+    await user.click(within(section).getByRole("button", { name: "保存并申请证书" }));
+
+    await waitFor(() =>
+      expect(setTls).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            enabled: true,
+            domains: ["lx.example.com"],
+            provider: "tencentcloud",
+            env: [
+              { name: "TENCENTCLOUD_SECRET_ID", value: "AKID" },
+              { name: "TENCENTCLOUD_SECRET_KEY", value: "s3cret" },
+            ],
+          }),
+        }),
+      ),
+    );
+    await waitFor(() => expect(tlsIssue).toHaveBeenCalled());
+  });
+
+  test("https: served — the address and the expiry, a stored key kept unseen, renewed now, turned off", async () => {
+    setViewport(1280);
+    vi.mocked(tlsStatus).mockResolvedValue({
+      success: true,
+      data: {
+        ...tlsIdle,
+        enabled: true,
+        domains: ["lx.example.com"],
+        provider: "tencentcloud",
+        envSet: ["TENCENTCLOUD_SECRET_ID", "TENCENTCLOUD_SECRET_KEY"],
+        serving: true,
+        url: "https://lx.example.com:7443",
+        toolInstalled: true,
+        certificate: { domains: ["lx.example.com"], notBefore: null, notAfter: new Date(Date.now() + 80 * 86_400_000).toISOString(), serial: "abc", issuedAt: null },
+        resolution: [{ domain: "lx.example.com", addresses: ["192.168.2.70"], here: true }],
+      },
+    } as never);
+    const user = userEvent.setup();
+    renderAt("/settings/https");
+    const section = await screen.findByTestId("section-https", {}, LAZY);
+    const state = await within(section).findByTestId("tls-state");
+    expect(within(state).getByRole("link", { name: "https://lx.example.com:7443" })).toHaveAttribute("href", "https://lx.example.com:7443");
+    expect(state).toHaveTextContent("还有 79 天到期");
+    // the name resolves here
+    expect(within(section).getByTestId("tls-resolution")).toHaveTextContent("指向这台机器");
+    // a stored key: an empty field that says so
+    const key = within(section).getByLabelText("TENCENTCLOUD_SECRET_KEY");
+    expect(key).toHaveValue("");
+    expect(key).toHaveAttribute("placeholder", "已设置，留空保持不变");
+
+    await user.click(within(section).getByRole("button", { name: "立即续期" }));
+    await waitFor(() => expect(tlsIssue).toHaveBeenCalled());
+
+    await user.click(within(section).getByRole("button", { name: "关闭 HTTPS" }));
+    await user.click(await screen.findByRole("button", { name: "确认关闭" }));
+    await waitFor(() => expect(tlsDisable).toHaveBeenCalled());
+  });
+
+  test("https: while the tool downloads, then while the certificate is asked for", async () => {
+    setViewport(1280);
+    vi.mocked(tlsStatus).mockResolvedValueOnce({ success: true, data: { ...tlsIdle, enabled: true, stage: "downloading", received: 9_500_000, total: 19_000_000 } } as never);
+    renderAt("/settings/https");
+    const section = await screen.findByTestId("section-https", {}, LAZY);
+    expect(await within(section).findByText(/正在下载证书工具/)).toBeInTheDocument();
+    expect(section).toHaveTextContent("50%");
+  });
+
   test("files: the global rules beside the built-in lists they stack on; saved", async () => {
     const user = userEvent.setup();
     renderAt("/settings/files");

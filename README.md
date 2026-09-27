@@ -59,8 +59,23 @@ loginctl enable-linger "$USER"                               # 服务器：不�
 手动启动就是 `LONGX_DATA_DIR=~/.longx/data PORT=7788 ~/.longx/app/bin/longx start`；`PHX_HOST` 是生成链接用的主机名
 （默认 `localhost`）；`SECRET_KEY_BASE` / `LONGX_CLOAK_KEY` 可以代替数据目录里自动生成的密钥文件。
 `data/cloak_key` 加密 provider 的 API key，**丢了就读不回来**——备份 `~/.longx/data` 时一起备份。
-要 TLS 就在前面放一个反向代理（Caddy / nginx），Longx 自己只说 http。容器里还有两个变量：`LONGX_PUBLIC_URL`
+HTTPS 见下面「HTTPS（自带证书）」；也可以照旧在前面放一个反向代理（Caddy / nginx）。容器里还有两个变量：`LONGX_PUBLIC_URL`
 是外部访问地址（第三方登录回跳用；设置页里填了以设置页为准），`LONGX_OBSCURA` 指向镜像自带的无头浏览器二进制。
+
+### HTTPS（自带证书）
+
+设置 → HTTPS：填一个你自己的域名（比如 `lx.example.com`），选域名 DNS 所在的服务商（腾讯云 DNSPod、阿里云、华为云、
+Cloudflare……lego 支持的 222 家都能选），填一个只有 DNS 权限的密钥，点「保存并申请证书」。证书由 Let's Encrypt 签发，
+走 DNS 验证：只在域名的公网 DNS 里放一条 TXT 记录，这台机器不需要能从外网访问，所以局域网里的 Longx 也能拿到浏览器认可
+的证书。再在 DNS 里给这个名字加一条 A 记录指向这台机器的局域网地址（页面上会显示地址，并检查现在解析到哪里）。
+
+HTTPS 开在 7443 端口，和 http 的 7788 并存；打开 http 页面会自动跳到 https（可关），健康检查、webhook、API 和
+扩展的连接仍走 http。`http://<这台机器>:7788/settings/https` 这一页永远不跳转：名字解析不到时从这里改或关掉。每天检查一次，到期前 30 天自动续期，换证书不重启、不断连接。开了 HTTPS 以后浏览器能装 PWA、收系统
+通知，OAuth 登录也直接回到 Longx。
+
+申请证书的是 [longx-cert](https://github.com/mjason/longx-cert)（Go，内置 lego）：第一次申请时从它的 Release 下载
+（约 19 MB，按版本和 sha256 固定），放在 `data/longx-cert/`；`LONGX_CERT=/path/to/longx-cert` 可以指定自己的二进制。
+证书在 `data/tls/`（私钥只有属主可读），DNS 密钥加密存在数据库里，页面上不再显示。
 
 ### 升级
 
@@ -272,7 +287,7 @@ agent 要调的带鉴权的 API（含 HTTP 上的 MCP 服务）用**凭证**：�
 「登录」在浏览器里完成。回调地址：OAuth2 提供方只接受 https 或 127.0.0.1（RFC 8252），所以外部访问地址是 https 时
 回调就是 `<外部访问地址>/callback/credentials`，登录后自动回到 Longx；否则用 Longx 自己的 `http://127.0.0.1:<端口>/callback/credentials`
 ——浏览器就在 Longx 这台机器上时同样自动完成，浏览器在别的机器上时登录后会停在一个打不开的 127.0.0.1 地址，把地址栏里的完整
-地址贴回凭证页（或线程上的登录卡片）即可。想省掉粘贴这一步，就给 Longx 配一个 https 域名（TLS 反代）并填到「外部访问地址」。值加密存
+地址贴回凭证页（或线程上的登录卡片）即可。想省掉粘贴这一步，就给 Longx 开 HTTPS（设置 → HTTPS，或 TLS 反代并填到「外部访问地址」）。值加密存
 在数据库里，模型永远看不到：它只知道凭证的名字，用 `http_request(credential, url, …)` 让 Longx 代发——值只发给允许的主机，
 不跟随跳转，回来的内容里值会被抹成 `[redacted:名字]`；快过期的 OAuth2 令牌由后台（Oban，每 5 分钟）自动刷新。agent 也能自
 己声明一个凭证（`credential_create`）并发起登录（`credential_login`）：密钥由你在线程上的遮罩输入框里填，不经过模型。

@@ -17,9 +17,10 @@ import { UpdateSection } from "./settings/UpdateSection";
 import { WatchesSection } from "./settings/WatchesSection";
 import { ProcessesSection } from "./settings/ProcessesSection";
 import { BrowsersSection } from "./settings/BrowsersSection";
+import { HttpsSection } from "./settings/HttpsSection";
 import { FileRulesSection } from "./settings/FileRulesSection";
 
-const SECTIONS = ["models", "dependencies", "knowledge", "agent", "browsers", "files", "credentials", "watches", "processes", "update", "requests", "appearance"] as const;
+const SECTIONS = ["models", "dependencies", "knowledge", "agent", "browsers", "https", "files", "credentials", "watches", "processes", "update", "requests", "appearance"] as const;
 type Section = (typeof SECTIONS)[number];
 
 /**
@@ -112,6 +113,8 @@ function SectionBody({ section }: { section: Section }) {
       return <ProcessesSection />;
     case "browsers":
       return <BrowsersSection />;
+    case "https":
+      return <HttpsSection />;
     case "appearance":
       return <Appearance />;
   }

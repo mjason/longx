@@ -101,6 +101,11 @@ if config_env() == :prod do
   config :longx, Longx.Jobs, dir: Path.join(data_dir, "jobs")
   # the headless browser, downloaded on first use (Longx.Browser.Installer)
   config :longx, Longx.Browser, dir: Path.join(data_dir, "obscura")
+  # HTTPS: the certificate, and longx-cert downloaded on first use (Longx.Tls)
+  config :longx, Longx.Tls,
+    dir: Path.join(data_dir, "tls"),
+    tool_dir: Path.join(data_dir, "longx-cert")
+
   config :longx, Longx.Agent.Knowledge, global_dir: Path.join(data_dir, "agent/knowledge")
 
   # PORT only applies to prod; dev (7798) and test (4002) are fixed in their config files.

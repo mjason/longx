@@ -204,6 +204,48 @@ export const browserIdle = {
   upgradable: false,
 };
 
+/** HTTPS off, nothing saved (Longx.Tls.report) */
+export const tlsIdle = {
+  enabled: false,
+  domains: [] as string[],
+  provider: null as string | null,
+  email: "",
+  directory: "letsencrypt",
+  port: 7443,
+  redirect: true,
+  httpPort: 7788,
+  envSet: [] as string[],
+  stage: "idle",
+  received: 0,
+  total: null as number | null,
+  error: null as string | null,
+  startedAt: null as string | null,
+  finishedAt: null as string | null,
+  certificate: null as null | { domains: string[]; notBefore: string | null; notAfter: string | null; serial: string | null; issuedAt: string | null },
+  serving: false,
+  url: null as string | null,
+  addresses: ["192.168.2.70"],
+  resolution: [] as { domain: string; addresses: string[]; here: boolean }[],
+  toolVersion: "0.1.0",
+  toolInstalled: false,
+};
+
+export const tlsProvidersList = [
+  { code: "alidns", name: "Alibaba Cloud DNS", url: null, aliases: [], credentials: [{ name: "ALICLOUD_ACCESS_KEY", description: "Access key ID" }, { name: "ALICLOUD_SECRET_KEY", description: "Access Key secret" }], additional: [] },
+  { code: "gandi", name: "Gandi", url: null, aliases: [], credentials: [{ name: "GANDI_API_KEY", description: "API key" }], additional: [] },
+  {
+    code: "tencentcloud",
+    name: "Tencent Cloud DNS",
+    url: "https://cloud.tencent.com/product/dns",
+    aliases: [],
+    credentials: [
+      { name: "TENCENTCLOUD_SECRET_ID", description: "Access key ID" },
+      { name: "TENCENTCLOUD_SECRET_KEY", description: "Access Key secret" },
+    ],
+    additional: [{ name: "TENCENTCLOUD_TTL", description: "The TTL of the TXT record used for the DNS challenge in seconds (Default: 600)" }],
+  },
+];
+
 export const upgradeIdle = {
   current: "0.1.0",
   installed: true,
@@ -354,6 +396,11 @@ export function rpcMock() {
       }),
     ),
     browserSettings: vi.fn(async () => ok({ allowPrivateNetwork: false, available: true })),
+    tlsStatus: vi.fn(async () => ok(tlsIdle)),
+    tlsProviders: vi.fn(async () => ok({ providers: tlsProvidersList })),
+    setTls: vi.fn(async (args: { input: Record<string, unknown> }) => ok({ ...tlsIdle, ...args.input, envSet: ((args.input.env as { name: string }[] | undefined) ?? []).map((v) => v.name) })),
+    tlsIssue: vi.fn(async () => ok({ ...tlsIdle, enabled: true, stage: "issuing" })),
+    tlsDisable: vi.fn(async () => ok({ ...tlsIdle, enabled: false })),
     browserStatus: vi.fn(async () => ok({ ...browserIdle, stage: "installed", path: "/data/obscura/0.2.2/x86_64-linux/obscura" })),
     browserInstall: vi.fn(async () => ok({ ...browserIdle, stage: "downloading", received: 0, total: 60_000_000 })),
     setBrowserPrivateNetwork: vi.fn(async ({ input }: { input: { enabled: boolean } }) => ok({ allowPrivateNetwork: input.enabled, available: true })),

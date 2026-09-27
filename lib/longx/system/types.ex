@@ -321,4 +321,162 @@ defmodule Longx.System.Types do
 
     def graphql_type(_), do: :gateway_requests
   end
+
+  defmodule TlsVariable do
+    @moduledoc """
+    One of the DNS provider's variables as the page sends it: a value, `""`
+    to keep the stored one, nil to remove it (`Longx.Tls.save/1`).
+    """
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          name: [type: :string, allow_nil?: false],
+          # "" is not nil here: it keeps the stored value
+          value: [type: :string, constraints: [allow_empty?: true, trim?: false]]
+        ]
+      ]
+
+    def graphql_type(_), do: :tls_variable
+    def graphql_input_type(_), do: :tls_variable_input
+  end
+
+  defmodule TlsCertificate do
+    @moduledoc "the certificate on disk (`Longx.Tls.certificate/0`)"
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          domains: [type: {:array, :string}, allow_nil?: false, constraints: [nil_items?: false]],
+          not_before: [type: :utc_datetime],
+          not_after: [type: :utc_datetime],
+          serial: [type: :string],
+          issued_at: [type: :utc_datetime]
+        ]
+      ]
+
+    def graphql_type(_), do: :tls_certificate
+  end
+
+  defmodule TlsResolution do
+    @moduledoc "what a name resolves to now, and whether that is this machine"
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          domain: [type: :string, allow_nil?: false],
+          addresses: [
+            type: {:array, :string},
+            allow_nil?: false,
+            constraints: [nil_items?: false]
+          ],
+          here: [type: :boolean, allow_nil?: false]
+        ]
+      ]
+
+    def graphql_type(_), do: :tls_resolution
+  end
+
+  defmodule TlsStatus do
+    @moduledoc "`Longx.System.Status.tls_status` and the HTTPS actions (`Longx.Tls.report/0`)"
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          enabled: [type: :boolean, allow_nil?: false],
+          domains: [type: {:array, :string}, allow_nil?: false, constraints: [nil_items?: false]],
+          provider: [type: :string],
+          email: [type: :string, allow_nil?: false, constraints: [allow_empty?: true]],
+          directory: [type: :string, allow_nil?: false],
+          port: [type: :integer, allow_nil?: false],
+          redirect: [type: :boolean, allow_nil?: false],
+          http_port: [type: :integer],
+          # the provider's variables that have a value — never the values
+          env_set: [type: {:array, :string}, allow_nil?: false, constraints: [nil_items?: false]],
+          # the issuance: idle | downloading | verifying | extracting | issuing | failed
+          stage: [type: :string, allow_nil?: false],
+          received: [type: :integer, allow_nil?: false],
+          total: [type: :integer],
+          error: [type: :string],
+          started_at: [type: :utc_datetime],
+          finished_at: [type: :utc_datetime],
+          certificate: [type: TlsCertificate],
+          # HTTPS served now, and where
+          serving: [type: :boolean, allow_nil?: false],
+          url: [type: :string],
+          # this machine's addresses, and what each name resolves to (the A record to add)
+          addresses: [
+            type: {:array, :string},
+            allow_nil?: false,
+            constraints: [nil_items?: false]
+          ],
+          resolution: [
+            type: {:array, TlsResolution},
+            allow_nil?: false,
+            constraints: [nil_items?: false]
+          ],
+          tool_version: [type: :string, allow_nil?: false],
+          tool_installed: [type: :boolean, allow_nil?: false]
+        ]
+      ]
+
+    def graphql_type(_), do: :tls_status
+  end
+
+  defmodule TlsProviderVariable do
+    @moduledoc "an environment variable a DNS provider reads, with lego's description"
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          name: [type: :string, allow_nil?: false],
+          description: [type: :string, constraints: [allow_empty?: true]]
+        ]
+      ]
+
+    def graphql_type(_), do: :tls_provider_variable
+  end
+
+  defmodule TlsProvider do
+    @moduledoc "one of lego's DNS providers (`Longx.Tls.providers/0`)"
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          code: [type: :string, allow_nil?: false],
+          name: [type: :string, allow_nil?: false],
+          url: [type: :string],
+          aliases: [type: {:array, :string}, allow_nil?: false, constraints: [nil_items?: false]],
+          credentials: [
+            type: {:array, TlsProviderVariable},
+            allow_nil?: false,
+            constraints: [nil_items?: false]
+          ],
+          additional: [
+            type: {:array, TlsProviderVariable},
+            allow_nil?: false,
+            constraints: [nil_items?: false]
+          ]
+        ]
+      ]
+
+    def graphql_type(_), do: :tls_provider
+  end
+
+  defmodule TlsProviders do
+    @moduledoc "the result of `Longx.System.Status.tls_providers`"
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          providers: [
+            type: {:array, TlsProvider},
+            allow_nil?: false,
+            constraints: [nil_items?: false]
+          ]
+        ]
+      ]
+
+    def graphql_type(_), do: :tls_providers
+  end
 end

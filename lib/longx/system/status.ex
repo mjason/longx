@@ -267,6 +267,66 @@ defmodule Longx.System.Status do
       end
     end
 
+    # HTTPS with a certificate longx-cert obtains through DNS-01 (Longx.Tls)
+    action :tls_status, Types.TlsStatus do
+      run fn _input, _ -> {:ok, Longx.Tls.report()} end
+    end
+
+    action :tls_providers, Types.TlsProviders do
+      run fn _input, _ -> {:ok, %{providers: Longx.Tls.providers()}} end
+    end
+
+    # saves what is given (the variables: a value, "" to keep, nil to remove)
+    # and brings the listener in line — off stops it, another port moves it
+    action :set_tls, Types.TlsStatus do
+      argument :enabled, :boolean
+      argument :domains, {:array, :string}
+      argument :provider, :string
+      argument :email, :string, constraints: [allow_empty?: true]
+      argument :directory, :string
+      argument :port, :integer
+      argument :redirect, :boolean
+      argument :env, {:array, Types.TlsVariable}
+
+      run fn input, _ ->
+        attrs =
+          input.arguments
+          |> Map.take([:enabled, :domains, :provider, :email, :directory, :port, :redirect])
+          |> Map.put(:env, Map.new(input.arguments[:env] || [], &{&1.name, &1[:value]}))
+
+        case Longx.Tls.save(attrs) do
+          {:ok, _} ->
+            :ok = Longx.Tls.Manager.apply_settings()
+            {:ok, Longx.Tls.report()}
+
+          {:error, field, message} ->
+            argument_error(field, message)
+        end
+      end
+    end
+
+    # obtains the certificate now (downloading longx-cert first when needed);
+    # the page follows the stage through tls_status
+    action :tls_issue, Types.TlsStatus do
+      run fn _input, _ ->
+        case Longx.Tls.Manager.issue(:manual) do
+          :ok ->
+            {:ok, Longx.Tls.report()}
+
+          {:error, :not_configured} ->
+            argument_error(:domains, "save the names and a DNS provider first")
+        end
+      end
+    end
+
+    action :tls_disable, Types.TlsStatus do
+      run fn _input, _ ->
+        {:ok, _} = Longx.Tls.save(%{enabled: false})
+        :ok = Longx.Tls.Manager.apply_settings()
+        {:ok, Longx.Tls.report()}
+      end
+    end
+
     action :set_browser_private_network, Types.Browser do
       argument :enabled, :boolean, allow_nil?: false
 

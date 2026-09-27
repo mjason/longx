@@ -98,6 +98,63 @@ type RunningCommands {
   commands: [Json!]!
 }
 
+type TlsProviderVariable {
+  name: String!
+  description: String
+}
+
+type TlsProvider {
+  url: String
+  name: String!
+  credentials: [TlsProviderVariable!]!
+  code: String!
+  aliases: [String!]!
+  additional: [TlsProviderVariable!]!
+}
+
+type TlsProviders {
+  providers: [TlsProvider!]!
+}
+
+type TlsCertificate {
+  serial: String
+  notBefore: DateTime
+  notAfter: DateTime
+  issuedAt: DateTime
+  domains: [String!]!
+}
+
+type TlsResolution {
+  here: Boolean!
+  domain: String!
+  addresses: [String!]!
+}
+
+type TlsStatus {
+  url: String
+  total: Int
+  toolVersion: String!
+  toolInstalled: Boolean!
+  startedAt: DateTime
+  stage: String!
+  serving: Boolean!
+  resolution: [TlsResolution!]!
+  redirect: Boolean!
+  received: Int!
+  provider: String
+  port: Int!
+  httpPort: Int
+  finishedAt: DateTime
+  error: String
+  envSet: [String!]!
+  enabled: Boolean!
+  email: String!
+  domains: [String!]!
+  directory: String!
+  certificate: TlsCertificate
+  addresses: [String!]!
+}
+
 type BrowserStatus {
   version: String!
   upgradable: Boolean!
@@ -208,6 +265,11 @@ type ListDirectory {
   parent: String
   git: Boolean!
   entries: [Json!]!
+}
+
+input TlsVariableInput {
+  value: String
+  name: String!
 }
 
 type ApplyPreset {
@@ -2615,6 +2677,17 @@ type Provider {
   hasApiKey: Boolean
 }
 
+input SetTlsInput {
+  enabled: Boolean
+  domains: [String!]
+  provider: String
+  email: String
+  directory: String
+  port: Int
+  redirect: Boolean
+  env: [TlsVariableInput!]
+}
+
 input SetBrowserPrivateNetworkInput {
   enabled: Boolean!
 }
@@ -4034,6 +4107,8 @@ type RootQueryType {
   runningCommands: RunningCommands!
   browserSettings: Browser!
   browserStatus: BrowserStatus!
+  tlsStatus: TlsStatus!
+  tlsProviders: TlsProviders!
   listProviders(
     "How to sort the records in the response"
     sort: [ProviderSortInput]
@@ -4166,6 +4241,9 @@ type RootMutationType {
   killCommand(input: KillCommandInput!): KillCommand!
   browserInstall: BrowserStatus!
   setBrowserPrivateNetwork(input: SetBrowserPrivateNetworkInput!): Browser!
+  setTls(input: SetTlsInput): TlsStatus!
+  tlsIssue: TlsStatus!
+  tlsDisable: TlsStatus!
   createProvider(input: CreateProviderInput!): CreateProviderResult
   updateProvider(id: ID!, input: UpdateProviderInput): UpdateProviderResult
   deleteProvider(id: ID!): DeleteProviderResult

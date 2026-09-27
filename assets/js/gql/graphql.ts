@@ -1936,6 +1936,17 @@ export type SetThreadOnDutyInput = {
   threadId: string | number;
 };
 
+export type SetTlsInput = {
+  directory?: string | null | undefined;
+  domains?: Array<string> | null | undefined;
+  email?: string | null | undefined;
+  enabled?: boolean | null | undefined;
+  env?: Array<TlsVariableInput> | null | undefined;
+  port?: number | null | undefined;
+  provider?: string | null | undefined;
+  redirect?: boolean | null | undefined;
+};
+
 export type SortOrder =
   | 'ASC'
   | 'ASC_NULLS_FIRST'
@@ -2305,6 +2316,11 @@ export type ThreadSortField =
 export type ThreadSortInput = {
   field: ThreadSortField;
   order?: SortOrder | null | undefined;
+};
+
+export type TlsVariableInput = {
+  name: string;
+  value?: string | null | undefined;
 };
 
 export type TurnFilterCompletedAt = {
@@ -3339,6 +3355,16 @@ export type BrowserStatusQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type BrowserStatusQuery = { browserStatus: { version: string, upgradable: boolean, total: number | null, target: string | null, stage: string, source: string | null, received: number, path: string | null, latest: string, installedVersion: string | null, error: string | null } };
 
+export type TlsStatusQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type TlsStatusQuery = { tlsStatus: { url: string | null, total: number | null, toolVersion: string, toolInstalled: boolean, startedAt: string | null, stage: string, serving: boolean, redirect: boolean, received: number, provider: string | null, port: number, httpPort: number | null, finishedAt: string | null, error: string | null, envSet: Array<string>, enabled: boolean, email: string, domains: Array<string>, directory: string, addresses: Array<string>, resolution: Array<{ here: boolean, domain: string, addresses: Array<string> }>, certificate: { serial: string | null, notBefore: string | null, notAfter: string | null, issuedAt: string | null, domains: Array<string> } | null } };
+
+export type TlsProvidersQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type TlsProvidersQuery = { tlsProviders: { providers: Array<{ url: string | null, name: string, code: string, aliases: Array<string>, credentials: Array<{ name: string, description: string | null }>, additional: Array<{ name: string, description: string | null }> }> } };
+
 export type ListProvidersQueryVariables = Exact<{
   sort?: Array<ProviderSortInput | null | undefined> | ProviderSortInput | null | undefined;
   filter?: ProviderFilterInput | null | undefined;
@@ -3788,6 +3814,23 @@ export type SetBrowserPrivateNetworkMutationVariables = Exact<{
 
 
 export type SetBrowserPrivateNetworkMutation = { setBrowserPrivateNetwork: { available: boolean, allowPrivateNetwork: boolean } };
+
+export type SetTlsMutationVariables = Exact<{
+  input?: SetTlsInput | null | undefined;
+}>;
+
+
+export type SetTlsMutation = { setTls: { url: string | null, total: number | null, toolVersion: string, toolInstalled: boolean, startedAt: string | null, stage: string, serving: boolean, redirect: boolean, received: number, provider: string | null, port: number, httpPort: number | null, finishedAt: string | null, error: string | null, envSet: Array<string>, enabled: boolean, email: string, domains: Array<string>, directory: string, addresses: Array<string>, resolution: Array<{ here: boolean, domain: string, addresses: Array<string> }>, certificate: { serial: string | null, notBefore: string | null, notAfter: string | null, issuedAt: string | null, domains: Array<string> } | null } };
+
+export type TlsIssueMutationVariables = Exact<{ [key: string]: never; }>;
+
+
+export type TlsIssueMutation = { tlsIssue: { url: string | null, total: number | null, toolVersion: string, toolInstalled: boolean, startedAt: string | null, stage: string, serving: boolean, redirect: boolean, received: number, provider: string | null, port: number, httpPort: number | null, finishedAt: string | null, error: string | null, envSet: Array<string>, enabled: boolean, email: string, domains: Array<string>, directory: string, addresses: Array<string>, resolution: Array<{ here: boolean, domain: string, addresses: Array<string> }>, certificate: { serial: string | null, notBefore: string | null, notAfter: string | null, issuedAt: string | null, domains: Array<string> } | null } };
+
+export type TlsDisableMutationVariables = Exact<{ [key: string]: never; }>;
+
+
+export type TlsDisableMutation = { tlsDisable: { url: string | null, total: number | null, toolVersion: string, toolInstalled: boolean, startedAt: string | null, stage: string, serving: boolean, redirect: boolean, received: number, provider: string | null, port: number, httpPort: number | null, finishedAt: string | null, error: string | null, envSet: Array<string>, enabled: boolean, email: string, domains: Array<string>, directory: string, addresses: Array<string>, resolution: Array<{ here: boolean, domain: string, addresses: Array<string> }>, certificate: { serial: string | null, notBefore: string | null, notAfter: string | null, issuedAt: string | null, domains: Array<string> } | null } };
 
 export type CreateProviderMutationVariables = Exact<{
   input: CreateProviderInput;
@@ -4451,6 +4494,64 @@ export const BrowserStatusDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<BrowserStatusQuery, BrowserStatusQueryVariables>;
+export const TlsStatusDocument = new TypedDocumentString(`
+    query TlsStatus {
+  tlsStatus {
+    url
+    total
+    toolVersion
+    toolInstalled
+    startedAt
+    stage
+    serving
+    resolution {
+      here
+      domain
+      addresses
+    }
+    redirect
+    received
+    provider
+    port
+    httpPort
+    finishedAt
+    error
+    envSet
+    enabled
+    email
+    domains
+    directory
+    certificate {
+      serial
+      notBefore
+      notAfter
+      issuedAt
+      domains
+    }
+    addresses
+  }
+}
+    `) as unknown as TypedDocumentString<TlsStatusQuery, TlsStatusQueryVariables>;
+export const TlsProvidersDocument = new TypedDocumentString(`
+    query TlsProviders {
+  tlsProviders {
+    providers {
+      url
+      name
+      credentials {
+        name
+        description
+      }
+      code
+      aliases
+      additional {
+        name
+        description
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<TlsProvidersQuery, TlsProvidersQueryVariables>;
 export const ListProvidersDocument = new TypedDocumentString(`
     query ListProviders($sort: [ProviderSortInput], $filter: ProviderFilterInput) {
   listProviders(sort: $sort, filter: $filter) {
@@ -5431,6 +5532,120 @@ export const SetBrowserPrivateNetworkDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetBrowserPrivateNetworkMutation, SetBrowserPrivateNetworkMutationVariables>;
+export const SetTlsDocument = new TypedDocumentString(`
+    mutation SetTls($input: SetTlsInput) {
+  setTls(input: $input) {
+    url
+    total
+    toolVersion
+    toolInstalled
+    startedAt
+    stage
+    serving
+    resolution {
+      here
+      domain
+      addresses
+    }
+    redirect
+    received
+    provider
+    port
+    httpPort
+    finishedAt
+    error
+    envSet
+    enabled
+    email
+    domains
+    directory
+    certificate {
+      serial
+      notBefore
+      notAfter
+      issuedAt
+      domains
+    }
+    addresses
+  }
+}
+    `) as unknown as TypedDocumentString<SetTlsMutation, SetTlsMutationVariables>;
+export const TlsIssueDocument = new TypedDocumentString(`
+    mutation TlsIssue {
+  tlsIssue {
+    url
+    total
+    toolVersion
+    toolInstalled
+    startedAt
+    stage
+    serving
+    resolution {
+      here
+      domain
+      addresses
+    }
+    redirect
+    received
+    provider
+    port
+    httpPort
+    finishedAt
+    error
+    envSet
+    enabled
+    email
+    domains
+    directory
+    certificate {
+      serial
+      notBefore
+      notAfter
+      issuedAt
+      domains
+    }
+    addresses
+  }
+}
+    `) as unknown as TypedDocumentString<TlsIssueMutation, TlsIssueMutationVariables>;
+export const TlsDisableDocument = new TypedDocumentString(`
+    mutation TlsDisable {
+  tlsDisable {
+    url
+    total
+    toolVersion
+    toolInstalled
+    startedAt
+    stage
+    serving
+    resolution {
+      here
+      domain
+      addresses
+    }
+    redirect
+    received
+    provider
+    port
+    httpPort
+    finishedAt
+    error
+    envSet
+    enabled
+    email
+    domains
+    directory
+    certificate {
+      serial
+      notBefore
+      notAfter
+      issuedAt
+      domains
+    }
+    addresses
+  }
+}
+    `) as unknown as TypedDocumentString<TlsDisableMutation, TlsDisableMutationVariables>;
 export const CreateProviderDocument = new TypedDocumentString(`
     mutation CreateProvider($input: CreateProviderInput!) {
   createProvider(input: $input) {

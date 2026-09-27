@@ -73,6 +73,8 @@ defmodule LongxWeb.Endpoint do
     cookie_key: "request_logger"
 
   plug Plug.RequestId
+  # a page asked for over http goes to the https address Longx serves (Longx.Tls)
+  plug LongxWeb.Plugs.HttpsRedirect
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
   plug Plug.Parsers,

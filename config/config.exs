@@ -139,19 +139,22 @@ config :sentry,
 config :longx, Longx.Upgrade, repo: "mjason/longx", tick: :timer.hours(6)
 
 # Background jobs on the SQLite database (Oban's Lite engine): the OAuth2
-# token refresh (Longx.Credentials.RefreshWorker) every five minutes
+# token refresh (Longx.Credentials.RefreshWorker) every five minutes, the
+# watches every minute, the HTTPS certificate's renewal once a day
 config :longx, Oban,
   engine: Oban.Engines.Lite,
   # the Postgres notifier is the default and needs postgrex; one BEAM, so PG
   notifier: Oban.Notifiers.PG,
   repo: Longx.Repo,
-  queues: [credentials: 2, watches: 4],
+  queues: [credentials: 2, watches: 4, tls: 1],
   plugins: [
     {Oban.Plugins.Cron,
      crontab: [
        {"*/5 * * * *", Longx.Credentials.RefreshWorker},
        # the watches' clock: files reconciled, due ones queued (Longx.Watches)
-       {"* * * * *", Longx.Watches.Tick}
+       {"* * * * *", Longx.Watches.Tick},
+       # the HTTPS certificate renewed when due (Longx.Tls)
+       {"17 3 * * *", Longx.Tls.RenewWorker}
      ]},
     {Oban.Plugins.Pruner, max_age: 7 * 24 * 60 * 60}
   ]

@@ -22,6 +22,8 @@ defmodule Longx.System do
       action Longx.System.Status, :running_commands, :running_commands
       action Longx.System.Status, :browser_settings, :browser_settings
       action Longx.System.Status, :browser_status, :browser_status
+      action Longx.System.Status, :tls_status, :tls_status
+      action Longx.System.Status, :tls_providers, :tls_providers
     end
 
     mutations do
@@ -40,6 +42,9 @@ defmodule Longx.System do
       action Longx.System.Status, :kill_command, :kill_command
       action Longx.System.Status, :browser_install, :browser_install
       action Longx.System.Status, :set_browser_private_network, :set_browser_private_network
+      action Longx.System.Status, :set_tls, :set_tls
+      action Longx.System.Status, :tls_issue, :tls_issue
+      action Longx.System.Status, :tls_disable, :tls_disable
     end
   end
 
@@ -61,14 +66,20 @@ defmodule Longx.System do
   @doc """
   The address the outside reaches Longx at — what a tool hands a third
   party that must send the person back (`Longx.Agent.Context.ask/2`'s
-  callback): the setting (`set_public_url/1`), else where the last browser
-  connected from (`LongxWeb.Origins`), else the endpoint's own URL.
+  callback): the setting (`set_public_url/1`), else `LONGX_PUBLIC_URL`, else
+  the https address Longx serves itself (`Longx.Tls.https_url/0` — an https
+  callback needs nothing pasted back), else where the last browser connected
+  from (`LongxWeb.Origins`), else the endpoint's own URL.
   """
   @spec public_url() :: String.t()
   def public_url do
     case get_setting(@public_url_key) do
-      {:ok, %{value: url}} when is_binary(url) and url != "" -> url
-      _ -> env_public_url() || LongxWeb.Origins.last() || LongxWeb.Endpoint.url()
+      {:ok, %{value: url}} when is_binary(url) and url != "" ->
+        url
+
+      _ ->
+        env_public_url() || Longx.Tls.https_url() || LongxWeb.Origins.last() ||
+          LongxWeb.Endpoint.url()
     end
   end
 

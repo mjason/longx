@@ -6,7 +6,8 @@ rendering the agent UI with **React 19** (Vite, shadcn/Tailwind v4, assistant-ui
 chat), mobile-first, with a React Native client planned on the same core code. Every model
 request goes through `Longx.AI` to the providers the person configured (DeepSeek, GLM, 阿里云
 百炼, OpenAI, any OpenAI-compatible endpoint). Nothing is bundled in `priv/` but the Go shim
-it builds: git is the machine's, the headless browser is downloaded on first use.
+it builds: git is the machine's, the headless browser and the certificate tool are downloaded
+on first use.
 
 ## Architecture
 
@@ -1181,6 +1182,57 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     runs or downloads the real one; `test/longx/browser_integration_test.exs`
     (`:integration`) downloads the real binary (~60 MB) into a tmp dir and renders a
     Bypass SPA.
+- **HTTPS with its own certificate — `Longx.Tls`** (Settings → HTTPS). Let's Encrypt through
+  the **ACME DNS-01 challenge**: only a TXT record in the domain's public DNS, so a Longx on a
+  LAN gets a certificate every browser trusts; the name's A record points at the LAN address
+  (the page shows this machine's addresses and what each name resolves to now). **The
+  certificate tool is `longx-cert`** (github.com/mjason/longx-cert, a sibling repository: Go,
+  lego v5 inside, all 222 DNS providers — 58 MB, which is why it is not the shim),
+  downloaded on the first issuance like obscura: `Longx.Tls.Tool` pins the version and a
+  sha256 per Go `<os>-<arch>` target from the release's `SHA256SUMS`, `<tool_dir>/<version>/
+  <target>/`, `LONGX_CERT` overrides; `priv/tls/providers.json` is that release's `longx-cert
+  providers` (bump both together). It speaks JSON: `obtain` reads the request on stdin
+  (`Longx.Tls.request/0`: directory, domains, provider, the provider's variables, the ACME
+  account of the last run) and answers one JSON document; lego's log goes to stderr.
+  **Settings** (`Longx.System.Setting`, encrypted): `tls` (enabled, domains, provider — a
+  code or alias, canonicalised —, email, directory `letsencrypt` / `letsencrypt-staging` / an
+  https URL, port 7443 — never the http port —, redirect), `tls_env` (the provider's
+  variables: **only names the provider declares are accepted** — the tool runs with them in
+  its environment, `PATH` or `LD_PRELOAD` are refused —; `""` keeps a stored value, nil removes
+  it, another provider drops the old one's; never read back, the page gets `env_set` names),
+  `tls_account`. The certificate is `cert.pem` / `key.pem` (0600) / `meta.json` under `dir`
+  (`config :longx, Longx.Tls, dir:, tool_dir:` — dev `data/tls` / `data/longx-cert`, prod
+  `$LONGX_DATA_DIR/…`), each replaced whole. **`Longx.Tls.Manager`** (in the tree): one
+  issuance at a time as a task — the tool fetched first when missing (stages `downloading` /
+  `verifying` / `extracting` with bytes, `download_url:` / `download_sha256:` stand in for
+  tests), then `issuing`, then stored — broadcast as `{:tls, status}` on `"tls"`; a failure
+  keeps what was there, shows the tool's error and goes to `Longx.System.Faults`. **The
+  listener is `Longx.Tls.Listener`**: a Bandit TLS server (`cipher_suite: :strong`, HTTP/2 by
+  ALPN) in front of the same `LongxWeb.Endpoint`, started and stopped at run time under
+  `Longx.Tls.ListenerSupervisor` (the endpoint's own `https:` config is read once at boot),
+  `SyncCodeReloadPlug` in dev as `Bandit.PhoenixAdapter` does; a renewal only `reload/0`s
+  (`:ssl.clear_pem_cache/0` — the next handshake reads the new files, open connections keep
+  theirs). `Manager.apply_settings/0` after every save and at boot: on + certificate → serve
+  (or reload on the same port), else stop. `Longx.Tls.RenewWorker` (Oban, queue `tls`, 03:17
+  daily) → `renew_if_due/1` (`due?/3`: on and no certificate, other names, or < 30 days
+  left). What is served is published (`Longx.Tls.https_url/0`, `redirect_url/0`,
+  persistent_term): `Longx.System.public_url/0` takes it after the setting and
+  `LONGX_PUBLIC_URL` (OAuth callbacks land on Longx, nothing to paste) and
+  **`LongxWeb.Plugs.HttpsRedirect`** sends a page asked for over http there (307, GET/HEAD
+  with `text/html` only — `/health`, `/api/`, `/hooks/`, `/callback/`, `/files/`,
+  `/extension/`, the sockets, `/gql`, `/attachments/` stay on http, and so does
+  `/settings/https` itself — the way back when the name does not resolve from the browser's
+  machine and every other page would be sent somewhere unreachable). GraphQL on
+  `Longx.System.Status`: `tls_status` (`Longx.Tls.report/0`), `tls_providers`, `set_tls` (the
+  variables as `[TlsVariableInput]` name–value pairs — a Json map's keys would be case-mangled
+  by the client), `tls_issue`, `tls_disable`. Page: `settings/HttpsSection` over
+  `core/https.ts` (polled every second while busy; the provider picker is a popover + command
+  list, the common Chinese providers first). The Chrome extension already speaks wss.
+  Tests: `test/longx/tls/{tool,settings,listener,manager}_test` (real TLS on a free port with
+  `Longx.Test.Certs` — `pkix_test_data` with sha256: the default digest leaves TLS 1.3
+  without an acceptable signature —, `fake_longx_cert.sh` as the tool, Bypass as the
+  download), `https_redirect_test`, `public_url_test`, `tls_rpc_test`; longx-cert's own
+  suite runs a full issuance and renewal against pebble.
 - **The person's own browser — `Longx.Chrome`, the Chrome extension, `Plugs.Browser`**
   (`docs/browser-design.md`). Longx runs on a server and Chrome on the person's machine, so
   the **Longx 浏览器桥** extension (`assets/extension/`, MV3, TypeScript; built by `mix
@@ -1352,7 +1404,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     (`LongxWeb.Gql`, imported by `ConnCase`): the old RPC shape — `"fields"` (a selection;
     an object-typed field named bare, or no list at all, selects every field of its type
     from the Absinthe schema), `"input"`, `"identity"` — turned into a query or mutation
-    by the domains' own definitions, posted to `/gql`, answered as `%{"success", "data"}`
+    by the domains' own definitions (each argument rendered by its schema type: a map under
+    an input object type is an object literal, one under a `Json` scalar a JSON string),
+    posted to `/gql`, answered as `%{"success", "data"}`
     / `%{"success" => false, "errors" => [%{"message", "fields", "field", "code"}]}`
     (fields camelCased, AshGraphql's doubled argument error deduplicated); a field the
     schema does not have does not even build the document (`RuntimeError`, "no field …"),
@@ -1711,10 +1765,10 @@ release (Erlang runtime, the Go shim, the built SPA); `mix.exs`'s release steps 
 `mix release --overwrite` replaces only the current version's directory, and CI's cached
 `_build` shipped a stale `longx-0.1.0/` with the then-bundled codex, obscura and git,
 500 MB, in every tarball up to 0.2.1; `release.yml` also `rm -rf _build/prod/rel` first).
-A lean release is ~30 MB compressed. Nothing is downloaded at build time: git is the host's, the browser is
-fetched at runtime. `config/runtime.exs` (prod) needs only `LONGX_DATA_DIR`: the database
-(`longx.db`), the global knowledge (`agent/knowledge`), attachments, the browser (`obscura`)
-and the two secrets live there — `secret_key_base` and `cloak_key` are generated on first
+A lean release is ~30 MB compressed. Nothing is downloaded at build time: git is the host's, the browser and
+longx-cert are fetched at runtime. `config/runtime.exs` (prod) needs only `LONGX_DATA_DIR`: the database
+(`longx.db`), the global knowledge (`agent/knowledge`), attachments, the browser (`obscura`),
+the HTTPS certificate (`tls`) and its tool (`longx-cert`) and the two secrets live there — `secret_key_base` and `cloak_key` are generated on first
 boot into 0600 files unless given as env vars; `PORT` (7788), `PHX_HOST`; the release serves
 plain http itself (`server: true`, no `force_ssl` — TLS is a proxy's job). The endpoint has
 `check_origin: :conn`: the socket's Origin is checked against the request's own Host, never
@@ -1766,7 +1820,8 @@ Where tests live / what to use:
   (`assistant_message/1`, `function_call/3`); a test gives its own `pipeline:` module.
   Every test that starts agents ends with `Longx.Test.Agents.stop_all!/0`. Test support
   lives in `test/support/` (`agents.ex`, `channel_case.ex`, `conn_case.ex`, `data_case.ex`,
-  `fake_obscura.sh`, `responses_fixture.ex`, `tmp_dirs.ex`, `vite_manifest.json`).
+  `fake_obscura.sh`, `fake_longx_cert.sh`, `certs.ex`, `responses_fixture.ex`, `tmp_dirs.ex`,
+  `vite_manifest.json`).
 - DB tests must clear the seeded rows in `setup` (seeds run before the suite).
 - The browser → the unit suite runs `fake_obscura.sh`; `browser_integration_test.exs`
   (`:integration`) downloads the real binary. `:live` tests (real DeepSeek / Tavily) read

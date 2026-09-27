@@ -55,7 +55,8 @@ defmodule LongxWeb.Gql do
   @schema LongxWeb.GraphqlSchema
 
   defp document(:query, entry, params) do
-    args = args(params["input"] || %{})
+    defs = root_args(:query, entry.name)
+    args = args(params["input"] || %{}, defs)
 
     "query { #{field_name(entry.name)}#{args}#{selection(params["fields"], root_type(:query, entry.name))} }"
   end
@@ -89,16 +90,60 @@ defmodule LongxWeb.Gql do
         selection(params["fields"], root)
       end
 
-    "mutation { #{field_name(entry.name)}#{args_list(args)}#{selection} }"
+    "mutation { #{field_name(entry.name)}#{args_list(args, root_args(:mutation, entry.name))}#{selection} }"
   end
 
-  defp args(map) when map_size(map) == 0, do: ""
-  defp args(map), do: args_list(Enum.to_list(map))
+  defp args(map, _defs) when map_size(map) == 0, do: ""
+  defp args(map, defs), do: args_list(Enum.to_list(map), defs)
 
-  defp args_list([]), do: ""
+  defp args_list([], _defs), do: ""
 
-  defp args_list(pairs),
-    do: "(" <> Enum.map_join(pairs, ", ", fn {k, v} -> "#{camel(k)}: #{literal(v)}" end) <> ")"
+  defp args_list(pairs, defs),
+    do:
+      "(" <>
+        Enum.map_join(pairs, ", ", fn {k, v} -> "#{camel(k)}: #{typed(v, arg_type(defs, k))}" end) <>
+        ")"
+
+  # a root field's arguments, from the schema
+  defp root_args(kind, identifier) do
+    root = Absinthe.Schema.lookup_type(@schema, kind)
+    (root.fields[identifier] || raise("no #{kind} field #{identifier} in the schema")).args
+  end
+
+  defp arg_type(defs, name) do
+    case Enum.find(defs, fn {identifier, _} -> camel(identifier) == camel(name) end) do
+      {_, arg} -> arg.type
+      nil -> nil
+    end
+  end
+
+  # a value rendered by the type the schema gives it: a map under an input
+  # object type is an object literal, one under a Json scalar a JSON string
+  defp typed(nil, _type), do: "null"
+  defp typed({:object, map}, type), do: typed(map, type)
+  defp typed(value, %Absinthe.Type.NonNull{of_type: t}), do: typed(value, t)
+
+  defp typed(list, %Absinthe.Type.List{of_type: t}) when is_list(list),
+    do: "[" <> Enum.map_join(list, ", ", &typed(&1, t)) <> "]"
+
+  defp typed(map, identifier)
+       when is_map(map) and is_atom(identifier) and not is_nil(identifier) do
+    case Absinthe.Schema.lookup_type(@schema, identifier) do
+      %Absinthe.Type.InputObject{fields: fields} ->
+        "{" <>
+          Enum.map_join(map, ", ", fn {k, v} ->
+            field_type =
+              Enum.find_value(fields, fn {id, f} -> camel(id) == camel(k) && f.type end)
+
+            "#{camel(k)}: #{typed(v, field_type)}"
+          end) <> "}"
+
+      _ ->
+        literal(map)
+    end
+  end
+
+  defp typed(value, _type), do: literal(value)
 
   # a nested object literal (an input object); an untyped map argument is a
   # Json scalar, which reads a JSON string

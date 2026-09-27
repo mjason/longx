@@ -34,4 +34,20 @@ defmodule Longx.System.PublicUrlTest do
     assert {:ok, _} = System.set_public_url("https://other.example")
     assert System.public_url() == "https://other.example"
   end
+
+  test "HTTPS served by Longx itself stands under the setting and the environment, over the browser's origin" do
+    on_exit(fn -> Longx.Tls.publish(nil, false) end)
+    LongxWeb.Origins.remember(%URI{scheme: "http", host: "192.168.2.129", port: 7788})
+    :ok = Longx.Tls.publish("https://lx.example.com:7443", true)
+    # an https address: OAuth callbacks land on Longx with nothing to paste
+    assert System.public_url() == "https://lx.example.com:7443"
+
+    Elixir.System.put_env("LONGX_PUBLIC_URL", "https://longx.example:8443")
+    on_exit(fn -> Elixir.System.delete_env("LONGX_PUBLIC_URL") end)
+    assert System.public_url() == "https://longx.example:8443"
+
+    Elixir.System.delete_env("LONGX_PUBLIC_URL")
+    :ok = Longx.Tls.publish(nil, false)
+    assert System.public_url() == "http://192.168.2.129:7788"
+  end
 end

@@ -101,7 +101,12 @@ defmodule Longx.Application do
       Longx.Browser.Installer,
       # new releases on GitHub, and the upgrade itself (Longx.Upgrade)
       {Task.Supervisor, name: Longx.Upgrade.TaskSupervisor},
-      Longx.Upgrade
+      Longx.Upgrade,
+      # HTTPS beside the http port with a certificate longx-cert obtains
+      # (Longx.Tls): the listener, after the endpoint it serves
+      {DynamicSupervisor, name: Longx.Tls.ListenerSupervisor, strategy: :one_for_one},
+      {Task.Supervisor, name: Longx.Tls.TaskSupervisor},
+      Longx.Tls.Manager
     ]
 
     # See https://elixir.hexdocs.pm/Supervisor.html

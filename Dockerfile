@@ -70,7 +70,8 @@ ENV HOME=/home/longx \
     PATH=/home/longx/.local/bin:/opt/longx/bin:/usr/local/bin:/usr/bin:/bin
 
 VOLUME ["/data", "/home/longx"]
-EXPOSE 7788
+# 7443: HTTPS once a certificate is obtained in Settings → HTTPS (Longx.Tls)
+EXPOSE 7788 7443
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -fsS http://127.0.0.1:7788/health || exit 1
