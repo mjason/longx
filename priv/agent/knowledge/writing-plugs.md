@@ -38,7 +38,7 @@ agent do
 end
 ```
 
-The shipped pipeline: `Environment`, `Base`, `Shell` (exec_command), `Patch` (apply_patch), `ViewImage`, `Knowledge`, `WebSearch`, `WebFetch` (web_fetch), `Agents` (spawn_agent / send_message / close_agent / agents_directory / claim_handle), `Watches` (watch_list / watch_run / watch_enable / wait_until / notify), `Goal` (create_goal / update_goal / get_goal), `Compaction` (get_context_remaining / new_context_window; folds the context at 90 % of the window), `Request` (all under `Longx.Agent.Plugs`). Not in it, added by a project that wants it: `Browser` — the person's own Chrome through the extension they paired in Settings → 浏览器; `plug Browser` (their default alias) or `plug Browser, browser: "qa-chrome", max_tabs: 3` in `local/agent.exs` mounts the `javascript` tool.
+The shipped pipeline: `Environment`, `Base`, `Shell` (exec_command), `Patch` (apply_patch), `ViewImage`, `Knowledge`, `WebSearch`, `WebFetch` (web_fetch), `Agents` (spawn_agent / send_message / close_agent / agents_directory / claim_handle), `Watches` (watch_list / watch_run / watch_enable / wait_until / notify), `Goal` (create_goal / update_goal / get_goal), `Compaction` (get_context_remaining / new_context_window; folds the context at 90 % of the window), `Request` (all under `Longx.Agent.Plugs`). Not in it, added by a project that wants it: `Browser` (the person's own browser) — `plug Browser` (their default alias) or `plug Browser, browser: "qa-chrome", max_tabs: 3` in `local/agent.exs` mounts the `javascript` tool.
 
 **Declared agents (roles)** — `shared/agents/<name>/agent.exs` (or `local/agents/<name>/`) is a description of its own, applied on top of the project's when that agent is spawned:
 
