@@ -11,8 +11,8 @@ import {
 } from "@assistant-ui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { archiveThread, deleteThread, releaseWaiting as releaseWaitingRpc, renameThread, retractTurn, sendMessage, steerTurn } from "@/ash_rpc";
-import { queryKeys, unwrap, useAgentDefinition, useStartThread, useThread, useThreads } from "@/core/projects";
+import { archiveThread, deleteThread, getThread, releaseWaiting as releaseWaitingRpc, renameThread, retractTurn, sendMessage, steerTurn } from "@/ash_rpc";
+import { queryKeys, threadFields, unwrap, useAgentDefinition, useStartThread, useThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
@@ -168,6 +168,19 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     });
     return { threadId: row.id, kernelThreadId: row.kernelThreadId };
   }, [startThread, webSearch, model, effort]);
+  // where a message goes when the adapter has no target yet: the page's own
+  // thread when it names one (a conversation opened by link, its row still in
+  // flight when the person presses Enter — the runtime once started a new chat
+  // with their words), else a new chat
+  const targetFor = useCallback(async (): Promise<ThreadTarget> => {
+    if (threadId === undefined) return createThread();
+    const row = await client.ensureQueryData({
+      queryKey: ["thread", threadId] as const,
+      queryFn: async () =>
+        unwrap(await getThread({ fields: [...threadFields, "parentThreadId", "agentPath"], input: { id: threadId } })),
+    });
+    return { threadId: row.id, kernelThreadId: row.kernelThreadId };
+  }, [client, threadId, createThread]);
 
   const threadList = useMemo(
     () =>
@@ -339,7 +352,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
         disabled: disabledReason !== null,
         sendDisabled: thread !== undefined && !ready,
         loading: thread !== undefined && !ready && !error,
-        createThread,
+        createThread: targetFor,
         onSent,
         refetch,
         threadList,
@@ -360,7 +373,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       thread?.status,
       ready,
       error,
-      createThread,
+      targetFor,
       onSent,
       refetch,
       threadList,

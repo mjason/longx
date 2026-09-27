@@ -34,7 +34,9 @@ agent do
 end
 ```
 
-The shipped pipeline: `Environment`, `Base`, `AgentsMd` (the project's AGENTS.md; `drop AgentsMd` leaves it out), `Shell` (exec_command), `Jobs` (start_job / jobs / job_output / wait_job / stop_job — long commands in the background, by name), `Patch` (apply_patch), `ViewImage`, `Knowledge`, `WebSearch`, `Browser` (web_fetch), `Agents` (spawn_agent / send_message / close_agent), `Goal` (create_goal / update_goal / get_goal), `Compaction` (get_context_remaining / new_context_window; folds the context at 90 % of the window), `Request` (all under `Longx.Agent.Plugs`).
+The shipped pipeline: `Environment`, `Base`, `AgentsMd` (the project's AGENTS.md; `drop AgentsMd` leaves it out), `Shell` (exec_command), `Jobs` (start_job / jobs / job_output / wait_job / stop_job — long commands in the background, by name), `Patch` (apply_patch), `ViewImage`, `Knowledge`, `WebSearch`, `WebFetch` (web_fetch — a headless browser on this Longx reads a page), `Agents` (spawn_agent / send_message / close_agent), `Goal` (create_goal / update_goal / get_goal), `Compaction` (get_context_remaining / new_context_window; folds the context at 90 % of the window), `Request` (all under `Longx.Agent.Plugs`).
+
+**Not in the shipped pipeline, added by a project that wants it:** `Browser` — the person's own Chrome, driven through the Longx extension they paired in Settings → 浏览器 (their logged-in sessions, their tabs). `plug Browser` uses the person's default browser alias; `plug Browser, browser: "qa-chrome", max_tabs: 3` names an alias and the number of tabs the project may hold. It mounts one tool, `javascript` (code over CDP in a persistent realm). When the person asks to turn the browser on, add that line to `local/agent.exs` (it takes effect on the next step); the alias and the pairing are theirs to set on the settings page.
 
 **Declared agents (roles)** — `shared/agents/<name>/agent.exs` (or `local/agents/<name>/`) is a description of its own, applied on top of the project's when that agent is spawned:
 

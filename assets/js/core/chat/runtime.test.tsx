@@ -7,7 +7,7 @@ import { useLongxRuntime } from "./runtime";
 
 vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { archiveThread, deleteThread, getThread, listThreads, startThread } from "@/ash_rpc";
+import { archiveThread, deleteThread, getThread, listThreads, sendMessage, startThread } from "@/ash_rpc";
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 function wrapper({ children }: { children: ReactNode }) {
@@ -83,6 +83,25 @@ describe("useLongxRuntime", () => {
     await waitFor(() => expect(result.current.thread?.id).toBe("t9"));
     expect(result.current.missing).toBe(false);
     expect(getThread).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "t9" } }));
+  });
+
+  test("a message typed before the page's thread row arrived goes to that thread, never to a new chat", async () => {
+    // a conversation opened by link on a slow network: the list is still in
+    // flight when the person presses Enter — the runtime once had no target and
+    // started a new chat with their words (seen driving the dev server)
+    const cold = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const coldWrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={cold}>{children}</QueryClientProvider>;
+    vi.mocked(listThreads).mockImplementation(() => new Promise(() => {}) as never);
+    vi.mocked(getThread).mockResolvedValue(ok(thread(1)) as never);
+    const onOpenThread = vi.fn();
+    const { result } = renderHook(() => useLongxRuntime({ projectId: "id-1", threadId: "t1", onOpenThread }), { wrapper: coldWrapper });
+    await waitFor(() => expect(result.current.runtime).toBeDefined());
+    expect(result.current.thread).toBeUndefined();
+
+    await act(async () => { await result.current.runtime.thread.append({ role: "user", content: [{ type: "text", text: "hi" }] }); });
+    expect(startThread).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "hi" }) }));
+    expect(onOpenThread).not.toHaveBeenCalled();
   });
 
   test("the first message of a new chat opens its thread without a moment of 找不到这个会话: the row is in the list before the page moves", async () => {

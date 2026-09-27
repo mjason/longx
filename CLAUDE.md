@@ -1405,6 +1405,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `messages`, earlier ones a completed marker — so a child asked again is seen where
     the person is, not at its spawn far above), `adapter.ts` (`buildAdapter` →
     `ExternalStoreAdapter`: `onNew` → `steerTurn` while `runningTurnId(view)`, else `sendMessage`;
+    **a message typed before the page's thread row arrived goes to that thread** — the
+    runtime's `targetFor` fetches the route's thread by id when the adapter has no target
+    yet, and starts a new chat only on the new-chat page (a conversation opened by link on a
+    slow network once had the person's first words start a new conversation);
     `/goal <objective>` typed past the popover
     sets the goal; `onCancel` → `interruptTurn`, always (`not_running` ignored), the
     composer never written; `turnHadEffects` now decides only whether the stopped-run

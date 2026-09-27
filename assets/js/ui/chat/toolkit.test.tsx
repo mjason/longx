@@ -478,11 +478,14 @@ describe("surfaces: files and artifacts for the person", () => {
     );
     const row = screen.getByTestId("tool-javascript");
     expect(row).toHaveTextContent("open the login page");
+    // the screenshots are what the person asked for: under the row, not folded inside it
+    expect(row).not.toHaveTextContent("at http://localhost:3000/login");
+    expect(screen.getByRole("img")).toHaveAttribute("src", "/files/p1/_attachments/20260927T010203-screenshot-1.jpg?inline=1");
+    expect(within(row).queryByRole("img")).toBeNull();
     // a finished cell is folded like a command: the trigger opens the output
     fireEvent.click(within(row).getAllByRole("button")[0]!);
     expect(row).toHaveTextContent("at http://localhost:3000/login");
     expect(row).toHaveTextContent("page.goto");
-    expect(within(row).getByRole("img")).toHaveAttribute("src", "/files/p1/_attachments/20260927T010203-screenshot-1.jpg?inline=1");
   });
 
   test("show_html is an artifact row: the title, 打开 opens the artifact tab with the html (or the url)", () => {

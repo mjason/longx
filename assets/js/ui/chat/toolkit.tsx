@@ -1006,38 +1006,41 @@ export const JavascriptTool: ToolCallMessagePartComponent<{ title?: string; code
   const failed = p.isError === true || p.status.type === "incomplete";
   const shots = Array.isArray(details?.["screenshots"]) ? (details["screenshots"] as { name: string; path: string; attachment?: boolean }[]) : [];
   return (
-    <ToolRow
-      part={p}
-      label={t.ranScript}
-      activeLabel={t.runningScript}
-      query={title}
-      queryDetail={
-        <div className="flex max-w-[min(40rem,88vw)] flex-col gap-1.5">
-          <p className="text-foreground/85 text-xs">{title}</p>
-          {code ? <pre className="text-foreground/85 max-h-64 overflow-y-auto font-mono text-xs break-all whitespace-pre-wrap">{code}</pre> : null}
-        </div>
-      }
-      running={running}
-      failed={failed}
-      testId="tool-javascript"
-    >
-      <div className="flex flex-col gap-2">
-        <details className="text-xs">
-          <summary className="text-muted-foreground cursor-pointer">{t.scriptCode}</summary>
-          <pre className="text-foreground/85 mt-1 max-h-64 overflow-auto font-mono text-xs whitespace-pre-wrap">{code}</pre>
-        </details>
-        <TerminalBlock command={title} lines={lines} done={!running} exitCode={running ? 0 : failed ? 1 : 0} variant="ink" />
-        {surface && shots.length > 0 ? (
-          <div className="flex flex-wrap gap-2" data-testid="javascript-screenshots">
-            {shots.map((shot) => (
-              <a key={shot.name} href={fileUrl(surface.projectId, shot.path, shot.attachment !== false)} target="_blank" rel="noreferrer">
-                <img src={fileUrl(surface.projectId, shot.path, shot.attachment !== false, true)} alt={t.scriptScreenshots} className="max-h-64 rounded-md border" />
-              </a>
-            ))}
+    <>
+      <ToolRow
+        part={p}
+        label={t.ranScript}
+        activeLabel={t.runningScript}
+        query={title}
+        queryDetail={
+          <div className="flex max-w-[min(40rem,88vw)] flex-col gap-1.5">
+            <p className="text-foreground/85 text-xs">{title}</p>
+            {code ? <pre className="text-foreground/85 max-h-64 overflow-y-auto font-mono text-xs break-all whitespace-pre-wrap">{code}</pre> : null}
           </div>
-        ) : null}
-      </div>
-    </ToolRow>
+        }
+        running={running}
+        failed={failed}
+        testId="tool-javascript"
+      >
+        <div className="flex flex-col gap-2">
+          <details className="text-xs">
+            <summary className="text-muted-foreground cursor-pointer">{t.scriptCode}</summary>
+            <pre className="text-foreground/85 mt-1 max-h-64 overflow-auto font-mono text-xs whitespace-pre-wrap">{code}</pre>
+          </details>
+          <TerminalBlock command={title} lines={lines} done={!running} exitCode={running ? 0 : failed ? 1 : 0} variant="ink" />
+        </div>
+      </ToolRow>
+      {/* the screenshots are what the person asked for: under the row, seen without unfolding it */}
+      {surface && shots.length > 0 ? (
+        <div className="flex flex-wrap gap-2 pb-1" data-testid="javascript-screenshots">
+          {shots.map((shot) => (
+            <a key={shot.name} href={fileUrl(surface.projectId, shot.path, shot.attachment !== false)} target="_blank" rel="noreferrer">
+              <img src={fileUrl(surface.projectId, shot.path, shot.attachment !== false, true)} alt={t.scriptScreenshots} className="max-h-64 rounded-md border" />
+            </a>
+          ))}
+        </div>
+      ) : null}
+    </>
   );
 };
 
