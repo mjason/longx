@@ -15,13 +15,6 @@ defmodule LongxWeb.KnowledgeRpcTest do
     :ok
   end
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   @fields ["root", "path", "title", "summary", "tags", "always", "writable"]
 
   test "list → write → read → delete; the shipped root is listed read-only", %{conn: conn} do

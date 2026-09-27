@@ -69,7 +69,8 @@ defmodule Longx.MixProject do
   defp deps do
     [
       {:sourceror, "~> 1.8", only: [:dev, :test]},
-      {:ash_typescript, "~> 0.18"},
+      {:ash_graphql, "~> 1.12"},
+      {:absinthe_plug, "~> 1.5"},
       {:usage_rules, "~> 1.0", only: [:dev]},
       {:ash_sqlite, "~> 0.2"},
       {:ash_phoenix, "~> 2.0"},
@@ -130,7 +131,8 @@ defmodule Longx.MixProject do
       "assets.setup": ["cmd --cd assets npm install"],
       "assets.build": [
         "compile",
-        "ash_typescript.codegen",
+        # the GraphQL client from priv/schema.graphql (written by the compile above)
+        "cmd --cd assets npm run codegen",
         "cmd --cd assets npm run build",
         # the Chrome extension (docs/browser-design.md), loaded unpacked from priv/static/extension
         "cmd --cd assets npm run build:extension"
@@ -143,12 +145,18 @@ defmodule Longx.MixProject do
         "cmd --cd native/shim gofmt -l .",
         "cmd --cd native/shim go vet ./...",
         "cmd --cd native/shim go test ./...",
-        "ash_typescript.codegen --check",
+        "schema.check",
         "cmd --cd assets npm run present-schema -- --check",
         "cmd --cd assets npm run check",
         "test"
       ],
-      "ash.setup": ["ash.setup", "run priv/repo/seeds.exs"]
+      "ash.setup": ["ash.setup", "run priv/repo/seeds.exs"],
+      # the committed schema and the client generated from it are current
+      "schema.check": [
+        "compile",
+        "cmd git diff --exit-code --quiet -- priv/schema.graphql",
+        "cmd --cd assets npm run codegen:check"
+      ]
     ]
   end
 

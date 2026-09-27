@@ -14,7 +14,9 @@ defmodule Longx.Projects.Project do
     otp_app: :longx,
     domain: Longx.Projects,
     data_layer: AshSqlite.DataLayer,
-    extensions: [AshTypescript.Resource]
+    extensions: [AshGraphql.Resource]
+
+  alias Longx.Projects.Types
 
   alias Longx.Projects.Project.{Changes, Validations}
 
@@ -23,30 +25,9 @@ defmodule Longx.Projects.Project do
     repo Longx.Repo
   end
 
-  typescript do
-    type_name "Project"
+  graphql do
+    type :project
   end
-
-  # what the SPA gets for git_info / init_git
-  @git_info [
-    repository: [type: :boolean, allow_nil?: false],
-    head: [type: :string],
-    clean: [type: :boolean],
-    changes: [type: :integer, allow_nil?: false],
-    lfs: [type: :boolean, allow_nil?: false]
-  ]
-
-  @agent_settings_fields [
-    max_depth: [type: :integer],
-    max_children: [type: :integer],
-    idle_minutes: [type: :integer],
-    model_retries: [type: :integer],
-    command_oom_priority: [type: :integer],
-    command_memory_percent: [type: :integer],
-    memory_floor_percent: [type: :integer],
-    child_model: [type: :string],
-    child_effort: [type: :string]
-  ]
 
   actions do
     defaults [:read, :destroy]
@@ -126,27 +107,15 @@ defmodule Longx.Projects.Project do
       change set_attribute(:archived_at, &DateTime.utc_now/0)
     end
 
-    ## Generic actions the SPA calls (typed through ash_typescript)
+    ## Generic actions the SPA calls (typed results in Longx.Projects.Types, GraphQL object types)
 
-    action :git_info, :map do
-      constraints fields: @git_info
+    action :git_info, Types.GitInfo do
       argument :id, :uuid, allow_nil?: false
       run fn input, _ -> with {:ok, project} <- fetch(input), do: {:ok, git_info_map(project)} end
     end
 
     # the composer's @ mentions: fuzzy file matches under the root
-    action :search_files, {:array, :map} do
-      constraints items: [
-                    fields: [
-                      path: [type: :string, allow_nil?: false],
-                      file_name: [type: :string, allow_nil?: false],
-                      root: [type: :string, allow_nil?: false],
-                      match_type: [type: :string, allow_nil?: false],
-                      score: [type: :integer, allow_nil?: false],
-                      indices: [type: {:array, :integer}]
-                    ]
-                  ]
-
+    action :search_files, {:array, Types.SearchFiles} do
       argument :id, :uuid, allow_nil?: false
       argument :query, :string, allow_nil?: false, constraints: [allow_empty?: true]
 
@@ -158,43 +127,7 @@ defmodule Longx.Projects.Project do
 
     # the kernel's layered agent definition for this project, for the
     # settings page: the resolved plugs, the layers with their files, errors
-    action :agent_definition, :map do
-      constraints fields: [
-                    present: [type: :boolean, allow_nil?: false],
-                    trusted: [type: :boolean, allow_nil?: false],
-                    dir: [type: :string, allow_nil?: false],
-                    model: [type: :string],
-                    effort: [type: :string],
-                    plugs: [type: {:array, :string}, allow_nil?: false],
-                    files: [type: {:array, :string}, allow_nil?: false],
-                    local_files: [type: {:array, :string}, allow_nil?: false],
-                    # untyped: ash_typescript 0.18 cannot select inside an array of typed maps
-                    agents: [type: {:array, :map}, allow_nil?: false],
-                    settings: [
-                      type: :map,
-                      allow_nil?: false,
-                      constraints: [fields: @agent_settings_fields]
-                    ],
-                    overrides: [
-                      type: :map,
-                      allow_nil?: false,
-                      constraints: [fields: @agent_settings_fields]
-                    ],
-                    errors: [type: {:array, :string}, allow_nil?: false],
-                    # what `plug Browser` resolves to on this machine; nil without the plug
-                    browser: [
-                      type: :map,
-                      constraints: [
-                        fields: [
-                          alias: [type: :string],
-                          max_tabs: [type: :integer, allow_nil?: false],
-                          state: [type: :string, allow_nil?: false],
-                          browser: [type: :string]
-                        ]
-                      ]
-                    ]
-                  ]
-
+    action :agent_definition, Types.AgentDefinition do
       argument :id, :uuid, allow_nil?: false
 
       run fn input, _ ->
@@ -203,8 +136,7 @@ defmodule Longx.Projects.Project do
     end
 
     # a file of .longx/local/ moved into .longx/shared/ (reviewed, for the team)
-    action :promote_local, :map do
-      constraints fields: [path: [type: :string, allow_nil?: false]]
+    action :promote_local, Types.PromoteLocal do
       argument :id, :uuid, allow_nil?: false
       argument :path, :string, allow_nil?: false
 
@@ -216,8 +148,7 @@ defmodule Longx.Projects.Project do
       end
     end
 
-    action :init_git, :map do
-      constraints fields: @git_info
+    action :init_git, Types.GitInfo do
       argument :id, :uuid, allow_nil?: false
 
       run fn input, _ ->
@@ -259,7 +190,7 @@ defmodule Longx.Projects.Project do
     # the kernel's settings this project overrides (nil = the global
     # value): Longx.Agent.Definition.Settings' fields, validated by Validations.AgentSettings;
     # untyped on the wire so the client selects it by name (a typed map inside
-    # the resource's field list broke ash_typescript 0.18's selection type)
+    # the resource's field list is not what the page needs)
     attribute :agent_settings, :map, public?: true
 
     # what the file watcher and the tree ignore beyond the built-in lists and the

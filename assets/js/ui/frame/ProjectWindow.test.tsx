@@ -5,9 +5,9 @@ import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
 import { channel, ok } from "@/ui/test-mocks";
 
-vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { browserStatus, dependencies, setThreadHandle, setThreadOnDuty, startThread, upgradeStatus } from "@/ash_rpc";
+import { browserStatus, dependencies, setThreadHandle, setThreadOnDuty, startThread, upgradeStatus } from "@/core/api";
 import { browserIdle, dependencyReport, upgradeIdle } from "@/ui/test-mocks";
 
 describe("ProjectWindow", () => {
@@ -41,7 +41,7 @@ describe("ProjectWindow", () => {
   test("the status strip follows the disk: the watcher's git and files events refetch HEAD and the dirty count", async () => {
     setViewport(1280);
     channel.reset();
-    const { gitInfo } = await import("@/ash_rpc");
+    const { gitInfo } = await import("@/core/api");
     const original = vi.mocked(gitInfo).getMockImplementation()!;
     const repo = (head: string | null, changes: number) => ok({ repository: head !== null, branch: head ? "main" : null, head, clean: changes === 0, changes }) as never;
     vi.mocked(gitInfo).mockResolvedValue(repo(null, 0));
@@ -61,7 +61,7 @@ describe("ProjectWindow", () => {
 
   test("the status strip counts the server's faults of the last hour and links to the record", async () => {
     setViewport(1280);
-    const { recentFaults } = await import("@/ash_rpc");
+    const { recentFaults } = await import("@/core/api");
     vi.mocked(recentFaults).mockResolvedValue(ok({ faults: [{ kind: "socket_encode", where: "thread:x", detail: "d", at: "2026-09-18T10:00:00Z" }], recent: 3 }) as never);
     renderAt("/p/app-1/t/t1");
     const strip = await screen.findByTestId("status-strip");

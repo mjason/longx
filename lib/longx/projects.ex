@@ -6,86 +6,80 @@ defmodule Longx.Projects do
   records the commit every turn started from so a bad turn can be undone.
   """
 
-  use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
+  use Ash.Domain, otp_app: :longx, extensions: [AshGraphql.Domain]
 
   alias Longx.Git
   alias Longx.Projects.FileRules
   alias Longx.Projects.Project
 
-  # The SPA's typed client (assets/js/ash_rpc.ts, `mix ash_typescript.codegen`)
-  typescript_rpc do
-    resource Project do
-      rpc_action :list_projects, :active
-      rpc_action :list_all_projects, :read
-      rpc_action :get_project, :by_slug
-      rpc_action :create_project, :create
-      rpc_action :update_project, :update
-      rpc_action :archive_project, :archive
-      rpc_action :delete_project, :delete
-      rpc_action :git_info, :git_info
-      rpc_action :search_files, :search_files
-      rpc_action :agent_definition, :agent_definition
-      rpc_action :promote_local, :promote_local
-      rpc_action :init_git, :init_git
+  # The SPA's client (assets/js/core/api.ts, generated from priv/schema.graphql)
+  graphql do
+    # every error at the top level of the response, for calls and records alike
+    root_level_errors? true
+
+    queries do
+      list Longx.Projects.Project, :list_projects, :active, paginate_with: nil
+      list Longx.Projects.Project, :list_all_projects, :read, paginate_with: nil
+      read_one Longx.Projects.Project, :get_project, :by_slug
+      action Longx.Projects.Project, :git_info, :git_info
+      action Longx.Projects.Project, :search_files, :search_files
+      action Longx.Projects.Project, :agent_definition, :agent_definition
+      list Longx.Projects.Thread, :list_threads, :for_project, paginate_with: nil
+      read_one Longx.Projects.Thread, :get_thread, :by_id
+      list Longx.Projects.Thread, :list_subagents, :subagents_of, paginate_with: nil
+      action Longx.Projects.Thread, :list_running_threads, :list_running
+      action Longx.Projects.Thread, :directory, :directory
+      action Longx.Projects.Files, :list_files, :list_files
+      action Longx.Projects.Files, :read_file, :read_file
+      action Longx.Projects.Files, :ignored_paths, :ignored_paths
+      action Longx.Projects.Repo, :git_changes, :git_changes
+      action Longx.Projects.Repo, :git_file_diff, :git_file_diff
+      action Longx.Projects.Repo, :git_log, :git_log
+      action Longx.Projects.Repo, :git_show, :git_show
+      action Longx.Projects.Repo, :git_commit_file_diff, :git_commit_file_diff
+      action Longx.Projects.Repo, :git_file_versions, :git_file_versions
+      action Longx.Projects.Repo, :git_branches, :git_branches
+      list Longx.Projects.Turn, :list_turns, :for_thread, paginate_with: nil
     end
 
-    resource Longx.Projects.Thread do
-      rpc_action :list_threads, :for_project
-      rpc_action :get_thread, :by_id
-      rpc_action :list_subagents, :subagents_of
-      rpc_action :start_thread, :start_thread
-      rpc_action :send_message, :send_message
-      rpc_action :interrupt_turn, :interrupt_turn
-      rpc_action :steer_turn, :steer_turn
-      rpc_action :retract_turn, :retract_turn
-      rpc_action :release_waiting, :release_waiting
-      rpc_action :compact_thread, :compact_thread
-      rpc_action :answer_request, :answer_request
-      rpc_action :list_running_threads, :list_running
-      rpc_action :set_goal, :set_goal
-      rpc_action :clear_goal, :clear_goal
-      rpc_action :rename_thread, :rename
-      rpc_action :set_thread_handle, :set_handle_action
-      rpc_action :set_thread_on_duty, :set_on_duty_action
-      rpc_action :directory, :directory
-      rpc_action :archive_thread, :archive
-      rpc_action :delete_thread, :delete_thread
-    end
-
-    resource Longx.Projects.Files do
-      rpc_action :list_files, :list_files
-      rpc_action :read_file, :read_file
-      rpc_action :write_file, :write_file
-      rpc_action :create_entry, :create_entry
-      rpc_action :rename_entry, :rename_entry
-      rpc_action :delete_entry, :delete_entry
-      rpc_action :ignored_paths, :ignored_paths
-    end
-
-    resource Longx.Projects.Repo do
-      rpc_action :git_changes, :git_changes
-      rpc_action :git_file_diff, :git_file_diff
-      rpc_action :git_commit, :git_commit
-      rpc_action :git_discard, :git_discard
-      rpc_action :git_undo_commit, :git_undo_commit
-      rpc_action :git_abort_merge, :git_abort_merge
-      rpc_action :git_log, :git_log
-      rpc_action :git_show, :git_show
-      rpc_action :git_commit_file_diff, :git_commit_file_diff
-      rpc_action :git_file_versions, :git_file_versions
-      rpc_action :git_branches, :git_branches
-      rpc_action :git_create_branch, :git_create_branch
-      rpc_action :git_switch, :git_switch
-      rpc_action :git_delete_branch, :git_delete_branch
-      rpc_action :git_stash_pop, :git_stash_pop
-      rpc_action :git_set_remote, :git_set_remote
-      rpc_action :git_fetch, :git_fetch
-      rpc_action :git_pull, :git_pull
-      rpc_action :git_push, :git_push
-    end
-
-    resource Longx.Projects.Turn do
-      rpc_action :list_turns, :for_thread
+    mutations do
+      create Longx.Projects.Project, :create_project, :create
+      update Longx.Projects.Project, :update_project, :update
+      update Longx.Projects.Project, :archive_project, :archive
+      destroy Longx.Projects.Project, :delete_project, :delete
+      action Longx.Projects.Project, :promote_local, :promote_local
+      action Longx.Projects.Project, :init_git, :init_git
+      action Longx.Projects.Thread, :start_thread, :start_thread
+      action Longx.Projects.Thread, :send_message, :send_message
+      action Longx.Projects.Thread, :interrupt_turn, :interrupt_turn
+      action Longx.Projects.Thread, :steer_turn, :steer_turn
+      action Longx.Projects.Thread, :retract_turn, :retract_turn
+      action Longx.Projects.Thread, :release_waiting, :release_waiting
+      action Longx.Projects.Thread, :compact_thread, :compact_thread
+      action Longx.Projects.Thread, :answer_request, :answer_request
+      action Longx.Projects.Thread, :set_goal, :set_goal
+      action Longx.Projects.Thread, :clear_goal, :clear_goal
+      update Longx.Projects.Thread, :rename_thread, :rename
+      action Longx.Projects.Thread, :set_thread_handle, :set_handle_action
+      action Longx.Projects.Thread, :set_thread_on_duty, :set_on_duty_action
+      update Longx.Projects.Thread, :archive_thread, :archive
+      action Longx.Projects.Thread, :delete_thread, :delete_thread
+      action Longx.Projects.Files, :write_file, :write_file
+      action Longx.Projects.Files, :create_entry, :create_entry
+      action Longx.Projects.Files, :rename_entry, :rename_entry
+      action Longx.Projects.Files, :delete_entry, :delete_entry
+      action Longx.Projects.Repo, :git_commit, :git_commit
+      action Longx.Projects.Repo, :git_discard, :git_discard
+      action Longx.Projects.Repo, :git_undo_commit, :git_undo_commit
+      action Longx.Projects.Repo, :git_abort_merge, :git_abort_merge
+      action Longx.Projects.Repo, :git_create_branch, :git_create_branch
+      action Longx.Projects.Repo, :git_switch, :git_switch
+      action Longx.Projects.Repo, :git_delete_branch, :git_delete_branch
+      action Longx.Projects.Repo, :git_stash_pop, :git_stash_pop
+      action Longx.Projects.Repo, :git_set_remote, :git_set_remote
+      action Longx.Projects.Repo, :git_fetch, :git_fetch
+      action Longx.Projects.Repo, :git_pull, :git_pull
+      action Longx.Projects.Repo, :git_push, :git_push
     end
   end
 

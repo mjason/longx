@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { ok, rpcMock, socketMock, provider, credential } from "@/ui/test-mocks";
 
-vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () =>
   (await import("@/ui/test-mocks")).socketMock(),
 );
@@ -48,7 +48,7 @@ import {
   credentialDevicePoll,
   credentialLoginUrl,
   credentialCompleteUrl,
-} from "@/ash_rpc";
+} from "@/core/api";
 import { browserIdle, dependencyReport, dependencyTool, model, upgradeIdle } from "@/ui/test-mocks";
 import { page } from "@/core/upgrade";
 import { within } from "@testing-library/react";
@@ -838,8 +838,8 @@ describe("SettingsPage", () => {
 
     // the token: saved, then its presence shown; blank clears it (the
     // server answers the whole status, the check result included)
-    vi.mocked(setGithubToken).mockImplementation(async ({ input }) =>
-      ok({ ...upgradeIdle, latest: "0.2.0", available: true, hasGithubToken: !!input?.token }) as never,
+    vi.mocked(setGithubToken).mockImplementation(async (args) =>
+      ok({ ...upgradeIdle, latest: "0.2.0", available: true, hasGithubToken: !!args?.input?.["token"] }) as never,
     );
     await user.type(within(section).getByLabelText("GitHub token"), "ghp_abc");
     await user.click(within(section).getByRole("button", { name: "保存 token" }));

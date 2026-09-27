@@ -27,13 +27,6 @@ defmodule LongxWeb.WorkspaceRpcTest do
     %{dir: dir, id: project.id, project: project}
   end
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   test "files: list, read, write, create, rename, delete", %{conn: conn, id: id, dir: dir} do
     assert %{"success" => true, "data" => entries} =
              rpc(conn, "list_files", %{

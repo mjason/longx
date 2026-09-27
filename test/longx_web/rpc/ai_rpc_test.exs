@@ -14,13 +14,6 @@ defmodule LongxWeb.AiRpcTest do
     :ok
   end
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   test "providers: create (key never read back, only its presence), update, list, delete", %{
     conn: conn
   } do
@@ -58,8 +51,10 @@ defmodule LongxWeb.AiRpcTest do
                "input" => %{"streamIdleTimeoutMs" => 120_000}
              })
 
-    assert %{"success" => false} =
-             rpc(conn, "list_providers", %{"fields" => ["id", "apiKey"]})
+    # the key is not in the schema at all: a document naming it does not even build
+    assert_raise RuntimeError, ~r/no field apiKey on Provider/, fn ->
+      rpc(conn, "list_providers", %{"fields" => ["id", "apiKey"]})
+    end
 
     assert %{"success" => true, "data" => [%{"id" => ^id, "name" => "GLM"}]} =
              rpc(conn, "list_providers", %{"fields" => ["id", "name", "hasApiKey", "lastError"]})

@@ -9,24 +9,19 @@ defmodule Longx.Projects.Files do
   use Ash.Resource,
     otp_app: :longx,
     domain: Longx.Projects,
-    extensions: [AshTypescript.Resource]
+    extensions: [AshGraphql.Resource]
+
+  alias Longx.Projects.Types
 
   alias Longx.Projects.Workspace
 
-  typescript do
-    type_name "ProjectFiles"
+  # no rows, no object type: only its generic actions are in the schema
+  graphql do
+    generate_object? false
   end
 
-  @entry [
-    name: [type: :string, allow_nil?: false],
-    path: [type: :string, allow_nil?: false],
-    kind: [type: :atom, constraints: [one_of: [:file, :dir]], allow_nil?: false],
-    size: [type: :integer, allow_nil?: false]
-  ]
-
   actions do
-    action :list_files, {:array, :map} do
-      constraints items: [fields: @entry]
+    action :list_files, {:array, Types.FilesEntry} do
       argument :project_id, :uuid, allow_nil?: false
       argument :path, :string, allow_nil?: false, constraints: [allow_empty?: true]
 
@@ -36,15 +31,7 @@ defmodule Longx.Projects.Files do
       end
     end
 
-    action :read_file, :map do
-      constraints fields: [
-                    path: [type: :string, allow_nil?: false],
-                    content: [type: :string],
-                    size: [type: :integer, allow_nil?: false],
-                    binary: [type: :boolean, allow_nil?: false],
-                    truncated: [type: :boolean, allow_nil?: false]
-                  ]
-
+    action :read_file, Types.ReadFile do
       argument :project_id, :uuid, allow_nil?: false
       argument :path, :string, allow_nil?: false
 
@@ -69,8 +56,7 @@ defmodule Longx.Projects.Files do
       end
     end
 
-    action :create_entry, :map do
-      constraints fields: @entry
+    action :create_entry, Types.FilesEntry do
       argument :project_id, :uuid, allow_nil?: false
       argument :path, :string, allow_nil?: false
       argument :kind, :atom, constraints: [one_of: [:file, :dir]], allow_nil?: false
@@ -81,8 +67,7 @@ defmodule Longx.Projects.Files do
       end
     end
 
-    action :rename_entry, :map do
-      constraints fields: @entry
+    action :rename_entry, Types.FilesEntry do
       argument :project_id, :uuid, allow_nil?: false
       argument :from, :string, allow_nil?: false
       argument :to, :string, allow_nil?: false

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ThreadRow } from "@/core/chat/threadList";
+import type { ApiError } from "@/core/gql";
 import {
   agentDefinition,
-  type AgentDefinitionFields,
   createProject,
   getProject,
   gitInfo,
@@ -18,12 +18,10 @@ import {
   getThread,
   listThreads,
   startThread,
-  type AshRpcError,
-  type ListModelsFields,
   directory,
   setThreadHandle,
   setThreadOnDuty,
-} from "@/ash_rpc";
+} from "@/core/api";
 
 export const projectFields = [
   "id",
@@ -75,8 +73,8 @@ export const gitFields = [
 ] as const;
 /** An RPC failure as an Error the UI can show; field errors keep their names. */
 export class RpcFailure extends Error {
-  errors: AshRpcError[];
-  constructor(errors: AshRpcError[]) {
+  errors: ApiError[];
+  constructor(errors: ApiError[]) {
     super(errors.map((e) => e.message).join("; ") || "request failed");
     this.errors = errors;
   }
@@ -90,10 +88,20 @@ export class RpcFailure extends Error {
 
 export function unwrap<T>(
   result:
-    { success: true; data: T } | { success: false; errors: AshRpcError[] },
+    { success: true; data: T } | { success: false; errors: ApiError[] },
 ): T {
   if (result.success) return result.data;
   throw new RpcFailure(result.errors);
+}
+
+/** a read of one record: null is 找不到, an error like any other (the RPC answered so) */
+export function unwrapOne<T>(
+  result:
+    { success: true; data: T | null } | { success: false; errors: ApiError[] },
+): T {
+  const data = unwrap(result);
+  if (data === null) throw new RpcFailure([{ message: "not found", fields: [] }]);
+  return data;
 }
 
 export const queryKeys = {
@@ -111,13 +119,13 @@ export function useGoalActions(threadId: string | undefined) {
   const set = useMutation({
     mutationFn: async (input: { objective?: string; status?: "active" | "paused" | "complete"; tokenBudget?: number | null }) => {
       if (!threadId) throw new Error("no thread");
-      return unwrap(await setGoal({ fields: ["objective", "status", "tokenBudget", "tokensUsed", "timeUsedSeconds"], input: { threadId, ...input } }));
+      return unwrap(await setGoal({ input: { threadId, ...input } }));
     },
   });
   const clear = useMutation({
     mutationFn: async () => {
       if (!threadId) throw new Error("no thread");
-      return unwrap(await clearGoal({ fields: ["cleared"], input: { threadId } }));
+      return unwrap(await clearGoal({ input: { threadId } }));
     },
   });
   return { set, clear };
@@ -175,14 +183,14 @@ const agentDefinitionFields = [
   { settings: [...agentSettingsViewFields] },
   { overrides: [...agentSettingsViewFields] },
   { browser: ["alias", "maxTabs", "state", "browser"] },
-] as const satisfies AgentDefinitionFields;
+] as const;
 
 export function useAgentDefinition(projectId: string | undefined) {
   return useQuery({
     queryKey: ["project", projectId, "agent-definition"] as const,
     queryFn: async () =>
       unwrap(
-        await agentDefinition({ fields: [...agentDefinitionFields], input: { id: projectId! } }),
+        await agentDefinition({ input: { id: projectId! } }),
       ) as AgentDefinition,
     enabled: !!projectId,
     staleTime: 10_000,
@@ -210,7 +218,7 @@ export function useRunningThreads(intervalMs = 3000) {
   return useQuery({
     queryKey: queryKeys.running,
     queryFn: async () =>
-      unwrap(await listRunningThreads({ fields: ["threads"] })).threads as RunningThread[],
+      unwrap(await listRunningThreads()).threads as RunningThread[],
     refetchInterval: intervalMs,
   });
 }
@@ -219,7 +227,7 @@ export function useProjects() {
   return useQuery({
     queryKey: queryKeys.projects,
     queryFn: async () =>
-      unwrap(await listProjects({ fields: [...projectFields] })),
+      unwrap(await listProjects()),
   });
 }
 
@@ -227,7 +235,7 @@ export function useProject(slug: string) {
   return useQuery({
     queryKey: queryKeys.project(slug),
     queryFn: async () =>
-      unwrap(await getProject({ fields: [...projectFields], input: { slug } })),
+      unwrapOne(await getProject({ input: { slug } })),
   });
 }
 
@@ -236,7 +244,7 @@ export function useGitInfo(id: string | undefined) {
     queryKey: queryKeys.git(id ?? ""),
     enabled: !!id,
     queryFn: async () =>
-      unwrap(await gitInfo({ fields: [...gitFields], input: { id: id! } })),
+      unwrap(await gitInfo({ input: { id: id! } })),
   });
 }
 
@@ -247,7 +255,6 @@ export function useThreads(id: string | undefined) {
     queryFn: async () =>
       unwrap(
         await listThreads({
-          fields: [...threadFields],
           input: { projectId: id! },
         }),
       ),
@@ -289,7 +296,7 @@ export function useSessions(projectId: string | undefined) {
     enabled: !!projectId,
     refetchInterval: 5_000,
     queryFn: async () =>
-      unwrap(await directory({ fields: ["sessions"], input: { projectId: projectId! } })).sessions as SessionEntry[],
+      unwrap(await directory({ input: { projectId: projectId! } })).sessions as SessionEntry[],
   });
 }
 
@@ -298,7 +305,7 @@ export function useSetThreadHandle(projectId: string | undefined) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async ({ threadId, handle }: { threadId: string; handle: string | null }) =>
-      unwrap(await setThreadHandle({ fields: ["id", "handle"], input: { threadId, handle } })),
+      unwrap(await setThreadHandle({ input: { threadId, handle } })),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["sessions", projectId ?? ""] });
       if (projectId) client.invalidateQueries({ queryKey: queryKeys.threads(projectId) });
@@ -311,7 +318,7 @@ export function useSetThreadOnDuty(projectId: string | undefined) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async ({ threadId, onDuty }: { threadId: string; onDuty: boolean }) =>
-      unwrap(await setThreadOnDuty({ fields: ["id", "onDuty"], input: { threadId, onDuty } })),
+      unwrap(await setThreadOnDuty({ input: { threadId, onDuty } })),
     onSuccess: () => client.invalidateQueries({ queryKey: ["sessions", projectId ?? ""] }),
   });
 }
@@ -322,7 +329,7 @@ export function useThread(id: string | undefined) {
     enabled: !!id,
     retry: false,
     queryFn: async () =>
-      unwrap(await getThread({ fields: [...threadFields, "parentThreadId", "agentPath"], input: { id: id! } })),
+      unwrapOne(await getThread({ input: { id: id! } })),
   });
 }
 
@@ -333,14 +340,13 @@ export function useSubagents(threadId: string | undefined) {
     queryFn: async () =>
       unwrap(
         await listSubagents({
-          fields: [...subagentFields],
           input: { parentThreadId: threadId! },
         }),
       ),
   });
 }
 
-export const modelFields: ListModelsFields = [
+export const modelFields = [
   "id",
   "name",
   "slug",
@@ -356,7 +362,7 @@ export function useModels() {
   return useQuery({
     queryKey: queryKeys.models,
     staleTime: 60_000,
-    queryFn: async () => unwrap(await listModels({ fields: modelFields })),
+    queryFn: async () => unwrap(await listModels()),
   });
 }
 
@@ -384,7 +390,6 @@ export function useDirectory(path: string | null, showHidden = false) {
     queryFn: async () =>
       unwrap(
         await listDirectory({
-          fields: ["path", "parent", "git", "entries", "roots"],
           input: { ...(path ? { path } : {}), showHidden },
         }),
       ) as DirectoryListing,
@@ -396,7 +401,7 @@ export function useCreateDirectory() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (input: { parent: string; name: string }) =>
-      unwrap(await createDirectory({ fields: ["name", "path", "git"], input })),
+      unwrap(await createDirectory({ input })),
     onSuccess: () => client.invalidateQueries({ queryKey: ["directory"] }),
   });
 }
@@ -405,7 +410,7 @@ export function useCreateProject() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewProjectInput) =>
-      unwrap(await createProject({ fields: [...projectFields], input })),
+      unwrap(await createProject({ input })),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.projects }),
   });
 }
@@ -414,7 +419,7 @@ export function useInitGit(id: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async () =>
-      unwrap(await initGit({ fields: [...gitFields], input: { id } })),
+      unwrap(await initGit({ input: { id } })),
     onSuccess: (data) => client.setQueryData(queryKeys.git(id), data),
   });
 }
@@ -432,7 +437,6 @@ export function useStartThread(id: string) {
     mutationFn: async (input?: StartThreadInput) =>
       unwrap(
         await startThread({
-          fields: [...threadFields],
           input: { projectId: id, ...(input ?? {}) },
         }),
       ),

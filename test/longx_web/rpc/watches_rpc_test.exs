@@ -37,13 +37,6 @@ defmodule LongxWeb.Rpc.WatchesRpcTest do
     %{conn: conn, project: project, dir: dir}
   end
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   @fields ~w(id name path layer kind cron at enabled disabledReason loadError nextDueAt runningSince lastRunAt lastDurationMs lastError lastOutput lastSentTo runs sends webhookToken state)
 
   test "list, switch, dry run, delete; the global overview", %{conn: conn, project: project} do

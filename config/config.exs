@@ -7,29 +7,9 @@
 # General application configuration
 import Config
 
-config :ash_typescript,
-  manifest: Longx.AshTypescriptManifest,
-  output_file: "assets/js/ash_rpc.ts",
-  run_endpoint: "/rpc/run",
-  validate_endpoint: "/rpc/validate",
-  input_field_formatter: :camel_case,
-  output_field_formatter: :camel_case,
-  require_tenant_parameters: false,
-  generate_zod_schemas: false,
-  generate_phx_channel_rpc_actions: false,
-  # CSRF (and later auth) headers on every call, see assets/js/core/rpcHooks.ts
-  rpc_action_before_request_hook: "RpcHooks.beforeRequest",
-  rpc_validation_before_request_hook: "RpcHooks.beforeValidationRequest",
-  rpc_action_hook_context_type: "RpcHooks.ActionHookContext",
-  rpc_validation_hook_context_type: "RpcHooks.ValidationHookContext",
-  import_into_generated: [%{import_name: "RpcHooks", file: "assets/js/core/rpcHooks"}],
-  generate_validation_functions: true,
-  zod_import_path: "zod",
-  zod_schema_suffix: "ZodSchema",
-  generate_valibot_schemas: false,
-  valibot_import_path: "valibot",
-  valibot_schema_suffix: "ValibotSchema",
-  phoenix_import_path: "phoenix"
+# an untyped map (a resource's `agent_settings`, a browser's `device`) is a JSON
+# object on the wire, not a string holding one
+config :ash_graphql, :json_type, :json
 
 # Every transaction begins IMMEDIATE: it takes the write lock first, so a
 # second writer waits (busy_timeout) — a transaction that began by reading

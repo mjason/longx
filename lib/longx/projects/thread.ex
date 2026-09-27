@@ -10,15 +10,17 @@ defmodule Longx.Projects.Thread do
     otp_app: :longx,
     domain: Longx.Projects,
     data_layer: AshSqlite.DataLayer,
-    extensions: [AshTypescript.Resource]
+    extensions: [AshGraphql.Resource]
+
+  alias Longx.Projects.Types
 
   sqlite do
     table "project_threads"
     repo Longx.Repo
   end
 
-  typescript do
-    type_name "Thread"
+  graphql do
+    type :thread
   end
 
   actions do
@@ -105,8 +107,7 @@ defmodule Longx.Projects.Thread do
 
     # a message while a turn runs: into that turn; not_running is an error
     # on thread_id — send it as a turn then
-    action :steer_turn, :map do
-      constraints fields: [kernel_turn_id: [type: :string, allow_nil?: false]]
+    action :steer_turn, Types.SteerTurn do
       argument :thread_id, :uuid, allow_nil?: false
       argument :text, :string, allow_nil?: false
       argument :images, {:array, :string}
@@ -160,8 +161,7 @@ defmodule Longx.Projects.Thread do
     # that ran nothing (the stopped turn's 丢弃) — has_output / not_running /
     # not_yours (another agent, a job, a watch started it) / not_last are
     # errors on the argument
-    action :retract_turn, :map do
-      constraints fields: [text: [type: :string, allow_nil?: false]]
+    action :retract_turn, Types.RetractTurn do
       argument :thread_id, :uuid, allow_nil?: false
       argument :kernel_turn_id, :string, allow_nil?: false
 
@@ -221,17 +221,7 @@ defmodule Longx.Projects.Thread do
       end
     end
 
-    # goal mode: set / change the thread's goal, clear it
-    @goal_fields [
-      objective: [type: :string, allow_nil?: false],
-      status: [type: :string, allow_nil?: false],
-      token_budget: [type: :integer],
-      tokens_used: [type: :integer, allow_nil?: false],
-      time_used_seconds: [type: :integer, allow_nil?: false]
-    ]
-
-    action :set_goal, :map do
-      constraints fields: @goal_fields
+    action :set_goal, Types.Goal do
       argument :thread_id, :uuid, allow_nil?: false
       argument :objective, :string
       argument :status, :atom, constraints: [one_of: [:active, :paused, :blocked, :complete]]
@@ -257,8 +247,7 @@ defmodule Longx.Projects.Thread do
       end
     end
 
-    action :clear_goal, :map do
-      constraints fields: [cleared: [type: :boolean, allow_nil?: false]]
+    action :clear_goal, Types.ClearGoal do
       argument :thread_id, :uuid, allow_nil?: false
 
       run fn input, _ ->
@@ -389,10 +378,8 @@ defmodule Longx.Projects.Thread do
 
     # the welcome page: what is running right now, with a way back to it
     # (entries are untyped maps, camelCased here — arrays of typed maps are
-    # not selectable in ash_typescript 0.18)
-    action :list_running, :map do
-      constraints fields: [threads: [type: {:array, :map}, allow_nil?: false]]
-
+    # untyped: a Json value on the wire)
+    action :list_running, Types.ListRunning do
       run fn _input, _ ->
         {:ok, %{threads: Enum.map(Longx.Projects.running_threads(), &camelize/1)}}
       end
@@ -406,8 +393,7 @@ defmodule Longx.Projects.Thread do
 
     # the project's sessions with their live state (Longx.Projects.directory/2):
     # the Agents tool window, the agent's own agents_directory
-    action :directory, :map do
-      constraints fields: [sessions: [type: {:array, :map}, allow_nil?: false]]
+    action :directory, Types.Directory do
       argument :project_id, :uuid, allow_nil?: false
       argument :scope, :atom, constraints: [one_of: [:project, :all]]
 

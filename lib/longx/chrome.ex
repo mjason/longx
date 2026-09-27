@@ -16,25 +16,31 @@ defmodule Longx.Chrome do
   `Longx.Chrome.Session` a conversation's tabs and JavaScript runtime.
   """
 
-  use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
+  use Ash.Domain, otp_app: :longx, extensions: [AshGraphql.Domain]
 
   alias Longx.Chrome.{Aliases, Browser, Bridge, Connection}
 
-  typescript_rpc do
-    resource Bridge do
-      rpc_action :list_chrome_browsers, :list_chrome_browsers
-      rpc_action :approve_chrome_browser, :approve_chrome_browser
-      rpc_action :reject_chrome_browser, :reject_chrome_browser
-      rpc_action :revoke_chrome_browser, :revoke_chrome_browser
-      rpc_action :rename_chrome_browser, :rename_chrome_browser
-      rpc_action :set_chrome_browser_max_tabs, :set_chrome_browser_max_tabs
-      rpc_action :set_chrome_origin, :set_chrome_origin
-      rpc_action :delete_chrome_origin, :delete_chrome_origin
-      rpc_action :chrome_aliases, :chrome_aliases
-      rpc_action :set_chrome_alias, :set_chrome_alias
-      rpc_action :delete_chrome_alias, :delete_chrome_alias
-      rpc_action :set_chrome_default_alias, :set_chrome_default_alias
-      rpc_action :chrome_extension, :chrome_extension
+  graphql do
+    # every error at the top level of the response, for calls and records alike
+    root_level_errors? true
+
+    queries do
+      action Bridge, :list_chrome_browsers, :list_chrome_browsers
+      action Bridge, :chrome_aliases, :chrome_aliases
+      action Bridge, :chrome_extension, :chrome_extension
+    end
+
+    mutations do
+      action Bridge, :approve_chrome_browser, :approve_chrome_browser
+      action Bridge, :reject_chrome_browser, :reject_chrome_browser
+      action Bridge, :revoke_chrome_browser, :revoke_chrome_browser
+      action Bridge, :rename_chrome_browser, :rename_chrome_browser
+      action Bridge, :set_chrome_browser_max_tabs, :set_chrome_browser_max_tabs
+      action Bridge, :set_chrome_origin, :set_chrome_origin
+      action Bridge, :delete_chrome_origin, :delete_chrome_origin
+      action Bridge, :set_chrome_alias, :set_chrome_alias
+      action Bridge, :delete_chrome_alias, :delete_chrome_alias
+      action Bridge, :set_chrome_default_alias, :set_chrome_default_alias
     end
   end
 
@@ -199,14 +205,14 @@ defmodule Longx.Chrome do
         device: browser.device,
         status: Atom.to_string(browser.status),
         connected: Connection.connected?(browser.id),
-        maxTabs: browser.max_tabs,
+        max_tabs: browser.max_tabs,
         origins: browser.origins,
-        lastSeenAt: browser.last_seen_at,
-        approvedAt: browser.approved_at,
+        last_seen_at: browser.last_seen_at,
+        approved_at: browser.approved_at,
         tabs:
           Enum.map(
             Longx.Chrome.Tabs.of_browser(browser.id),
-            &%{threadId: &1.thread_id, title: &1.title, tabs: &1.tabs}
+            &%{thread_id: &1.thread_id, title: &1.title, tabs: &1.tabs}
           ),
         aliases: aliases_of(browser.id)
       }

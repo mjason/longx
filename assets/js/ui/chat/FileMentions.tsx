@@ -4,7 +4,7 @@
 // message shows the path as a chip (directive-text with our formatter).
 import { unstable_useLiveCompletionAdapter } from "@assistant-ui/react";
 import { FileIcon, FolderIcon, Paperclip, Sparkles } from "lucide-react";
-import { searchFiles } from "@/ash_rpc";
+import { searchFiles } from "@/core/api";
 import { fileFormatter, fileMentionItems, mentionFormatter } from "@/core/chat/mentions";
 import { unwrap } from "@/core/projects";
 import { ComposerTriggerPopover } from "@/ui/components/assistant-ui/elements/composer-trigger-popover.aui";
@@ -23,7 +23,7 @@ export function FileMentions() {
     cacheKey: projectId,
     fetcher: async (query) => {
       if (!query) return [];
-      const matches = unwrap(await searchFiles({ fields: ["path", "fileName", "matchType"], input: { id: projectId, query } }));
+      const matches = unwrap(await searchFiles({ input: { id: projectId, query } }));
       return fileMentionItems(matches);
     },
   });

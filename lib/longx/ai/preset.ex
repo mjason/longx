@@ -7,40 +7,25 @@ defmodule Longx.AI.Preset do
   use Ash.Resource,
     otp_app: :longx,
     domain: Longx.AI,
-    extensions: [AshTypescript.Resource]
+    extensions: [AshGraphql.Resource]
+
+  alias Longx.AI.Types
 
   alias Longx.AI.Presets
 
-  typescript do
-    type_name "Preset"
+  # no rows, no object type: only its generic actions are in the schema
+  graphql do
+    generate_object? false
   end
 
   actions do
     # the cards: each preset with its models (an array of typed maps is not
-    # selectable in ash_typescript 0.18's field types; the model shape —
+    # a Json value on the wire; the model shape —
     # upstreamId, slug, name, contextWindow, reasoningLevels, reasoningEffort,
     # image, recommended, installed — is typed client-side). `installed` says
     # whether the provider (and a model) already exists, so the page can offer
     # "add the missing ones" instead of a fresh setup.
-    action :list_presets, {:array, :map} do
-      constraints items: [
-                    fields: [
-                      slug: [type: :string, allow_nil?: false],
-                      name: [type: :string, allow_nil?: false],
-                      kind: [type: :atom, allow_nil?: false],
-                      base_url: [type: :string, allow_nil?: false],
-                      supports_hosted_web_search: [type: :boolean, allow_nil?: false],
-                      key_env: [type: :string, allow_nil?: false],
-                      key_url: [type: :string, allow_nil?: false],
-                      docs_url: [type: :string, allow_nil?: false],
-                      installed: [type: :boolean, allow_nil?: false],
-                      # the key is a login (a subscription), not a string
-                      credential: [type: :boolean, allow_nil?: false],
-                      provider_id: [type: :uuid],
-                      models: [type: {:array, :map}, allow_nil?: false]
-                    ]
-                  ]
-
+    action :list_presets, {:array, Types.ListPresets} do
       run fn _input, _ ->
         # an untyped map crosses the wire as is: camelCase it here
         {:ok,
@@ -51,14 +36,7 @@ defmodule Longx.AI.Preset do
     end
 
     # one step: the key, the models to add, which becomes the default
-    action :apply_preset, :map do
-      constraints fields: [
-                    provider_id: [type: :uuid, allow_nil?: false],
-                    model_ids: [type: {:array, :uuid}, allow_nil?: false],
-                    # the OAuth2 credential a subscription preset made (the login comes next)
-                    credential_id: [type: :uuid]
-                  ]
-
+    action :apply_preset, Types.ApplyPreset do
       argument :slug, :string, allow_nil?: false
       argument :api_key, :string
       # upstream ids; absent = the preset's recommended models

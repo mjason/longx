@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/ui/components/ui/alert-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { browserSettings, setBrowserPrivateNetwork } from "@/ash_rpc";
+import { browserSettings, setBrowserPrivateNetwork } from "@/core/api";
 import { unwrap } from "@/core/projects";
 import { Button } from "@/ui/components/ui/button";
 import { Input } from "@/ui/components/ui/input";
@@ -51,10 +51,10 @@ function BrowserCard() {
   const client = useQueryClient();
   const settings = useQuery({
     queryKey: browserKey,
-    queryFn: async () => unwrap(await browserSettings({ fields: ["allowPrivateNetwork", "available"] })),
+    queryFn: async () => unwrap(await browserSettings()),
   });
   const set = useMutation({
-    mutationFn: async (enabled: boolean) => unwrap(await setBrowserPrivateNetwork({ fields: ["allowPrivateNetwork", "available"], input: { enabled } })),
+    mutationFn: async (enabled: boolean) => unwrap(await setBrowserPrivateNetwork({ input: { enabled } })),
     onSuccess: (data) => client.setQueryData(browserKey, data),
     onError: fail,
   });

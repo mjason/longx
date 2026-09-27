@@ -52,13 +52,6 @@ defmodule LongxWeb.ProjectsRpcTest do
     %{dir: dir, bypass: bypass, model: model}
   end
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   defp create!(conn, dir, extra \\ %{}) do
     %{"success" => true, "data" => project} =
       rpc(conn, "create_project", %{
@@ -678,11 +671,13 @@ defmodule LongxWeb.ProjectsRpcTest do
       thread_idle(conn, project["id"], thread_id)
       assert File.read!(Path.join(dir, "a.txt")) == "changed"
 
-      assert %{"success" => false} =
-               rpc(conn, "list_turns", %{
-                 "fields" => ["commitBefore"],
-                 "input" => %{"threadId" => thread_id}
-               })
+      # the bookmarks are gone from the schema: a document naming one does not even build
+      assert_raise RuntimeError, ~r/no field commitBefore on Turn/, fn ->
+        rpc(conn, "list_turns", %{
+          "fields" => ["commitBefore"],
+          "input" => %{"threadId" => thread_id}
+        })
+      end
     end
   end
 

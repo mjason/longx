@@ -7,6 +7,7 @@ import { chromium, devices } from "playwright";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { buildSchema, getNamedType, isEnumType, isListType, isNonNullType, isObjectType, isScalarType } from "graphql";
 
 export const BASE = (process.env.LONGX_E2E_URL || "http://127.0.0.1:7798").replace(/\/$/, "");
 export const MODEL = process.env.LONGX_E2E_MODEL || null;
@@ -46,10 +47,19 @@ export class Harness {
     return this.watch(await context.newPage());
   }
 
+  /**
+   * A call into the GraphQL API in the old RPC shape: `action` (snake_case),
+   * `input` (the arguments), `fields` (the selection: names, or `{ parent:
+   * [...] }` for a nested object — an object-typed field named bare, or no
+   * list at all, reads every scalar of it), `extra.identity` (a record's id).
+   * The document is built from this checkout's priv/schema.graphql; the
+   * answer is the root field's value, a mutation's record unwrapped.
+   */
   async rpc(action, input, fields, extra = {}) {
-    const r = await this.page.request.post(BASE + "/rpc/run", {
+    const { document, field, wrapped } = gqlDocument(action, input ?? {}, fields, extra.identity);
+    const r = await this.page.request.post(BASE + "/gql", {
       headers: { "x-csrf-token": this.csrf, "content-type": "application/json" },
-      data: { action, input, ...(fields ? { fields } : {}), ...extra },
+      data: { query: document },
     });
     const text = await r.text();
     let json;
@@ -58,8 +68,10 @@ export class Harness {
     } catch {
       throw new Error(`${action}: HTTP ${r.status()} ${text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 300)}`);
     }
-    if (!json.success) throw new Error(`${action}: ${JSON.stringify(json.errors).slice(0, 400)}`);
-    return json.data;
+    if (json.errors?.length) throw new Error(`${action}: ${JSON.stringify(json.errors.map((e) => ({ message: e.message, fields: e.fields }))).slice(0, 400)}`);
+    const value = json.data?.[field];
+    // the keys inside a Json value come as the server keeps them: camelCase, like every typed field
+    return deepCamel(wrapped && value && typeof value === "object" && "result" in value ? value.result : value);
   }
 
   // a project of its own on the server's disk (the same machine as this script)
@@ -127,3 +139,89 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export function expect(cond, message) {
   if (!cond) throw new Error(message);
 }
+
+// --- the GraphQL document of an RPC-shaped call (the schema of this checkout) ---
+const SCHEMA = buildSchema(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), "../../../priv/schema.graphql"), "utf8"));
+const RESOURCE_TYPES = new Set(["Project", "Thread", "Turn", "Provider", "Model", "SearchProvider", "Credential", "Watch"]);
+const camel = (s) => s.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
+const snake = (s) => s.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase());
+function deepKeys(value, rename) {
+  if (Array.isArray(value)) return value.map((v) => deepKeys(v, rename));
+  if (value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [rename(k), deepKeys(v, rename)]));
+  }
+  return value;
+}
+const deepCamel = (v) => deepKeys(v, camel);
+
+export function gqlDocument(action, input, fields, identity) {
+  const name = camel(action);
+  let kind = "query";
+  let field = SCHEMA.getQueryType()?.getFields()[name];
+  if (!field) {
+    kind = "mutation";
+    field = SCHEMA.getMutationType()?.getFields()[name];
+  }
+  if (!field) throw new Error(`no GraphQL query or mutation named ${name}`);
+  const argNames = field.args.map((a) => a.name);
+  const rest = { ...input };
+  const args = [];
+  if (kind === "query") {
+    for (const [k, v] of Object.entries(rest)) args.push([camel(k), literal(v)]);
+  } else {
+    if (argNames.includes("id")) {
+      args.push(["id", literal(identity ?? rest.id)]);
+      delete rest.id;
+    }
+    for (const a of argNames) if (a !== "id" && a !== "input" && a in rest) { args.push([a, literal(rest[a])]); delete rest[a]; }
+    if (argNames.includes("input") && (Object.keys(rest).length > 0 || !argNames.includes("id"))) args.push(["input", object(rest)]);
+  }
+  const named = getNamedType(field.type);
+  const wrapped = kind === "mutation" && isObjectType(named) && /Result$/.test(named.name) && "result" in named.getFields();
+  const sel = wrapped ? ` { result${selection(fields, named.getFields().result.type, 0)} }` : selection(fields, field.type, 0);
+  const argText = args.length ? `(${args.map(([k, v]) => `${k}: ${v}`).join(", ")})` : "";
+  return { document: `${kind} { ${name}${argText}${sel} }`, field: name, wrapped };
+}
+
+function object(map) {
+  return `{${Object.entries(map).map(([k, v]) => `${camel(k)}: ${literal(v)}`).join(", ")}}`;
+}
+
+// a nested map is a Json scalar, which reads a JSON string
+function literal(v) {
+  if (v === null || v === undefined) return "null";
+  if (typeof v === "boolean" || typeof v === "number") return String(v);
+  if (typeof v === "string") return JSON.stringify(v);
+  if (Array.isArray(v)) return `[${v.map(literal).join(", ")}]`;
+  return JSON.stringify(JSON.stringify(deepKeys(v, snake)));
+}
+
+function selection(fields, type, depth) {
+  const named = getNamedType(type);
+  if (!isObjectType(named) || depth > 5) return "";
+  const all = Object.values(named.getFields());
+  const wanted = fields && fields.length ? fields : all.filter((f) => !RESOURCE_TYPES.has(getNamedType(f.type).name)).map((f) => f.name);
+  const parts = [];
+  for (const w of wanted) {
+    if (typeof w === "object") {
+      for (const [k, sub] of Object.entries(w)) parts.push(camel(k) + selection(sub, fieldOf(named, k).type, depth + 1));
+    } else {
+      const f = fieldOf(named, w);
+      const inner = getNamedType(f.type);
+      parts.push(camel(w) + (isScalarType(inner) || isEnumType(inner) ? "" : selection(null, f.type, depth + 1)));
+    }
+  }
+  return ` { ${parts.join(" ")} }`;
+}
+
+function fieldOf(objType, name) {
+  const wanted = camel(name);
+  const f = Object.values(objType.getFields()).find((x) => x.name === wanted);
+  if (!f) throw new Error(`no field ${name} on ${objType.name}`);
+  return f;
+}
+
+// unused imports kept for a reader of the schema helpers
+void isListType;
+void isNonNullType;
+

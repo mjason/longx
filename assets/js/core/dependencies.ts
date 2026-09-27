@@ -1,7 +1,7 @@
 // The command-line tools the agent's shell work leans on: what the server
 // found on its PATH, what is missing, and the install line for its platform.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { checkDependencies, dependencies } from "@/ash_rpc";
+import { checkDependencies, dependencies } from "@/core/api";
 import { unwrap } from "@/core/projects";
 
 export type DependencyTool = {
@@ -27,7 +27,7 @@ export const dependencyKeys = { report: ["dependencies"] as const };
 export function useDependencies() {
   return useQuery({
     queryKey: dependencyKeys.report,
-    queryFn: async () => unwrap(await dependencies({ fields: [...fields] })) as DependencyReport,
+    queryFn: async () => unwrap(await dependencies()) as DependencyReport,
     staleTime: 60_000,
   });
 }
@@ -35,7 +35,7 @@ export function useDependencies() {
 export function useCheckDependencies() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async () => unwrap(await checkDependencies({ fields: [...fields] })) as DependencyReport,
+    mutationFn: async () => unwrap(await checkDependencies()) as DependencyReport,
     onSuccess: (report) => client.setQueryData(dependencyKeys.report, report),
   });
 }

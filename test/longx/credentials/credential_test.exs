@@ -31,7 +31,7 @@ defmodule Longx.Credentials.CredentialTest do
     [listed] = Credentials.list()
     assert listed.name == "coros"
     assert listed.status == :ready
-    assert listed.has_secret?
+    assert listed.has_secret
     refute is_binary(Map.get(listed, :secret))
     refute inspect(listed) =~ "sk-test-value"
 
@@ -80,7 +80,7 @@ defmodule Longx.Credentials.CredentialTest do
         expires_at: DateTime.add(DateTime.utc_now(), 3600, :second)
       })
 
-    assert [%{status: :ready, has_refresh_token?: true}] = Credentials.list()
+    assert [%{status: :ready, has_refresh_token: true}] = Credentials.list()
     refute cred.encrypted_access_token =~ "at-1"
 
     {:ok, _} =

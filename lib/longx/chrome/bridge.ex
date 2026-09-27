@@ -9,42 +9,22 @@ defmodule Longx.Chrome.Bridge do
   use Ash.Resource,
     otp_app: :longx,
     domain: Longx.Chrome,
-    extensions: [AshTypescript.Resource]
+    extensions: [AshGraphql.Resource]
 
   alias Longx.Chrome
-  alias Longx.Chrome.Aliases
+  alias Longx.Chrome.{Aliases, Types}
 
-  typescript do
-    type_name "ChromeBridge"
+  # no rows, no object type: only its generic actions are in the schema
+  graphql do
+    generate_object? false
   end
 
-  @browsers_fields [
-    # untyped: an array of typed maps cannot be selected into by ash_typescript 0.18
-    browsers: [type: {:array, :map}, allow_nil?: false]
-  ]
-
-  @aliases_fields [
-    aliases: [type: {:array, :map}, allow_nil?: false],
-    default: [type: :string]
-  ]
-
-  @extension_fields [
-    url: [type: :string, allow_nil?: false],
-    version: [type: :string],
-    built: [type: :boolean, allow_nil?: false],
-    minimum_chrome: [type: :string, allow_nil?: false]
-  ]
-
-  @ok [ok: [type: :boolean, allow_nil?: false]]
-
   actions do
-    action :list_chrome_browsers, :map do
-      constraints fields: @browsers_fields
+    action :list_chrome_browsers, Types.Browsers do
       run fn _input, _ -> {:ok, %{browsers: Chrome.directory()}} end
     end
 
-    action :approve_chrome_browser, :map do
-      constraints fields: @ok
+    action :approve_chrome_browser, Types.Ok do
       argument :id, :string, allow_nil?: false
 
       run fn input, _ ->
@@ -55,8 +35,7 @@ defmodule Longx.Chrome.Bridge do
       end
     end
 
-    action :reject_chrome_browser, :map do
-      constraints fields: @ok
+    action :reject_chrome_browser, Types.Ok do
       argument :id, :string, allow_nil?: false
 
       run fn input, _ ->
@@ -67,8 +46,7 @@ defmodule Longx.Chrome.Bridge do
       end
     end
 
-    action :revoke_chrome_browser, :map do
-      constraints fields: @ok
+    action :revoke_chrome_browser, Types.Ok do
       argument :id, :string, allow_nil?: false
 
       run fn input, _ ->
@@ -79,8 +57,7 @@ defmodule Longx.Chrome.Bridge do
       end
     end
 
-    action :rename_chrome_browser, :map do
-      constraints fields: @ok
+    action :rename_chrome_browser, Types.Ok do
       argument :id, :string, allow_nil?: false
       argument :name, :string, allow_nil?: false
 
@@ -92,8 +69,7 @@ defmodule Longx.Chrome.Bridge do
       end
     end
 
-    action :set_chrome_browser_max_tabs, :map do
-      constraints fields: @ok
+    action :set_chrome_browser_max_tabs, Types.Ok do
       argument :id, :string, allow_nil?: false
       argument :max_tabs, :integer, allow_nil?: false, constraints: [min: 1, max: 100]
 
@@ -105,8 +81,7 @@ defmodule Longx.Chrome.Bridge do
       end
     end
 
-    action :set_chrome_origin, :map do
-      constraints fields: @ok
+    action :set_chrome_origin, Types.Ok do
       argument :id, :string, allow_nil?: false
       argument :origin, :string, allow_nil?: false
       argument :access, :atom, allow_nil?: false, constraints: [one_of: [:allow, :deny]]
@@ -120,8 +95,7 @@ defmodule Longx.Chrome.Bridge do
       end
     end
 
-    action :delete_chrome_origin, :map do
-      constraints fields: @ok
+    action :delete_chrome_origin, Types.Ok do
       argument :id, :string, allow_nil?: false
       argument :origin, :string, allow_nil?: false
 
@@ -133,13 +107,11 @@ defmodule Longx.Chrome.Bridge do
       end
     end
 
-    action :chrome_aliases, :map do
-      constraints fields: @aliases_fields
+    action :chrome_aliases, Types.Aliases do
       run fn _input, _ -> {:ok, aliases()} end
     end
 
-    action :set_chrome_alias, :map do
-      constraints fields: @aliases_fields
+    action :set_chrome_alias, Types.Aliases do
       argument :name, :string, allow_nil?: false
       argument :browsers, {:array, :string}, allow_nil?: false
 
@@ -151,8 +123,7 @@ defmodule Longx.Chrome.Bridge do
       end
     end
 
-    action :delete_chrome_alias, :map do
-      constraints fields: @aliases_fields
+    action :delete_chrome_alias, Types.Aliases do
       argument :name, :string, allow_nil?: false
 
       run fn input, _ ->
@@ -161,8 +132,7 @@ defmodule Longx.Chrome.Bridge do
       end
     end
 
-    action :set_chrome_default_alias, :map do
-      constraints fields: @aliases_fields
+    action :set_chrome_default_alias, Types.Aliases do
       argument :name, :string
 
       run fn input, _ ->
@@ -174,8 +144,7 @@ defmodule Longx.Chrome.Bridge do
     end
 
     # where the extension is downloaded from, and which version that is
-    action :chrome_extension, :map do
-      constraints fields: @extension_fields
+    action :chrome_extension, Types.Extension do
       run fn _input, _ -> {:ok, Chrome.extension_info()} end
     end
   end

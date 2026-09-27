@@ -3,7 +3,7 @@
 // DOM-free hooks. Saving reloads every open project's file watcher; the
 // tree's ignored list is refetched with it.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fileRules, setFileRules, updateProject } from "@/ash_rpc";
+import { fileRules, setFileRules, updateProject } from "@/core/api";
 import { queryKeys, unwrap } from "./projects";
 
 /** two texts, gitignore syntax: `ignore` hides, `watch` keeps watched what .gitignore hides */
@@ -14,13 +14,13 @@ const fields = ["ignore", "watch", "builtinIgnore", "builtinWatch"] as const;
 const key = ["file-rules"] as const;
 
 export function useFileRules() {
-  return useQuery({ queryKey: key, queryFn: async () => unwrap(await fileRules({ fields: [...fields] })) as GlobalFileRules });
+  return useQuery({ queryKey: key, queryFn: async () => unwrap(await fileRules()) as GlobalFileRules });
 }
 
 export function useSaveFileRules() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (input: FileRules) => unwrap(await setFileRules({ fields: [...fields], input })) as GlobalFileRules,
+    mutationFn: async (input: FileRules) => unwrap(await setFileRules({ input })) as GlobalFileRules,
     onSuccess: (data) => {
       client.setQueryData(key, data);
       void client.invalidateQueries({ queryKey: ["files"] });
@@ -32,7 +32,7 @@ export function useSaveFileRules() {
 export function useSaveProjectFileRules(projectId: string, slug: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (rules: FileRules) => unwrap(await updateProject({ identity: projectId, fields: ["id"], input: { fileRules: rules } })),
+    mutationFn: async (rules: FileRules) => unwrap(await updateProject({ identity: projectId, input: { fileRules: rules } })),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.project(slug) });
       void client.invalidateQueries({ queryKey: ["files", projectId] });

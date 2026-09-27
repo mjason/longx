@@ -14,7 +14,7 @@ import {
   updateCredential,
   credentialDeviceBegin,
   credentialDevicePoll,
-} from "@/ash_rpc";
+} from "@/core/api";
 import { unwrap } from "@/core/projects";
 
 export type CredentialKind = "api_key" | "oauth2";
@@ -117,7 +117,7 @@ export function splitHosts(text: string): string[] {
 export function useCredentials(options: { refetchInterval?: number | false } = {}) {
   return useQuery({
     queryKey: credentialKeys.all,
-    queryFn: async () => unwrap(await listCredentials({ fields: [...credentialFields] })) as Credential[],
+    queryFn: async () => unwrap(await listCredentials()) as Credential[],
     refetchInterval: options.refetchInterval ?? false,
   });
 }
@@ -127,7 +127,7 @@ export function useRedirectUri(origin: string | null) {
   return useQuery({
     queryKey: credentialKeys.redirect(origin),
     queryFn: async () =>
-      unwrap(await credentialRedirectUri({ fields: ["uri"], input: origin ? { origin } : {} })).uri,
+      unwrap(await credentialRedirectUri({ input: origin ? { origin } : {} })).uri,
     staleTime: 5 * 60_000,
   });
 }
@@ -135,18 +135,17 @@ export function useRedirectUri(origin: string | null) {
 export function useCredentialActions() {
   const client = useQueryClient();
   const invalidate = () => client.invalidateQueries({ queryKey: credentialKeys.all });
-  const fields = [...credentialFields];
   const createApiKey = useMutation({
-    mutationFn: async (input: ApiKeyInput) => unwrap(await createCredentialApiKey({ fields, input })) as Credential,
+    mutationFn: async (input: ApiKeyInput) => unwrap(await createCredentialApiKey({ input })) as Credential,
     onSuccess: invalidate,
   });
   const createOauth2 = useMutation({
-    mutationFn: async (input: Oauth2Input) => unwrap(await createCredentialOauth2({ fields, input })) as Credential,
+    mutationFn: async (input: Oauth2Input) => unwrap(await createCredentialOauth2({ input })) as Credential,
     onSuccess: invalidate,
   });
   const update = useMutation({
     mutationFn: async ({ id, input }: { id: string; input: CredentialUpdate }) =>
-      unwrap(await updateCredential({ fields, identity: id, input })) as Credential,
+      unwrap(await updateCredential({ identity: id, input })) as Credential,
     onSuccess: invalidate,
   });
   const remove = useMutation({
@@ -155,18 +154,18 @@ export function useCredentialActions() {
   });
   const loginUrl = useMutation({
     mutationFn: async ({ id, origin }: { id: string; origin: string | null }) =>
-      unwrap(await credentialLoginUrl({ fields: ["url", "redirectUri", "loopback"], input: origin ? { id, origin } : { id } })),
+      unwrap(await credentialLoginUrl({ input: origin ? { id, origin } : { id } })),
   });
   // the address the browser was sent to, pasted by the person (a loopback redirect
   // the browser could not reach because it runs on another machine)
   const completeUrl = useMutation({
-    mutationFn: async (url: string) => unwrap(await credentialCompleteUrl({ fields, input: { url } })) as Credential,
+    mutationFn: async (url: string) => unwrap(await credentialCompleteUrl({ input: { url } })) as Credential,
     onSuccess: invalidate,
   });
   // the device-code login: a code to type at the vendor's page, then polls until done
   const deviceBegin = useMutation({
     mutationFn: async (id: string) =>
-      unwrap(await credentialDeviceBegin({ fields: ["state", "userCode", "verificationUrl", "interval"], input: { id } })) as {
+      unwrap(await credentialDeviceBegin({ input: { id } })) as {
         state: string;
         userCode: string;
         verificationUrl: string;
@@ -175,11 +174,11 @@ export function useCredentialActions() {
   });
   const devicePoll = useMutation({
     mutationFn: async (state: string) =>
-      unwrap(await credentialDevicePoll({ fields: ["status", "message"], input: { state } })) as { status: "pending" | "ok" | "error"; message: string | null },
+      unwrap(await credentialDevicePoll({ input: { state } })) as { status: "pending" | "ok" | "error"; message: string | null },
     onSuccess: (r) => (r.status === "ok" ? invalidate() : undefined),
   });
   const refresh = useMutation({
-    mutationFn: async (id: string) => unwrap(await refreshCredential({ fields, input: { id } })) as Credential,
+    mutationFn: async (id: string) => unwrap(await refreshCredential({ input: { id } })) as Credential,
     onSuccess: invalidate,
   });
   return { createApiKey, createOauth2, update, remove, loginUrl, completeUrl, deviceBegin, devicePoll, refresh, invalidate };

@@ -4,106 +4,20 @@ defmodule Longx.System.Status do
   use Ash.Resource,
     otp_app: :longx,
     domain: Longx.System,
-    extensions: [AshTypescript.Resource]
+    extensions: [AshGraphql.Resource]
 
-  typescript do
-    type_name "SystemStatus"
+  alias Longx.System.Types
+
+  # no rows, no object type: only its generic actions are in the schema
+  graphql do
+    generate_object? false
   end
-
-  @dependency_fields [
-    os: [type: :string, allow_nil?: false],
-    missing: [type: :integer, allow_nil?: false],
-    install_command: [type: :string],
-    # untyped: an array of typed maps cannot be selected into by ash_typescript 0.18
-    tools: [type: {:array, :map}, allow_nil?: false],
-    checked_at: [type: :string, allow_nil?: false]
-  ]
-
-  @browser_fields [
-    allow_private_network: [type: :boolean, allow_nil?: false],
-    available: [type: :boolean, allow_nil?: false]
-  ]
-
-  @browser_status_fields [
-    stage: [type: :string, allow_nil?: false],
-    received: [type: :integer, allow_nil?: false],
-    total: [type: :integer],
-    error: [type: :string],
-    version: [type: :string, allow_nil?: false],
-    latest: [type: :string, allow_nil?: false],
-    target: [type: :string],
-    path: [type: :string],
-    # where the binary in use comes from: env | downloaded (nil: none)
-    source: [type: :string],
-    installed_version: [type: :string],
-    upgradable: [type: :boolean, allow_nil?: false]
-  ]
-
-  @upgrade_fields [
-    current: [type: :string, allow_nil?: false],
-    installed: [type: :boolean, allow_nil?: false],
-    # the Docker image: an upgrade is a new image, the page says so
-    container: [type: :boolean, allow_nil?: false],
-    latest: [type: :string],
-    available: [type: :boolean, allow_nil?: false],
-    notes_url: [type: :string],
-    checked_at: [type: :string],
-    error: [type: :string],
-    stage: [
-      type: :atom,
-      allow_nil?: false,
-      constraints: [
-        one_of: [:idle, :downloading, :verifying, :installing, :restarting, :installed, :failed]
-      ]
-    ],
-    message: [type: :string],
-    target: [type: :string],
-    # the tarball's bytes so far while downloading (total nil without a content-length)
-    progress: [type: :map],
-    has_github_token: [type: :boolean, allow_nil?: false]
-  ]
-
-  @agent_settings_fields [
-    max_depth: [type: :integer, allow_nil?: false],
-    max_children: [type: :integer, allow_nil?: false],
-    idle_minutes: [type: :integer, allow_nil?: false],
-    model_retries: [type: :integer, allow_nil?: false],
-    command_oom_priority: [type: :integer, allow_nil?: false],
-    command_memory_percent: [type: :integer, allow_nil?: false],
-    memory_floor_percent: [type: :integer, allow_nil?: false],
-    child_model: [type: :string],
-    child_effort: [type: :string]
-  ]
-
-  @file_rules_fields [
-    ignore: [type: :string, allow_nil?: false, constraints: [allow_empty?: true, trim?: false]],
-    watch: [type: :string, allow_nil?: false, constraints: [allow_empty?: true, trim?: false]],
-    builtin_ignore: [type: {:array, :string}, allow_nil?: false],
-    builtin_watch: [type: {:array, :string}, allow_nil?: false]
-  ]
-
-  @sentry_fields [
-    enabled: [type: :boolean, allow_nil?: false],
-    dsn: [type: :string],
-    environment: [type: :string, allow_nil?: false],
-    release: [type: :string, allow_nil?: false]
-  ]
 
   actions do
     # The directory picker: subdirectories of `path` (home when omitted),
     # each flagged when it is a git repository. Files are never listed;
     # dot-directories only with `show_hidden`. Paths must be absolute.
-    action :list_directory, :map do
-      constraints fields: [
-                    path: [type: :string, allow_nil?: false],
-                    parent: [type: :string],
-                    git: [type: :boolean, allow_nil?: false],
-                    # arrays of typed maps are not selectable in ash_typescript 0.18's
-                    # field types; the entry shape (name, path, git) is typed client-side
-                    entries: [type: {:array, :map}, allow_nil?: false],
-                    roots: [type: {:array, :map}, allow_nil?: false]
-                  ]
-
+    action :list_directory, Types.ListDirectory do
       argument :path, :string
       argument :show_hidden, :boolean, default: false
 
@@ -116,13 +30,7 @@ defmodule Longx.System.Status do
 
     # The picker's "new directory": one segment under an existing parent;
     # answers the entry as the listing would show it
-    action :create_directory, :map do
-      constraints fields: [
-                    name: [type: :string, allow_nil?: false],
-                    path: [type: :string, allow_nil?: false],
-                    git: [type: :boolean, allow_nil?: false]
-                  ]
-
+    action :create_directory, Types.CreateDirectory do
       argument :parent, :string, allow_nil?: false
       argument :name, :string, allow_nil?: false
 
@@ -131,21 +39,7 @@ defmodule Longx.System.Status do
       end
     end
 
-    # the native kernel's knowledge, the shipped root (read-only) and the
-    # person's global root: what Settings → 知识 lists and edits
-    @knowledge_doc_fields [
-      root: [type: :string, allow_nil?: false],
-      path: [type: :string, allow_nil?: false],
-      title: [type: :string, allow_nil?: false],
-      summary: [type: :string, allow_nil?: false],
-      tags: [type: {:array, :string}, allow_nil?: false],
-      always: [type: :boolean, allow_nil?: false],
-      writable: [type: :boolean, allow_nil?: false]
-    ]
-
-    action :knowledge_docs, {:array, :map} do
-      constraints items: [fields: @knowledge_doc_fields]
-
+    action :knowledge_docs, {:array, Types.KnowledgeDoc} do
       run fn _input, _ ->
         {:ok,
          Enum.map(Longx.Agent.Knowledge.global_docs(), fn doc ->
@@ -162,15 +56,8 @@ defmodule Longx.System.Status do
       end
     end
 
-    action :knowledge_read, :map do
+    action :knowledge_read, Types.KnowledgeRead do
       # a file's text, as it is: Ash trims strings unless told not to
-      constraints fields: [
-                    text: [
-                      type: :string,
-                      allow_nil?: false,
-                      constraints: [trim?: false, allow_empty?: true]
-                    ]
-                  ]
 
       argument :path, :string, allow_nil?: false
 
@@ -219,14 +106,11 @@ defmodule Longx.System.Status do
     end
 
     # the native kernel's settings (Longx.Agent.Definition.Settings): the global layer
-    action :agent_settings, :map do
-      constraints fields: @agent_settings_fields
-
+    action :agent_settings, Types.AgentSettings do
       run fn _input, _ -> {:ok, Longx.Agent.Definition.Settings.global()} end
     end
 
-    action :set_agent_settings, :map do
-      constraints fields: @agent_settings_fields
+    action :set_agent_settings, Types.AgentSettings do
       argument :max_depth, :integer
       argument :max_children, :integer
       argument :idle_minutes, :integer
@@ -255,26 +139,18 @@ defmodule Longx.System.Status do
     end
 
     # the command-line tools the agent leans on: what is missing and how to install it
-    action :dependencies, :map do
-      constraints fields: @dependency_fields
+    action :dependencies, Types.Dependency do
       run fn _input, _ -> {:ok, dependency_report(Longx.System.Dependencies.report())} end
     end
 
-    action :check_dependencies, :map do
-      constraints fields: @dependency_fields
-
+    action :check_dependencies, Types.Dependency do
       run fn _input, _ ->
         {:ok, dependency_report(Longx.System.Dependencies.report(force: true))}
       end
     end
 
     # the address a login sends the person back to (Longx.System.public_url/0)
-    action :public_url, :map do
-      constraints fields: [
-                    url: [type: :string, allow_nil?: false],
-                    setting: [type: :string]
-                  ]
-
+    action :public_url, Types.PublicUrl do
       run fn _input, _ ->
         {:ok, %{url: Longx.System.public_url(), setting: Longx.System.public_url_setting()}}
       end
@@ -282,13 +158,11 @@ defmodule Longx.System.Status do
 
     # what Longx ignores in every project (Longx.Projects.FileRules): the global
     # texts, gitignore syntax, beside the built-in lists they stack on
-    action :file_rules, :map do
-      constraints fields: @file_rules_fields
+    action :file_rules, Types.FileRules do
       run fn _input, _ -> {:ok, file_rules()} end
     end
 
-    action :set_file_rules, :map do
-      constraints fields: @file_rules_fields
+    action :set_file_rules, Types.FileRules do
       argument :ignore, :string, constraints: [allow_empty?: true, trim?: false]
       argument :watch, :string, constraints: [allow_empty?: true, trim?: false]
 
@@ -299,13 +173,11 @@ defmodule Longx.System.Status do
     end
 
     # error reporting (Longx.Sentry): on when a DSN is saved
-    action :sentry_status, :map do
-      constraints fields: @sentry_fields
+    action :sentry_status, Types.Sentry do
       run fn _input, _ -> {:ok, Longx.Sentry.status()} end
     end
 
-    action :set_sentry_dsn, :map do
-      constraints fields: @sentry_fields
+    action :set_sentry_dsn, Types.Sentry do
       argument :dsn, :string, allow_nil?: false, constraints: [allow_empty?: true]
 
       run fn input, _ ->
@@ -316,12 +188,7 @@ defmodule Longx.System.Status do
       end
     end
 
-    action :sentry_test, :map do
-      constraints fields: [
-                    ok: [type: :boolean, allow_nil?: false],
-                    message: [type: :string, allow_nil?: false]
-                  ]
-
+    action :sentry_test, Types.SentryTest do
       run fn _input, _ ->
         case Longx.Sentry.send_test() do
           {:ok, id} -> {:ok, %{ok: true, message: id}}
@@ -330,12 +197,7 @@ defmodule Longx.System.Status do
       end
     end
 
-    action :set_public_url, :map do
-      constraints fields: [
-                    url: [type: :string, allow_nil?: false],
-                    setting: [type: :string]
-                  ]
-
+    action :set_public_url, Types.SetPublicUrl do
       argument :url, :string, allow_nil?: false, constraints: [allow_empty?: true]
 
       run fn input, _ ->
@@ -351,14 +213,11 @@ defmodule Longx.System.Status do
 
     # Longx.Upgrade — the version, the last release check, the stage of an
     # upgrade in progress; one shape for the four actions
-    action :upgrade_status, :map do
-      constraints fields: @upgrade_fields
+    action :upgrade_status, Types.Upgrade do
       run fn _input, _ -> {:ok, upgrade_status()} end
     end
 
-    action :upgrade_check, :map do
-      constraints fields: @upgrade_fields
-
+    action :upgrade_check, Types.Upgrade do
       run fn _input, _ ->
         # the failure is in the status (error), not an RPC error: the page shows it in place
         _ = Longx.Upgrade.check(force: true)
@@ -366,9 +225,7 @@ defmodule Longx.System.Status do
       end
     end
 
-    action :upgrade_apply, :map do
-      constraints fields: @upgrade_fields
-
+    action :upgrade_apply, Types.Upgrade do
       run fn _input, _ ->
         case Longx.Upgrade.apply() do
           {:ok, _} ->
@@ -389,20 +246,16 @@ defmodule Longx.System.Status do
     # private / loopback addresses. Off is the SSRF guard; on is needed on a
     # fake-ip network (a VPN resolving every site to a private address),
     # since obscura has no per-range allowance
-    action :browser_settings, :map do
-      constraints fields: @browser_fields
+    action :browser_settings, Types.Browser do
       run fn _input, _ -> {:ok, browser_settings()} end
     end
 
     # the headless browser's download (Longx.Browser.Installer): installed, downloading (bytes), failed
-    action :browser_status, :map do
-      constraints fields: @browser_status_fields
+    action :browser_status, Types.BrowserStatus do
       run fn _input, _ -> {:ok, browser_status()} end
     end
 
-    action :browser_install, :map do
-      constraints fields: @browser_status_fields
-
+    action :browser_install, Types.BrowserStatus do
       run fn _input, _ ->
         case Longx.Browser.Installer.install() do
           :ok ->
@@ -414,8 +267,7 @@ defmodule Longx.System.Status do
       end
     end
 
-    action :set_browser_private_network, :map do
-      constraints fields: @browser_fields
+    action :set_browser_private_network, Types.Browser do
       argument :enabled, :boolean, allow_nil?: false
 
       run fn input, _ ->
@@ -427,9 +279,7 @@ defmodule Longx.System.Status do
     # Settings → 请求记录: the gateway's last requests (Longx.AI.Gateway.Log) —
     # what went wrong on the server lately (Longx.System.Faults), newest first
     # the agents' live commands, for the settings page; one killed from there
-    action :running_commands, :map do
-      constraints fields: [commands: [type: {:array, :map}, allow_nil?: false]]
-
+    action :running_commands, Types.RunningCommands do
       run fn _input, _ ->
         {:ok,
          %{
@@ -463,8 +313,7 @@ defmodule Longx.System.Status do
       end
     end
 
-    action :kill_command, :map do
-      constraints fields: [ok: [type: :boolean, allow_nil?: false]]
+    action :kill_command, Types.KillCommand do
       argument :id, :string, allow_nil?: false
 
       run fn input, _ ->
@@ -475,12 +324,7 @@ defmodule Longx.System.Status do
       end
     end
 
-    action :recent_faults, :map do
-      constraints fields: [
-                    faults: [type: {:array, :map}, allow_nil?: false],
-                    recent: [type: :integer, allow_nil?: false]
-                  ]
-
+    action :recent_faults, Types.RecentFaults do
       run fn _input, _ ->
         {:ok,
          %{
@@ -501,13 +345,8 @@ defmodule Longx.System.Status do
     end
 
     # what codex asked the provider for, newest first; entries are untyped
-    # maps (arrays of typed maps are not selectable in ash_typescript 0.18)
-    action :gateway_requests, :map do
-      constraints fields: [
-                    requests: [type: {:array, :map}, allow_nil?: false],
-                    keep: [type: :integer, allow_nil?: false]
-                  ]
-
+    # maps (untyped: a Json value on the wire, its keys camelCased by the client)
+    action :gateway_requests, Types.GatewayRequests do
       argument :limit, :integer, default: 100
 
       run fn input, _ ->
@@ -519,8 +358,7 @@ defmodule Longx.System.Status do
       end
     end
 
-    action :set_github_token, :map do
-      constraints fields: @upgrade_fields
+    action :set_github_token, Types.Upgrade do
       argument :token, :string
 
       run fn input, _ ->

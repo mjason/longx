@@ -17,7 +17,7 @@ import {
   setChromeBrowserMaxTabs,
   setChromeDefaultAlias,
   setChromeOrigin,
-} from "@/ash_rpc";
+} from "@/core/api";
 import { unwrap } from "./projects";
 
 export type ChromeBrowser = {
@@ -51,14 +51,14 @@ export function useChromeBrowsers(options: { refetchInterval?: number | false } 
   return useQuery({
     queryKey: chromeKeys.browsers,
     refetchInterval: options.refetchInterval ?? 3000,
-    queryFn: async () => (unwrap(await listChromeBrowsers({ fields: ["browsers"] })) as { browsers: ChromeBrowser[] }).browsers,
+    queryFn: async () => (unwrap(await listChromeBrowsers()) as { browsers: ChromeBrowser[] }).browsers,
   });
 }
 
 export function useChromeAliases() {
   return useQuery({
     queryKey: chromeKeys.aliases,
-    queryFn: async () => unwrap(await chromeAliases({ fields: [...aliasFields] })) as ChromeAliases,
+    queryFn: async () => unwrap(await chromeAliases()) as ChromeAliases,
   });
 }
 
@@ -66,7 +66,7 @@ export function useChromeExtension() {
   return useQuery({
     queryKey: chromeKeys.extension,
     staleTime: 60_000,
-    queryFn: async () => unwrap(await chromeExtension({ fields: ["url", "version", "built", "minimumChrome"] })) as ChromeExtension,
+    queryFn: async () => unwrap(await chromeExtension()) as ChromeExtension,
   });
 }
 
@@ -82,33 +82,33 @@ function useBrowsersMutation<T>(fn: (input: T) => Promise<unknown>) {
 }
 
 export function useApproveBrowser() {
-  return useBrowsersMutation(async (id: string) => unwrap(await approveChromeBrowser({ fields: ["ok"], input: { id } })));
+  return useBrowsersMutation(async (id: string) => unwrap(await approveChromeBrowser({ input: { id } })));
 }
 
 export function useRejectBrowser() {
-  return useBrowsersMutation(async (id: string) => unwrap(await rejectChromeBrowser({ fields: ["ok"], input: { id } })));
+  return useBrowsersMutation(async (id: string) => unwrap(await rejectChromeBrowser({ input: { id } })));
 }
 
 export function useRevokeBrowser() {
-  return useBrowsersMutation(async (id: string) => unwrap(await revokeChromeBrowser({ fields: ["ok"], input: { id } })));
+  return useBrowsersMutation(async (id: string) => unwrap(await revokeChromeBrowser({ input: { id } })));
 }
 
 export function useRenameBrowser() {
-  return useBrowsersMutation(async (input: { id: string; name: string }) => unwrap(await renameChromeBrowser({ fields: ["ok"], input })));
+  return useBrowsersMutation(async (input: { id: string; name: string }) => unwrap(await renameChromeBrowser({ input })));
 }
 
 export function useSetBrowserMaxTabs() {
-  return useBrowsersMutation(async (input: { id: string; maxTabs: number }) => unwrap(await setChromeBrowserMaxTabs({ fields: ["ok"], input })));
+  return useBrowsersMutation(async (input: { id: string; maxTabs: number }) => unwrap(await setChromeBrowserMaxTabs({ input })));
 }
 
 export function useSetOrigin() {
   return useBrowsersMutation(async (input: { id: string; origin: string; access: "allow" | "deny" }) =>
-    unwrap(await setChromeOrigin({ fields: ["ok"], input })),
+    unwrap(await setChromeOrigin({ input })),
   );
 }
 
 export function useDeleteOrigin() {
-  return useBrowsersMutation(async (input: { id: string; origin: string }) => unwrap(await deleteChromeOrigin({ fields: ["ok"], input })));
+  return useBrowsersMutation(async (input: { id: string; origin: string }) => unwrap(await deleteChromeOrigin({ input })));
 }
 
 function useAliasesMutation<T>(fn: (input: T) => Promise<ChromeAliases>) {
@@ -124,16 +124,16 @@ function useAliasesMutation<T>(fn: (input: T) => Promise<ChromeAliases>) {
 
 export function useSetChromeAlias() {
   return useAliasesMutation(
-    async (input: { name: string; browsers: string[] }) => unwrap(await setChromeAlias({ fields: [...aliasFields], input })) as ChromeAliases,
+    async (input: { name: string; browsers: string[] }) => unwrap(await setChromeAlias({ input })) as ChromeAliases,
   );
 }
 
 export function useDeleteChromeAlias() {
-  return useAliasesMutation(async (name: string) => unwrap(await deleteChromeAlias({ fields: [...aliasFields], input: { name } })) as ChromeAliases);
+  return useAliasesMutation(async (name: string) => unwrap(await deleteChromeAlias({ input: { name } })) as ChromeAliases);
 }
 
 export function useSetChromeDefaultAlias() {
   return useAliasesMutation(
-    async (name: string | null) => unwrap(await setChromeDefaultAlias({ fields: [...aliasFields], input: { name } })) as ChromeAliases,
+    async (name: string | null) => unwrap(await setChromeDefaultAlias({ input: { name } })) as ChromeAliases,
   );
 }

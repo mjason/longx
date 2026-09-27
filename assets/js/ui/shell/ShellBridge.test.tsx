@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt } from "@/ui/test-utils";
 
-vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
 
 // the app's half of the bridge lives in the router: a deep link from a

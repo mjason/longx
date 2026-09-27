@@ -11,15 +11,17 @@ defmodule Longx.Watches.Watch do
     otp_app: :longx,
     domain: Longx.Watches,
     data_layer: AshSqlite.DataLayer,
-    extensions: [AshTypescript.Resource]
+    extensions: [AshGraphql.Resource]
+
+  alias Longx.Watches.Types
 
   sqlite do
     table "watches"
     repo Longx.Repo
   end
 
-  typescript do
-    type_name "Watch"
+  graphql do
+    type :watch
   end
 
   actions do
@@ -155,14 +157,7 @@ defmodule Longx.Watches.Watch do
     end
 
     # a dry run: what the script would log and send, its result
-    action :dry_run, :map do
-      constraints fields: [
-                    ok: [type: :boolean, allow_nil?: false],
-                    result: [type: :string, allow_nil?: false],
-                    log: [type: {:array, :string}, allow_nil?: false],
-                    sends: [type: {:array, :string}, allow_nil?: false]
-                  ]
-
+    action :dry_run, Types.DryRun do
       argument :id, :uuid, allow_nil?: false
 
       run fn input, _ ->
@@ -200,9 +195,7 @@ defmodule Longx.Watches.Watch do
     end
 
     # every project's watches, the running ones first (the global settings page)
-    action :list_all, :map do
-      constraints fields: [watches: [type: {:array, :map}, allow_nil?: false]]
-
+    action :list_all, Types.ListAll do
       run fn _input, _ ->
         {:ok, %{watches: Longx.Watches.overview()}}
       end

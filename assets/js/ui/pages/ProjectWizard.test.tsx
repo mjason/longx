@@ -4,9 +4,9 @@ import { describe, expect, test, vi } from "vitest";
 import { renderAt } from "@/ui/test-utils";
 import { failed, ok, project, rpcMock, socketMock } from "@/ui/test-mocks";
 
-vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { createDirectory, createProject } from "@/ash_rpc";
+import { createDirectory, createProject } from "@/core/api";
 
 // the page opens through a lazy route (routes.tsx): its module in the cache
 // first, so the route resolves at once however slow the machine — CI's runner

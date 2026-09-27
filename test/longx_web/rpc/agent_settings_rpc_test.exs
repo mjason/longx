@@ -16,13 +16,6 @@ defmodule LongxWeb.AgentSettingsRpcTest do
     %{dir: dir}
   end
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   @fields [
     "maxDepth",
     "maxChildren",

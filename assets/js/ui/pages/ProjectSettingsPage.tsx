@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
-import { archiveProject, deleteProject, updateProject, type UpdateProjectInput } from "@/ash_rpc";
+import { archiveProject, deleteProject, updateProject } from "@/core/api";
+import type { UpdateProjectInput } from "@/gql/graphql";
 import { usePromoteLocal } from "@/core/agent";
 import { useModelRows } from "@/core/ai";
 import { queryKeys, unwrap, useAgentDefinition, useModels, useProject } from "@/core/projects";
@@ -23,7 +24,10 @@ import { ProjectWatches } from "./settings/ProjectWatches";
 import { projectFileRules, useSaveProjectFileRules, type FileRules } from "@/core/fileRules";
 import { FileRulesFields } from "@/ui/components/FileRulesFields";
 
-type Form = Required<Pick<UpdateProjectInput, "name" | "webSearch" | "trustLocalAgent">> & {
+type Form = {
+  name: string;
+  webSearch: boolean;
+  trustLocalAgent: boolean;
   description: string;
   modelId: string;
   /** the kernel's parameters this project overrides ("" = inherit) */
@@ -67,7 +71,6 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
       unwrap(
         await updateProject({
           identity: project.id,
-          fields: ["id"],
           input: {
             name: form.name,
             description: form.description || null,
@@ -88,7 +91,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
   });
 
   const archive = useMutation({
-    mutationFn: async () => unwrap(await archiveProject({ identity: project.id, fields: ["id"] })),
+    mutationFn: async () => unwrap(await archiveProject({ identity: project.id })),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: queryKeys.projects });
       navigate("/");

@@ -26,6 +26,13 @@ metadata:
 - [relationships](references/ash/relationships.md)
 - [testing](references/ash/testing.md)
 
+### ash_graphql
+
+- [ash_graphql](references/ash_graphql/ash_graphql.md)
+- [custom_types](references/ash_graphql/custom_types.md)
+- [domain_configuration](references/ash_graphql/domain_configuration.md)
+- [resource_configuration](references/ash_graphql/resource_configuration.md)
+
 ### ash_phoenix
 
 - [ash_phoenix](references/ash_phoenix/ash_phoenix.md)
@@ -43,7 +50,7 @@ metadata:
 ## Searching Documentation
 
 ```sh
-mix usage_rules.search_docs "search term" -p ash -p ash_cloak -p ash_phoenix -p ash_sqlite -p ash_typescript
+mix usage_rules.search_docs "search term" -p ash -p ash_cloak -p ash_graphql -p ash_phoenix -p ash_sqlite -p ash_typescript
 ```
 
 ## Available Mix Tasks
@@ -73,6 +80,7 @@ mix usage_rules.search_docs "search term" -p ash -p ash_cloak -p ash_phoenix -p 
 - `mix ash.set.domains` - Dynamically discovers and updates Ash domains in config.exs
 - `mix ash.setup` - Runs all setup tasks for any extension on any resource/domain in your application.
 - `mix ash.tear_down` - Runs all tear_down tasks for any extension on any resource/domain in your application.
+- `mix ash_graphql.install` - Installs AshGraphql. Should be run with `mix igniter.install ash_graphql`
 - `mix ash_phoenix.gen.html` - Generates a controller and HTML views for an existing Ash resource.
 - `mix ash_phoenix.gen.live` - Generates liveviews for a given domain and resource.
 - `mix ash_phoenix.install` - Installs AshPhoenix into a project. Should be called with `mix igniter.install ash_phoenix`

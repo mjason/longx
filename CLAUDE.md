@@ -183,7 +183,10 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     watched though ignored (built in `.longx/ .gitignore .longxignore`, global, the
     project's), each line a `!` rule; 4 `.longxignore` at the root, above all
     (`!target/reports/` brings back what `.gitignore` hides). `.git` itself is never
-    walked. A change to the rules (a setting — `Watcher.reload/1` / `reload_all/0` —, an
+    walked. **An ignored entry appearing under a watched parent is reported** (a `target/`
+    made at the root: the tree draws it dimmed, so it must learn of it — the shim once
+    dropped the entry with everything under it and the tree never showed it; e2e
+    `08-files`); what lands inside it stays unreported. A change to the rules (a setting — `Watcher.reload/1` / `reload_all/0` —, an
     ignore file on disk) re-syncs the watches. RPC `ignored_paths` (Files), `file_rules` /
     `set_file_rules` (System), `update_project` `fileRules`. Tests:
     `test/longx/projects/file_watch_test.exs`, `project_channel_test`,
@@ -1323,12 +1326,37 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     address). Tests: `report_test`, `api_controller_test`, the ThreadPage copy test.
   - `LongxWeb.Actor` is the single place an actor comes from (RPC conn, socket params) —
     `nil` today; AshAuthentication plugs in there later without touching the client.
-  - **RPC** = ash_typescript: domains `Longx.Projects`, `Longx.AI`, `Longx.System` declare
-    `typescript_rpc` blocks; work that lives in domain functions is exposed as **generic
-    actions** whose `run` calls the existing function and whose return is a typed map or
-    `:struct`. `POST /rpc/run` is tested at the wire in `test/longx_web/rpc/` so the
-    generated client's contract is what is tested. Every call carries Phoenix's CSRF token
-    via the lifecycle hook (`assets/js/core/rpcHooks.ts`). Thread RPC: `list_threads`,
+  - **The API is GraphQL — AshGraphql** (`LongxWeb.GraphqlSchema`, one endpoint `POST /gql`
+    under the `:graphql` pipeline: the session, the CSRF token, `LongxWeb.Actor` as the
+    actor, `AshGraphql.Plug`; `/gql/playground` in dev). Every domain declares a `graphql
+    do queries … mutations … end` block (`root_level_errors? true`, every `list` with
+    `paginate_with: nil`): a read action is a `list` / `read_one`, a record's `create` /
+    `update` / `destroy` answers `{result, errors}` (the client unwraps `result`), and
+    work that lives in domain functions is a **generic action** (`action Resource,
+    :name, :action`) — a query when it reads, a mutation otherwise — whose return is a
+    **NewType map** with `graphql_type/1` (`lib/longx/<domain>/types.ex`: an inline
+    `:map` with `fields` is only a `Json` scalar to AshGraphql; a NewType is an object
+    type, its nested `fields` typed with it as `<type>_<field>`, a nested NewType by its
+    own name; `nil_items?: false` on an array of them for `[T!]!`). A resource with no
+    rows (`Files`, `Repo`, `Status`, `Bridge`, `Preset`) says `generate_object? false`
+    and exposes only generic actions; a data resource says `type :project`; an untyped
+    `:map` is a `Json` scalar that comes as an object (`config :ash_graphql, :json_type,
+    :json`) with the keys as the server keeps them — the client camelCases every key of a
+    Json value on the way out and snake_cases the keys of a Json input, as the RPC did.
+    GraphQL names carry no `?`: the calculations are `has_api_key`, `has_secret`… (the
+    wire names were `hasApiKey` already). **`priv/schema.graphql` is the contract**:
+    written on every recompilation (`auto_generate_sdl_file?`), committed, checked by
+    precommit (`mix schema.check`: the file unchanged, the client regenerated from it
+    unchanged), and what every client is generated from — TypeScript here, Rust or Swift
+    elsewhere. Wire tests in `test/longx_web/rpc/` call `rpc(conn, action, params)`
+    (`LongxWeb.Gql`, imported by `ConnCase`): the old RPC shape — `"fields"` (a selection;
+    an object-typed field named bare, or no list at all, selects every field of its type
+    from the Absinthe schema), `"input"`, `"identity"` — turned into a query or mutation
+    by the domains' own definitions, posted to `/gql`, answered as `%{"success", "data"}`
+    / `%{"success" => false, "errors" => [%{"message", "fields", "field", "code"}]}`
+    (fields camelCased, AshGraphql's doubled argument error deduplicated); a field the
+    schema does not have does not even build the document (`RuntimeError`, "no field …"),
+    which is how a test asserts a secret never comes back. Thread operations: `list_threads`,
     `get_thread`, `list_subagents`, `start_thread`, `send_message`, `steer_turn`,
     `interrupt_turn`, `retract_turn`, `compact_thread`, `answer_request`,
     `list_running_threads`, `set_goal` / `clear_goal`, `rename_thread`, `archive_thread`,
@@ -1369,8 +1397,9 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     LongxWeb.Vite, dev_server:`; `LONGX_DEV_HOST=<lan-ip>` for phone testing — Vite listens
     on `0.0.0.0:7799`, `strictPort`) — otherwise the hashed files from
     `priv/static/assets/.vite/manifest.json`. The dev watcher runs `npm run dev` **through
-    `Longx.Shim`** so Vite dies with the BEAM. `mix assets.build` = compile +
-    `ash_typescript.codegen` + `npm run build` → `priv/static/assets/` (gitignored); no
+    `Longx.Shim`** so Vite dies with the BEAM. `mix assets.build` = compile (which writes
+    `priv/schema.graphql`) + `npm run codegen` + `npm run build` → `priv/static/assets/`
+    (gitignored); no
     `phx.digest`. PWA bits are committed static files. **What a weak network downloads**
     (measured at 1.5 Mbps / 400 ms: 0.2.64's messages showed after 27 s, 21 of them the
     3.7 MB entry sent raw — `gzip:` serves only a `.gz` that exists, and nothing wrote
@@ -1391,9 +1420,21 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `js/build/plugins.test.ts`).
 - `assets/` — Vite + TypeScript + React 19, tests with vitest/testing-library
   (`npm run check` = `tsc --noEmit` + `vitest run`, part of `mix precommit`). Layout:
-  - `js/core/` — **DOM-free**, the part a React Native app will reuse: the generated client
-    (`ash_rpc.ts`, `ash_types.ts` — **generated** by `mix ash_typescript.codegen`, never
-    edited; `codegen --check` runs in precommit), `rpcHooks.ts`, `socket.ts`,
+  - `js/core/` — **DOM-free**, the part a React Native app will reuse: the GraphQL client —
+    `gql.ts` (the transport: a `fetch` of `{query, variables}` to `/gql` with the CSRF
+    token; `call()` gives a generated operation the RPC's old shape, `listThreads({
+    input })` / `updateProject({ identity, input })` answering `{ success, data }` or
+    `{ success: false, errors }`, `unwrap` / `unwrapOne` / `RpcFailure` above it; a
+    `Json` value's keys camelCased out, snake_cased in), and **three generated files,
+    never edited**: `operations.graphql` and `api.ts` (`scripts/gql-client.mjs` from
+    `priv/schema.graphql`: one operation per root field selecting every scalar and nested
+    map of its result, relationships left out except the ones a page reads —
+    `RELATIONSHIPS` in the script, `listModels`'s `provider` —, and one function per
+    operation), and `js/gql/graphql.ts` (graphql-codegen's client preset, `codegen.ts`:
+    the schema's types and each operation's `XDocument` as a **string**, `documentMode:
+    "string"`, so no GraphQL runtime ships — the entry budget). `npm run codegen` after
+    a schema change; `codegen:check` (in `mix schema.check`) fails when they are stale.
+    Then `socket.ts`,
     `projectChannel.ts`, TanStack Query hooks (`projects.ts` — `RpcFailure` carries field
     errors —, `ai.ts`, `agent.ts` (definition, settings, public URL), `browser.ts`,
     `dependencies.ts`, `upgrade.ts`, `workspace.ts`), `frame.ts` / `workbench.ts` /
@@ -1700,7 +1741,8 @@ motivated it.
 3. Refactor while green, then run the whole suite: `mix test`.
 4. Before declaring done: `mix precommit`
    (`compile --warnings-as-errors`, `deps.unlock --unused`, `format`, the Go checks,
-   `ash_typescript.codegen --check`, `npm run check`, `test`).
+   `schema.check` — the committed `priv/schema.graphql` and the client generated from it
+   are current —, `npm run check`, `test`).
    `mix dialyzer` (dialyxir; PLT in `priv/plts/`, mix + ex_unit included) must stay at
    zero warnings — not part of precommit (minutes), run it before merging. Two habits it
    enforces: never `Process.sleep(n) && f()` (`:ok && …` is a guard that can never fail —
@@ -1737,8 +1779,10 @@ Where tests live / what to use:
   one on 7798 if it is already up). **The e2e suite** — `npm run e2e` in `assets/`
   (`scripts/e2e/run.mjs`; `-- turn exchange` picks scenarios by name; `LONGX_E2E_URL`,
   `LONGX_E2E_MODEL`, `LONGX_E2E_KEEP=1` keeps the scratch projects) — drives a running
-  Longx with its real model through the page and the page's own RPC (`scripts/e2e/
-  lib.mjs`: a `Harness` with a scratch project under the OS tmp dir, `send` / `idle`
+  Longx with its real model through the page and the page's own API (`scripts/e2e/
+  lib.mjs`: `h.rpc(action, input, fields)` builds a GraphQL document from this checkout's
+  `priv/schema.graphql` in the old RPC shape and camelCases the Json values it reads; a
+  `Harness` with a scratch project under the OS tmp dir, `send` / `idle`
   (no turn in progress), a phone context, console-error and overflow checks, screenshots
   in `scripts/e2e/out/`). Scenarios: `01-pages` (every page, desktop and phone), `02-turn`
   (a file written and run, the rows and the badge, a second turn from the composer),
@@ -1771,7 +1815,7 @@ Where tests live / what to use:
   kernel, the prompts or the chat.
 - TypeScript/React → also test-first: vitest + testing-library in `assets/` (`npm test`).
   Pure code in `js/core/` is unit-tested directly; pages render the real route tree with
-  `renderAt(path)` from `ui/test-utils.tsx`, mocking `@/ash_rpc` (and `@/core/socket`) with
+  `renderAt(path)` from `ui/test-utils.tsx`, mocking `@/core/api` (and `@/core/socket`) with
   `vi.mock` (shared factories in `ui/test-mocks.ts`); `setViewport(390)` for phone-width
   assertions.
 - `mix test` runs `ash.setup --quiet` first; the test DB is `longx_test.db` (SQLite) —
@@ -1805,7 +1849,7 @@ Where tests live / what to use:
 - HTTP client: `Req` only (no httpoison/tesla/httpc).
 - Ash: consult the `ash-framework` skill before touching domains/resources. Generate with
   `mix ash.gen.*`; migrations via `mix ash.codegen <name>` then `mix ash.migrate`;
-  RPC exposure lives in `Longx.AshTypescriptManifest`.
+  an action reaches the page through the domain's `graphql` block and a NewType result.
 - Phoenix: consult the `phoenix-framework` skill for the web layer. The UI is the React SPA;
   HEEx is only the shell/error pages — no LiveView screens.
 - Assets: Vite owns bundling (`assets/vite.config.ts`, `@` → `assets/js`); never `@apply`;

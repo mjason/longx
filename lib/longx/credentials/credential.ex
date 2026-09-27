@@ -14,7 +14,9 @@ defmodule Longx.Credentials.Credential do
     otp_app: :longx,
     domain: Longx.Credentials,
     data_layer: AshSqlite.DataLayer,
-    extensions: [AshCloak, AshTypescript.Resource]
+    extensions: [AshCloak, AshGraphql.Resource]
+
+  alias Longx.Credentials.Types
 
   alias Longx.Credentials.Credential.{Changes, Validations}
 
@@ -32,13 +34,8 @@ defmodule Longx.Credentials.Credential do
     encrypt_nil?(false)
   end
 
-  typescript do
-    type_name "Credential"
-
-    field_names has_secret?: "hasSecret",
-                has_access_token?: "hasAccessToken",
-                has_refresh_token?: "hasRefreshToken",
-                has_client_secret?: "hasClientSecret"
+  graphql do
+    type :credential
   end
 
   actions do
@@ -132,15 +129,7 @@ defmodule Longx.Credentials.Credential do
 
     # the settings page's 登录: where to send the browser; it comes back
     # through /callback/credentials and the tokens land on the row
-    action :login_url, :map do
-      constraints fields: [
-                    url: [type: :string, allow_nil?: false],
-                    redirect_uri: [type: :string, allow_nil?: false],
-                    # a loopback redirect: a browser on another machine lands on an
-                    # unreachable page and the person pastes its address (complete_url)
-                    loopback: [type: :boolean, allow_nil?: false]
-                  ]
-
+    action :login_url, Types.LoginUrl do
       argument :id, :uuid, allow_nil?: false
       # the address the person's browser reached Longx by, else the public URL
       argument :origin, :string
@@ -172,14 +161,7 @@ defmodule Longx.Credentials.Credential do
 
     # the address the browser was sent to after the login, pasted by the person
     # the device-code login: the code to type and where, then polls until done
-    action :device_begin, :map do
-      constraints fields: [
-                    state: [type: :string, allow_nil?: false],
-                    user_code: [type: :string, allow_nil?: false],
-                    verification_url: [type: :string, allow_nil?: false],
-                    interval: [type: :integer, allow_nil?: false]
-                  ]
-
+    action :device_begin, Types.DeviceBegin do
       argument :id, :uuid, allow_nil?: false
 
       run fn input, _ ->
@@ -201,12 +183,7 @@ defmodule Longx.Credentials.Credential do
       end
     end
 
-    action :device_poll, :map do
-      constraints fields: [
-                    status: [type: :string, allow_nil?: false],
-                    message: [type: :string]
-                  ]
-
+    action :device_poll, Types.DevicePoll do
       argument :state, :string, allow_nil?: false
 
       run fn input, _ ->
@@ -288,8 +265,7 @@ defmodule Longx.Credentials.Credential do
     end
 
     # what to register at the provider as the redirect URI
-    action :redirect_uri, :map do
-      constraints fields: [uri: [type: :string, allow_nil?: false]]
+    action :redirect_uri, Types.RedirectUri do
       argument :origin, :string
 
       run fn input, _ ->
@@ -386,15 +362,14 @@ defmodule Longx.Credentials.Credential do
   end
 
   calculations do
-    calculate :has_secret?, :boolean, expr(not is_nil(encrypted_secret)), public?: true
+    calculate :has_secret, :boolean, expr(not is_nil(encrypted_secret)), public?: true
 
-    calculate :has_access_token?, :boolean, expr(not is_nil(encrypted_access_token)),
+    calculate :has_access_token, :boolean, expr(not is_nil(encrypted_access_token)), public?: true
+
+    calculate :has_refresh_token, :boolean, expr(not is_nil(encrypted_refresh_token)),
       public?: true
 
-    calculate :has_refresh_token?, :boolean, expr(not is_nil(encrypted_refresh_token)),
-      public?: true
-
-    calculate :has_client_secret?, :boolean, expr(not is_nil(encrypted_client_secret)),
+    calculate :has_client_secret, :boolean, expr(not is_nil(encrypted_client_secret)),
       public?: true
 
     # ready | expired | needs_login | error — what the list and the agent see

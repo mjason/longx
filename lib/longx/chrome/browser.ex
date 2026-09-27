@@ -8,10 +8,8 @@ defmodule Longx.Chrome.Browser do
   in it (`%{"https://example.com" => %{"access" => "allow" | "deny"}}`).
   """
 
-  # No TypeScript type: the page reads browsers through `Longx.Chrome.Bridge`'s
-  # maps (`Chrome.directory/0`), never this row — a resource with the
-  # AshTypescript extension outside a `typescript_rpc` block is warned about on
-  # every RPC call.
+  # No GraphQL type of its own: the page reads browsers through `Longx.Chrome.Bridge`'s
+  # typed results (`Chrome.directory/0`), never this row.
   use Ash.Resource,
     otp_app: :longx,
     domain: Longx.Chrome,

@@ -1,39 +1,45 @@
 defmodule Longx.System do
   @moduledoc "Node-level facts the SPA asks for: the version and its upgrade, the knowledge, the kernel settings; plus the encrypted settings store."
 
-  use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
+  use Ash.Domain, otp_app: :longx, extensions: [AshGraphql.Domain]
 
-  typescript_rpc do
-    resource Longx.System.Status do
-      rpc_action :list_directory, :list_directory
-      rpc_action :create_directory, :create_directory
-      rpc_action :knowledge_docs, :knowledge_docs
-      rpc_action :knowledge_read, :knowledge_read
-      rpc_action :knowledge_write, :knowledge_write
-      rpc_action :knowledge_delete, :knowledge_delete
-      rpc_action :agent_settings, :agent_settings
-      rpc_action :set_agent_settings, :set_agent_settings
-      rpc_action :public_url, :public_url
-      rpc_action :dependencies, :dependencies
-      rpc_action :check_dependencies, :check_dependencies
-      rpc_action :set_public_url, :set_public_url
-      rpc_action :file_rules, :file_rules
-      rpc_action :set_file_rules, :set_file_rules
-      rpc_action :sentry_status, :sentry_status
-      rpc_action :set_sentry_dsn, :set_sentry_dsn
-      rpc_action :sentry_test, :sentry_test
-      rpc_action :upgrade_status, :upgrade_status
-      rpc_action :upgrade_check, :upgrade_check
-      rpc_action :upgrade_apply, :upgrade_apply
-      rpc_action :set_github_token, :set_github_token
-      rpc_action :gateway_requests, :gateway_requests
-      rpc_action :recent_faults, :recent_faults
-      rpc_action :running_commands, :running_commands
-      rpc_action :kill_command, :kill_command
-      rpc_action :browser_settings, :browser_settings
-      rpc_action :browser_status, :browser_status
-      rpc_action :browser_install, :browser_install
-      rpc_action :set_browser_private_network, :set_browser_private_network
+  graphql do
+    # every error at the top level of the response, for calls and records alike
+    root_level_errors? true
+
+    queries do
+      action Longx.System.Status, :list_directory, :list_directory
+      action Longx.System.Status, :knowledge_docs, :knowledge_docs
+      action Longx.System.Status, :knowledge_read, :knowledge_read
+      action Longx.System.Status, :agent_settings, :agent_settings
+      action Longx.System.Status, :public_url, :public_url
+      action Longx.System.Status, :dependencies, :dependencies
+      action Longx.System.Status, :file_rules, :file_rules
+      action Longx.System.Status, :sentry_status, :sentry_status
+      action Longx.System.Status, :upgrade_status, :upgrade_status
+      action Longx.System.Status, :gateway_requests, :gateway_requests
+      action Longx.System.Status, :recent_faults, :recent_faults
+      action Longx.System.Status, :running_commands, :running_commands
+      action Longx.System.Status, :browser_settings, :browser_settings
+      action Longx.System.Status, :browser_status, :browser_status
+    end
+
+    mutations do
+      action Longx.System.Status, :create_directory, :create_directory
+      action Longx.System.Status, :knowledge_write, :knowledge_write
+      action Longx.System.Status, :knowledge_delete, :knowledge_delete
+      action Longx.System.Status, :set_agent_settings, :set_agent_settings
+      action Longx.System.Status, :check_dependencies, :check_dependencies
+      action Longx.System.Status, :set_public_url, :set_public_url
+      action Longx.System.Status, :set_file_rules, :set_file_rules
+      action Longx.System.Status, :set_sentry_dsn, :set_sentry_dsn
+      action Longx.System.Status, :sentry_test, :sentry_test
+      action Longx.System.Status, :upgrade_check, :upgrade_check
+      action Longx.System.Status, :upgrade_apply, :upgrade_apply
+      action Longx.System.Status, :set_github_token, :set_github_token
+      action Longx.System.Status, :kill_command, :kill_command
+      action Longx.System.Status, :browser_install, :browser_install
+      action Longx.System.Status, :set_browser_private_network, :set_browser_private_network
     end
   end
 

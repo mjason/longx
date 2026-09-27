@@ -28,6 +28,8 @@ defmodule LongxWeb.ConnCase do
       import Plug.Conn
       import Phoenix.ConnTest
       import LongxWeb.ConnCase
+      # `rpc(conn, action, params)`: a GraphQL call in the wire tests' shape
+      import LongxWeb.Gql, only: [rpc: 3]
     end
   end
 

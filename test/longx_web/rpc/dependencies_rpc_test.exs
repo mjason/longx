@@ -2,13 +2,6 @@ defmodule LongxWeb.DependenciesRpcTest do
   @moduledoc "The system dependency check on the wire."
   use LongxWeb.ConnCase, async: false
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   @fields ["os", "missing", "installCommand", "tools", "checkedAt"]
 
   test "the report lists every tool with found / version / install package; a forced check answers the same shape",

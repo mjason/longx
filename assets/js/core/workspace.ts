@@ -29,7 +29,7 @@ import {
   readFile,
   renameEntry,
   writeFile,
-} from "@/ash_rpc";
+} from "@/core/api";
 import type { WatchStatus } from "./projectChannel";
 import { queryKeys, unwrap } from "./projects";
 
@@ -79,7 +79,7 @@ export function useFiles(projectId: string, path: string, enabled = true) {
   return useQuery({
     queryKey: wsKeys.files(projectId, path),
     enabled,
-    queryFn: async () => unwrap(await listFiles({ fields: [...entryFields], input: { projectId, path } })) as FileEntry[],
+    queryFn: async () => unwrap(await listFiles({ input: { projectId, path } })) as FileEntry[],
   });
 }
 
@@ -106,7 +106,7 @@ export function useFileContent(projectId: string, path: string | null) {
     queryKey: wsKeys.file(projectId, path ?? ""),
     enabled: path !== null,
     queryFn: async () =>
-      unwrap(await readFile({ fields: ["path", "content", "size", "binary", "truncated"], input: { projectId, path: path! } })) as FileContent,
+      unwrap(await readFile({ input: { projectId, path: path! } })) as FileContent,
   });
 }
 
@@ -141,7 +141,7 @@ export function useCreateEntry(projectId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async ({ path, kind }: { path: string; kind: "file" | "dir" }) =>
-      unwrap(await createEntry({ fields: [...entryFields], input: { projectId, path, kind } })) as FileEntry,
+      unwrap(await createEntry({ input: { projectId, path, kind } })) as FileEntry,
     onSuccess: () => invalidateFiles(client, projectId),
   });
 }
@@ -150,7 +150,7 @@ export function useRenameEntry(projectId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async ({ from, to }: { from: string; to: string }) =>
-      unwrap(await renameEntry({ fields: [...entryFields], input: { projectId, from, to } })) as FileEntry,
+      unwrap(await renameEntry({ input: { projectId, from, to } })) as FileEntry,
     onSuccess: () => invalidateFiles(client, projectId),
   });
 }
@@ -178,7 +178,7 @@ export function useGitChanges(projectId: string, opts: { poll?: boolean } = {}) 
   const watch = useWatchStatus(projectId).data;
   return useQuery({
     queryKey: wsKeys.changes(projectId),
-    queryFn: async () => unwrap(await gitChanges({ fields: [...changesFields], input: { projectId } })) as GitChanges,
+    queryFn: async () => unwrap(await gitChanges({ input: { projectId } })) as GitChanges,
     refetchInterval: gitPollInterval(!!opts.poll, watch),
     refetchOnWindowFocus: true,
   });
@@ -190,7 +190,7 @@ export function useGitFileVersions(projectId: string, sha: string | null, path: 
     queryKey: wsKeys.versions(projectId, sha, path ?? ""),
     enabled: path !== null,
     queryFn: async () =>
-      unwrap(await gitFileVersions({ fields: ["before", "after", "binary"], input: { projectId, sha: sha ?? undefined, path: path! } })) as FileVersions,
+      unwrap(await gitFileVersions({ input: { projectId, sha: sha ?? undefined, path: path! } })) as FileVersions,
   });
 }
 
@@ -200,7 +200,7 @@ export function useGitLog(projectId: string, limit = 50, skip = 0, enabled = tru
   return useQuery({
     queryKey: wsKeys.log(projectId, limit, skip),
     enabled,
-    queryFn: async () => unwrap(await gitLog({ fields: [...logFields], input: { projectId, limit, skip } })) as LogEntry[],
+    queryFn: async () => unwrap(await gitLog({ input: { projectId, limit, skip } })) as LogEntry[],
   });
 }
 
@@ -209,7 +209,7 @@ export function useGitShow(projectId: string, sha: string | null) {
     queryKey: wsKeys.show(projectId, sha ?? ""),
     enabled: sha !== null,
     queryFn: async () =>
-      unwrap(await gitShow({ fields: [...logFields, "body", "parents", "files"], input: { projectId, sha: sha! } })) as Commit,
+      unwrap(await gitShow({ input: { projectId, sha: sha! } })) as Commit,
   });
 }
 
@@ -217,7 +217,7 @@ export function useGitBranches(projectId: string, enabled = true) {
   return useQuery({
     queryKey: wsKeys.branches(projectId),
     enabled,
-    queryFn: async () => unwrap(await gitBranches({ fields: ["current", "branches", "stashes"], input: { projectId } })) as Branches,
+    queryFn: async () => unwrap(await gitBranches({ input: { projectId } })) as Branches,
   });
 }
 
@@ -235,11 +235,11 @@ export function useGitActions(projectId: string) {
   return {
     commit: useMutation({
       mutationFn: async ({ paths, message }: { paths: string[]; message: string }) =>
-        unwrap(await gitCommit({ fields: ["sha"], input: { projectId, paths, message } })),
+        unwrap(await gitCommit({ input: { projectId, paths, message } })),
       onSuccess: done,
     }),
     discard: useMutation({ mutationFn: async (paths: string[]) => unwrap(await gitDiscard({ input: { projectId, paths } })), onSuccess: done }),
-    undoCommit: useMutation({ mutationFn: async () => unwrap(await gitUndoCommit({ fields: ["sha"], input: { projectId } })), onSuccess: done }),
+    undoCommit: useMutation({ mutationFn: async () => unwrap(await gitUndoCommit({ input: { projectId } })), onSuccess: done }),
     abortMerge: useMutation({ mutationFn: async () => unwrap(await gitAbortMerge({ input: { projectId } })), onSuccess: done }),
     createBranch: useMutation({ mutationFn: async (name: string) => unwrap(await gitCreateBranch({ input: { projectId, name } })), onSuccess: done }),
     switchBranch: useMutation({

@@ -5,13 +5,6 @@ defmodule LongxWeb.ChromeRpcTest do
   alias Longx.Chrome
   alias Longx.Chrome.Aliases
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   setup do
     for b <- Chrome.list_browsers!(), do: :ok = Chrome.destroy_browser(b)
     for %{name: name} <- Aliases.all(), do: Aliases.delete(name)

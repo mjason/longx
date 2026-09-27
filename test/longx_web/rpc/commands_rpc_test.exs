@@ -2,13 +2,6 @@ defmodule LongxWeb.CommandsRpcTest do
   @moduledoc "The live commands on the wire: listed with their session, killed by id from the GUI."
   use LongxWeb.ConnCase, async: false
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   test "running_commands lists what runs; kill_command ends one and answers not_found afterwards",
        %{conn: conn} do
     me = self()

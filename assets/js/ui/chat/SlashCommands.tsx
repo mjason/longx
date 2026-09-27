@@ -6,7 +6,7 @@ import { FolderTree, GitBranch, MessageSquarePlus, Minimize2, ScrollText, Settin
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { compactThread } from "@/ash_rpc";
+import { compactThread } from "@/core/api";
 import { useFrame } from "@/core/frame";
 import { unwrap } from "@/core/projects";
 import { ComposerTriggerPopover } from "@/ui/components/assistant-ui/elements/composer-trigger-popover.aui";

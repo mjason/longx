@@ -1,0 +1,4249 @@
+schema {
+  mutation: RootMutationType
+  query: RootQueryType
+}
+
+type ListAll {
+  watches: [Json!]!
+}
+
+type DryRun {
+  sends: [String!]!
+  result: String!
+  ok: Boolean!
+  log: [String!]!
+}
+
+type RedirectUri {
+  uri: String!
+}
+
+type DevicePoll {
+  status: String!
+  message: String
+}
+
+type DeviceBegin {
+  verificationUrl: String!
+  userCode: String!
+  state: String!
+  interval: Int!
+}
+
+type LoginUrl {
+  url: String!
+  redirectUri: String!
+  loopback: Boolean!
+}
+
+type ChromeExtension {
+  version: String
+  url: String!
+  minimumChrome: String!
+  built: Boolean!
+}
+
+type ChromeAlias {
+  name: String!
+  browsers: [String!]!
+}
+
+type ChromeAliases {
+  default: String
+  aliases: [ChromeAlias!]!
+}
+
+type Ok {
+  ok: Boolean!
+}
+
+type ChromeBrowserTabs {
+  title: String!
+  threadId: String!
+  tabs: Int!
+}
+
+type ChromeBrowser {
+  tabs: [ChromeBrowserTabs!]!
+  status: String!
+  origins: Json!
+  name: String!
+  maxTabs: Int!
+  lastSeenAt: DateTime
+  id: String!
+  device: Json!
+  connected: Boolean!
+  approvedAt: DateTime
+  aliases: [String!]!
+}
+
+type ChromeBrowsers {
+  browsers: [ChromeBrowser!]!
+}
+
+type GatewayRequests {
+  requests: [Json!]!
+  keep: Int!
+}
+
+type RecentFaults {
+  recent: Int!
+  faults: [Json!]!
+}
+
+type KillCommand {
+  ok: Boolean!
+}
+
+type RunningCommands {
+  commands: [Json!]!
+}
+
+type BrowserStatus {
+  version: String!
+  upgradable: Boolean!
+  total: Int
+  target: String
+  stage: String!
+  source: String
+  received: Int!
+  path: String
+  latest: String!
+  installedVersion: String
+  error: String
+}
+
+type Browser {
+  available: Boolean!
+  allowPrivateNetwork: Boolean!
+}
+
+type Upgrade {
+  target: String
+  stage: String!
+  progress: Json
+  notesUrl: String
+  message: String
+  latest: String
+  installed: Boolean!
+  hasGithubToken: Boolean!
+  error: String
+  current: String!
+  container: Boolean!
+  checkedAt: String
+  available: Boolean!
+}
+
+type SetPublicUrl {
+  url: String!
+  setting: String
+}
+
+type SentryTest {
+  ok: Boolean!
+  message: String!
+}
+
+type Sentry {
+  release: String!
+  environment: String!
+  enabled: Boolean!
+  dsn: String
+}
+
+type FileRules {
+  watch: String!
+  ignore: String!
+  builtinWatch: [String!]!
+  builtinIgnore: [String!]!
+}
+
+type PublicUrl {
+  url: String!
+  setting: String
+}
+
+type Dependency {
+  tools: [Json!]!
+  os: String!
+  missing: Int!
+  installCommand: String
+  checkedAt: String!
+}
+
+type AgentSettings {
+  modelRetries: Int!
+  memoryFloorPercent: Int!
+  maxDepth: Int!
+  maxChildren: Int!
+  idleMinutes: Int!
+  commandOomPriority: Int!
+  commandMemoryPercent: Int!
+  childModel: String
+  childEffort: String
+}
+
+type KnowledgeRead {
+  text: String!
+}
+
+type KnowledgeDoc {
+  writable: Boolean!
+  title: String!
+  tags: [String!]!
+  summary: String!
+  root: String!
+  path: String!
+  always: Boolean!
+}
+
+type CreateDirectory {
+  path: String!
+  name: String!
+  git: Boolean!
+}
+
+type ListDirectory {
+  roots: [Json!]!
+  path: String!
+  parent: String
+  git: Boolean!
+  entries: [Json!]!
+}
+
+type ApplyPreset {
+  providerId: ID!
+  modelIds: [ID!]!
+  credentialId: ID
+}
+
+type ListPresets {
+  supportsHostedWebSearch: Boolean!
+  slug: String!
+  providerId: ID
+  name: String!
+  models: [Json!]!
+  kind: String!
+  keyUrl: String!
+  keyEnv: String!
+  installed: Boolean!
+  docsUrl: String!
+  credential: Boolean!
+  baseUrl: String!
+}
+
+type ModelAlias {
+  name: String!
+  models: [String!]!
+  label: String!
+  builtin: Boolean!
+}
+
+type ModelDefault {
+  slug: String
+  name: String!
+  kind: String!
+}
+
+type CheckModel {
+  ok: Boolean!
+  latencyMs: Int
+  error: String
+}
+
+type DiscoverModels {
+  ok: Boolean!
+  models: [Json!]!
+  error: String
+}
+
+type GitBranches {
+  stashes: [Json!]!
+  current: String
+  branches: [Json!]!
+}
+
+type GitFileVersions {
+  binary: Boolean!
+  before: String
+  after: String
+}
+
+type GitShow {
+  subject: String!
+  sha: String!
+  parents: [String!]!
+  files: [Json!]!
+  email: String!
+  body: String!
+  author: String!
+  at: String!
+}
+
+type GitLog {
+  subject: String!
+  sha: String!
+  email: String!
+  author: String!
+  at: String!
+}
+
+type RepoSha {
+  sha: String!
+}
+
+type RepoDiff {
+  diff: String!
+  binary: Boolean!
+}
+
+type GitChanges {
+  repository: Boolean!
+  remotes: [Json!]!
+  merging: Boolean!
+  lfs: Boolean!
+  ignored: [String!]!
+  head: String
+  changes: [Json!]!
+  branch: String
+  behind: Int
+  ahead: Int
+}
+
+type ReadFile {
+  truncated: Boolean!
+  size: Int!
+  path: String!
+  content: String
+  binary: Boolean!
+}
+
+type FilesEntry {
+  size: Int!
+  path: String!
+  name: String!
+  kind: String!
+}
+
+type Directory {
+  sessions: [Json!]!
+}
+
+type ListRunning {
+  threads: [Json!]!
+}
+
+type ClearGoal {
+  cleared: Boolean!
+}
+
+type Goal {
+  tokensUsed: Int!
+  tokenBudget: Int
+  timeUsedSeconds: Int!
+  status: String!
+  objective: String!
+}
+
+type RetractTurn {
+  text: String!
+}
+
+type SteerTurn {
+  kernelTurnId: String!
+}
+
+type PromoteLocal {
+  path: String!
+}
+
+type AgentDefinitionBrowser {
+  state: String!
+  maxTabs: Int!
+  browser: String
+  alias: String
+}
+
+type AgentDefinitionOverrides {
+  modelRetries: Int
+  memoryFloorPercent: Int
+  maxDepth: Int
+  maxChildren: Int
+  idleMinutes: Int
+  commandOomPriority: Int
+  commandMemoryPercent: Int
+  childModel: String
+  childEffort: String
+}
+
+type AgentDefinitionSettings {
+  modelRetries: Int
+  memoryFloorPercent: Int
+  maxDepth: Int
+  maxChildren: Int
+  idleMinutes: Int
+  commandOomPriority: Int
+  commandMemoryPercent: Int
+  childModel: String
+  childEffort: String
+}
+
+type AgentDefinition {
+  trusted: Boolean!
+  settings: AgentDefinitionSettings!
+  present: Boolean!
+  plugs: [String!]!
+  overrides: AgentDefinitionOverrides!
+  model: String
+  localFiles: [String!]!
+  files: [String!]!
+  errors: [String!]!
+  effort: String
+  dir: String!
+  browser: AgentDefinitionBrowser
+  agents: [Json!]!
+}
+
+type SearchFiles {
+  score: Int!
+  root: String!
+  path: String!
+  matchType: String!
+  indices: [Int!]
+  fileName: String!
+}
+
+type GitInfo {
+  repository: Boolean!
+  lfs: Boolean!
+  head: String
+  clean: Boolean
+  changes: Int!
+}
+
+enum TurnSortField {
+  ID
+  KERNEL_TURN_ID
+  USER_TEXT
+  MODEL_SLUG
+  REASONING_EFFORT
+  STATUS
+  STARTED_AT
+  COMPLETED_AT
+  ERROR
+  USAGE
+  INSERTED_AT
+  UPDATED_AT
+  THREAD_ID
+}
+
+input TurnFilterThreadId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID!]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input TurnFilterUpdatedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input TurnFilterInsertedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input TurnFilterUsage {
+  isNil: Boolean
+  eq: Json
+  notEq: Json
+  in: [Json]
+  lessThan: Json
+  greaterThan: Json
+  lessThanOrEqual: Json
+  greaterThanOrEqual: Json
+  isDistinctFrom: Json
+  isNotDistinctFrom: Json
+  rangeAdjacent: Json
+  rangeContains: String
+  rangeOverlaps: Json
+}
+
+input TurnFilterError {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input TurnFilterCompletedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input TurnFilterStartedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input TurnFilterStatus {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+}
+
+input TurnFilterReasoningEffort {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input TurnFilterModelSlug {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input TurnFilterUserText {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input TurnFilterKernelTurnId {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input TurnFilterId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID!]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input TurnFilterInput {
+  and: [TurnFilterInput!]
+  or: [TurnFilterInput!]
+  not: [TurnFilterInput!]
+  id: TurnFilterId
+  kernelTurnId: TurnFilterKernelTurnId
+  userText: TurnFilterUserText
+  modelSlug: TurnFilterModelSlug
+  reasoningEffort: TurnFilterReasoningEffort
+  status: TurnFilterStatus
+  startedAt: TurnFilterStartedAt
+  completedAt: TurnFilterCompletedAt
+  error: TurnFilterError
+  usage: TurnFilterUsage
+  insertedAt: TurnFilterInsertedAt
+  updatedAt: TurnFilterUpdatedAt
+  threadId: TurnFilterThreadId
+  thread: ThreadFilterInput
+}
+
+input TurnSortInput {
+  order: SortOrder
+  field: TurnSortField!
+}
+
+type Turn {
+  id: ID!
+  kernelTurnId: String!
+  userText: String
+  modelSlug: String
+  reasoningEffort: String
+  status: String!
+  startedAt: DateTime!
+  completedAt: DateTime
+  error: String
+  usage: Json
+  insertedAt: DateTime!
+  updatedAt: DateTime!
+  threadId: ID!
+  thread: Thread!
+}
+
+input GitPushInput {
+  projectId: ID!
+}
+
+input GitPullInput {
+  projectId: ID!
+}
+
+input GitFetchInput {
+  projectId: ID!
+}
+
+input GitSetRemoteInput {
+  projectId: ID!
+  name: String!
+  url: String!
+}
+
+input GitStashPopInput {
+  projectId: ID!
+}
+
+input GitDeleteBranchInput {
+  projectId: ID!
+  name: String!
+  force: Boolean
+}
+
+input GitSwitchInput {
+  projectId: ID!
+  name: String!
+  stash: Boolean
+}
+
+input GitCreateBranchInput {
+  projectId: ID!
+  name: String!
+}
+
+input GitAbortMergeInput {
+  projectId: ID!
+}
+
+input GitUndoCommitInput {
+  projectId: ID!
+}
+
+input GitDiscardInput {
+  projectId: ID!
+  paths: [String!]!
+}
+
+input GitCommitInput {
+  projectId: ID!
+  paths: [String!]!
+  message: String!
+}
+
+input DeleteEntryInput {
+  projectId: ID!
+  path: String!
+}
+
+input RenameEntryInput {
+  projectId: ID!
+  from: String!
+  to: String!
+}
+
+input CreateEntryInput {
+  projectId: ID!
+  path: String!
+  kind: String!
+}
+
+input WriteFileInput {
+  projectId: ID!
+  path: String!
+  content: String!
+}
+
+input DeleteThreadInput {
+  threadId: ID!
+}
+
+"The result of the :archive_thread mutation"
+type ArchiveThreadResult {
+  "The successful result of the mutation"
+  result: Thread
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input SetThreadOnDutyInput {
+  threadId: ID!
+  onDuty: Boolean!
+}
+
+input SetThreadHandleInput {
+  threadId: ID!
+  handle: String
+}
+
+"The result of the :rename_thread mutation"
+type RenameThreadResult {
+  "The successful result of the mutation"
+  result: Thread
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input RenameThreadInput {
+  title: String
+}
+
+input ClearGoalInput {
+  threadId: ID!
+}
+
+input SetGoalInput {
+  threadId: ID!
+  objective: String
+  status: String
+  tokenBudget: Int
+}
+
+input AnswerRequestInput {
+  threadId: ID!
+  requestId: String!
+  answers: Json!
+}
+
+input CompactThreadInput {
+  threadId: ID!
+}
+
+input ReleaseWaitingInput {
+  threadId: ID!
+  waitingId: String!
+}
+
+input RetractTurnInput {
+  threadId: ID!
+  kernelTurnId: String!
+}
+
+input SteerTurnInput {
+  threadId: ID!
+  text: String!
+  images: [String!]
+}
+
+input InterruptTurnInput {
+  threadId: ID!
+  kernelTurnId: String!
+}
+
+input SendMessageInput {
+  threadId: ID!
+  text: String!
+  images: [String!]
+  model: String
+  effort: String
+}
+
+input StartThreadInput {
+  projectId: ID!
+  model: String
+  effort: String
+  webSearch: Boolean
+}
+
+enum ThreadSortField {
+  ID
+  KERNEL_THREAD_ID
+  TITLE
+  PREVIEW
+  HANDLE
+  ON_DUTY
+  CWD
+  MODEL_SLUG
+  REASONING_EFFORT
+  WEB_SEARCH
+  AGENT_PATH
+  STATUS
+  LAST_ACTIVITY_AT
+  INSERTED_AT
+  UPDATED_AT
+  PROJECT_ID
+  PARENT_THREAD_ID
+}
+
+input ThreadFilterParentThreadId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input ThreadFilterProjectId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID!]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input ThreadFilterUpdatedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input ThreadFilterInsertedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input ThreadFilterLastActivityAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input ThreadFilterStatus {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+}
+
+input ThreadFilterAgentPath {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ThreadFilterWebSearch {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input ThreadFilterReasoningEffort {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ThreadFilterModelSlug {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ThreadFilterCwd {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ThreadFilterOnDuty {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input ThreadFilterHandle {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ThreadFilterPreview {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ThreadFilterTitle {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ThreadFilterKernelThreadId {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ThreadFilterId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID!]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input ThreadFilterInput {
+  and: [ThreadFilterInput!]
+  or: [ThreadFilterInput!]
+  not: [ThreadFilterInput!]
+  id: ThreadFilterId
+  kernelThreadId: ThreadFilterKernelThreadId
+  title: ThreadFilterTitle
+  preview: ThreadFilterPreview
+  handle: ThreadFilterHandle
+  onDuty: ThreadFilterOnDuty
+  cwd: ThreadFilterCwd
+  modelSlug: ThreadFilterModelSlug
+  reasoningEffort: ThreadFilterReasoningEffort
+  webSearch: ThreadFilterWebSearch
+  agentPath: ThreadFilterAgentPath
+  status: ThreadFilterStatus
+  lastActivityAt: ThreadFilterLastActivityAt
+  insertedAt: ThreadFilterInsertedAt
+  updatedAt: ThreadFilterUpdatedAt
+  projectId: ThreadFilterProjectId
+  parentThreadId: ThreadFilterParentThreadId
+  project: ProjectFilterInput
+  parentThread: ThreadFilterInput
+}
+
+input ThreadSortInput {
+  order: SortOrder
+  field: ThreadSortField!
+}
+
+type Thread {
+  id: ID!
+  kernelThreadId: String!
+  title: String
+  preview: String
+  handle: String
+  onDuty: Boolean!
+  cwd: String!
+  modelSlug: String
+  reasoningEffort: String
+  webSearch: Boolean!
+  agentPath: String
+  status: String!
+  lastActivityAt: DateTime
+  insertedAt: DateTime!
+  updatedAt: DateTime!
+  projectId: ID!
+  parentThreadId: ID
+  project: Project!
+  parentThread: Thread
+}
+
+input InitGitInput {
+  id: ID!
+}
+
+input PromoteLocalInput {
+  id: ID!
+  path: String!
+}
+
+"The result of the :delete_project mutation"
+type DeleteProjectResult {
+  "The record that was successfully deleted"
+  result: Project
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input DeleteProjectInput {
+  confirm: Boolean
+}
+
+"The result of the :archive_project mutation"
+type ArchiveProjectResult {
+  "The successful result of the mutation"
+  result: Project
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+"The result of the :update_project mutation"
+type UpdateProjectResult {
+  "The successful result of the mutation"
+  result: Project
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input UpdateProjectInput {
+  name: String
+  slug: String
+  description: String
+  webSearch: Boolean
+  trustLocalAgent: Boolean
+  agentSettings: Json
+  fileRules: Json
+  modelId: ID
+}
+
+"The result of the :create_project mutation"
+type CreateProjectResult {
+  "The successful result of the mutation"
+  result: Project
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input CreateProjectInput {
+  name: String!
+  description: String
+  rootPath: String!
+  webSearch: Boolean
+  trustLocalAgent: Boolean
+  agentSettings: Json
+  modelId: ID
+  initGit: Boolean
+}
+
+enum ProjectSortField {
+  ID
+  NAME
+  SLUG
+  DESCRIPTION
+  ROOT_PATH
+  WEB_SEARCH
+  TRUST_LOCAL_AGENT
+  AGENT_SETTINGS
+  FILE_RULES
+  ARCHIVED_AT
+  INSERTED_AT
+  UPDATED_AT
+  MODEL_ID
+}
+
+input ProjectFilterModelId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input ProjectFilterUpdatedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input ProjectFilterInsertedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input ProjectFilterArchivedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input ProjectFilterFileRules {
+  isNil: Boolean
+  eq: Json
+  notEq: Json
+  in: [Json!]
+  lessThan: Json
+  greaterThan: Json
+  lessThanOrEqual: Json
+  greaterThanOrEqual: Json
+  isDistinctFrom: Json
+  isNotDistinctFrom: Json
+  rangeAdjacent: Json
+  rangeContains: String
+  rangeOverlaps: Json
+}
+
+input ProjectFilterAgentSettings {
+  isNil: Boolean
+  eq: Json
+  notEq: Json
+  in: [Json]
+  lessThan: Json
+  greaterThan: Json
+  lessThanOrEqual: Json
+  greaterThanOrEqual: Json
+  isDistinctFrom: Json
+  isNotDistinctFrom: Json
+  rangeAdjacent: Json
+  rangeContains: String
+  rangeOverlaps: Json
+}
+
+input ProjectFilterTrustLocalAgent {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input ProjectFilterWebSearch {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input ProjectFilterRootPath {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ProjectFilterDescription {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ProjectFilterSlug {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ProjectFilterName {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ProjectFilterId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID!]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input ProjectFilterInput {
+  and: [ProjectFilterInput!]
+  or: [ProjectFilterInput!]
+  not: [ProjectFilterInput!]
+  id: ProjectFilterId
+  name: ProjectFilterName
+  slug: ProjectFilterSlug
+  description: ProjectFilterDescription
+  rootPath: ProjectFilterRootPath
+  webSearch: ProjectFilterWebSearch
+  trustLocalAgent: ProjectFilterTrustLocalAgent
+  agentSettings: ProjectFilterAgentSettings
+  fileRules: ProjectFilterFileRules
+  archivedAt: ProjectFilterArchivedAt
+  insertedAt: ProjectFilterInsertedAt
+  updatedAt: ProjectFilterUpdatedAt
+  modelId: ProjectFilterModelId
+  model: ModelFilterInput
+}
+
+input ProjectSortInput {
+  order: SortOrder
+  field: ProjectSortField!
+}
+
+type Project {
+  id: ID!
+  name: String!
+  slug: String!
+  description: String
+  rootPath: String!
+  webSearch: Boolean!
+  trustLocalAgent: Boolean!
+  agentSettings: Json
+  fileRules: Json!
+  archivedAt: DateTime
+  insertedAt: DateTime!
+  updatedAt: DateTime!
+  modelId: ID
+  model: Model
+}
+
+enum SortOrder {
+  DESC
+  DESC_NULLS_FIRST
+  DESC_NULLS_LAST
+  ASC
+  ASC_NULLS_FIRST
+  ASC_NULLS_LAST
+}
+
+"An error generated by a failed mutation"
+type MutationError {
+  "The human readable error message"
+  message: String
+
+  "A shorter error message, with vars not replaced"
+  shortMessage: String
+
+  "Replacements for the short message"
+  vars: Json
+
+  "An error code for the given error"
+  code: String
+
+  "The field or fields that produced the error"
+  fields: [String!]
+
+  "The path to the field that produced the error"
+  path: [String!]
+}
+
+input ApplyPresetInput {
+  slug: String!
+  apiKey: String
+  models: [String!]
+  makeDefault: String
+}
+
+"The result of the :update_search_provider mutation"
+type UpdateSearchProviderResult {
+  "The successful result of the mutation"
+  result: SearchProvider
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input UpdateSearchProviderInput {
+  name: String
+  baseUrl: String
+  apiKey: String
+}
+
+enum SearchProviderSortField {
+  ID
+  NAME
+  SLUG
+  KIND
+  BASE_URL
+  DEFAULT
+  HAS_API_KEY
+}
+
+input SearchProviderFilterHasApiKey {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input SearchProviderFilterDefault {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input SearchProviderFilterBaseUrl {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input SearchProviderFilterKind {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+}
+
+input SearchProviderFilterSlug {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input SearchProviderFilterName {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input SearchProviderFilterId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID!]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input SearchProviderFilterInput {
+  and: [SearchProviderFilterInput!]
+  or: [SearchProviderFilterInput!]
+  not: [SearchProviderFilterInput!]
+  id: SearchProviderFilterId
+  name: SearchProviderFilterName
+  slug: SearchProviderFilterSlug
+  kind: SearchProviderFilterKind
+  baseUrl: SearchProviderFilterBaseUrl
+  default: SearchProviderFilterDefault
+  hasApiKey: SearchProviderFilterHasApiKey
+}
+
+input SearchProviderSortInput {
+  order: SortOrder
+  field: SearchProviderSortField!
+}
+
+type SearchProvider {
+  id: ID!
+  name: String!
+  slug: String!
+  kind: String!
+  baseUrl: String!
+  default: Boolean!
+  hasApiKey: Boolean
+}
+
+"The result of the :delete_model mutation"
+type DeleteModelResult {
+  "The record that was successfully deleted"
+  result: Model
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input DeleteModelAliasInput {
+  name: String!
+}
+
+input SetModelAliasInput {
+  name: String!
+  models: [String!]!
+}
+
+input CheckModelInput {
+  id: ID!
+}
+
+input SetDefaultModelInput {
+  name: String!
+}
+
+"The result of the :make_default_model mutation"
+type MakeDefaultModelResult {
+  "The successful result of the mutation"
+  result: Model
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+"The result of the :update_model mutation"
+type UpdateModelResult {
+  "The successful result of the mutation"
+  result: Model
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input UpdateModelInput {
+  name: String
+  slug: String
+  upstreamId: String
+  contextWindow: Int
+  reasoningLevels: [String!]
+  reasoningEffort: String
+  reasoningSummary: String
+  verbosity: String
+  hostedWebSearch: Boolean
+  imageGeneration: Boolean
+  maxOutputTokens: Int
+}
+
+"The result of the :create_model mutation"
+type CreateModelResult {
+  "The successful result of the mutation"
+  result: Model
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input CreateModelInput {
+  name: String!
+  slug: String
+  upstreamId: String!
+  contextWindow: Int
+  reasoningLevels: [String!]
+  reasoningEffort: String
+  reasoningSummary: String
+  verbosity: String
+  hostedWebSearch: Boolean
+  imageGeneration: Boolean
+  maxOutputTokens: Int
+  providerId: ID!
+}
+
+enum ModelSortField {
+  ID
+  NAME
+  SLUG
+  UPSTREAM_ID
+  CONTEXT_WINDOW
+  DEFAULT
+  REASONING_EFFORT
+  REASONING_SUMMARY
+  VERBOSITY
+  HOSTED_WEB_SEARCH
+  IMAGE_GENERATION
+  MAX_OUTPUT_TOKENS
+  INSERTED_AT
+  UPDATED_AT
+  PROVIDER_ID
+}
+
+input ModelFilterProviderId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID!]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input ModelFilterUpdatedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input ModelFilterInsertedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input ModelFilterMaxOutputTokens {
+  isNil: Boolean
+  eq: Int
+  notEq: Int
+  in: [Int]
+  lessThan: Int
+  greaterThan: Int
+  lessThanOrEqual: Int
+  greaterThanOrEqual: Int
+  isDistinctFrom: Int
+  isNotDistinctFrom: Int
+  rangeAdjacent: Int
+  rangeContains: String
+  rangeOverlaps: Int
+}
+
+input ModelFilterImageGeneration {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input ModelFilterHostedWebSearch {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input ModelFilterVerbosity {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ModelFilterReasoningSummary {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+}
+
+input ModelFilterReasoningEffort {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ModelFilterDefault {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input ModelFilterContextWindow {
+  isNil: Boolean
+  eq: Int
+  notEq: Int
+  in: [Int!]
+  lessThan: Int
+  greaterThan: Int
+  lessThanOrEqual: Int
+  greaterThanOrEqual: Int
+  isDistinctFrom: Int
+  isNotDistinctFrom: Int
+  rangeAdjacent: Int
+  rangeContains: String
+  rangeOverlaps: Int
+}
+
+input ModelFilterUpstreamId {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ModelFilterSlug {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ModelFilterName {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ModelFilterId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID!]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input ModelFilterInput {
+  and: [ModelFilterInput!]
+  or: [ModelFilterInput!]
+  not: [ModelFilterInput!]
+  id: ModelFilterId
+  name: ModelFilterName
+  slug: ModelFilterSlug
+  upstreamId: ModelFilterUpstreamId
+  contextWindow: ModelFilterContextWindow
+  default: ModelFilterDefault
+  reasoningEffort: ModelFilterReasoningEffort
+  reasoningSummary: ModelFilterReasoningSummary
+  verbosity: ModelFilterVerbosity
+  hostedWebSearch: ModelFilterHostedWebSearch
+  imageGeneration: ModelFilterImageGeneration
+  maxOutputTokens: ModelFilterMaxOutputTokens
+  insertedAt: ModelFilterInsertedAt
+  updatedAt: ModelFilterUpdatedAt
+  providerId: ModelFilterProviderId
+  provider: ProviderFilterInput
+}
+
+input ModelSortInput {
+  order: SortOrder
+  field: ModelSortField!
+}
+
+type Model {
+  id: ID!
+  name: String!
+  slug: String
+  upstreamId: String!
+  contextWindow: Int!
+  default: Boolean!
+  reasoningLevels: [String!]!
+  reasoningEffort: String
+  reasoningSummary: String
+  verbosity: String
+  hostedWebSearch: Boolean
+  imageGeneration: Boolean!
+  maxOutputTokens: Int
+  insertedAt: DateTime!
+  updatedAt: DateTime!
+  providerId: ID!
+  provider: Provider!
+}
+
+input DiscoverModelsInput {
+  id: ID!
+}
+
+"The result of the :delete_provider mutation"
+type DeleteProviderResult {
+  "The record that was successfully deleted"
+  result: Provider
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+"The result of the :update_provider mutation"
+type UpdateProviderResult {
+  "The successful result of the mutation"
+  result: Provider
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input UpdateProviderInput {
+  name: String
+  baseUrl: String
+  credentialId: ID
+  kind: String
+  supportsHostedWebSearch: Boolean
+  promptCacheKey: Boolean
+  requestTimeoutMs: Int
+  streamIdleTimeoutMs: Int
+  maxConcurrentRequests: Int
+  apiKey: String
+}
+
+"The result of the :create_provider mutation"
+type CreateProviderResult {
+  "The successful result of the mutation"
+  result: Provider
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input CreateProviderInput {
+  name: String!
+  slug: String!
+  baseUrl: String!
+  credentialId: ID
+  kind: String
+  supportsHostedWebSearch: Boolean
+  promptCacheKey: Boolean
+  requestTimeoutMs: Int
+  streamIdleTimeoutMs: Int
+  maxConcurrentRequests: Int
+  apiKey: String
+}
+
+enum ProviderSortField {
+  ID
+  NAME
+  SLUG
+  BASE_URL
+  CREDENTIAL_ID
+  KIND
+  SUPPORTS_HOSTED_WEB_SEARCH
+  PROMPT_CACHE_KEY
+  REQUEST_TIMEOUT_MS
+  STREAM_IDLE_TIMEOUT_MS
+  MAX_CONCURRENT_REQUESTS
+  LAST_CHECKED_AT
+  LAST_ERROR
+  LAST_ERROR_AT
+  INSERTED_AT
+  UPDATED_AT
+  HAS_API_KEY
+}
+
+input ProviderFilterHasApiKey {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input ProviderFilterUpdatedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input ProviderFilterInsertedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input ProviderFilterLastErrorAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input ProviderFilterLastError {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ProviderFilterLastCheckedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input ProviderFilterMaxConcurrentRequests {
+  isNil: Boolean
+  eq: Int
+  notEq: Int
+  in: [Int]
+  lessThan: Int
+  greaterThan: Int
+  lessThanOrEqual: Int
+  greaterThanOrEqual: Int
+  isDistinctFrom: Int
+  isNotDistinctFrom: Int
+  rangeAdjacent: Int
+  rangeContains: String
+  rangeOverlaps: Int
+}
+
+input ProviderFilterStreamIdleTimeoutMs {
+  isNil: Boolean
+  eq: Int
+  notEq: Int
+  in: [Int!]
+  lessThan: Int
+  greaterThan: Int
+  lessThanOrEqual: Int
+  greaterThanOrEqual: Int
+  isDistinctFrom: Int
+  isNotDistinctFrom: Int
+  rangeAdjacent: Int
+  rangeContains: String
+  rangeOverlaps: Int
+}
+
+input ProviderFilterRequestTimeoutMs {
+  isNil: Boolean
+  eq: Int
+  notEq: Int
+  in: [Int!]
+  lessThan: Int
+  greaterThan: Int
+  lessThanOrEqual: Int
+  greaterThanOrEqual: Int
+  isDistinctFrom: Int
+  isNotDistinctFrom: Int
+  rangeAdjacent: Int
+  rangeContains: String
+  rangeOverlaps: Int
+}
+
+input ProviderFilterPromptCacheKey {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input ProviderFilterSupportsHostedWebSearch {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input ProviderFilterKind {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+}
+
+input ProviderFilterCredentialId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input ProviderFilterBaseUrl {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ProviderFilterSlug {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ProviderFilterName {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input ProviderFilterId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID!]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input ProviderFilterInput {
+  and: [ProviderFilterInput!]
+  or: [ProviderFilterInput!]
+  not: [ProviderFilterInput!]
+  id: ProviderFilterId
+  name: ProviderFilterName
+  slug: ProviderFilterSlug
+  baseUrl: ProviderFilterBaseUrl
+  credentialId: ProviderFilterCredentialId
+  kind: ProviderFilterKind
+  supportsHostedWebSearch: ProviderFilterSupportsHostedWebSearch
+  promptCacheKey: ProviderFilterPromptCacheKey
+  requestTimeoutMs: ProviderFilterRequestTimeoutMs
+  streamIdleTimeoutMs: ProviderFilterStreamIdleTimeoutMs
+  maxConcurrentRequests: ProviderFilterMaxConcurrentRequests
+  lastCheckedAt: ProviderFilterLastCheckedAt
+  lastError: ProviderFilterLastError
+  lastErrorAt: ProviderFilterLastErrorAt
+  insertedAt: ProviderFilterInsertedAt
+  updatedAt: ProviderFilterUpdatedAt
+  hasApiKey: ProviderFilterHasApiKey
+}
+
+input ProviderSortInput {
+  order: SortOrder
+  field: ProviderSortField!
+}
+
+type Provider {
+  id: ID!
+  name: String!
+  slug: String!
+  baseUrl: String!
+  credentialId: ID
+  kind: String!
+  supportsHostedWebSearch: Boolean!
+  promptCacheKey: Boolean
+  requestTimeoutMs: Int!
+  streamIdleTimeoutMs: Int!
+  maxConcurrentRequests: Int
+  lastCheckedAt: DateTime
+  lastError: String
+  lastErrorAt: DateTime
+  insertedAt: DateTime!
+  updatedAt: DateTime!
+  hasApiKey: Boolean
+}
+
+input SetBrowserPrivateNetworkInput {
+  enabled: Boolean!
+}
+
+input KillCommandInput {
+  id: String!
+}
+
+input SetGithubTokenInput {
+  token: String
+}
+
+input SetSentryDsnInput {
+  dsn: String!
+}
+
+input SetFileRulesInput {
+  ignore: String
+  watch: String
+}
+
+input SetPublicUrlInput {
+  url: String!
+}
+
+input SetAgentSettingsInput {
+  maxDepth: Int
+  maxChildren: Int
+  idleMinutes: Int
+  modelRetries: Int
+  commandOomPriority: Int
+  commandMemoryPercent: Int
+  memoryFloorPercent: Int
+  childModel: String
+  childEffort: String
+}
+
+input KnowledgeDeleteInput {
+  path: String!
+}
+
+input KnowledgeWriteInput {
+  path: String!
+  content: String!
+}
+
+input CreateDirectoryInput {
+  parent: String!
+  name: String!
+}
+
+input SetChromeDefaultAliasInput {
+  name: String
+}
+
+input DeleteChromeAliasInput {
+  name: String!
+}
+
+input SetChromeAliasInput {
+  name: String!
+  browsers: [String!]!
+}
+
+input DeleteChromeOriginInput {
+  id: String!
+  origin: String!
+}
+
+input SetChromeOriginInput {
+  id: String!
+  origin: String!
+  access: String!
+}
+
+input SetChromeBrowserMaxTabsInput {
+  id: String!
+  maxTabs: Int!
+}
+
+input RenameChromeBrowserInput {
+  id: String!
+  name: String!
+}
+
+input RevokeChromeBrowserInput {
+  id: String!
+}
+
+input RejectChromeBrowserInput {
+  id: String!
+}
+
+input ApproveChromeBrowserInput {
+  id: String!
+}
+
+input CredentialDevicePollInput {
+  state: String!
+}
+
+input CredentialDeviceBeginInput {
+  id: ID!
+}
+
+input CredentialCompleteUrlInput {
+  url: String!
+}
+
+input RefreshCredentialInput {
+  id: ID!
+}
+
+input CredentialLoginUrlInput {
+  id: ID!
+  origin: String
+}
+
+"The result of the :delete_credential mutation"
+type DeleteCredentialResult {
+  "The record that was successfully deleted"
+  result: Credential
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+"The result of the :update_credential mutation"
+type UpdateCredentialResult {
+  "The successful result of the mutation"
+  result: Credential
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input UpdateCredentialInput {
+  label: String
+  header: String
+  scheme: String
+  allowedHosts: [String!]
+  clientId: String
+  authorizeUrl: String
+  tokenUrl: String
+  registrationUrl: String
+  scopes: String
+  pkce: Boolean
+  extraParams: Json
+  fixedClient: Boolean
+  redirectUri: String
+  authorizeParams: Json
+  deviceFlow: String
+  clientSecret: String
+  secret: String
+}
+
+"The result of the :create_credential_oauth2 mutation"
+type CreateCredentialOauth2Result {
+  "The successful result of the mutation"
+  result: Credential
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input CreateCredentialOauth2Input {
+  name: String!
+  label: String
+  header: String
+  scheme: String
+  allowedHosts: [String!]
+  clientId: String
+  authorizeUrl: String
+  tokenUrl: String
+  registrationUrl: String
+  scopes: String
+  pkce: Boolean
+  extraParams: Json
+  fixedClient: Boolean
+  redirectUri: String
+  authorizeParams: Json
+  deviceFlow: String
+  clientSecret: String
+}
+
+"The result of the :create_credential_api_key mutation"
+type CreateCredentialApiKeyResult {
+  "The successful result of the mutation"
+  result: Credential
+
+  "Any errors generated, if the mutation failed"
+  errors: [MutationError!]!
+}
+
+input CreateCredentialApiKeyInput {
+  name: String!
+  label: String
+  header: String
+  scheme: String
+  allowedHosts: [String!]
+  secret: String
+}
+
+enum CredentialSortField {
+  ID
+  NAME
+  LABEL
+  KIND
+  HEADER
+  SCHEME
+  CLIENT_ID
+  AUTHORIZE_URL
+  TOKEN_URL
+  REGISTRATION_URL
+  SCOPES
+  PKCE
+  EXTRA_PARAMS
+  FIXED_CLIENT
+  REDIRECT_URI
+  AUTHORIZE_PARAMS
+  DEVICE_FLOW
+  EXPIRES_AT
+  REFRESHED_AT
+  LAST_ERROR
+  LAST_ERROR_AT
+  INSERTED_AT
+  UPDATED_AT
+  HAS_SECRET
+  HAS_ACCESS_TOKEN
+  HAS_REFRESH_TOKEN
+  HAS_CLIENT_SECRET
+}
+
+input CredentialFilterHasClientSecret {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input CredentialFilterHasRefreshToken {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input CredentialFilterHasAccessToken {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input CredentialFilterHasSecret {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input CredentialFilterUpdatedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input CredentialFilterInsertedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input CredentialFilterLastErrorAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input CredentialFilterLastError {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input CredentialFilterRefreshedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input CredentialFilterExpiresAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input CredentialFilterDeviceFlow {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+}
+
+input CredentialFilterAuthorizeParams {
+  isNil: Boolean
+  eq: Json
+  notEq: Json
+  in: [Json!]
+  lessThan: Json
+  greaterThan: Json
+  lessThanOrEqual: Json
+  greaterThanOrEqual: Json
+  isDistinctFrom: Json
+  isNotDistinctFrom: Json
+  rangeAdjacent: Json
+  rangeContains: String
+  rangeOverlaps: Json
+}
+
+input CredentialFilterRedirectUri {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input CredentialFilterFixedClient {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input CredentialFilterExtraParams {
+  isNil: Boolean
+  eq: Json
+  notEq: Json
+  in: [Json!]
+  lessThan: Json
+  greaterThan: Json
+  lessThanOrEqual: Json
+  greaterThanOrEqual: Json
+  isDistinctFrom: Json
+  isNotDistinctFrom: Json
+  rangeAdjacent: Json
+  rangeContains: String
+  rangeOverlaps: Json
+}
+
+input CredentialFilterPkce {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input CredentialFilterScopes {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input CredentialFilterRegistrationUrl {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input CredentialFilterTokenUrl {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input CredentialFilterAuthorizeUrl {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input CredentialFilterClientId {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input CredentialFilterScheme {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input CredentialFilterHeader {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input CredentialFilterKind {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+}
+
+input CredentialFilterLabel {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input CredentialFilterName {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input CredentialFilterId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID!]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input CredentialFilterInput {
+  and: [CredentialFilterInput!]
+  or: [CredentialFilterInput!]
+  not: [CredentialFilterInput!]
+  id: CredentialFilterId
+  name: CredentialFilterName
+  label: CredentialFilterLabel
+  kind: CredentialFilterKind
+  header: CredentialFilterHeader
+  scheme: CredentialFilterScheme
+  clientId: CredentialFilterClientId
+  authorizeUrl: CredentialFilterAuthorizeUrl
+  tokenUrl: CredentialFilterTokenUrl
+  registrationUrl: CredentialFilterRegistrationUrl
+  scopes: CredentialFilterScopes
+  pkce: CredentialFilterPkce
+  extraParams: CredentialFilterExtraParams
+  fixedClient: CredentialFilterFixedClient
+  redirectUri: CredentialFilterRedirectUri
+  authorizeParams: CredentialFilterAuthorizeParams
+  deviceFlow: CredentialFilterDeviceFlow
+  expiresAt: CredentialFilterExpiresAt
+  refreshedAt: CredentialFilterRefreshedAt
+  lastError: CredentialFilterLastError
+  lastErrorAt: CredentialFilterLastErrorAt
+  insertedAt: CredentialFilterInsertedAt
+  updatedAt: CredentialFilterUpdatedAt
+  hasSecret: CredentialFilterHasSecret
+  hasAccessToken: CredentialFilterHasAccessToken
+  hasRefreshToken: CredentialFilterHasRefreshToken
+  hasClientSecret: CredentialFilterHasClientSecret
+}
+
+input CredentialSortInput {
+  order: SortOrder
+  field: CredentialSortField!
+}
+
+type Credential {
+  id: ID!
+  name: String!
+  label: String
+  kind: String!
+  header: String!
+  scheme: String!
+  allowedHosts: [String!]!
+  clientId: String
+  authorizeUrl: String
+  tokenUrl: String
+  registrationUrl: String
+  scopes: String
+  pkce: Boolean!
+  extraParams: Json!
+  fixedClient: Boolean!
+  redirectUri: String
+  authorizeParams: Json!
+  deviceFlow: String!
+  expiresAt: DateTime
+  refreshedAt: DateTime
+  lastError: String
+  lastErrorAt: DateTime
+  insertedAt: DateTime!
+  updatedAt: DateTime!
+  hasSecret: Boolean
+  hasAccessToken: Boolean
+  hasRefreshToken: Boolean
+  hasClientSecret: Boolean
+  status: String
+}
+
+input DeleteWatchInput {
+  id: ID!
+}
+
+input DryRunWatchInput {
+  id: ID!
+}
+
+input SwitchWatchInput {
+  id: ID!
+  enabled: Boolean!
+}
+
+enum WatchSortField {
+  ID
+  NAME
+  PATH
+  LAYER
+  KIND
+  CRON
+  AT
+  EXPIRES_AT
+  MAX_RUNS
+  TIMEOUT_MS
+  BUDGET_PER_HOUR
+  NEXT_DUE_AT
+  STATE
+  RUNNING_SINCE
+  LAST_RUN_AT
+  LAST_DURATION_MS
+  LAST_ERROR
+  LAST_OUTPUT
+  LAST_SENT_TO
+  RUNS
+  SENDS
+  SENDS_THIS_HOUR
+  HOUR_STARTED_AT
+  ENABLED
+  DISABLED_REASON
+  LOAD_ERROR
+  WEBHOOK_TOKEN
+  INSERTED_AT
+  UPDATED_AT
+  PROJECT_ID
+}
+
+input WatchFilterProjectId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID!]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input WatchFilterUpdatedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input WatchFilterInsertedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime!]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input WatchFilterWebhookToken {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input WatchFilterLoadError {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input WatchFilterDisabledReason {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+}
+
+input WatchFilterEnabled {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
+}
+
+input WatchFilterHourStartedAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input WatchFilterSendsThisHour {
+  isNil: Boolean
+  eq: Int
+  notEq: Int
+  in: [Int!]
+  lessThan: Int
+  greaterThan: Int
+  lessThanOrEqual: Int
+  greaterThanOrEqual: Int
+  isDistinctFrom: Int
+  isNotDistinctFrom: Int
+  rangeAdjacent: Int
+  rangeContains: String
+  rangeOverlaps: Int
+}
+
+input WatchFilterSends {
+  isNil: Boolean
+  eq: Int
+  notEq: Int
+  in: [Int!]
+  lessThan: Int
+  greaterThan: Int
+  lessThanOrEqual: Int
+  greaterThanOrEqual: Int
+  isDistinctFrom: Int
+  isNotDistinctFrom: Int
+  rangeAdjacent: Int
+  rangeContains: String
+  rangeOverlaps: Int
+}
+
+input WatchFilterRuns {
+  isNil: Boolean
+  eq: Int
+  notEq: Int
+  in: [Int!]
+  lessThan: Int
+  greaterThan: Int
+  lessThanOrEqual: Int
+  greaterThanOrEqual: Int
+  isDistinctFrom: Int
+  isNotDistinctFrom: Int
+  rangeAdjacent: Int
+  rangeContains: String
+  rangeOverlaps: Int
+}
+
+input WatchFilterLastSentTo {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input WatchFilterLastOutput {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input WatchFilterLastError {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input WatchFilterLastDurationMs {
+  isNil: Boolean
+  eq: Int
+  notEq: Int
+  in: [Int]
+  lessThan: Int
+  greaterThan: Int
+  lessThanOrEqual: Int
+  greaterThanOrEqual: Int
+  isDistinctFrom: Int
+  isNotDistinctFrom: Int
+  rangeAdjacent: Int
+  rangeContains: String
+  rangeOverlaps: Int
+}
+
+input WatchFilterLastRunAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input WatchFilterRunningSince {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input WatchFilterState {
+  isNil: Boolean
+  eq: Json
+  notEq: Json
+  in: [Json!]
+  lessThan: Json
+  greaterThan: Json
+  lessThanOrEqual: Json
+  greaterThanOrEqual: Json
+  isDistinctFrom: Json
+  isNotDistinctFrom: Json
+  rangeAdjacent: Json
+  rangeContains: String
+  rangeOverlaps: Json
+}
+
+input WatchFilterNextDueAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input WatchFilterBudgetPerHour {
+  isNil: Boolean
+  eq: Int
+  notEq: Int
+  in: [Int!]
+  lessThan: Int
+  greaterThan: Int
+  lessThanOrEqual: Int
+  greaterThanOrEqual: Int
+  isDistinctFrom: Int
+  isNotDistinctFrom: Int
+  rangeAdjacent: Int
+  rangeContains: String
+  rangeOverlaps: Int
+}
+
+input WatchFilterTimeoutMs {
+  isNil: Boolean
+  eq: Int
+  notEq: Int
+  in: [Int!]
+  lessThan: Int
+  greaterThan: Int
+  lessThanOrEqual: Int
+  greaterThanOrEqual: Int
+  isDistinctFrom: Int
+  isNotDistinctFrom: Int
+  rangeAdjacent: Int
+  rangeContains: String
+  rangeOverlaps: Int
+}
+
+input WatchFilterMaxRuns {
+  isNil: Boolean
+  eq: Int
+  notEq: Int
+  in: [Int]
+  lessThan: Int
+  greaterThan: Int
+  lessThanOrEqual: Int
+  greaterThanOrEqual: Int
+  isDistinctFrom: Int
+  isNotDistinctFrom: Int
+  rangeAdjacent: Int
+  rangeContains: String
+  rangeOverlaps: Int
+}
+
+input WatchFilterExpiresAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input WatchFilterAt {
+  isNil: Boolean
+  eq: DateTime
+  notEq: DateTime
+  in: [DateTime]
+  lessThan: DateTime
+  greaterThan: DateTime
+  lessThanOrEqual: DateTime
+  greaterThanOrEqual: DateTime
+  isDistinctFrom: DateTime
+  isNotDistinctFrom: DateTime
+  rangeAdjacent: DateTime
+  rangeContains: String
+  rangeOverlaps: DateTime
+}
+
+input WatchFilterCron {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input WatchFilterKind {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+}
+
+input WatchFilterLayer {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+}
+
+input WatchFilterPath {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input WatchFilterName {
+  isNil: Boolean
+  eq: String
+  notEq: String
+  in: [String!]
+  lessThan: String
+  greaterThan: String
+  lessThanOrEqual: String
+  greaterThanOrEqual: String
+  contains: String
+  isDistinctFrom: String
+  isNotDistinctFrom: String
+  rangeAdjacent: String
+  rangeContains: String
+  rangeOverlaps: String
+  stringEndsWith: String
+  stringStartsWith: String
+}
+
+input WatchFilterId {
+  isNil: Boolean
+  eq: ID
+  notEq: ID
+  in: [ID!]
+  lessThan: ID
+  greaterThan: ID
+  lessThanOrEqual: ID
+  greaterThanOrEqual: ID
+  isDistinctFrom: ID
+  isNotDistinctFrom: ID
+  rangeAdjacent: ID
+  rangeContains: String
+  rangeOverlaps: ID
+}
+
+input WatchFilterInput {
+  and: [WatchFilterInput!]
+  or: [WatchFilterInput!]
+  not: [WatchFilterInput!]
+  id: WatchFilterId
+  name: WatchFilterName
+  path: WatchFilterPath
+  layer: WatchFilterLayer
+  kind: WatchFilterKind
+  cron: WatchFilterCron
+  at: WatchFilterAt
+  expiresAt: WatchFilterExpiresAt
+  maxRuns: WatchFilterMaxRuns
+  timeoutMs: WatchFilterTimeoutMs
+  budgetPerHour: WatchFilterBudgetPerHour
+  nextDueAt: WatchFilterNextDueAt
+  state: WatchFilterState
+  runningSince: WatchFilterRunningSince
+  lastRunAt: WatchFilterLastRunAt
+  lastDurationMs: WatchFilterLastDurationMs
+  lastError: WatchFilterLastError
+  lastOutput: WatchFilterLastOutput
+  lastSentTo: WatchFilterLastSentTo
+  runs: WatchFilterRuns
+  sends: WatchFilterSends
+  sendsThisHour: WatchFilterSendsThisHour
+  hourStartedAt: WatchFilterHourStartedAt
+  enabled: WatchFilterEnabled
+  disabledReason: WatchFilterDisabledReason
+  loadError: WatchFilterLoadError
+  webhookToken: WatchFilterWebhookToken
+  insertedAt: WatchFilterInsertedAt
+  updatedAt: WatchFilterUpdatedAt
+  projectId: WatchFilterProjectId
+  project: ProjectFilterInput
+}
+
+input WatchSortInput {
+  order: SortOrder
+  field: WatchSortField!
+}
+
+type Watch {
+  id: ID!
+  name: String!
+  path: String!
+  layer: String!
+  kind: String!
+  cron: String
+  at: DateTime
+  expiresAt: DateTime
+  maxRuns: Int
+  timeoutMs: Int!
+  budgetPerHour: Int!
+  nextDueAt: DateTime
+  state: Json!
+  runningSince: DateTime
+  lastRunAt: DateTime
+  lastDurationMs: Int
+  lastError: String
+  lastOutput: String
+  lastSentTo: String
+  runs: Int!
+  sends: Int!
+  sendsThisHour: Int!
+  hourStartedAt: DateTime
+  enabled: Boolean!
+  disabledReason: String
+  loadError: String
+  webhookToken: String
+  insertedAt: DateTime!
+  updatedAt: DateTime!
+  projectId: ID!
+  project: Project!
+}
+
+type RootQueryType {
+  listWatches(
+    "How to sort the records in the response"
+    sort: [WatchSortInput]
+
+    "A filter to limit the results"
+    filter: WatchFilterInput
+
+    projectId: ID!
+  ): [Watch!]!
+  listAllWatches: ListAll!
+  listCredentials(
+    "How to sort the records in the response"
+    sort: [CredentialSortInput]
+
+    "A filter to limit the results"
+    filter: CredentialFilterInput
+  ): [Credential!]!
+  credentialRedirectUri(origin: String): RedirectUri!
+  listChromeBrowsers: ChromeBrowsers!
+  chromeAliases: ChromeAliases!
+  chromeExtension: ChromeExtension!
+  listDirectory(path: String, showHidden: Boolean): ListDirectory!
+  knowledgeDocs: [KnowledgeDoc!]!
+  knowledgeRead(path: String!): KnowledgeRead!
+  agentSettings: AgentSettings!
+  publicUrl: PublicUrl!
+  dependencies: Dependency!
+  fileRules: FileRules!
+  sentryStatus: Sentry!
+  upgradeStatus: Upgrade!
+  gatewayRequests(limit: Int): GatewayRequests!
+  recentFaults: RecentFaults!
+  runningCommands: RunningCommands!
+  browserSettings: Browser!
+  browserStatus: BrowserStatus!
+  listProviders(
+    "How to sort the records in the response"
+    sort: [ProviderSortInput]
+
+    "A filter to limit the results"
+    filter: ProviderFilterInput
+  ): [Provider!]!
+  listModels(
+    "How to sort the records in the response"
+    sort: [ModelSortInput]
+
+    "A filter to limit the results"
+    filter: ModelFilterInput
+  ): [Model!]!
+  defaultModelSetting: ModelDefault!
+  modelAliases: [ModelAlias!]!
+  listSearchProviders(
+    "How to sort the records in the response"
+    sort: [SearchProviderSortInput]
+
+    "A filter to limit the results"
+    filter: SearchProviderFilterInput
+  ): [SearchProvider!]!
+  listPresets: [ListPresets!]!
+  listProjects(
+    "How to sort the records in the response"
+    sort: [ProjectSortInput]
+
+    "A filter to limit the results"
+    filter: ProjectFilterInput
+  ): [Project!]!
+  listAllProjects(
+    "How to sort the records in the response"
+    sort: [ProjectSortInput]
+
+    "A filter to limit the results"
+    filter: ProjectFilterInput
+  ): [Project!]!
+  getProject(
+    "A filter to limit the results"
+    filter: ProjectFilterInput
+
+    slug: String!
+  ): Project
+  gitInfo(id: ID!): GitInfo!
+  searchFiles(id: ID!, query: String!): [SearchFiles!]!
+  agentDefinition(id: ID!): AgentDefinition!
+  listThreads(
+    "How to sort the records in the response"
+    sort: [ThreadSortInput]
+
+    "A filter to limit the results"
+    filter: ThreadFilterInput
+
+    projectId: ID!
+  ): [Thread!]!
+  getThread(
+    "A filter to limit the results"
+    filter: ThreadFilterInput
+
+    id: ID!
+  ): Thread
+  listSubagents(
+    "How to sort the records in the response"
+    sort: [ThreadSortInput]
+
+    "A filter to limit the results"
+    filter: ThreadFilterInput
+
+    parentThreadId: ID!
+  ): [Thread!]!
+  listRunningThreads: ListRunning!
+  directory(projectId: ID!, scope: String): Directory!
+  listFiles(projectId: ID!, path: String!): [FilesEntry!]!
+  readFile(projectId: ID!, path: String!): ReadFile!
+  ignoredPaths(projectId: ID!): [String!]!
+  gitChanges(projectId: ID!): GitChanges!
+  gitFileDiff(projectId: ID!, path: String!): RepoDiff!
+  gitLog(projectId: ID!, limit: Int, skip: Int): [GitLog!]!
+  gitShow(projectId: ID!, sha: String!): GitShow!
+  gitCommitFileDiff(projectId: ID!, sha: String!, path: String!): RepoDiff!
+  gitFileVersions(projectId: ID!, sha: String, path: String!): GitFileVersions!
+  gitBranches(projectId: ID!): GitBranches!
+  listTurns(
+    "How to sort the records in the response"
+    sort: [TurnSortInput]
+
+    "A filter to limit the results"
+    filter: TurnFilterInput
+
+    threadId: ID!
+
+    includeReverted: Boolean
+  ): [Turn!]!
+}
+
+type RootMutationType {
+  switchWatch(input: SwitchWatchInput!): Watch!
+  dryRunWatch(input: DryRunWatchInput!): DryRun!
+  deleteWatch(input: DeleteWatchInput!): Boolean!
+  createCredentialApiKey(input: CreateCredentialApiKeyInput!): CreateCredentialApiKeyResult
+  createCredentialOauth2(input: CreateCredentialOauth2Input!): CreateCredentialOauth2Result
+  updateCredential(id: ID!, input: UpdateCredentialInput): UpdateCredentialResult
+  deleteCredential(id: ID!): DeleteCredentialResult
+  credentialLoginUrl(input: CredentialLoginUrlInput!): LoginUrl!
+  refreshCredential(input: RefreshCredentialInput!): Credential!
+  credentialCompleteUrl(input: CredentialCompleteUrlInput!): Credential!
+  credentialDeviceBegin(input: CredentialDeviceBeginInput!): DeviceBegin!
+  credentialDevicePoll(input: CredentialDevicePollInput!): DevicePoll!
+  approveChromeBrowser(input: ApproveChromeBrowserInput!): Ok!
+  rejectChromeBrowser(input: RejectChromeBrowserInput!): Ok!
+  revokeChromeBrowser(input: RevokeChromeBrowserInput!): Ok!
+  renameChromeBrowser(input: RenameChromeBrowserInput!): Ok!
+  setChromeBrowserMaxTabs(input: SetChromeBrowserMaxTabsInput!): Ok!
+  setChromeOrigin(input: SetChromeOriginInput!): Ok!
+  deleteChromeOrigin(input: DeleteChromeOriginInput!): Ok!
+  setChromeAlias(input: SetChromeAliasInput!): ChromeAliases!
+  deleteChromeAlias(input: DeleteChromeAliasInput!): ChromeAliases!
+  setChromeDefaultAlias(input: SetChromeDefaultAliasInput): ChromeAliases!
+  createDirectory(input: CreateDirectoryInput!): CreateDirectory!
+  knowledgeWrite(input: KnowledgeWriteInput!): Boolean!
+  knowledgeDelete(input: KnowledgeDeleteInput!): Boolean!
+  setAgentSettings(input: SetAgentSettingsInput): AgentSettings!
+  checkDependencies: Dependency!
+  setPublicUrl(input: SetPublicUrlInput!): SetPublicUrl!
+  setFileRules(input: SetFileRulesInput): FileRules!
+  setSentryDsn(input: SetSentryDsnInput!): Sentry!
+  sentryTest: SentryTest!
+  upgradeCheck: Upgrade!
+  upgradeApply: Upgrade!
+  setGithubToken(input: SetGithubTokenInput): Upgrade!
+  killCommand(input: KillCommandInput!): KillCommand!
+  browserInstall: BrowserStatus!
+  setBrowserPrivateNetwork(input: SetBrowserPrivateNetworkInput!): Browser!
+  createProvider(input: CreateProviderInput!): CreateProviderResult
+  updateProvider(id: ID!, input: UpdateProviderInput): UpdateProviderResult
+  deleteProvider(id: ID!): DeleteProviderResult
+  discoverModels(input: DiscoverModelsInput!): DiscoverModels!
+  createModel(input: CreateModelInput!): CreateModelResult
+  updateModel(id: ID!, input: UpdateModelInput): UpdateModelResult
+  makeDefaultModel(id: ID!): MakeDefaultModelResult
+  setDefaultModel(input: SetDefaultModelInput!): ModelDefault!
+  checkModel(input: CheckModelInput!): CheckModel!
+  setModelAlias(input: SetModelAliasInput!): ModelAlias!
+  deleteModelAlias(input: DeleteModelAliasInput!): Boolean!
+  deleteModel(id: ID!): DeleteModelResult
+  updateSearchProvider(id: ID!, input: UpdateSearchProviderInput): UpdateSearchProviderResult
+  applyPreset(input: ApplyPresetInput!): ApplyPreset!
+  createProject(input: CreateProjectInput!): CreateProjectResult
+  updateProject(id: ID!, input: UpdateProjectInput): UpdateProjectResult
+  archiveProject(id: ID!): ArchiveProjectResult
+  deleteProject(id: ID!, input: DeleteProjectInput): DeleteProjectResult
+  promoteLocal(input: PromoteLocalInput!): PromoteLocal!
+  initGit(input: InitGitInput!): GitInfo!
+  startThread(input: StartThreadInput!): Thread!
+  sendMessage(input: SendMessageInput!): Turn!
+  interruptTurn(input: InterruptTurnInput!): Boolean!
+  steerTurn(input: SteerTurnInput!): SteerTurn!
+  retractTurn(input: RetractTurnInput!): RetractTurn!
+  releaseWaiting(input: ReleaseWaitingInput!): Boolean!
+  compactThread(input: CompactThreadInput!): Boolean!
+  answerRequest(input: AnswerRequestInput!): Boolean!
+  setGoal(input: SetGoalInput!): Goal!
+  clearGoal(input: ClearGoalInput!): ClearGoal!
+  renameThread(id: ID!, input: RenameThreadInput): RenameThreadResult
+  setThreadHandle(input: SetThreadHandleInput!): Thread!
+  setThreadOnDuty(input: SetThreadOnDutyInput!): Thread!
+  archiveThread(id: ID!): ArchiveThreadResult
+  deleteThread(input: DeleteThreadInput!): Boolean!
+  writeFile(input: WriteFileInput!): Boolean!
+  createEntry(input: CreateEntryInput!): FilesEntry!
+  renameEntry(input: RenameEntryInput!): FilesEntry!
+  deleteEntry(input: DeleteEntryInput!): Boolean!
+  gitCommit(input: GitCommitInput!): RepoSha!
+  gitDiscard(input: GitDiscardInput!): Boolean!
+  gitUndoCommit(input: GitUndoCommitInput!): RepoSha!
+  gitAbortMerge(input: GitAbortMergeInput!): Boolean!
+  gitCreateBranch(input: GitCreateBranchInput!): Boolean!
+  gitSwitch(input: GitSwitchInput!): Boolean!
+  gitDeleteBranch(input: GitDeleteBranchInput!): Boolean!
+  gitStashPop(input: GitStashPopInput!): Boolean!
+  gitSetRemote(input: GitSetRemoteInput!): Boolean!
+  gitFetch(input: GitFetchInput!): Boolean!
+  gitPull(input: GitPullInput!): Boolean!
+  gitPush(input: GitPushInput!): Boolean!
+}
+
+"""
+The `Json` scalar type represents arbitrary json string data, represented as UTF-8
+character sequences. The Json type is most often used to represent a free-form
+human-readable json string.
+"""
+scalar Json
+
+"""
+The `DateTime` scalar type represents a date and time in the UTC
+timezone. The DateTime appears in a JSON response as an ISO8601 formatted
+string, including UTC timezone ("Z"). The parsed date and time string will
+be converted to UTC if there is an offset.
+"""
+scalar DateTime

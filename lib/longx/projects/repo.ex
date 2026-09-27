@@ -10,34 +10,20 @@ defmodule Longx.Projects.Repo do
   use Ash.Resource,
     otp_app: :longx,
     domain: Longx.Projects,
-    extensions: [AshTypescript.Resource]
+    extensions: [AshGraphql.Resource]
+
+  alias Longx.Projects.Types
 
   alias Longx.Git
 
-  typescript do
-    type_name "ProjectRepo"
+  # no rows, no object type: only its generic actions are in the schema
+  graphql do
+    generate_object? false
   end
-
-  @diff [binary: [type: :boolean, allow_nil?: false], diff: [type: :string, allow_nil?: false]]
-  @sha [sha: [type: :string, allow_nil?: false]]
 
   actions do
     # the Changes view + the sync state, in one call
-    action :git_changes, :map do
-      constraints fields: [
-                    repository: [type: :boolean, allow_nil?: false],
-                    branch: [type: :string],
-                    head: [type: :string],
-                    changes: [type: {:array, :map}, allow_nil?: false],
-                    ahead: [type: :integer],
-                    behind: [type: :integer],
-                    remotes: [type: {:array, :map}, allow_nil?: false],
-                    lfs: [type: :boolean, allow_nil?: false],
-                    # what .gitignore hides (the tree dims them); a merge stopped on conflicts
-                    ignored: [type: {:array, :string}, allow_nil?: false],
-                    merging: [type: :boolean, allow_nil?: false]
-                  ]
-
+    action :git_changes, Types.GitChanges do
       argument :project_id, :uuid, allow_nil?: false
 
       run fn input, _ ->
@@ -78,8 +64,7 @@ defmodule Longx.Projects.Repo do
       end
     end
 
-    action :git_file_diff, :map do
-      constraints fields: @diff
+    action :git_file_diff, Types.RepoDiff do
       argument :project_id, :uuid, allow_nil?: false
       argument :path, :string, allow_nil?: false
 
@@ -88,8 +73,7 @@ defmodule Longx.Projects.Repo do
       end
     end
 
-    action :git_commit, :map do
-      constraints fields: @sha
+    action :git_commit, Types.RepoSha do
       argument :project_id, :uuid, allow_nil?: false
       argument :paths, {:array, :string}, allow_nil?: false
       argument :message, :string, allow_nil?: false
@@ -125,8 +109,7 @@ defmodule Longx.Projects.Repo do
       end
     end
 
-    action :git_undo_commit, :map do
-      constraints fields: @sha
+    action :git_undo_commit, Types.RepoSha do
       argument :project_id, :uuid, allow_nil?: false
 
       run fn input, _ ->
@@ -137,18 +120,7 @@ defmodule Longx.Projects.Repo do
     end
 
     # the History view
-    action :git_log, {:array, :map} do
-      constraints items: [
-                    fields: [
-                      sha: [type: :string, allow_nil?: false],
-                      subject: [type: :string, allow_nil?: false],
-                      author: [type: :string, allow_nil?: false],
-                      email: [type: :string, allow_nil?: false],
-                      # ISO 8601: a typed map's utc_datetime has no client-side type in ash_typescript 0.18
-                      at: [type: :string, allow_nil?: false]
-                    ]
-                  ]
-
+    action :git_log, {:array, Types.GitLog} do
       argument :project_id, :uuid, allow_nil?: false
       argument :limit, :integer, default: 50
       argument :skip, :integer, default: 0
@@ -163,18 +135,7 @@ defmodule Longx.Projects.Repo do
       end
     end
 
-    action :git_show, :map do
-      constraints fields: [
-                    sha: [type: :string, allow_nil?: false],
-                    subject: [type: :string, allow_nil?: false],
-                    body: [type: :string, allow_nil?: false],
-                    author: [type: :string, allow_nil?: false],
-                    email: [type: :string, allow_nil?: false],
-                    at: [type: :string, allow_nil?: false],
-                    parents: [type: {:array, :string}, allow_nil?: false],
-                    files: [type: {:array, :map}, allow_nil?: false]
-                  ]
-
+    action :git_show, Types.GitShow do
       argument :project_id, :uuid, allow_nil?: false
       argument :sha, :string, allow_nil?: false
 
@@ -188,8 +149,7 @@ defmodule Longx.Projects.Repo do
       end
     end
 
-    action :git_commit_file_diff, :map do
-      constraints fields: @diff
+    action :git_commit_file_diff, Types.RepoDiff do
       argument :project_id, :uuid, allow_nil?: false
       argument :sha, :string, allow_nil?: false
       argument :path, :string, allow_nil?: false
@@ -205,13 +165,7 @@ defmodule Longx.Projects.Repo do
     end
 
     # both whole texts, for the side-by-side view (sha nil: HEAD vs the working tree)
-    action :git_file_versions, :map do
-      constraints fields: [
-                    before: [type: :string],
-                    after: [type: :string],
-                    binary: [type: :boolean, allow_nil?: false]
-                  ]
-
+    action :git_file_versions, Types.GitFileVersions do
       argument :project_id, :uuid, allow_nil?: false
       argument :sha, :string
       argument :path, :string, allow_nil?: false
@@ -224,13 +178,7 @@ defmodule Longx.Projects.Repo do
     end
 
     # Branches (and the stash, which is what a switch with changes needs)
-    action :git_branches, :map do
-      constraints fields: [
-                    current: [type: :string],
-                    branches: [type: {:array, :map}, allow_nil?: false],
-                    stashes: [type: {:array, :map}, allow_nil?: false]
-                  ]
-
+    action :git_branches, Types.GitBranches do
       argument :project_id, :uuid, allow_nil?: false
 
       run fn input, _ ->

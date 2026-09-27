@@ -4,9 +4,9 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { ok, project, rpcMock, socketMock } from "@/ui/test-mocks";
 
-vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { listProjects, listRunningThreads } from "@/ash_rpc";
+import { listProjects, listRunningThreads } from "@/core/api";
 
 describe("WelcomePage", () => {
   beforeEach(() => setViewport(390));

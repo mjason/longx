@@ -357,8 +357,8 @@ lib/longx/browser*          obscura 无头浏览器：按需下载（Installer�
 lib/longx/projects/         项目、会话、轮次（git 书签）、Tracker、文件与 git 工具、附件
 lib/longx/system/           系统依赖检测、目录浏览、设置项；lib/longx/upgrade.ex 自升级；lib/longx/git.ex 机器上的 git
 lib/longx/shim*             Go 中间件：带背压、可干净终止的外部进程（命令、git、浏览器都通过它）
-lib/longx_web/              SPA 壳（所有路径）、/rpc（ash_typescript）、/socket（thread / project / notify channel）、/callback、/attachments
-assets/js/core/             不碰 DOM 的前端核心（RPC 客户端、socket、channel、reducer）——以后 React Native 复用
+lib/longx_web/              SPA 壳（所有路径）、/gql（AshGraphql，schema 在 priv/schema.graphql）、/socket（thread / project / notify channel）、/callback、/attachments
+assets/js/core/             不碰 DOM 的前端核心（GraphQL 客户端、socket、channel、reducer）——以后 React Native 复用
 assets/js/ui/               React DOM：路由、页面、assistant-ui 元素、shadcn 组件；移动端优先
 priv/agent/                 基础 prompt、apply_patch 语法、压缩 prompt、给 agent 的 API 参考、出厂知识
 ```

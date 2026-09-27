@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useFaults } from "@/core/faults";
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { gatewayRequests } from "@/ash_rpc";
+import { gatewayRequests } from "@/core/api";
 import { formatDuration } from "@/core/format";
 import { unwrap } from "@/core/projects";
 import { Button } from "@/ui/components/ui/button";
@@ -42,7 +42,7 @@ export function useGatewayRequests(limit = 200) {
     queryKey: ["gateway-requests", limit],
     refetchInterval: 5_000,
     queryFn: async () => {
-      const data = unwrap(await gatewayRequests({ fields: ["requests", "keep"], input: { limit } }));
+      const data = unwrap(await gatewayRequests({ input: { limit } }));
       return { keep: data.keep, requests: data.requests as GatewayRequest[] };
     },
   });

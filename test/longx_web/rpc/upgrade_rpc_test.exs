@@ -24,13 +24,6 @@ defmodule LongxWeb.UpgradeRpcTest do
     %{bypass: bypass}
   end
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   @fields ~w(current installed latest available notesUrl checkedAt error stage message target hasGithubToken)
 
   test "status before any check, a check, the token, an apply outside an install", %{

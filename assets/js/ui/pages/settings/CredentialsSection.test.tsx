@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt } from "@/ui/test-utils";
 import { credential, ok } from "@/ui/test-mocks";
 
-vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
 import {
   createCredentialApiKey,
@@ -15,7 +15,7 @@ import {
   listCredentials,
   refreshCredential,
   updateCredential,
-} from "@/ash_rpc";
+} from "@/core/api";
 
 // the page opens through a lazy route (routes.tsx): its module in the cache
 // first, so the route resolves at once however slow the machine — CI's runner

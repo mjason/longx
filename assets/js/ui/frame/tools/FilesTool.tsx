@@ -10,7 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useFrame } from "@/core/frame";
 import { useViewport } from "@/core/viewport";
 import { useWorkbench } from "@/core/workbench";
-import { searchFiles } from "@/ash_rpc";
+import { searchFiles } from "@/core/api";
 import { unwrap } from "@/core/projects";
 import { useQuery } from "@tanstack/react-query";
 import { useCreateEntry, useDeleteEntry, useFiles, useGitChanges, useIgnored, useRenameEntry, useWatchStatus, wsKeys, type FileEntry } from "@/core/workspace";
@@ -124,7 +124,7 @@ function FilterResults({ projectId, query, git }: { projectId: string; query: st
   const viewport = useViewport();
   const results = useQuery({
     queryKey: ["file-search", projectId, query],
-    queryFn: async () => unwrap(await searchFiles({ fields: ["path", "fileName", "matchType"], input: { id: projectId, query } })),
+    queryFn: async () => unwrap(await searchFiles({ input: { id: projectId, query } })),
   });
   if (results.isPending) return <Skeleton className="h-5 w-1/2" />;
   if (results.isError) return <p className="text-destructive text-xs">{results.error.message}</p>;

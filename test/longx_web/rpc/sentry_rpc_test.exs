@@ -2,13 +2,6 @@ defmodule LongxWeb.SentryRpcTest do
   @moduledoc "Error reporting on the wire: the status, the DSN saved and cleared, a test event."
   use LongxWeb.ConnCase, async: false
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   setup do
     Ash.bulk_destroy!(Longx.System.Setting, :destroy, %{}, authorize?: false)
     Longx.Sentry.set_dsn("")

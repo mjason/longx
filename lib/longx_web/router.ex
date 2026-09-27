@@ -27,12 +27,32 @@ defmodule LongxWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # the GraphQL API (`LongxWeb.GraphqlSchema`): the page's calls, with the
+  # session and the CSRF token like every other browser request; the actor
+  # comes from `LongxWeb.Actor` for the whole request
+  pipeline :graphql do
+    plug :fetch_session
+    plug :protect_from_forgery
+    plug :set_actor
+    plug AshGraphql.Plug
+  end
+
+  scope "/gql" do
+    pipe_through :graphql
+
+    if Application.compile_env(:longx, :dev_routes) do
+      forward "/playground", Absinthe.Plug.GraphiQL,
+        schema: Module.concat(["LongxWeb.GraphqlSchema"]),
+        interface: :playground
+    end
+
+    forward "/", Absinthe.Plug, schema: Module.concat(["LongxWeb.GraphqlSchema"])
+  end
+
   scope "/", LongxWeb do
     pipe_through :browser
 
-    post "/rpc/run", AshTypescriptRpcController, :run
-    post "/rpc/validate", AshTypescriptRpcController, :validate
-    # the composer's file attachments (multipart; CSRF like the RPC calls)
+    # the composer's file attachments (multipart; CSRF like the GraphQL calls)
     post "/attachments/:project_id", AttachmentController, :create
   end
 
@@ -66,7 +86,7 @@ defmodule LongxWeb.Router do
   end
 
   # The React SPA: every remaining HTML path gets the shell (see
-  # LongxWeb.PageController). Must stay last — after /ai, /rpc and /dev.
+  # LongxWeb.PageController). Must stay last — after /gql, /api and /dev.
   scope "/", LongxWeb do
     pipe_through :spa
 
@@ -95,4 +115,7 @@ defmodule LongxWeb.Router do
 
     get "/*path", PageController, :spa
   end
+
+  # who is acting, for every Ash call of the request (`LongxWeb.Actor`: nil until there is authentication)
+  defp set_actor(conn, _opts), do: Ash.PlugHelpers.set_actor(conn, LongxWeb.Actor.from_conn(conn))
 end

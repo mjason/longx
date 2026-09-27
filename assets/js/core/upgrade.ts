@@ -13,7 +13,7 @@ import {
   upgradeApply,
   upgradeCheck,
   upgradeStatus,
-} from "@/ash_rpc";
+} from "@/core/api";
 import { unwrap } from "./projects";
 
 export type UpgradeStage =
@@ -81,7 +81,7 @@ export function useUpgradeStatus(opts: { poll?: boolean } = {}) {
   const query = useQuery({
     queryKey: upgradeKey,
     queryFn: async () =>
-      unwrap(await upgradeStatus({ fields: [...upgradeFields] })) as UpgradeStatus,
+      unwrap(await upgradeStatus()) as UpgradeStatus,
     retry: false,
     staleTime: 60_000,
     refetchInterval: (q) => {
@@ -109,18 +109,18 @@ export function useUpgradeActions() {
   return {
     check: useMutation({
       mutationFn: async () =>
-        unwrap(await upgradeCheck({ fields: [...upgradeFields] })) as UpgradeStatus,
+        unwrap(await upgradeCheck()) as UpgradeStatus,
       onSuccess: (status) => put(client, status),
     }),
     apply: useMutation({
       mutationFn: async () =>
-        unwrap(await upgradeApply({ fields: [...upgradeFields] })) as UpgradeStatus,
+        unwrap(await upgradeApply()) as UpgradeStatus,
       onSuccess: (status) => put(client, status),
     }),
     setToken: useMutation({
       mutationFn: async (token: string | null) =>
         unwrap(
-          await setGithubToken({ fields: [...upgradeFields], input: { token } }),
+          await setGithubToken({ input: { token } }),
         ) as UpgradeStatus,
       onSuccess: (status) => put(client, status),
     }),

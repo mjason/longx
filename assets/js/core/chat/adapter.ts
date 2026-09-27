@@ -11,7 +11,7 @@ import type {
   ExternalStoreThreadListAdapter,
     ThreadMessageLike,
 } from "@assistant-ui/react";
-import { answerRequest, interruptTurn, sendMessage, setGoal, steerTurn } from "@/ash_rpc";
+import { answerRequest, interruptTurn, sendMessage, setGoal, steerTurn } from "@/core/api";
 import { unwrap } from "@/core/projects";
 import { toMessages, type SubViews } from "./messages";
 import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
@@ -137,7 +137,6 @@ export function buildAdapter(
       if (goal) {
         unwrap(
           await setGoal({
-            fields: ["objective", "status"],
             input: { threadId: target.threadId, objective: goal[1]!.trim() },
           }),
         );
@@ -150,7 +149,6 @@ export function buildAdapter(
       const running = runningTurnId(view);
       if (running && target.threadId === opts.target?.threadId) {
         const steered = await steerTurn({
-          fields: ["kernelTurnId"],
           input: { threadId: target.threadId, text, ...(images.length > 0 ? { images } : {}) },
         });
         if (steered.success) {
@@ -161,7 +159,6 @@ export function buildAdapter(
       }
       unwrap(
         await sendMessage({
-          fields: ["id"],
           input: {
             threadId: target.threadId,
             text,

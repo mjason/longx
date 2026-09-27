@@ -28,13 +28,6 @@ defmodule LongxWeb.AliasesRpcTest do
     :ok
   end
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   @fields ["name", "label", "models", "builtin"]
 
   test "list, map a tier, add and remove an alias; a bad name is an error on its field", %{
@@ -106,13 +99,6 @@ defmodule LongxWeb.DefaultModelRpcTest do
 
     AI.make_default_model!(a)
     :ok
-  end
-
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
   end
 
   test "read, set to a tier, an alias's error, a concrete model", %{conn: conn} do

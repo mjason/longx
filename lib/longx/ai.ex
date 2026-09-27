@@ -5,7 +5,7 @@ defmodule Longx.AI do
   this domain decides what that means.
   """
 
-  use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
+  use Ash.Domain, otp_app: :longx, extensions: [AshGraphql.Domain]
 
   alias Longx.AI.{Aliases, Model, Provider, SearchProvider, SearchTarget, Target}
 
@@ -33,37 +33,34 @@ defmodule Longx.AI do
   end
 
   # The SPA's typed client (settings pages)
-  typescript_rpc do
-    resource Provider do
-      rpc_action :list_providers, :read
-      rpc_action :create_provider, :create
-      rpc_action :update_provider, :update
-      rpc_action :delete_provider, :delete
-      rpc_action :discover_models, :discover_models
+  graphql do
+    # every error at the top level of the response, for calls and records alike
+    root_level_errors? true
+
+    queries do
+      list Longx.AI.Provider, :list_providers, :read, paginate_with: nil
+      list Longx.AI.Model, :list_models, :read, paginate_with: nil
+      action Longx.AI.Model, :default_model_setting, :default_model_setting
+      action Longx.AI.Model, :model_aliases, :model_aliases
+      list Longx.AI.SearchProvider, :list_search_providers, :read, paginate_with: nil
+      action Longx.AI.Preset, :list_presets, :list_presets
     end
 
-    resource Model do
-      rpc_action :list_models, :read
-      rpc_action :create_model, :create
-      rpc_action :update_model, :update
-      rpc_action :make_default_model, :make_default
-      rpc_action :default_model_setting, :default_model_setting
-      rpc_action :set_default_model, :set_default_model
-      rpc_action :check_model, :check_model
-      rpc_action :model_aliases, :model_aliases
-      rpc_action :set_model_alias, :set_model_alias
-      rpc_action :delete_model_alias, :delete_model_alias
-      rpc_action :delete_model, :delete
-    end
-
-    resource SearchProvider do
-      rpc_action :list_search_providers, :read
-      rpc_action :update_search_provider, :update
-    end
-
-    resource Longx.AI.Preset do
-      rpc_action :list_presets, :list_presets
-      rpc_action :apply_preset, :apply_preset
+    mutations do
+      create Longx.AI.Provider, :create_provider, :create
+      update Longx.AI.Provider, :update_provider, :update
+      destroy Longx.AI.Provider, :delete_provider, :delete
+      action Longx.AI.Provider, :discover_models, :discover_models
+      create Longx.AI.Model, :create_model, :create
+      update Longx.AI.Model, :update_model, :update
+      update Longx.AI.Model, :make_default_model, :make_default
+      action Longx.AI.Model, :set_default_model, :set_default_model
+      action Longx.AI.Model, :check_model, :check_model
+      action Longx.AI.Model, :set_model_alias, :set_model_alias
+      action Longx.AI.Model, :delete_model_alias, :delete_model_alias
+      destroy Longx.AI.Model, :delete_model, :delete
+      update Longx.AI.SearchProvider, :update_search_provider, :update
+      action Longx.AI.Preset, :apply_preset, :apply_preset
     end
   end
 

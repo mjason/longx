@@ -1,5 +1,5 @@
 import { AssistantRuntimeProvider, useAui } from "@assistant-ui/react";
-import { answerRequest, interruptTurn } from "@/ash_rpc";
+import { answerRequest, interruptTurn } from "@/core/api";
 import { unwrap, useSubagents } from "@/core/projects";
 import { runningTurnId } from "@/core/chat/thread";
 import {

@@ -28,7 +28,7 @@ defmodule Longx.Watches do
   the settings page sees what runs.
   """
 
-  use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
+  use Ash.Domain, otp_app: :longx, extensions: [AshGraphql.Domain]
 
   require Logger
 
@@ -40,13 +40,19 @@ defmodule Longx.Watches do
   @task_supervisor Longx.Watches.TaskSupervisor
   @output_bytes 2_048
 
-  typescript_rpc do
-    resource Watch do
-      rpc_action :list_watches, :for_project
-      rpc_action :switch_watch, :switch
-      rpc_action :dry_run_watch, :dry_run
-      rpc_action :delete_watch, :delete_watch
-      rpc_action :list_all_watches, :list_all
+  graphql do
+    # every error at the top level of the response, for calls and records alike
+    root_level_errors? true
+
+    queries do
+      list Longx.Watches.Watch, :list_watches, :for_project, paginate_with: nil
+      action Longx.Watches.Watch, :list_all_watches, :list_all
+    end
+
+    mutations do
+      action Longx.Watches.Watch, :switch_watch, :switch
+      action Longx.Watches.Watch, :dry_run_watch, :dry_run
+      action Longx.Watches.Watch, :delete_watch, :delete_watch
     end
   end
 

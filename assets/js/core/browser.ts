@@ -2,7 +2,7 @@
 // status the kernel settings card and the status strip read, polled every
 // second while a stage runs, and the install / retry mutation.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { browserInstall, browserStatus } from "@/ash_rpc";
+import { browserInstall, browserStatus } from "@/core/api";
 import { unwrap } from "./projects";
 
 export type BrowserStage = "idle" | "downloading" | "verifying" | "extracting" | "installed" | "failed";
@@ -59,7 +59,7 @@ export function browserPercent(st: Pick<BrowserStatus, "received" | "total">): n
 export function useBrowserStatus(opts: { poll?: boolean } = {}) {
   return useQuery({
     queryKey: browserKey,
-    queryFn: async () => unwrap(await browserStatus({ fields: [...browserFields] })) as BrowserStatus,
+    queryFn: async () => unwrap(await browserStatus()) as BrowserStatus,
     retry: false,
     staleTime: 10_000,
     refetchInterval: (q) => {
@@ -73,7 +73,7 @@ export function useBrowserStatus(opts: { poll?: boolean } = {}) {
 export function useBrowserInstall() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async () => unwrap(await browserInstall({ fields: [...browserFields] })) as BrowserStatus,
+    mutationFn: async () => unwrap(await browserInstall()) as BrowserStatus,
     onSuccess: (status) => client.setQueryData(browserKey, status),
   });
 }

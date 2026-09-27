@@ -12,7 +12,7 @@ import { _resetFrameStoreForTests } from "@/core/frame";
 import { _resetWorkbenchForTests } from "@/core/workbench";
 import { agentDefinitionData, channel, failed, model, ok, thread, session } from "@/ui/test-mocks";
 
-vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("sonner", async (importOriginal) => {
   const mod = await importOriginal<typeof import("sonner")>();
   return { ...mod, toast: Object.assign(vi.fn(), mod.toast, { warning: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn() }) };
@@ -38,7 +38,7 @@ import {
   setGoal,
   startThread,
   directory,
-} from "@/ash_rpc";
+} from "@/core/api";
 
 const snapshot = {
   thread_id: "thr_1",
@@ -1128,7 +1128,7 @@ describe("ThreadPage", () => {
           {
             id: 9,
             method: "longx/action/request",
-            params: { requestId: 9, itemId: "cmd_alpha", threadId: child, title: "登录 alpha 的账号", text: "", url: null, fields: [] },
+            params: { requestId: 9, itemId: "cmd_alpha", threadId: child, title: "登录 alpha 的账号", text: "", url: null },
           },
         ],
       }),
@@ -1307,7 +1307,7 @@ describe("ThreadPage", () => {
   });
 
   test("/ in the composer lists the commands: /compact compacts, /init sends the prompt, /git opens the tool; no /review", async () => {
-    const { compactThread } = await import("@/ash_rpc");
+    const { compactThread } = await import("@/core/api");
     const user = userEvent.setup();
     await open();
     const box = screen.getByRole("textbox", { name: "随心输入" });
@@ -1636,7 +1636,7 @@ describe("ThreadPage", () => {
       channel.deliver("event", {
         seq: 5,
         method: "longx/action/request",
-        params: { requestId: "ask_1", itemId: "call_7", threadId: "thr_1", title: "登录 COROS", text: "用存有训练数据的账号登录", url: "https://auth.example/authorize?x=1", fields: [], callbackUrl: "http://192.168.2.129:7788/callback/ask_1" },
+        params: { requestId: "ask_1", itemId: "call_7", threadId: "thr_1", title: "登录 COROS", text: "用存有训练数据的账号登录", url: "https://auth.example/authorize?x=1", callbackUrl: "http://192.168.2.129:7788/callback/ask_1" },
       });
     });
     const card = await screen.findByTestId("tool-action");

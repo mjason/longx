@@ -3,7 +3,7 @@
 // and the thread goes on with 继续 on it, for this and later turns.
 import { useState } from "react";
 import { toast } from "sonner";
-import { sendMessage } from "@/ash_rpc";
+import { sendMessage } from "@/core/api";
 import { unwrap, useModels } from "@/core/projects";
 import { Alert, AlertDescription } from "@/ui/components/ui/alert";
 import { Button } from "@/ui/components/ui/button";
@@ -29,7 +29,7 @@ export function ModelFailedBanner() {
     if (!picked) return;
     setBusy(true);
     try {
-      unwrap(await sendMessage({ fields: ["id"], input: { threadId: thread.id, text: s.continueText, model: picked } }));
+      unwrap(await sendMessage({ input: { threadId: thread.id, text: s.continueText, model: picked } }));
       setModel(picked);
     } catch (e) {
       toast.error((e as Error).message);

@@ -25,13 +25,10 @@ import {
   updateModel,
   updateProvider,
   updateSearchProvider,
-  type CreateModelInput,
-  type CreateProviderInput,
-  type UpdateModelInput,
-  type UpdateProviderInput,
   defaultModelSetting,
   setDefaultModel,
-} from "@/ash_rpc";
+} from "@/core/api";
+import type { CreateModelInput, CreateProviderInput, UpdateModelInput, UpdateProviderInput } from "@/gql/graphql";
 import { queryKeys, unwrap } from "./projects";
 
 export const aiKeys = {
@@ -53,14 +50,14 @@ export type DefaultModel = { name: string; slug: string | null; kind: "tier" | "
 export function useDefaultModel() {
   return useQuery({
     queryKey: aiKeys.defaultModel,
-    queryFn: async () => unwrap(await defaultModelSetting({ fields: ["name", "slug", "kind"] })) as DefaultModel,
+    queryFn: async () => unwrap(await defaultModelSetting()) as DefaultModel,
   });
 }
 
 export function useModelAliases() {
   return useQuery({
     queryKey: aiKeys.aliases,
-    queryFn: async () => unwrap(await modelAliases({ fields: ["name", "label", "models", "builtin"] })) as ModelAlias[],
+    queryFn: async () => unwrap(await modelAliases()) as ModelAlias[],
   });
 }
 
@@ -83,7 +80,7 @@ export function useDiscoverModels(providerId: string | null) {
   return useQuery({
     queryKey: ["ai", "discover", providerId] as const,
     queryFn: async () =>
-      unwrap(await discoverModels({ fields: ["ok", "error", "models"], input: { id: providerId! } })) as Discovery,
+      unwrap(await discoverModels({ input: { id: providerId! } })) as Discovery,
     enabled: providerId !== null,
     staleTime: 0,
     gcTime: 0,
@@ -226,7 +223,7 @@ export function useProviders() {
     queryKey: aiKeys.providers,
     queryFn: async () =>
       unwrap(
-        await listProviders({ fields: [...providerFields] }),
+        await listProviders(),
       ) as Provider[],
   });
 }
@@ -236,7 +233,7 @@ export function useModelRows() {
   return useQuery({
     queryKey: aiKeys.models,
     queryFn: async () =>
-      unwrap(await listModels({ fields: [...modelRowFields] })) as ModelRow[],
+      unwrap(await listModels()) as ModelRow[],
   });
 }
 
@@ -245,17 +242,7 @@ export function useSearchProviders() {
     queryKey: aiKeys.search,
     queryFn: async () =>
       unwrap(
-        await listSearchProviders({
-          fields: [
-            "id",
-            "name",
-            "slug",
-            "kind",
-            "baseUrl",
-            "hasApiKey",
-            "default",
-          ],
-        }),
+        await listSearchProviders(),
       ) as SearchProviderRow[],
   });
 }
@@ -264,7 +251,7 @@ export function usePresets() {
   return useQuery({
     queryKey: aiKeys.presets,
     queryFn: async () =>
-      unwrap(await listPresets({ fields: [...presetFields] })) as Preset[],
+      unwrap(await listPresets()) as Preset[],
   });
 }
 
@@ -287,11 +274,11 @@ export type ModelPatch = UpdateModelInput;
 export function useAiActions() {
   return {
     createProvider: useAiWrite(async (input: ProviderInput) =>
-      unwrap(await createProvider({ fields: ["id"], input })),
+      unwrap(await createProvider({ input })),
     ),
     updateProvider: useAiWrite(
       async ({ id, input }: { id: string; input: ProviderPatch }) =>
-        unwrap(await updateProvider({ fields: ["id"], identity: id, input })),
+        unwrap(await updateProvider({ identity: id, input })),
     ),
     deleteProvider: useAiWrite(async (id: string) =>
       unwrap(await deleteProvider({ identity: id })),
@@ -299,43 +286,41 @@ export function useAiActions() {
     applyPreset: useAiWrite(
       async (input: ApplyPresetInput) =>
         unwrap(
-          await applyPreset({ fields: ["providerId", "modelIds", "credentialId"], input }),
+          await applyPreset({ input }),
         ) as { providerId: string; modelIds: string[]; credentialId: string | null },
     ),
     createModel: useAiWrite(async (input: ModelInput) =>
-      unwrap(await createModel({ fields: ["id"], input })),
+      unwrap(await createModel({ input })),
     ),
     updateModel: useAiWrite(
       async ({ id, input }: { id: string; input: ModelPatch }) =>
-        unwrap(await updateModel({ fields: ["id"], identity: id, input })),
+        unwrap(await updateModel({ identity: id, input })),
     ),
     deleteModel: useAiWrite(async (id: string) =>
       unwrap(await deleteModel({ identity: id })),
     ),
     makeDefault: useAiWrite(async (id: string) =>
-      unwrap(await makeDefaultModel({ fields: ["id"], identity: id })),
+      unwrap(await makeDefaultModel({ identity: id })),
     ),
     checkModel: useAiWrite(
       async (id: string) =>
         unwrap(
           await checkModel({
-            fields: ["ok", "latencyMs", "error"],
             input: { id },
           }),
         ) as { ok: boolean; latencyMs: number | null; error: string | null },
     ),
     setDefaultModel: useAiWrite(async (name: string) =>
-      unwrap(await setDefaultModel({ fields: ["name", "slug", "kind"], input: { name } })) as DefaultModel,
+      unwrap(await setDefaultModel({ input: { name } })) as DefaultModel,
     ),
     setModelAlias: useAiWrite(async (input: { name: string; models: string[] }) =>
-      unwrap(await setModelAlias({ fields: ["name", "label", "models", "builtin"], input })),
+      unwrap(await setModelAlias({ input })),
     ),
     deleteModelAlias: useAiWrite(async (name: string) => unwrap(await deleteModelAlias({ input: { name } }))),
     setSearchKey: useAiWrite(
       async ({ id, apiKey }: { id: string; apiKey: string }) =>
         unwrap(
           await updateSearchProvider({
-            fields: ["id"],
             identity: id,
             input: { apiKey },
           }),
@@ -357,14 +342,14 @@ export function useKnowledgeDocs() {
   return useQuery({
     queryKey: knowledgeKeys.docs,
     queryFn: async () =>
-      unwrap(await knowledgeDocs({ fields: ["root", "path", "title", "summary", "tags", "always", "writable"] })) as KnowledgeDoc[],
+      unwrap(await knowledgeDocs()) as KnowledgeDoc[],
   });
 }
 
 export function useKnowledgeDoc(path: string | null) {
   return useQuery({
     queryKey: knowledgeKeys.doc(path ?? ""),
-    queryFn: async () => (unwrap(await knowledgeRead({ fields: ["text"], input: { path: path! } })) as { text: string }).text,
+    queryFn: async () => (unwrap(await knowledgeRead({ input: { path: path! } })) as { text: string }).text,
     enabled: path !== null,
   });
 }

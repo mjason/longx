@@ -5,9 +5,9 @@ import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
 import { channel, ok } from "@/ui/test-mocks";
 
-vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { listSubagents } from "@/ash_rpc";
+import { listSubagents } from "@/core/api";
 
 const subagents = [
   { id: "t9", kernelThreadId: "thr_1-alpha", title: "alpha", preview: "read a.txt", status: "active", agentPath: "/root/alpha", lastActivityAt: "2026-09-13T01:00:00Z", insertedAt: "2026-09-13T00:59:00Z" },

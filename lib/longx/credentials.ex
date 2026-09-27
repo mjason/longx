@@ -15,25 +15,31 @@ defmodule Longx.Credentials do
   the browser sent back to `<public url>/callback/credentials`).
   """
 
-  use Ash.Domain, otp_app: :longx, extensions: [AshTypescript.Rpc]
+  use Ash.Domain, otp_app: :longx, extensions: [AshGraphql.Domain]
 
   require Ash.Query
 
   alias Longx.Credentials.{Credential, Http, OAuth}
 
-  typescript_rpc do
-    resource Credential do
-      rpc_action :list_credentials, :read
-      rpc_action :create_credential_api_key, :create_api_key
-      rpc_action :create_credential_oauth2, :create_oauth2
-      rpc_action :update_credential, :update
-      rpc_action :delete_credential, :destroy
-      rpc_action :credential_login_url, :login_url
-      rpc_action :refresh_credential, :refresh
-      rpc_action :credential_complete_url, :complete_url
-      rpc_action :credential_device_begin, :device_begin
-      rpc_action :credential_device_poll, :device_poll
-      rpc_action :credential_redirect_uri, :redirect_uri
+  graphql do
+    # every error at the top level of the response, for calls and records alike
+    root_level_errors? true
+
+    queries do
+      list Longx.Credentials.Credential, :list_credentials, :read, paginate_with: nil
+      action Longx.Credentials.Credential, :credential_redirect_uri, :redirect_uri
+    end
+
+    mutations do
+      create Longx.Credentials.Credential, :create_credential_api_key, :create_api_key
+      create Longx.Credentials.Credential, :create_credential_oauth2, :create_oauth2
+      update Longx.Credentials.Credential, :update_credential, :update
+      destroy Longx.Credentials.Credential, :delete_credential, :destroy
+      action Longx.Credentials.Credential, :credential_login_url, :login_url
+      action Longx.Credentials.Credential, :refresh_credential, :refresh
+      action Longx.Credentials.Credential, :credential_complete_url, :complete_url
+      action Longx.Credentials.Credential, :credential_device_begin, :device_begin
+      action Longx.Credentials.Credential, :credential_device_poll, :device_poll
     end
   end
 
@@ -51,10 +57,10 @@ defmodule Longx.Credentials do
 
   @list_load [
     :status,
-    :has_secret?,
-    :has_access_token?,
-    :has_refresh_token?,
-    :has_client_secret?
+    :has_secret,
+    :has_access_token,
+    :has_refresh_token,
+    :has_client_secret
   ]
 
   @doc "Every credential with its status — never a secret value."
@@ -131,6 +137,6 @@ defmodule Longx.Credentials do
     |> Ash.Query.filter(kind == :oauth2 and not is_nil(expires_at) and expires_at <= ^cutoff)
     |> Ash.Query.load(@list_load)
     |> Ash.read!()
-    |> Enum.filter(& &1.has_refresh_token?)
+    |> Enum.filter(& &1.has_refresh_token)
   end
 end

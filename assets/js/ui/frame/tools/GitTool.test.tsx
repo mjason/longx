@@ -6,9 +6,9 @@ import { _resetFrameStoreForTests } from "@/core/frame";
 import { _resetWorkbenchForTests } from "@/core/workbench";
 import { channel, ok } from "@/ui/test-mocks";
 
-vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { gitBranches, gitChanges, gitCommit, gitCreateBranch, gitDeleteBranch, gitDiscard, gitFetch, gitLog, gitPull, gitPush, gitSetRemote, gitShow, gitSwitch, gitUndoCommit } from "@/ash_rpc";
+import { gitBranches, gitChanges, gitCommit, gitCreateBranch, gitDeleteBranch, gitDiscard, gitFetch, gitLog, gitPull, gitPush, gitSetRemote, gitShow, gitSwitch, gitUndoCommit } from "@/core/api";
 
 const repo = { repository: true, branch: "main", head: "abc123def", changes: [{ path: "lib/a.ex", status: "modified" }, { path: "new.txt", status: "untracked" }], ahead: 1, behind: 2, remotes: [{ name: "origin", url: "git@example.com:x/y.git" }], lfs: false, ignored: [], merging: false };
 const log = [
@@ -138,7 +138,7 @@ describe("GitTool", () => {
   });
 
   test("a merge stopped on conflicts is said so, with a way out", async () => {
-    const { gitAbortMerge } = await import("@/ash_rpc");
+    const { gitAbortMerge } = await import("@/core/api");
     vi.mocked(gitChanges).mockResolvedValue(ok({ ...repo, merging: true, changes: [{ path: "lib/a.ex", status: "unmerged" }] }) as never);
     const { user, panel } = await openGit();
     expect(within(panel).getByRole("alert")).toHaveTextContent("正在合并");

@@ -10,29 +10,18 @@ defmodule Longx.AI.Model do
     otp_app: :longx,
     domain: Longx.AI,
     data_layer: AshSqlite.DataLayer,
-    extensions: [AshTypescript.Resource]
+    extensions: [AshGraphql.Resource]
+
+  alias Longx.AI.Types
 
   sqlite do
     table "ai_models"
     repo Longx.Repo
   end
 
-  typescript do
-    type_name "Model"
+  graphql do
+    type :model
   end
-
-  @default_fields [
-    name: [type: :string, allow_nil?: false],
-    slug: [type: :string],
-    kind: [type: :atom, allow_nil?: false, constraints: [one_of: [:tier, :alias, :model]]]
-  ]
-
-  @alias_fields [
-    name: [type: :string, allow_nil?: false],
-    label: [type: :string, allow_nil?: false],
-    models: [type: {:array, :string}, allow_nil?: false],
-    builtin: [type: :boolean, allow_nil?: false]
-  ]
 
   actions do
     defaults [:read, :destroy]
@@ -98,13 +87,7 @@ defmodule Longx.AI.Model do
     end
 
     # Longx.AI.check_model/1: one tiny request through the provider, outcome recorded
-    action :check_model, :map do
-      constraints fields: [
-                    ok: [type: :boolean, allow_nil?: false],
-                    latency_ms: [type: :integer],
-                    error: [type: :string]
-                  ]
-
+    action :check_model, Types.CheckModel do
       argument :id, :uuid, allow_nil?: false
 
       run fn input, _ ->
@@ -118,13 +101,11 @@ defmodule Longx.AI.Model do
     end
 
     # the default (Longx.AI.default_model_name/0): a tier, an alias or a slug
-    action :default_model_setting, :map do
-      constraints fields: @default_fields
+    action :default_model_setting, Types.ModelDefault do
       run fn _input, _ -> {:ok, Longx.AI.default_model_info()} end
     end
 
-    action :set_default_model, :map do
-      constraints fields: @default_fields
+    action :set_default_model, Types.ModelDefault do
       argument :name, :string, allow_nil?: false
 
       run fn input, _ ->
@@ -136,14 +117,11 @@ defmodule Longx.AI.Model do
     end
 
     # tiers and aliases (Longx.AI.Aliases): names that survive a migration
-    action :model_aliases, {:array, :map} do
-      constraints items: [fields: @alias_fields]
-
+    action :model_aliases, {:array, Types.ModelAlias} do
       run fn _input, _ -> {:ok, Enum.map(Longx.AI.Aliases.all(), &alias_entry/1)} end
     end
 
-    action :set_model_alias, :map do
-      constraints fields: @alias_fields
+    action :set_model_alias, Types.ModelAlias do
       argument :name, :string, allow_nil?: false
       argument :models, {:array, :string}, allow_nil?: false
 

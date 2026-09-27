@@ -3,7 +3,7 @@ import { createMessageQueue } from "@assistant-ui/react";
 import { buildAdapter, textOf } from "./adapter";
 import { emptyView } from "./thread";
 
-vi.mock("@/ash_rpc", () => ({
+vi.mock("@/core/api", () => ({
   sendMessage: vi.fn(async () => ({ success: true, data: { id: "turn-row" } })),
   interruptTurn: vi.fn(async () => ({ success: true, data: null })),
   answerRequest: vi.fn(async () => ({ success: true, data: null })),
@@ -11,7 +11,7 @@ vi.mock("@/ash_rpc", () => ({
   retractTurn: vi.fn(async () => ({ success: true, data: { text: "look at it" } })),
   steerTurn: vi.fn(async () => ({ success: true, data: { kernelTurnId: "turn_9" } })),
 }));
-import { answerRequest, interruptTurn, retractTurn, sendMessage, setGoal, steerTurn } from "@/ash_rpc";
+import { answerRequest, interruptTurn, retractTurn, sendMessage, setGoal, steerTurn } from "@/core/api";
 
 const target = { threadId: "row-1", kernelThreadId: "thr_1" };
 const append = (text: string) =>

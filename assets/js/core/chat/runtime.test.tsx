@@ -5,9 +5,9 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { channel, ok, thread } from "@/ui/test-mocks";
 import { useLongxRuntime } from "./runtime";
 
-vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { archiveThread, deleteThread, getThread, listThreads, sendMessage, startThread } from "@/ash_rpc";
+import { archiveThread, deleteThread, getThread, listThreads, sendMessage, startThread } from "@/core/api";
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 function wrapper({ children }: { children: ReactNode }) {

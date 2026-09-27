@@ -2,7 +2,7 @@
 // their state for the project's settings page and the global overview,
 // switched, dry-run, deleted. DOM-free.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deleteWatch, dryRunWatch, listAllWatches, listWatches, switchWatch } from "@/ash_rpc";
+import { deleteWatch, dryRunWatch, listAllWatches, listWatches, switchWatch } from "@/core/api";
 import { unwrap } from "@/core/projects";
 
 export type WatchKind = "cron" | "once" | "webhook";
@@ -73,7 +73,7 @@ export function useWatches(projectId: string | undefined) {
   return useQuery({
     queryKey: watchKeys.project(projectId ?? ""),
     enabled: !!projectId,
-    queryFn: async () => unwrap(await listWatches({ fields: [...watchFields], input: { projectId: projectId! } })) as Watch[],
+    queryFn: async () => unwrap(await listWatches({ input: { projectId: projectId! } })) as Watch[],
   });
 }
 
@@ -82,7 +82,7 @@ export function useAllWatches() {
   return useQuery({
     queryKey: watchKeys.all,
     refetchInterval: 10_000,
-    queryFn: async () => unwrap(await listAllWatches({ fields: ["watches"] })).watches as WatchOverview[],
+    queryFn: async () => unwrap(await listAllWatches()).watches as WatchOverview[],
   });
 }
 
@@ -101,11 +101,11 @@ export function useWatchActions(projectId: string | undefined) {
   };
   const toggle = useMutation({
     mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) =>
-      unwrap(await switchWatch({ fields: [...watchFields], input: { id, enabled } })) as Watch,
+      unwrap(await switchWatch({ input: { id, enabled } })) as Watch,
     onSuccess: invalidate,
   });
   const dryRun = useMutation({
-    mutationFn: async (id: string) => unwrap(await dryRunWatch({ fields: ["ok", "result", "log", "sends"], input: { id } })) as DryRun,
+    mutationFn: async (id: string) => unwrap(await dryRunWatch({ input: { id } })) as DryRun,
   });
   const remove = useMutation({
     mutationFn: async (id: string) => unwrap(await deleteWatch({ input: { id } })),

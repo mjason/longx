@@ -1,6 +1,6 @@
 [
   import_deps: [
-    :ash_typescript,
+    :ash_graphql,
     :ash_sqlite,
     :ash_phoenix,
     :ash,

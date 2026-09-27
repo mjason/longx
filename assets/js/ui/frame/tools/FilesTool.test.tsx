@@ -6,9 +6,9 @@ import { _resetFrameStoreForTests } from "@/core/frame";
 import { _resetWorkbenchForTests } from "@/core/workbench";
 import { channel, ok } from "@/ui/test-mocks";
 
-vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { createEntry, deleteEntry, gitChanges, ignoredPaths, listFiles, readFile, renameEntry, writeFile } from "@/ash_rpc";
+import { createEntry, deleteEntry, gitChanges, ignoredPaths, listFiles, readFile, renameEntry, writeFile } from "@/core/api";
 
 const tree: Record<string, { name: string; path: string; kind: "file" | "dir"; size: number }[]> = {
   "": [
@@ -35,7 +35,7 @@ describe("FilesTool", () => {
     _resetFrameStoreForTests();
     _resetWorkbenchForTests();
     channel.reset();
-    vi.mocked(listFiles).mockImplementation(async ({ input }: { input: { path: string } }) => ok(tree[input.path] ?? []) as never);
+    vi.mocked(listFiles).mockImplementation(async (args) => ok(tree[(args!.input as { path: string }).path] ?? []) as never);
     vi.mocked(gitChanges).mockResolvedValue(
       ok({ repository: true, branch: "main", head: "abc", changes: [{ path: "lib/a.ex", status: "modified" }, { path: "new.txt", status: "untracked" }], ahead: 0, behind: 0, remotes: [], lfs: false, ignored: [], merging: false }) as never,
     );
@@ -69,8 +69,10 @@ describe("FilesTool", () => {
     const { panel } = await openFiles();
     expect(within(panel).queryByTestId("watch-hint")).toBeNull();
     const before = vi.mocked(listFiles).mock.calls.length;
-    vi.mocked(listFiles).mockImplementation(async ({ input }: { input: { path: string } }) =>
-      ok(input.path === "" ? [...tree[""]!, { name: "new.txt", path: "new.txt", kind: "file", size: 1 }] : (tree[input.path] ?? [])) as never,
+    vi.mocked(listFiles).mockImplementation(async (args) => {
+      const input = args!.input as { path: string };
+      return ok(input.path === "" ? [...tree[""]!, { name: "new.txt", path: "new.txt", kind: "file", size: 1 }] : (tree[input.path] ?? [])) as never;
+    },
     );
     act(() => channel.deliverTo("project:id-1", "files", { paths: ["new.txt"] }));
     await within(panel).findByRole("treeitem", { name: /new\.txt/ });
@@ -178,7 +180,7 @@ describe("FilesTool", () => {
   });
 
   test("the filter finds files through the server's fuzzy index and opens one", async () => {
-    const { searchFiles } = await import("@/ash_rpc");
+    const { searchFiles } = await import("@/core/api");
     vi.mocked(searchFiles).mockResolvedValue(ok([{ path: "lib/deep/gateway.ex", fileName: "gateway.ex", matchType: "file", root: "/", score: 1, indices: null }]) as never);
     const { user, panel } = await openFiles();
     await user.type(within(panel).getByRole("searchbox", { name: "按文件名查找…" }), "gtw");

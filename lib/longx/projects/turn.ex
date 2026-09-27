@@ -10,15 +10,15 @@ defmodule Longx.Projects.Turn do
     otp_app: :longx,
     domain: Longx.Projects,
     data_layer: AshSqlite.DataLayer,
-    extensions: [AshTypescript.Resource]
+    extensions: [AshGraphql.Resource]
 
   sqlite do
     table "project_turns"
     repo Longx.Repo
   end
 
-  typescript do
-    type_name "Turn"
+  graphql do
+    type :turn
   end
 
   actions do

@@ -11,8 +11,8 @@ import {
 } from "@assistant-ui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { archiveThread, deleteThread, getThread, releaseWaiting as releaseWaitingRpc, renameThread, retractTurn, sendMessage, steerTurn } from "@/ash_rpc";
-import { queryKeys, threadFields, unwrap, useAgentDefinition, useStartThread, useThread, useThreads } from "@/core/projects";
+import { archiveThread, deleteThread, getThread, releaseWaiting as releaseWaitingRpc, renameThread, retractTurn, sendMessage, steerTurn } from "@/core/api";
+import { queryKeys, unwrap, unwrapOne, useAgentDefinition, useStartThread, useThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
@@ -26,7 +26,7 @@ import {
 } from "./adapter";
 import { subagentsOf, turnCount, type SubViews } from "./messages";
 import { runningTurnId, type ThreadView } from "./thread";
-import { csrfToken } from "@/core/rpcHooks";
+import { csrfToken } from "@/core/gql";
 import { FileUploadAttachmentAdapter } from "./fileAttachments";
 import { buildThreadListAdapter, type ThreadRow } from "./threadList";
 import { useThreadView } from "./useThreadView";
@@ -177,7 +177,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     const row = await client.ensureQueryData({
       queryKey: ["thread", threadId] as const,
       queryFn: async () =>
-        unwrap(await getThread({ fields: [...threadFields, "parentThreadId", "agentPath"], input: { id: threadId } })),
+        unwrapOne(await getThread({ input: { id: threadId } })),
     });
     return { threadId: row.id, kernelThreadId: row.kernelThreadId };
   }, [client, threadId, createThread]);
@@ -241,7 +241,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       const item = [...queue.adapter.steerItems, ...queue.adapter.items].find((i) => i.id === queueItemId);
       if (!item || !thread) return;
       const text = item.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
-      const steered = await steerTurn({ fields: ["kernelTurnId"], input: { threadId: thread.id, text } });
+      const steered = await steerTurn({ input: { threadId: thread.id, text } });
       if (steered.success) {
         queue.adapter.remove(queueItemId);
         void invalidate();
@@ -251,7 +251,6 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
         queue.adapter.remove(queueItemId);
         unwrap(
           await sendMessage({
-            fields: ["id"],
             input: { threadId: thread.id, text, ...(model ? { model } : {}), ...(effort ? { effort } : {}) },
           }),
         );
@@ -277,7 +276,6 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       if (!thread) return;
       unwrap(
         await sendMessage({
-          fields: ["id"],
           input: { threadId: thread.id, text, ...(model ? { model } : {}), ...(effort ? { effort } : {}) },
         }),
       );
@@ -288,7 +286,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
   const discardTurn = useCallback(
     async (kernelTurnId: string) => {
       if (!thread) return;
-      unwrap(await retractTurn({ fields: ["text"], input: { threadId: thread.id, kernelTurnId } }));
+      unwrap(await retractTurn({ input: { threadId: thread.id, kernelTurnId } }));
       void invalidate();
     },
     [thread, invalidate],

@@ -10,13 +10,6 @@ defmodule LongxWeb.CredentialsRpcTest do
     :ok
   end
 
-  defp rpc(conn, action, params) do
-    conn
-    |> put_req_header("content-type", "application/json")
-    |> post("/rpc/run", Jason.encode!(Map.put(params, "action", action)))
-    |> json_response(200)
-  end
-
   @fields ~w(id name label kind header scheme allowedHosts clientId authorizeUrl tokenUrl registrationUrl scopes pkce expiresAt refreshedAt lastError status hasSecret hasAccessToken hasRefreshToken hasClientSecret)
 
   test "an API key is created with its value, listed without it, updated, deleted", %{conn: conn} do

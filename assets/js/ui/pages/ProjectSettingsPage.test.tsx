@@ -5,9 +5,9 @@ import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
 import { agentDefinitionData, agentSettingsData, channel, ok } from "@/ui/test-mocks";
 
-vi.mock("@/ash_rpc", async () => (await import("@/ui/test-mocks")).rpcMock());
+vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { agentDefinition, archiveProject, deleteProject, deleteWatch, dryRunWatch, promoteLocal, switchWatch, updateProject } from "@/ash_rpc";
+import { agentDefinition, archiveProject, deleteProject, deleteWatch, dryRunWatch, promoteLocal, switchWatch, updateProject } from "@/core/api";
 
 // the page opens through a lazy route (routes.tsx): its module in the cache
 // first, so the route resolves at once however slow the machine — CI's runner

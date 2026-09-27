@@ -10,7 +10,9 @@ defmodule Longx.AI.Provider do
     otp_app: :longx,
     domain: Longx.AI,
     data_layer: AshSqlite.DataLayer,
-    extensions: [AshCloak, AshTypescript.Resource]
+    extensions: [AshCloak, AshGraphql.Resource]
+
+  alias Longx.AI.Types
 
   sqlite do
     table "ai_providers"
@@ -24,10 +26,8 @@ defmodule Longx.AI.Provider do
     encrypt_nil?(false)
   end
 
-  typescript do
-    type_name "Provider"
-    # the key itself never leaves the server; the UI only learns whether one is set
-    field_names has_api_key?: "hasApiKey"
+  graphql do
+    type :provider
   end
 
   actions do
@@ -43,13 +43,7 @@ defmodule Longx.AI.Provider do
 
     # the provider's own model list (OpenAI's GET /models standard) for the
     # settings page's "从接口获取模型"; entries are untyped maps (camelCased here)
-    action :discover_models, :map do
-      constraints fields: [
-                    ok: [type: :boolean, allow_nil?: false],
-                    error: [type: :string],
-                    models: [type: {:array, :map}, allow_nil?: false]
-                  ]
-
+    action :discover_models, Types.DiscoverModels do
       argument :id, :uuid, allow_nil?: false
 
       run fn input, _ ->
@@ -218,7 +212,7 @@ defmodule Longx.AI.Provider do
   end
 
   calculations do
-    calculate :has_api_key?,
+    calculate :has_api_key,
               :boolean,
               expr(not is_nil(encrypted_api_key) or not is_nil(credential_id)) do
       public? true

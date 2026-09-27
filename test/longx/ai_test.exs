@@ -78,12 +78,12 @@ defmodule Longx.AITest do
       assert loaded.api_key == "sk-plain"
     end
 
-    test "has_api_key? reflects whether a key is set" do
-      with_key = create_provider!() |> Ash.load!(:has_api_key?)
-      without = create_provider!(%{api_key: nil}) |> Ash.load!(:has_api_key?)
+    test "has_api_key reflects whether a key is set" do
+      with_key = create_provider!() |> Ash.load!(:has_api_key)
+      without = create_provider!(%{api_key: nil}) |> Ash.load!(:has_api_key)
 
-      assert with_key.has_api_key?
-      refute without.has_api_key?
+      assert with_key.has_api_key
+      refute without.has_api_key
     end
 
     test "slug is unique" do
