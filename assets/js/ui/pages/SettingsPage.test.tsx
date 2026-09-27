@@ -39,6 +39,9 @@ import {
   setSentryDsn,
   sentryTest,
   killCommand,
+  approveChromeBrowser,
+  deleteChromeOrigin,
+  setChromeAlias,
   listProviders,
   listCredentials,
   credentialDeviceBegin,
@@ -591,6 +594,39 @@ describe("SettingsPage", () => {
     await user.click(within(rows[0]!).getByRole("button", { name: "结束" }));
     await user.click(await screen.findByRole("button", { name: "确认结束" }));
     await waitFor(() => expect(killCommand).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "cmd_1" } })));
+  });
+
+  test("browsers: the extension to download, a pairing request allowed, the paired browser's origins and alias", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/browsers");
+    // the extension card: the download and the steps (the section shows a skeleton until the list is in)
+    const ext = await screen.findByTestId("chrome-extension", {}, LAZY);
+    const section = screen.getByTestId("section-browsers");
+    expect(await within(ext).findByRole("link", { name: /下载扩展/ })).toHaveAttribute("href", "/extension/longx-chrome.zip");
+    expect(ext).toHaveTextContent("版本 0.1.0");
+    expect(ext).toHaveTextContent("chrome://extensions");
+    // the request waiting: allowed from here
+    const pending = within(section).getByTestId("pending-row");
+    expect(pending).toHaveTextContent("MJ 的 Windows · Chrome 153");
+    await user.click(within(pending).getByRole("button", { name: "允许" }));
+    await waitFor(() => expect(approveChromeBrowser).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "b1" } })));
+    // the paired one: online, its alias, the session using it, an origin rule removed
+    const row = within(section).getByTestId("browser-row");
+    expect(row).toHaveTextContent("在线");
+    expect(row).toHaveTextContent("qa-chrome");
+    expect(row).toHaveTextContent("修登录页 · 2 个标签");
+    expect(within(row).getByTestId("browser-origins")).toHaveTextContent("https://github.com");
+    await user.click(within(row).getByRole("button", { name: "删除站点规则 https://github.com" }));
+    await waitFor(() => expect(deleteChromeOrigin).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "b2", origin: "https://github.com" } })));
+    // aliases: the existing one is the default; a new one is saved with the picked browser
+    const aliases = within(section).getByTestId("chrome-aliases");
+    expect(within(aliases).getByTestId("alias-row")).toHaveTextContent("qa-chrome");
+    expect(within(aliases).getByRole("radio", { name: "默认" })).toBeChecked();
+    await user.type(within(aliases).getByLabelText("别名"), "home");
+    await user.click(within(aliases).getByRole("checkbox", { name: /qa 机/ }));
+    await user.click(within(aliases).getByRole("button", { name: "保存别名" }));
+    await waitFor(() => expect(setChromeAlias).toHaveBeenCalledWith(expect.objectContaining({ input: { name: "home", browsers: ["b2"] } })));
   });
 
   test("agent kernel: the built-in browser's private-network switch (a fake-ip network needs it)", async () => {

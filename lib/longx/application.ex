@@ -88,6 +88,13 @@ defmodule Longx.Application do
       ),
       # Start to serve requests, typically the last entry
       LongxWeb.Endpoint,
+      # the person's browsers through the Chrome extension (Longx.Chrome): the
+      # connections, the sessions' tabs and JavaScript runtimes
+      {Registry, keys: :unique, name: Longx.Chrome.Registry},
+      {Registry, keys: :unique, name: Longx.Chrome.SessionRegistry},
+      {Registry, keys: :duplicate, name: Longx.Chrome.TabRegistry},
+      {Task.Supervisor, name: Longx.Chrome.TaskSupervisor},
+      {DynamicSupervisor, name: Longx.Chrome.SessionSupervisor, strategy: :one_for_one},
       # permits for the headless browser (Longx.Browser), and its on-demand download
       Longx.Browser.Pool,
       {Task.Supervisor, name: Longx.Browser.TaskSupervisor},

@@ -1782,6 +1782,950 @@ export async function validateUpdateSearchProvider(
 }
 
 
+export type ApproveChromeBrowserInput = {
+  id: string;
+};
+
+export type ApproveChromeBrowserFields = UnifiedFieldSelection<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}>[];
+
+export type InferApproveChromeBrowserResult<
+  Fields extends ApproveChromeBrowserFields | undefined,
+> = InferResult<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}, Fields>;
+
+export type ApproveChromeBrowserResult<Fields extends ApproveChromeBrowserFields | undefined = undefined> = | { success: true; data: InferApproveChromeBrowserResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function approveChromeBrowser<Fields extends ApproveChromeBrowserFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: ApproveChromeBrowserInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ApproveChromeBrowserResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "approve_chrome_browser",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ApproveChromeBrowserResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateApproveChromeBrowser(
+  config: {
+  tenant?: string;
+  input: ApproveChromeBrowserInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "approve_chrome_browser",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ChromeAliasesFields = UnifiedFieldSelection<{aliases: Array<Record<string, any>>, default: string | null, __type: "TypedMap", __primitiveFields: "aliases" | "default"}>[];
+
+export type InferChromeAliasesResult<
+  Fields extends ChromeAliasesFields | undefined,
+> = InferResult<{aliases: Array<Record<string, any>>, default: string | null, __type: "TypedMap", __primitiveFields: "aliases" | "default"}, Fields>;
+
+export type ChromeAliasesResult<Fields extends ChromeAliasesFields | undefined = undefined> = | { success: true; data: InferChromeAliasesResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function chromeAliases<Fields extends ChromeAliasesFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ChromeAliasesResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "chrome_aliases",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ChromeAliasesResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateChromeAliases(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "chrome_aliases",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ChromeExtensionFields = UnifiedFieldSelection<{url: string, version: string | null, built: boolean, minimumChrome: string, __type: "TypedMap", __primitiveFields: "url" | "version" | "built" | "minimumChrome"}>[];
+
+export type InferChromeExtensionResult<
+  Fields extends ChromeExtensionFields | undefined,
+> = InferResult<{url: string, version: string | null, built: boolean, minimumChrome: string, __type: "TypedMap", __primitiveFields: "url" | "version" | "built" | "minimumChrome"}, Fields>;
+
+export type ChromeExtensionResult<Fields extends ChromeExtensionFields | undefined = undefined> = | { success: true; data: InferChromeExtensionResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function chromeExtension<Fields extends ChromeExtensionFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ChromeExtensionResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "chrome_extension",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ChromeExtensionResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateChromeExtension(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "chrome_extension",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type DeleteChromeAliasInput = {
+  name: string;
+};
+
+export type DeleteChromeAliasFields = UnifiedFieldSelection<{aliases: Array<Record<string, any>>, default: string | null, __type: "TypedMap", __primitiveFields: "aliases" | "default"}>[];
+
+export type InferDeleteChromeAliasResult<
+  Fields extends DeleteChromeAliasFields | undefined,
+> = InferResult<{aliases: Array<Record<string, any>>, default: string | null, __type: "TypedMap", __primitiveFields: "aliases" | "default"}, Fields>;
+
+export type DeleteChromeAliasResult<Fields extends DeleteChromeAliasFields | undefined = undefined> = | { success: true; data: InferDeleteChromeAliasResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function deleteChromeAlias<Fields extends DeleteChromeAliasFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: DeleteChromeAliasInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DeleteChromeAliasResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "delete_chrome_alias",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<DeleteChromeAliasResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateDeleteChromeAlias(
+  config: {
+  tenant?: string;
+  input: DeleteChromeAliasInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "delete_chrome_alias",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type DeleteChromeOriginInput = {
+  id: string;
+  origin: string;
+};
+
+export type DeleteChromeOriginFields = UnifiedFieldSelection<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}>[];
+
+export type InferDeleteChromeOriginResult<
+  Fields extends DeleteChromeOriginFields | undefined,
+> = InferResult<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}, Fields>;
+
+export type DeleteChromeOriginResult<Fields extends DeleteChromeOriginFields | undefined = undefined> = | { success: true; data: InferDeleteChromeOriginResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function deleteChromeOrigin<Fields extends DeleteChromeOriginFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: DeleteChromeOriginInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<DeleteChromeOriginResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "delete_chrome_origin",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<DeleteChromeOriginResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateDeleteChromeOrigin(
+  config: {
+  tenant?: string;
+  input: DeleteChromeOriginInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "delete_chrome_origin",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type ListChromeBrowsersFields = UnifiedFieldSelection<{browsers: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "browsers"}>[];
+
+export type InferListChromeBrowsersResult<
+  Fields extends ListChromeBrowsersFields | undefined,
+> = InferResult<{browsers: Array<Record<string, any>>, __type: "TypedMap", __primitiveFields: "browsers"}, Fields>;
+
+export type ListChromeBrowsersResult<Fields extends ListChromeBrowsersFields | undefined = undefined> = | { success: true; data: InferListChromeBrowsersResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function listChromeBrowsers<Fields extends ListChromeBrowsersFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ListChromeBrowsersResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "list_chrome_browsers",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<ListChromeBrowsersResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateListChromeBrowsers(
+  config: {
+  tenant?: string;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "list_chrome_browsers",
+    ...(config.tenant !== undefined && { tenant: config.tenant })
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type RejectChromeBrowserInput = {
+  id: string;
+};
+
+export type RejectChromeBrowserFields = UnifiedFieldSelection<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}>[];
+
+export type InferRejectChromeBrowserResult<
+  Fields extends RejectChromeBrowserFields | undefined,
+> = InferResult<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}, Fields>;
+
+export type RejectChromeBrowserResult<Fields extends RejectChromeBrowserFields | undefined = undefined> = | { success: true; data: InferRejectChromeBrowserResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function rejectChromeBrowser<Fields extends RejectChromeBrowserFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: RejectChromeBrowserInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<RejectChromeBrowserResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "reject_chrome_browser",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<RejectChromeBrowserResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateRejectChromeBrowser(
+  config: {
+  tenant?: string;
+  input: RejectChromeBrowserInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "reject_chrome_browser",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type RenameChromeBrowserInput = {
+  id: string;
+  name: string;
+};
+
+export type RenameChromeBrowserFields = UnifiedFieldSelection<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}>[];
+
+export type InferRenameChromeBrowserResult<
+  Fields extends RenameChromeBrowserFields | undefined,
+> = InferResult<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}, Fields>;
+
+export type RenameChromeBrowserResult<Fields extends RenameChromeBrowserFields | undefined = undefined> = | { success: true; data: InferRenameChromeBrowserResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function renameChromeBrowser<Fields extends RenameChromeBrowserFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: RenameChromeBrowserInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<RenameChromeBrowserResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "rename_chrome_browser",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<RenameChromeBrowserResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateRenameChromeBrowser(
+  config: {
+  tenant?: string;
+  input: RenameChromeBrowserInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "rename_chrome_browser",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type RevokeChromeBrowserInput = {
+  id: string;
+};
+
+export type RevokeChromeBrowserFields = UnifiedFieldSelection<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}>[];
+
+export type InferRevokeChromeBrowserResult<
+  Fields extends RevokeChromeBrowserFields | undefined,
+> = InferResult<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}, Fields>;
+
+export type RevokeChromeBrowserResult<Fields extends RevokeChromeBrowserFields | undefined = undefined> = | { success: true; data: InferRevokeChromeBrowserResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function revokeChromeBrowser<Fields extends RevokeChromeBrowserFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: RevokeChromeBrowserInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<RevokeChromeBrowserResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "revoke_chrome_browser",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<RevokeChromeBrowserResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateRevokeChromeBrowser(
+  config: {
+  tenant?: string;
+  input: RevokeChromeBrowserInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "revoke_chrome_browser",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetChromeAliasInput = {
+  name: string;
+  browsers: Array<string>;
+};
+
+export type SetChromeAliasFields = UnifiedFieldSelection<{aliases: Array<Record<string, any>>, default: string | null, __type: "TypedMap", __primitiveFields: "aliases" | "default"}>[];
+
+export type InferSetChromeAliasResult<
+  Fields extends SetChromeAliasFields | undefined,
+> = InferResult<{aliases: Array<Record<string, any>>, default: string | null, __type: "TypedMap", __primitiveFields: "aliases" | "default"}, Fields>;
+
+export type SetChromeAliasResult<Fields extends SetChromeAliasFields | undefined = undefined> = | { success: true; data: InferSetChromeAliasResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function setChromeAlias<Fields extends SetChromeAliasFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SetChromeAliasInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetChromeAliasResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_chrome_alias",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetChromeAliasResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetChromeAlias(
+  config: {
+  tenant?: string;
+  input: SetChromeAliasInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_chrome_alias",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetChromeBrowserMaxTabsInput = {
+  id: string;
+  maxTabs: number;
+};
+
+export type SetChromeBrowserMaxTabsFields = UnifiedFieldSelection<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}>[];
+
+export type InferSetChromeBrowserMaxTabsResult<
+  Fields extends SetChromeBrowserMaxTabsFields | undefined,
+> = InferResult<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}, Fields>;
+
+export type SetChromeBrowserMaxTabsResult<Fields extends SetChromeBrowserMaxTabsFields | undefined = undefined> = | { success: true; data: InferSetChromeBrowserMaxTabsResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function setChromeBrowserMaxTabs<Fields extends SetChromeBrowserMaxTabsFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SetChromeBrowserMaxTabsInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetChromeBrowserMaxTabsResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_chrome_browser_max_tabs",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetChromeBrowserMaxTabsResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetChromeBrowserMaxTabs(
+  config: {
+  tenant?: string;
+  input: SetChromeBrowserMaxTabsInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_chrome_browser_max_tabs",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetChromeDefaultAliasInput = {
+  name?: string | null;
+};
+
+export type SetChromeDefaultAliasFields = UnifiedFieldSelection<{aliases: Array<Record<string, any>>, default: string | null, __type: "TypedMap", __primitiveFields: "aliases" | "default"}>[];
+
+export type InferSetChromeDefaultAliasResult<
+  Fields extends SetChromeDefaultAliasFields | undefined,
+> = InferResult<{aliases: Array<Record<string, any>>, default: string | null, __type: "TypedMap", __primitiveFields: "aliases" | "default"}, Fields>;
+
+export type SetChromeDefaultAliasResult<Fields extends SetChromeDefaultAliasFields | undefined = undefined> = | { success: true; data: InferSetChromeDefaultAliasResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function setChromeDefaultAlias<Fields extends SetChromeDefaultAliasFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input?: SetChromeDefaultAliasInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetChromeDefaultAliasResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_chrome_default_alias",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetChromeDefaultAliasResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetChromeDefaultAlias(
+  config: {
+  tenant?: string;
+  input?: SetChromeDefaultAliasInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_chrome_default_alias",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
+export type SetChromeOriginInput = {
+  id: string;
+  origin: string;
+  access: "allow" | "deny";
+};
+
+export type SetChromeOriginFields = UnifiedFieldSelection<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}>[];
+
+export type InferSetChromeOriginResult<
+  Fields extends SetChromeOriginFields | undefined,
+> = InferResult<{ok: boolean, __type: "TypedMap", __primitiveFields: "ok"}, Fields>;
+
+export type SetChromeOriginResult<Fields extends SetChromeOriginFields | undefined = undefined> = | { success: true; data: InferSetChromeOriginResult<Fields>; }
+| { success: false; errors: AshRpcError[]; }
+
+;
+
+/**
+ * Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ */
+export async function setChromeOrigin<Fields extends SetChromeOriginFields | undefined = undefined>(
+  config: {
+  tenant?: string;
+  input: SetChromeOriginInput;
+  hookCtx?: ActionHookContext;
+  fields: Fields;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<SetChromeOriginResult<Fields extends undefined ? [] : Fields>> {
+  const payload = {
+    action: "set_chrome_origin",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input,
+    ...(config.fields !== undefined && { fields: config.fields })
+  };
+
+  return executeActionRpcRequest<SetChromeOriginResult<Fields extends undefined ? [] : Fields>>(
+    payload,
+    config
+  );
+}
+
+
+/**
+ * Validate: Execute generic action on Bridge
+ *
+ * @ashActionType :action
+ * @validation true
+ */
+export async function validateSetChromeOrigin(
+  config: {
+  tenant?: string;
+  input: SetChromeOriginInput;
+  hookCtx?: ValidationHookContext;
+  headers?: Record<string, string>;
+  fetchOptions?: RequestInit;
+  customFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+): Promise<ValidationResult> {
+  const payload = {
+    action: "set_chrome_origin",
+    ...(config.tenant !== undefined && { tenant: config.tenant }),
+    input: config.input
+  };
+
+  return executeValidationRpcRequest<ValidationResult>(
+    payload,
+    config
+  );
+}
+
+
 export type CredentialCompleteUrlInput = {
   url: string;
 };
@@ -3237,11 +4181,11 @@ export type AgentDefinitionInput = {
   id: UUID;
 };
 
-export type AgentDefinitionFields = UnifiedFieldSelection<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, localFiles: Array<string>, agents: Array<Record<string, any>>, settings: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, modelRetries: number | null, commandOomPriority: number | null, commandMemoryPercent: number | null, memoryFloorPercent: number | null, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries" | "commandOomPriority" | "commandMemoryPercent" | "memoryFloorPercent" | "childModel" | "childEffort"}, overrides: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, modelRetries: number | null, commandOomPriority: number | null, commandMemoryPercent: number | null, memoryFloorPercent: number | null, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries" | "commandOomPriority" | "commandMemoryPercent" | "memoryFloorPercent" | "childModel" | "childEffort"}, errors: Array<string>, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "localFiles" | "agents" | "errors"}>[];
+export type AgentDefinitionFields = UnifiedFieldSelection<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, localFiles: Array<string>, agents: Array<Record<string, any>>, settings: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, modelRetries: number | null, commandOomPriority: number | null, commandMemoryPercent: number | null, memoryFloorPercent: number | null, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries" | "commandOomPriority" | "commandMemoryPercent" | "memoryFloorPercent" | "childModel" | "childEffort"}, overrides: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, modelRetries: number | null, commandOomPriority: number | null, commandMemoryPercent: number | null, memoryFloorPercent: number | null, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries" | "commandOomPriority" | "commandMemoryPercent" | "memoryFloorPercent" | "childModel" | "childEffort"}, errors: Array<string>, browser: {alias: string | null, maxTabs: number, state: string, browser: string | null, __type: "TypedMap", __primitiveFields: "alias" | "maxTabs" | "state" | "browser"} | null, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "localFiles" | "agents" | "errors"}>[];
 
 export type InferAgentDefinitionResult<
   Fields extends AgentDefinitionFields | undefined,
-> = InferResult<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, localFiles: Array<string>, agents: Array<Record<string, any>>, settings: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, modelRetries: number | null, commandOomPriority: number | null, commandMemoryPercent: number | null, memoryFloorPercent: number | null, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries" | "commandOomPriority" | "commandMemoryPercent" | "memoryFloorPercent" | "childModel" | "childEffort"}, overrides: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, modelRetries: number | null, commandOomPriority: number | null, commandMemoryPercent: number | null, memoryFloorPercent: number | null, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries" | "commandOomPriority" | "commandMemoryPercent" | "memoryFloorPercent" | "childModel" | "childEffort"}, errors: Array<string>, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "localFiles" | "agents" | "errors"}, Fields>;
+> = InferResult<{present: boolean, trusted: boolean, dir: string, model: string | null, effort: string | null, plugs: Array<string>, files: Array<string>, localFiles: Array<string>, agents: Array<Record<string, any>>, settings: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, modelRetries: number | null, commandOomPriority: number | null, commandMemoryPercent: number | null, memoryFloorPercent: number | null, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries" | "commandOomPriority" | "commandMemoryPercent" | "memoryFloorPercent" | "childModel" | "childEffort"}, overrides: {maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, modelRetries: number | null, commandOomPriority: number | null, commandMemoryPercent: number | null, memoryFloorPercent: number | null, childModel: string | null, childEffort: string | null, __type: "TypedMap", __primitiveFields: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries" | "commandOomPriority" | "commandMemoryPercent" | "memoryFloorPercent" | "childModel" | "childEffort"}, errors: Array<string>, browser: {alias: string | null, maxTabs: number, state: string, browser: string | null, __type: "TypedMap", __primitiveFields: "alias" | "maxTabs" | "state" | "browser"} | null, __type: "TypedMap", __primitiveFields: "present" | "trusted" | "dir" | "model" | "effort" | "plugs" | "files" | "localFiles" | "agents" | "errors"}, Fields>;
 
 export type AgentDefinitionResult<Fields extends AgentDefinitionFields | undefined = undefined> = | { success: true; data: InferAgentDefinitionResult<Fields>; }
 | { success: false; errors: AshRpcError[]; }

@@ -1,0 +1,192 @@
+defmodule Longx.ChromeTest do
+  use Longx.DataCase, async: false
+
+  alias Longx.Chrome
+  alias Longx.Chrome.{Aliases, Browser, Connection, Policy}
+
+  @device %{"name" => "MJ 的 MacBook · Chrome 153", "platform" => "mac", "extension" => "0.1.0"}
+
+  setup do
+    for b <- Chrome.list_browsers!(), do: :ok = Chrome.destroy_browser(b)
+    for %{name: name} <- Aliases.all(), do: Aliases.delete(name)
+    :ok
+  end
+
+  describe "pairing" do
+    test "an extension without a token is a pending row named after its device; the same install is the same row" do
+      assert {:ok, %Browser{status: :pending, name: "MJ 的 MacBook · Chrome 153"} = b} =
+               Chrome.connect("install-1", nil, @device)
+
+      assert {:ok, %Browser{id: id}} = Chrome.connect("install-1", nil, @device)
+      assert id == b.id
+      assert [_one] = Chrome.list_browsers!()
+    end
+
+    test "approving gives a token the extension connects with; a wrong or missing token asks again" do
+      {:ok, b} = Chrome.connect("install-2", nil, @device)
+      assert {:ok, %Browser{status: :approved}, token} = Chrome.approve(b.id)
+      assert is_binary(token) and byte_size(token) > 20
+
+      assert {:ok, %Browser{status: :approved, id: id}} =
+               Chrome.connect("install-2", token, @device)
+
+      assert id == b.id
+      # a token of another install is nobody's
+      assert {:error, :bad_token} = Chrome.connect("install-other", token, @device)
+      assert {:error, :bad_token} = Chrome.connect("install-2", "made-up", @device)
+      # approved but silent about its token: it must ask again, not become pending by itself
+      assert {:error, :bad_token} = Chrome.connect("install-2", nil, @device)
+    end
+
+    test "revoking voids the token; the extension asking again is pending again; rejecting removes the row" do
+      {:ok, b} = Chrome.connect("install-3", nil, @device)
+      {:ok, _, token} = Chrome.approve(b.id)
+      assert {:ok, %Browser{status: :revoked}} = Chrome.revoke(b.id)
+      assert {:error, :bad_token} = Chrome.connect("install-3", token, @device)
+      assert {:ok, %Browser{status: :pending}} = Chrome.connect("install-3", nil, @device)
+
+      assert :ok = Chrome.reject(b.id)
+      assert [] = Chrome.list_browsers!()
+    end
+
+    test "the person's own name stays when the device reconnects" do
+      {:ok, b} = Chrome.connect("install-4", nil, @device)
+      {:ok, _} = Chrome.rename(b.id, "qa 机")
+      {:ok, _, token} = Chrome.approve(b.id)
+
+      assert {:ok, %Browser{name: "qa 机"}} =
+               Chrome.connect("install-4", token, %{"name" => "Renamed device"})
+    end
+
+    test "origins and max tabs are kept on the row" do
+      {:ok, b} = Chrome.connect("install-5", nil, @device)
+
+      assert {:ok, %Browser{origins: %{"https://github.com" => %{"access" => "allow"}}}} =
+               Chrome.set_origin(b.id, "https://GitHub.com/mjason/longx", :allow)
+
+      assert {:ok, %Browser{origins: %{}}} = Chrome.delete_origin(b.id, "https://github.com")
+      assert {:ok, %Browser{max_tabs: 2}} = Chrome.set_max_tabs(b.id, 2)
+      assert {:error, _} = Chrome.set_origin(b.id, "ftp://x", :allow)
+    end
+
+    test "the directory says whether a browser is connected" do
+      {:ok, b} = Chrome.connect("install-6", nil, @device)
+      assert [%{connected: false, status: "pending", tabs: []}] = Chrome.directory()
+      :ok = Connection.register(b.id, :approved)
+      assert [%{connected: true}] = Chrome.directory()
+      assert Chrome.online?(b.id)
+    end
+  end
+
+  describe "aliases" do
+    test "an alias names browsers and resolves to the first one online" do
+      {:ok, a} = Chrome.connect("install-a", nil, @device)
+      {:ok, b} = Chrome.connect("install-b", nil, @device)
+      {:ok, _, _} = Chrome.approve(a.id)
+      {:ok, _, _} = Chrome.approve(b.id)
+
+      assert :ok = Aliases.put("qa-chrome", [a.id, b.id])
+      assert [%{name: "qa-chrome", browsers: [_, _]}] = Aliases.all()
+      assert {:error, {:offline, "qa-chrome", [_, _]}} = Aliases.resolve("qa-chrome")
+
+      :ok = Connection.register(b.id, :approved)
+      assert {:ok, %Browser{id: id}} = Aliases.resolve("qa-chrome")
+      assert id == b.id
+
+      assert {:error, {:unknown_alias, "nope"}} = Aliases.resolve("nope")
+      assert {:error, :no_default} = Aliases.resolve(nil)
+      assert :ok = Aliases.set_default("qa-chrome")
+      assert {:ok, %Browser{id: ^id}} = Aliases.resolve(nil)
+      assert {:error, %{field: :name}} = Aliases.set_default("nope")
+
+      assert {:error, %{field: :browsers}} = Aliases.put("empty", [])
+      assert {:error, %{field: :browsers}} = Aliases.put("ghost", ["not-a-browser"])
+      assert {:error, %{field: :name}} = Aliases.put("no spaces", [a.id])
+
+      assert :ok = Aliases.delete("qa-chrome")
+      assert Aliases.default() == nil
+      assert Aliases.all() == []
+    end
+  end
+
+  describe "the project's definition" do
+    setup do
+      root =
+        Path.join(System.tmp_dir!(), "longx-chrome-def-#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(Path.join(root, ".longx/local"))
+      on_exit(fn -> File.rm_rf!(root) end)
+
+      {:ok, project} =
+        Longx.Projects.create_project(%{
+          name: "browser def #{Path.basename(root)}",
+          root_path: root
+        })
+
+      %{root: root, project: project}
+    end
+
+    test "says what `plug Browser` resolves to on this machine", %{root: root, project: project} do
+      describe_with = fn line ->
+        File.write!(
+          Path.join(root, ".longx/local/agent.exs"),
+          "import Longx.Agent.Config\nagent do\n  version 1\n  extends :default\n  #{line}\nend\n"
+        )
+      end
+
+      # no Browser plug: nothing to say
+      describe_with.("plug Environment")
+      assert %{browser: nil} = Longx.Projects.agent_definition(project)
+
+      # an alias nobody declared on this machine
+      describe_with.("plug Browser, browser: \"qa\", max_tabs: 2")
+
+      assert %{browser: %{alias: "qa", max_tabs: 2, state: "unknown_alias", browser: nil}} =
+               Longx.Projects.agent_definition(project)
+
+      # the alias names a paired browser that is not connected now
+      {:ok, b} = Chrome.connect("install-def", nil, @device)
+      {:ok, _, _} = Chrome.approve(b.id)
+      :ok = Aliases.put("qa", [b.id])
+
+      assert %{browser: %{state: "offline", browser: "MJ 的 MacBook · Chrome 153"}} =
+               Longx.Projects.agent_definition(project)
+
+      # connected: online
+      :ok = Connection.register(b.id, :approved)
+
+      assert %{browser: %{state: "online", browser: "MJ 的 MacBook · Chrome 153"}} =
+               Longx.Projects.agent_definition(project)
+
+      # `plug Browser` alone means the default alias, and none is set
+      describe_with.("plug Browser, max_tabs: 3")
+
+      assert %{browser: %{alias: nil, max_tabs: 3, state: "no_default", browser: nil}} =
+               Longx.Projects.agent_definition(project)
+
+      :ok = Aliases.set_default("qa")
+      assert %{browser: %{alias: nil, state: "online"}} = Longx.Projects.agent_definition(project)
+    end
+  end
+
+  describe "policy" do
+    test "origins are normalised; the verdict comes from the browser, then the session, else ask" do
+      assert {:ok, "https://example.com"} = Policy.origin("https://Example.com/a/b?c")
+      assert {:ok, "http://localhost:7798"} = Policy.origin("http://localhost:7798/p/x")
+      assert {:ok, "https://x.test"} = Policy.origin("https://x.test:443/")
+      assert {:error, _} = Policy.origin("chrome://settings")
+      assert Policy.blank?("about:blank")
+
+      browser = %{
+        "https://a.test" => %{"access" => "allow"},
+        "https://b.test" => %{"access" => "deny"}
+      }
+
+      session = %{"https://c.test" => %{"access" => "allow"}}
+      assert {:allow, "https://a.test"} = Policy.check("https://a.test/page", browser, session)
+      assert {:deny, "https://b.test"} = Policy.check("https://b.test/", browser, session)
+      assert {:allow, "https://c.test"} = Policy.check("https://c.test/x", browser, session)
+      assert {:ask, "https://d.test"} = Policy.check("https://d.test/", browser, session)
+    end
+  end
+end

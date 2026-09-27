@@ -567,7 +567,7 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     end` — a description records the **difference** to the layer below (`Config.resolve/2`
     applies the ops; a short name means the shipped plug, `Config.builtin/1`), so a release
     that changes the shipped pipeline (`Longx.Agent.Pipelines.Default.config/0`:
-    Environment, Base, AgentsMd, Shell, Jobs, Patch, ViewImage, Present, Knowledge, WebSearch, Browser,
+    Environment, Base, AgentsMd, Shell, Jobs, Patch, ViewImage, Present, Knowledge, WebSearch, WebFetch,
     Credentials, Agents, Watches, Goal, Compaction, Request; a description's `prompt`
     becomes a `Plugs.Prompt` — codex's developer instructions, raw text — right after
     AgentsMd (else Base), each layer's behind the one below so local and a role have the
@@ -768,7 +768,8 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     search) — *standalone* for every other model: `web_search(query, recency_days,
     domains)` over `Longx.AI.Search` (Tavily; no provider → said inside the result). The
     thread's 联网搜索 switch reaches the kernel as `web_search:`; `false` mounts nothing.
-    `Plugs.Browser` is `web_fetch(url, format, selector)` in every mode — obscura through
+    `Plugs.WebFetch` (it was `Plugs.Browser` until the person's own browser took that name)
+    is `web_fetch(url, format, selector)` in every mode — obscura through
     `Longx.Browser.fetch/2`, markdown by default; while the browser is still being
     downloaded the tool answers "being downloaded (N%)".
   - **Image generation is the provider's hosted tool, per model** — `Model.image_generation`
@@ -1171,6 +1172,81 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     runs or downloads the real one; `test/longx/browser_integration_test.exs`
     (`:integration`) downloads the real binary (~60 MB) into a tmp dir and renders a
     Bypass SPA.
+- **The person's own browser — `Longx.Chrome`, the Chrome extension, `Plugs.Browser`**
+  (`docs/browser-design.md`). Longx runs on a server and Chrome on the person's machine, so
+  the **Longx 浏览器桥** extension (`assets/extension/`, MV3, TypeScript; built by `mix
+  assets.build` → `npm run build:extension` into `priv/static/extension/unpacked/`, zipped on
+  request by `LongxWeb.ExtensionController` at `GET /extension/longx-chrome.zip`, downloaded
+  and loaded unpacked from Settings → 浏览器) connects **out** to Longx
+  (`LongxWeb.ChromeSocket` at `/chrome/socket`, `check_origin: false` — the Origin is
+  `chrome-extension://…` —, channel `chrome:bridge`, `LongxWeb.ChromeChannel`) and relays
+  allow-listed `chrome.*` calls the way Playwright's extension does (`debugger.attach /
+  detach / sendCommand`, `tabs.*`, `tabGroups.*`, `windows.*`; events `debugger.onEvent /
+  onDetach`, `tabs.on*`): server → `"cmd"` `%{id, method, params}`, extension → `"result"` /
+  `"event"`; no eval in the extension, ever (MV3 forbids remote code there, and the model's
+  code has no business with `chrome.*`). **Pairing**: an extension without a token is a
+  `pending` `Longx.Chrome.Browser` row (`install_id`, device name) until the person allows it
+  (`Chrome.approve/1` → a token pushed once, its sha256 kept; `reject`, `revoke`; the
+  `"approved"` / `"revoked"` pushes); `Longx.Chrome.Connection` is the live side (Registry
+  by browser id, `call/4` through the channel process, `{:error, :offline | :pending |
+  :timeout}`). **Aliases** (`Longx.Chrome.Aliases`, Settings `chrome_aliases` /
+  `chrome_default_alias`) name browsers for descriptions the way model aliases name models:
+  an alias → one or more browsers, resolved to the **first online**; a shared repository's
+  description works on every person's Longx. **Not in the shipped pipeline**: a project
+  writes `plug Browser` (the default alias) or `plug Browser, browser: "qa-chrome", max_tabs:
+  3` — the Phoenix shape, options inline (`options X, …` is for a plug a lower layer
+  mounted). One tool, **`javascript(title, code)`** (code mode, as codex's `node_repl.js`,
+  browser-harness and browser-use-pi; not a fixed action set, not browser-use's 1400-line DOM
+  serializer — the model filters the AX tree in JS): the code is the body of an async
+  function run in the conversation's persistent realm, **`shim js`** (`native/shim/js.go`:
+  goja, pure Go, ES2023 minus the web platform; `goja_nodejs` event loop; JSON lines over
+  stdio; top-level `const/let/function/class` rewritten to land on `globalThis` so they
+  survive into the next cell, Node's REPL way; `__longx_cdp(target, method, params)` the
+  one way out, a promise the host answers; `interrupt` stops a busy loop **and rebuilds the
+  realm** — goja cannot run promise jobs after an interrupt inside an `await` continuation
+  (probed 2026-09-27), so an interrupt or the 30 s deadline means `reset: true`, the same
+  contract as browser-use-pi's cell timeout; `hold` / `resume` pause the deadline while the
+  person is asked). `Longx.Chrome.Runtime` owns the shim (one per session, under
+  `Longx.Shim`; a reader task; `execute/4`, `hold/1`, `resume/1`; a dead shim comes back
+  for the next cell with `reset: true`); `priv/agent/browser/prelude.js` is the model's API
+  (browser-use-pi's: `page.goto / info / evaluate / waitFor / snapshot / screenshot /
+  clickAt / cdp / console / close`, `tabs.open / list / get / close`, `snapshot()`,
+  `screenshot()`; `URL`, `atob` polyfilled; `page` opens its tab on first use).
+  **`Longx.Chrome.Session`**, one per thread (`SessionSupervisor` / `SessionRegistry`): the
+  browser (alias resolved at first use), its **tab group** `Longx · <session>` in the
+  person's Chrome (a tab dragged in is handed over, one dragged out is taken back —
+  `tabs.list` reconciles), the debugger attachments (`Runtime` / `Page` / `Log` enabled), a
+  200-entry console buffer per tab (`longx.console`), the CDP proxy every cell call goes
+  through (`tab:<id>` must be the session's; `Target.* / Fetch.* / Browser.* / Storage.*`
+  and the cookie commands are refused; `Page.navigate` passes `Longx.Chrome.Policy`: the
+  browser row's `origins`, the session's, the turn's — an unknown origin is an **Ask** with
+  本轮 / 这个会话 / 一直允许 / 拒绝, the deadline held meanwhile), the `longx` pseudo-methods
+  (`longx.tabs.open` — the project's `max_tabs` counts all its sessions through
+  `Longx.Chrome.Tabs`' duplicate-key registry, the browser row's `max_tabs` every project —,
+  `longx.tabs.list / close`, `longx.console`). The turn's end (`:turn_end`) **detaches** the
+  debugger from every tab (the person's browser stops saying it is debugged; the tabs
+  stay); the agent gone for 60 s closes the session: its tabs, its runtime. The person
+  cancelling Chrome's debugging bar (`onDetach canceled_by_user`) refuses that tab for the
+  turn. Screenshots reach the model as `"images"` on the result → a `:screenshot` transcript
+  kind whose messages `Transcript.input/1` keeps only the **last two** of
+  (`keep_screenshots:`; browser-use-pi's `project()`), and the person as project
+  attachments drawn inline by the chat (`details.screenshots`, `JavascriptTool` in
+  `toolkit.tsx`, a `TerminalBlock` for the console output, the code folded). **Prompt
+  sources**: `prompt.md` is browser-use-pi's system prompt (MIT) adapted (no workspace /
+  finish / checkpoint; our tabs, console, origins paragraphs; when not to use the browser,
+  from browser-harness); `policy.md` is codex's Computer/Browser Use Confirmation Policy
+  (`models.json`) adapted (hand-off = say so and stop, the person continues in their own
+  browser; a project's own dev server needs no confirmation). Settings → 浏览器
+  (`BrowsersSection`, `core/chrome.ts`; RPC on the data-less `Longx.Chrome.Bridge`:
+  `list_chrome_browsers`, `approve / reject / revoke / rename_chrome_browser`,
+  `set_chrome_browser_max_tabs`, `set / delete_chrome_origin`, `chrome_aliases`, `set /
+  delete_chrome_alias`, `set_chrome_default_alias`, `chrome_extension`). Tests:
+  `native/shim/js_test.go`, `test/longx/chrome/{runtime,chrome,session}_test`,
+  `test/longx_web/channels/chrome_channel_test`, `test/longx/agent/plugs/browser_test`
+  (Bypass as the model, `Longx.Test.FakeChrome` as the extension: it joins the channel,
+  answers `cmd` pushes with a small fake Chrome while the code under test runs in a task),
+  `chrome_rpc_test`, `extension_controller_test`, the transcript's screenshot pruning,
+  `assets/extension/src/relay.test.ts`, the settings and toolkit tests.
 - **System** — `Longx.System` (domain) → `Longx.System.Status` generic actions:
   `list_directory` / `create_directory` (`Longx.System.Directory`, the project wizard's
   picker), `knowledge_docs` / `knowledge_read` / `knowledge_write` / `knowledge_delete`
@@ -1669,7 +1745,14 @@ Where tests live / what to use:
   for a foreground `exec_command` — a model now takes `sleep 120` for a job), `10-waiting`
   (a job ending while a foreground `sleep 60` runs: its row above the composer, the
   composer empty; the stop → the stopped-run card, the list paused, no turn by itself;
-  立即插入 → the job's turn; a poem stopped mid-way and 丢弃'd — gone, composer empty). A model that refuses an instruction
+  立即插入 → the job's turn; a poem stopped mid-way and 丢弃'd — gone, composer empty),
+  `11-chrome` (the person's browser: a second Chromium with the built extension loaded —
+  `priv/static/extension/unpacked`, so `mix assets.build` first — pairs through the popup,
+  is allowed on Settings → 浏览器 and given the alias `e2e-chrome`; the project's
+  `local/agent.exs` says `plug Browser, browser: "e2e-chrome", max_tabs: 2`; the agent
+  opens a page of the project served by `/files/…?inline=1`, the origin is asked on the
+  chat and 一直允许'd, the title read back through `page.info()`, the origin kept on the
+  browser row and the tab still open in that Chrome). A model that refuses an instruction
   fails a scenario — that is the point; run it before a release and after a change to the
   kernel, the prompts or the chat.
 - TypeScript/React → also test-first: vitest + testing-library in `assets/` (`npm test`).

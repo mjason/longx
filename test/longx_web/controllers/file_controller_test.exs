@@ -53,8 +53,16 @@ defmodule LongxWeb.FileControllerTest do
   } do
     conn = get(conn, "/files/#{p.id}/logo.png?inline=1")
     assert conn.status == 200
-    assert get_resp_header(conn, "content-type") |> hd() =~ "image/png"
+    assert get_resp_header(conn, "content-type") == ["image/png"]
     assert get_resp_header(conn, "content-disposition") |> hd() =~ "inline"
+  end
+
+  test "a text file is served as utf-8: a browser decodes an html without a charset by its locale",
+       %{conn: conn, project: p, root: root} do
+    File.write!(Path.join(root, "hello.html"), "<!doctype html><title>页面</title>")
+    conn = get(conn, "/files/#{p.id}/hello.html?inline=1")
+    assert conn.status == 200
+    assert get_resp_header(conn, "content-type") == ["text/html; charset=utf-8"]
   end
 
   test "the attachment directory is reached under _attachments", %{

@@ -16,7 +16,7 @@ defmodule Longx.Agent.Plugs.WebSearch do
 
   The thread's own switch (a new chat's 联网搜索) arrives as
   `assigns.web_search`; `false` mounts nothing. Reading a page is
-  `Longx.Agent.Plugs.Browser`'s `web_fetch`, in every mode.
+  `Longx.Agent.Plugs.WebFetch`'s `web_fetch`, in every mode.
   """
 
   use Longx.Agent.Plug

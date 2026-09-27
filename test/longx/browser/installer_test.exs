@@ -184,7 +184,7 @@ defmodule Longx.Browser.InstallerTest do
     assert stage in [:downloading, :verifying, :extracting, :installed]
 
     assert {:error, message} =
-             Longx.Agent.Plugs.Browser.web_fetch(
+             Longx.Agent.Plugs.WebFetch.web_fetch(
                %{"url" => "https://example.com/"},
                %Longx.Agent.Context{}
              )

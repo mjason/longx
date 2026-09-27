@@ -55,6 +55,9 @@ defmodule LongxWeb.Router do
     get "/:project_id/*path", FileController, :show
   end
 
+  # the Chrome extension the person installs unpacked (Longx.Chrome)
+  get "/extension/longx-chrome.zip", LongxWeb.ExtensionController, :download
+
   # a conversation as JSON for another agent (Longx.Projects.Report): the
   # page's address with /api in front; no `:accepts` — always JSON
   scope "/api", LongxWeb do

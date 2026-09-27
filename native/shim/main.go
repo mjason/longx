@@ -13,8 +13,9 @@ import (
 const usage = "usage: shim [flags] -- <program> [args...]"
 
 func main() {
-	// the project's file watcher and its ignore listing (watch.go, rules.go):
-	// subcommands of their own, no port protocol
+	// the project's file watcher and its ignore listing (watch.go, rules.go)
+	// and the browser sessions' JavaScript runtime (js.go): subcommands of
+	// their own, no port protocol
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "watch":
@@ -23,6 +24,9 @@ func main() {
 			os.Exit(listMain("ignored", listIgnored))
 		case "files":
 			os.Exit(listMain("files", listFiles))
+		case "js":
+			// the browser sessions' JavaScript runtime (js.go)
+			os.Exit(jsMain())
 		}
 	}
 

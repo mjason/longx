@@ -128,7 +128,13 @@ defmodule Longx.MixProject do
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ash.setup --quiet", "test"],
       "assets.setup": ["cmd --cd assets npm install"],
-      "assets.build": ["compile", "ash_typescript.codegen", "cmd --cd assets npm run build"],
+      "assets.build": [
+        "compile",
+        "ash_typescript.codegen",
+        "cmd --cd assets npm run build",
+        # the Chrome extension (docs/browser-design.md), loaded unpacked from priv/static/extension
+        "cmd --cd assets npm run build:extension"
+      ],
       "assets.deploy": ["assets.build"],
       precommit: [
         "compile --warnings-as-errors",

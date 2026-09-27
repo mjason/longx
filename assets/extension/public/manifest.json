@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Longx 浏览器桥",
+  "description": "把这个浏览器接到你的 Longx，让 agent 在你的 Chrome 里打开页面、调试自己写的网页",
+  "version": "0.1.0",
+  "minimum_chrome_version": "118",
+  "permissions": ["debugger", "tabs", "tabGroups", "storage", "alarms"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Longx 浏览器桥",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

@@ -141,6 +141,18 @@ export type AgentDefinition = {
   /** the project's own overrides (null = inherit) */
   overrides: Partial<AgentSettingsView>;
   errors: string[];
+  /** what `plug Browser` resolves to on this machine; null without the plug */
+  browser: AgentBrowserView | null;
+};
+
+export type AgentBrowserView = {
+  /** the alias the description names; null = the default alias */
+  alias: string | null;
+  maxTabs: number;
+  /** `online` / `offline` (paired, not connected) / `no_default` / `unknown_alias` */
+  state: string;
+  /** the browser's name (the browsers' names, offline) */
+  browser: string | null;
 };
 
 export type AgentSettingsView = {
@@ -162,6 +174,7 @@ const agentDefinitionFields = [
   "present", "trusted", "dir", "model", "effort", "plugs", "files", "localFiles", "agents", "errors",
   { settings: [...agentSettingsViewFields] },
   { overrides: [...agentSettingsViewFields] },
+  { browser: ["alias", "maxTabs", "state", "browser"] },
 ] as const satisfies AgentDefinitionFields;
 
 export function useAgentDefinition(projectId: string | undefined) {

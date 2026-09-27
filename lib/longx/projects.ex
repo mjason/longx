@@ -482,8 +482,38 @@ defmodule Longx.Projects do
         ),
       settings: Longx.Agent.Definition.Settings.for_project(project),
       overrides: project.agent_settings || %{},
-      errors: Enum.map(loaded.errors, & &1.message)
+      errors: Enum.map(loaded.errors, & &1.message),
+      browser: browser_resolution(loaded.plugs)
     }
+  end
+
+  # What `plug Browser` resolves to on this machine (the definition card): the
+  # alias the description names (nil = the default alias), the tab limit, and
+  # `state` online / offline / no_default / unknown_alias with the browser's name.
+  defp browser_resolution(plugs) do
+    case List.keyfind(plugs, Longx.Agent.Plugs.Browser, 0) do
+      nil ->
+        nil
+
+      {module, opts} ->
+        opts = module.init(opts)
+        name = Keyword.get(opts, :browser)
+        base = %{alias: name, max_tabs: Keyword.get(opts, :max_tabs) || 1, browser: nil}
+
+        case Longx.Chrome.Aliases.resolve(name) do
+          {:ok, browser} ->
+            Map.merge(base, %{state: "online", browser: browser.name})
+
+          {:error, {:offline, _name, rows}} ->
+            Map.merge(base, %{state: "offline", browser: Enum.map_join(rows, ", ", & &1.name)})
+
+          {:error, :no_default} ->
+            Map.put(base, :state, "no_default")
+
+          {:error, {:unknown_alias, _name}} ->
+            Map.put(base, :state, "unknown_alias")
+        end
+    end
   end
 
   # what the local tree holds, relative to it (the candidates for promotion)

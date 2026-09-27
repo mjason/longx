@@ -142,6 +142,20 @@ export type SearchProviderAttributesOnlySchema = {
 };
 
 
+// ChromeBridge Schema
+export type ChromeBridgeResourceSchema = {
+  __type: "Resource";
+  __primitiveFields: never;
+};
+
+
+
+export type ChromeBridgeAttributesOnlySchema = {
+  __type: "Resource";
+  __primitiveFields: never;
+};
+
+
 // Credential Schema
 export type CredentialResourceSchema = {
   __type: "Resource";
@@ -900,6 +914,14 @@ export type SearchProviderFilterInput = {
     stringEndsWith?: string;
     stringStartsWith?: string;
   };
+
+
+};
+export type ChromeBridgeFilterInput = {
+  and?: Array<ChromeBridgeFilterInput>;
+  or?: Array<ChromeBridgeFilterInput>;
+  not?: Array<ChromeBridgeFilterInput>;
+
 
 
 };
@@ -2110,6 +2132,7 @@ export type ProviderFilterField = (typeof providerFilterFields)[number];
 export const searchProviderFilterFields = ["baseUrl", "default", "hasApiKey", "id", "kind", "name", "slug"] as const;
 export type SearchProviderFilterField = (typeof searchProviderFilterFields)[number];
 
+
 export const credentialFilterFields = ["allowedHosts", "authorizeParams", "authorizeUrl", "clientId", "deviceFlow", "expiresAt", "extraParams", "fixedClient", "hasAccessToken", "hasClientSecret", "hasRefreshToken", "hasSecret", "header", "id", "insertedAt", "kind", "label", "lastError", "lastErrorAt", "name", "pkce", "redirectUri", "refreshedAt", "registrationUrl", "scheme", "scopes", "status", "tokenUrl", "updatedAt"] as const;
 export type CredentialFilterField = (typeof credentialFilterFields)[number];
 
@@ -2138,6 +2161,7 @@ export type ProviderSortField = (typeof providerSortFields)[number];
 
 export const searchProviderSortFields = ["baseUrl", "default", "hasApiKey", "id", "kind", "name", "slug"] as const;
 export type SearchProviderSortField = (typeof searchProviderSortFields)[number];
+
 
 export const credentialSortFields = ["allowedHosts", "authorizeParams", "authorizeUrl", "clientId", "deviceFlow", "expiresAt", "extraParams", "fixedClient", "hasAccessToken", "hasClientSecret", "hasRefreshToken", "hasSecret", "header", "id", "insertedAt", "kind", "label", "lastError", "lastErrorAt", "name", "pkce", "redirectUri", "refreshedAt", "registrationUrl", "scheme", "scopes", "status", "tokenUrl", "updatedAt"] as const;
 export type CredentialSortField = (typeof credentialSortFields)[number];

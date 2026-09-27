@@ -1718,6 +1718,7 @@ defmodule Longx.Agent do
         context_overflow: false,
         compact_requested: false,
         pending_images: [],
+        pending_screenshots: [],
         progress: nil,
         quiet: nil
     }

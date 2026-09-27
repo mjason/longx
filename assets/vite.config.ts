@@ -38,7 +38,7 @@ export default defineConfig(({ command }) => ({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
-    include: ["js/**/*.test.{ts,tsx}"],
+    include: ["js/**/*.test.{ts,tsx}", "extension/**/*.test.ts"],
     css: false,
   },
 }));

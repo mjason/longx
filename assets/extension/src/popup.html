@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Longx 浏览器桥</title>
+  </head>
+  <body>
+    <header>
+      <img src="/icons/icon-32.png" alt="" width="24" height="24" />
+      <h1>Longx 浏览器桥</h1>
+    </header>
+    <form id="form">
+      <label for="server">Longx 地址</label>
+      <input id="server" type="url" placeholder="http://192.168.2.70:7788" autocomplete="off" spellcheck="false" />
+      <div class="row">
+        <button id="connect" type="submit">连接</button>
+        <button id="disconnect" type="button" class="secondary" hidden>断开</button>
+      </div>
+    </form>
+    <p id="status" class="status" data-status="disconnected">未连接</p>
+    <p id="hint" class="hint" hidden></p>
+    <section id="sessions" hidden>
+      <h2>正在使用这个浏览器的会话</h2>
+      <ul></ul>
+    </section>
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>

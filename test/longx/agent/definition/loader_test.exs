@@ -73,7 +73,7 @@ defmodule Longx.Agent.Definition.LoaderTest do
              Longx.Agent.Plugs.Present,
              Longx.Agent.Plugs.Knowledge,
              Longx.Agent.Plugs.WebSearch,
-             Longx.Agent.Plugs.Browser,
+             Longx.Agent.Plugs.WebFetch,
              Longx.Agent.Plugs.Credentials,
              Longx.Agent.Plugs.Agents,
              Longx.Agent.Plugs.Watches,

@@ -47,3 +47,6 @@ npm-debug.log
 /priv/plts/
 .claude/worktrees/
 assets/scripts/e2e/out/
+
+# the Chrome extension build (npm run build:extension), zipped on request
+/priv/static/extension/

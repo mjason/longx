@@ -45,6 +45,22 @@ export const fileRulesData = () => ({
   builtinWatch: [".longx/", ".gitignore", ".longxignore"],
 });
 
+/** a paired browser as the settings page lists it */
+export const chromeBrowser = (id: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  name: "Chrome",
+  device: { platform: "linux", extension: "0.1.0" },
+  status: "approved",
+  connected: false,
+  maxTabs: 6,
+  origins: {},
+  lastSeenAt: null,
+  approvedAt: null,
+  tabs: [],
+  aliases: [],
+  ...extra,
+});
+
 /** a credential row as the wire lists it: never a value, only "has one" */
 export const credential = (name: string, extra: Record<string, unknown> = {}) => ({
   id: `cred-${name}`,
@@ -100,6 +116,7 @@ export const agentDefinitionData = (extra: Record<string, unknown> = {}) => ({
   ],
   settings: agentSettingsData(),
   overrides: {},
+  browser: null,
   errors: [],
   ...extra,
 });
@@ -261,6 +278,20 @@ export function rpcMock() {
       }),
     ),
     killCommand: vi.fn(async () => ok({ ok: true })),
+    // the person's browsers (Longx.Chrome): one waiting, one paired and online
+    listChromeBrowsers: vi.fn(async () => ok({ browsers: [chromeBrowser("b1", { name: "MJ 的 Windows · Chrome 153", status: "pending", connected: true }), chromeBrowser("b2", { name: "qa 机", status: "approved", connected: true, aliases: ["qa-chrome"], origins: { "https://github.com": { access: "allow" } }, tabs: [{ threadId: "t1", title: "修登录页", tabs: 2 }] })] })),
+    approveChromeBrowser: vi.fn(async () => ok({ ok: true })),
+    rejectChromeBrowser: vi.fn(async () => ok({ ok: true })),
+    revokeChromeBrowser: vi.fn(async () => ok({ ok: true })),
+    renameChromeBrowser: vi.fn(async () => ok({ ok: true })),
+    setChromeBrowserMaxTabs: vi.fn(async () => ok({ ok: true })),
+    setChromeOrigin: vi.fn(async () => ok({ ok: true })),
+    deleteChromeOrigin: vi.fn(async () => ok({ ok: true })),
+    chromeAliases: vi.fn(async () => ok({ aliases: [{ name: "qa-chrome", browsers: ["b2"] }], default: "qa-chrome" })),
+    setChromeAlias: vi.fn(async () => ok({ aliases: [{ name: "qa-chrome", browsers: ["b2"] }], default: "qa-chrome" })),
+    deleteChromeAlias: vi.fn(async () => ok({ aliases: [], default: null })),
+    setChromeDefaultAlias: vi.fn(async () => ok({ aliases: [{ name: "qa-chrome", browsers: ["b2"] }], default: "qa-chrome" })),
+    chromeExtension: vi.fn(async () => ok({ url: "/extension/longx-chrome.zip", version: "0.1.0", built: true, minimumChrome: "118" })),
     sentryStatus: vi.fn(async () => ok({ enabled: false, dsn: null, environment: "production", release: "0.2.8" })),
     setSentryDsn: vi.fn(async ({ input }: { input: { dsn: string } }) => ok({ enabled: input.dsn !== "", dsn: input.dsn ? input.dsn.replace(/\/\/[^@]+@/, "//***@") : null, environment: "production", release: "0.2.8" })),
     sentryTest: vi.fn(async () => ok({ ok: true, message: "evt-1" })),

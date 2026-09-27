@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useNavigate, useOutletContext } from "react-router";
+import { Link, useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
 import { archiveProject, deleteProject, updateProject, type UpdateProjectInput } from "@/ash_rpc";
 import { usePromoteLocal } from "@/core/agent";
@@ -211,6 +211,13 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
   );
 }
 
+/** What `plug Browser` resolves to, in words: the browser's name with its state, or why there is none. */
+function browserStateLabel(b: { state: string; browser: string | null }): string {
+  const label = t.agentDefinition.browserState[b.state];
+  if (typeof label === "function") return label(b.browser ?? "");
+  return label ?? b.state;
+}
+
 /**
  * The kernel's layered agent definition: the trust switch and the
  * kernel overrides (saved with the form), the declared agents, the files,
@@ -290,6 +297,15 @@ function AgentSection({
           ) : null}
           {d.model ? (
             <p className="text-muted-foreground text-xs">{t.agentDefinition.model}: <span className="font-mono">{d.model}{d.effort ? ` · ${d.effort}` : ""}</span></p>
+          ) : null}
+          {d.browser ? (
+            <p className="text-muted-foreground text-xs" data-testid="project-browser">
+              {t.agentDefinition.browser}: <span className="font-mono">{d.browser.alias ?? t.agentDefinition.browserDefault}</span>
+              {" · "}
+              <span className={d.browser.state === "online" ? "text-foreground" : "text-amber-600 dark:text-amber-400"}>{browserStateLabel(d.browser)}</span>
+              {" · "}{t.agentDefinition.browserTabs(d.browser.maxTabs)}
+              {" · "}<Link to="/settings/browsers" className="underline underline-offset-2">{t.agentDefinition.browserSettings}</Link>
+            </p>
           ) : null}
           <div>
             <p className="text-muted-foreground text-xs">{t.agentDefinition.plugs}</p>

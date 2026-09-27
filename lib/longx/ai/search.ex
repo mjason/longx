@@ -2,7 +2,7 @@ defmodule Longx.AI.Search do
   @moduledoc """
   One web search against a `Longx.AI.SearchTarget` (Tavily) for the
   kernel's standalone `web_search` tool (`Longx.Agent.Plugs.WebSearch`).
-  Reading a page is the browser's job (`Longx.Agent.Plugs.Browser`).
+  Reading a page is the browser's job (`Longx.Agent.Plugs.WebFetch`).
 
   `search/3` answers `{:ok, %{output, results}}`: `output` is the text
   handed to the model (numbered results with title, URL, date and

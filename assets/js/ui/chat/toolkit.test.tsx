@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, ImageGenerationTool, PresentTool, SendFileTool, ShowDiffTool, ShowFileTool, ShowHtmlTool, SubagentContext, SubagentTool, SurfaceContext, WebSearchTool, parseDiff, treeOf } from "./toolkit";
+import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, ImageGenerationTool, JavascriptTool, PresentTool, SendFileTool, ShowDiffTool, ShowFileTool, ShowHtmlTool, SubagentContext, SubagentTool, SurfaceContext, WebSearchTool, parseDiff, treeOf } from "./toolkit";
 
 const answerAction = vi.fn(async () => {});
 
@@ -457,6 +457,32 @@ describe("surfaces: files and artifacts for the person", () => {
     expect(card).toHaveTextContent("a red circle");
     expect(within(card).getByRole("img")).toHaveAttribute("src", "/files/p1/_attachments/20260920T010203-image-abc.png?inline=1");
     expect(within(card).getByRole("link", { name: /下载/ })).toHaveAttribute("download");
+  });
+
+  test("a browser cell is a row with its title, the code folded, the console output and the screenshots inline", () => {
+    render(
+      <SurfaceContext.Provider value={surface}>
+        <JavascriptTool
+          {...part({
+            toolName: "browser.javascript",
+            args: { title: "open the login page", code: "await page.goto('http://localhost:3000/login')" },
+            status: { type: "complete" },
+            result: {
+              success: true,
+              contentItems: [{ type: "inputText", text: "at http://localhost:3000/login\n→ \"ok\"\n1 screenshot(s) attached." }],
+              details: { title: "open the login page", code: "await page.goto('http://localhost:3000/login')", images: 1, screenshots: [{ name: "20260927T010203-screenshot-1.jpg", path: "20260927T010203-screenshot-1.jpg", attachment: true, mime: "image/jpeg" }] },
+            },
+          })}
+        />
+      </SurfaceContext.Provider>,
+    );
+    const row = screen.getByTestId("tool-javascript");
+    expect(row).toHaveTextContent("open the login page");
+    // a finished cell is folded like a command: the trigger opens the output
+    fireEvent.click(within(row).getAllByRole("button")[0]!);
+    expect(row).toHaveTextContent("at http://localhost:3000/login");
+    expect(row).toHaveTextContent("page.goto");
+    expect(within(row).getByRole("img")).toHaveAttribute("src", "/files/p1/_attachments/20260927T010203-screenshot-1.jpg?inline=1");
   });
 
   test("show_html is an artifact row: the title, 打开 opens the artifact tab with the html (or the url)", () => {

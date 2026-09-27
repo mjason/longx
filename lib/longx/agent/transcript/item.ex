@@ -62,6 +62,9 @@ defmodule Longx.Agent.Transcript.Item do
                     :function_call_output,
                     :compaction,
                     :hosted_call,
+                    # a browser screenshot for the model: a user message of images
+                    # of which the context keeps only the latest few
+                    :screenshot,
                     # a UI-only marker (a sub-agent's activity): never model input
                     :activity
                   ]

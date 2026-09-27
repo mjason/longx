@@ -1,0 +1,152 @@
+/* The app's palette (assets/css/app.css) at popup size: the LX azure as the
+   one accent, the frame one step off the ground, dark by the OS. */
+:root {
+  --bg: #ffffff;
+  --fg: #16181d;
+  --muted: #6b7280;
+  --frame: #f3f4f7;
+  --border: #dfe2e8;
+  --primary: #1b5cf0;
+  --primary-fg: #ffffff;
+  --ok: #15803d;
+  --warn: #b45309;
+  --bad: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1e24;
+    --fg: #e6e7eb;
+    --muted: #9aa0ab;
+    --frame: #15171c;
+    --border: #2b2f38;
+    --primary: #2f7cf6;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  width: 320px;
+  padding: 14px 16px 16px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.45 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+h2 {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--frame);
+  color: var(--fg);
+  font: inherit;
+}
+input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+button {
+  flex: 1;
+  height: 36px;
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  background: var(--primary);
+  color: var(--primary-fg);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+button.secondary {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--fg);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.status {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--frame);
+}
+.status::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  vertical-align: 1px;
+}
+.status[data-status="approved"]::before {
+  background: var(--ok);
+}
+.status[data-status="pending"]::before,
+.status[data-status="connecting"]::before,
+.status[data-status="bad_token"]::before {
+  background: var(--warn);
+}
+.status[data-status="revoked"]::before,
+.status[data-status="error"]::before {
+  background: var(--bad);
+}
+.hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.hint.error {
+  color: var(--bad);
+}
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+}
+li span:last-child {
+  color: var(--muted);
+  white-space: nowrap;
+}

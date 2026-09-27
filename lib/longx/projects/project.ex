@@ -180,7 +180,19 @@ defmodule Longx.Projects.Project do
                       allow_nil?: false,
                       constraints: [fields: @agent_settings_fields]
                     ],
-                    errors: [type: {:array, :string}, allow_nil?: false]
+                    errors: [type: {:array, :string}, allow_nil?: false],
+                    # what `plug Browser` resolves to on this machine; nil without the plug
+                    browser: [
+                      type: :map,
+                      constraints: [
+                        fields: [
+                          alias: [type: :string],
+                          max_tabs: [type: :integer, allow_nil?: false],
+                          state: [type: :string, allow_nil?: false],
+                          browser: [type: :string]
+                        ]
+                      ]
+                    ]
                   ]
 
       argument :id, :uuid, allow_nil?: false

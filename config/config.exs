@@ -94,7 +94,8 @@ config :longx,
     Longx.System,
     Longx.Watches,
     Longx.Credentials,
-    Longx.Agent.Transcript
+    Longx.Agent.Transcript,
+    Longx.Chrome
   ]
 
 # Configure the endpoint

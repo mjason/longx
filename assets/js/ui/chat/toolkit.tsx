@@ -989,6 +989,58 @@ function SessionName({ address }: { address: string }) {
   );
 }
 
+/**
+ * `browser.javascript` (Longx.Agent.Plugs.Browser): a cell the agent ran in
+ * the person's browser — its title on the row, the code under it, the console
+ * output as a terminal block, the screenshots inline from the attachments.
+ */
+export const JavascriptTool: ToolCallMessagePartComponent<{ title?: string; code?: string }, unknown> = (p) => {
+  const surface = useContext(SurfaceContext);
+  const details = detailsOf(p);
+  const title = typeof p.args.title === "string" && p.args.title ? p.args.title : "javascript";
+  const code = typeof p.args.code === "string" ? p.args.code : "";
+  const result = p.result as { contentItems?: { type: string; text?: string }[] } | undefined;
+  const output = (result?.contentItems ?? []).map((c) => c.text ?? "").join("\n");
+  const lines = output ? output.replace(/\n$/, "").split("\n") : [];
+  const running = p.result === undefined && p.status.type === "running";
+  const failed = p.isError === true || p.status.type === "incomplete";
+  const shots = Array.isArray(details?.["screenshots"]) ? (details["screenshots"] as { name: string; path: string; attachment?: boolean }[]) : [];
+  return (
+    <ToolRow
+      part={p}
+      label={t.ranScript}
+      activeLabel={t.runningScript}
+      query={title}
+      queryDetail={
+        <div className="flex max-w-[min(40rem,88vw)] flex-col gap-1.5">
+          <p className="text-foreground/85 text-xs">{title}</p>
+          {code ? <pre className="text-foreground/85 max-h-64 overflow-y-auto font-mono text-xs break-all whitespace-pre-wrap">{code}</pre> : null}
+        </div>
+      }
+      running={running}
+      failed={failed}
+      testId="tool-javascript"
+    >
+      <div className="flex flex-col gap-2">
+        <details className="text-xs">
+          <summary className="text-muted-foreground cursor-pointer">{t.scriptCode}</summary>
+          <pre className="text-foreground/85 mt-1 max-h-64 overflow-auto font-mono text-xs whitespace-pre-wrap">{code}</pre>
+        </details>
+        <TerminalBlock command={title} lines={lines} done={!running} exitCode={running ? 0 : failed ? 1 : 0} variant="ink" />
+        {surface && shots.length > 0 ? (
+          <div className="flex flex-wrap gap-2" data-testid="javascript-screenshots">
+            {shots.map((shot) => (
+              <a key={shot.name} href={fileUrl(surface.projectId, shot.path, shot.attachment !== false)} target="_blank" rel="noreferrer">
+                <img src={fileUrl(surface.projectId, shot.path, shot.attachment !== false, true)} alt={t.scriptScreenshots} className="max-h-64 rounded-md border" />
+              </a>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </ToolRow>
+  );
+};
+
 // `type: "backend"`: the kernel runs these; we only render. `display: "standalone"`
 // keeps them out of the collapsible "n tool calls" trace group — what the
 // agent ran and changed is the point of this UI, not a trace to fold away;
@@ -1016,6 +1068,8 @@ export const longxToolkit = defineToolkit({
   "longx.image_generation": { type: "backend", render: ImageGenerationTool, display: "standalone" },
   "longx.show_html": { type: "backend", render: ShowHtmlTool, display: "standalone" },
   "agents.send_message": { type: "backend", render: SendMessageTool, display: "standalone" },
+  // the person's browser (Longx.Agent.Plugs.Browser): a cell with its output and screenshots
+  "browser.javascript": { type: "backend", render: JavascriptTool, display: "standalone" },
 });
 
 export const chatConfig = AuiConfig({

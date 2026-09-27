@@ -22,9 +22,15 @@ defmodule LongxWeb.FileController do
     with {:ok, project} <- fetch_project(project_id),
          {:ok, full} <- locate(project, segments),
          true <- File.regular?(full) do
+      mime = MIME.from_path(full)
+
       send_download(conn, {:file, full},
         filename: Path.basename(full),
-        content_type: MIME.from_path(full),
+        content_type: mime,
+        # a text file without a charset is decoded by the browser's locale
+        # (an html the agent opened in the person's Chrome read its title
+        # as latin-1); the project's text is utf-8
+        charset: if(String.starts_with?(mime, "text/"), do: "utf-8"),
         disposition: if(params["inline"] in ["1", "true"], do: :inline, else: :attachment)
       )
     else

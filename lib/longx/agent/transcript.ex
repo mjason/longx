@@ -19,6 +19,22 @@ defmodule Longx.Agent.Transcript do
   @interrupted_output "[interrupted before the tool finished]"
   # the user's words kept verbatim across a compaction (codex: 20k tokens, ~4 bytes each)
   @keep_user_bytes 80_000
+  # browser screenshots the model still sees: the latest two (browser-use-pi's
+  # `project()`); every earlier one is a megabyte of context about a page long gone
+  @keep_screenshots 2
+
+  defp keep_latest_screenshots(items, keep) do
+    shots = items |> Enum.filter(&(&1.kind == :screenshot)) |> length()
+    drop = Kernel.max(shots - keep, 0)
+
+    {kept, _} =
+      Enum.reduce(items, {[], drop}, fn
+        %Item{kind: :screenshot}, {acc, n} when n > 0 -> {acc, n - 1}
+        item, {acc, n} -> {[item | acc], n}
+      end)
+
+    Enum.reverse(kept)
+  end
 
   # a compaction boundary: before it only the user's own messages survive
   # (newest first within the budget), then the summary, then what came after
@@ -78,7 +94,7 @@ defmodule Longx.Agent.Transcript do
             else: take_outputs(more, wanted, outputs, [out | others])
 
         [%Item{kind: kind} = item | more]
-        when kind in [:user_message, :agent_message, :reasoning] ->
+        when kind in [:user_message, :agent_message, :reasoning, :screenshot] ->
           take_outputs(more, wanted, outputs, [item | others])
 
         _ ->
@@ -187,6 +203,7 @@ defmodule Longx.Agent.Transcript do
     items =
       items
       |> Enum.reject(&(&1.kind == :activity))
+      |> keep_latest_screenshots(Keyword.get(opts, :keep_screenshots, @keep_screenshots))
       |> fold(Keyword.get(opts, :keep_user_bytes, @keep_user_bytes))
       |> regroup()
 

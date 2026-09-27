@@ -3,7 +3,7 @@ defmodule Longx.Agent.WebSearchTest do
   use Longx.DataCase, async: false
 
   alias Longx.Agent.{Context, Step, Tool}
-  alias Longx.Agent.Plugs.{Browser, WebSearch}
+  alias Longx.Agent.Plugs.{WebFetch, WebSearch}
   alias Longx.AI
 
   setup do
@@ -106,7 +106,7 @@ defmodule Longx.Agent.WebSearchTest do
 
     on_exit(fn -> Application.put_env(:longx, Longx.Browser, previous) end)
 
-    tool = tool!(Browser, "web_fetch")
+    tool = tool!(WebFetch, "web_fetch")
     assert tool.show == :web_search
 
     assert {:ok, text, %{"results" => [%{"url" => "https://example.test/page"}]}} =

@@ -170,6 +170,14 @@ defmodule Longx.Agent.Kernel.Calls do
         do: %{state | pending_images: state.pending_images ++ [extra["image"]]},
         else: state
 
+    # screenshots (the browser's javascript tool): the same message, logged as
+    # `:screenshot` so the context keeps only the latest few (Transcript.input/1)
+    state =
+      case extra["images"] do
+        [_ | _] = urls -> %{state | pending_screenshots: state.pending_screenshots ++ urls}
+        _ -> state
+      end
+
     # a tool asked for a new context window (new_context_window)
     state = if extra["compact"] == true, do: %{state | compact_requested: true}, else: state
     # a card the tool made for the person (Context.present after the fact)
@@ -195,17 +203,25 @@ defmodule Longx.Agent.Kernel.Calls do
   def output_type(%{"type" => "custom_tool_call"}), do: "custom_tool_call_output"
   def output_type(_call), do: "function_call_output"
 
-  def attach_images(%State{pending_images: []} = state), do: state
+  def attach_images(%State{pending_images: [], pending_screenshots: []} = state), do: state
 
-  def attach_images(%State{pending_images: urls} = state) do
-    input = %{
+  def attach_images(%State{pending_images: urls, pending_screenshots: shots} = state) do
+    state =
+      if urls == [], do: state, else: append(state, :user_message, images_message(urls), nil)
+
+    state =
+      if shots == [], do: state, else: append(state, :screenshot, images_message(shots), nil)
+
+    %{state | pending_images: [], pending_screenshots: []}
+  end
+
+  defp images_message(urls) do
+    %{
       "type" => "message",
       "role" => "user",
       "content" =>
         Enum.map(urls, &%{"type" => "input_image", "image_url" => &1, "detail" => "auto"})
     }
-
-    %{append(state, :user_message, input, nil) | pending_images: []}
   end
 
   # every tool answered: the images, then the next step — through the mailbox

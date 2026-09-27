@@ -1,0 +1,139 @@
+// The person's browsers reached through the Longx Chrome extension
+// (Longx.Chrome): the paired extensions with their live state, the
+// approvals, names, limits and origins, the aliases descriptions name, and
+// where the extension is downloaded from.
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  approveChromeBrowser,
+  chromeAliases,
+  chromeExtension,
+  deleteChromeAlias,
+  deleteChromeOrigin,
+  listChromeBrowsers,
+  rejectChromeBrowser,
+  renameChromeBrowser,
+  revokeChromeBrowser,
+  setChromeAlias,
+  setChromeBrowserMaxTabs,
+  setChromeDefaultAlias,
+  setChromeOrigin,
+} from "@/ash_rpc";
+import { unwrap } from "./projects";
+
+export type ChromeBrowser = {
+  id: string;
+  name: string;
+  device: { name?: string; platform?: string; ua?: string; extension?: string };
+  status: "pending" | "approved" | "revoked";
+  connected: boolean;
+  maxTabs: number;
+  origins: Record<string, { access: "allow" | "deny" }>;
+  lastSeenAt: string | null;
+  approvedAt: string | null;
+  tabs: { threadId: string; title: string; tabs: number }[];
+  aliases: string[];
+};
+
+export type ChromeAliases = { aliases: { name: string; browsers: string[] }[]; default: string | null };
+
+export type ChromeExtension = { url: string; version: string | null; built: boolean; minimumChrome: string };
+
+export const chromeKeys = {
+  browsers: ["chrome", "browsers"] as const,
+  aliases: ["chrome", "aliases"] as const,
+  extension: ["chrome", "extension"] as const,
+};
+
+const aliasFields = ["aliases", "default"] as const;
+
+/** every paired extension; refreshed often while shown — a pairing request is answered here */
+export function useChromeBrowsers(options: { refetchInterval?: number | false } = {}) {
+  return useQuery({
+    queryKey: chromeKeys.browsers,
+    refetchInterval: options.refetchInterval ?? 3000,
+    queryFn: async () => (unwrap(await listChromeBrowsers({ fields: ["browsers"] })) as { browsers: ChromeBrowser[] }).browsers,
+  });
+}
+
+export function useChromeAliases() {
+  return useQuery({
+    queryKey: chromeKeys.aliases,
+    queryFn: async () => unwrap(await chromeAliases({ fields: [...aliasFields] })) as ChromeAliases,
+  });
+}
+
+export function useChromeExtension() {
+  return useQuery({
+    queryKey: chromeKeys.extension,
+    staleTime: 60_000,
+    queryFn: async () => unwrap(await chromeExtension({ fields: ["url", "version", "built", "minimumChrome"] })) as ChromeExtension,
+  });
+}
+
+function useBrowsersMutation<T>(fn: (input: T) => Promise<unknown>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: chromeKeys.browsers });
+      void client.invalidateQueries({ queryKey: chromeKeys.aliases });
+    },
+  });
+}
+
+export function useApproveBrowser() {
+  return useBrowsersMutation(async (id: string) => unwrap(await approveChromeBrowser({ fields: ["ok"], input: { id } })));
+}
+
+export function useRejectBrowser() {
+  return useBrowsersMutation(async (id: string) => unwrap(await rejectChromeBrowser({ fields: ["ok"], input: { id } })));
+}
+
+export function useRevokeBrowser() {
+  return useBrowsersMutation(async (id: string) => unwrap(await revokeChromeBrowser({ fields: ["ok"], input: { id } })));
+}
+
+export function useRenameBrowser() {
+  return useBrowsersMutation(async (input: { id: string; name: string }) => unwrap(await renameChromeBrowser({ fields: ["ok"], input })));
+}
+
+export function useSetBrowserMaxTabs() {
+  return useBrowsersMutation(async (input: { id: string; maxTabs: number }) => unwrap(await setChromeBrowserMaxTabs({ fields: ["ok"], input })));
+}
+
+export function useSetOrigin() {
+  return useBrowsersMutation(async (input: { id: string; origin: string; access: "allow" | "deny" }) =>
+    unwrap(await setChromeOrigin({ fields: ["ok"], input })),
+  );
+}
+
+export function useDeleteOrigin() {
+  return useBrowsersMutation(async (input: { id: string; origin: string }) => unwrap(await deleteChromeOrigin({ fields: ["ok"], input })));
+}
+
+function useAliasesMutation<T>(fn: (input: T) => Promise<ChromeAliases>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: (data) => {
+      client.setQueryData(chromeKeys.aliases, data);
+      void client.invalidateQueries({ queryKey: chromeKeys.browsers });
+    },
+  });
+}
+
+export function useSetChromeAlias() {
+  return useAliasesMutation(
+    async (input: { name: string; browsers: string[] }) => unwrap(await setChromeAlias({ fields: [...aliasFields], input })) as ChromeAliases,
+  );
+}
+
+export function useDeleteChromeAlias() {
+  return useAliasesMutation(async (name: string) => unwrap(await deleteChromeAlias({ fields: [...aliasFields], input: { name } })) as ChromeAliases);
+}
+
+export function useSetChromeDefaultAlias() {
+  return useAliasesMutation(
+    async (name: string | null) => unwrap(await setChromeDefaultAlias({ fields: [...aliasFields], input: { name } })) as ChromeAliases,
+  );
+}

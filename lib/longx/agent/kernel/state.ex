@@ -59,6 +59,8 @@ defmodule Longx.Agent.Kernel.State do
             compact_requested: false,
             # images tools attached in this step (view_image), added after its outputs
             pending_images: [],
+            # screenshots a tool attached (the browser): the same, kept short in the context
+            pending_screenshots: [],
             # a call the model is still writing (`turn/progress`): %{item, name, bytes, shown_at}
             progress: nil,
             # how long the upstream has sent nothing (ms, Longx.Agent.Model's `{:quiet, ms}`)

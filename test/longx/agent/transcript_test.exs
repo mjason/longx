@@ -252,4 +252,63 @@ defmodule Longx.Agent.TranscriptTest do
              %{"role" => "assistant"}
            ] = Transcript.input(Transcript.items!(id))
   end
+
+  test "the context keeps only the latest two screenshots; a screenshot between a call's siblings moves behind their outputs" do
+    id = @thread <> "s"
+
+    shot = fn n ->
+      %{
+        "type" => "message",
+        "role" => "user",
+        "content" => [%{"type" => "input_image", "image_url" => "data:shot-#{n}"}]
+      }
+    end
+
+    user = %{
+      "type" => "message",
+      "role" => "user",
+      "content" => [%{"type" => "input_text", "text" => "look"}]
+    }
+
+    call = fn n ->
+      %{"type" => "function_call", "call_id" => n, "name" => "javascript", "arguments" => "{}"}
+    end
+
+    out = fn n -> %{"type" => "function_call_output", "call_id" => n, "output" => "ok"} end
+
+    rows = [
+      {:user_message, user},
+      {:function_call, call.("a")},
+      {:function_call_output, out.("a")},
+      {:screenshot, shot.(1)},
+      {:function_call, call.("b")},
+      {:function_call_output, out.("b")},
+      {:screenshot, shot.(2)},
+      {:function_call, call.("c")},
+      {:function_call, call.("d")},
+      {:function_call_output, out.("c")},
+      {:screenshot, shot.(3)},
+      {:function_call_output, out.("d")}
+    ]
+
+    for {{kind, input}, i} <- Enum.with_index(rows, 1),
+        do: Transcript.append!(%{thread_id: id, turn_id: "t", seq: i, kind: kind, input: input})
+
+    input = Transcript.input(Transcript.items!(id))
+
+    images =
+      for %{"content" => [%{"type" => "input_image", "image_url" => url}]} <- input, do: url
+
+    assert images == ["data:shot-2", "data:shot-3"]
+    # the third screenshot stood between c's and d's outputs: it follows them
+    assert Enum.drop_while(input, &(&1["call_id"] != "d" or &1["type"] != "function_call_output"))
+           |> Enum.at(1) == shot.(3)
+
+    # with a bigger budget every screenshot stays
+    assert length(
+             for %{"content" => [%{"type" => "input_image"}]} <-
+                   Transcript.input(Transcript.items!(id), keep_screenshots: 5),
+                 do: 1
+           ) == 3
+  end
 end

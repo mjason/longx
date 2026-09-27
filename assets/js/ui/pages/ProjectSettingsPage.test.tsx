@@ -45,6 +45,22 @@ describe("ProjectSettingsPage", () => {
     expect(vi.mocked(updateProject).mock.calls[0]![0]!.input).not.toHaveProperty("dirtyStart");
   });
 
+  test("the definition card says which browser `plug Browser` resolves to, with a way to the browser settings", async () => {
+    vi.mocked(agentDefinition).mockResolvedValue(
+      ok(agentDefinitionData({ present: true, plugs: ["Longx.Agent.Plugs.Browser"], browser: { alias: "qa", maxTabs: 2, state: "offline", browser: "MacBook Chrome" } })) as never,
+    );
+    try {
+      renderAt("/p/app-1/settings");
+      const line = await screen.findByTestId("project-browser");
+      expect(line).toHaveTextContent("qa");
+      expect(line).toHaveTextContent("MacBook Chrome（离线）");
+      expect(line).toHaveTextContent("2");
+      expect(within(line).getByRole("link", { name: "浏览器设置" })).toHaveAttribute("href", "/settings/browsers");
+    } finally {
+      vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData()) as never);
+    }
+  });
+
   test("the project shows its .longx definition and the trust switch, saved with the form", async () => {
     vi.mocked(agentDefinition).mockResolvedValue(
       ok(agentDefinitionData({ present: true, model: "deepseek-flash", effort: "low", plugs: ["Longx.Agent.Plugs.Environment", "Longx.Agent.Local.P1.Deploy"], files: [".longx/agent.exs", ".longx/plugs/deploy.exs"], errors: [".longx/plugs/bad.exs:3: syntax error"] })) as never,
