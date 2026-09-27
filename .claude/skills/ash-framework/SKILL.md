@@ -43,14 +43,10 @@ metadata:
 - [nested_forms](references/ash_phoenix/nested_forms.md)
 - [union_forms](references/ash_phoenix/union_forms.md)
 
-### ash_typescript
-
-- [ash_typescript](references/ash_typescript/ash_typescript.md)
-
 ## Searching Documentation
 
 ```sh
-mix usage_rules.search_docs "search term" -p ash -p ash_cloak -p ash_graphql -p ash_phoenix -p ash_sqlite -p ash_typescript
+mix usage_rules.search_docs "search term" -p ash -p ash_cloak -p ash_graphql -p ash_phoenix -p ash_sqlite
 ```
 
 ## Available Mix Tasks
@@ -90,7 +86,4 @@ mix usage_rules.search_docs "search term" -p ash -p ash_cloak -p ash_graphql -p 
 - `mix ash_sqlite.install` - Installs AshSqlite. Should be run with `mix igniter.install ash_sqlite`
 - `mix ash_sqlite.migrate` - Runs the repository migrations for all repositories in the provided (or configured) domains
 - `mix ash_sqlite.rollback` - Rolls back the repository migrations for all repositories in the provided (or configured) domains
-- `mix ash_typescript.codegen` - Generates TypeScript types for Ash Rpc-calls
-- `mix ash_typescript.install` - Installs AshTypescript into a project. Should be called with `mix igniter.install ash_typescript`
-- `mix ash_typescript.npm_install`
 <!-- usage-rules-skill-end -->
