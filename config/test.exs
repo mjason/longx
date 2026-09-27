@@ -48,7 +48,11 @@ config :longx, Longx.Browser,
 # HTTPS (Longx.Tls): certificates and the downloaded tool never in the real data
 config :longx, Longx.Tls,
   dir: Path.join(System.tmp_dir!(), "longx-tls-test"),
-  tool_dir: Path.join(System.tmp_dir!(), "longx-cert-test")
+  tool_dir: Path.join(System.tmp_dir!(), "longx-cert-test"),
+  # no lookup leaves the machine: a test that wants one configures it
+  public_dns: [],
+  doh_url: nil,
+  system_lookup: {Longx.Test.Dns, :nothing}
 
 # Print only warnings and errors during test
 config :logger, level: :warning

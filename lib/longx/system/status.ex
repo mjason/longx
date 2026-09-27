@@ -276,6 +276,13 @@ defmodule Longx.System.Status do
       run fn _input, _ -> {:ok, %{providers: Longx.Tls.providers()}} end
     end
 
+    # where the names point as the world sees them (public DNS, not a proxy's
+    # fake-ip), this machine's answer beside it; the names as typed, unsaved
+    action :tls_resolution, Types.TlsResolutionReport do
+      argument :domains, {:array, :string}, allow_nil?: false
+      run fn input, _ -> {:ok, Longx.Tls.resolution_report(input.arguments.domains)} end
+    end
+
     # saves what is given (the variables: a value, "" to keep, nil to remove)
     # and brings the listener in line — off stops it, another port moves it
     action :set_tls, Types.TlsStatus do
@@ -286,12 +293,26 @@ defmodule Longx.System.Status do
       argument :directory, :string
       argument :port, :integer
       argument :redirect, :boolean
+      argument :resolvers, {:array, :string}
+      argument :propagation_check, :boolean
+      argument :propagation_wait, :integer
       argument :env, {:array, Types.TlsVariable}
 
       run fn input, _ ->
         attrs =
           input.arguments
-          |> Map.take([:enabled, :domains, :provider, :email, :directory, :port, :redirect])
+          |> Map.take([
+            :enabled,
+            :domains,
+            :provider,
+            :email,
+            :directory,
+            :port,
+            :redirect,
+            :resolvers,
+            :propagation_check,
+            :propagation_wait
+          ])
           |> Map.put(:env, Map.new(input.arguments[:env] || [], &{&1.name, &1[:value]}))
 
         case Longx.Tls.save(attrs) do

@@ -31,7 +31,12 @@ defmodule Longx.Tls do
     email: "",
     directory: "letsencrypt",
     port: 7443,
-    redirect: true
+    redirect: true,
+    # the TXT check's resolvers ([] = this machine's, or the public ones
+    # when this machine's is a proxy's fake-ip), or no check and a wait
+    resolvers: [],
+    propagation_check: true,
+    propagation_wait: 60
   }
 
   @domain ~r/^(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/
@@ -44,7 +49,10 @@ defmodule Longx.Tls do
           email: String.t(),
           directory: String.t(),
           port: pos_integer,
-          redirect: boolean
+          redirect: boolean,
+          resolvers: [String.t()],
+          propagation_check: boolean,
+          propagation_wait: non_neg_integer
         }
 
   ## Settings
@@ -86,10 +94,68 @@ defmodule Longx.Tls do
          :ok <- directory(s.directory),
          :ok <- email(s.email),
          :ok <- boolean(:redirect, s.redirect),
-         :ok <- boolean(:enabled, s.enabled) do
-      {:ok, %{s | domains: domains, provider: provider}}
+         :ok <- boolean(:enabled, s.enabled),
+         {:ok, resolvers} <- resolvers(s.resolvers),
+         :ok <- boolean(:propagation_check, s.propagation_check),
+         :ok <- propagation_wait(s.propagation_wait) do
+      {:ok, %{s | domains: domains, provider: provider, resolvers: resolvers}}
     end
   end
+
+  # IP addresses only: a name would be looked up through this machine's DNS,
+  # the fake-ip one this setting exists to get around
+  defp resolvers(list) when is_list(list) do
+    list
+    |> Enum.map(&(&1 |> to_string() |> String.trim()))
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.reduce_while({:ok, []}, fn entry, {:ok, acc} ->
+      case resolver(entry) do
+        {:ok, normalized} ->
+          {:cont, {:ok, [normalized | acc]}}
+
+        :error ->
+          {:halt, {:error, :resolvers, "#{inspect(entry)}: an IP address, with :port if not 53"}}
+      end
+    end)
+    |> case do
+      {:ok, acc} -> {:ok, acc |> Enum.reverse() |> Enum.uniq()}
+      error -> error
+    end
+  end
+
+  defp resolvers(_), do: {:error, :resolvers, "a list of IP addresses"}
+
+  defp resolver("[" <> rest) do
+    with [host, ":" <> port] <- String.split(rest, "]", parts: 2),
+         {:ok, {_, _, _, _, _, _, _, _} = ip} <- :inet.parse_address(String.to_charlist(host)),
+         {port, ""} when port in 1..65_535 <- Integer.parse(port) do
+      {:ok, "[#{:inet.ntoa(ip)}]:#{port}"}
+    else
+      _ -> :error
+    end
+  end
+
+  defp resolver(entry) do
+    case :inet.parse_address(String.to_charlist(entry)) do
+      {:ok, {_, _, _, _, _, _, _, _} = ip} ->
+        {:ok, "[#{:inet.ntoa(ip)}]:53"}
+
+      {:ok, ip} ->
+        {:ok, "#{:inet.ntoa(ip)}:53"}
+
+      {:error, _} ->
+        with [host, port] <- String.split(entry, ":", parts: 2),
+             {:ok, {_, _, _, _} = ip} <- :inet.parse_address(String.to_charlist(host)),
+             {port, ""} when port in 1..65_535 <- Integer.parse(port) do
+          {:ok, "#{:inet.ntoa(ip)}:#{port}"}
+        else
+          _ -> :error
+        end
+    end
+  end
+
+  defp propagation_wait(seconds) when is_integer(seconds) and seconds in 0..600, do: :ok
+  defp propagation_wait(_), do: {:error, :propagation_wait, "seconds between 0 and 600"}
 
   defp domains(list) when is_list(list) do
     list
@@ -261,15 +327,43 @@ defmodule Longx.Tls do
   def request do
     s = settings()
 
-    %{
+    request = %{
       "directory" => s.directory,
       "domains" => s.domains,
       "provider" => s.provider,
       "email" => s.email,
       "env" => env(),
       "account" => read_json(@account_key),
-      "key_type" => "EC256"
+      "key_type" => "EC256",
+      "resolvers" => check_resolvers(s)
     }
+
+    if s.propagation_check,
+      do: request,
+      else:
+        Map.merge(request, %{
+          "propagation_check" => false,
+          "propagation_wait_s" => s.propagation_wait
+        })
+  end
+
+  @doc """
+  The resolvers lego's TXT check uses: the person's, else the public ones
+  when this machine's resolver answers with a proxy's fake-ip address
+  (lego would look the authoritative servers up through it), else none —
+  this machine's.
+  """
+  @spec check_resolvers(settings) :: [String.t()]
+  def check_resolvers(%{resolvers: [_ | _] = resolvers}), do: resolvers
+
+  def check_resolvers(settings) do
+    if fake_ip_here?(settings.domains), do: Longx.Tls.Dns.public_resolvers(), else: []
+  end
+
+  # a fake-ip resolver answers every name: the first real name tells, else a well-known one
+  defp fake_ip_here?(domains) do
+    probe = Enum.find(domains, &(not String.starts_with?(&1, "*."))) || "letsencrypt.org"
+    probe |> Longx.Tls.Dns.system_a() |> Enum.any?(&Longx.Tls.Dns.fake_ip?/1)
   end
 
   @doc "Keeps the ACME account the tool returned, for the next renewal."
@@ -351,8 +445,9 @@ defmodule Longx.Tls do
   @doc """
   The page's view: the settings, the names of the provider's variables that
   have a value (never the values), the issuance's stage, the certificate on
-  disk, whether and where HTTPS is served, this machine's addresses and
-  what each name resolves to now (the A record the person adds), the tool.
+  disk, whether and where HTTPS is served, this machine's addresses, the
+  tool. Where the names point is `resolution_report/1`, asked for apart
+  (it goes out to the public resolvers; the page polls this one while busy).
   """
   @spec report() :: map
   def report do
@@ -368,6 +463,9 @@ defmodule Longx.Tls do
       directory: s.directory,
       port: s.port,
       redirect: s.redirect,
+      resolvers: s.resolvers,
+      propagation_check: s.propagation_check,
+      propagation_wait: s.propagation_wait,
       http_port: http_port(),
       env_set: env_names(),
       stage: Atom.to_string(status.stage),
@@ -380,7 +478,6 @@ defmodule Longx.Tls do
       serving: Longx.Tls.Listener.running?(),
       url: https_url(),
       addresses: addresses,
-      resolution: resolution(s.domains, addresses),
       tool_version: Longx.Tls.Tool.version(),
       tool_installed: match?({:ok, _, _}, Longx.Tls.Tool.resolve())
     }
@@ -423,28 +520,44 @@ defmodule Longx.Tls do
   defp rank({172, b, _, _}) when b in 16..31, do: 2
   defp rank(_), do: 3
 
-  # each name looked up now (two seconds at most), wildcards left out
-  defp resolution(domains, addresses) do
-    domains
-    |> Enum.reject(&String.starts_with?(&1, "*."))
-    |> Enum.map(fn domain ->
-      Task.async(fn ->
-        case :inet.getaddrs(String.to_charlist(domain), :inet) do
-          {:ok, ips} -> Enum.map(ips, &(&1 |> :inet.ntoa() |> to_string()))
-          _ -> []
-        end
-      end)
-      |> then(&{domain, &1})
-    end)
-    |> Enum.map(fn {domain, task} ->
-      found =
-        case Task.yield(task, 2_000) || Task.shutdown(task, :brutal_kill) do
-          {:ok, ips} -> ips
-          _ -> []
-        end
+  @doc """
+  Where each name points: the public resolvers' answer (the A record the
+  person added — `Longx.Tls.Dns.public_a/1`, so a proxy's fake-ip DNS here
+  does not hide it), whether that is this machine, this machine's own
+  answer beside it and whether that is a proxy's; wildcards left out. With
+  the resolvers the TXT check would use now.
+  """
+  @spec resolution_report([String.t()]) :: map
+  def resolution_report(domains) do
+    addresses = local_addresses()
 
-      %{domain: domain, addresses: found, here: Enum.any?(found, &(&1 in addresses))}
-    end)
+    names =
+      domains
+      |> Enum.map(&String.downcase(String.trim(&1)))
+      |> Enum.reject(&(&1 == "" or String.starts_with?(&1, "*.")))
+
+    resolution =
+      names
+      |> Enum.map(fn name ->
+        Task.async(fn -> {name, Longx.Tls.Dns.public_a(name), Longx.Tls.Dns.system_a(name)} end)
+      end)
+      |> Enum.map(&Task.await(&1, 10_000))
+      |> Enum.map(fn {name, public, local} ->
+        %{
+          domain: name,
+          addresses: public,
+          here: Enum.any?(public, &(&1 in addresses)),
+          local: local,
+          fake_ip: Enum.any?(local, &Longx.Tls.Dns.fake_ip?/1)
+        }
+      end)
+
+    %{
+      addresses: addresses,
+      resolution: resolution,
+      fake_ip: Enum.any?(resolution, & &1.fake_ip),
+      check_resolvers: check_resolvers(%{settings() | domains: names})
+    }
   end
 
   ## The address HTTPS is served at

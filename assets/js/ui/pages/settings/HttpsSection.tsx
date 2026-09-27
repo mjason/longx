@@ -13,12 +13,15 @@ import {
   daysLeft,
   envInput,
   parseDomains,
+  parseResolvers,
   providerLabel,
+  proxySnippet,
   tlsBusy,
   useDisableTls,
   useIssueTls,
   useSaveTls,
   useTlsProviders,
+  useTlsResolution,
   useTlsStatus,
   type TlsProvider,
   type TlsStatus,
@@ -142,6 +145,9 @@ function SettingsForm({ status, providers }: { status: TlsStatus; providers: Tls
   const [email, setEmail] = useState(status.email);
   const [port, setPort] = useState(String(status.port));
   const [redirect, setRedirect] = useState(status.redirect);
+  const [resolvers, setResolvers] = useState(status.resolvers.join(", "));
+  const [propagationCheck, setPropagationCheck] = useState(status.propagationCheck);
+  const [propagationWait, setPropagationWait] = useState(String(status.propagationWait));
 
   // a saved provider's stored names stay with it; another provider starts empty
   useEffect(() => {
@@ -161,6 +167,9 @@ function SettingsForm({ status, providers }: { status: TlsStatus; providers: Tls
     email: email.trim(),
     port: Number.parseInt(port, 10),
     redirect,
+    resolvers: parseResolvers(resolvers),
+    propagationCheck,
+    propagationWait: Number.parseInt(propagationWait, 10) || 0,
     env: envInput(typed, cleared),
   });
 
@@ -185,6 +194,9 @@ function SettingsForm({ status, providers }: { status: TlsStatus; providers: Tls
     });
 
   const names = parseDomains(domains);
+  const resolution = useTlsResolution(names);
+  const report = resolution.data;
+  const fakeLocal = report?.resolution.find((r) => r.fakeIp);
 
   return (
     <div className="flex flex-col gap-5">
@@ -193,10 +205,10 @@ function SettingsForm({ status, providers }: { status: TlsStatus; providers: Tls
         <Input id="tls-domains" value={domains} onChange={(e) => setDomains(e.target.value)} placeholder="lx.example.com" autoCapitalize="none" spellCheck={false} />
         <p className="text-muted-foreground text-xs">{s.domainsHint}</p>
         <p className="text-muted-foreground text-xs">{s.aRecord(status.addresses.join("、") || "—")}</p>
-        {status.resolution.length > 0 && names.length > 0 ? (
+        {report && report.resolution.length > 0 && names.length > 0 ? (
           <ul className="flex flex-col gap-0.5 text-xs" data-testid="tls-resolution">
-            {status.resolution.map((r) => (
-              <li key={r.domain} className="flex items-center gap-1.5">
+            {report.resolution.map((r) => (
+              <li key={r.domain} className="flex flex-wrap items-center gap-1.5">
                 {r.here ? <Check className="size-3.5 text-emerald-600" aria-hidden /> : <X className="text-warning size-3.5" aria-hidden />}
                 <code className="font-mono">{r.domain}</code>
                 <span className={r.here ? "text-muted-foreground" : "text-warning"}>
@@ -205,6 +217,13 @@ function SettingsForm({ status, providers }: { status: TlsStatus; providers: Tls
               </li>
             ))}
           </ul>
+        ) : null}
+        {fakeLocal ? (
+          <div className="bg-muted/40 grid gap-2 rounded-md border p-2.5 text-xs" data-testid="tls-fake-ip">
+            <p className="text-muted-foreground">{s.fakeIpNote(fakeLocal.local.join("、"))}</p>
+            <p className="text-muted-foreground">{s.fakeIpClients}</p>
+            <pre className="bg-background overflow-x-auto rounded border p-2 font-mono text-[11px] leading-relaxed">{proxySnippet(fakeLocal.domain)}</pre>
+          </div>
         ) : null}
       </div>
 
@@ -266,6 +285,32 @@ function SettingsForm({ status, providers }: { status: TlsStatus; providers: Tls
             <Label htmlFor="tls-port">{s.port}</Label>
             <Input id="tls-port" inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value.replace(/\D/g, ""))} className="w-32" />
             <p className="text-muted-foreground text-xs">{s.portHint(status.httpPort ?? null)}</p>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="tls-resolvers">{s.checkResolvers}</Label>
+            <Input
+              id="tls-resolvers"
+              value={resolvers}
+              onChange={(e) => setResolvers(e.target.value)}
+              placeholder={s.checkResolversAuto(report?.checkResolvers ?? [])}
+              className="font-mono"
+              autoCapitalize="none"
+              spellCheck={false}
+            />
+            <p className="text-muted-foreground text-xs">{s.checkResolversHint}</p>
+          </div>
+          <div className="grid gap-1.5">
+            <div className="flex items-center gap-3">
+              <Switch id="tls-propagation" checked={propagationCheck} onCheckedChange={setPropagationCheck} />
+              <Label htmlFor="tls-propagation">{s.propagationCheck}</Label>
+            </div>
+            {propagationCheck ? null : (
+              <div className="grid gap-1">
+                <Label htmlFor="tls-wait">{s.propagationWait}</Label>
+                <Input id="tls-wait" inputMode="numeric" value={propagationWait} onChange={(e) => setPropagationWait(e.target.value.replace(/\D/g, ""))} className="w-32" />
+              </div>
+            )}
+            <p className="text-muted-foreground text-xs">{s.propagationHint}</p>
           </div>
           <div className="grid gap-1">
             <div className="flex items-center gap-3">

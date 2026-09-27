@@ -1943,8 +1943,11 @@ export type SetTlsInput = {
   enabled?: boolean | null | undefined;
   env?: Array<TlsVariableInput> | null | undefined;
   port?: number | null | undefined;
+  propagationCheck?: boolean | null | undefined;
+  propagationWait?: number | null | undefined;
   provider?: string | null | undefined;
   redirect?: boolean | null | undefined;
+  resolvers?: Array<string> | null | undefined;
 };
 
 export type SortOrder =
@@ -3358,12 +3361,19 @@ export type BrowserStatusQuery = { browserStatus: { version: string, upgradable:
 export type TlsStatusQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type TlsStatusQuery = { tlsStatus: { url: string | null, total: number | null, toolVersion: string, toolInstalled: boolean, startedAt: string | null, stage: string, serving: boolean, redirect: boolean, received: number, provider: string | null, port: number, httpPort: number | null, finishedAt: string | null, error: string | null, envSet: Array<string>, enabled: boolean, email: string, domains: Array<string>, directory: string, addresses: Array<string>, resolution: Array<{ here: boolean, domain: string, addresses: Array<string> }>, certificate: { serial: string | null, notBefore: string | null, notAfter: string | null, issuedAt: string | null, domains: Array<string> } | null } };
+export type TlsStatusQuery = { tlsStatus: { url: string | null, total: number | null, toolVersion: string, toolInstalled: boolean, startedAt: string | null, stage: string, serving: boolean, resolvers: Array<string>, redirect: boolean, received: number, provider: string | null, propagationWait: number, propagationCheck: boolean, port: number, httpPort: number | null, finishedAt: string | null, error: string | null, envSet: Array<string>, enabled: boolean, email: string, domains: Array<string>, directory: string, addresses: Array<string>, certificate: { serial: string | null, notBefore: string | null, notAfter: string | null, issuedAt: string | null, domains: Array<string> } | null } };
 
 export type TlsProvidersQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type TlsProvidersQuery = { tlsProviders: { providers: Array<{ url: string | null, name: string, code: string, aliases: Array<string>, credentials: Array<{ name: string, description: string | null }>, additional: Array<{ name: string, description: string | null }> }> } };
+
+export type TlsResolutionQueryVariables = Exact<{
+  domains: Array<string> | string;
+}>;
+
+
+export type TlsResolutionQuery = { tlsResolution: { fakeIp: boolean, checkResolvers: Array<string>, addresses: Array<string>, resolution: Array<{ local: Array<string>, here: boolean, fakeIp: boolean, domain: string, addresses: Array<string> }> } };
 
 export type ListProvidersQueryVariables = Exact<{
   sort?: Array<ProviderSortInput | null | undefined> | ProviderSortInput | null | undefined;
@@ -3820,17 +3830,17 @@ export type SetTlsMutationVariables = Exact<{
 }>;
 
 
-export type SetTlsMutation = { setTls: { url: string | null, total: number | null, toolVersion: string, toolInstalled: boolean, startedAt: string | null, stage: string, serving: boolean, redirect: boolean, received: number, provider: string | null, port: number, httpPort: number | null, finishedAt: string | null, error: string | null, envSet: Array<string>, enabled: boolean, email: string, domains: Array<string>, directory: string, addresses: Array<string>, resolution: Array<{ here: boolean, domain: string, addresses: Array<string> }>, certificate: { serial: string | null, notBefore: string | null, notAfter: string | null, issuedAt: string | null, domains: Array<string> } | null } };
+export type SetTlsMutation = { setTls: { url: string | null, total: number | null, toolVersion: string, toolInstalled: boolean, startedAt: string | null, stage: string, serving: boolean, resolvers: Array<string>, redirect: boolean, received: number, provider: string | null, propagationWait: number, propagationCheck: boolean, port: number, httpPort: number | null, finishedAt: string | null, error: string | null, envSet: Array<string>, enabled: boolean, email: string, domains: Array<string>, directory: string, addresses: Array<string>, certificate: { serial: string | null, notBefore: string | null, notAfter: string | null, issuedAt: string | null, domains: Array<string> } | null } };
 
 export type TlsIssueMutationVariables = Exact<{ [key: string]: never; }>;
 
 
-export type TlsIssueMutation = { tlsIssue: { url: string | null, total: number | null, toolVersion: string, toolInstalled: boolean, startedAt: string | null, stage: string, serving: boolean, redirect: boolean, received: number, provider: string | null, port: number, httpPort: number | null, finishedAt: string | null, error: string | null, envSet: Array<string>, enabled: boolean, email: string, domains: Array<string>, directory: string, addresses: Array<string>, resolution: Array<{ here: boolean, domain: string, addresses: Array<string> }>, certificate: { serial: string | null, notBefore: string | null, notAfter: string | null, issuedAt: string | null, domains: Array<string> } | null } };
+export type TlsIssueMutation = { tlsIssue: { url: string | null, total: number | null, toolVersion: string, toolInstalled: boolean, startedAt: string | null, stage: string, serving: boolean, resolvers: Array<string>, redirect: boolean, received: number, provider: string | null, propagationWait: number, propagationCheck: boolean, port: number, httpPort: number | null, finishedAt: string | null, error: string | null, envSet: Array<string>, enabled: boolean, email: string, domains: Array<string>, directory: string, addresses: Array<string>, certificate: { serial: string | null, notBefore: string | null, notAfter: string | null, issuedAt: string | null, domains: Array<string> } | null } };
 
 export type TlsDisableMutationVariables = Exact<{ [key: string]: never; }>;
 
 
-export type TlsDisableMutation = { tlsDisable: { url: string | null, total: number | null, toolVersion: string, toolInstalled: boolean, startedAt: string | null, stage: string, serving: boolean, redirect: boolean, received: number, provider: string | null, port: number, httpPort: number | null, finishedAt: string | null, error: string | null, envSet: Array<string>, enabled: boolean, email: string, domains: Array<string>, directory: string, addresses: Array<string>, resolution: Array<{ here: boolean, domain: string, addresses: Array<string> }>, certificate: { serial: string | null, notBefore: string | null, notAfter: string | null, issuedAt: string | null, domains: Array<string> } | null } };
+export type TlsDisableMutation = { tlsDisable: { url: string | null, total: number | null, toolVersion: string, toolInstalled: boolean, startedAt: string | null, stage: string, serving: boolean, resolvers: Array<string>, redirect: boolean, received: number, provider: string | null, propagationWait: number, propagationCheck: boolean, port: number, httpPort: number | null, finishedAt: string | null, error: string | null, envSet: Array<string>, enabled: boolean, email: string, domains: Array<string>, directory: string, addresses: Array<string>, certificate: { serial: string | null, notBefore: string | null, notAfter: string | null, issuedAt: string | null, domains: Array<string> } | null } };
 
 export type CreateProviderMutationVariables = Exact<{
   input: CreateProviderInput;
@@ -4504,14 +4514,12 @@ export const TlsStatusDocument = new TypedDocumentString(`
     startedAt
     stage
     serving
-    resolution {
-      here
-      domain
-      addresses
-    }
+    resolvers
     redirect
     received
     provider
+    propagationWait
+    propagationCheck
     port
     httpPort
     finishedAt
@@ -4552,6 +4560,22 @@ export const TlsProvidersDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<TlsProvidersQuery, TlsProvidersQueryVariables>;
+export const TlsResolutionDocument = new TypedDocumentString(`
+    query TlsResolution($domains: [String!]!) {
+  tlsResolution(domains: $domains) {
+    resolution {
+      local
+      here
+      fakeIp
+      domain
+      addresses
+    }
+    fakeIp
+    checkResolvers
+    addresses
+  }
+}
+    `) as unknown as TypedDocumentString<TlsResolutionQuery, TlsResolutionQueryVariables>;
 export const ListProvidersDocument = new TypedDocumentString(`
     query ListProviders($sort: [ProviderSortInput], $filter: ProviderFilterInput) {
   listProviders(sort: $sort, filter: $filter) {
@@ -5542,14 +5566,12 @@ export const SetTlsDocument = new TypedDocumentString(`
     startedAt
     stage
     serving
-    resolution {
-      here
-      domain
-      addresses
-    }
+    resolvers
     redirect
     received
     provider
+    propagationWait
+    propagationCheck
     port
     httpPort
     finishedAt
@@ -5580,14 +5602,12 @@ export const TlsIssueDocument = new TypedDocumentString(`
     startedAt
     stage
     serving
-    resolution {
-      here
-      domain
-      addresses
-    }
+    resolvers
     redirect
     received
     provider
+    propagationWait
+    propagationCheck
     port
     httpPort
     finishedAt
@@ -5618,14 +5638,12 @@ export const TlsDisableDocument = new TypedDocumentString(`
     startedAt
     stage
     serving
-    resolution {
-      here
-      domain
-      addresses
-    }
+    resolvers
     redirect
     received
     provider
+    propagationWait
+    propagationCheck
     port
     httpPort
     finishedAt

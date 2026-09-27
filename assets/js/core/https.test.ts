@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { daysLeft, envInput, parseDomains, providerLabel, tlsBusy } from "./https";
+import { daysLeft, envInput, parseDomains, parseResolvers, providerLabel, proxySnippet, tlsBusy } from "./https";
 
 describe("https", () => {
   test("the variables sent: what was typed, and null for a stored one cleared; an empty field keeps the stored value", () => {
@@ -30,5 +30,11 @@ describe("https", () => {
     expect(providerLabel({ code: "gandi", name: "Gandi" })).toBe("Gandi");
     expect(daysLeft("2026-12-26T00:00:00Z", new Date("2026-09-27T00:00:00Z"))).toBe(90);
     expect(daysLeft(null)).toBe(null);
+  });
+
+  test("the TXT check's resolvers as typed; the proxy setting for a name", () => {
+    expect(parseResolvers("1.1.1.1, 8.8.8.8:53\n[2400:3200::1]:53")).toEqual(["1.1.1.1", "8.8.8.8:53", "[2400:3200::1]:53"]);
+    expect(parseResolvers("")).toEqual([]);
+    expect(proxySnippet("lx.example.com")).toBe('dns:\n  fake-ip-filter:\n    - "+.lx.example.com"\nrules:\n  - DOMAIN-SUFFIX,lx.example.com,DIRECT');
   });
 });

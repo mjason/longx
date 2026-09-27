@@ -1200,7 +1200,19 @@ on first use.
   variables: **only names the provider declares are accepted** — the tool runs with them in
   its environment, `PATH` or `LD_PRELOAD` are refused —; `""` keeps a stored value, nil removes
   it, another provider drops the old one's; never read back, the page gets `env_set` names),
-  `tls_account`. The certificate is `cert.pem` / `key.pem` (0600) / `meta.json` under `dir`
+  `tls_account`, and the TXT check's options (`resolvers` — IP addresses only, `:53` added —,
+  `propagation_check` / `propagation_wait`: off = no check, a fixed wait). **A proxy's fake-ip
+  DNS on the LAN** (Clash / mihomo / sing-box / Surge answer every name from 198.18.0.0/15 —
+  this dev box's resolver does) is handled by `Longx.Tls.Dns`: where a name points is asked of
+  the public resolvers directly (`public_dns:` — 223.5.5.5, 119.29.29.29 over UDP —, AliDNS's
+  DoH JSON `doh_url:` when UDP brings nothing), this machine's answer shown beside it and
+  flagged (`resolution_report/1`, RPC `tls_resolution` for the names as typed); and lego's
+  TXT check gets the public resolvers (`check_resolvers/1`) when this machine's answer is a
+  fake-ip one — it would look the authoritative servers up through the proxy. The page tells
+  the person the proxy lines their devices need (`fake-ip-filter` + a `DIRECT` rule). Tests
+  never look anything up (`config/test.exs`: `public_dns: []`, `doh_url: nil`,
+  `system_lookup: {Longx.Test.Dns, :nothing}`); `Longx.Test.FakeDns` is a UDP DNS server.
+  The certificate is `cert.pem` / `key.pem` (0600) / `meta.json` under `dir`
   (`config :longx, Longx.Tls, dir:, tool_dir:` — dev `data/tls` / `data/longx-cert`, prod
   `$LONGX_DATA_DIR/…`), each replaced whole. **`Longx.Tls.Manager`** (in the tree): one
   issuance at a time as a task — the tool fetched first when missing (stages `downloading` /
@@ -1223,7 +1235,7 @@ on first use.
   `/extension/`, the sockets, `/gql`, `/attachments/` stay on http, and so does
   `/settings/https` itself — the way back when the name does not resolve from the browser's
   machine and every other page would be sent somewhere unreachable). GraphQL on
-  `Longx.System.Status`: `tls_status` (`Longx.Tls.report/0`), `tls_providers`, `set_tls` (the
+  `Longx.System.Status`: `tls_status` (`Longx.Tls.report/0`), `tls_providers`, `tls_resolution`, `set_tls` (the
   variables as `[TlsVariableInput]` name–value pairs — a Json map's keys would be case-mangled
   by the client), `tls_issue`, `tls_disable`. Page: `settings/HttpsSection` over
   `core/https.ts` (polled every second while busy; the provider picker is a popover + command
@@ -1820,8 +1832,8 @@ Where tests live / what to use:
   (`assistant_message/1`, `function_call/3`); a test gives its own `pipeline:` module.
   Every test that starts agents ends with `Longx.Test.Agents.stop_all!/0`. Test support
   lives in `test/support/` (`agents.ex`, `channel_case.ex`, `conn_case.ex`, `data_case.ex`,
-  `fake_obscura.sh`, `fake_longx_cert.sh`, `certs.ex`, `responses_fixture.ex`, `tmp_dirs.ex`,
-  `vite_manifest.json`).
+  `fake_obscura.sh`, `fake_longx_cert.sh`, `certs.ex`, `fake_dns.ex`, `responses_fixture.ex`,
+  `tmp_dirs.ex`, `vite_manifest.json`).
 - DB tests must clear the seeded rows in `setup` (seeds run before the suite).
 - The browser → the unit suite runs `fake_obscura.sh`; `browser_integration_test.exs`
   (`:integration`) downloads the real binary. `:live` tests (real DeepSeek / Tavily) read

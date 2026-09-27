@@ -93,6 +93,49 @@ defmodule LongxWeb.TlsRpcTest do
     refute Jason.encode!(read) =~ "4711"
   end
 
+  test "the TXT check's resolvers and wait are saved; where the typed names point comes apart", %{
+    conn: conn
+  } do
+    assert %{"success" => true, "data" => status} =
+             rpc(conn, "set_tls", %{
+               "input" => %{
+                 "resolvers" => ["223.5.5.5"],
+                 "propagationCheck" => false,
+                 "propagationWait" => 90
+               }
+             })
+
+    assert %{
+             "resolvers" => ["223.5.5.5:53"],
+             "propagationCheck" => false,
+             "propagationWait" => 90
+           } =
+             status
+
+    assert %{"success" => false, "errors" => [%{"fields" => ["resolvers"]}]} =
+             rpc(conn, "set_tls", %{"input" => %{"resolvers" => ["dns.example.com"]}})
+
+    # the suite's lookups resolve nothing (config/test.exs): the shape, no network
+    assert %{
+             "success" => true,
+             "data" => %{
+               "fakeIp" => false,
+               "checkResolvers" => ["223.5.5.5:53"],
+               "resolution" => [
+                 %{
+                   "domain" => "lx.example.test",
+                   "addresses" => [],
+                   "local" => [],
+                   "here" => false
+                 }
+               ]
+             }
+           } =
+             rpc(conn, "tls_resolution", %{
+               "input" => %{"domains" => ["lx.example.test", "*.lx.example.test"]}
+             })
+  end
+
   test "an error names its field", %{conn: conn} do
     assert %{"success" => false, "errors" => [%{"fields" => ["provider"]}]} =
              rpc(conn, "set_tls", %{"input" => %{"provider" => "no-such-dns"}})

@@ -73,6 +73,11 @@ HTTPS 开在 7443 端口，和 http 的 7788 并存；打开 http 页面会自�
 扩展的连接仍走 http。`http://<这台机器>:7788/settings/https` 这一页永远不跳转：名字解析不到时从这里改或关掉。每天检查一次，到期前 30 天自动续期，换证书不重启、不断连接。开了 HTTPS 以后浏览器能装 PWA、收系统
 通知，OAuth 登录也直接回到 Longx。
 
+**局域网里的 DNS 是代理的 fake-ip 时**（Clash、mihomo、sing-box 之类，任何名字都解析成 198.18.x.x）：设置页的解析检查
+直接问公共 DNS（223.5.5.5、119.29.29.29，不通再用 DoH），显示你真正的 A 记录，并标出这台机器拿到的是 fake-ip；申请证书
+时确认 TXT 记录也自动改用公共 DNS（「更多选项」里可以自己指定，或者关掉确认、改为等待几十秒）。浏览器所在的设备开着这类
+代理时，在代理配置里把这个名字加进 `fake-ip-filter`，再加一条 `DOMAIN-SUFFIX,<你的域名>,DIRECT`，页面上会给出这几行。
+
 申请证书的是 [longx-cert](https://github.com/mjason/longx-cert)（Go，内置 lego）：第一次申请时从它的 Release 下载
 （约 19 MB，按版本和 sha256 固定），放在 `data/longx-cert/`；`LONGX_CERT=/path/to/longx-cert` 可以指定自己的二进制。
 证书在 `data/tls/`（私钥只有属主可读），DNS 密钥加密存在数据库里，页面上不再显示。

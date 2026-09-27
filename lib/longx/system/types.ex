@@ -359,7 +359,11 @@ defmodule Longx.System.Types do
   end
 
   defmodule TlsResolution do
-    @moduledoc "what a name resolves to now, and whether that is this machine"
+    @moduledoc """
+    where a name points: the public resolvers' answer and whether that is
+    this machine, this machine's own answer and whether that is a proxy's
+    fake-ip address
+    """
     use Ash.Type.NewType,
       subtype_of: :map,
       constraints: [
@@ -370,11 +374,43 @@ defmodule Longx.System.Types do
             allow_nil?: false,
             constraints: [nil_items?: false]
           ],
-          here: [type: :boolean, allow_nil?: false]
+          here: [type: :boolean, allow_nil?: false],
+          local: [type: {:array, :string}, allow_nil?: false, constraints: [nil_items?: false]],
+          fake_ip: [type: :boolean, allow_nil?: false]
         ]
       ]
 
     def graphql_type(_), do: :tls_resolution
+  end
+
+  defmodule TlsResolutionReport do
+    @moduledoc "the result of `Longx.System.Status.tls_resolution` (`Longx.Tls.resolution_report/1`)"
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          addresses: [
+            type: {:array, :string},
+            allow_nil?: false,
+            constraints: [nil_items?: false]
+          ],
+          resolution: [
+            type: {:array, TlsResolution},
+            allow_nil?: false,
+            constraints: [nil_items?: false]
+          ],
+          # this machine's DNS answers with a proxy's addresses
+          fake_ip: [type: :boolean, allow_nil?: false],
+          # the resolvers the TXT check would use now ([] = this machine's)
+          check_resolvers: [
+            type: {:array, :string},
+            allow_nil?: false,
+            constraints: [nil_items?: false]
+          ]
+        ]
+      ]
+
+    def graphql_type(_), do: :tls_resolution_report
   end
 
   defmodule TlsStatus do
@@ -390,6 +426,13 @@ defmodule Longx.System.Types do
           directory: [type: :string, allow_nil?: false],
           port: [type: :integer, allow_nil?: false],
           redirect: [type: :boolean, allow_nil?: false],
+          resolvers: [
+            type: {:array, :string},
+            allow_nil?: false,
+            constraints: [nil_items?: false]
+          ],
+          propagation_check: [type: :boolean, allow_nil?: false],
+          propagation_wait: [type: :integer, allow_nil?: false],
           http_port: [type: :integer],
           # the provider's variables that have a value — never the values
           env_set: [type: {:array, :string}, allow_nil?: false, constraints: [nil_items?: false]],
@@ -404,14 +447,9 @@ defmodule Longx.System.Types do
           # HTTPS served now, and where
           serving: [type: :boolean, allow_nil?: false],
           url: [type: :string],
-          # this machine's addresses, and what each name resolves to (the A record to add)
+          # this machine's addresses (the A record to add)
           addresses: [
             type: {:array, :string},
-            allow_nil?: false,
-            constraints: [nil_items?: false]
-          ],
-          resolution: [
-            type: {:array, TlsResolution},
             allow_nil?: false,
             constraints: [nil_items?: false]
           ],

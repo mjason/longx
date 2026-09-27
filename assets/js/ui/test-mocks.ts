@@ -213,6 +213,9 @@ export const tlsIdle = {
   directory: "letsencrypt",
   port: 7443,
   redirect: true,
+  resolvers: [] as string[],
+  propagationCheck: true,
+  propagationWait: 60,
   httpPort: 7788,
   envSet: [] as string[],
   stage: "idle",
@@ -225,7 +228,6 @@ export const tlsIdle = {
   serving: false,
   url: null as string | null,
   addresses: ["192.168.2.70"],
-  resolution: [] as { domain: string; addresses: string[]; here: boolean }[],
   toolVersion: "0.1.0",
   toolInstalled: false,
 };
@@ -398,6 +400,15 @@ export function rpcMock() {
     browserSettings: vi.fn(async () => ok({ allowPrivateNetwork: false, available: true })),
     tlsStatus: vi.fn(async () => ok(tlsIdle)),
     tlsProviders: vi.fn(async () => ok({ providers: tlsProvidersList })),
+    // every typed name, unresolved, this machine's DNS a real one
+    tlsResolution: vi.fn(async (args: { input: { domains: string[] } }) =>
+      ok({
+        addresses: ["192.168.2.70"],
+        resolution: args.input.domains.filter((d) => !d.startsWith("*.")).map((domain) => ({ domain, addresses: [] as string[], here: false, local: [] as string[], fakeIp: false })),
+        fakeIp: false,
+        checkResolvers: [] as string[],
+      }),
+    ),
     setTls: vi.fn(async (args: { input: Record<string, unknown> }) => ok({ ...tlsIdle, ...args.input, envSet: ((args.input.env as { name: string }[] | undefined) ?? []).map((v) => v.name) })),
     tlsIssue: vi.fn(async () => ok({ ...tlsIdle, enabled: true, stage: "issuing" })),
     tlsDisable: vi.fn(async () => ok({ ...tlsIdle, enabled: false })),

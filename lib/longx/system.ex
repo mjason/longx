@@ -24,6 +24,7 @@ defmodule Longx.System do
       action Longx.System.Status, :browser_status, :browser_status
       action Longx.System.Status, :tls_status, :tls_status
       action Longx.System.Status, :tls_providers, :tls_providers
+      action Longx.System.Status, :tls_resolution, :tls_resolution
     end
 
     mutations do

@@ -30,7 +30,10 @@ defmodule Longx.Tls.SettingsTest do
              directory: "letsencrypt",
              port: 7443,
              redirect: true,
-             email: ""
+             email: "",
+             resolvers: [],
+             propagation_check: true,
+             propagation_wait: 60
            } = Tls.settings()
 
     assert Tls.env_names() == []
@@ -198,5 +201,109 @@ defmodule Longx.Tls.SettingsTest do
              "172.25.0.1",
              "100.101.102.103"
            ]
+  end
+
+  describe "a fake-ip DNS on this machine" do
+    setup do
+      previous = Application.get_env(:longx, Longx.Tls)
+      on_exit(fn -> Application.put_env(:longx, Longx.Tls, previous) end)
+      :ok
+    end
+
+    defp lookups(system, public \\ %{}) do
+      {_pid, port} = Longx.Test.FakeDns.start(public)
+
+      Application.put_env(
+        :longx,
+        Longx.Tls,
+        Keyword.merge(Application.get_env(:longx, Longx.Tls),
+          system_lookup: fn _ -> system end,
+          public_dns: [{{127, 0, 0, 1}, port}]
+        )
+      )
+
+      port
+    end
+
+    test "the resolvers for the TXT check are IP addresses, with :53 unless a port is given" do
+      assert {:ok, %{resolvers: resolvers}} =
+               Tls.save(%{
+                 resolvers: [
+                   " 223.5.5.5 ",
+                   "119.29.29.29:5353",
+                   "[2400:3200::1]:53",
+                   "2400:3200::1"
+                 ]
+               })
+
+      # the same resolver twice is kept once
+      assert resolvers == ["223.5.5.5:53", "119.29.29.29:5353", "[2400:3200::1]:53"]
+      assert {:error, :resolvers, message} = Tls.save(%{resolvers: ["dns.example.com"]})
+      assert message =~ "IP"
+      assert {:error, :propagation_wait, _} = Tls.save(%{propagation_wait: 5_000})
+      assert {:error, :propagation_check, _} = Tls.save(%{propagation_check: "no"})
+    end
+
+    test "the TXT check goes to the public resolvers when this machine's answer is a proxy's",
+         _ctx do
+      port = lookups(["198.18.0.7"])
+      {:ok, _} = Tls.save(%{domains: ["lx.example.test"], provider: "tencentcloud"})
+      assert Tls.request()["resolvers"] == ["127.0.0.1:#{port}"]
+
+      # a real answer: the machine's own resolver
+      lookups(["192.168.2.70"])
+      assert Tls.request()["resolvers"] == []
+
+      # the person's own list wins either way
+      lookups(["198.18.0.7"])
+      {:ok, _} = Tls.save(%{resolvers: ["1.1.1.1"]})
+      assert Tls.request()["resolvers"] == ["1.1.1.1:53"]
+    end
+
+    test "no check, a wait instead, when the person turns it off" do
+      lookups(["192.168.2.70"])
+
+      {:ok, _} =
+        Tls.save(%{
+          domains: ["lx.example.test"],
+          provider: "tencentcloud",
+          propagation_check: false,
+          propagation_wait: 90
+        })
+
+      assert %{"propagation_check" => false, "propagation_wait_s" => 90} = Tls.request()
+      {:ok, _} = Tls.save(%{propagation_check: true})
+      refute Map.has_key?(Tls.request(), "propagation_check")
+    end
+
+    test "where a name points: the public answer, this machine's beside it, a proxy's marked" do
+      here = List.first(Tls.local_addresses()) || "192.0.2.1"
+
+      port =
+        lookups(["198.18.0.7"], %{"lx.example.test" => here, "other.example.test" => "192.0.2.99"})
+
+      assert %{
+               fake_ip: true,
+               check_resolvers: ["127.0.0.1:" <> _],
+               resolution: [
+                 %{
+                   domain: "lx.example.test",
+                   addresses: [^here],
+                   local: ["198.18.0.7"],
+                   fake_ip: true
+                 },
+                 %{domain: "other.example.test", addresses: ["192.0.2.99"], here: false},
+                 %{domain: "nowhere.example.test", addresses: []}
+               ]
+             } =
+               Tls.resolution_report([
+                 "lx.example.test",
+                 "other.example.test",
+                 "nowhere.example.test",
+                 "*.lx.example.test"
+               ])
+
+      assert port > 0
+    end
   end
 end

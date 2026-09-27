@@ -98,6 +98,21 @@ type RunningCommands {
   commands: [Json!]!
 }
 
+type TlsResolution {
+  local: [String!]!
+  here: Boolean!
+  fakeIp: Boolean!
+  domain: String!
+  addresses: [String!]!
+}
+
+type TlsResolutionReport {
+  resolution: [TlsResolution!]!
+  fakeIp: Boolean!
+  checkResolvers: [String!]!
+  addresses: [String!]!
+}
+
 type TlsProviderVariable {
   name: String!
   description: String
@@ -124,12 +139,6 @@ type TlsCertificate {
   domains: [String!]!
 }
 
-type TlsResolution {
-  here: Boolean!
-  domain: String!
-  addresses: [String!]!
-}
-
 type TlsStatus {
   url: String
   total: Int
@@ -138,10 +147,12 @@ type TlsStatus {
   startedAt: DateTime
   stage: String!
   serving: Boolean!
-  resolution: [TlsResolution!]!
+  resolvers: [String!]!
   redirect: Boolean!
   received: Int!
   provider: String
+  propagationWait: Int!
+  propagationCheck: Boolean!
   port: Int!
   httpPort: Int
   finishedAt: DateTime
@@ -2685,6 +2696,9 @@ input SetTlsInput {
   directory: String
   port: Int
   redirect: Boolean
+  resolvers: [String!]
+  propagationCheck: Boolean
+  propagationWait: Int
   env: [TlsVariableInput!]
 }
 
@@ -4109,6 +4123,7 @@ type RootQueryType {
   browserStatus: BrowserStatus!
   tlsStatus: TlsStatus!
   tlsProviders: TlsProviders!
+  tlsResolution(domains: [String!]!): TlsResolutionReport!
   listProviders(
     "How to sort the records in the response"
     sort: [ProviderSortInput]

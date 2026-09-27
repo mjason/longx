@@ -50,6 +50,7 @@ import {
   setTls,
   tlsIssue,
   tlsDisable,
+  tlsResolution,
   tlsStatus,
 } from "@/core/api";
 import { browserIdle, dependencyReport, dependencyTool, model, tlsIdle, upgradeIdle } from "@/ui/test-mocks";
@@ -95,6 +96,9 @@ describe("SettingsPage", () => {
               { name: "TENCENTCLOUD_SECRET_ID", value: "AKID" },
               { name: "TENCENTCLOUD_SECRET_KEY", value: "s3cret" },
             ],
+            resolvers: [],
+            propagationCheck: true,
+            propagationWait: 60,
           }),
         }),
       ),
@@ -116,8 +120,11 @@ describe("SettingsPage", () => {
         url: "https://lx.example.com:7443",
         toolInstalled: true,
         certificate: { domains: ["lx.example.com"], notBefore: null, notAfter: new Date(Date.now() + 80 * 86_400_000).toISOString(), serial: "abc", issuedAt: null },
-        resolution: [{ domain: "lx.example.com", addresses: ["192.168.2.70"], here: true }],
       },
+    } as never);
+    vi.mocked(tlsResolution).mockResolvedValue({
+      success: true,
+      data: { addresses: ["192.168.2.70"], resolution: [{ domain: "lx.example.com", addresses: ["192.168.2.70"], here: true, local: ["192.168.2.70"], fakeIp: false }], fakeIp: false, checkResolvers: [] },
     } as never);
     const user = userEvent.setup();
     renderAt("/settings/https");
@@ -126,7 +133,7 @@ describe("SettingsPage", () => {
     expect(within(state).getByRole("link", { name: "https://lx.example.com:7443" })).toHaveAttribute("href", "https://lx.example.com:7443");
     expect(state).toHaveTextContent("还有 79 天到期");
     // the name resolves here
-    expect(within(section).getByTestId("tls-resolution")).toHaveTextContent("指向这台机器");
+    expect(await within(section).findByTestId("tls-resolution")).toHaveTextContent("指向这台机器");
     // a stored key: an empty field that says so
     const key = within(section).getByLabelText("TENCENTCLOUD_SECRET_KEY");
     expect(key).toHaveValue("");
@@ -138,6 +145,46 @@ describe("SettingsPage", () => {
     await user.click(within(section).getByRole("button", { name: "关闭 HTTPS" }));
     await user.click(await screen.findByRole("button", { name: "确认关闭" }));
     await waitFor(() => expect(tlsDisable).toHaveBeenCalled());
+  });
+
+  test("https: a proxy's fake-ip DNS here — the public answer shown, the proxy setting to add, the TXT check's DNS and wait", async () => {
+    setViewport(1280);
+    vi.mocked(tlsResolution).mockResolvedValue({
+      success: true,
+      data: {
+        addresses: ["192.168.2.70"],
+        resolution: [{ domain: "lx.example.com", addresses: ["192.168.2.70"], here: true, local: ["198.18.0.7"], fakeIp: true }],
+        fakeIp: true,
+        checkResolvers: ["223.5.5.5:53", "119.29.29.29:53"],
+      },
+    } as never);
+    const user = userEvent.setup();
+    renderAt("/settings/https");
+    const section = await screen.findByTestId("section-https", {}, LAZY);
+    await user.type(await within(section).findByLabelText("域名"), "lx.example.com");
+
+    const resolution = await within(section).findByTestId("tls-resolution");
+    expect(resolution).toHaveTextContent("指向这台机器");
+    // what this machine's resolver said, and why it does not count
+    const note = within(section).getByTestId("tls-fake-ip");
+    expect(note).toHaveTextContent("198.18.0.7");
+    expect(note).toHaveTextContent("fake-ip-filter");
+    expect(note).toHaveTextContent("DOMAIN-SUFFIX,lx.example.com,DIRECT");
+
+    await user.click(within(section).getByRole("button", { name: /更多选项/ }));
+    const resolvers = within(section).getByLabelText("检查 TXT 记录用的 DNS");
+    expect(resolvers).toHaveAttribute("placeholder", expect.stringContaining("223.5.5.5:53"));
+    await user.type(resolvers, "1.1.1.1, 8.8.8.8");
+    await user.click(within(section).getByRole("switch", { name: "申请前确认 TXT 记录已生效" }));
+    const wait = within(section).getByLabelText("改为等待（秒）");
+    await user.clear(wait);
+    await user.type(wait, "90");
+    await user.click(within(section).getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(setTls).toHaveBeenCalledWith(
+        expect.objectContaining({ input: expect.objectContaining({ resolvers: ["1.1.1.1", "8.8.8.8"], propagationCheck: false, propagationWait: 90 }) }),
+      ),
+    );
   });
 
   test("https: while the tool downloads, then while the certificate is asked for", async () => {
