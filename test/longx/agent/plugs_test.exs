@@ -556,18 +556,20 @@ defmodule Longx.Agent.PlugsTest do
   describe "Local" do
     alias Longx.Agent.Plugs.Local
 
-    test "a trusted project's agent is told the two files of a custom tool and where the reference is",
+    test "a trusted project's agent is told the two files of a custom tool and which doc to read first — one paragraph, not the reference",
          %{dir: dir} do
       step = Local.call(Step.new(phase: :request, cwd: dir), Local.init(root: dir))
       text = Enum.join(step.instructions, "\n")
       assert text =~ "local/plugs/<name>.exs"
       assert text =~ "local/agent.exs"
       assert text =~ "next step"
-      # the reference rides along: the plug API, the outcome shapes, when to write one
-      assert text =~ "use Longx.Agent.Plug"
-      assert text =~ "{:ok, text, meta}"
-      assert text =~ "When to write one"
-      assert text =~ "prompt_file"
+      # the reference is the knowledge doc, read when the definition is about to change —
+      # it rode along whole in every request once (3.3k tokens, the same text as the doc)
+      assert text =~ "knowledge_read(\"longx/writing-plugs.md\")"
+      refute text =~ "use Longx.Agent.Plug"
+      refute text =~ "{:ok, text, meta}"
+      refute text =~ "When to write one"
+      assert String.length(text) < 2_500
 
       # what Longx ships wins over what the agent wrote earlier: a stale local doc or tool is fixed, not followed
       assert text =~ "precedence"

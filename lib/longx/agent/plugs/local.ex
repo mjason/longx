@@ -1,17 +1,15 @@
 defmodule Longx.Agent.Plugs.Local do
   @moduledoc """
-  What a trusted project's agent is told about itself: that its
+  What a project's agent is told about itself, in one paragraph: that its
   definition lives in `.longx/` (the description, the plugs), that it may
-  change it when a workflow repeats or a tool would help, and the compact
-  reference of the description and plug API (`priv/agent/reference.md`)
-  — so it can. Mounted by `Longx.Agent.Definition.Loader`, never by hand.
+  change it when a workflow repeats or a tool would help, and which
+  knowledge doc to read first (`longx/writing-plugs.md`, the description
+  and plug API — it rode along whole in every request once, 3.3k tokens, the
+  same text as the doc). Mounted by `Longx.Agent.Definition.Loader`, never by
+  hand.
   """
 
   use Longx.Agent.Plug
-
-  @reference_path Path.join(:code.priv_dir(:longx), "agent/reference.md")
-  @external_resource @reference_path
-  @reference File.read!(@reference_path)
 
   @untrusted """
   **This project is not trusted yet**: `agent.exs` and `shared/` are not loaded (their code came with the clone) until the person turns on 信任并加载 .longx 里的定义 in the project settings. `local/` loads regardless — declare agents and plugs there; say so if something you need sits in `shared/`.
@@ -27,11 +25,8 @@ defmodule Longx.Agent.Plugs.Local do
     |> Step.instructions("""
     # Your own definition
 
-    This project's agent — the pipeline you run through, your prompt, your tools, the agents you may spawn — is defined in `#{Path.join(root, ".longx")}`: `agent.exs` (the shared description), `shared/` (agents, plugs, knowledge — in git, reviewed by the person) and `local/` (the same, gitignored — this machine's and yours). Write your own additions to `local/` (`local/agent.exs`, `local/plugs/*.exs`, `local/agents/<name>/`, `local/watches/*.exs`); the person promotes what they reviewed into `shared/`. Changes load at your next step — no restart; a file that fails to load comes back to you as a notice, so fix it. **A custom tool is two files**: the plug module in `local/plugs/<name>.exs` and a `plug <Module>` line in `local/agent.exs`; at the next step the tool is in your list (or a notice says what broke). When a workflow keeps repeating, write it as a plug with a tool; when an instruction should always hold, add it to the description's `prompt`; when a kind of task keeps being delegated, declare it as an agent. Record the difference to the default (`extends :default` + `plug` / `options` / `drop`), not a copy of the whole pipeline. **What Longx ships takes precedence over what was written here earlier**: when a local or shared doc, tool or role contradicts the shipped guidance or a notice (a plug doing its own OAuth or token storage, a doc describing that as the only way), migrate the local one first and rewrite its doc with the date — never follow it because it exists.
-
-    #{if trusted?, do: "", else: @untrusted}
-
-    #{@reference}
+    This project's agent — the pipeline you run through, your prompt, your tools, the agents you may spawn — is defined in `#{Path.join(root, ".longx")}`: `agent.exs` (the shared description), `shared/` (agents, plugs, knowledge — in git, reviewed by the person) and `local/` (the same, gitignored — this machine's and yours). Write your own additions to `local/`; the person promotes what they reviewed into `shared/`. Changes load at your next step — no restart; a file that fails to load comes back to you as a notice, so fix it. A custom tool is two files: the plug module in `local/plugs/<name>.exs` and a `plug <Module>` line in `local/agent.exs`. **Before editing the description or writing a plug, read the reference whole: `knowledge_read("longx/writing-plugs.md")`** (the layout, the description DSL, the plug API, roles). What Longx ships takes precedence over what was written here earlier: when a local or shared doc, tool or role contradicts the shipped guidance or a notice, migrate the local one first and rewrite its doc with the date — never follow it because it exists.
+    #{if trusted?, do: "", else: "\n" <> @untrusted}
     """)
   end
 

@@ -535,8 +535,14 @@ it builds: git is the machine's, the headless browser is downloaded on first use
     `Plugs.Environment` is codex's `<environment_context>` block (`cwd`, `shell`,
     `current_date`) plus our `operating_system` and `model` elements; `Plugs.Prompt` the
     description's prompt or a loader notice; `Plugs.Local` what the agent is told about its own definition
-    (the reference `priv/agent/reference.md`, its layout, and a `# Models` section from
-    `Longx.AI.model_choices/0` — aliases first, then slugs with levels and the default).
+    — **one paragraph** (its layout in `.longx/`, a tool is two files, read
+    `longx/writing-plugs.md` whole before editing the description or writing a plug, the
+    shipped guidance wins over a stale local doc) and a `# Models` section from
+    `Longx.AI.model_choices/0` — aliases first, then slugs with levels and the default. The
+    reference of the description and plug API is the knowledge doc
+    `priv/agent/knowledge/writing-plugs.md` alone, one index line per request: until
+    2026-09-27 a `priv/agent/reference.md` with the same text rode along whole in every
+    request (3.3k tokens) beside the doc it duplicated.
   - `Longx.Agent.Transcript` (Ash domain) / `Longx.Agent.Transcript.Item` (`agent_items`):
     the append-only log — every Responses input item (`input`: user / assistant message,
     reasoning, `function_call`, `function_call_output`, `compaction`) with its UI item
@@ -1756,7 +1762,11 @@ Where tests live / what to use:
   `local/agent.exs` says `plug Browser, browser: "e2e-chrome", max_tabs: 2`; the agent
   opens a page of the project served by `/files/…?inline=1`, the origin is asked on the
   chat and 一直允许'd, the title read back through `page.info()`, the origin kept on the
-  browser row and the tab still open in that Chrome). A model that refuses an instruction
+  browser row and the tab still open in that Chrome), `12-plug` (a fresh project with no
+  `.longx`: asked for a custom tool `greet(name)`, the agent reads `longx/writing-plugs.md`
+  first — the Local paragraph names it, the reference no longer rides along —, writes
+  `local/plugs/*.exs` + `local/agent.exs`, calls the tool at its next step and answers
+  with its words). A model that refuses an instruction
   fails a scenario — that is the point; run it before a release and after a change to the
   kernel, the prompts or the chat.
 - TypeScript/React → also test-first: vitest + testing-library in `assets/` (`npm test`).
