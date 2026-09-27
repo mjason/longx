@@ -54,7 +54,9 @@ jobs:
         working-directory: native/shim
       - run: go test ./...
         working-directory: native/shim
-      - run: mix ash_typescript.codegen --check
+      # the committed GraphQL schema and the client generated from it are current
+      - run: mix schema.check
+      - run: npm run present-schema --prefix assets -- --check
       - run: npm run check --prefix assets
       # the bwrap probe passes on a dev box, not inside a GitHub runner
       - run: mix test --exclude host_sandbox

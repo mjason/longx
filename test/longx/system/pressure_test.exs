@@ -28,10 +28,15 @@ defmodule Longx.System.PressureTest do
 
     assert_receive :registered
     assert_receive :registered
-    assert Enum.sort(Enum.map(Pressure.running(), &elem(&1, 0))) == Enum.sort([low, high])
+    # the ledger is the machine's: a command another test left behind may be
+    # in it too (this compared the whole list once and failed now and then)
+    running = Pressure.running()
+    pids = Enum.map(running, &elem(&1, 0))
+    assert low in pids and high in pids
+    above_ten = Enum.count(running, fn {_pid, %{floor: floor}} -> floor > 10 end)
 
     # 10% free: below 20, above 5
-    assert Pressure.sweep(%{total: 1000, available: 100}) == 1
+    assert Pressure.sweep(%{total: 1000, available: 100}) == above_ten
     assert_receive {:high_got, {:memory_pressure, %{percent: 10, available: 100, total: 1000}}}
     refute_receive {:low_got, _}, 100
 
