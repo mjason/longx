@@ -21,14 +21,14 @@ const readerFailure = (name: string) => {
 describe("attachments", () => {
   test("a file the browser could not read (FileReader's NotReadableError) is described for the person, by name; other failures keep their words", () => {
     expect(describeAttachmentError("notes.txt", readerFailure("NotReadableError"))).toBe(
-      "浏览器读不了 notes.txt：选中后文件可能被改动、移动，或它所在的位置不允许读取（网络共享、云盘占位文件、正在被写入的文件）。换个位置或重新选一次。",
+      "浏览器读不了 notes.txt：它所在的位置可能不允许浏览器读取（macOS 上另一个 App 的目录——微信、QQ 收到的文件——、网络共享、云盘占位文件），或者选中后被改动、移动、还在被写入。把文件放到\"下载\"或桌面再选一次。",
     );
     expect(describeAttachmentError("data.zip", new Error("上传失败（500）"))).toBe("data.zip：上传失败（500）");
     expect(describeAttachmentError("x.bin", "boom")).toBe("x.bin：boom");
     // an upload that never left the browser: fetch's own words say nothing (Chrome could
     // not open the file for the request body — net::ERR_ACCESS_DENIED — or the network is down)
     expect(describeAttachmentError("dump.txt", new TypeError("Failed to fetch"))).toBe(
-      "dump.txt 没有上传出去：浏览器读不了这个文件（选中后被改动、移动，或它所在的位置不允许读取——网络共享、云盘占位文件、正在被写入的文件），或者网络断了。换个位置或重新选一次。",
+      "dump.txt 没有上传出去：浏览器读不了这个文件（它所在的位置不允许浏览器读取——macOS 上另一个 App 的目录，比如微信、QQ 收到的文件——、网络共享、云盘占位文件，或者选中后被改动、移动、还在被写入），或者网络断了。把文件放到\"下载\"或桌面再选一次。",
     );
   });
 

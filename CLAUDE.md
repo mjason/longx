@@ -1833,9 +1833,14 @@ on first use.
     stands for the text types and routes by size). **Every failed add or send is told**
     (`core/chat/attachments.ts`'s `reportingAdapter` → `onAttachmentError` → a toast):
     assistant-ui only puts the message back and rethrows, and a `.txt` the browser refused
-    to read (FileReader's `NotReadableError` — changed after it was picked, or on a share
-    it cannot read) bounced four times with nothing said but a console error; a failed
-    upload (413, 500) was as silent. Dictation is off (`DICTATION = false` in `runtime.ts`). Terminal
+    to read (FileReader's `NotReadableError`; on the upload path the same file is fetch's
+    bare `TypeError` behind `net::ERR_ACCESS_DENIED` — Chrome could not open it for the
+    request body) bounced four times with nothing said but a console error; a failed
+    upload (413, 500) was as silent. The cause, found on the person's Mac: the file sat in
+    another app's container (WeChat's received files), which macOS lets no browser read
+    and asks nothing about; moved to 下载 the system asked and it went — the toast names
+    that first, then shares, cloud placeholders, a file changed after it was picked.
+    Dictation is off (`DICTATION = false` in `runtime.ts`). Terminal
     output linkifies URLs (an ask's link is often printed there). `thread.aui` shows a
     stall hint (`unstable_useMessageStallDetection`, 15 s) and the timing badge; the
     viewport follows the bottom (no `turnAnchor="top"`). After `npm install` adds packages
