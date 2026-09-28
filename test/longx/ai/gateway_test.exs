@@ -502,6 +502,45 @@ defmodule Longx.AI.GatewayTest do
       assert up.body["reasoning"] == %{"effort" => "low", "summary" => "auto"}
     end
 
+    test "a request with both search tools (a tier whose models search both ways): each model keeps the one it uses" do
+      ours = %{"type" => "function", "name" => "web_search", "parameters" => %{}}
+      hosted = %{"type" => "web_search", "external_web_access" => true}
+
+      body =
+        Map.put(@codex_body, "tools", [
+          ours,
+          hosted,
+          %{"type" => "function", "name" => "exec_command"}
+        ])
+
+      {:ok, up} = Gateway.prepare(body, %Target{@target | hosted_web_search?: true})
+
+      assert Enum.map(up.body["tools"], &(&1["name"] || &1["type"])) == [
+               "web_search",
+               "exec_command"
+             ]
+
+      assert Enum.any?(up.body["tools"], &(&1["type"] == "web_search"))
+
+      refute Enum.any?(
+               up.body["tools"],
+               &(&1["type"] == "function" and &1["name"] == "web_search")
+             )
+
+      {:ok, up} = Gateway.prepare(body, @target)
+      assert Enum.map(up.body["tools"], & &1["name"]) == ["web_search", "exec_command"]
+      assert Enum.all?(up.body["tools"], &(&1["type"] == "function"))
+
+      # ours alone reaches a model that searches itself (nothing else to search with)
+      {:ok, up} =
+        Gateway.prepare(Map.put(@codex_body, "tools", [ours]), %Target{
+          @target
+          | hosted_web_search?: true
+        })
+
+      assert up.body["tools"] == [ours]
+    end
+
     test "the model's verbosity goes out as text.verbosity (OpenAI's knob for how much the answer says); unset sends nothing" do
       {:ok, up} = Gateway.prepare(@codex_body, @target)
       refute Map.has_key?(up.body, "text")

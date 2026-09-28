@@ -790,6 +790,25 @@ defmodule Longx.AI do
 
   def web_search_mode(slug), do: web_search_mode(resolve_target(slug), resolve_search_target())
 
+  @doc """
+  The ways the models behind a name search: a tier or alias whose chain
+  mixes models that search on their side with ones that do not gives both
+  (the request then carries both tools and the gateway keeps, for each
+  model, the one it uses).
+  """
+  @spec web_search_modes(String.t() | nil) :: [web_search_mode]
+  def web_search_modes(name) do
+    case resolve_targets(name) do
+      {:ok, targets} ->
+        targets
+        |> Enum.map(&if(&1.hosted_web_search?, do: :hosted, else: :standalone))
+        |> Enum.uniq()
+
+      {:error, _} ->
+        [web_search_mode(name)]
+    end
+  end
+
   defp web_search_mode({:ok, %Target{hosted_web_search?: true}}, _search), do: :hosted
   defp web_search_mode(_target, _search), do: :standalone
 

@@ -267,6 +267,20 @@ defmodule Longx.AI.Gateway do
 
   defp put_image_generation(body, _target), do: body
 
+  # a model that searches on its side, sent both tools (a tier whose models
+  # search both ways): its own, not Longx's web_search
+  defp drop_hosted_search(%{"tools" => tools} = body, %Target{hosted_web_search?: true})
+       when is_list(tools) do
+    if Enum.any?(tools, &(&1["type"] in @hosted_search_tools)),
+      do:
+        Map.put(
+          body,
+          "tools",
+          Enum.reject(tools, &(&1["type"] == "function" and &1["name"] == "web_search"))
+        ),
+      else: body
+  end
+
   defp drop_hosted_search(body, %Target{hosted_web_search?: true}), do: body
 
   defp drop_hosted_search(%{"tools" => tools} = body, _target) when is_list(tools),

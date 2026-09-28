@@ -14,6 +14,10 @@ defmodule Longx.Agent.Plugs.WebSearch do
       `Longx.AI.Search` (Tavily, the search provider of Settings → 联网搜索);
       no provider configured is said inside the result, never an error.
 
+  A tier or alias whose models search both ways gets both: the gateway keeps
+  the hosted tool for a model that searches on its side and `web_search` for
+  the others.
+
   The thread's own switch (a new chat's 联网搜索) arrives as
   `assigns.web_search`; `false` mounts nothing. Reading a page is
   `Longx.Agent.Plugs.WebFetch`'s `web_fetch`, in every mode.
@@ -42,17 +46,20 @@ defmodule Longx.Agent.Plugs.WebSearch do
   def call(%Step{phase: :request, assigns: %{web_search: false}} = step, _mode), do: step
 
   def call(%Step{phase: :request} = step, mode) do
-    case resolve(mode, step.model) do
-      :hosted -> Step.raw_tool(step, @hosted_tool)
-      :standalone -> Longx.Agent.Plug.mount(step, __MODULE__)
-      :off -> step
-    end
+    Enum.reduce(resolve(mode, step.model), step, fn
+      :hosted, step -> Step.raw_tool(step, @hosted_tool)
+      :standalone, step -> Longx.Agent.Plug.mount(step, __MODULE__)
+      :off, step -> step
+    end)
   end
 
   def call(step, _mode), do: step
 
-  defp resolve(:auto, model), do: AI.web_search_mode(model)
-  defp resolve(mode, _model), do: mode
+  # auto: the ways the models of the chain search — both for a tier mixing them
+  # (Longx.AI.Gateway keeps, for each model, the tool it uses; a fallback that
+  # does not search on its side once had no search at all)
+  defp resolve(:auto, model), do: AI.web_search_modes(model)
+  defp resolve(mode, _model), do: [mode]
 
   def web_search(%{"query" => query} = args, _ctx) do
     target =

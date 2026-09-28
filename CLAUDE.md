@@ -795,7 +795,12 @@ on first use.
     provider's `web_search_call` items and `url_citation` annotations into `webSearch`
     rows (kept as `:hosted_call`; `Gateway.prepare` drops them for a target that does not
     search) — *standalone* for every other model: `web_search(query, recency_days,
-    domains)` over `Longx.AI.Search` (Tavily; no provider → said inside the result). The
+    domains)` over `Longx.AI.Search` (Tavily; no provider → said inside the result). **A
+    tier or alias whose models search both ways gets both** (`AI.web_search_modes/1` over
+    the chain's targets): the request carries the hosted tool and `web_search`, and the
+    gateway keeps, per model, the one it uses (`drop_hosted_search`) — the kind was the
+    first model's, so a fallback that does not search on its side got its hosted tool
+    removed and no `web_search` either. The
     thread's 联网搜索 switch reaches the kernel as `web_search:`; `false` mounts nothing.
     `Plugs.WebFetch` (it was `Plugs.Browser` until the person's own browser took that name)
     is `web_fetch(url, format, selector)` in every mode — obscura through
@@ -1065,7 +1070,7 @@ on first use.
     **base**: what an unmapped tier means and the fallback when the name no longer
     resolves, so a fresh install runs on its preset's model until the person maps
     `plus`. `resolve_targets(nil)` is the default name's whole chain; `in_force(nil, _)`
-    names it (`turn/model` says `plus` → the slug). Settings → 模型与 Provider has the
+    names it (`turn/model` says `plus` → the slug). Settings → 模型 has the
     默认模型 card (`DefaultModelCard`: tiers with their labels, aliases, models, the
     resolution and the reason to prefer a tier); the composer rail shows a tier as
     `plus deepseek-flash high` (`useDefaultModel`).
@@ -1593,10 +1598,20 @@ on first use.
     model), `/p/:slug` and `/p/:slug/t/:threadId` (`frame/ProjectWindow` + `chat/ThreadPage`),
     `/p/:slug/settings` (`pages/ProjectSettingsPage`: name, description, defaults, the
     definition with the trust switch and 提升到 shared, `AgentSettingsFields` overrides,
-    `GitCard`, danger zone), `/settings/:section` (`pages/SettingsPage`: `models` 模型与
-    Provider — providers as cards, presets first, `LevelsEditor`, 档位与别名; a provider on
-    a credential shows 已登录 / 未登录 instead of the key badge and 登录 ChatGPT in its
-    menu; the `chatgpt` preset's dialog has no key field and opens
+    `GitCard`, danger zone), `/settings/:section` (`pages/SettingsPage`: `models` 模型 — what
+    a person sets day to day (`settings/ModelsSection`): the default model with what it
+    resolves to at which level, the tiers and the aliases as chains — a model and its
+    level, the fallbacks as chips each with its level, every model marked 自带搜索 or 代搜
+    —, and 联网搜索 split the two ways by model (the provider searches on its side; Longx's
+    `web_search` with the search service's key, which sits there); `providers` Provider —
+    where the models come from (`settings/ProvidersSection`): a card per provider folded
+    to one line (kind, key or login, how many models, which tiers use them, the last
+    check, an error in red) and open by itself when it needs looking at (no key, an
+    error, no model), its models with window, how many levels, the default level, 兜底
+    for the base row (it was a second 默认 beside the default model's name) and every
+    action (检测, 编辑, 设为兜底模型, 删除) in the row's menu; presets first,
+    `LevelsEditor`; a provider on a credential shows 已登录 / 未登录 instead of the key
+    badge and 登录 ChatGPT in its menu; the `chatgpt` preset's dialog has no key field and opens
     `settings/ChatGptLoginDialog` after applying: the device code with the vendor's page
     and a poll every `interval` s, and beneath it 改用浏览器登录 with the paste box; the
     凭证 page's 登录 opens the same dialog for a `deviceFlow: "openai"` credential —,

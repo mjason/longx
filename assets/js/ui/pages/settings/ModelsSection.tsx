@@ -1,1293 +1,107 @@
-// Settings → 模型与 Provider: every provider as a card — its endpoint, key
-// status and last error, then its models with the default marked — and the
-// search provider's key. Adding and editing happen in dialogs; deleting
-// asks first.
-import {
-  CheckCircle2,
-  ChevronDown,
-  ExternalLink,
-  MoreHorizontal,
-  Plus,
-  Star,
-  Trash2,
-} from "lucide-react";
-import { ChatGptLoginDialog } from "./ChatGptLoginDialog";
-import { useCredentials } from "@/core/credentials";
-import { useState, type FormEvent } from "react";
+// Settings → 模型: what a person sets day to day — which model new
+// conversations, projects and sub-agents run on, at which reasoning level.
+// The default model (a name: a tier by preference), the tiers and the
+// aliases — each a chain of models, every one at its own level, the
+// fallbacks as chips —, and web search, which goes two ways by model: the
+// provider searches on its side (自带搜索), or Longx's web_search does with
+// the search service's key (代搜). Where the models come from — endpoints,
+// keys, windows, levels — is Settings → Provider (./ProvidersSection).
+import { Plus, Trash2, X } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { relativeTime } from "@/core/format";
 import {
   useAiActions,
-  useDiscoverModels,
-  useModelRows,
-  usePresets,
-  useProviders,
   useDefaultModel,
   useModelAliases,
-  type ModelAlias,
+  useModelRows,
+  useProviders,
   useSearchProviders,
-  type ModelInput,
+  type ModelAlias,
   type ModelRow,
-  type Preset,
   type Provider,
-  type ProviderInput,
 } from "@/core/ai";
-import { effortLabel } from "@/ui/chat/TurnBar";
-import {
-  ModelPicker,
-  type PickableModel,
-} from "@/ui/components/assistant-ui/elements/model-picker";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/ui/components/ui/alert-dialog";
 import { Badge } from "@/ui/components/ui/badge";
 import { Button } from "@/ui/components/ui/button";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/ui/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/ui/components/ui/dropdown-menu";
 import { Input } from "@/ui/components/ui/input";
 import { Label } from "@/ui/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/ui/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { Skeleton } from "@/ui/components/ui/skeleton";
-import { Switch } from "@/ui/components/ui/switch";
 import { t } from "@/ui/strings";
+import { SearchBadge, searchesItself } from "./ProvidersSection";
 
 const s = t.ai;
-const fail = (e: unknown) =>
-  toast.error(e instanceof Error ? e.message : String(e));
+const fail = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e));
+const NONE = "__none";
 
-// what the section's dialogs can be doing: choosing a template, filling one
-// in, or the free-form provider form (new or editing a row)
-type Editing =
-  | { kind: "choose" }
-  | { kind: "preset"; preset: Preset }
-  | { kind: "login"; credentialId: string }
-  | { kind: "custom"; provider: Provider | null }
-  | null;
+type Link = { slug: string; effort: string };
+
+/** What the page needs of a model: its levels, its default level, whether it searches on its side. */
+type Facts = Map<string, { levels: string[]; effort: string | null; searches: boolean }>;
 
 export function ModelsSection() {
-  const providers = useProviders();
   const models = useModelRows();
-  const presets = usePresets();
-  const [editing, setEditing] = useState<Editing>(null);
-  if (providers.isPending || models.isPending)
-    return <Skeleton className="h-24 w-full" data-testid="section-models" />;
-  if (providers.isError)
-    return (
-      <p className="text-destructive text-sm">{providers.error.message}</p>
-    );
-  if (models.isError)
-    return <p className="text-destructive text-sm">{models.error.message}</p>;
-  return (
-    <div className="flex flex-col gap-8" data-testid="section-models">
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-medium">{s.providers}</h2>
-          <Button size="sm" onClick={() => setEditing({ kind: "choose" })}>
-            <Plus className="size-4" /> {s.addProvider}
-          </Button>
-        </div>
-        <p className="text-muted-foreground text-sm">{s.providersHint}</p>
-        {providers.data.map((p) => (
-          <ProviderCard
-            key={p.id}
-            provider={p}
-            models={models.data.filter((m) => m.providerId === p.id)}
-            preset={
-              presets.data?.find((preset) => preset.providerId === p.id) ?? null
-            }
-            onEdit={() => setEditing({ kind: "custom", provider: p })}
-            onAddFromPreset={(preset) => setEditing({ kind: "preset", preset })}
-            onLogin={(credentialId) => setEditing({ kind: "login", credentialId })}
-          />
-        ))}
-      </section>
-      <DefaultModelCard models={models.data} />
-      <AliasesCard models={models.data} />
-      <SearchProviderCard />
-      {editing?.kind === "choose" ? (
-        <PresetChooser
-          presets={presets.data ?? []}
-          onPick={(preset) =>
-            setEditing(
-              preset
-                ? { kind: "preset", preset }
-                : { kind: "custom", provider: null },
-            )
-          }
-          onClose={() => setEditing(null)}
-        />
-      ) : null}
-      {editing?.kind === "login" ? (
-        <ChatGptLoginDialog credentialId={editing.credentialId} onClose={() => setEditing(null)} />
-      ) : null}
-      {editing?.kind === "preset" ? (
-        <PresetDialog
-          preset={editing.preset}
-          onLogin={(credentialId) => setEditing({ kind: "login", credentialId })}
-          onClose={() => setEditing(null)}
-        />
-      ) : null}
-      {editing?.kind === "custom" ? (
-        <ProviderDialog
-          provider={editing.provider}
-          onClose={() => setEditing(null)}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-/** The first step of "add": a template (the facts filled in) or the free form. */
-function PresetChooser({
-  presets,
-  onPick,
-  onClose,
-}: {
-  presets: Preset[];
-  onPick: (preset: Preset | null) => void;
-  onClose: () => void;
-}) {
-  return (
-    <Dialog open onOpenChange={(o) => (o ? null : onClose())}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{s.chooseTemplate}</DialogTitle>
-          <DialogDescription>{s.chooseTemplateHint}</DialogDescription>
-        </DialogHeader>
-        <DialogBody className="flex flex-col gap-4">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {presets.map((preset) => (
-              <button
-                key={preset.slug}
-                type="button"
-                onClick={() => onPick(preset)}
-                className="hover:bg-accent flex min-h-16 min-w-0 flex-col items-start gap-1 rounded-lg border p-3 text-start transition-colors"
-              >
-                <span className="flex w-full items-center justify-between gap-2">
-                  <span className="font-medium">{preset.name}</span>
-                  {preset.installed ? (
-                    <Badge variant="secondary">{s.presetInstalled}</Badge>
-                  ) : null}
-                </span>
-                <span
-                  className="text-muted-foreground w-full truncate font-mono text-xs"
-                  title={preset.baseUrl}
-                >
-                  {preset.baseUrl}
-                </span>
-                <span className="text-muted-foreground text-xs">
-                  {preset.models.map((m) => m.upstreamId).join(" · ")}
-                </span>
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => onPick(null)}
-              className="hover:bg-accent flex min-h-16 flex-col items-start gap-1 rounded-lg border border-dashed p-3 text-start transition-colors"
-            >
-              <span className="font-medium">{s.custom}</span>
-              <span className="text-muted-foreground text-xs">
-                {s.customHint}
-              </span>
-            </button>
-          </div>
-        </DialogBody>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-const formatWindow = (tokens: number) =>
-  tokens >= 1_000_000
-    ? `${Math.round(tokens / 100_000) / 10}M`
-    : `${Math.round(tokens / 1000)}k`;
-
-/**
- * A template in one step: the key (unless the provider is already there),
- * the models to add — the registry's model-picker list as a checklist,
- * recommended ones pre-checked, installed ones left out — and which becomes
- * the default.
- */
-function PresetDialog({
-  preset,
-  onClose,
-  onLogin,
-}: {
-  preset: Preset;
-  onClose: () => void;
-  /** a subscription template: the credential is made, the login comes next */
-  onLogin: (credentialId: string) => void;
-}) {
-  const actions = useAiActions();
   const providers = useProviders();
-  // an installed provider without a key still wants one — unless its key is a login
-  const needsKey =
-    !preset.credential &&
-    (!preset.installed ||
-      !providers.data?.find((p) => p.id === preset.providerId)?.hasApiKey);
-  const candidates = preset.models.filter((m) => !m.installed);
-  const [apiKey, setApiKey] = useState("");
-  const [chosen, setChosen] = useState<string[]>(
-    candidates.filter((m) => m.recommended).map((m) => m.upstreamId),
-  );
-  const [makeDefault, setMakeDefault] = useState("__keep");
-  const rows: PickableModel[] = candidates.map((m) => ({
-    id: m.upstreamId,
-    name: m.upstreamId,
-    family: preset.name,
-    context: formatWindow(m.contextWindow),
-    capabilities: [
-      ...(m.image ? [s.image] : []),
-      ...(m.reasoningLevels.length > 0
-        ? [`${m.reasoningLevels.map(effortLabel).join(" / ")}`]
-        : []),
-    ],
-  }));
-  const toggle = (id: string) =>
-    setChosen((ids) =>
-      ids.includes(id)
-        ? ids.filter((x) => x !== id)
-        : candidates
-            .filter((m) => m.upstreamId === id || ids.includes(m.upstreamId))
-            .map((m) => m.upstreamId),
-    );
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    actions.applyPreset.mutate(
-      {
-        slug: preset.slug,
-        ...(apiKey ? { apiKey } : {}),
-        models: chosen,
-        ...(makeDefault !== "__keep" && chosen.includes(makeDefault)
-          ? { makeDefault }
-          : {}),
-      },
-      {
-        onSuccess: (r) => {
-          toast.success(s.saved);
-          // a subscription: straight on to the login
-          if (preset.credential && r.credentialId) onLogin(r.credentialId);
-          else onClose();
-        },
-        onError: fail,
-      },
-    );
-  };
-  return (
-    <Dialog open onOpenChange={(o) => (o ? null : onClose())}>
-      <DialogContent>
-        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col gap-4">
-          <DialogHeader>
-            <DialogTitle>
-              {preset.installed
-                ? s.presetMoreTitle(preset.name)
-                : s.presetTitle(preset.name)}
-            </DialogTitle>
-            <DialogDescription className="font-mono text-xs break-all">
-              {preset.baseUrl}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody className="flex flex-col gap-4">
-            {preset.credential ? (
-              <p className="text-muted-foreground text-sm">{s.presetLoginHint}</p>
-            ) : null}
-            {needsKey ? (
-              <Field
-                id="ps-key"
-                label={s.apiKey}
-                hint={s.presetKeyHint(preset.keyEnv)}
-              >
-                <Input
-                  id="ps-key"
-                  type="password"
-                  autoComplete="off"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className="font-mono"
-                />
-              </Field>
-            ) : null}
-            <div className="flex flex-wrap gap-3 text-xs">
-              {preset.credential ? null : (
-                <a
-                  href={preset.keyUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-primary inline-flex items-center gap-1 underline-offset-4 hover:underline"
-                >
-                  {s.getKey} <ExternalLink className="size-3" />
-                </a>
-              )}
-              <a
-                href={preset.docsUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-muted-foreground inline-flex items-center gap-1 underline-offset-4 hover:underline"
-              >
-                {s.presetDocs} <ExternalLink className="size-3" />
-              </a>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>{s.presetModels}</Label>
-              {rows.length > 0 ? (
-                <ModelPicker
-                  models={rows}
-                  selectedIds={chosen}
-                  onToggle={toggle}
-                  className="max-w-none"
-                />
-              ) : (
-                <p className="text-muted-foreground text-sm">
-                  {s.presetAllInstalled}
-                </p>
-              )}
-            </div>
-            {chosen.length > 0 ? (
-              <Field id="ps-default" label={s.defaultModel}>
-                <Select value={makeDefault} onValueChange={setMakeDefault}>
-                  <SelectTrigger id="ps-default" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__keep">{s.keepDefault}</SelectItem>
-                    {chosen.map((id) => (
-                      <SelectItem key={id} value={id} className="font-mono">
-                        {id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            ) : null}
-          </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              {t.cancel}
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                actions.applyPreset.isPending ||
-                (chosen.length === 0 && preset.installed)
-              }
-            >
-              {s.add}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ProviderCard({
-  provider,
-  models,
-  preset,
-  onEdit,
-  onAddFromPreset,
-  onLogin,
-}: {
-  provider: Provider;
-  models: ModelRow[];
-  preset: Preset | null;
-  onEdit: () => void;
-  onAddFromPreset: (preset: Preset) => void;
-  onLogin: (credentialId: string) => void;
-}) {
-  const actions = useAiActions();
-  // a provider on a credential (a ChatGPT subscription): its login is its key
-  const credentials = useCredentials({ refetchInterval: provider.credentialId ? 5000 : false });
-  const credential = provider.credentialId ? (credentials.data?.find((c) => c.id === provider.credentialId) ?? null) : null;
-  const [adding, setAdding] = useState<ModelRow | "new" | null>(null);
-  const [discovering, setDiscovering] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  // the template this provider came from still has models to offer
-  const missing = preset?.models.some((m) => !m.installed) ? preset : null;
-  return (
-    <div className="rounded-lg border" data-testid={`provider-${provider.id}`}>
-      <div className="flex items-start justify-between gap-3 p-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{provider.name}</span>
-            <Badge variant="outline">{s.kinds[provider.kind]}</Badge>
-            {provider.credentialId ? (
-              credential?.status === "ready" ? (
-                <Badge variant="secondary">{s.loginSet}</Badge>
-              ) : credential?.status === "expired" || credential?.status === "error" ? (
-                <Badge variant="destructive">{s.loginExpired}</Badge>
-              ) : (
-                <Badge variant="destructive">{s.loginMissing}</Badge>
-              )
-            ) : provider.hasApiKey ? (
-              <Badge variant="secondary">{s.apiKeySet}</Badge>
-            ) : (
-              <Badge variant="destructive">{s.apiKeyMissing}</Badge>
-            )}
-          </div>
-          <p className="text-muted-foreground mt-1 truncate font-mono text-xs">
-            {provider.baseUrl}
-          </p>
-          {provider.lastError ? (
-            <p className="text-destructive mt-1 text-xs">
-              {s.lastError}: {provider.lastError}
-            </p>
-          ) : provider.lastCheckedAt ? (
-            <p className="text-muted-foreground mt-1 text-xs">
-              {s.lastChecked(relativeTime(provider.lastCheckedAt))}
-            </p>
-          ) : null}
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 shrink-0"
-              aria-label={`${provider.name} 的操作`}
-            >
-              <MoreHorizontal className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {provider.credentialId ? (
-              <DropdownMenuItem onSelect={() => onLogin(provider.credentialId!)}>
-                {s.loginChatGpt}
-              </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuItem onSelect={onEdit}>
-              {s.editProvider}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setAdding("new")}>
-              {s.addModel}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setDiscovering(true)}>
-              {s.discover}
-            </DropdownMenuItem>
-            {missing ? (
-              <DropdownMenuItem onSelect={() => onAddFromPreset(missing)}>
-                {s.addFromPreset}
-              </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuItem
-              variant="destructive"
-              onSelect={() => setConfirmDelete(true)}
-            >
-              {s.deleteProvider}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      <ul className="divide-y border-t">
-        {models.length === 0 ? (
-          <li className="text-muted-foreground px-3 py-2 text-sm">
-            {s.noModels}
-          </li>
-        ) : null}
-        {models.map((m) => (
-          <ModelRowView key={m.id} model={m} onEdit={() => setAdding(m)} />
-        ))}
-        <li className="px-3 py-2">
-          <Button variant="ghost" size="sm" onClick={() => setAdding("new")}>
-            <Plus className="size-4" /> {s.addModel}
-          </Button>
-        </li>
-      </ul>
-      {adding ? (
-        <ModelDialog
-          provider={provider}
-          model={adding === "new" ? null : adding}
-          onClose={() => setAdding(null)}
-        />
-      ) : null}
-      {discovering ? (
-        <DiscoverDialog
-          provider={provider}
-          onClose={() => setDiscovering(false)}
-        />
-      ) : null}
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {s.deleteProviderTitle(provider.name)}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {s.deleteProviderHint}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() =>
-                actions.deleteProvider.mutate(provider.id, {
-                  onSuccess: () => toast.success(s.deleted),
-                  onError: fail,
-                })
-              }
-            >
-              {t.delete}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  );
-}
-
-function ModelRowView({
-  model,
-  onEdit,
-}: {
-  model: ModelRow;
-  onEdit: () => void;
-}) {
-  const actions = useAiActions();
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [checked, setChecked] = useState<{
-    ok: boolean;
-    latencyMs: number | null;
-    error: string | null;
-  } | null>(null);
-  const check = () =>
-    actions.checkModel.mutate(model.id, {
-      onSuccess: (r) => {
-        setChecked(r);
-        if (r.ok) toast.success(s.checkOk(r.latencyMs ?? 0));
-        else toast.error(s.checkFailed(r.error ?? ""));
-      },
-      onError: fail,
-    });
-  return (
-    <li
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm"
-      data-testid={`model-${model.id}`}
-    >
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="flex items-center gap-2">
-          <span className="font-mono text-xs">
-            {model.slug ?? model.upstreamId}
-          </span>
-          {model.default ? (
-            <Badge>
-              <Star className="size-3" /> {s.default}
-            </Badge>
-          ) : null}
-        </span>
-        <span className="text-muted-foreground text-xs">
-          {model.name} · {model.upstreamId}
-          {model.contextWindow ? ` · ${formatWindow(model.contextWindow)}` : ""}
-          {model.reasoningLevels.length > 0
-            ? ` · ${model.reasoningLevels.map(effortLabel).join(" / ")}`
-            : ""}
-          {model.reasoningEffort
-            ? ` · ${s.default} ${effortLabel(model.reasoningEffort)}`
-            : ""}
-        </span>
-        {checked ? (
-          <span
-            className={`text-xs ${checked.ok ? "text-success" : "text-destructive"}`}
-          >
-            {checked.ok ? (
-              <>
-                <CheckCircle2 className="mr-1 inline size-3" />
-                {s.checkOk(checked.latencyMs ?? 0)}
-              </>
-            ) : (
-              s.checkFailed(checked.error ?? "")
-            )}
-          </span>
-        ) : null}
-      </div>
-      <div className="flex items-center gap-1">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7"
-          onClick={check}
-          disabled={actions.checkModel.isPending}
-        >
-          {s.check}
-        </Button>
-        {!model.default ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7"
-            onClick={() =>
-              actions.makeDefault.mutate(model.id, { onError: fail })
-            }
-          >
-            {s.makeDefault}
-          </Button>
-        ) : null}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              aria-label={`${model.name} 的操作`}
-            >
-              <MoreHorizontal className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={onEdit}>{s.editModel}</DropdownMenuItem>
-            <DropdownMenuItem
-              variant="destructive"
-              onSelect={() => setConfirmDelete(true)}
-            >
-              {s.deleteModel}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {s.deleteModelTitle(model.name)}
-            </AlertDialogTitle>
-            <AlertDialogDescription>{s.deleteModelHint}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() =>
-                actions.deleteModel.mutate(model.id, {
-                  onSuccess: () => toast.success(s.deleted),
-                  onError: fail,
-                })
-              }
-            >
-              {t.delete}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </li>
-  );
-}
-
-const slugOf = (name: string) =>
-  name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-function ProviderDialog({
-  provider,
-  onClose,
-}: {
-  provider: Provider | null;
-  onClose: () => void;
-}) {
-  const actions = useAiActions();
-  const [form, setForm] = useState({
-    name: provider?.name ?? "",
-    slug: provider?.slug ?? "",
-    baseUrl: provider?.baseUrl ?? "",
-    apiKey: "",
-    kind: provider?.kind ?? "openai_compatible",
-    supportsHostedWebSearch: provider?.supportsHostedWebSearch ?? false,
-    // "auto" follows the kind (OpenAI sends it, a compatible service does not)
-    promptCacheKey: provider?.promptCacheKey === true ? "on" : provider?.promptCacheKey === false ? "off" : "auto",
-    timeoutS: String(
-      Math.round((provider?.requestTimeoutMs ?? 600_000) / 1000),
-    ),
-    idleS: String(Math.round((provider?.streamIdleTimeoutMs ?? 300_000) / 1000)),
-    concurrency: provider?.maxConcurrentRequests
-      ? String(provider.maxConcurrentRequests)
-      : "",
-  });
-  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
-    setForm((f) => ({ ...f, [k]: v }));
-  const busy =
-    actions.createProvider.isPending || actions.updateProvider.isPending;
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const common = {
-      name: form.name.trim(),
-      baseUrl: form.baseUrl.trim(),
-      kind: form.kind as Provider["kind"],
-      supportsHostedWebSearch: form.supportsHostedWebSearch,
-      promptCacheKey: form.promptCacheKey === "on" ? true : form.promptCacheKey === "off" ? false : null,
-      requestTimeoutMs: Math.max(1, Number(form.timeoutS) || 600) * 1000,
-      streamIdleTimeoutMs: Math.max(1, Number(form.idleS) || 300) * 1000,
-      maxConcurrentRequests: form.concurrency ? Number(form.concurrency) : null,
-      ...(form.apiKey ? { apiKey: form.apiKey } : {}),
-    };
-    const done = {
-      onSuccess: () => (toast.success(s.saved), onClose()),
-      onError: fail,
-    };
-    if (provider)
-      actions.updateProvider.mutate({ id: provider.id, input: common }, done);
-    else
-      actions.createProvider.mutate(
-        {
-          ...common,
-          slug: form.slug.trim() || slugOf(form.name),
-        } as ProviderInput,
-        done,
-      );
-  };
-  return (
-    <Dialog open onOpenChange={(o) => (o ? null : onClose())}>
-      <DialogContent>
-        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col gap-4">
-          <DialogHeader>
-            <DialogTitle>
-              {provider ? s.editProvider : s.addProvider}
-            </DialogTitle>
-          </DialogHeader>
-          <DialogBody className="flex flex-col gap-4">
-            <Field id="pv-name" label={s.name}>
-              <Input
-                id="pv-name"
-                value={form.name}
-                onChange={(e) => set("name", e.target.value)}
-                required
-              />
-            </Field>
-            {!provider ? (
-              <Field id="pv-slug" label={s.slug} hint={s.slugHint}>
-                <Input
-                  id="pv-slug"
-                  value={form.slug}
-                  placeholder={slugOf(form.name)}
-                  onChange={(e) => set("slug", e.target.value)}
-                  className="font-mono"
-                />
-              </Field>
-            ) : null}
-            <Field id="pv-url" label={s.baseUrl}>
-              <Input
-                id="pv-url"
-                type="url"
-                value={form.baseUrl}
-                placeholder="https://api.deepseek.com/v1"
-                onChange={(e) => set("baseUrl", e.target.value)}
-                required
-                className="font-mono"
-              />
-            </Field>
-            <Field
-              id="pv-key"
-              label={s.apiKey}
-              hint={provider?.hasApiKey ? s.keepKey : undefined}
-            >
-              <Input
-                id="pv-key"
-                type="password"
-                autoComplete="off"
-                value={form.apiKey}
-                onChange={(e) => set("apiKey", e.target.value)}
-                className="font-mono"
-              />
-            </Field>
-            <Field id="pv-kind" label={s.kind} hint={s.kindHint}>
-              <Select
-                value={form.kind}
-                onValueChange={(v) => set("kind", v as Provider["kind"])}
-              >
-                <SelectTrigger id="pv-kind" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(["openai_compatible", "openai"] as const).map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {s.kinds[k]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="pv-search">{s.hostedSearch}</Label>
-              <Switch
-                id="pv-search"
-                checked={form.supportsHostedWebSearch}
-                onCheckedChange={(v) => set("supportsHostedWebSearch", v)}
-              />
-            </div>
-            <Field id="pv-cache" label="prompt_cache_key" hint={s.promptCacheKeyHint}>
-              <Select value={form.promptCacheKey} onValueChange={(v) => set("promptCacheKey", v)}>
-                <SelectTrigger id="pv-cache" aria-label="prompt_cache_key">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">{s.promptCacheKeyOptions.auto}</SelectItem>
-                  <SelectItem value="on">{s.promptCacheKeyOptions.on}</SelectItem>
-                  <SelectItem value="off">{s.promptCacheKeyOptions.off}</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <details className="group">
-              <summary className="text-muted-foreground flex cursor-pointer list-none items-center gap-1 text-sm">
-                <ChevronDown className="size-4 transition-transform group-open:rotate-180" />{" "}
-                {s.advanced}
-              </summary>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <Field id="pv-timeout" label={s.timeout}>
-                  <Input
-                    id="pv-timeout"
-                    type="number"
-                    min={1}
-                    value={form.timeoutS}
-                    onChange={(e) => set("timeoutS", e.target.value)}
-                  />
-                </Field>
-                <Field id="pv-idle" label={s.idleTimeout} hint={s.idleTimeoutHint}>
-                  <Input
-                    id="pv-idle"
-                    type="number"
-                    min={1}
-                    value={form.idleS}
-                    onChange={(e) => set("idleS", e.target.value)}
-                  />
-                </Field>
-                <Field id="pv-conc" label={s.concurrency}>
-                  <Input
-                    id="pv-conc"
-                    type="number"
-                    min={1}
-                    placeholder={s.unlimited}
-                    value={form.concurrency}
-                    onChange={(e) => set("concurrency", e.target.value)}
-                  />
-                </Field>
-              </div>
-            </details>
-          </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              {t.cancel}
-            </Button>
-            <Button type="submit" disabled={busy}>
-              {t.save}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ModelDialog({
-  provider,
-  model,
-  onClose,
-}: {
-  provider: Provider;
-  model: ModelRow | null;
-  onClose: () => void;
-}) {
-  const actions = useAiActions();
-  const [form, setForm] = useState({
-    name: model?.name ?? "",
-    slug: model?.slug ?? "",
-    upstreamId: model?.upstreamId ?? "",
-    contextWindow: model?.contextWindow
-      ? String(model.contextWindow)
-      : "128000",
-    reasoningLevels: model?.reasoningLevels ?? ([] as string[]),
-    reasoningEffort: model?.reasoningEffort ?? "",
-    customLevel: "",
-    reasoningSummary: model?.reasoningSummary ?? "__none",
-    verbosity: model?.verbosity ?? "__none",
-    maxOutputTokens: model?.maxOutputTokens
-      ? String(model.maxOutputTokens)
-      : "",
-    hostedWebSearch:
-      model?.hostedWebSearch === true
-        ? "hosted"
-        : model?.hostedWebSearch === false
-          ? "longx"
-          : "provider",
-    imageGeneration: model?.imageGeneration === true,
-  });
-  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
-    setForm((f) => ({ ...f, [k]: v }));
-  const busy = actions.createModel.isPending || actions.updateModel.isPending;
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const common = {
-      name: form.name.trim(),
-      upstreamId: form.upstreamId.trim(),
-      contextWindow: Number(form.contextWindow) || undefined,
-      reasoningLevels: form.reasoningLevels,
-      reasoningEffort: form.reasoningEffort.trim() || null,
-      reasoningSummary:
-        form.reasoningSummary === "__none"
-          ? null
-          : (form.reasoningSummary as ModelRow["reasoningSummary"]),
-      verbosity: form.verbosity === "__none" ? null : (form.verbosity as ModelRow["verbosity"]),
-      maxOutputTokens: form.maxOutputTokens
-        ? Number(form.maxOutputTokens)
-        : null,
-      hostedWebSearch:
-        form.hostedWebSearch === "hosted"
-          ? true
-          : form.hostedWebSearch === "longx"
-            ? false
-            : null,
-      imageGeneration: form.imageGeneration,
-      ...(form.slug.trim() ? { slug: form.slug.trim() } : {}),
-    };
-    const done = {
-      onSuccess: () => (toast.success(s.saved), onClose()),
-      onError: fail,
-    };
-    if (model)
-      actions.updateModel.mutate({ id: model.id, input: common }, done);
-    else
-      actions.createModel.mutate(
-        { ...common, providerId: provider.id } as ModelInput,
-        done,
-      );
-  };
-  return (
-    <Dialog open onOpenChange={(o) => (o ? null : onClose())}>
-      <DialogContent>
-        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col gap-4">
-          <DialogHeader>
-            <DialogTitle>
-              {model ? s.editModel : s.addModel} · {provider.name}
-            </DialogTitle>
-          </DialogHeader>
-          <DialogBody className="flex flex-col gap-4">
-            <Field id="md-name" label={s.name}>
-              <Input
-                id="md-name"
-                value={form.name}
-                onChange={(e) => set("name", e.target.value)}
-                required
-              />
-            </Field>
-            <Field
-              id="md-upstream"
-              label={s.upstreamId}
-              hint={s.upstreamIdHint}
-            >
-              <Input
-                id="md-upstream"
-                value={form.upstreamId}
-                onChange={(e) => set("upstreamId", e.target.value)}
-                required
-                className="font-mono"
-              />
-            </Field>
-            <Field id="md-slug" label={s.slug} hint={s.slugHint}>
-              <Input
-                id="md-slug"
-                value={form.slug}
-                placeholder={form.upstreamId}
-                onChange={(e) => set("slug", e.target.value)}
-                className="font-mono"
-              />
-            </Field>
-            <Field
-              id="md-window"
-              label={s.contextWindow}
-              hint={s.contextWindowHint}
-            >
-              <Input
-                id="md-window"
-                type="number"
-                min={1000}
-                step={1}
-                value={form.contextWindow}
-                onChange={(e) => set("contextWindow", e.target.value)}
-                required
-              />
-            </Field>
-            <LevelsEditor
-              levels={form.reasoningLevels}
-              custom={form.customLevel}
-              onCustom={(v) => set("customLevel", v)}
-              onChange={(levels) =>
-                setForm((f) => ({
-                  ...f,
-                  reasoningLevels: levels,
-                  reasoningEffort:
-                    levels.length === 0 || levels.includes(f.reasoningEffort)
-                      ? f.reasoningEffort
-                      : "",
-                }))
-              }
-            />
-            <div className="grid grid-cols-2 gap-3">
-              {form.reasoningLevels.length > 0 ? (
-                <Field
-                  id="md-effort"
-                  label={s.reasoningEffort}
-                  hint={s.reasoningEffortHint}
-                >
-                  <Select
-                    value={form.reasoningEffort || "__none"}
-                    onValueChange={(v) =>
-                      set("reasoningEffort", v === "__none" ? "" : v)
-                    }
-                  >
-                    <SelectTrigger id="md-effort" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none">—</SelectItem>
-                      {form.reasoningLevels.map((level) => (
-                        <SelectItem key={level} value={level}>
-                          {effortLabel(level)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              ) : (
-                <Field
-                  id="md-effort"
-                  label={s.reasoningEffortFree}
-                  hint={s.reasoningEffortFreeHint}
-                >
-                  <Input
-                    id="md-effort"
-                    value={form.reasoningEffort}
-                    onChange={(e) => set("reasoningEffort", e.target.value)}
-                    className="font-mono"
-                  />
-                </Field>
-              )}
-              <Field id="md-summary" label={s.reasoningSummary} hint={s.reasoningSummaryHint}>
-                <Select
-                  value={form.reasoningSummary}
-                  onValueChange={(v) => set("reasoningSummary", v)}
-                >
-                  <SelectTrigger id="md-summary" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none">—</SelectItem>
-                    {(["auto", "concise", "detailed", "none"] as const).map(
-                      (k) => (
-                        <SelectItem key={k} value={k}>
-                          {s.reasoningSummaries[k]}
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-            <Field id="md-verbosity" label={s.verbosity} hint={s.verbosityHint}>
-              <Select value={form.verbosity} onValueChange={(v) => set("verbosity", v)}>
-                <SelectTrigger id="md-verbosity" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none">—</SelectItem>
-                  {(["low", "medium", "high"] as const).map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {s.verbosities[k]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field id="md-max" label={s.maxOutputTokens}>
-              <Input
-                id="md-max"
-                type="number"
-                min={1}
-                placeholder={s.unlimited}
-                value={form.maxOutputTokens}
-                onChange={(e) => set("maxOutputTokens", e.target.value)}
-              />
-            </Field>
-            <Field id="md-search" label={s.hostedWebSearch}>
-              <Select
-                value={form.hostedWebSearch}
-                onValueChange={(v) => set("hostedWebSearch", v)}
-              >
-                <SelectTrigger id="md-search" aria-label={s.hostedWebSearch}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="provider">
-                    {s.hostedWebSearchOptions.provider}
-                  </SelectItem>
-                  <SelectItem value="hosted">
-                    {s.hostedWebSearchOptions.hosted}
-                  </SelectItem>
-                  <SelectItem value="longx">
-                    {s.hostedWebSearchOptions.longx}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-muted-foreground text-xs">
-                {s.hostedWebSearchHint}
-              </p>
-            </Field>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-3">
-                <Switch id="md-image" checked={form.imageGeneration} onCheckedChange={(v) => set("imageGeneration", v)} aria-label={s.imageGeneration} />
-                <Label htmlFor="md-image">{s.imageGeneration}</Label>
-              </div>
-              <p className="text-muted-foreground text-xs">{s.imageGenerationHint}</p>
-            </div>
-          </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              {t.cancel}
-            </Button>
-            <Button type="submit" disabled={busy}>
-              {t.save}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// the known efforts, in order; a model may add its own
-const KNOWN_LEVELS = [
-  "none",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "ultra",
-];
-
-/** The levels a model offers: the known ones as toggles (kept in the known order), any other typed in. */
-function LevelsEditor({
-  levels,
-  custom,
-  onCustom,
-  onChange,
-}: {
-  levels: string[];
-  custom: string;
-  onCustom: (v: string) => void;
-  onChange: (levels: string[]) => void;
-}) {
-  const order = [
-    ...KNOWN_LEVELS,
-    ...levels.filter((l) => !KNOWN_LEVELS.includes(l)),
-  ];
-  const toggle = (level: string) =>
-    onChange(
-      levels.includes(level)
-        ? levels.filter((l) => l !== level)
-        : order.filter((l) => l === level || levels.includes(l)),
-    );
-  const addCustom = () => {
-    const level = custom.trim();
-    if (level && !levels.includes(level)) onChange([...levels, level]);
-    onCustom("");
-  };
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label>{s.reasoningLevels}</Label>
-      <div className="flex flex-wrap gap-1.5">
-        {order.map((level) => (
-          <Button
-            key={level}
-            type="button"
-            size="sm"
-            variant={levels.includes(level) ? "default" : "outline"}
-            className="h-7 font-mono"
-            aria-pressed={levels.includes(level)}
-            aria-label={level}
-            onClick={() => toggle(level)}
-          >
-            {level}
-          </Button>
-        ))}
-        <div className="flex gap-1">
-          <Input
-            aria-label={s.customLevel}
-            placeholder={s.customLevelPlaceholder}
-            value={custom}
-            onChange={(e) => onCustom(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addCustom();
-              }
-            }}
-            className="h-7 w-44 font-mono text-xs"
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7"
-            onClick={addCustom}
-            disabled={!custom.trim()}
-          >
-            {s.addLevel}
-          </Button>
-        </div>
-      </div>
-      <p className="text-muted-foreground text-xs">{s.reasoningLevelsHint}</p>
-    </div>
-  );
-}
-
-/**
- * Tiers (flagship / advanced / standard) and the team's own aliases, each a
- * chain of models: what a description names instead of a concrete slug, so
- * a migration is a change here and nowhere else.
- */
-/** What runs when nobody picks: a tier by preference, an alias or a model. */
-function DefaultModelCard({ models }: { models: ModelRow[] }) {
-  const current = useDefaultModel();
   const aliases = useModelAliases();
-  const actions = useAiActions();
-  if (!current.data || !aliases.data) return null;
-  const tiers = aliases.data.filter((a) => a.builtin);
-  const custom = aliases.data.filter((a) => !a.builtin);
-  const slugs = models.filter((m) => m.slug).map((m) => m.slug!);
-  const pick = (name: string) => actions.setDefaultModel.mutate(name, { onSuccess: () => toast.success(s.defaultModelSaved), onError: fail });
+  if (models.isPending || providers.isPending || aliases.isPending) return <Skeleton className="h-24 w-full" data-testid="section-models" />;
+  if (models.isError) return <p className="text-destructive text-sm">{models.error.message}</p>;
+  const rows = models.data.filter((m) => m.slug);
+  const byId = new Map<string, Provider>((providers.data ?? []).map((p) => [p.id, p]));
+  const facts: Facts = new Map(
+    rows.map((m) => [m.slug!, { levels: m.reasoningLevels, effort: m.reasoningEffort, searches: searchesItself(m, byId.get(m.providerId)) }]),
+  );
+  const all = aliases.data ?? [];
   return (
-    <section className="flex flex-col gap-3" data-testid="default-model">
-      <h2 className="text-base font-medium">{s.defaultModel}</h2>
-      <p className="text-muted-foreground text-sm">{s.defaultModelHint}</p>
+    <div className="flex flex-col gap-6" data-testid="section-models">
+      <p className="text-muted-foreground text-sm">{s.modelsHint}</p>
+      <DefaultModelCard rows={rows} aliases={all} facts={facts} />
+      <ChainsCard
+        testId="model-tiers"
+        title={s.tiers}
+        hint={s.tiersHint}
+        chains={all.filter((a) => a.builtin)}
+        slugs={rows.map((m) => m.slug!)}
+        facts={facts}
+      />
+      <ChainsCard
+        testId="model-aliases"
+        title={s.aliases}
+        hint={s.aliasesOnlyHint}
+        chains={all.filter((a) => !a.builtin)}
+        slugs={rows.map((m) => m.slug!)}
+        facts={facts}
+        adding
+      />
+      <SearchCard rows={rows} facts={facts} />
+    </div>
+  );
+}
+
+function Card({ testId, title, hint, children }: { testId: string; title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-lg border p-4" data-testid={testId}>
+      <h2 className="text-base font-medium">{title}</h2>
+      {hint ? <p className="text-muted-foreground mt-1 text-sm">{hint}</p> : null}
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+function DefaultModelCard({ rows, aliases, facts }: { rows: ModelRow[]; aliases: ModelAlias[]; facts: Facts }) {
+  const current = useDefaultModel();
+  const actions = useAiActions();
+  if (!current.data) return null;
+  const tiers = aliases.filter((a) => a.builtin);
+  const custom = aliases.filter((a) => !a.builtin);
+  const pick = (name: string) => actions.setDefaultModel.mutate(name, { onSuccess: () => toast.success(s.defaultModelSaved), onError: fail });
+  // what it runs on now: the model, at the level its tier gave it, else the model's default
+  const chain = aliases.find((a) => a.name === current.data.name);
+  const slug = current.data.slug;
+  const level = slug ? ((chain && chain.models[0] === slug ? chain.efforts?.[0] : null) ?? facts.get(slug)?.effort ?? null) : null;
+  return (
+    <Card testId="default-model" title={s.defaultModel} hint={s.defaultModelHint}>
       <div className="flex flex-wrap items-center gap-3">
         <Select value={current.data.name} onValueChange={pick}>
-          <SelectTrigger className="h-10 w-72" aria-label={s.defaultModel}>
+          <SelectTrigger className="h-10 w-72 max-w-full" aria-label={s.defaultModel}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1295,7 +109,8 @@ function DefaultModelCard({ models }: { models: ModelRow[] }) {
               <SelectLabel>{s.defaultModelTiers}</SelectLabel>
               {tiers.map((a) => (
                 <SelectItem key={a.name} value={a.name}>
-                  {a.name} · {a.label}{a.models[0] ? ` → ${a.models[0]}` : ` → ${s.defaultModelBase}`}
+                  {a.name} · {a.label}
+                  {a.models[0] ? ` → ${a.models[0]}` : ` → ${s.defaultModelBase}`}
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -1303,342 +118,262 @@ function DefaultModelCard({ models }: { models: ModelRow[] }) {
               <SelectGroup>
                 <SelectLabel>{s.defaultModelAliases}</SelectLabel>
                 {custom.map((a) => (
-                  <SelectItem key={a.name} value={a.name}>{a.name}{a.models[0] ? ` → ${a.models[0]}` : ""}</SelectItem>
+                  <SelectItem key={a.name} value={a.name}>
+                    {a.name}
+                    {a.models[0] ? ` → ${a.models[0]}` : ""}
+                  </SelectItem>
                 ))}
               </SelectGroup>
             ) : null}
             <SelectGroup>
               <SelectLabel>{s.defaultModelModels}</SelectLabel>
-              {slugs.map((slug) => (
-                <SelectItem key={slug} value={slug}>{slug}</SelectItem>
+              {rows.map((m) => (
+                <SelectItem key={m.slug!} value={m.slug!}>
+                  {m.slug}
+                </SelectItem>
               ))}
             </SelectGroup>
           </SelectContent>
         </Select>
-        <span className="text-muted-foreground text-sm">
-          {current.data.slug ? s.defaultModelNow(current.data.slug) : s.defaultModelUnresolved}
-        </span>
+        <span className="text-muted-foreground font-mono text-sm">{slug ? s.defaultModelNow(slug, level) : s.defaultModelUnresolved}</span>
       </div>
-    </section>
+    </Card>
   );
 }
 
-function AliasesCard({ models }: { models: ModelRow[] }) {
-  const aliases = useModelAliases();
+function ChainsCard({
+  testId,
+  title,
+  hint,
+  chains,
+  slugs,
+  facts,
+  adding = false,
+}: {
+  testId: string;
+  title: string;
+  hint: string;
+  chains: ModelAlias[];
+  slugs: string[];
+  facts: Facts;
+  adding?: boolean;
+}) {
   const actions = useAiActions();
-  const [adding, setAdding] = useState("");
-  if (!aliases.data) return null;
-  const slugs = models.filter((m) => m.slug).map((m) => m.slug!);
-  const levels = new Map(models.filter((m) => m.slug).map((m) => [m.slug!, m.reasoningLevels ?? []]));
-  // each model of the chain beside its level ("" = the model's default)
-  const save = (name: string, chain: Slot[]) => {
-    const kept = chain.filter((c) => c.slug);
+  const [name, setName] = useState("");
+  // the whole chain, each model beside its level ("" = the model's default)
+  const save = (alias: string, links: Link[]) => {
+    const kept = links.filter((l) => l.slug);
     actions.setModelAlias.mutate(
-      { name, models: kept.map((c) => c.slug), efforts: kept.map((c) => c.effort) },
+      { name: alias, models: kept.map((l) => l.slug), efforts: kept.map((l) => l.effort) },
       { onSuccess: () => toast.success(s.aliasSaved), onError: fail },
     );
   };
   const add = () => {
-    const name = adding.trim();
-    if (!name || slugs.length === 0) return;
-    actions.setModelAlias.mutate({ name, models: [slugs[0]!], efforts: [""] }, { onSuccess: () => { setAdding(""); toast.success(s.aliasSaved); }, onError: fail });
+    const alias = name.trim();
+    if (!alias || slugs.length === 0) return;
+    actions.setModelAlias.mutate({ name: alias, models: [slugs[0]!], efforts: [""] }, { onSuccess: () => (setName(""), toast.success(s.aliasSaved)), onError: fail });
   };
   return (
-    <section className="flex flex-col gap-3" data-testid="model-aliases">
-      <h2 className="text-base font-medium">{s.aliases}</h2>
-      <p className="text-muted-foreground text-sm">{s.aliasesHint}</p>
-      <div className="flex flex-col gap-2">
-        {aliases.data.map((a) => (
-          <AliasRow key={a.name} alias={a} slugs={slugs} levels={levels} onSave={(chain) => save(a.name, chain)} onRemove={a.builtin ? undefined : () => actions.deleteModelAlias.mutate(a.name, { onError: fail })} />
+    <Card testId={testId} title={title} hint={hint}>
+      <div className="divide-y">
+        {chains.map((a) => (
+          <ChainRow
+            key={a.name}
+            alias={a}
+            slugs={slugs}
+            facts={facts}
+            onSave={(links) => save(a.name, links)}
+            onRemove={a.builtin ? undefined : () => actions.deleteModelAlias.mutate(a.name, { onError: fail })}
+          />
         ))}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Input value={adding} onChange={(e) => setAdding(e.target.value)} placeholder={s.aliasNamePlaceholder} aria-label={s.aliasAdd} className="w-40" />
-        <Button size="sm" variant="outline" onClick={add} disabled={!adding.trim() || actions.setModelAlias.isPending}>
-          <Plus className="size-4" /> {s.aliasAdd}
-        </Button>
-      </div>
-    </section>
+      {adding ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={s.aliasNamePlaceholder} aria-label={s.aliasAdd} className="w-40" />
+          <Button size="sm" variant="outline" onClick={add} disabled={!name.trim() || actions.setModelAlias.isPending}>
+            <Plus className="size-4" /> {s.aliasAdd}
+          </Button>
+        </div>
+      ) : null}
+    </Card>
   );
 }
 
-const NONE = "__none";
-
-type Slot = { slug: string; effort: string };
-
-function AliasRow({
-  alias,
-  slugs,
-  levels,
-  onSave,
-  onRemove,
-}: {
-  alias: ModelAlias;
-  slugs: string[];
-  levels: Map<string, string[]>;
-  onSave: (chain: Slot[]) => void;
-  onRemove?: () => void;
-}) {
-  // the chain as three slots: the model used, then two fallbacks — each with its level
-  const slots: Slot[] = [0, 1, 2].map((i) => ({ slug: alias.models[i] ?? "", effort: alias.efforts?.[i] ?? "" }));
-  const set = (i: number, patch: Partial<Slot>) => {
-    const next = slots.map((slot, j) => (j === i ? { ...slot, ...patch } : slot));
-    // another model: its own default level until one is picked
-    if (patch.slug !== undefined) next[i] = { slug: patch.slug, effort: "" };
-    onSave(next);
-  };
+function LevelSelect({ slug, value, label, facts, onChange, compact = false }: { slug: string; value: string; label: string; facts: Facts; onChange: (v: string) => void; compact?: boolean }) {
+  const levels = slug ? (facts.get(slug)?.levels ?? []) : [];
   return (
-    <div className="grid items-start gap-2 rounded-lg border p-3 sm:grid-cols-[8rem_1fr_1fr_1fr_auto]" data-testid={`alias-${alias.name}`}>
-      <div className="flex flex-col">
-        <span className="font-mono text-sm">{alias.name}</span>
+    <Select value={value || NONE} onValueChange={(v) => onChange(v === NONE ? "" : v)} disabled={levels.length === 0}>
+      <SelectTrigger className={`font-mono text-xs ${compact ? "h-6 w-auto gap-1 border-0 bg-transparent px-1" : "h-9 w-24"}`} aria-label={label}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={NONE}>{s.aliasLevelDefault}</SelectItem>
+        {levels.map((level) => (
+          <SelectItem key={level} value={level} className="font-mono">
+            {level}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function ChainRow({ alias, slugs, facts, onSave, onRemove }: { alias: ModelAlias; slugs: string[]; facts: Facts; onSave: (links: Link[]) => void; onRemove?: () => void }) {
+  const links: Link[] = alias.models.map((slug, i) => ({ slug, effort: alias.efforts?.[i] ?? "" }));
+  const primary = links[0] ?? { slug: "", effort: "" };
+  const fallbacks = links.slice(1);
+  const primaryName = `${alias.name} ${s.aliasPrimary}`;
+  const setPrimary = (patch: Partial<Link>) => {
+    // another model starts at its own default level
+    const next: Link = patch.slug !== undefined ? { slug: patch.slug, effort: "" } : { ...primary, ...patch };
+    onSave(next.slug ? [next, ...fallbacks] : fallbacks);
+  };
+  const setFallback = (i: number, effort: string) => onSave([primary, ...fallbacks.map((f, j) => (j === i ? { ...f, effort } : f))]);
+  const unused = slugs.filter((slug) => !links.some((l) => l.slug === slug));
+  return (
+    <div className="grid items-center gap-x-4 gap-y-2 py-3 sm:grid-cols-[5.5rem_minmax(0,1fr)_2rem]" data-testid={`alias-${alias.name}`}>
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-sm font-medium">{alias.name}</span>
         {alias.label !== alias.name ? <span className="text-muted-foreground text-xs">{alias.label}</span> : null}
       </div>
-      {slots.map((slot, i) => {
-        const name = `${alias.name} ${i === 0 ? s.aliasPrimary : s.aliasFallback(i)}`;
-        const own = slot.slug ? (levels.get(slot.slug) ?? []) : [];
-        return (
-          <div key={i} className="flex flex-col gap-1">
-            <Select value={slot.slug || NONE} onValueChange={(v) => set(i, { slug: v === NONE ? "" : v })}>
-              <SelectTrigger className="w-full" aria-label={name}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>{i === 0 ? s.aliasNone : s.aliasNoFallback}</SelectItem>
-                {slugs.map((slug) => (
-                  <SelectItem key={slug} value={slug} className="font-mono">
-                    {slug}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={slot.effort || NONE} onValueChange={(v) => set(i, { effort: v === NONE ? "" : v })} disabled={own.length === 0}>
-              <SelectTrigger className="h-8 w-full font-mono text-xs" aria-label={s.aliasLevel(name)}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>{s.aliasLevelDefault}</SelectItem>
-                {own.map((level) => (
-                  <SelectItem key={level} value={level} className="font-mono">
-                    {level}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        );
-      })}
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+        <Select value={primary.slug || NONE} onValueChange={(v) => setPrimary({ slug: v === NONE ? "" : v })}>
+          <SelectTrigger className="h-9 w-44 max-w-full font-mono text-xs" aria-label={primaryName}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {alias.builtin ? <SelectItem value={NONE}>{s.aliasNone}</SelectItem> : null}
+            {slugs.map((slug) => (
+              <SelectItem key={slug} value={slug} className="font-mono">
+                {slug}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <LevelSelect slug={primary.slug} value={primary.effort} label={s.aliasLevel(primaryName)} facts={facts} onChange={(effort) => setPrimary({ effort })} />
+        {primary.slug ? <SearchBadge own={facts.get(primary.slug)?.searches ?? false} /> : null}
+      </div>
       {onRemove ? (
-        <Button size="sm" variant="ghost" className="text-destructive" onClick={onRemove} aria-label={`${s.aliasRemove} ${alias.name}`}>
+        <Button size="icon" variant="ghost" className="text-destructive size-8 sm:row-span-2" onClick={onRemove} aria-label={`${s.aliasRemove} ${alias.name}`}>
           <Trash2 className="size-4" />
         </Button>
       ) : (
-        <span />
+        <span className="hidden sm:row-span-2 sm:block" />
       )}
+      {/* the fallbacks on a line of their own under the model: chips, each with its level */}
+      <div className="flex flex-wrap items-center gap-1 sm:col-start-2">
+        <span className="text-muted-foreground mr-1 text-xs">{s.fallbacks}</span>
+        {fallbacks.map((f, i) => (
+          <span key={f.slug} className="bg-muted inline-flex items-center gap-1 rounded-full py-0.5 pr-1 pl-2.5 font-mono text-xs whitespace-nowrap" data-testid={`fallback-${f.slug}`}>
+            {f.slug}
+            <LevelSelect compact slug={f.slug} value={f.effort} label={s.fallbackLevel(alias.name, f.slug)} facts={facts} onChange={(effort) => setFallback(i, effort)} />
+            <SearchBadge own={facts.get(f.slug)?.searches ?? false} />
+            <button
+              type="button"
+              aria-label={s.removeFallback(alias.name, f.slug)}
+              className="text-muted-foreground hover:text-foreground rounded-full p-0.5"
+              onClick={() => onSave(links.filter((l) => l.slug !== f.slug))}
+            >
+              <X className="size-3" />
+            </button>
+          </span>
+        ))}
+        {primary.slug && unused.length > 0 ? (
+          <Select value="" onValueChange={(slug) => onSave([...links, { slug, effort: "" }])}>
+            <SelectTrigger className="text-primary h-7 w-auto gap-1 border-dashed px-2 text-xs" aria-label={s.addFallbackLabel(alias.name)}>
+              <SelectValue placeholder={s.addFallback} />
+            </SelectTrigger>
+            <SelectContent>
+              {unused.map((slug) => (
+                <SelectItem key={slug} value={slug} className="font-mono">
+                  {slug}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+        {fallbacks.length === 0 && !(primary.slug && unused.length > 0) ? <span className="text-muted-foreground text-xs">{s.searchNoModels}</span> : null}
+      </div>
     </div>
   );
 }
 
-/**
- * The provider's own model list (OpenAI's GET /models standard; OpenRouter's
- * entries carry window, levels and modalities, a plain gateway's only ids)
- * as a checklist — the registry's model-picker, like the preset dialog —
- * with a filter for long lists; picked ones become rows.
- */
-function DiscoverDialog({
-  provider,
-  onClose,
-}: {
-  provider: Provider;
-  onClose: () => void;
-}) {
-  const discovery = useDiscoverModels(provider.id);
-  const actions = useAiActions();
-  const [filter, setFilter] = useState("");
-  const [chosen, setChosen] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const candidates = (discovery.data?.ok ? discovery.data.models : []).filter(
-    (m) => !m.installed,
-  );
-  const q = filter.trim().toLowerCase();
-  const shown = q
-    ? candidates.filter(
-        (m) =>
-          m.id.toLowerCase().includes(q) ||
-          m.name.toLowerCase().includes(q) ||
-          (m.ownedBy ?? "").toLowerCase().includes(q),
-      )
-    : candidates;
-  const rows: PickableModel[] = shown.map((m) => ({
-    id: m.id,
-    name: m.name,
-    family: m.ownedBy ?? provider.name,
-    context: m.contextWindow ? formatWindow(m.contextWindow) : "",
-    ...(m.name !== m.id ? { note: m.id } : {}),
-    capabilities: [
-      ...(m.imageInput ? [s.image] : []),
-      ...(m.reasoningLevels.length > 0
-        ? [m.reasoningLevels.map(effortLabel).join(" / ")]
-        : []),
-    ],
-  }));
-  const toggle = (id: string) =>
-    setChosen((ids) =>
-      ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
-    );
-  const add = async () => {
-    setBusy(true);
-    try {
-      for (const id of chosen) {
-        const m = candidates.find((c) => c.id === id);
-        if (!m) continue;
-        await actions.createModel.mutateAsync({
-          providerId: provider.id,
-          upstreamId: m.id,
-          name: m.name,
-          ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
-          ...(m.reasoningLevels.length > 0
-            ? { reasoningLevels: m.reasoningLevels }
-            : {}),
-          ...(m.reasoningEffort ? { reasoningEffort: m.reasoningEffort } : {}),
-        });
-      }
-      toast.success(s.discoverAdded(chosen.length));
-      onClose();
-    } catch (e) {
-      fail(e);
-    } finally {
-      setBusy(false);
-    }
-  };
+function SearchCard({ rows, facts }: { rows: ModelRow[]; facts: Facts }) {
+  const own = rows.filter((m) => facts.get(m.slug!)?.searches);
+  const ours = rows.filter((m) => !facts.get(m.slug!)?.searches);
   return (
-    <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{s.discoverTitle(provider.name)}</DialogTitle>
-          <DialogDescription>{s.discoverHint}</DialogDescription>
-        </DialogHeader>
-        <DialogBody className="flex flex-col gap-4">
-          {discovery.isPending ? (
-            <p className="text-muted-foreground text-sm">{s.discoverLoading}</p>
-          ) : discovery.isError ? (
-            <p className="text-destructive text-sm">
-              {discovery.error.message}
-            </p>
-          ) : !discovery.data.ok ? (
-            <p className="text-destructive text-sm">{discovery.data.error}</p>
-          ) : candidates.length === 0 ? (
-            <p className="text-muted-foreground text-sm">{s.discoverEmpty}</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <Input
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                placeholder={s.discoverFilter}
-                aria-label={s.discoverFilter}
-              />
-              <ModelPicker
-                models={rows}
-                selectedIds={chosen}
-                onToggle={toggle}
-                className="max-w-none"
-              />
-            </div>
-          )}
-        </DialogBody>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
-            {t.cancel}
-          </Button>
-          <Button
-            type="button"
-            onClick={add}
-            disabled={chosen.length === 0 || busy}
-          >
-            {s.discoverAdd(chosen.length)}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Card testId="web-search" title={s.search} hint={s.searchCardHint}>
+      <div className="divide-y">
+        <div className="grid gap-2 py-3 sm:grid-cols-[7rem_minmax(0,1fr)]" data-testid="search-own">
+          <div>
+            <SearchBadge own />
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="text-muted-foreground text-sm">{s.searchOwnHint}</p>
+            <ModelChips rows={own} />
+          </div>
+        </div>
+        <div className="grid gap-2 py-3 sm:grid-cols-[7rem_minmax(0,1fr)]" data-testid="search-ours">
+          <div>
+            <Badge variant="outline" className="border-primary/40 text-primary">
+              {s.searchOursLong}
+            </Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="text-muted-foreground text-sm">{s.searchOursHint}</p>
+            <ModelChips rows={ours} />
+            <SearchKey needed={ours.length > 0} />
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 
-function SearchProviderCard() {
+function ModelChips({ rows }: { rows: ModelRow[] }) {
+  if (rows.length === 0) return <span className="text-muted-foreground text-xs">{s.searchNoModels}</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {rows.map((m) => (
+        <span key={m.id} className="bg-muted rounded-full px-2.5 py-0.5 font-mono text-xs">
+          {m.slug}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The search service's key (Tavily): set, kept unseen, replaced when typed. */
+function SearchKey({ needed }: { needed: boolean }) {
   const search = useSearchProviders();
   const actions = useAiActions();
   const [key, setKey] = useState("");
   const row = search.data?.find((r) => r.default) ?? search.data?.[0];
   if (!row) return null;
   return (
-    <section className="flex flex-col gap-3" data-testid="search-provider">
-      <h2 className="text-base font-medium">{s.search}</h2>
-      <p className="text-muted-foreground text-sm">{s.searchHint}</p>
-      <div className="rounded-lg border p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{row.name}</span>
-          {row.hasApiKey ? (
-            <Badge variant="secondary">{s.apiKeySet}</Badge>
-          ) : (
-            <Badge variant="destructive">{s.apiKeyMissing}</Badge>
-          )}
-        </div>
-        <form
-          className="mt-3 flex flex-col gap-1.5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!key) return;
-            actions.setSearchKey.mutate(
-              { id: row.id, apiKey: key },
-              {
-                onSuccess: () => (toast.success(s.saved), setKey("")),
-                onError: fail,
-              },
-            );
-          }}
-        >
-          <Label htmlFor="sp-key">{s.apiKey}</Label>
-          <div className="flex gap-2">
-            <Input
-              id="sp-key"
-              type="password"
-              autoComplete="off"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              className="min-w-0 flex-1 font-mono"
-            />
-            <Button
-              type="submit"
-              disabled={!key || actions.setSearchKey.isPending}
-            >
-              {t.save}
-            </Button>
-          </div>
-          {row.hasApiKey ? (
-            <p className="text-muted-foreground text-xs">{s.keepKey}</p>
-          ) : null}
-        </form>
+    <form
+      className="flex flex-col gap-1.5"
+      data-testid="search-provider"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!key) return;
+        actions.setSearchKey.mutate({ id: row.id, apiKey: key }, { onSuccess: () => (toast.success(s.saved), setKey("")), onError: fail });
+      }}
+    >
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-medium">{row.name}</span>
+        {row.hasApiKey ? <Badge variant="secondary">{s.apiKeySet}</Badge> : <Badge variant="destructive">{s.apiKeyMissing}</Badge>}
+        {!row.hasApiKey && needed ? <span className="text-warning text-xs">{s.searchKeyNeeded}</span> : null}
       </div>
-    </section>
-  );
-}
-
-function Field({
-  id,
-  label,
-  hint,
-  className = "",
-  children,
-}: {
-  id: string;
-  label: string;
-  hint?: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={`flex flex-col gap-1.5 ${className}`}>
-      <Label htmlFor={id}>{label}</Label>
-      {children}
-      {hint ? <p className="text-muted-foreground text-xs">{hint}</p> : null}
-    </div>
+      <Label htmlFor="sp-key" className="sr-only">
+        {s.apiKey}
+      </Label>
+      <div className="flex max-w-md gap-2">
+        <Input id="sp-key" type="password" autoComplete="off" aria-label={s.apiKey} placeholder={row.hasApiKey ? s.keepKey : s.apiKey} value={key} onChange={(e) => setKey(e.target.value)} className="min-w-0 flex-1 font-mono" />
+        <Button type="submit" disabled={!key || actions.setSearchKey.isPending}>
+          {t.save}
+        </Button>
+      </div>
+    </form>
   );
 }

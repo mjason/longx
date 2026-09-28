@@ -5,6 +5,7 @@ import { useViewport } from "@/core/viewport";
 import { Page, TopBar } from "@/ui/shell/Shell";
 import { t } from "@/ui/strings";
 import { ModelsSection } from "./settings/ModelsSection";
+import { ProvidersSection } from "./settings/ProvidersSection";
 import { KnowledgeSection } from "./settings/KnowledgeSection";
 import { AgentKernelSection } from "./settings/AgentKernelSection";
 import { DependenciesSection } from "./settings/DependenciesSection";
@@ -19,7 +20,7 @@ import { FileRulesSection } from "./settings/FileRulesSection";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { KeysSection } from "./settings/KeysSection";
 
-const SECTIONS = ["models", "dependencies", "knowledge", "agent", "browsers", "https", "files", "credentials", "watches", "processes", "update", "requests", "keys", "appearance"] as const;
+const SECTIONS = ["models", "providers", "dependencies", "knowledge", "agent", "browsers", "https", "files", "credentials", "watches", "processes", "update", "requests", "keys", "appearance"] as const;
 type Section = (typeof SECTIONS)[number];
 
 /**
@@ -92,6 +93,8 @@ function SectionBody({ section }: { section: Section }) {
   switch (section) {
     case "models":
       return <ModelsSection />;
+    case "providers":
+      return <ProvidersSection />;
     case "dependencies":
       return <DependenciesSection />;
     case "knowledge":

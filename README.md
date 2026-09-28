@@ -17,7 +17,7 @@ mix phx.server       # 0.0.0.0:7798（开发端口，和生产的 7788 错开）
 手机连 LAN 调试时页面从 `http://<lan-ip>:7798` 打开，脚本要能到达 Vite：`LONGX_DEV_HOST=<lan-ip> mix phx.server`。
 开发数据都在仓库里：根目录的 `longx_dev.db`，`data/` 下的附件、全局知识和下载来的浏览器（都不进 git）。
 
-模型 provider 和密钥在启动后的「设置 → 模型与 Provider」里配置（seeds 只建 DeepSeek / OpenAI 的空 provider 和
+模型 provider 和密钥在启动后的「设置 → Provider」里配置，默认模型、档位和联网搜索在「设置 → 模型」（seeds 只建 DeepSeek / OpenAI 的空 provider 和
 Tavily 一行，不读环境变量）；`:live` 测试自己读 `DEEPSEEK_API_KEY` / `TAVILY_API_KEY`。
 
 ## 在 Linux 上安装（x86_64 / arm64）
@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install.sh | sh
 
 脚本做的事：识别架构 → 从 Releases 下载最新版并校验 sha256 → 解到 `~/.longx/app` → 建 `~/.longx/data` →
 写一个 `systemd --user` 服务（`~/.config/systemd/user/longx.service`）并启动 → 等到端口响应后打印地址。
-然后打开 `http://<这台机器>:7788`，到「设置 → 模型与 Provider」接入一个模型（DeepSeek / GLM / 百炼 / OpenAI 有预设，
+然后打开 `http://<这台机器>:7788`，到「设置 → Provider」接入一个模型（DeepSeek / GLM / 百炼 / OpenAI 有预设，
 填 API Key 就行；密钥加密存在数据目录里，不走环境变量）。
 
 可以调的：

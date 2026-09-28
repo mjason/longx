@@ -52,6 +52,7 @@ import {
   tlsDisable,
   tlsResolution,
   tlsStatus,
+  modelAliases,
 } from "@/core/api";
 import { browserIdle, dependencyReport, dependencyTool, model, tlsIdle, upgradeIdle } from "@/ui/test-mocks";
 import { page } from "@/core/upgrade";
@@ -242,17 +243,26 @@ describe("SettingsPage", () => {
     );
   });
 
-  test("models: every provider with its models and key status; a provider and a model can be added", async () => {
+  test("providers: every provider with its models and key status; a provider and a model can be added", async () => {
     setViewport(1280);
     const user = userEvent.setup();
-    renderAt("/settings/models");
+    renderAt("/settings/providers");
     const prov = await screen.findByTestId("provider-p1");
+    // folded to one line: its key, how many models and which tiers use them
+    expect(prov).toHaveTextContent("1 个模型");
+    expect(prov).toHaveTextContent("用于 ultra");
+    expect(within(prov).queryByText("deepseek-flash")).not.toBeInTheDocument();
+    await user.click(within(prov).getByRole("button", { name: "Prov" }));
     expect(prov).toHaveTextContent("https://api.deepseek.com/v1");
     expect(within(prov).getByText("deepseek-flash")).toBeInTheDocument();
-    expect(within(prov).getByText("默认")).toBeInTheDocument();
+    // the base row is 兜底 now, not a second 默认
+    expect(within(prov).getByText("兜底")).toBeInTheDocument();
+    expect(within(prov).getByText("代搜")).toBeInTheDocument();
+    // one that needs looking at opens by itself
     const glm = screen.getByTestId("provider-p2");
     expect(glm).toHaveTextContent("未设置密钥");
     expect(glm).toHaveTextContent("401 Authentication Fails");
+    expect(within(glm).getByRole("button", { name: "GLM" })).toHaveAttribute("aria-expanded", "true");
 
     // "add" offers the templates first; 自定义 is the full form
     await user.click(screen.getByRole("button", { name: "添加 Provider" }));
@@ -328,10 +338,10 @@ describe("SettingsPage", () => {
     );
   });
 
-  test("models: a template sets a provider up in one step — key, the models to add, the default", async () => {
+  test("providers: a template sets a provider up in one step — key, the models to add, the default", async () => {
     setViewport(1280);
     const user = userEvent.setup();
-    renderAt("/settings/models");
+    renderAt("/settings/providers");
     await screen.findByTestId("provider-p1");
     await user.click(screen.getByRole("button", { name: "添加 Provider" }));
     await user.click(
@@ -400,14 +410,14 @@ describe("SettingsPage", () => {
 
   // real timers: the login's poll every second (the vendor's interval, never under 1 s) — a
   // slow CI runner took it past the 5 s default
-  test("models: the ChatGPT-subscription template needs no key — it makes the credential and opens the device-code login; the card shows the login state and offers the browser way with a pasted address", async () => {
+  test("providers: the ChatGPT-subscription template needs no key — it makes the credential and opens the device-code login; the card shows the login state and offers the browser way with a pasted address", async () => {
     setViewport(1280);
     const user = userEvent.setup();
     // after the template is applied the provider and its credential exist
     vi.mocked(listProviders).mockResolvedValue(ok([provider(1), provider(3, { name: "OpenAI（ChatGPT 订阅）", slug: "chatgpt", kind: "openai", baseUrl: "https://chatgpt.com/backend-api/codex", hasApiKey: true, credentialId: "cred-chatgpt" })]) as never);
     vi.mocked(listCredentials).mockResolvedValue(ok([credential("chatgpt", { id: "cred-chatgpt", kind: "oauth2", status: "needs_login", hasSecret: false, clientId: "app_x", authorizeUrl: "https://auth.openai.com/oauth/authorize", tokenUrl: "https://auth.openai.com/oauth/token", deviceFlow: "openai", redirectUri: "http://localhost:1455/auth/callback" })]) as never);
     try {
-      renderAt("/settings/models");
+      renderAt("/settings/providers");
       await screen.findByTestId("provider-p1");
       await user.click(screen.getByRole("button", { name: "添加 Provider" }));
       await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: /ChatGPT 订阅/ }));
@@ -447,10 +457,10 @@ describe("SettingsPage", () => {
     }
   }, 20_000);
 
-  test("models: a provider's stream idle timeout — how long a begun stream may say nothing before it is asked again — is set in its advanced options (codex's 5 min by default)", async () => {
+  test("providers: a provider's stream idle timeout — how long a begun stream may say nothing before it is asked again — is set in its advanced options (codex's 5 min by default)", async () => {
     setViewport(1280);
     const user = userEvent.setup();
-    renderAt("/settings/models");
+    renderAt("/settings/providers");
     const card = await screen.findByTestId("provider-p1");
     await user.click(within(card).getByRole("button", { name: "Prov 的操作" }));
     await user.click(await screen.findByRole("menuitem", { name: "编辑 Provider" }));
@@ -464,10 +474,10 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(updateProvider).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ streamIdleTimeoutMs: 120_000, requestTimeoutMs: 600_000 }) })));
   });
 
-  test("models: a reasoning level the list does not know is typed and added", async () => {
+  test("providers: a reasoning level the list does not know is typed and added", async () => {
     setViewport(1280);
     const user = userEvent.setup();
-    renderAt("/settings/models");
+    renderAt("/settings/providers");
     const glm = await screen.findByTestId("provider-p2");
     await user.click(within(glm).getByRole("button", { name: "添加模型" }));
     const md = await screen.findByRole("dialog");
@@ -478,10 +488,10 @@ describe("SettingsPage", () => {
     expect(within(md).getByRole("button", { name: "max2", pressed: true })).toBeInTheDocument();
   });
 
-  test("models: the reasoning summary says what it is for — OpenAI's hidden reasoning; other providers ignore it", async () => {
+  test("providers: the reasoning summary says what it is for — OpenAI's hidden reasoning; other providers ignore it", async () => {
     setViewport(1280);
     const user = userEvent.setup();
-    renderAt("/settings/models");
+    renderAt("/settings/providers");
     const glm = await screen.findByTestId("provider-p2");
     await user.click(within(glm).getByRole("button", { name: "添加模型" }));
     const md = await screen.findByRole("dialog");
@@ -493,19 +503,22 @@ describe("SettingsPage", () => {
     expect(md).toHaveTextContent(/忽略/);
   });
 
-  test("models: check, make default, delete (with a confirm)", async () => {
+  test("providers: check, make default, delete (with a confirm)", async () => {
     setViewport(1280);
     const user = userEvent.setup();
-    renderAt("/settings/models");
+    renderAt("/settings/providers");
     const row = await screen.findByTestId("model-m2");
-    await user.click(within(row).getByRole("button", { name: "检测" }));
+    // the row's actions live in its menu
+    await user.click(within(row).getByRole("button", { name: "Model 2 的操作" }));
+    await user.click(await screen.findByRole("menuitem", { name: "检测" }));
     await waitFor(() =>
       expect(checkModel).toHaveBeenCalledWith(
         expect.objectContaining({ input: { id: "m2" } }),
       ),
     );
     await within(row).findByText(/321 ms/);
-    await user.click(within(row).getByRole("button", { name: "设为默认" }));
+    await user.click(within(row).getByRole("button", { name: "Model 2 的操作" }));
+    await user.click(await screen.findByRole("menuitem", { name: "设为兜底模型" }));
     await waitFor(() =>
       expect(makeDefaultModel).toHaveBeenCalledWith(
         expect.objectContaining({ identity: "m2" }),
@@ -527,11 +540,16 @@ describe("SettingsPage", () => {
     );
   });
 
-  test("models: the search provider's key can be set", async () => {
+  test("models: web search goes two ways by model; the search service's key can be set", async () => {
     setViewport(1280);
     const user = userEvent.setup();
     renderAt("/settings/models");
-    const search = await screen.findByTestId("search-provider");
+    // two ways by model: the provider's own search, or Longx's with the service's key
+    const card = await screen.findByTestId("web-search");
+    expect(within(card).getByTestId("search-own")).toHaveTextContent("没有");
+    expect(within(card).getByTestId("search-ours")).toHaveTextContent("deepseek-flash");
+    expect(within(card).getByTestId("search-ours")).toHaveTextContent("glm-5");
+    const search = await within(card).findByTestId("search-provider");
     expect(search).toHaveTextContent("Tavily");
     await user.type(within(search).getByLabelText("API Key"), "tvly-1");
     await user.click(within(search).getByRole("button", { name: "保存" }));
@@ -545,7 +563,7 @@ describe("SettingsPage", () => {
     );
   });
 
-  test("models: a provider's own list (GET /models) is fetched into a checklist; picked ones become rows with what the list said", async () => {
+  test("providers: a provider's own list (GET /models) is fetched into a checklist; picked ones become rows with what the list said", async () => {
     setViewport(1280);
     vi.mocked(discoverModels).mockResolvedValue(
       ok({
@@ -559,7 +577,7 @@ describe("SettingsPage", () => {
       }) as never,
     );
     const user = userEvent.setup();
-    renderAt("/settings/models");
+    renderAt("/settings/providers");
     const card = await screen.findByTestId("provider-p1");
     await user.click(within(card).getByRole("button", { name: "Prov 的操作" }));
     await user.click(await screen.findByRole("menuitem", { name: "从接口获取模型" }));
@@ -584,11 +602,11 @@ describe("SettingsPage", () => {
     vi.mocked(discoverModels).mockResolvedValue(ok({ ok: true, error: null, models: [] }) as never);
   });
 
-  test("models: the endpoint refusing the list is said in the dialog", async () => {
+  test("providers: the endpoint refusing the list is said in the dialog", async () => {
     setViewport(1280);
     vi.mocked(discoverModels).mockResolvedValue(ok({ ok: false, error: "401 bad key", models: [] }) as never);
     const user = userEvent.setup();
-    renderAt("/settings/models");
+    renderAt("/settings/providers");
     const card = await screen.findByTestId("provider-p1");
     await user.click(within(card).getByRole("button", { name: "Prov 的操作" }));
     await user.click(await screen.findByRole("menuitem", { name: "从接口获取模型" }));
@@ -613,38 +631,70 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(setDefaultModel).toHaveBeenCalledWith(expect.objectContaining({ input: { name: "ultra" } })));
   });
 
-  test("models: tiers and aliases — a chain per name, mapped in place; an alias can be added and removed", async () => {
+  test("models: tiers and aliases — a model with its level, fallbacks as chips; an alias can be added and removed", async () => {
     setViewport(1280);
     const user = userEvent.setup();
     renderAt("/settings/models");
-    const card = await screen.findByTestId("model-aliases");
-    const flagship = within(card).getByTestId("alias-ultra");
+    const tiers = await screen.findByTestId("model-tiers");
+    const flagship = within(tiers).getByTestId("alias-ultra");
     expect(within(flagship).getByRole("combobox", { name: "ultra 用的模型" })).toHaveTextContent("glm-5");
-    expect(within(flagship).getByRole("combobox", { name: "ultra 备选 1" })).toHaveTextContent("deepseek-flash");
-    expect(within(within(card).getByTestId("alias-pro")).getByRole("combobox", { name: "pro 用的模型" })).toHaveTextContent("默认模型");
-    // a tier has no delete; a fallback picked is saved as the whole chain
+    // the fallback is a chip with its own level and search kind; a tier has no delete
+    expect(within(flagship).getByTestId("fallback-deepseek-flash")).toHaveTextContent("代搜");
+    expect(within(tiers).getByTestId("alias-pro")).toHaveTextContent("未映射");
     expect(within(flagship).queryByRole("button", { name: /删除/ })).not.toBeInTheDocument();
-    await user.click(within(flagship).getByRole("combobox", { name: "ultra 备选 2" }));
-    await user.click(await screen.findByRole("option", { name: "deepseek-flash" }));
+    await user.click(within(flagship).getByRole("button", { name: "去掉 ultra 的备用 deepseek-flash" }));
     await waitFor(() =>
-      expect(setModelAlias).toHaveBeenCalledWith(expect.objectContaining({ input: { name: "ultra", models: ["glm-5", "deepseek-flash", "deepseek-flash"], efforts: ["", "", ""] } })),
+      expect(setModelAlias).toHaveBeenLastCalledWith(expect.objectContaining({ input: { name: "ultra", models: ["glm-5"], efforts: [""] } })),
     );
-    // a new alias starts on the first model
-    await user.type(within(card).getByRole("textbox", { name: "添加别名" }), "青龙");
-    await user.click(within(card).getByRole("button", { name: /添加别名/ }));
+    // pro gets a model; a new alias starts on the first model
+    await user.click(within(within(tiers).getByTestId("alias-pro")).getByRole("combobox", { name: "pro 用的模型" }));
+    await user.click(await screen.findByRole("option", { name: "glm-5" }));
+    await waitFor(() => expect(setModelAlias).toHaveBeenLastCalledWith(expect.objectContaining({ input: { name: "pro", models: ["glm-5"], efforts: [""] } })));
+    const aliases = screen.getByTestId("model-aliases");
+    await user.type(within(aliases).getByRole("textbox", { name: "添加别名" }), "青龙");
+    await user.click(within(aliases).getByRole("button", { name: /添加别名/ }));
     await waitFor(() => expect(setModelAlias).toHaveBeenLastCalledWith(expect.objectContaining({ input: { name: "青龙", models: ["deepseek-flash"], efforts: [""] } })));
+  });
+
+  test("models: a fallback is added from the chip row, at its model's default level until one is picked", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    vi.mocked(modelAliases).mockResolvedValue(
+      ok([
+        { name: "ultra", label: "旗舰", models: ["deepseek-flash"], efforts: [null], builtin: true },
+        { name: "pro", label: "高级", models: [], efforts: [], builtin: true },
+        { name: "plus", label: "普通", models: [], efforts: [], builtin: true },
+      ]) as never,
+    );
+    try {
+      renderAt("/settings/models");
+      const flagship = await screen.findByTestId("alias-ultra");
+      await user.click(within(flagship).getByRole("combobox", { name: "给 ultra 添加备用模型" }));
+      await user.click(await screen.findByRole("option", { name: "glm-5" }));
+      await waitFor(() =>
+        expect(setModelAlias).toHaveBeenLastCalledWith(expect.objectContaining({ input: { name: "ultra", models: ["deepseek-flash", "glm-5"], efforts: ["", ""] } })),
+      );
+    } finally {
+      vi.mocked(modelAliases).mockResolvedValue(
+        ok([
+          { name: "ultra", label: "旗舰", models: ["glm-5", "deepseek-flash"], efforts: [null, null], builtin: true },
+          { name: "pro", label: "高级", models: [], efforts: [], builtin: true },
+          { name: "plus", label: "普通", models: [], efforts: [], builtin: true },
+        ]) as never,
+      );
+    }
   });
 
   test("models: each model of a tier has its level beside it, from that model's own levels", async () => {
     setViewport(1280);
     const user = userEvent.setup();
     renderAt("/settings/models");
-    const card = await screen.findByTestId("model-aliases");
+    const card = await screen.findByTestId("model-tiers");
     const flagship = within(card).getByTestId("alias-ultra");
     // glm-5 declares low / high; deepseek-flash none: no level to pick there
     const level = within(flagship).getByRole("combobox", { name: "ultra 用的模型的思考档位" });
     expect(level).toHaveTextContent("模型默认");
-    expect(within(flagship).getByRole("combobox", { name: "ultra 备选 1的思考档位" })).toBeDisabled();
+    expect(within(flagship).getByRole("combobox", { name: "ultra 的备用 deepseek-flash 的思考档位" })).toBeDisabled();
     await user.click(level);
     await user.click(await screen.findByRole("option", { name: "high" }));
     await waitFor(() =>
@@ -962,7 +1012,8 @@ describe("SettingsPage", () => {
     // the page redirects once it is drawn (a lazy route): awaited, not read at once
     await waitFor(() => expect(router.state.location.pathname).toBe("/settings/models"), LAZY);
     expect(await screen.findByTestId("section-models", undefined, LAZY)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "模型与 Provider" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "模型" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Provider" })).toBeInTheDocument();
   });
 
   test("update: the version, a check finds a release, the token, the upgrade with its stages until the new version answers", async () => {

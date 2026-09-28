@@ -2,7 +2,7 @@
 // on a desktop and on a phone.
 import { expect } from "../lib.mjs";
 
-const SETTINGS = ["models", "dependencies", "knowledge", "agent", "browsers", "https", "files", "watches", "processes", "update", "requests", "appearance", "credentials"];
+const SETTINGS = ["models", "providers", "dependencies", "knowledge", "agent", "browsers", "https", "files", "watches", "processes", "update", "requests", "appearance", "credentials", "keys"];
 
 export async function run(h) {
   await h.project();

@@ -94,6 +94,46 @@ defmodule Longx.Agent.WebSearchTest do
     assert Map.keys(auto.tools) == ["web_search"]
   end
 
+  test "a tier whose models search both ways gets both tools; one that searches one way only its own" do
+    Ash.bulk_destroy!(Longx.System.Setting, :destroy, %{}, authorize?: false)
+    n = System.unique_integer([:positive])
+
+    provider =
+      AI.create_provider!(%{
+        name: "P#{n}",
+        slug: "p-#{n}",
+        base_url: "http://localhost:1/v1",
+        api_key: "k"
+      })
+
+    hosted =
+      AI.create_model!(%{
+        name: "H",
+        upstream_id: "h",
+        slug: "hosted-#{n}",
+        provider_id: provider.id,
+        hosted_web_search: true
+      })
+
+    plain =
+      AI.create_model!(%{
+        name: "S",
+        upstream_id: "s",
+        slug: "plain-#{n}",
+        provider_id: provider.id
+      })
+
+    {:ok, _} = AI.Aliases.put("pro", [hosted.slug, plain.slug])
+    mixed = WebSearch.call(Step.new(phase: :request, model: "pro"), WebSearch.init([]))
+    assert mixed.raw_tools == [%{"type" => "web_search", "external_web_access" => true}]
+    assert Map.keys(mixed.tools) == ["web_search"]
+
+    {:ok, _} = AI.Aliases.put("pro", [hosted.slug])
+    only_hosted = WebSearch.call(Step.new(phase: :request, model: "pro"), WebSearch.init([]))
+    assert only_hosted.tools == %{}
+    assert only_hosted.raw_tools != []
+  end
+
   test "web_fetch renders a page through the browser and returns markdown with the page as a result",
        %{ctx: ctx} do
     previous = Application.get_env(:longx, Longx.Browser, [])
