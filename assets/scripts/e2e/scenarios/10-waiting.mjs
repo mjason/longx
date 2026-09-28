@@ -1,7 +1,9 @@
 // What arrives while a turn runs waits above the composer, never in it; a stop
-// is an interrupt that leaves the composer alone and a stopped-run card under
-// the turn (继续 / 丢弃); after the person's stop what waits holds until they
-// let it in. Here a background job ends while a foreground command runs.
+// once the model has answered is an interrupt that leaves the composer alone
+// and a stopped-run card under the turn (继续 / 丢弃); after the person's stop
+// what waits holds until they let it in. A stop before the model answers
+// (thinking is no answer) takes the message back into the composer instead.
+// Here a background job ends while a foreground command runs.
 import { expect, sleep } from "../lib.mjs";
 
 export async function run(h) {
@@ -45,9 +47,12 @@ export async function run(h) {
   await page.getByTestId("waiting-messages").waitFor({ state: "detached", timeout: 10_000 });
 
   // a reply stopped mid-way and thrown away: 丢弃 takes the turn out, the composer stays empty
+  // (the stop waits for the poem's first words: before them it would take the turn back)
+  const said = await page.locator(".aui-md").count();
   await h.send(t.id, "写一首 40 行的中文长诗，慢慢写。");
   await page.getByRole("button", { name: /停止/ }).first().waitFor({ timeout: 30_000 });
-  await sleep(1500);
+  await page.locator(".aui-md").nth(said).waitFor({ timeout: 60_000 });
+  await sleep(500);
   await page.getByRole("button", { name: /停止/ }).first().click();
   const card2 = page.getByTestId("stopped-turn");
   await card2.waitFor({ timeout: 30_000 });
@@ -56,4 +61,24 @@ export async function run(h) {
   await page.getByText("写一首 40 行的中文长诗，慢慢写。").waitFor({ state: "detached", timeout: 15_000 });
   expect((await composer.inputValue()) === "", "丢弃 never writes the composer");
   await h.shot(page, "discarded");
+
+  // a stop before the model answers takes the message back: no card, the text in the composer
+  const ask = "再写一首 40 行的英文长诗，先想清楚结构。";
+  await composer.fill(ask);
+  await composer.press("Enter");
+  await page.getByRole("button", { name: /停止/ }).first().waitFor({ timeout: 30_000 });
+  await page.getByRole("button", { name: /停止/ }).first().click();
+  const took = await Promise.race([
+    page.waitForFunction((text) => document.querySelector('[aria-label="随心输入"]')?.value === text, ask, { timeout: 20_000 }).then(() => true),
+    page.getByTestId("stopped-turn").waitFor({ timeout: 20_000 }).then(() => false),
+  ]);
+  if (took) {
+    expect((await page.getByTestId("stopped-turn").count()) === 0, "a turn taken back has no stopped-run card");
+    await page.getByText(ask).first().waitFor({ state: "detached", timeout: 15_000 }).catch(() => {});
+    await h.shot(page, "taken-back");
+  } else {
+    // the model got its first words out before the stop landed: an interrupt then, the card
+    console.log("    (the model answered before the stop could take the turn back)");
+    expect((await composer.inputValue()) === "", "an interrupt leaves the composer alone");
+  }
 }

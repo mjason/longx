@@ -189,10 +189,55 @@ describe("chat adapter", () => {
     );
   });
 
-  test("onCancel only ever interrupts: the turn stays, nothing is taken back into the composer, whatever the turn did (a report's turn stopped early once put the report in the person's composer)", async () => {
+  test("onCancel before the model answered takes the person's turn back and hands its text to the composer; thinking is no answer", async () => {
     vi.mocked(interruptTurn).mockClear();
     vi.mocked(retractTurn).mockClear();
-    const untouched = buildAdapter({
+    const onRetract = vi.fn();
+    const unanswered = buildAdapter({
+      target,
+      view: {
+        ...emptyView("thr_1"),
+        turn: { id: "turn_9", status: "inProgress" },
+        items: [
+          { id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] },
+          { id: "r9", type: "reasoning", turnId: "turn_9", summary: ["hmm"] },
+          { id: "a9", type: "agentMessage", turnId: "turn_9", text: "" },
+        ],
+      },
+      model: null,
+      onRetract,
+    });
+    await unanswered.onCancel!();
+    expect(retractTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", kernelTurnId: "turn_9" } }));
+    expect(onRetract).toHaveBeenCalledWith("look at it");
+    expect(interruptTurn).not.toHaveBeenCalled();
+  });
+
+  test("onCancel once the model answered, or on a turn that is not the person's, only interrupts: the turn stays with its stopped-run card", async () => {
+    vi.mocked(interruptTurn).mockClear();
+    vi.mocked(retractTurn).mockClear();
+    const onRetract = vi.fn();
+    const answered = buildAdapter({
+      target,
+      view: {
+        ...emptyView("thr_1"),
+        turn: { id: "turn_9", status: "inProgress" },
+        items: [
+          { id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] },
+          { id: "a9", type: "agentMessage", turnId: "turn_9", text: "Sure," },
+        ],
+      },
+      model: null,
+      onRetract,
+    });
+    await answered.onCancel!();
+    expect(interruptTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", kernelTurnId: "turn_9" } }));
+    expect(retractTurn).not.toHaveBeenCalled();
+    expect(onRetract).not.toHaveBeenCalled();
+
+    // a report's turn (a stop once put "[agent coder] …" in the person's composer)
+    vi.mocked(interruptTurn).mockClear();
+    const report = buildAdapter({
       target,
       view: {
         ...emptyView("thr_1"),
@@ -200,14 +245,33 @@ describe("chat adapter", () => {
         items: [{ id: "u9", type: "userMessage", turnId: "turn_9", from: "coder", content: [{ type: "text", text: "[agent coder] done" }] }],
       },
       model: null,
+      onRetract,
     });
-    await untouched.onCancel!();
-    expect(interruptTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "row-1", kernelTurnId: "turn_9" } }));
+    await report.onCancel!();
+    expect(interruptTurn).toHaveBeenCalledTimes(1);
     expect(retractTurn).not.toHaveBeenCalled();
+    expect(onRetract).not.toHaveBeenCalled();
+
+    // the model answered while the stop was on its way and the kernel refused the retract: an interrupt then
+    vi.mocked(interruptTurn).mockClear();
+    vi.mocked(retractTurn).mockResolvedValueOnce({ success: false, errors: [{ type: "invalid", message: "has_output", shortMessage: "has_output", vars: {}, fields: ["kernelTurnId"], path: [], details: {} }] } as never);
+    const raced = buildAdapter({
+      target,
+      view: {
+        ...emptyView("thr_1"),
+        turn: { id: "turn_9", status: "inProgress" },
+        items: [{ id: "u9", type: "userMessage", turnId: "turn_9", content: [{ type: "text", text: "look at it" }] }],
+      },
+      model: null,
+      onRetract,
+    });
+    await raced.onCancel!();
+    expect(interruptTurn).toHaveBeenCalledTimes(1);
+    expect(onRetract).not.toHaveBeenCalled();
 
     // the turn ended on its own while the stop was on its way: nothing to report
     vi.mocked(interruptTurn).mockResolvedValueOnce({ success: false, errors: [{ type: "invalid", message: "not_running", shortMessage: "not_running", vars: {}, fields: ["kernelTurnId"], path: [], details: {} }] } as never);
-    await expect(untouched.onCancel!()).resolves.toBeUndefined();
+    await expect(report.onCancel!()).resolves.toBeUndefined();
   });
 
   test("without a thread, the first message creates one and lands there", async () => {

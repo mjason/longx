@@ -107,9 +107,14 @@ on first use.
     urls from the composer, passed through as `input_image` parts). A message while a turn
     runs is a **steer** (`steer_message/3` → `Agent.send/3` on a running thread; no new
     row; `{:error, :not_running}` once the turn is over). `interrupt_turn/2` kills the
-    tasks — **the stop button only ever interrupts**, the turn stays and the composer is
-    never written (a stop that took the turn back once put a child's report, which had
-    started that turn, in the person's composer); `retract_turn/3` is the stopped turn's
+    tasks — **a stop before the model answered takes the person's own turn back into the
+    composer** (the adapter's `onCancel`: `startedByPerson` and not `turnAnswered` —
+    words said, anything run or asked; thinking is no answer — → `retract_turn`, the text
+    ahead of the draft being typed; a refusal, the model having answered meanwhile, falls
+    back to the interrupt), **once it has answered a stop only interrupts**: the turn
+    stays with its stopped-run card and the composer is left alone (a take-back of every
+    stop once put a child's report, which had started that turn, in the person's
+    composer — a turn another agent, a job or a watch started is only interrupted); `retract_turn/3` is the stopped turn's
     丢弃: the running turn or the person's stopped **last** turn, one the person started
     (`{:error, :not_yours}` for a turn another agent, a job, a watch or the goal started)
     that had no side effect (only words, no pending ask — else `{:error, :has_output}`):
@@ -1552,8 +1557,8 @@ on first use.
     slow network once had the person's first words start a new conversation);
     `/goal <objective>` typed past the popover
     sets the goal; `onCancel` → `interruptTurn`, always (`not_running` ignored), the
-    composer never written; `turnHadEffects` now decides only whether the stopped-run
-    card offers 丢弃; `extras.answerAction`), `threadList.ts`, `runtime.ts` (**`useLongxRuntime({ projectId, defaults, threadId,
+    composer written only by a take-back (above); `turnHadEffects` decides whether the
+    stopped-run card offers 丢弃, `turnAnswered` whether a stop takes the turn back; `extras.answerAction`), `threadList.ts`, `runtime.ts` (**`useLongxRuntime({ projectId, defaults, threadId,
     onOpenThread })`** — the whole thing as one hook; everything the adapter is built
     from must be referentially stable — `runtime.test.tsx`; assistant-ui's
     `createMessageQueue` is the runtime's queue: a message sent while a turn runs waits
@@ -1982,7 +1987,9 @@ Where tests live / what to use:
   for a foreground `exec_command` — a model now takes `sleep 120` for a job), `10-waiting`
   (a job ending while a foreground `sleep 60` runs: its row above the composer, the
   composer empty; the stop → the stopped-run card, the list paused, no turn by itself;
-  立即插入 → the job's turn; a poem stopped mid-way and 丢弃'd — gone, composer empty),
+  立即插入 → the job's turn; a poem stopped once its words came and 丢弃'd — gone, composer
+  empty; a request stopped before the model answered taken back into the composer, no
+  card — the model's first words beating the stop is tolerated and said),
   `11-chrome` (the person's browser: a second Chromium with the built extension loaded —
   `priv/static/extension/unpacked`, so `mix assets.build` first — pairs through the popup,
   is allowed on Settings → 浏览器 and given the alias `e2e-chrome`; the project's

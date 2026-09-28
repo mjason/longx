@@ -338,6 +338,21 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     [totalTurns, windowTurns],
   );
 
+  // a stop before the model answered: the turn's text back in the composer, ahead
+  // of whatever was being typed (a draft is not lost to it)
+  const runtimeRef = useRef<AssistantRuntime | null>(null);
+  const onRetract = useCallback(
+    (text: string) => {
+      const composer = runtimeRef.current?.thread.composer;
+      if (composer) {
+        const draft = composer.getState().text;
+        composer.setText(draft.trim() ? `${text}\n\n${draft}` : text);
+      }
+      void invalidate();
+    },
+    [invalidate],
+  );
+
   const adapter = useMemo(
     () =>
       buildAdapter({
@@ -352,6 +367,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
         loading: thread !== undefined && !ready && !error,
         createThread: targetFor,
         onSent,
+        onRetract,
         refetch,
         threadList,
         queue: queue.adapter,
@@ -373,6 +389,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       error,
       targetFor,
       onSent,
+      onRetract,
       refetch,
       threadList,
       queue,
@@ -383,6 +400,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
   );
   onNewRef.current = adapter.onNew;
   const runtime = useExternalStoreRuntime(adapter);
+  runtimeRef.current = runtime;
 
   const awaiting =
     view.requests.length > 0 ||

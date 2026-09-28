@@ -11,7 +11,7 @@ import type {
   ExternalStoreThreadListAdapter,
     ThreadMessageLike,
 } from "@assistant-ui/react";
-import { answerRequest, interruptTurn, sendMessage, setGoal, steerTurn } from "@/core/api";
+import { answerRequest, interruptTurn, retractTurn, sendMessage, setGoal, steerTurn } from "@/core/api";
 import { unwrap } from "@/core/projects";
 import { toMessages, type SubViews } from "./messages";
 import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
@@ -54,6 +54,8 @@ export type AdapterOptions = {
   attachments?: AttachmentAdapter;
   /** voice input written into the composer (the browser's speech recognition) */
   dictation?: DictationAdapter;
+  /** a stop before the model answered took the person's turn out: its text goes back to the composer */
+  onRetract?: (text: string) => void;
 };
 
 export function textOf(message: AppendMessage): string {
@@ -95,6 +97,25 @@ export function turnHadEffects(view: ThreadView, turnId: string): boolean {
     view.items.some((i) => i.turnId === turnId && !HARMLESS_ITEMS.has(i.type)) ||
     view.requests.some((r) => r.params["turnId"] === turnId)
   );
+}
+
+/**
+ * Whether the model has answered: said words (an assistant message with
+ * text — one just begun, still empty, has not), run anything, or asked.
+ * Thinking is no answer: a turn stopped while the model only reasoned is
+ * taken back whole.
+ */
+export function turnAnswered(view: ThreadView, turnId: string): boolean {
+  return (
+    view.items.some((i) => i.turnId === turnId && (i.type === "agentMessage" ? String(i["text"] ?? "") !== "" : i.type !== "userMessage" && i.type !== "reasoning")) ||
+    view.requests.some((r) => r.params["turnId"] === turnId)
+  );
+}
+
+/** The person's own turn: its opening message is not another agent's, a job's, a watch's or the goal's. */
+export function startedByPerson(view: ThreadView, turnId: string): boolean {
+  const opening = view.items.find((i) => i.turnId === turnId && i.type === "userMessage");
+  return opening !== undefined && !opening["from"] && !opening["origin"];
 }
 
 export function buildAdapter(
@@ -170,14 +191,24 @@ export function buildAdapter(
       );
       opts.onSent?.(target);
     },
-    // a stop is an interrupt, whatever the turn did: the turn stays in the
-    // thread (the stopped-run card under it offers 继续 / 丢弃) and the composer
-    // is never written — a stop that took the turn back once put a child's
-    // report, which had started that turn, in the person's composer
+    // a stop before the model answered (thinking is no answer) takes the
+    // person's own turn back, as Claude Code does, and its text returns to the
+    // composer for editing; once the model has answered — or for a turn another
+    // agent, a job or a watch started (a take-back once put "[agent coder] …",
+    // a child's report, in the person's composer) — a stop only interrupts:
+    // the turn stays with its stopped-run card (继续 / 丢弃)
     onCancel: async () => {
       const turnId = runningTurnId(view);
       const id = threadId();
       if (!turnId || !id) return;
+      if (opts.onRetract && startedByPerson(view, turnId) && !turnAnswered(view, turnId)) {
+        const taken = await retractTurn({ input: { threadId: id, kernelTurnId: turnId } });
+        if (taken.success) {
+          opts.onRetract(taken.data.text);
+          return;
+        }
+        // the model answered while the stop was on its way (has_output): an interrupt then
+      }
       const stopped = await interruptTurn({ input: { threadId: id, kernelTurnId: turnId } });
       // "not_running": the turn ended on its own while the stop was on its way
       if (!stopped.success && !stopped.errors.some((e) => e.message === "not_running")) unwrap(stopped);

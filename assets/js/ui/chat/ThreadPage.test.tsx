@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
 import { _resetWorkbenchForTests } from "@/core/workbench";
+import { commands } from "@/core/keys/registry";
 import { agentDefinitionData, channel, failed, model, ok, thread, session } from "@/ui/test-mocks";
 
 vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
@@ -417,7 +418,7 @@ describe("ThreadPage", () => {
     expect(screen.getByTestId("turn-bar")).toHaveTextContent("进行中");
   });
 
-  test("a stop interrupts and never writes the composer; the stopped turn says so, with 继续 and 丢弃; what arrives from elsewhere waits above the composer with 立即插入", async () => {
+  test("a stop before the model answers takes the message back into the composer, before what was being typed; what arrives from elsewhere waits above the composer with 立即插入", async () => {
     const user = userEvent.setup();
     await open();
     act(() => {
@@ -427,8 +428,14 @@ describe("ThreadPage", () => {
         method: "item/completed",
         params: { turnId: "turn_2", item: { id: "u2", type: "userMessage", turnId: "turn_2", content: [{ type: "text", text: "look at pandas" }] } },
       });
+      // thinking is no answer
       channel.deliver("event", {
         seq: 6,
+        method: "item/completed",
+        params: { turnId: "turn_2", item: { id: "r2", type: "reasoning", turnId: "turn_2", summary: ["let me see"] } },
+      });
+      channel.deliver("event", {
+        seq: 7,
         method: "thread/waiting/updated",
         params: { waiting: [{ id: "w1", text: "tests pass", from: "coder", kind: "report", at: "2026-09-25T01:00:00Z" }], paused: false },
       });
@@ -442,6 +449,41 @@ describe("ThreadPage", () => {
     await user.click(within(row).getByRole("button", { name: /立即插入/ }));
     await waitFor(() => expect(releaseWaiting).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", waitingId: "w1" } })));
 
+    // a draft typed: the stop button gives way to send, so the stop is Esc Esc (the keys)
+    await user.type(composer, "and koalas");
+    vi.mocked(retractTurn).mockResolvedValueOnce(ok({ text: "look at pandas" }) as never);
+    await waitFor(() => expect(commands.available("turn.stop")).toBe(true));
+    await user.keyboard("{Escape}");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(retractTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", kernelTurnId: "turn_2" } })));
+    expect(interruptTurn).not.toHaveBeenCalled();
+    // the message is back for editing, ahead of what was being typed
+    await waitFor(() => expect(composer).toHaveValue("look at pandas\n\nand koalas"));
+    act(() => {
+      channel.deliver("event", { seq: 8, method: "thread/reverted", params: { turnIds: ["turn_2"] } });
+    });
+    expect(screen.queryByTestId("stopped-turn")).not.toBeInTheDocument();
+  });
+
+  test("a stop after the model answered only interrupts: the stopped turn says so, with 继续 and 丢弃, and the composer is left alone", async () => {
+    vi.mocked(retractTurn).mockClear();
+    vi.mocked(interruptTurn).mockClear();
+    const user = userEvent.setup();
+    await open();
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", {
+        seq: 5,
+        method: "item/completed",
+        params: { turnId: "turn_2", item: { id: "u2", type: "userMessage", turnId: "turn_2", content: [{ type: "text", text: "look at pandas" }] } },
+      });
+      channel.deliver("event", {
+        seq: 6,
+        method: "item/started",
+        params: { turnId: "turn_2", item: { id: "a2", type: "agentMessage", turnId: "turn_2", text: "Pandas are" } },
+      });
+    });
+    const composer = screen.getByRole("textbox", { name: "随心输入" });
     await user.click(await screen.findByRole("button", { name: /停止/ }));
     await waitFor(() => expect(interruptTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", kernelTurnId: "turn_2" } })));
     expect(retractTurn).not.toHaveBeenCalled();
