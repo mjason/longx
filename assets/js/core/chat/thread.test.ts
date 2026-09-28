@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { applyEvent, fromSnapshot, runningTurnId, type ThreadSnapshot } from "./thread";
+import { applyEvent, fromSnapshot, prependEarlier, runningTurnId, type ThreadSnapshot } from "./thread";
 
 const snapshot: ThreadSnapshot = {
   seq: 10,
@@ -16,6 +16,26 @@ const snapshot: ThreadSnapshot = {
 };
 
 describe("thread view", () => {
+  test("a snapshot is a window: what lies above it comes as `earlier` (nothing above a whole one); a page fetched up is put in front once, and says what is still above", () => {
+    expect(fromSnapshot(snapshot).earlier).toEqual({ items: 0, turns: 0, partial: 0, activities: [] });
+    const act = { id: "act", type: "subAgentActivity", turnId: "turn_0", agentThreadId: "child", kind: "started" };
+    const windowed = fromSnapshot({ ...snapshot, earlier: { items: 4, turns: 1, partial: 1, activities: [act] } });
+    expect(windowed.earlier).toEqual({ items: 4, turns: 1, partial: 1, activities: [act] });
+
+    const page = {
+      items: [
+        { id: "u0", type: "userMessage", turnId: "turn_0", content: [] },
+        { id: "u1", type: "userMessage", turnId: "turn_1", content: [{ type: "text", text: "hi" }] },
+      ],
+      earlier: { items: 2, turns: 0, partial: 2, activities: [act] },
+    };
+    const wider = prependEarlier(windowed, page);
+    // u1 was already there: the page's copy is not doubled
+    expect(wider.items.map((i) => i.id)).toEqual(["u0", "u1", "a1"]);
+    expect(wider.earlier).toEqual(page.earlier);
+    expect(wider.seq).toBe(windowed.seq);
+  });
+
   test("events at or before the snapshot's seq are ignored; later ones advance it", () => {
     const v = fromSnapshot(snapshot);
     expect(applyEvent(v, { seq: 10, method: "turn/started", params: { turn: { id: "x" } } })).toBe(v);

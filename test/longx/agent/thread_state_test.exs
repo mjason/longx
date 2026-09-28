@@ -254,6 +254,85 @@ defmodule Longx.Agent.ThreadStateTest do
       assert Store.requests(t) == []
       assert Store.snapshot(t).seq == 0
     end
+
+    # four turns of three items; turn-1 holds a sub-agent activity
+    defp twelve_items(t) do
+      for turn <- 1..4, i <- 1..3 do
+        item =
+          if turn == 1 and i == 2,
+            do: %{
+              "id" => "act",
+              "type" => "subAgentActivity",
+              "agentThreadId" => "child",
+              "kind" => "started"
+            },
+            else: %{"id" => "i#{turn}-#{i}", "type" => "agentMessage", "text" => "x"}
+
+        item_completed(t, item, "turn-#{turn}")
+      end
+    end
+
+    test "a windowed snapshot: the last `limit` items, what lies above counted (items, whole turns, the cut turn's items) and the sub-agent activities above it listed" do
+      t = new_thread()
+      twelve_items(t)
+
+      whole = Store.snapshot(t)
+      assert length(whole.items) == 12
+      assert whole.earlier == %{items: 0, turns: 0, partial: 0, activities: []}
+
+      %{items: items, earlier: earlier} = Store.snapshot(t, limit: 5)
+      assert Enum.map(items, & &1["id"]) == ["i3-2", "i3-3", "i4-1", "i4-2", "i4-3"]
+      # above: turn-1 and turn-2 whole (7 items with the activity), one item of turn-3
+      assert %{items: 7, turns: 2, partial: 1, activities: [%{"id" => "act"}]} = earlier
+
+      assert Store.snapshot(new_thread(), limit: 5).items == []
+      assert Store.snapshot(new_thread(), limit: 5).earlier.items == 0
+    end
+
+    test "the last turn is never cut: a turn longer than the window comes whole, running or done" do
+      t = new_thread()
+      for i <- 1..3, do: item_completed(t, %{"id" => "a#{i}", "type" => "agentMessage"}, "turn-1")
+      Store.fold(t, "turn/started", %{"turn" => %{"id" => "turn-2", "status" => "inProgress"}})
+
+      for i <- 1..6,
+          do: item_started(t, %{"id" => "b#{i}", "type" => "commandExecution"}, "turn-2")
+
+      %{items: items, earlier: earlier} = Store.snapshot(t, limit: 2)
+      assert Enum.map(items, & &1["id"]) == Enum.map(1..6, &"b#{&1}")
+      assert %{items: 3, turns: 1, partial: 0} = earlier
+
+      Store.fold(t, "turn/completed", %{"turn" => %{"id" => "turn-2", "status" => "completed"}})
+      assert length(Store.snapshot(t, limit: 2).items) == 6
+
+      # an item with no turn at the tail (an activity after the turn) belongs with the turn before it
+      item_completed(
+        t,
+        %{"id" => "tail", "type" => "subAgentActivity", "agentThreadId" => "c"},
+        nil
+      )
+
+      assert length(Store.snapshot(t, limit: 1).items) == 7
+    end
+
+    test "earlier/3 pages back from an item, counting what is still above; the last page leaves nothing; an unknown item is refused" do
+      t = new_thread()
+      twelve_items(t)
+      %{items: [%{"id" => first} | _]} = Store.snapshot(t, limit: 3)
+      assert first == "i4-1"
+
+      assert {:ok, %{items: page, earlier: earlier}} = Store.earlier(t, first, 4)
+      assert Enum.map(page, & &1["id"]) == ["i2-3", "i3-1", "i3-2", "i3-3"]
+      # above the page: turn-1 whole, two items of turn-2 (its third is in the page)
+      assert %{items: 5, turns: 1, partial: 2, activities: [%{"id" => "act"}]} = earlier
+
+      assert {:ok, %{items: rest, earlier: %{items: 0, turns: 0, partial: 0, activities: []}}} =
+               Store.earlier(t, "i2-3", :all)
+
+      assert Enum.map(rest, & &1["id"]) == ["i1-1", "act", "i1-3", "i2-1", "i2-2"]
+
+      assert {:ok, %{items: [], earlier: %{items: 0}}} = Store.earlier(t, "i1-1", 4)
+      assert Store.earlier(t, "nope", 4) == {:error, :unknown_item}
+    end
   end
 
   describe "ThreadState process" do

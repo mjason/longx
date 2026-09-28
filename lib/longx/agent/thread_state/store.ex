@@ -316,22 +316,38 @@ defmodule Longx.Agent.ThreadState.Store do
   def backfill(t, %{"thread" => thread}), do: put_meta(t, %{thread: thread})
   def backfill(_t, _), do: :ok
 
-  ## whole-thread views
+  ## whole-thread and windowed views
 
-  @spec snapshot(String.t()) :: map
-  def snapshot(thread_id), do: snapshot(thread_id, 100)
+  @typedoc """
+  What lies above a window: how many items, how many turns whole, how many
+  items of a turn the window cuts (`partial`), and the sub-agent activities
+  among them (`activities` — the page must know a child spawned long ago to
+  list it; everything else up there is fetched on request, `earlier/3`).
+  """
+  @type earlier :: %{
+          items: non_neg_integer,
+          turns: non_neg_integer,
+          partial: non_neg_integer,
+          activities: [map]
+        }
 
-  # a seqlock read: the meta before and after the items must agree and no
-  # event may be mid-write; the writer is one process, so a retry is rare
-  defp snapshot(thread_id, tries) do
-    before = meta(thread_id)
-    items = items(thread_id)
-    requests = requests(thread_id)
-    meta = meta(thread_id)
+  @doc """
+  The stored view. `limit:` (an item count, default `:all`) windows the
+  items to the tail: a page that joined a 13,666-item conversation once
+  parsed 15 MB before it could draw anything. The last turn — the running
+  one, else the last item's — always comes whole, so what the page decides
+  about it (a stop's take-back, the pending ask, live deltas by id) has every
+  item; `earlier` says what is above.
+  """
+  @spec snapshot(String.t(), limit: pos_integer | :all) :: map
+  def snapshot(thread_id, opts \\ []) do
+    limit = Keyword.get(opts, :limit, :all)
 
-    if (before.folding or meta.folding or before.seq != meta.seq) and tries > 0 do
-      snapshot(thread_id, tries - 1)
-    else
+    consistent(thread_id, fn meta ->
+      all = items(thread_id)
+      start = window_start(all, meta, limit)
+      {above, window} = Enum.split(all, start)
+
       %{
         seq: meta.seq,
         thread_id: thread_id,
@@ -343,10 +359,81 @@ defmodule Longx.Agent.ThreadState.Store do
         goal: meta.goal,
         waiting: meta.waiting,
         progress: meta.progress,
-        items: items,
-        pending_requests: requests
+        items: window,
+        earlier: earlier(above, window),
+        pending_requests: requests(thread_id)
       }
+    end)
+  end
+
+  @doc """
+  The `limit` items before `before_id` (`:all` for everything above it) and
+  what is still above them — the way a page walks up a long conversation.
+  An item the store no longer has (a retract took its turn) is refused; the
+  client re-snapshots.
+  """
+  @spec earlier(String.t(), String.t(), pos_integer | :all) ::
+          {:ok, %{items: [map], earlier: earlier}} | {:error, :unknown_item}
+  def earlier(thread_id, before_id, limit) do
+    consistent(thread_id, fn _meta ->
+      all = items(thread_id)
+
+      case Enum.find_index(all, &(&1["id"] == before_id)) do
+        nil ->
+          {:error, :unknown_item}
+
+        at ->
+          {above, from} = Enum.split(all, at)
+          start = if limit == :all, do: 0, else: max(length(above) - limit, 0)
+          {rest, page} = Enum.split(above, start)
+          {:ok, %{items: page, earlier: earlier(rest, page ++ from)}}
+      end
+    end)
+  end
+
+  # where the window begins: `limit` items from the end, moved up to the
+  # first item of the last turn when that turn is longer
+  defp window_start(_all, _meta, :all), do: 0
+
+  defp window_start(all, meta, limit) do
+    n = length(all)
+    by_count = max(n - limit, 0)
+
+    case last_turn(meta, all) do
+      nil -> by_count
+      turn -> min(by_count, Enum.find_index(all, &(&1["turnId"] == turn)) || by_count)
     end
+  end
+
+  defp last_turn(%{turn: %{"status" => "inProgress", "id" => id}}, _all) when is_binary(id),
+    do: id
+
+  defp last_turn(_meta, all) do
+    all |> Enum.reverse() |> Enum.find_value(& &1["turnId"])
+  end
+
+  defp earlier(above, shown) do
+    shown_turns = shown |> Enum.map(& &1["turnId"]) |> Enum.reject(&is_nil/1) |> MapSet.new()
+    turn_ids = above |> Enum.map(& &1["turnId"]) |> Enum.reject(&is_nil/1)
+
+    %{
+      items: length(above),
+      turns: turn_ids |> Enum.uniq() |> Enum.reject(&MapSet.member?(shown_turns, &1)) |> length(),
+      partial: Enum.count(turn_ids, &MapSet.member?(shown_turns, &1)),
+      activities: Enum.filter(above, &(&1["type"] == "subAgentActivity"))
+    }
+  end
+
+  # a seqlock read: the meta before and after the reads must agree and no
+  # event may be mid-write; the writer is one process, so a retry is rare
+  defp consistent(thread_id, read, tries \\ 100) do
+    before = meta(thread_id)
+    result = read.(before)
+    meta = meta(thread_id)
+
+    if (before.folding or meta.folding or before.seq != meta.seq) and tries > 0,
+      do: consistent(thread_id, read, tries - 1),
+      else: result
   end
 
   @spec delete(String.t()) :: :ok

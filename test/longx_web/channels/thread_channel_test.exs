@@ -8,10 +8,19 @@ defmodule LongxWeb.ThreadChannelTest do
   alias Longx.Agent.ThreadState
   alias Longx.Projects
 
-  defp join!(thread_id) do
+  defp join!(thread_id, payload \\ %{}) do
     LongxWeb.UserSocket
     |> socket("user", %{})
-    |> subscribe_and_join(LongxWeb.ThreadChannel, "thread:" <> thread_id)
+    |> subscribe_and_join(LongxWeb.ThreadChannel, "thread:" <> thread_id, payload)
+  end
+
+  defp message!(thread_id, id, turn) do
+    :ok =
+      ThreadState.ingest(thread_id, "item/completed", %{
+        "threadId" => thread_id,
+        "turnId" => turn,
+        "item" => %{"id" => id, "type" => "agentMessage", "text" => id}
+      })
   end
 
   setup do
@@ -103,6 +112,40 @@ defmodule LongxWeb.ThreadChannelTest do
 
   defp event(thread_id, turn_id),
     do: %{"threadId" => thread_id, "turn" => %{"id" => turn_id, "status" => "inProgress"}}
+
+  test "a join names its window: the last that many items come (the last turn whole), what is above is counted; `earlier` pages up, `snapshot` takes a limit too",
+       %{thread_id: thread_id} do
+    # the writes are casts: wait for every one to be in the store before the join reads it
+    :ok = ThreadState.subscribe(thread_id)
+    for id <- ~w(a1 a2 a3), do: message!(thread_id, id, "turn_1")
+    for id <- ~w(b1 b2), do: message!(thread_id, id, "turn_2")
+    for _ <- 1..5, do: assert_receive({:thread, _, "item/completed", _})
+
+    {:ok, reply, socket} = join!(thread_id, %{"limit" => 1})
+    assert Enum.map(reply.items, & &1["id"]) == ["b1", "b2"]
+    assert %{items: 3, turns: 1, partial: 0, activities: []} = reply.earlier
+
+    ref = push(socket, "earlier", %{"before" => "b1", "limit" => 2})
+    assert_reply ref, :ok, %{items: page, earlier: %{items: 1, turns: 0, partial: 1}}, 2_000
+    assert Enum.map(page, & &1["id"]) == ["a2", "a3"]
+
+    ref = push(socket, "earlier", %{"before" => "a2", "limit" => "all"})
+    assert_reply ref, :ok, %{items: [%{"id" => "a1"}], earlier: %{items: 0}}, 2_000
+
+    ref = push(socket, "snapshot", %{"limit" => "all"})
+    assert_reply ref, :ok, %{items: [_, _, _, _, _], earlier: %{items: 0}}, 2_000
+
+    # a join with no window gets the default (the tail; here everything)
+    {:ok, whole, _socket} = join!(thread_id)
+    assert length(whole.items) == 5
+  end
+
+  test "`earlier` before an item the store no longer has is refused (the client re-snapshots)",
+       %{thread_id: thread_id} do
+    {:ok, _, socket} = join!(thread_id)
+    ref = push(socket, "earlier", %{"before" => "gone", "limit" => 10})
+    assert_reply ref, :error, %{reason: "unknown item"}, 2_000
+  end
 
   test "joining an unknown thread is refused" do
     assert {:error, %{reason: "unknown thread"}} = join!("native_nobody")

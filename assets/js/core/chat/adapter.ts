@@ -30,8 +30,6 @@ export type AdapterOptions = {
   queue?: ExternalThreadQueueAdapter;
   /** null = no thread open yet: the first message creates one (`createThread`) */
   target: ThreadTarget | null;
-  /** the last that many turns are built for the runtime (the rest waits above the edge) */
-  window?: number;
   view: ThreadView;
   /** the live views of the thread's sub-agents (nested conversations; their asks surface here) */
   subviews?: SubViews;
@@ -131,7 +129,7 @@ export function buildAdapter(
     },
   };
   return {
-    messages: opts.target ? toMessages(view, opts.subviews, opts.window) : [],
+    messages: opts.target ? toMessages(view, opts.subviews) : [],
     convertMessage: (m) => m,
     isRunning: opts.target ? runningTurnId(view) !== null : false,
     isDisabled: opts.disabled ?? false,

@@ -372,11 +372,13 @@ export const t = {
     items: "条目",
   },
   stalledFor: (s: number) => `${s} 秒没有新输出`,
-  // chat: the part of a long thread above the window it opened on
+  // chat: the part of a long thread above the window it opened on (fetched from the server on request)
   history: {
     hidden: (turns: number) => `还有 ${turns} 轮更早的对话`,
-    more: (turns: number) => `显示更早 ${turns} 轮`,
+    partial: (items: number) => `这一轮还有 ${items} 条更早的内容`,
+    more: (items: number) => `显示更早 ${items} 条`,
     all: "显示全部",
+    loading: "正在加载…",
   },
   // chat: goal mode
   goal: {

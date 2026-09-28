@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { displayCommand, toMessages, turnCount, userText } from "./messages";
+import { displayCommand, subagentsOf, toMessages, userText } from "./messages";
 import { emptyView, type ThreadView } from "./thread";
 import type { ThreadMessageLike } from "@assistant-ui/react";
 
@@ -89,19 +89,19 @@ describe("toMessages", () => {
     expect(msgs[5]!.metadata?.custom?.["kind"]).toBeUndefined();
   });
 
-  test("a window builds only the last N turns — the rest is counted, never rendered (a 1700-item thread took six seconds to open); an item with no turn follows its neighbour", () => {
-    const items: Record<string, unknown>[] = [];
-    for (let i = 1; i <= 5; i++) {
-      items.push({ id: `u${i}`, type: "userMessage", turnId: `t${i}`, content: [{ type: "text", text: `q${i}` }] });
-      items.push({ id: `a${i}`, type: "agentMessage", turnId: `t${i}`, text: `a${i}` });
-      if (i === 3) items.push({ id: "stray", type: "agentMessage", text: "no turn" });
-    }
-    const v = view({ items: items as ThreadView["items"] });
-    expect(turnCount(v)).toBe(5);
-    expect(toMessages(v, {}, 2).map((m) => m.id)).toEqual(["u4", "turn:t4", "u5", "turn:t5"]);
-    // the window covers the thread: everything, the stray included
-    expect(toMessages(v, {}, 5).length).toBe(toMessages(v).length);
-    expect(toMessages(v, {}, 99).length).toBe(toMessages(v).length);
+  test("a child spawned above the window is still a sub-agent of the view: its activities ride in `earlier.activities`, never as messages", () => {
+    const spawned = { id: "act", type: "subAgentActivity", turnId: "t1", agentThreadId: "child", agentPath: "/root/coder", kind: "started" };
+    const v = view({
+      items: [
+        { id: "u9", type: "userMessage", turnId: "t9", content: [{ type: "text", text: "q" }] },
+        { id: "a9", type: "agentMessage", turnId: "t9", text: "a" },
+      ] as ThreadView["items"],
+      earlier: { items: 40, turns: 8, partial: 0, activities: [spawned as ThreadView["items"][number]] },
+    });
+    const agents = subagentsOf(v);
+    expect([...agents.keys()]).toEqual(["child"]);
+    expect(agents.get("child")).toMatchObject({ name: "coder", kind: "started" });
+    expect(toMessages(v).map((m) => m.id)).toEqual(["u9", "turn:t9"]);
   });
 
   test("the turn in flight is running; a streaming command has no result yet", () => {

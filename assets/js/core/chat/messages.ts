@@ -38,10 +38,14 @@ export type SubAgent = {
 /** The method of a tool's ask (Context.ask): the person has to act before the tool goes on. */
 export const ACTION_REQUEST = "longx/action/request";
 
-/** The sub-agents a view mentions, in order of first appearance. */
+/**
+ * The sub-agents a view mentions, in order of first appearance — the
+ * activities above its window count (`earlier.activities`: a child spawned
+ * long ago, still at work, must be in the agents panel).
+ */
 export function subagentsOf(view: ThreadView): Map<string, SubAgent> {
   const agents = new Map<string, SubAgent>();
-  for (const item of view.items) {
+  for (const item of [...view.earlier.activities, ...view.items]) {
     if (item.type !== "subAgentActivity") continue;
     const threadId = String(item["agentThreadId"] ?? "");
     if (!threadId) continue;
@@ -84,38 +88,19 @@ export function subagentsOf(view: ThreadView): Map<string, SubAgent> {
   return agents;
 }
 
-/** The thread's turns in order (distinct turn ids over the items). */
-export function turnIds(view: ThreadView): string[] {
-  const ids: string[] = [];
-  let last: string | undefined;
-  for (const item of view.items) {
-    if (item.turnId && item.turnId !== last && !ids.includes(item.turnId)) ids.push(item.turnId);
-    if (item.turnId) last = item.turnId;
-  }
-  return ids;
-}
-
-export function turnCount(view: ThreadView): number {
-  return turnIds(view).length;
-}
-
 /**
- * `window`: build only the last that many turns — a 1700-item thread once took
- * six seconds to open because every message was rendered at once. The view
- * stays whole (the agents panel, the timing, the state read all of it); only
- * what is handed to the runtime is the tail. An item with no turn (an activity)
- * follows the item before it.
+ * Every item the view holds becomes a message — the view is the window (the
+ * server sends the tail of a long conversation, `earlier` says what is above;
+ * a 13,666-item thread once came whole, 15 MB, and a 1700-item one took six
+ * seconds to draw). An item with no turn (an activity) follows the item before it.
  */
 export function toMessages(
   view: ThreadView,
   subviews: SubViews = {},
-  window?: number,
 ): ThreadMessageLike[] {
   const running = runningTurnId(view);
   const agents = subagentsOf(view);
   const out: ThreadMessageLike[] = [];
-  const shown = window === undefined ? null : new Set(turnIds(view).slice(-window));
-  let visible = shown === null || shown.size === turnCount(view);
   let current: { turnId: string | undefined; parts: Part[] } | null = null;
   // a message steered into a running turn splits its assistant message: the
   // segments after the first get an index, or they would share one id and
@@ -145,10 +130,6 @@ export function toMessages(
   };
 
   for (const item of view.items) {
-    if (shown !== null) {
-      if (item.turnId) visible = shown.has(item.turnId);
-      if (!visible) continue;
-    }
     if (item.type === "userMessage" && jobOrigin(item)) {
       // a background job's end the kernel woke the agent with: a marker opening
       // the turn (the model reads the notice, the page names the job)

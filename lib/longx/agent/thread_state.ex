@@ -44,8 +44,12 @@ defmodule Longx.Agent.ThreadState do
           waiting: map | nil,
           progress: map | nil,
           items: [map],
+          earlier: Store.earlier(),
           pending_requests: [map]
         }
+
+  # the items a page joins with: the tail; the rest comes up with `earlier/3`
+  @default_window 500
 
   ## Client
 
@@ -112,9 +116,18 @@ defmodule Longx.Agent.ThreadState do
   @spec drop_turns(String.t(), [String.t()]) :: :ok
   def drop_turns(thread_id, turn_ids), do: GenServer.call(via(thread_id), {:drop_turns, turn_ids})
 
-  @doc "Reads the stored view directly from ETS."
-  @spec snapshot(String.t()) :: snapshot
-  def snapshot(thread_id), do: Store.snapshot(thread_id)
+  @doc "Reads the stored view directly from ETS; `limit:` windows the items to the tail (`Store.snapshot/2`)."
+  @spec snapshot(String.t(), limit: pos_integer | :all) :: snapshot
+  def snapshot(thread_id, opts \\ []), do: Store.snapshot(thread_id, opts)
+
+  @doc "The items before one the client has, and what is still above them (`Store.earlier/3`)."
+  @spec earlier(String.t(), String.t(), pos_integer | :all) ::
+          {:ok, %{items: [map], earlier: Store.earlier()}} | {:error, :unknown_item}
+  def earlier(thread_id, before_id, limit), do: Store.earlier(thread_id, before_id, limit)
+
+  @doc "How many items a page joins with when it names no window."
+  @spec default_window() :: pos_integer
+  def default_window, do: @default_window
 
   def start_link(thread_id), do: GenServer.start_link(__MODULE__, thread_id, name: via(thread_id))
 

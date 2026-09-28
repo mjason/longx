@@ -95,30 +95,48 @@ describe("ThreadPage", () => {
     setViewport(1280);
   });
 
-  test("a long thread opens on its last 20 turns; the edge above says how many more there are and shows them on request, all of them or 20 at a time", async () => {
-    const items: Record<string, unknown>[] = [];
-    for (let i = 1; i <= 45; i++) {
-      items.push({ id: `u${i}`, type: "userMessage", turnId: `turn_${i}`, content: [{ type: "text", text: `问题 ${i}` }] });
-      items.push({ id: `a${i}`, type: "agentMessage", turnId: `turn_${i}`, text: `回答 ${i}` });
-    }
+  // turns `from`..`to` as the server's items: a question and an answer each
+  const turnItems = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, k) => from + k).flatMap((i) => [
+      { id: `u${i}`, type: "userMessage", turnId: `turn_${i}`, content: [{ type: "text", text: `问题 ${i}` }] },
+      { id: `a${i}`, type: "agentMessage", turnId: `turn_${i}`, text: `回答 ${i}` },
+    ]);
+  const none = { items: 0, turns: 0, partial: 0, activities: [] };
+
+  test("a long thread opens on the tail the server sent; the edge above says what waits there and fetches it from the server on request, a page at a time or all of it", async () => {
     renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-    act(() => channel.reply("ok", { ...snapshot, items }));
+    act(() => channel.reply("ok", { ...snapshot, items: turnItems(41, 45), earlier: { items: 80, turns: 40, partial: 0, activities: [] } }));
     await screen.findByText("问题 45");
-    expect(screen.queryByText("问题 25")).not.toBeInTheDocument();
-    expect(screen.getByText("问题 26")).toBeInTheDocument();
+    expect(screen.queryByText("问题 40")).not.toBeInTheDocument();
     const edge = screen.getByTestId("history-edge");
-    expect(edge).toHaveTextContent("还有 25 轮更早的对话");
+    expect(edge).toHaveTextContent("还有 40 轮更早的对话");
 
     const user = userEvent.setup();
-    await user.click(within(edge).getByRole("button", { name: /显示更早 20 轮/ }));
-    await screen.findByText("问题 6");
-    expect(screen.queryByText("问题 5")).not.toBeInTheDocument();
-    expect(screen.getByTestId("history-edge")).toHaveTextContent("还有 5 轮更早的对话");
+    await user.click(within(edge).getByRole("button", { name: /显示更早 80 条/ }));
+    // asked of the server: the page before the first item the view holds
+    expect(channel.pushed.at(-1)).toEqual({ event: "earlier", payload: { before: "u41", limit: 500 } });
+    expect(screen.getByTestId("history-edge")).toHaveTextContent("正在加载");
+    act(() => channel.answer("ok", { items: turnItems(21, 40), earlier: { items: 40, turns: 20, partial: 0, activities: [] } }));
+    await screen.findByText("问题 21");
+    expect(screen.queryByText("问题 20")).not.toBeInTheDocument();
+    expect(screen.getByTestId("history-edge")).toHaveTextContent("还有 20 轮更早的对话");
 
     await user.click(within(screen.getByTestId("history-edge")).getByRole("button", { name: /显示全部/ }));
+    expect(channel.pushed.at(-1)).toEqual({ event: "earlier", payload: { before: "u21", limit: "all" } });
+    act(() => channel.answer("ok", { items: turnItems(1, 20), earlier: none }));
     await screen.findByText("问题 1");
     expect(screen.queryByTestId("history-edge")).not.toBeInTheDocument();
+  });
+
+  test("a window that starts inside a turn says how much of that turn is above it", async () => {
+    renderAt("/p/app-1/t/t1");
+    await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
+    act(() => channel.reply("ok", { ...snapshot, items: turnItems(9, 9), earlier: { items: 27, turns: 2, partial: 3, activities: [] } }));
+    await screen.findByText("问题 9");
+    expect(screen.getByTestId("history-edge")).toHaveTextContent("还有 2 轮更早的对话");
+    expect(screen.getByTestId("history-edge")).toHaveTextContent("这一轮还有 3 条更早的内容");
+    expect(within(screen.getByTestId("history-edge")).getByRole("button", { name: /显示更早 27 条/ })).toBeInTheDocument();
   });
 
   test("renders the snapshot: user message, command block, markdown reply", async () => {

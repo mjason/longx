@@ -24,13 +24,13 @@ import {
   buildAdapter,
   type ThreadTarget,
 } from "./adapter";
-import { subagentsOf, turnCount, type SubViews } from "./messages";
+import { subagentsOf, type SubViews } from "./messages";
 import { runningTurnId, type ThreadView } from "./thread";
 import { csrfToken } from "@/core/gql";
 import { FileUploadAttachmentAdapter } from "./fileAttachments";
 import { buildThreadListAdapter, type ThreadRow } from "./threadList";
-import { useThreadView } from "./useThreadView";
-import { useThreadViews } from "./useThreadViews";
+import { useThreadView, type LoadEarlier } from "./useThreadView";
+import { useThreadViews, type LoadEarlierOf } from "./useThreadViews";
 
 export type LongxRuntimeOptions = {
   projectId: string;
@@ -50,14 +50,39 @@ export type LongxRuntimeOptions = {
 /** `compacting`: a context fold between turns — no turn runs, but the kernel is busy and the page says so */
 export type TurnState = "idle" | "running" | "waiting" | "compacting";
 
-/** how many turns a thread opens on; the edge above them shows more on request */
-export const HISTORY_WINDOW = 20;
-
-/** the part of the thread above the window: how many turns wait there, and how to show them */
+/**
+ * The part of the thread above the window the view holds (the server sends
+ * the tail): how many turns wait there whole, how many items in all, how many
+ * items of the turn the window cut, and the way to fetch them.
+ */
 export type ThreadHistory = {
   hiddenTurns: number;
-  showEarlier: (turns: number | "all") => void;
+  hiddenItems: number;
+  partial: number;
+  loading: boolean;
+  showEarlier: (count: number | "all") => Promise<void>;
 };
+
+/** The edge's state over a view and the loader that fetches a page from above it. */
+export function useHistory(view: ThreadView, load: LoadEarlier): ThreadHistory {
+  const [loading, setLoading] = useState(false);
+  const showEarlier = useCallback(
+    async (count: number | "all") => {
+      setLoading(true);
+      try {
+        await load(count);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [load],
+  );
+  const earlier = view.earlier;
+  return useMemo<ThreadHistory>(
+    () => ({ hiddenTurns: earlier.turns, hiddenItems: earlier.items, partial: earlier.partial, loading, showEarlier }),
+    [earlier, loading, showEarlier],
+  );
+}
 
 export type LongxRuntime = {
   runtime: AssistantRuntime;
@@ -72,6 +97,8 @@ export type LongxRuntime = {
   error: string | null;
   state: TurnState;
   history: ThreadHistory;
+  /** a page from above a sub-agent's view (its conversation read in a tab) */
+  loadEarlierOf: LoadEarlierOf;
   /** why the thread cannot take messages, if so */
   disabledReason: string | null;
   /** the project's default model id, for the rail to name what a new chat starts on */
@@ -129,10 +156,10 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     () => (definition.data ? { model: definition.data.model, effort: definition.data.effort } : null),
     [definition.data],
   );
-  const { view, ready, error, refetch } = useThreadView(thread?.kernelThreadId, onSignal);
+  const { view, ready, error, refetch, loadEarlier } = useThreadView(thread?.kernelThreadId, onSignal);
   // sub-agents work on their own threads; the parent's activities name
   // them, and a child's activities name its own children
-  const subviews = useThreadViews(
+  const { views: subviews, loadEarlier: loadEarlierOf } = useThreadViews(
     useMemo(() => subagentIds(view), [view]),
     subagentIds,
   );
@@ -325,18 +352,8 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     [invalidate, threadId, onOpenThread],
   );
 
-  // a long thread opens on its tail; another thread starts over
-  const [windowTurns, setWindowTurns] = useState(HISTORY_WINDOW);
-  useEffect(() => setWindowTurns(HISTORY_WINDOW), [threadId]);
-  const totalTurns = useMemo(() => turnCount(view), [view]);
-  const history = useMemo<ThreadHistory>(
-    () => ({
-      hiddenTurns: Math.max(0, totalTurns - windowTurns),
-      showEarlier: (turns) =>
-        setWindowTurns((w) => (turns === "all" ? Number.MAX_SAFE_INTEGER : w + turns)),
-    }),
-    [totalTurns, windowTurns],
-  );
+  // a long thread opens on its tail (the server's window); the edge fetches what is above
+  const history = useHistory(view, loadEarlier);
 
   // a stop before the model answered: the turn's text back in the composer, ahead
   // of whatever was being typed (a draft is not lost to it)
@@ -359,7 +376,6 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
         target,
         view,
         subviews,
-        window: windowTurns,
         model,
         effort,
         disabled: disabledReason !== null,
@@ -380,7 +396,6 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       target?.kernelThreadId,
       view,
       subviews,
-      windowTurns,
       model,
       effort,
       disabledReason,
@@ -426,6 +441,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     error,
     state,
     history,
+    loadEarlierOf,
     disabledReason,
     defaultModelId,
     definitionModel,

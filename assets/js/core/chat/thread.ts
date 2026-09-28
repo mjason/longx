@@ -56,6 +56,34 @@ export type Waiting = { items: WaitingMessage[]; paused: boolean };
 
 const NO_WAITING: Waiting = { items: [], paused: false };
 
+/**
+ * What lies above the items the view holds (the snapshot is a window on the
+ * tail — Store.snapshot/2): how many items, how many turns whole, how many
+ * items of the turn the window cuts, and the sub-agent activities up there
+ * (a child spawned long ago is still the view's; everything else comes down
+ * with `earlier` on request).
+ */
+export type EarlierHistory = { items: number; turns: number; partial: number; activities: ThreadItem[] };
+
+/** how many items a page asks for: at the join, and per step up */
+export const HISTORY_PAGE = 500;
+
+export const NO_EARLIER: EarlierHistory = { items: 0, turns: 0, partial: 0, activities: [] };
+
+function earlierOf(raw: unknown): EarlierHistory {
+  if (typeof raw !== "object" || raw === null) return NO_EARLIER;
+  const r = raw as Partial<EarlierHistory>;
+  return {
+    items: typeof r.items === "number" ? r.items : 0,
+    turns: typeof r.turns === "number" ? r.turns : 0,
+    partial: typeof r.partial === "number" ? r.partial : 0,
+    activities: Array.isArray(r.activities) ? r.activities : [],
+  };
+}
+
+/** A page of items fetched from above the view (the channel's "earlier" reply). */
+export type EarlierPage = { items: ThreadItem[]; earlier: EarlierHistory };
+
 function waitingOf(raw: unknown): Waiting {
   if (typeof raw !== "object" || raw === null) return NO_WAITING;
   const r = raw as { waiting?: unknown; paused?: unknown };
@@ -77,6 +105,7 @@ export type ThreadSnapshot = {
   goal?: ThreadGoal | null;
   waiting?: { waiting: WaitingMessage[]; paused: boolean } | null;
   progress?: TurnProgress | null;
+  earlier?: EarlierHistory;
 };
 
 /**
@@ -111,6 +140,8 @@ export type ThreadView = {
   goal: ThreadGoal | null;
   waiting: Waiting;
   progress: TurnProgress | null;
+  /** what is above `items` (the view is a window on the tail) */
+  earlier: EarlierHistory;
 };
 
 export function fromSnapshot(s: ThreadSnapshot): ThreadView {
@@ -127,6 +158,7 @@ export function fromSnapshot(s: ThreadSnapshot): ThreadView {
     goal: s.goal ?? null,
     waiting: waitingOf(s.waiting),
     progress: s.progress ?? null,
+    earlier: earlierOf(s.earlier),
   };
 }
 
@@ -144,6 +176,17 @@ export function emptyView(threadId: string): ThreadView {
     goal: null,
     waiting: NO_WAITING,
     progress: null,
+    earlier: NO_EARLIER,
+  };
+}
+
+/** A page from above the view put in front of its items (one the view already holds is not doubled); `earlier` is what is still above. */
+export function prependEarlier(view: ThreadView, page: EarlierPage): ThreadView {
+  const held = new Set(view.items.map((i) => i.id));
+  return {
+    ...view,
+    items: [...page.items.filter((i) => !held.has(i.id)), ...view.items],
+    earlier: earlierOf(page.earlier),
   };
 }
 

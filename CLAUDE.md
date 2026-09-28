@@ -985,7 +985,16 @@ on first use.
     `snapshot/1` retries a torn read), broadcasts `{:thread, seq, method, params}` on
     `"thread:<id>"`. Reads go straight to ETS. Pending asks are in the view with a
     `"requestId"`. **Page refresh / late join: `subscribe` → `snapshot` (has `seq`) →
-    render → apply only events with `seq > snapshot.seq`.**
+    render → apply only events with `seq > snapshot.seq`.** **The snapshot is a window**
+    (`Store.snapshot(id, limit: n | :all)`, `:all` for the kernel's own readers —
+    `Agent`, `Projects.retractable`, the API report): the last `limit` items, extended
+    to the first item of the last turn (the running one, else the last item's) so what
+    a page decides about that turn — a stop's take-back, the pending ask, deltas by id
+    — has every item; `earlier` `%{items, turns, partial, activities}` counts what is
+    above (turns whole, the cut turn's items, the `subAgentActivity` items up there so a
+    child spawned long ago is still known); `Store.earlier(id, before_item_id, limit)`
+    pages up from an item the client holds (`{:error, :unknown_item}` after a retract →
+    the client re-snapshots). Both reads are one seqlock read (`consistent/3`).
   - Tests: `test/longx/agent/` (`pipeline_test` the DSL and phases, `definition/{config,
     loader,settings}_test`, `knowledge_test`, `web_search_test` (Tavily by Bypass, the fake
     obscura), `tools/{patch,shell_env}_test`, `model/sse_test`, `plugs_test` runs real bash,
@@ -1476,8 +1485,12 @@ on first use.
     minute = status `unstable`: a red banner naming the server, reconnects at 5–10 s
     instead of phoenix's ladder, calm again after 30 s open). `LongxWeb.ThreadChannel` (`thread:<kernel_thread_id>`,
     join → `Projects.host_thread/1` starts the agent again after a restart) replies with
-    the snapshot (`seq`), then pushes `"event"` `%{seq, method, params}`, `"snapshot"` on
-    demand. `LongxWeb.ProjectChannel` (`project:<id>`) pushes `"changed"` (rows changed →
+    the snapshot (`seq`; the join's `limit` — an item count or `"all"`,
+    `ThreadState.default_window/0` 500 when absent — is how many items of the tail come
+    with it), then pushes `"event"` `%{seq, method, params}`; `"snapshot"` on demand
+    (`limit` too), `"earlier"` `%{before, limit}` → `%{items, earlier}` the page above
+    an item the client holds (`{:error, %{reason: "unknown item"}}` once a retract took
+    it). `LongxWeb.ProjectChannel` (`project:<id>`) pushes `"changed"` (rows changed →
     refetch; `Projects.broadcast_changed/1`), `"files"` / `"git"` / `"definition"` /
     `"watch"` (the file watcher, above; the client invalidates the tree, the ignored
     list, every git query — the status strip's HEAD too — and keeps the watch status
@@ -1577,25 +1590,42 @@ on first use.
     (`discardTurn` → `retract_turn`); `toMessages` closes a turn stopped before the model
     said anything with an empty cancelled assistant message for it),
     `mentions.ts`,
-    `fileAttachments.ts`, `reasoningSteps.ts`. **A long thread opens on its tail**
-    (assistant-ui's windowed-history shape: the runtime renders whatever `messages`
-    holds, so the window is the last `HISTORY_WINDOW` (20) turns of `toMessages(view,
-    subviews, window)` — `turnIds/1` counts the turns, an item with no turn follows its
-    neighbour — and showing more is widening it; `runtime.ts`'s `history` `{hiddenTurns,
-    showEarlier}`, reset per thread; the view itself stays whole for the agents panel,
-    the timing and the state). `chat/HistoryEdge` (the `HistoryEdge` slot of `thread.aui`,
-    above the messages, `HistoryContext` provided by `ThreadPage` and by `AgentTab` for a
-    child's conversation): 还有 N 轮更早的对话 · 显示更早 20 轮 · 显示全部, the viewport's
-    `scrollTop` moved by the height the earlier turns added so the reader's place holds.
-    Measured on a 1714-item thread (223 messages, a 3.2 MB snapshot): the thread's own
-    cost fell from ~2.5 s to ~0.7 s, the DOM from 32k to 5.5k nodes, the heap from 250 to
-    66 MB; what is left of the ~4 s open is the app's boot (3.5 s: 3.9 MB of scripts and
-    a 1.1 s main-chunk task, the same on a 54-item thread). The viewports have no
-    `scroll-smooth` any more (the registry's default animated every jump to the bottom
-    and the thread re-laid out several times while opening — lazy shiki and KaTeX,
-    content-visibility sizing — so the reader watched it slide). Virtualization
-    (`/docs/guides/virtualization`, `Unstable_MessageById` + react-virtual, own scroll
-    container) is the next step if a window itself is ever too heavy.
+    `fileAttachments.ts`, `reasoningSteps.ts`. **A long thread opens on its tail, and
+    the tail is what the server sends** (assistant-ui's windowed-history shape: the
+    runtime renders whatever `messages` holds, and the view *is* the window — the join
+    asks for `HISTORY_PAGE` (500) items, `thread.ts`; `Store.snapshot/2`'s rule keeps the
+    last turn whole; the view's `earlier` `{items, turns, partial, activities}` is what
+    lies above; `useThreadView`'s `loadEarlier(count | "all")` pushes `"earlier"`
+    `{before: the first item's id, limit}` and `prependEarlier` puts the page in front;
+    a rejoin asks for as many items as the view had, so a reconnect keeps what the
+    reader scrolled up to; `subagentsOf` reads `earlier.activities` too, so a child
+    spawned above the window is still in the agents panel; `runtime.ts`'s `useHistory`
+    → `ThreadHistory` `{hiddenTurns, hiddenItems, partial, loading, showEarlier}`,
+    `loadEarlierOf` for a child's tab through `useThreadViews`). Until 2026-09-28 the
+    window was the client's — the last 20 turns of `toMessages` — over a whole
+    snapshot: a 13,666-item conversation joined with 15.6 MB (1.75 s on the LAN, a
+    1.3 s main-thread fold, every GraphQL reply of the page queued behind it), and a
+    turn of that thread averages 260 items, so 20 turns were still 7 MB; an 8 KB cap
+    per item would have saved 1 MB (the bytes are thousands of medium items, not a few
+    big ones). `chat/HistoryEdge` (the `HistoryEdge` slot of `thread.aui`, above the
+    messages, `HistoryContext` provided by `ThreadPage` and by `AgentTab` for a child's
+    conversation): 还有 N 轮更早的对话 · 这一轮还有 K 条更早的内容 · 显示更早 500 条 ·
+    显示全部, 正在加载… while the page is fetched; once it is in, the message that was
+    first is pinned by its **bottom** edge for a second of frames so the reader's place
+    holds — a cut turn grows that message at its top, and the viewport's height is no
+    measure (messages are drawn by index over `content-visibility` placeholders whose
+    remembered sizes shuffle when the list shifts: a height-delta pin drifted 240 px on
+    the scratch server).
+    Measured before, on a 1714-item thread (223 messages, a 3.2 MB snapshot): the
+    thread's own cost fell from ~2.5 s to ~0.7 s, the DOM from 32k to 5.5k nodes, the
+    heap from 250 to 66 MB; what is left of the ~4 s open is the app's boot (3.5 s: 3.9
+    MB of scripts and a 1.1 s main-chunk task, the same on a 54-item thread). The
+    viewports have no `scroll-smooth` any more (the registry's default animated every
+    jump to the bottom and the thread re-laid out several times while opening — lazy
+    shiki and KaTeX, content-visibility sizing — so the reader watched it slide).
+    Virtualization (`/docs/guides/virtualization`, `Unstable_MessageById` +
+    react-virtual, own scroll container) is the next step if a page itself is ever too
+    heavy.
   - `js/ui/` — React DOM, **shaped like an IDE with the chat where the editor would be**.
     `routes.tsx`: `/` (`pages/WelcomePage`: recent projects, what is running now —
     `useRunningThreads`, waiting ones first and amber), `/new` (`pages/ProjectWizard`:
