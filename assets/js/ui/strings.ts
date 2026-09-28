@@ -317,6 +317,10 @@ export const t = {
   },
   addAttachment: "添加附件",
   removeAttachment: "移除附件",
+  // the browser's FileReader refused the file (NotReadableError): the message came back to the composer with nothing said
+  attachmentUnreadable: (name: string) =>
+    `浏览器读不了 ${name}：选中后文件可能被改动、移动，或它所在的位置不允许读取（网络共享、云盘占位文件、正在被写入的文件）。换个位置或重新选一次。`,
+  attachmentFailed: (name: string, why: string) => `${name}：${why}`,
   dictate: "语音输入",
   stopDictation: "停止语音输入",
   commands: {

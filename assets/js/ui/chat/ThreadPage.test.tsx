@@ -1481,6 +1481,32 @@ describe("ThreadPage", () => {
     fetchMock.mockRestore();
   });
 
+  test("a text file past 32 KB is uploaded like a zip and the message names its path — never inlined into the prompt", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ path: "/data/attachments/id-1/20260928T020000-dump.txt", name: "dump.txt", bytes: 40 * 1024 }), { status: 200 }),
+    );
+    await open();
+    const file = new File([new Uint8Array(40 * 1024).fill(97)], "dump.txt", { type: "text/plain" });
+    const shell = document.querySelector("[data-slot=aui_composer-shell]")!;
+    fireEvent.drop(shell, { dataTransfer: { files: [file], types: ["Files"] } });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/attachments/id-1", expect.objectContaining({ method: "POST" })));
+    const box = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(box, "summarise it{Enter}");
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            text: expect.stringMatching(/^summarise it\n\n<attachment name="dump\.txt" path="\/data\/attachments\/id-1\/20260928T020000-dump\.txt"/),
+          }),
+        }),
+      ),
+    );
+    const sent = vi.mocked(sendMessage).mock.lastCall![0] as { input: { text: string } };
+    expect(sent.input.text).not.toContain("aaaa");
+    fetchMock.mockRestore();
+  });
+
   test("voice input is switched off for now: no mic in the rail", async () => {
     await open();
     expect(screen.queryByRole("button", { name: "语音输入" })).toBeNull();

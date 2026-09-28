@@ -27,7 +27,9 @@ import {
 import { subagentsOf, type SubViews } from "./messages";
 import { runningTurnId, type ThreadView } from "./thread";
 import { csrfToken } from "@/core/gql";
+import { reportingAdapter } from "./attachments";
 import { FileUploadAttachmentAdapter } from "./fileAttachments";
+import { TextAttachmentAdapter } from "./textAttachments";
 import { buildThreadListAdapter, type ThreadRow } from "./threadList";
 import { useThreadView, type LoadEarlier } from "./useThreadView";
 import { useThreadViews, type LoadEarlierOf } from "./useThreadViews";
@@ -44,6 +46,8 @@ export type LongxRuntimeOptions = {
   onOpenThread: (threadId: string | null) => void;
   /** a thread event worth telling the person about as it happens (model/rerouted) */
   onSignal?: (method: string, params: Record<string, unknown>) => void;
+  /** a file the composer could not add or send, in words (assistant-ui only bounces the message) */
+  onAttachmentError?: (message: string) => void;
 };
 
 /** idle, a turn running, or a tool waiting on the person (an ask) */
@@ -139,7 +143,10 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     threadId,
     onOpenThread,
     onSignal,
+    onAttachmentError,
   } = opts;
+  const attachmentErrorRef = useRef(onAttachmentError);
+  attachmentErrorRef.current = onAttachmentError;
   const client = useQueryClient();
   const threads = useThreads(projectId);
   const rows = useMemo(
@@ -322,14 +329,18 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
   // files (inlined) and any other file (uploaded to the server, its path in
   // the message), and the browser's speech recognition where it exists —
   // built once, like everything the adapter is made of
-  const [attachments] = useState(
-    () =>
+  const [attachments] = useState(() => {
+    const upload = new FileUploadAttachmentAdapter({ projectId, csrf: csrfToken });
+    return reportingAdapter(
       new CompositeAttachmentAdapter([
         new SimpleImageAttachmentAdapter(),
-        new SimpleTextAttachmentAdapter(),
-        new FileUploadAttachmentAdapter({ projectId, csrf: csrfToken }),
+        // a text file is inlined up to INLINE_TEXT_LIMIT, uploaded past it
+        new TextAttachmentAdapter(new SimpleTextAttachmentAdapter(), upload),
+        upload,
       ]),
-  );
+      (message) => attachmentErrorRef.current?.(message),
+    );
+  });
   const [dictation] = useState(() =>
     DICTATION && WebSpeechDictationAdapter.isSupported()
       ? new WebSpeechDictationAdapter({

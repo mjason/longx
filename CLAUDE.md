@@ -199,7 +199,9 @@ on first use.
     `file_rules_rpc_test`, `native/shim/watch_test.go`, e2e `08-files`.
   - **Attachments** (`Longx.Projects.Attachments`, `POST /attachments/:project_id`,
     `LongxWeb.AttachmentController`, multipart, 512 MB): a non-image, non-text file dropped
-    on the composer is stored as `<stamp>-<name>` under `<attachments dir>/<project id>/`
+    on the composer — and a text file past 32 KB (`INLINE_TEXT_LIMIT`,
+    `core/chat/textAttachments.ts`: a 251 KB text inlined would be most of a window) — is
+    stored as `<stamp>-<name>` under `<attachments dir>/<project id>/`
     (`config :longx, Longx.Projects.Attachments, dir:`; dev `data/attachments`, prod
     `$LONGX_DATA_DIR/attachments` — never the working directory) and the message carries
     `<attachment name path size />`; the agent reads or unzips the path itself.
@@ -1824,9 +1826,16 @@ on first use.
     exported `ReadOnlyThread`; a header link 到它的页面去对话 leads to the child's own
     page). The Agents tool window's inbox opens the same tab. A nested conversation in
     the transcript made a page one had to scroll for minutes to fold), `CompactionUI` for
-    the marker). Attachments: `CompositeAttachmentAdapter([SimpleImage, SimpleText,
-    FileUpload])` — images go out as `images`, text files appended, anything else uploaded
-    to `/attachments`. Dictation is off (`DICTATION = false` in `runtime.ts`). Terminal
+    the marker). Attachments: `CompositeAttachmentAdapter([SimpleImage,
+    TextAttachmentAdapter(SimpleText, FileUpload), FileUpload])` — images go out as
+    `images`, a text file up to 32 KB appended, one past that and anything else uploaded
+    to `/attachments` (the composite picks by `accept` alone, so `TextAttachmentAdapter`
+    stands for the text types and routes by size). **Every failed add or send is told**
+    (`core/chat/attachments.ts`'s `reportingAdapter` → `onAttachmentError` → a toast):
+    assistant-ui only puts the message back and rethrows, and a `.txt` the browser refused
+    to read (FileReader's `NotReadableError` — changed after it was picked, or on a share
+    it cannot read) bounced four times with nothing said but a console error; a failed
+    upload (413, 500) was as silent. Dictation is off (`DICTATION = false` in `runtime.ts`). Terminal
     output linkifies URLs (an ask's link is often printed there). `thread.aui` shows a
     stall hint (`unstable_useMessageStallDetection`, 15 s) and the timing badge; the
     viewport follows the bottom (no `turnAnchor="top"`). After `npm install` adds packages

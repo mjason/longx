@@ -97,6 +97,7 @@ export function ChatProvider({
     threadId,
     onOpenThread,
     onSignal,
+    onAttachmentError: (message) => toast.error(message),
   });
 
   // a tool's ask (Context.ask) is answered on the thread on screen — the
