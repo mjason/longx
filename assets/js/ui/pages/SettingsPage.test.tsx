@@ -627,12 +627,31 @@ describe("SettingsPage", () => {
     await user.click(within(flagship).getByRole("combobox", { name: "ultra 备选 2" }));
     await user.click(await screen.findByRole("option", { name: "deepseek-flash" }));
     await waitFor(() =>
-      expect(setModelAlias).toHaveBeenCalledWith(expect.objectContaining({ input: { name: "ultra", models: ["glm-5", "deepseek-flash", "deepseek-flash"] } })),
+      expect(setModelAlias).toHaveBeenCalledWith(expect.objectContaining({ input: { name: "ultra", models: ["glm-5", "deepseek-flash", "deepseek-flash"], efforts: ["", "", ""] } })),
     );
     // a new alias starts on the first model
     await user.type(within(card).getByRole("textbox", { name: "添加别名" }), "青龙");
     await user.click(within(card).getByRole("button", { name: /添加别名/ }));
-    await waitFor(() => expect(setModelAlias).toHaveBeenLastCalledWith(expect.objectContaining({ input: { name: "青龙", models: ["deepseek-flash"] } })));
+    await waitFor(() => expect(setModelAlias).toHaveBeenLastCalledWith(expect.objectContaining({ input: { name: "青龙", models: ["deepseek-flash"], efforts: [""] } })));
+  });
+
+  test("models: each model of a tier has its level beside it, from that model's own levels", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    renderAt("/settings/models");
+    const card = await screen.findByTestId("model-aliases");
+    const flagship = within(card).getByTestId("alias-ultra");
+    // glm-5 declares low / high; deepseek-flash none: no level to pick there
+    const level = within(flagship).getByRole("combobox", { name: "ultra 用的模型的思考档位" });
+    expect(level).toHaveTextContent("模型默认");
+    expect(within(flagship).getByRole("combobox", { name: "ultra 备选 1的思考档位" })).toBeDisabled();
+    await user.click(level);
+    await user.click(await screen.findByRole("option", { name: "high" }));
+    await waitFor(() =>
+      expect(setModelAlias).toHaveBeenLastCalledWith(
+        expect.objectContaining({ input: { name: "ultra", models: ["glm-5", "deepseek-flash"], efforts: ["high", ""] } }),
+      ),
+    );
   });
 
   test("requests: the gateway's last requests — model, effort, tools, outcome — newest first", async () => {

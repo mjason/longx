@@ -8,8 +8,13 @@ defmodule Longx.AI.Aliases do
   down). A description (`model "ultra"`), a child's default model, the
   the composer — all may name a tier or alias, or still a
   concrete slug; `Longx.AI` resolves them (`resolve_targets/1`). A tier
-  left unmapped means the default model. One `Longx.System.Setting`
-  (`model_aliases`, JSON); the settings page edits it.
+  left unmapped means the default model. **Each model of a chain carries its
+  own reasoning level** (nil: the model's default): `plus` and `pro` may be
+  the same model at `low` and `xhigh`, and a fallback of another provider
+  runs at a level it declares — the levels' words differ by provider. One
+  `Longx.System.Setting` (`model_aliases`, JSON `{name: [{slug, effort}]}`;
+  a chain saved as plain slugs reads as every model at its default); the
+  settings page edits it.
   """
 
   alias Longx.AI
@@ -18,7 +23,14 @@ defmodule Longx.AI.Aliases do
   @tiers ["ultra", "pro", "plus"]
   @labels %{"ultra" => "旗舰", "pro" => "高级", "plus" => "普通"}
 
-  @type entry :: %{name: String.t(), label: String.t(), models: [String.t()], builtin?: boolean}
+  @type link :: %{slug: String.t(), effort: String.t() | nil}
+  @type entry :: %{
+          name: String.t(),
+          label: String.t(),
+          models: [String.t()],
+          efforts: [String.t() | nil],
+          builtin?: boolean
+        }
 
   @spec tiers() :: [String.t()]
   def tiers, do: @tiers
@@ -33,15 +45,22 @@ defmodule Longx.AI.Aliases do
     saved = saved()
 
     tiers =
-      for tier <- @tiers,
-          do: %{name: tier, label: label(tier), models: Map.get(saved, tier, []), builtin?: true}
+      for tier <- @tiers, do: entry(tier, Map.get(saved, tier, []), true)
 
     aliases =
-      for {name, models} <- saved,
-          name not in @tiers,
-          do: %{name: name, label: name, models: models, builtin?: false}
+      for {name, links} <- saved, name not in @tiers, do: entry(name, links, false)
 
     tiers ++ Enum.sort_by(aliases, & &1.name)
+  end
+
+  defp entry(name, links, builtin?) do
+    %{
+      name: name,
+      label: label(name),
+      models: Enum.map(links, & &1.slug),
+      efforts: Enum.map(links, & &1.effort),
+      builtin?: builtin?
+    }
   end
 
   @doc """
@@ -50,37 +69,64 @@ defmodule Longx.AI.Aliases do
   or alias (a slug, an unknown name).
   """
   @spec resolve(String.t() | nil) :: {:ok, [String.t()]} | :error
-  def resolve(name) when is_binary(name) do
+  def resolve(name) do
+    with {:ok, links} <- resolve_entries(name), do: {:ok, Enum.map(links, & &1.slug)}
+  end
+
+  @doc "The chain behind a name with each model's level (nil: the model's default)."
+  @spec resolve_entries(String.t() | nil) :: {:ok, [link]} | :error
+  def resolve_entries(name) when is_binary(name) do
     name = tier_name(name)
 
     case {Map.get(saved(), name), name in @tiers} do
-      {[_ | _] = models, _} -> {:ok, models}
-      {_, true} -> with {:ok, slug} <- default_slug(), do: {:ok, [slug]}
+      {[_ | _] = links, _} -> {:ok, links}
+      {_, true} -> with {:ok, slug} <- default_slug(), do: {:ok, [%{slug: slug, effort: nil}]}
       _ -> :error
     end
   end
 
-  def resolve(_name), do: :error
+  def resolve_entries(_name), do: :error
 
   @doc "Whether the name is a tier or a saved alias."
   @spec alias?(String.t() | nil) :: boolean
   def alias?(name), do: match?({:ok, _}, resolve(name))
 
   @doc """
-  Maps a tier or alias to a chain of model slugs (`[]` unmaps a tier). The
-  name must be a word (letters, digits, `_`, `-`), must not be a model's
-  slug; every slug must exist. `{:error, %{field, message}}`.
+  Maps a tier or alias to a chain of model slugs (`[]` unmaps a tier), each
+  at the level in `efforts` beside it (nil or "" — or none given — for the
+  model's default). The name must be a word (letters, digits, `_`, `-`),
+  must not be a model's slug; every slug must exist, every level be one its
+  model declares. `{:error, %{field, message}}`.
   """
-  @spec put(String.t(), [String.t()]) ::
+  @spec put(String.t(), [String.t()], [String.t() | nil]) ::
           {:ok, entry} | {:error, %{field: atom, message: String.t()}}
-  def put(name, models) when is_binary(name) and is_list(models) do
+  def put(name, models, efforts \\ [])
+      when is_binary(name) and is_list(models) and is_list(efforts) do
     name = name |> String.trim() |> tier_name()
-    models = models |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == "")) |> Enum.uniq()
+
+    links =
+      models
+      |> Enum.with_index()
+      |> Enum.map(fn {slug, i} ->
+        %{slug: String.trim(slug), effort: blank_nil(Enum.at(efforts, i))}
+      end)
+      |> Enum.reject(&(&1.slug == ""))
+      |> Enum.uniq_by(& &1.slug)
 
     with :ok <- check_name(name),
-         :ok <- check_models(name, models),
-         :ok <- save(Map.put(saved(), name, models)) do
+         :ok <- check_models(name, Enum.map(links, & &1.slug)),
+         :ok <- check_efforts(links),
+         :ok <- save(Map.put(saved(), name, links)) do
       {:ok, Enum.find(all(), &(&1.name == name))}
+    end
+  end
+
+  defp blank_nil(nil), do: nil
+
+  defp blank_nil(effort) when is_binary(effort) do
+    case String.trim(effort) do
+      "" -> nil
+      e -> e
     end
   end
 
@@ -130,6 +176,27 @@ defmodule Longx.AI.Aliases do
     end
   end
 
+  defp check_efforts(links) do
+    levels = Map.new(AI.list_models!(), &{&1.slug, &1.reasoning_levels || []})
+
+    undeclared? = fn %{slug: slug, effort: effort} ->
+      is_binary(effort) and levels[slug] != [] and effort not in levels[slug]
+    end
+
+    case Enum.find(links, undeclared?) do
+      nil ->
+        :ok
+
+      %{slug: slug, effort: effort} ->
+        {:error,
+         %{
+           field: :efforts,
+           message: "#{slug} has no level #{effort}; it declares #{Enum.join(levels[slug], ", ")}"
+         }}
+    end
+  end
+
+  # {name => [%{slug, effort}]}; a chain saved as plain slugs (before levels) is every model at its default
   defp saved do
     case Longx.System.get_setting(@key) do
       {:ok, %{value: json}} when is_binary(json) ->
@@ -139,7 +206,7 @@ defmodule Longx.AI.Aliases do
                 is_binary(k),
                 is_list(v),
                 into: %{},
-                do: {k, Enum.filter(v, &is_binary/1)}
+                do: {k, Enum.flat_map(v, &link/1)}
 
           _ ->
             %{}
@@ -150,8 +217,20 @@ defmodule Longx.AI.Aliases do
     end
   end
 
+  defp link(slug) when is_binary(slug), do: [%{slug: slug, effort: nil}]
+
+  defp link(%{"slug" => slug} = l) when is_binary(slug),
+    do: [%{slug: slug, effort: if(is_binary(l["effort"]), do: l["effort"])}]
+
+  defp link(_), do: []
+
   defp save(map) do
-    case Longx.System.put_setting(@key, Jason.encode!(map)) do
+    json =
+      Map.new(map, fn {name, links} ->
+        {name, Enum.map(links, &%{"slug" => &1.slug, "effort" => &1.effort})}
+      end)
+
+    case Longx.System.put_setting(@key, Jason.encode!(json)) do
       {:ok, _} -> :ok
       {:error, reason} -> {:error, %{field: :name, message: inspect(reason)}}
     end

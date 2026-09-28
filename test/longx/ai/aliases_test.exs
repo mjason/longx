@@ -72,6 +72,56 @@ defmodule Longx.AI.AliasesTest do
     assert {:error, %{field: :name}} = Aliases.put("", ["model-a"])
   end
 
+  test "each model of a chain carries its own level: kept, checked against that model's levels, shown and resolved" do
+    assert {:ok, entry} = Aliases.put("pro", ["model-a", "model-b"], ["high", ""])
+    assert %{models: ["model-a", "model-b"], efforts: ["high", nil]} = entry
+
+    assert {:ok, [%{slug: "model-a", effort: "high"}, %{slug: "model-b", effort: nil}]} =
+             Aliases.resolve_entries("pro")
+
+    # the slugs as before
+    assert {:ok, ["model-a", "model-b"]} = Aliases.resolve("pro")
+
+    # a level the model does not declare is refused, on the field it concerns
+    assert {:error, %{field: :efforts, message: message}} =
+             Aliases.put("pro", ["model-a"], ["max"])
+
+    assert message =~ "model-a"
+    # plus and pro may share a model and differ by level
+    assert {:ok, _} = Aliases.put("plus", ["model-a"], ["low"])
+    assert {:ok, [%{effort: "low"}]} = Aliases.resolve_entries("plus")
+    # no levels given: every model at its own default
+    assert {:ok, %{efforts: [nil]}} = Aliases.put("ultra", ["model-a"])
+    # an unmapped tier: the base model at its default
+    assert {:ok, _} = Aliases.put("ultra", [])
+    assert {:ok, [%{slug: "model-a", effort: nil}]} = Aliases.resolve_entries("ultra")
+  end
+
+  test "a chain saved before levels (plain slugs) reads as every model at its default" do
+    {:ok, _} = Longx.System.put_setting("model_aliases", ~s({"pro":["model-b","model-a"]}))
+
+    assert {:ok, [%{slug: "model-b", effort: nil}, %{slug: "model-a", effort: nil}]} =
+             Aliases.resolve_entries("pro")
+
+    assert %{models: ["model-b", "model-a"], efforts: [nil, nil]} =
+             Enum.find(Aliases.all(), &(&1.name == "pro"))
+  end
+
+  test "a tier's level is what a turn runs at when nobody chose one; each target of the chain carries its own" do
+    {:ok, _} = Aliases.put("pro", ["model-a", "model-b"], ["high", ""])
+
+    assert {:ok, %{name: "pro", slug: "model-a", effort: "high", levels: ["low", "high"]}} =
+             AI.in_force("pro", nil)
+
+    assert {:ok, %{effort: "low"}} = AI.in_force("pro", "low")
+
+    assert {:ok, [first, second]} = AI.resolve_targets("pro")
+    assert %{model: "a", effort: "high", levels: ["low", "high"]} = first
+    assert %{model: "b", effort: nil, levels: []} = second
+    # a model named by its slug: no tier level, its own levels and default
+    assert {:ok, [%{effort: nil, levels: ["low", "high"]}]} = AI.resolve_targets("model-a")
+  end
+
   test "the rest of Longx.AI sees through an alias: targets in order, the first model's levels, the prompt's list" do
     {:ok, _} = Aliases.put("pro", ["model-b", "model-a"])
     assert {:ok, [%{model: "b"}, %{model: "a"}]} = AI.resolve_targets("pro")

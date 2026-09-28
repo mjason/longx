@@ -308,6 +308,7 @@ type ModelAlias {
   name: String!
   models: [String!]!
   label: String!
+  efforts: [String]!
   builtin: Boolean!
 }
 
@@ -1896,6 +1897,7 @@ input DeleteModelAliasInput {
 input SetModelAliasInput {
   name: String!
   models: [String!]!
+  efforts: [String]
 }
 
 input CheckModelInput {

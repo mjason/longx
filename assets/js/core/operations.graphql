@@ -54,7 +54,7 @@ query ListModels($sort: [ModelSortInput], $filter: ModelFilterInput) { listModel
 
 query DefaultModelSetting { defaultModelSetting { slug name kind } }
 
-query ModelAliases { modelAliases { name models label builtin } }
+query ModelAliases { modelAliases { name models label efforts builtin } }
 
 query ListSearchProviders($sort: [SearchProviderSortInput], $filter: SearchProviderFilterInput) { listSearchProviders(sort: $sort, filter: $filter) { id name slug kind baseUrl default hasApiKey } }
 
@@ -200,7 +200,7 @@ mutation SetDefaultModel($input: SetDefaultModelInput!) { setDefaultModel(input:
 
 mutation CheckModel($input: CheckModelInput!) { checkModel(input: $input) { ok latencyMs error } }
 
-mutation SetModelAlias($input: SetModelAliasInput!) { setModelAlias(input: $input) { name models label builtin } }
+mutation SetModelAlias($input: SetModelAliasInput!) { setModelAlias(input: $input) { name models label efforts builtin } }
 
 mutation DeleteModelAlias($input: DeleteModelAliasInput!) { deleteModelAlias(input: $input)  }
 

@@ -1113,6 +1113,28 @@ defmodule Longx.Agent.PlugsTest do
       assert instructions =~ "ships it"
     end
 
+    test "says whether its level was chosen or is only a default: a tier's own level for each model wins over a default" do
+      chosen =
+        Step.new(thread_id: "th", turn_id: "tu", model: "pro", effort: "low", transcript: [])
+        |> Request.call([])
+
+      assert chosen.request["client_metadata"]["effort_chosen"] == true
+
+      default =
+        Step.new(
+          thread_id: "th",
+          turn_id: "tu",
+          model: "pro",
+          effort: "xhigh",
+          transcript: [],
+          assigns: %{effort_chosen: false}
+        )
+        |> Request.call([])
+
+      assert default.request["client_metadata"]["effort_chosen"] == false
+      assert default.request["reasoning"]["effort"] == "xhigh"
+    end
+
     test "no model means the default (longx) and no reasoning block without a level" do
       step = Request.call(Step.new(), [])
       assert step.request["model"] == "longx"

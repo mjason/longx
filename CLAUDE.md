@@ -666,7 +666,23 @@ on first use.
     tiers `ultra` (旗舰) / `pro` (高级) / `plus` (普通), case-insensitive, plus custom
     aliases (青龙…), each mapping to a **chain** of slugs (`resolve_targets/1`); a
     description, a child's default model, the composer and RPC all take a tier, an alias or
-    a slug. `Longx.Agent.Model` walks the chain: a refusal for quota (429 or
+    a slug. **Each model of a chain carries its own reasoning level** (`Aliases.put(name,
+    models, efforts)`, `resolve_entries/1` → `[%{slug, effort}]`; the setting is `{name:
+    [{slug, effort}]}`, a chain saved as plain slugs reads as every model at its default;
+    a level the model does not declare is refused on `efforts`): `plus` and `pro` may be
+    the same model at `low` and `xhigh` — production's were, and ran alike at the model's
+    default. `in_force/2` gives the tier's level for its first model when none was chosen;
+    each `Target` carries `levels`, `default_effort` and the tier's `effort`, and
+    **`Gateway.put_effort`** sends every model of the chain a word it declares: the level
+    chosen (the person, a description — `client_metadata.effort_chosen`, set by
+    `Plugs.Request` from the kernel's `assigns.effort_chosen`) when this model has it, else
+    the tier's level for this model, else its default, a model that declares none taking
+    what it is sent, nothing it declares leaving the effort out — a fallback of another
+    provider once got the first model's word (the words differ: `none / low / high / max`,
+    `low / medium / xhigh`, … `ultra`). The composer's level list for a tier starts with
+    跟随档位 · <level> (`TurnBar`'s `tierEfforts`, nothing chosen goes out), the Android
+    shell's native list too (it once skipped the levels after a tier: it looked for a model
+    named `pro`), and Settings → 档位与别名 has a level beside every model of a chain. `Longx.Agent.Model` walks the chain: a refusal for quota (429 or
     `quota|exhaust|insufficient|balance|credit|billing|payment|exceeded your` — final, no
     retry), a rejected key or a dead upstream moves to the next target and emits
     `{:fallback, from, to, why}` → `model/rerouted` (a toast "模型已切换"). Other 429 / 5xx /

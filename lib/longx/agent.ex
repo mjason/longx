@@ -1201,7 +1201,9 @@ defmodule Longx.Agent do
             agents: loaded.agents,
             allowed: loaded.allowed,
             models: models,
-            model_in_force: in_force
+            model_in_force: in_force,
+            # chosen by the person or the description, or only the default (Plugs.Request)
+            effort_chosen: effort != nil
           })
     }
 

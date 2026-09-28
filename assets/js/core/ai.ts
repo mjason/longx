@@ -42,7 +42,8 @@ export const aiKeys = {
 };
 
 /** a tier (ultra / pro / plus, always there) or a team's alias: a chain of model slugs, the first used, the rest fallbacks */
-export type ModelAlias = { name: string; label: string; models: string[]; builtin: boolean };
+/** a tier or alias: its chain of models, each at its own level (null: the model's default) */
+export type ModelAlias = { name: string; label: string; models: string[]; efforts: (string | null)[]; builtin: boolean };
 
 /** the default model: a name (a tier, an alias, a slug) and what it resolves to now */
 export type DefaultModel = { name: string; slug: string | null; kind: "tier" | "alias" | "model" };
@@ -313,7 +314,7 @@ export function useAiActions() {
     setDefaultModel: useAiWrite(async (name: string) =>
       unwrap(await setDefaultModel({ input: { name } })) as DefaultModel,
     ),
-    setModelAlias: useAiWrite(async (input: { name: string; models: string[] }) =>
+    setModelAlias: useAiWrite(async (input: { name: string; models: string[]; efforts?: string[] }) =>
       unwrap(await setModelAlias({ input })),
     ),
     deleteModelAlias: useAiWrite(async (name: string) => unwrap(await deleteModelAlias({ input: { name } }))),

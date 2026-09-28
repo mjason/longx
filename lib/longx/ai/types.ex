@@ -60,6 +60,8 @@ defmodule Longx.AI.Types do
           name: [type: :string, allow_nil?: false],
           label: [type: :string, allow_nil?: false],
           models: [type: {:array, :string}, allow_nil?: false],
+          # beside each model its level; nil: the model's default
+          efforts: [type: {:array, :string}, allow_nil?: false, constraints: [nil_items?: true]],
           builtin: [type: :boolean, allow_nil?: false]
         ]
       ]

@@ -60,10 +60,13 @@ defmodule Longx.AI.Gateway do
   @spec prepare(term, Target.t()) :: {:ok, Upstream.t()} | {:error, :invalid_request}
   def prepare(%{"input" => input} = body, %Target{} = target) when is_list(input) do
     thread = thread_of(body)
+    # whether the level was chosen (the person, a description) or is only the default
+    chosen? = get_in(body, ["client_metadata", "effort_chosen"]) != false
 
     body =
       body
       |> put_prompt_cache_key(target)
+      |> put_effort(target, chosen?)
       |> Map.drop(@internal_fields)
       |> Map.put("model", target.model)
       |> Map.put("stream", true)
@@ -105,6 +108,41 @@ defmodule Longx.AI.Gateway do
   end
 
   def prepare(_body, _target), do: {:error, :invalid_request}
+
+  # Each model of a chain runs at a level it declares (the words differ by
+  # provider — none / low / high / max, low / medium / xhigh, … ultra): the
+  # level chosen, when this model has it; else the one the tier or alias gave
+  # this model (Longx.AI.Aliases); else the model's own default; a model that
+  # declares none takes the word it is sent. With nothing it declares the
+  # effort is left out rather than sent to be refused — a fallback of another
+  # provider once got the first model's word.
+  defp put_effort(body, %Target{} = target, chosen?) do
+    asked = get_in(body, ["reasoning", "effort"])
+    declared? = &(is_binary(&1) and (target.levels == [] or &1 in target.levels))
+
+    level =
+      cond do
+        chosen? and declared?.(asked) -> asked
+        declared?.(target.effort) -> target.effort
+        declared?.(target.default_effort) -> target.default_effort
+        declared?.(asked) -> asked
+        true -> nil
+      end
+
+    case {level, body} do
+      {nil, %{"reasoning" => %{} = reasoning}} ->
+        Map.put(body, "reasoning", Map.delete(reasoning, "effort"))
+
+      {nil, _} ->
+        body
+
+      {level, %{"reasoning" => %{} = reasoning}} ->
+        Map.put(body, "reasoning", Map.put(reasoning, "effort", level))
+
+      {level, _} ->
+        Map.put(body, "reasoning", %{"effort" => level, "summary" => "auto"})
+    end
+  end
 
   # OpenAI caches a request's prefix per `prompt_cache_key` (the Codex CLI sends
   # its session id): the thread is ours. Whether a provider gets it is its switch

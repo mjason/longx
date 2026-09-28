@@ -3011,6 +3011,44 @@ defmodule Longx.AgentTest do
     assert slug == model.slug
   end
 
+  test "a tier runs its model at the level the tier gave it; a level chosen for the turn stands",
+       %{
+         bypass: bypass,
+         thread_id: id,
+         model: model
+       } do
+    tiered =
+      AI.create_model!(%{
+        name: "Tiered",
+        upstream_id: "real-tiered",
+        slug: "tiered-#{System.unique_integer([:positive])}",
+        provider_id: model.provider_id,
+        reasoning_levels: ["low", "medium", "xhigh"],
+        reasoning_effort: "medium",
+        context_window: 64_000
+      })
+
+    {:ok, _} = AI.Aliases.put("pro", [tiered.slug], ["xhigh"])
+    on_exit(fn -> AI.Aliases.put("pro", []) end)
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("ok"),
+      ResponsesFixture.assistant_message("ok")
+    ])
+
+    {:ok, _} = Agent.send(id, "hi", model: "pro")
+    assert_receive {:thread, _, "turn/model", %{"name" => "pro", "effort" => "xhigh"}}, 5_000
+    await_turn_end()
+    assert_receive {:request, body}
+    assert body["model"] == "real-tiered"
+    assert body["reasoning"]["effort"] == "xhigh"
+
+    {:ok, _} = Agent.send(id, "again", model: "pro", effort: "low")
+    await_turn_end()
+    assert_receive {:request, again}
+    assert again["reasoning"]["effort"] == "low"
+  end
+
   test "a child inherits the session's model and level unless its role names its own; the turn says what it runs on",
        %{bypass: bypass, dir: dir, model: model} do
     # a second model, the session's pick; the default stays `model`

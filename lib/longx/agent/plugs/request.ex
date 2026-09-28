@@ -30,7 +30,11 @@ defmodule Longx.Agent.Plugs.Request do
         "client_metadata" => %{
           "thread_id" => step.thread_id,
           "turn_id" => step.turn_id,
-          "x-codex-turn-metadata" => Jason.encode!(%{"request_kind" => "agent"})
+          "x-codex-turn-metadata" => Jason.encode!(%{"request_kind" => "agent"}),
+          # a level chosen (the person, a description) stands for every model of
+          # the chain that declares it; one that is only the default gives way to
+          # the level a tier gave each model (Longx.AI.Gateway)
+          "effort_chosen" => Map.get(step.assigns, :effort_chosen, true)
         }
       }
       |> put_reasoning(step.effort)

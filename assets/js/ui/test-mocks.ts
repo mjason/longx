@@ -294,12 +294,14 @@ export function rpcMock() {
     ),
     modelAliases: vi.fn(async () =>
       ok([
-        { name: "ultra", label: "旗舰", models: ["glm-5", "deepseek-flash"], builtin: true },
-        { name: "pro", label: "高级", models: [], builtin: true },
-        { name: "plus", label: "普通", models: [], builtin: true },
+        { name: "ultra", label: "旗舰", models: ["glm-5", "deepseek-flash"], efforts: [null, null], builtin: true },
+        { name: "pro", label: "高级", models: [], efforts: [], builtin: true },
+        { name: "plus", label: "普通", models: [], efforts: [], builtin: true },
       ]),
     ),
-    setModelAlias: vi.fn(async ({ input }: { input: { name: string; models: string[] } }) => ok({ name: input.name, label: input.name, models: input.models, builtin: false })),
+    setModelAlias: vi.fn(async ({ input }: { input: { name: string; models: string[]; efforts?: string[] } }) =>
+      ok({ name: input.name, label: input.name, models: input.models, efforts: (input.efforts ?? []).map((e) => e || null), builtin: false }),
+    ),
     deleteModelAlias: vi.fn(async () => ok(null)),
     discoverModels: vi.fn(async () => ok({ ok: true, error: null, models: [] })),
     setGoal: vi.fn(async ({ input }: { input: Record<string, unknown> }) =>

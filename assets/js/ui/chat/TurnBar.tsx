@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { contextUsage } from "@/core/chat/thread";
 import { progressLabel } from "./progressLabel";
 import { useModels } from "@/core/projects";
-import { useDefaultModel, useModelAliases } from "@/core/ai";
+import { useDefaultModel, useModelAliases, type ModelAlias } from "@/core/ai";
 import { ContextDisplay } from "@/ui/components/assistant-ui/elements/context-display";
 import {
   ModelSelectorContent,
@@ -83,15 +83,17 @@ export function ComposerTrailing() {
   const aliasRow = aliases.data?.find((a) => a.name === selected);
   const concrete = aliasRow ? (aliasRow.models[0] ?? base) : selected;
   const row = rows.find((m) => m.slug === concrete);
-  // the level in force: the thread's own while it stays on its model, the description's, else the model's default
-  const inForce =
-    (thread && (model === null || model === thread.modelSlug)
-      ? thread.reasoningEffort
-      : null) ??
+  // the level in force: the thread's own while it stays on its model, the description's,
+  // else — a tier or alias — the level the tier gave its model, else the model's default
+  const ownLevel =
+    (thread && (model === null || model === thread.modelSlug) ? thread.reasoningEffort : null) ??
     (model === null && described && described === current ? definitionModel?.effort : null) ??
-    row?.reasoningEffort ??
-    undefined;
+    null;
+  const tierLevel = aliasRow ? (aliasRow.efforts?.[0] ?? row?.reasoningEffort ?? null) : null;
+  const inForce = ownLevel ?? (aliasRow ? tierLevel : row?.reasoningEffort) ?? undefined;
   const shownEffort = effort ?? inForce;
+  // nothing picked on a tier: it follows the tier's own level (the first level item)
+  const followsTier = aliasRow !== undefined && effort === null && ownLevel === null;
 
   const options = useMemo<ModelOption[]>(
     () => [
@@ -100,10 +102,7 @@ export function ComposerTrailing() {
         name: a.label === a.name ? a.name : `${a.name}（${a.label}）`,
         description: a.models.length ? a.models.join(" → ") : t.ai.aliasNone,
         provider: t.ai.aliases,
-        efforts: (rows.find((m) => m.slug === (a.models[0] ?? base))?.reasoningLevels ?? []).map((level) => ({
-          id: level,
-          name: effortLabel(level),
-        })),
+        efforts: tierEfforts(a, rows.find((m) => m.slug === (a.models[0] ?? base))),
       })),
       ...rows.map((m) => ({
         id: m.slug!,
@@ -149,14 +148,18 @@ export function ComposerTrailing() {
     });
     if (slug === null) return;
     setModel(slug === current ? null : slug);
-    const picked = rows.find((m) => m.slug === slug);
+    // a tier or alias stands for its first model: that model's levels, the tier's own first
+    const pickedAlias = aliases.data?.find((a) => a.name === slug);
+    const picked = rows.find((m) => m.slug === (pickedAlias ? (pickedAlias.models[0] ?? base) : slug));
     if (!picked || picked.reasoningLevels.length === 0) return;
+    const levels = pickedAlias ? tierEfforts(pickedAlias, picked) : picked.reasoningLevels.map((l) => ({ id: l, name: effortLabel(l) }));
+    const preselected = slug === selected ? (followsTier ? FOLLOW_TIER : shownEffort) : pickedAlias ? FOLLOW_TIER : picked.reasoningEffort;
     const level = await shellPick({
       title: t.reasoningLevel,
-      sections: [{ options: picked.reasoningLevels.map((l) => ({ id: l, label: effortLabel(l) })) }],
-      selected: (slug === selected ? shownEffort : null) ?? picked.reasoningEffort ?? null,
+      sections: [{ options: levels.map((l) => ({ id: l.id, label: l.name })) }],
+      selected: preselected ?? null,
     });
-    if (level !== null) setEffort(level);
+    if (level !== null) setEffort(level === FOLLOW_TIER ? null : level);
   };
 
   // a tier or alias shows its name and, muted, the model it stands for right now
@@ -209,8 +212,8 @@ export function ComposerTrailing() {
         models={options}
         value={selected}
         onValueChange={(slug) => setModel(slug === current ? null : slug)}
-        effort={shownEffort}
-        onEffortChange={setEffort}
+        effort={followsTier ? FOLLOW_TIER : shownEffort}
+        onEffortChange={(level) => setEffort(level === FOLLOW_TIER ? null : level)}
       >
         <ModelSelectorTrigger
           variant="ghost"
@@ -248,6 +251,20 @@ export function ComposerTrailing() {
       </ModelSelectorRoot>
     </>
   );
+}
+
+// the level item that follows a tier's own level (nothing picked)
+const FOLLOW_TIER = "__tier";
+
+/** A tier's levels: its first model's, with "follow the tier" (its own level, else the model's default) first. */
+function tierEfforts(alias: ModelAlias, first: { reasoningLevels: string[]; reasoningEffort?: string | null } | undefined) {
+  const levels = first?.reasoningLevels ?? [];
+  if (levels.length === 0) return [];
+  const own = alias.efforts?.[0] ?? first?.reasoningEffort ?? null;
+  return [
+    { id: FOLLOW_TIER, name: own ? t.ai.followTier(effortLabel(own)) : t.ai.followTierDefault },
+    ...levels.map((level) => ({ id: level, name: effortLabel(level) })),
+  ];
 }
 
 /** a level as the rail names it: the provider's own word (none, low, high, …), never translated */

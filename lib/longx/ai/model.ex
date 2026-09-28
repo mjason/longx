@@ -124,9 +124,15 @@ defmodule Longx.AI.Model do
     action :set_model_alias, Types.ModelAlias do
       argument :name, :string, allow_nil?: false
       argument :models, {:array, :string}, allow_nil?: false
+      # beside each model its level ("" or none: the model's default)
+      argument :efforts, {:array, :string}, default: [], constraints: [nil_items?: true]
 
       run fn input, _ ->
-        case Longx.AI.Aliases.put(input.arguments.name, input.arguments.models) do
+        case Longx.AI.Aliases.put(
+               input.arguments.name,
+               input.arguments.models,
+               input.arguments.efforts || []
+             ) do
           {:ok, entry} -> {:ok, alias_entry(entry)}
           {:error, %{field: field, message: message}} -> alias_error(field, message)
         end
@@ -244,8 +250,14 @@ defmodule Longx.AI.Model do
     identity :unique_slug, [:slug]
   end
 
-  defp alias_entry(%{name: name, label: label, models: models, builtin?: builtin?}),
-    do: %{name: name, label: label, models: models, builtin: builtin?}
+  defp alias_entry(%{
+         name: name,
+         label: label,
+         models: models,
+         efforts: efforts,
+         builtin?: builtin?
+       }),
+       do: %{name: name, label: label, models: models, efforts: efforts, builtin: builtin?}
 
   defp alias_error(field, message) do
     {:error,

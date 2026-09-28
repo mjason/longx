@@ -140,9 +140,14 @@ defmodule Longx.AI do
   """
   @spec resolve_targets(String.t() | nil) :: {:ok, [Target.t()]} | {:error, term}
   def resolve_targets(name) when is_binary(name) and name != @placeholder_model do
-    case Aliases.resolve(name) do
-      {:ok, slugs} ->
-        results = Enum.map(slugs, &resolve_slug_target/1)
+    case Aliases.resolve_entries(name) do
+      {:ok, entries} ->
+        # each model of the chain at the level the tier gave it
+        results =
+          Enum.map(entries, fn %{slug: slug, effort: effort} ->
+            with {:ok, %Target{} = target} <- resolve_slug_target(slug),
+                 do: {:ok, %Target{target | effort: effort}}
+          end)
 
         case for {:ok, target} <- results, do: target do
           [] -> hd(results)
@@ -250,7 +255,9 @@ defmodule Longx.AI do
          request_timeout_ms: provider.request_timeout_ms,
          stream_idle_timeout_ms: provider.stream_idle_timeout_ms,
          max_concurrent_requests: provider.max_concurrent_requests,
-         max_output_tokens: model.max_output_tokens
+         max_output_tokens: model.max_output_tokens,
+         levels: model.reasoning_levels || [],
+         default_effort: model.reasoning_effort
        }}
     end
   end
@@ -333,7 +340,8 @@ defmodule Longx.AI do
   What a turn runs on, for the person and the agent to see: `name` the
   tier / alias / slug asked for (nil when nothing was), `slug` the model
   it resolves to (the chain's first), `effort` the level in force (the one
-  asked for, else the model's default level), `levels` the model's.
+  asked for, else the level the tier gave that model, else the model's
+  default level), `levels` the model's.
   """
   @spec in_force(String.t() | nil, String.t() | nil) ::
           {:ok,
@@ -349,17 +357,18 @@ defmodule Longx.AI do
     asked = if name in [nil, @placeholder_model], do: default_model_name(), else: name
 
     with {:ok, model, _explicit?} <- fetch_model(asked) do
-      slug =
-        case Aliases.resolve(asked) do
-          {:ok, [first | _]} -> first
-          _ -> model.slug
+      # a tier or alias: its first model, at the level the tier gave it
+      {slug, tier_effort} =
+        case Aliases.resolve_entries(asked) do
+          {:ok, [first | _]} -> {first.slug, first.effort}
+          _ -> {model.slug, nil}
         end
 
       {:ok,
        %{
          name: if(Aliases.alias?(asked), do: asked),
          slug: slug,
-         effort: effort || model.reasoning_effort,
+         effort: effort || tier_effort || model.reasoning_effort,
          levels: model.reasoning_levels || []
        }}
     end

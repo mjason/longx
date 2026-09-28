@@ -467,6 +467,41 @@ defmodule Longx.AI.GatewayTest do
       refute Map.has_key?(up.body, "reasoning")
     end
 
+    test "each model of a chain gets a level it declares: the person's choice when it has it, else the tier's level for it, else its default" do
+      qwen = %Target{@target | levels: ["low", "medium", "xhigh"], default_effort: "xhigh"}
+
+      at = fn effort, chosen, target ->
+        body =
+          @codex_body
+          |> Map.put("reasoning", %{"effort" => effort, "summary" => "auto"})
+          |> Map.put("client_metadata", %{"thread_id" => "t", "effort_chosen" => chosen})
+
+        {:ok, up} = Gateway.prepare(body, target)
+        get_in(up.body, ["reasoning", "effort"])
+      end
+
+      # chosen and declared: it stands, over the tier's level
+      assert at.("low", true, %Target{qwen | effort: "xhigh"}) == "low"
+      # chosen but not this model's word (a fallback of another provider): the tier's level for it
+      assert at.("high", true, %Target{qwen | effort: "medium"}) == "medium"
+      # nobody chose: every model of the chain at the tier's level for it
+      assert at.("high", false, %Target{qwen | effort: "low"}) == "low"
+      # no tier level: the model's own default
+      assert at.("high", false, qwen) == "xhigh"
+      # a model that declares no levels takes what it is sent
+      assert at.("high", true, @target) == "high"
+
+      # levels but no default, and nothing it declares: no effort at all rather than a word it refuses
+      body = Map.put(@codex_body, "reasoning", %{"effort" => "max", "summary" => "auto"})
+      {:ok, up} = Gateway.prepare(body, %Target{@target | levels: ["low", "high"]})
+      refute Map.has_key?(up.body["reasoning"], "effort")
+      # a request with no level at all: the tier's level for this model is put in
+      {:ok, up} =
+        Gateway.prepare(Map.delete(@codex_body, "reasoning"), %Target{qwen | effort: "low"})
+
+      assert up.body["reasoning"] == %{"effort" => "low", "summary" => "auto"}
+    end
+
     test "the model's verbosity goes out as text.verbosity (OpenAI's knob for how much the answer says); unset sends nothing" do
       {:ok, up} = Gateway.prepare(@codex_body, @target)
       refute Map.has_key?(up.body, "text")

@@ -1329,12 +1329,19 @@ function AliasesCard({ models }: { models: ModelRow[] }) {
   const [adding, setAdding] = useState("");
   if (!aliases.data) return null;
   const slugs = models.filter((m) => m.slug).map((m) => m.slug!);
-  const save = (name: string, chain: string[]) =>
-    actions.setModelAlias.mutate({ name, models: chain.filter(Boolean) }, { onSuccess: () => toast.success(s.aliasSaved), onError: fail });
+  const levels = new Map(models.filter((m) => m.slug).map((m) => [m.slug!, m.reasoningLevels ?? []]));
+  // each model of the chain beside its level ("" = the model's default)
+  const save = (name: string, chain: Slot[]) => {
+    const kept = chain.filter((c) => c.slug);
+    actions.setModelAlias.mutate(
+      { name, models: kept.map((c) => c.slug), efforts: kept.map((c) => c.effort) },
+      { onSuccess: () => toast.success(s.aliasSaved), onError: fail },
+    );
+  };
   const add = () => {
     const name = adding.trim();
     if (!name || slugs.length === 0) return;
-    actions.setModelAlias.mutate({ name, models: [slugs[0]!] }, { onSuccess: () => { setAdding(""); toast.success(s.aliasSaved); }, onError: fail });
+    actions.setModelAlias.mutate({ name, models: [slugs[0]!], efforts: [""] }, { onSuccess: () => { setAdding(""); toast.success(s.aliasSaved); }, onError: fail });
   };
   return (
     <section className="flex flex-col gap-3" data-testid="model-aliases">
@@ -1342,7 +1349,7 @@ function AliasesCard({ models }: { models: ModelRow[] }) {
       <p className="text-muted-foreground text-sm">{s.aliasesHint}</p>
       <div className="flex flex-col gap-2">
         {aliases.data.map((a) => (
-          <AliasRow key={a.name} alias={a} slugs={slugs} onSave={(chain) => save(a.name, chain)} onRemove={a.builtin ? undefined : () => actions.deleteModelAlias.mutate(a.name, { onError: fail })} />
+          <AliasRow key={a.name} alias={a} slugs={slugs} levels={levels} onSave={(chain) => save(a.name, chain)} onRemove={a.builtin ? undefined : () => actions.deleteModelAlias.mutate(a.name, { onError: fail })} />
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -1357,33 +1364,69 @@ function AliasesCard({ models }: { models: ModelRow[] }) {
 
 const NONE = "__none";
 
-function AliasRow({ alias, slugs, onSave, onRemove }: { alias: ModelAlias; slugs: string[]; onSave: (chain: string[]) => void; onRemove?: () => void }) {
-  // the chain as three slots: the model used, then two fallbacks
-  const slots = [alias.models[0] ?? "", alias.models[1] ?? "", alias.models[2] ?? ""];
-  const set = (i: number, v: string) => {
-    const next = [...slots];
-    next[i] = v === NONE ? "" : v;
+type Slot = { slug: string; effort: string };
+
+function AliasRow({
+  alias,
+  slugs,
+  levels,
+  onSave,
+  onRemove,
+}: {
+  alias: ModelAlias;
+  slugs: string[];
+  levels: Map<string, string[]>;
+  onSave: (chain: Slot[]) => void;
+  onRemove?: () => void;
+}) {
+  // the chain as three slots: the model used, then two fallbacks — each with its level
+  const slots: Slot[] = [0, 1, 2].map((i) => ({ slug: alias.models[i] ?? "", effort: alias.efforts?.[i] ?? "" }));
+  const set = (i: number, patch: Partial<Slot>) => {
+    const next = slots.map((slot, j) => (j === i ? { ...slot, ...patch } : slot));
+    // another model: its own default level until one is picked
+    if (patch.slug !== undefined) next[i] = { slug: patch.slug, effort: "" };
     onSave(next);
   };
   return (
-    <div className="grid items-center gap-2 rounded-lg border p-3 sm:grid-cols-[8rem_1fr_1fr_1fr_auto]" data-testid={`alias-${alias.name}`}>
+    <div className="grid items-start gap-2 rounded-lg border p-3 sm:grid-cols-[8rem_1fr_1fr_1fr_auto]" data-testid={`alias-${alias.name}`}>
       <div className="flex flex-col">
         <span className="font-mono text-sm">{alias.name}</span>
         {alias.label !== alias.name ? <span className="text-muted-foreground text-xs">{alias.label}</span> : null}
       </div>
-      {slots.map((value, i) => (
-        <Select key={i} value={value || NONE} onValueChange={(v) => set(i, v)}>
-          <SelectTrigger className="w-full" aria-label={`${alias.name} ${i === 0 ? s.aliasPrimary : s.aliasFallback(i)}`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>{i === 0 ? s.aliasNone : s.aliasNoFallback}</SelectItem>
-            {slugs.map((slug) => (
-              <SelectItem key={slug} value={slug} className="font-mono">{slug}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ))}
+      {slots.map((slot, i) => {
+        const name = `${alias.name} ${i === 0 ? s.aliasPrimary : s.aliasFallback(i)}`;
+        const own = slot.slug ? (levels.get(slot.slug) ?? []) : [];
+        return (
+          <div key={i} className="flex flex-col gap-1">
+            <Select value={slot.slug || NONE} onValueChange={(v) => set(i, { slug: v === NONE ? "" : v })}>
+              <SelectTrigger className="w-full" aria-label={name}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>{i === 0 ? s.aliasNone : s.aliasNoFallback}</SelectItem>
+                {slugs.map((slug) => (
+                  <SelectItem key={slug} value={slug} className="font-mono">
+                    {slug}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={slot.effort || NONE} onValueChange={(v) => set(i, { effort: v === NONE ? "" : v })} disabled={own.length === 0}>
+              <SelectTrigger className="h-8 w-full font-mono text-xs" aria-label={s.aliasLevel(name)}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>{s.aliasLevelDefault}</SelectItem>
+                {own.map((level) => (
+                  <SelectItem key={level} value={level} className="font-mono">
+                    {level}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        );
+      })}
       {onRemove ? (
         <Button size="sm" variant="ghost" className="text-destructive" onClick={onRemove} aria-label={`${s.aliasRemove} ${alias.name}`}>
           <Trash2 className="size-4" />

@@ -34,7 +34,13 @@ defmodule Longx.AI.Target do
     # kernel's auto. Only OpenAI's hidden-reasoning models read it
     reasoning_summary: nil,
     # OpenAI's text.verbosity (low / medium / high); nil = not sent
-    verbosity: nil
+    verbosity: nil,
+    # the reasoning levels the model declares ([] = it takes any word) and its
+    # default one; `effort` is the level a tier or alias gave this model of its
+    # chain (Longx.AI.Aliases) — the gateway sends each model a level it declares
+    levels: [],
+    default_effort: nil,
+    effort: nil
   ]
 
   @type t :: %__MODULE__{
@@ -55,7 +61,10 @@ defmodule Longx.AI.Target do
           chatgpt?: boolean,
           account_id: String.t() | nil,
           reasoning_summary: :auto | :concise | :detailed | :none | nil,
-          verbosity: String.t() | nil
+          verbosity: String.t() | nil,
+          levels: [String.t()],
+          default_effort: String.t() | nil,
+          effort: String.t() | nil
         }
 
   defimpl Inspect do

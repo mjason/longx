@@ -38,6 +38,7 @@ import {
   setGoal,
   startThread,
   directory,
+  modelAliases,
 } from "@/core/api";
 
 const snapshot = {
@@ -1648,6 +1649,98 @@ describe("ThreadPage", () => {
     await waitFor(() =>
       expect(answerRequest).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", requestId: "ask_1", answers: { done: true } } })),
     );
+  });
+
+  test("a tier runs at its own level: the rail names it, the picker follows it until a level is picked, and following it again sends none", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listModels).mockResolvedValue(
+      ok([
+        model(1, { slug: "deepseek-flash", default: true, reasoningLevels: ["low", "high", "max"], reasoningEffort: "high" }),
+        model(2, { slug: "glm-5", reasoningLevels: ["low", "high"], reasoningEffort: "high" }),
+      ]) as never,
+    );
+    vi.mocked(modelAliases).mockResolvedValue(
+      ok([
+        { name: "ultra", label: "旗舰", models: [], efforts: [], builtin: true },
+        { name: "pro", label: "高级", models: ["glm-5"], efforts: ["low"], builtin: true },
+        { name: "plus", label: "普通", models: [], efforts: [], builtin: true },
+      ]) as never,
+    );
+    try {
+      await open();
+      await user.click(await screen.findByTestId("model-picker"));
+      await user.click(await screen.findByRole("option", { name: /^pro/ }));
+      // pro is glm-5 at low: the tier's level, not the model's default
+      await waitFor(() => expect(screen.getByTestId("model-picker")).toHaveTextContent(/pro\s*glm-5\s*low/));
+      await user.click(screen.getByTestId("model-picker"));
+      expect(await screen.findByRole("radio", { name: "跟随档位 · low" })).toBeChecked();
+      await user.click(screen.getByRole("radio", { name: "high" }));
+      await user.keyboard("{Escape}");
+      expect(screen.getByTestId("model-picker")).toHaveTextContent("high");
+      await user.type(screen.getByRole("textbox", { name: "随心输入" }), "go{Enter}");
+      await waitFor(() =>
+        expect(sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({ input: expect.objectContaining({ model: "pro", effort: "high" }) })),
+      );
+
+      // back to the tier's own level: nothing chosen goes out
+      await user.click(screen.getByTestId("model-picker"));
+      await user.click(await screen.findByRole("radio", { name: "跟随档位 · low" }));
+      await user.keyboard("{Escape}");
+      expect(screen.getByTestId("model-picker")).toHaveTextContent("low");
+    } finally {
+      vi.mocked(modelAliases).mockResolvedValue(
+        ok([
+          { name: "ultra", label: "旗舰", models: ["glm-5", "deepseek-flash"], efforts: [null, null], builtin: true },
+          { name: "pro", label: "高级", models: [], efforts: [], builtin: true },
+          { name: "plus", label: "普通", models: [], efforts: [], builtin: true },
+        ]) as never,
+      );
+    }
+  });
+
+  test("inside a native shell a tier is followed by its levels too, the tier's own first", async () => {
+    const posts: Record<string, unknown>[] = [];
+    window.LongxAndroid = { post: (json: string) => posts.push(JSON.parse(json)) };
+    vi.mocked(listModels).mockResolvedValue(
+      ok([
+        model(1, { slug: "deepseek-flash", default: true, reasoningLevels: ["low", "high"], reasoningEffort: "high" }),
+        model(2, { slug: "glm-5", reasoningLevels: ["low", "high"], reasoningEffort: "high" }),
+      ]) as never,
+    );
+    vi.mocked(modelAliases).mockResolvedValue(
+      ok([
+        { name: "ultra", label: "旗舰", models: [], efforts: [], builtin: true },
+        { name: "pro", label: "高级", models: ["deepseek-flash"], efforts: ["low"], builtin: true },
+        { name: "plus", label: "普通", models: [], efforts: [], builtin: true },
+      ]) as never,
+    );
+    try {
+      const user = userEvent.setup();
+      await open();
+      await waitFor(() => expect(window.LongxShell).toBeDefined());
+      await user.click(screen.getByTestId("model-picker"));
+      const pick = posts.find((p) => p["type"] === "pick") as { id: string };
+      window.LongxShell!.picked(pick.id, "pro");
+      await waitFor(() => expect(posts.filter((p) => p["type"] === "pick")).toHaveLength(2));
+      const levels = posts.filter((p) => p["type"] === "pick")[1] as { id: string; sections: { options: { id: string; label: string }[] }[]; selected: string };
+      expect(levels.sections[0]!.options.map((o) => o.label)).toEqual(["跟随档位 · low", "low", "high"]);
+      expect(levels.selected).toBe(levels.sections[0]!.options[0]!.id);
+      window.LongxShell!.picked(levels.id, "high");
+      await user.type(screen.getByRole("textbox", { name: "随心输入" }), "go{Enter}");
+      await waitFor(() =>
+        expect(sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({ input: expect.objectContaining({ model: "pro", effort: "high" }) })),
+      );
+    } finally {
+      delete window.LongxAndroid;
+      delete window.LongxShell;
+      vi.mocked(modelAliases).mockResolvedValue(
+        ok([
+          { name: "ultra", label: "旗舰", models: ["glm-5", "deepseek-flash"], efforts: [null, null], builtin: true },
+          { name: "pro", label: "高级", models: [], efforts: [], builtin: true },
+          { name: "plus", label: "普通", models: [], efforts: [], builtin: true },
+        ]) as never,
+      );
+    }
   });
 
   test("the picker shows the model the project's description names, and a tier is a choice like a model", async () => {

@@ -69,6 +69,37 @@ defmodule LongxWeb.AliasesRpcTest do
 
     assert {:ok, ["model-b", "model-a"]} = AI.Aliases.resolve("ultra")
   end
+
+  test "each model of a chain at its own level: sent beside the models, read back, a level it lacks refused on `efforts`",
+       %{conn: conn} do
+    AI.get_model_by_slug!("model-a") |> AI.update_model!(%{reasoning_levels: ["low", "high"]})
+
+    assert %{
+             "success" => true,
+             "data" => %{"models" => ["model-a", "model-b"], "efforts" => ["high", nil]}
+           } =
+             rpc(conn, "set_model_alias", %{
+               "fields" => ["name", "models", "efforts"],
+               "input" => %{
+                 "name" => "pro",
+                 "models" => ["model-a", "model-b"],
+                 "efforts" => ["high", ""]
+               }
+             })
+
+    assert %{"success" => true, "data" => aliases} =
+             rpc(conn, "model_aliases", %{"fields" => ["name", "efforts"]})
+
+    assert %{"efforts" => ["high", nil]} = Enum.find(aliases, &(&1["name"] == "pro"))
+
+    assert %{"success" => false, "errors" => [%{"fields" => ["efforts"], "message" => message}]} =
+             rpc(conn, "set_model_alias", %{
+               "fields" => ["name"],
+               "input" => %{"name" => "pro", "models" => ["model-a"], "efforts" => ["max"]}
+             })
+
+    assert message =~ "model-a"
+  end
 end
 
 defmodule LongxWeb.DefaultModelRpcTest do

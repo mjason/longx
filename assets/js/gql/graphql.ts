@@ -1914,6 +1914,7 @@ export type SetGoalInput = {
 };
 
 export type SetModelAliasInput = {
+  efforts?: Array<string | null | undefined> | null | undefined;
   models: Array<string>;
   name: string;
 };
@@ -3399,7 +3400,7 @@ export type DefaultModelSettingQuery = { defaultModelSetting: { slug: string | n
 export type ModelAliasesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type ModelAliasesQuery = { modelAliases: Array<{ name: string, models: Array<string>, label: string, builtin: boolean }> };
+export type ModelAliasesQuery = { modelAliases: Array<{ name: string, models: Array<string>, label: string, efforts: Array<string | null>, builtin: boolean }> };
 
 export type ListSearchProvidersQueryVariables = Exact<{
   sort?: Array<SearchProviderSortInput | null | undefined> | SearchProviderSortInput | null | undefined;
@@ -3919,7 +3920,7 @@ export type SetModelAliasMutationVariables = Exact<{
 }>;
 
 
-export type SetModelAliasMutation = { setModelAlias: { name: string, models: Array<string>, label: string, builtin: boolean } };
+export type SetModelAliasMutation = { setModelAlias: { name: string, models: Array<string>, label: string, efforts: Array<string | null>, builtin: boolean } };
 
 export type DeleteModelAliasMutationVariables = Exact<{
   input: DeleteModelAliasInput;
@@ -4662,6 +4663,7 @@ export const ModelAliasesDocument = new TypedDocumentString(`
     name
     models
     label
+    efforts
     builtin
   }
 }
@@ -5858,6 +5860,7 @@ export const SetModelAliasDocument = new TypedDocumentString(`
     name
     models
     label
+    efforts
     builtin
   }
 }
