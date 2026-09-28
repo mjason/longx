@@ -66,6 +66,18 @@ defmodule LongxWeb.StaticAssetsTest do
       refute Enum.any?(get_resp_header(sw, "cache-control"), &(&1 =~ "immutable"))
     end
 
+    test "the launcher icons: a white rounded tile with a clear margin; white to the edge where the system masks" do
+      # a dock shows an `any` icon as it is: its corner is transparent, never the
+      # old full-bleed navy square that read as a black tile
+      for name <- ~w(icon-192.png icon-512.png) do
+        assert {_r, _g, _b, 0} = corner_pixel(name), "#{name} has a transparent corner"
+      end
+
+      # Android crops the maskable one, iOS rounds the touch icon: white to the edge
+      assert {255, 255, 255, 255} = corner_pixel("maskable-512.png")
+      assert {255, 255, 255, 255} = corner_pixel("apple-touch-icon.png")
+    end
+
     test "the manifest: an id, the language, the shortcuts, an open window reused" do
       manifest =
         :longx
@@ -79,6 +91,35 @@ defmodule LongxWeb.StaticAssetsTest do
       assert Enum.map(manifest["shortcuts"], & &1["url"]) == ["/new", "/settings/models"]
       assert manifest["launch_handler"] == %{"client_mode" => ["focus-existing", "auto"]}
       assert is_binary(manifest["description"])
+    end
+  end
+
+  # the top-left pixel of a PNG in priv/static/icons, as RGBA: row 0's first pixel
+  # needs no neighbour to unfilter, whatever the filter
+  defp corner_pixel(name) do
+    <<137, "PNG", 13, 10, 26, 10, rest::binary>> =
+      File.read!(Application.app_dir(:longx, "priv/static/icons/" <> name))
+
+    {header, data} = chunks(rest, nil, [])
+    <<_width::32, _height::32, 8, color_type, _::binary>> = header
+    <<_filter, pixel::binary>> = :zlib.uncompress(data)
+
+    case {color_type, pixel} do
+      {6, <<r, g, b, a, _::binary>>} -> {r, g, b, a}
+      {2, <<r, g, b, _::binary>>} -> {r, g, b, 255}
+    end
+  end
+
+  defp chunks(
+         <<len::32, type::binary-4, body::binary-size(len), _crc::32, rest::binary>>,
+         header,
+         idat
+       ) do
+    case type do
+      "IHDR" -> chunks(rest, body, idat)
+      "IDAT" -> chunks(rest, header, [idat | body])
+      "IEND" -> {header, IO.iodata_to_binary(idat)}
+      _ -> chunks(rest, header, idat)
     end
   end
 end

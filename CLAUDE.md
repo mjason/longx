@@ -1683,7 +1683,11 @@ on first use.
     white / near-black ground, the frame one step off it, the LX logo's azure as the one
     accent (`--primary` `#2f7cf6` dark / `#1b5cf0` light); dark ground `#1c1e24`, frame
     `#15171c`; light `#ffffff` / `#f3f4f7`. Icons regenerated from
-    `priv/static/images/logo.png` with `python3 assets/scripts/icons.py`. Tailwind v4 with
+    `priv/static/images/logo.png` with `python3 assets/scripts/icons.py`: the launcher
+    icons are the mark on a white rounded tile with a clear margin (a dock shows them as
+    they are — the full-bleed navy square they were read as a black tile and hid the
+    mark's dark stroke), the maskable and touch icons white to the edge
+    (`static_assets_test` checks the corners). Tailwind v4 with
     shadcn token names, **no `@apply`**, no daisyUI; only `html` gets `overflow-x: hidden`.
     `DialogContent` is a flex column capped at the viewport with `DialogBody` as the
     scrolling middle. **Copy works over plain http**: a LAN address is not a secure
