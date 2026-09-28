@@ -62,7 +62,8 @@ defmodule Longx.Chrome.Session do
 
   def whereis(thread_id) do
     case Registry.lookup(@registry, thread_id) do
-      [{pid, _}] -> pid
+      # the registry drops a dead session a moment after it exits: never hand it out
+      [{pid, _}] -> if Process.alive?(pid), do: pid
       [] -> nil
     end
   end
@@ -91,11 +92,26 @@ defmodule Longx.Chrome.Session do
     end
   end
 
-  @doc "Closes the session: its tabs, its runtime."
+  @doc "Closes the session: its tabs, its runtime. Answers once the session is gone."
   def close(thread_id) do
     case whereis(thread_id) do
-      nil -> :ok
-      pid -> GenServer.call(pid, :close, 30_000)
+      nil ->
+        :ok
+
+      pid ->
+        # the reply comes before the process has exited: wait for it to be gone,
+        # so the caller's next `whereis` finds nothing (a test on CI's slower
+        # runner once saw the session still there right after its close)
+        ref = Process.monitor(pid)
+        result = GenServer.call(pid, :close, 30_000)
+
+        receive do
+          {:DOWN, ^ref, :process, ^pid, _} -> result
+        after
+          5_000 ->
+            Process.demonitor(ref, [:flush])
+            result
+        end
     end
   end
 
