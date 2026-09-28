@@ -3491,6 +3491,13 @@ export type ListRunningThreadsQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type ListRunningThreadsQuery = { listRunningThreads: { threads: Array<unknown> } };
 
+export type ListRecentThreadsQueryVariables = Exact<{
+  limit?: number | null | undefined;
+}>;
+
+
+export type ListRecentThreadsQuery = { listRecentThreads: { threads: Array<unknown> } };
+
 export type DirectoryQueryVariables = Exact<{
   projectId: string | number;
   scope?: string | null | undefined;
@@ -4890,6 +4897,13 @@ export const ListRunningThreadsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListRunningThreadsQuery, ListRunningThreadsQueryVariables>;
+export const ListRecentThreadsDocument = new TypedDocumentString(`
+    query ListRecentThreads($limit: Int) {
+  listRecentThreads(limit: $limit) {
+    threads
+  }
+}
+    `) as unknown as TypedDocumentString<ListRecentThreadsQuery, ListRecentThreadsQueryVariables>;
 export const DirectoryDocument = new TypedDocumentString(`
     query Directory($projectId: ID!, $scope: String) {
   directory(projectId: $projectId, scope: $scope) {

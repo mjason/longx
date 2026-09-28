@@ -497,6 +497,72 @@ defmodule LongxWeb.ProjectsRpcTest do
       send(handler, :go)
     end
 
+    test "list_recent_threads: every project's conversations, newest activity first, for ⌘K",
+         %{conn: conn, dir: dir} do
+      other = Path.join(dir, "other")
+      File.mkdir_p!(other)
+      shut = Path.join(dir, "shut")
+      File.mkdir_p!(shut)
+      a = Projects.create_project!(%{name: "Alpha", root_path: dir})
+      b = Projects.create_project!(%{name: "Beta", root_path: other})
+      gone = Projects.create_project!(%{name: "Gone", root_path: shut})
+
+      thread = fn project, n, title ->
+        t =
+          Projects.create_thread!(%{
+            project_id: project.id,
+            kernel_thread_id: "native_recent_#{n}",
+            cwd: project.root_path,
+            title: title
+          })
+
+        Projects.touch_thread!(t, %{
+          last_activity_at: DateTime.add(~U[2026-09-28 00:00:00Z], n, :minute)
+        })
+      end
+
+      old = thread.(a, 1, "old one")
+      newest = thread.(b, 3, "newest")
+      middle = thread.(a, 2, "middle")
+      archived = thread.(a, 4, "archived")
+      Projects.archive_thread!(archived)
+      in_gone = thread.(gone, 5, "in an archived project")
+      Projects.archive_project!(gone)
+
+      # a sub-agent's row is no conversation of its own
+      Projects.create_thread!(%{
+        project_id: a.id,
+        kernel_thread_id: "native_recent_child",
+        cwd: dir,
+        parent_thread_id: middle.id,
+        agent_path: "/root/helper"
+      })
+
+      assert %{"success" => true, "data" => %{"threads" => threads}} =
+               rpc(conn, "list_recent_threads", %{"fields" => ["threads"]})
+
+      assert Enum.map(threads, & &1["id"]) == [newest.id, middle.id, old.id]
+      refute Enum.any?(threads, &(&1["id"] in [archived.id, in_gone.id]))
+
+      assert %{
+               "title" => "newest",
+               "projectSlug" => slug,
+               "projectName" => "Beta",
+               "lastActivityAt" => at
+             } = hd(threads)
+
+      assert slug == b.slug
+      assert is_binary(at)
+
+      assert %{"success" => true, "data" => %{"threads" => [only]}} =
+               rpc(conn, "list_recent_threads", %{
+                 "fields" => ["threads"],
+                 "input" => %{"limit" => 1}
+               })
+
+      assert only["id"] == newest.id
+    end
+
     test "list_running_threads and answer_request: a thread waiting on the person, then answered",
          %{conn: conn, dir: dir, bypass: bypass} do
       File.mkdir_p!(Path.join(dir, ".longx/local/plugs"))

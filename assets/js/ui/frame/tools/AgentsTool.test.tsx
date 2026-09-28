@@ -28,7 +28,7 @@ describe("AgentsTool", () => {
     const user = userEvent.setup();
     const { router } = renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-    await user.keyboard("{Meta>}3{/Meta}");
+    await user.keyboard("{Control>}3{/Control}");
     const panel = await screen.findByTestId("tool-panel");
     await within(panel).findByText("alpha");
     expect(listSubagents).toHaveBeenCalledWith(expect.objectContaining({ input: { parentThreadId: "t1" } }));
@@ -47,7 +47,7 @@ describe("AgentsTool", () => {
     const user = userEvent.setup();
     renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-    await user.keyboard("{Meta>}3{/Meta}");
+    await user.keyboard("{Control>}3{/Control}");
     const panel = await screen.findByTestId("tool-panel");
     await within(panel).findByText("这个会话没有派出子 agent");
   });

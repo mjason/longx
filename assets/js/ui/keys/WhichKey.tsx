@@ -3,7 +3,7 @@
 // listed; the tabs' 1…9 are one row.
 import { useCommandsVersion } from "@/core/keys/useCommand";
 import { commands } from "@/core/keys/registry";
-import { formatSequence, SPACE_TREE, visibleChildren, type KeyNode } from "@/core/keys/keymap";
+import { formatSequence, visibleChildren, type KeyNode } from "@/core/keys/keymap";
 import { t } from "@/ui/strings";
 
 type Entry = { key: string; label: string; group: boolean };
@@ -21,9 +21,9 @@ function entries(nodes: KeyNode[], top: boolean): Entry[] {
   return out;
 }
 
-export function WhichKey({ sequence, flash }: { sequence: string[]; flash: number }) {
+export function WhichKey({ tree, sequence, flash }: { tree: KeyNode[]; sequence: string[]; flash: number }) {
   useCommandsVersion();
-  const nodes = visibleChildren(SPACE_TREE, sequence, commands.available);
+  const nodes = visibleChildren(tree, sequence, commands.available);
   return (
     <div
       data-testid="which-key"

@@ -1428,7 +1428,7 @@ on first use.
     which is how a test asserts a secret never comes back. Thread operations: `list_threads`,
     `get_thread`, `list_subagents`, `start_thread`, `send_message`, `steer_turn`,
     `interrupt_turn`, `retract_turn`, `compact_thread`, `answer_request`,
-    `list_running_threads`, `set_goal` / `clear_goal`, `rename_thread`, `archive_thread`,
+    `list_running_threads`, `list_recent_threads`, `set_goal` / `clear_goal`, `rename_thread`, `archive_thread`,
     `delete_thread`; Project: `list_projects`, `get_project` (by slug), `create` / `update`
     / `archive` / `delete_project`, `git_info`, `init_git`, `search_files`,
     `agent_definition`, `promote_local`; Turn: `list_turns`.
@@ -1621,35 +1621,54 @@ on first use.
     model and level picker inside a shell); shell → page `LongxShell.back()`,
     `navigate(path)`, `resume()`. `<html data-shell="android">` while installed;
     `--app-height` follows `visualViewport.height`.
-  - **The space menu** — Spacemacs' leader without modes (`core/keys/`, `ui/keys/`;
-    desktop and tablet, off on a phone; 外观 → 空格快捷菜单, `core/keys/preference.ts`,
-    per device in localStorage). Two states only: typing (focus in an input, a
-    textarea, a select, contenteditable, `.cm-editor`) or not. Not typing, **Space opens
-    the which-key panel** (`WhichKey`, bottom of the window: the keys that can follow,
-    `+` for a group, the tabs' 1…9 one row); a key descends or runs, `⌫` goes up, Esc or
-    an unknown key (flashed) closes, a ctrl / meta chord closes and passes through.
-    Typing, Esc only leaves the field (an IME composition's Esc is its own; an open
-    dialog, menu or popover takes Esc and Space itself; Esc never stops a turn), and a
-    keyboard-focused button keeps its Space. `KeysLayer` (the window's keydown in the
-    capture phase) runs the pure `core/keys/engine.ts` `press(state, input, tree,
-    available)` over `keymap.ts`'s `SPACE_TREE` (the one tree: SPC SPC composer, `:`
-    palette, `?` every key, `a` 对话, `t` 会话, `b` 标签, `f` 文件, `g` Git, `w` 工具窗口,
-    `p` 项目, `j` 跳转, `T` 开关, `m` 当前页面). **Commands are registered where their
-    state lives** (`useCommand(id, run, available?)` into `registry.ts`, the last
-    registration winning; the panel and `SPC ?` show only what `available()` allows now,
-    a group with nothing available is hidden): `GlobalCommands` (the Shell),
-    `ProjectCommands` (the project window: the turn, threads, files, Git, tool windows,
-    jumps), the `Workbench`'s tab commands (`stepTab`, `tabAt`, `back`, `reopen` in
-    `core/workbench.ts`), the editor's save / preview and the diff's next / previous
-    change in their tabs; what lives inside a component that may not be mounted yet —
-    the Git window's tabs, the branch popover, the file tree's reveal, the agents panel —
-    is an **intent** (`core/keys/intents.ts`: requested, taken up on mount). Pickers and
-    prompts are stores (`picker.ts`, `prompt.ts`) drawn by `PickerDialog` /
-    `PromptDialog`; the status strip's `KeysHint` says what Space does now, and a
-    button's tooltip names its keys (`keysTitle`, `hintOf` → `SPC b d`). The palette
-    (⌘K or `SPC :`) lists the available commands with their keys. Tests:
-    `core/keys/keys.test.ts`, `support.test.tsx`, `ui/keys/SpaceMenu.test.tsx`, e2e
-    `13-keys`.
+  - **The keys: one table** (`core/keys/`, `ui/keys/`). **`bindings.ts`** is every key the
+    page answers to — a chord (`mod+k`; `mod` is ⌘ on a Mac and Ctrl elsewhere, `ctrl` the
+    Control key itself), a space-menu sequence (`SPC a s`) or `Escape Escape` — each naming
+    a command of **`commands.ts`** (id → the name every surface shows, and the space menu's
+    group names) and the scene it holds in (`when`: `typing`, `editor` — the code editor or
+    a select, whose Alt+arrows are their own —, `app`, `mac`; `inLayer` for the one chord
+    that holds over a dialog, ⌘K). `notation.ts` spells an event (`eventChord`: letters and
+    digits by key cap, so ⌥A is alt+a on a Mac), compares (`canonical`) and shows keys
+    (`formatKeys`: ⌘⇧T / Ctrl+Shift+T). **The installed app's window** (`appWindow()`:
+    `display-mode` standalone / window-controls-overlay / minimal-ui, or
+    `data-app-window` on `<html>`) gets the keys a browser tab keeps — Chromium's
+    `IsReservedCommandOrKey` opens with "In Apps mode, no keys are reserved": ⌘W closes
+    the tab (nothing to close → the key goes on and closes the window), ⌘⇧T reopens, ⌘T is
+    a new conversation, Ctrl+Tab / Ctrl+⇧Tab walk the tabs by last use while Ctrl is held
+    (`workbench.ts` `cycle` / `endCycle`, `core/keys/release.ts` on Ctrl's keyup), ⌘⌥←→
+    (Ctrl+PgUp/PgDn off a Mac) step them; a test keeps every tab-reserved key app-only and
+    every input-method key (Ctrl+Space, Ctrl+., Shift+Space, ⌘Space) out, and no two
+    commands on one key where both could hold. Everywhere: ⌘K the quick switcher
+    (`CommandPalette`: this project's conversations first, running / waiting marked from
+    `useRunningThreads`, then other projects' newest — RPC `list_recent_threads`,
+    `Projects.recent_threads/1` —, projects, commands with their keys; it registers its
+    own `palette.open`), ⌥↑ / ⌥↓ the conversation above / below (`ProjectCommands`, the
+    list's order), ⌥⇧↓ the next one waiting on the person in any project
+    (`GlobalCommands`, `thread.waiting`), `SPC t l` the one visited before
+    (`core/keys/visits.ts`), ⌘S, ⌘1–4 (registered by `ProjectWindow` itself, not the lazy
+    `ProjectCommands`, so they work from the first paint). **Esc Esc stops a running
+    turn**: the first Esc leaves the text field (or, outside one, only arms) and the
+    status strip says 再按 Esc：停止这一轮; a second within `ESC_WINDOW_MS` (1.5 s) runs it,
+    any other key disarms, a dialog's Esc is the dialog's. **The engine is pure**
+    (`engine.ts` `press(state, input, {tree, bindings}, available)`), `KeysLayer` the one
+    capture-phase listener carrying its actions out. **The space menu** is the table's
+    `SPC` bindings as a tree (`leaderTree`; desktop and tablet, 外观 → 空格快捷菜单, per
+    device): not typing, Space opens the which-key panel (`WhichKey`: the keys that can
+    follow, `+` for a group, 1…9 one row); a key descends or runs, `⌫` goes up, Esc or an
+    unknown key (flashed) closes, a chord closes it and runs its own binding; a
+    keyboard-focused button keeps its Space. **Commands are registered where their state
+    lives** (`useCommand(id, run, available?)`, `registry.ts`, the last registration
+    winning; every surface shows only what `available()` allows now); what lives inside a
+    component that may not be mounted yet is an **intent** (`intents.ts`). **The person's
+    own keys** (Settings → 快捷键, `settings/KeysSection`, `overrides.ts` in localStorage
+    `longx:keys`): a command's keys replaced whole; 添加 records a chord, or a sequence
+    starting with Space and ending with Enter; `validateKeys` refuses an input method's key
+    and one another command holds in the same scene, and makes a tab-reserved key the
+    app's. `SPC ?` (`HelpDialog`), the palette, a button's tooltip (`keysTitle` / `keysOf`:
+    the keys this window has, the space menu's while it is on) and the settings list all
+    read the table in force (`useBindings`). Tests: `core/keys/{bindings,keys}.test.ts`,
+    `support.test.tsx`, `ui/keys/SpaceMenu.test.tsx`, `KeysSection.test.tsx`, the
+    workbench's cycle test, `projects_rpc_test` (`list_recent_threads`), e2e `13-keys`.
   - **The PWA** (a secure context only: HTTPS through `Longx.Tls` or a proxy, or
     localhost). `js/sw/sw.ts` over the pure `js/sw/logic.ts` is the service worker,
     built by `js/build/plugins.ts`'s `serviceWorker()` (esbuild, loaded inside the hook —
@@ -1944,7 +1963,10 @@ Where tests live / what to use:
   `local/plugs/*.exs` + `local/agent.exs`, calls the tool at its next step and answers
   with its words), `13-keys` (the space menu: Esc out of the composer, the which-key
   panel, `SPC f f` opening a file, `SPC b d` closing it, `SPC ?`, `SPC :`, `SPC w 4`,
-  `SPC SPC` back to the composer; nothing on a phone), `14-pwa` (on a secure origin —
+  `SPC SPC` back to the composer; ⌥↓ / ⌥↑ between conversations from the composer, ⌘K
+  listing the project's, Esc Esc stopping a real `sleep 120` turn, and in an app window
+  — display-mode standalone stood in for — Ctrl+Tab by last use, ⌘W closing a tab, ⌘⇧T
+  reopening it; nothing on a phone), `14-pwa` (on a secure origin —
   `127.0.0.1` counts —, in Chromium's new headless mode, whose permissions are real:
   the worker active and controlling, the caches filled, an offline reload drawing the
   marked shell and reloading by itself once back, a finished turn's system notification

@@ -56,7 +56,6 @@ export function EditorTab({ projectId, path, line }: { projectId: string; path: 
 
   // the space menu: SPC f s / SPC m s save, SPC m v flips a markdown file between preview and editor
   useCommand("file.save", doSave, () => dirty);
-  useCommand("editor.save", doSave, () => dirty);
   useCommand("editor.preview", () => setMode(previewing ? "edit" : "preview"), () => markdown && !dirty);
 
   if (file.isPending) return <Skeleton className="m-4 h-32" />;

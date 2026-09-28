@@ -80,6 +80,8 @@ query ListSubagents($sort: [ThreadSortInput], $filter: ThreadFilterInput, $paren
 
 query ListRunningThreads { listRunningThreads { threads } }
 
+query ListRecentThreads($limit: Int) { listRecentThreads(limit: $limit) { threads } }
+
 query Directory($projectId: ID!, $scope: String) { directory(projectId: $projectId, scope: $scope) { sessions } }
 
 query ListFiles($projectId: ID!, $path: String!) { listFiles(projectId: $projectId, path: $path) { size path name kind } }

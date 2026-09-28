@@ -1,11 +1,15 @@
 // The commands every page has (the space menu's top level and SPC p): the
-// palette, the full key list, settings, switching and creating projects,
-// the theme, the reasoning's default.
-import { useNavigate } from "react-router";
+// full key list (the palette registers its own ⌘K), settings, switching and creating projects,
+// the theme, the reasoning's default, the conversation visited before and
+// the next one waiting on the person.
+import { useMatch, useNavigate } from "react-router";
+import { toast } from "sonner";
+import { listRunningThreads } from "@/core/api";
 import { openPicker } from "@/core/keys/picker";
 import { getPreference, setPreference } from "@/core/keys/preference";
 import { useCommand } from "@/core/keys/useCommand";
-import { useProjects } from "@/core/projects";
+import { previousVisit } from "@/core/keys/visits";
+import { unwrap, useProjects, type RunningThread } from "@/core/projects";
 import { setTheme } from "@/core/theme";
 import { t } from "@/ui/strings";
 import { updateKeysUi } from "./state";
@@ -13,8 +17,8 @@ import { updateKeysUi } from "./state";
 export function GlobalCommands() {
   const navigate = useNavigate();
   const projects = useProjects();
+  const threadId = useMatch("/p/:slug/t/:threadId")?.params.threadId ?? null;
 
-  useCommand("palette.open", () => updateKeysUi({ palette: true }));
   useCommand("help.keys", () => updateKeysUi({ help: true }));
   useCommand("settings.open", () => navigate("/settings"));
   useCommand("project.new", () => navigate("/new"));
@@ -28,6 +32,27 @@ export function GlobalCommands() {
       }),
     () => (projects.data?.length ?? 0) > 0,
   );
+  useCommand(
+    "thread.last",
+    () => {
+      const before = previousVisit(threadId);
+      if (before) navigate(`/p/${before.slug}/t/${before.id}`);
+    },
+    () => previousVisit(threadId) !== null,
+  );
+  // the next conversation that waits on the person (an ask), in any project; around again past the last
+  useCommand("thread.waiting", () => {
+    void listRunningThreads()
+      .then(unwrap)
+      .then((data) => {
+        const waiting = (data.threads as RunningThread[]).filter((r) => r.waiting);
+        if (waiting.length === 0) return void toast(t.keys.noWaiting);
+        const at = waiting.findIndex((r) => r.id === threadId);
+        const next = waiting[(at + 1) % waiting.length]!;
+        if (next.id !== threadId) navigate(`/p/${next.projectSlug}/t/${next.id}`);
+      })
+      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)));
+  });
   useCommand("toggle.reasoning", () => setPreference("reasoningOpen", !getPreference("reasoningOpen")));
   useCommand("toggle.theme", () => setTheme(document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light"));
   return null;

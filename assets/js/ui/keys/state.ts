@@ -4,9 +4,10 @@
 import { useSyncExternalStore } from "react";
 import { CLOSED, type KeyState } from "@/core/keys/engine";
 
-type UiState = { menu: KeyState; flash: number; typing: boolean; help: boolean; palette: boolean };
+// `recording`: Settings → 快捷键 is listening for a new key, the dispatcher stands aside
+type UiState = { menu: KeyState; flash: number; typing: boolean; help: boolean; palette: boolean; recording: boolean };
 
-let state: UiState = { menu: CLOSED, flash: 0, typing: false, help: false, palette: false };
+let state: UiState = { menu: CLOSED, flash: 0, typing: false, help: false, palette: false, recording: false };
 const listeners = new Set<() => void>();
 
 export function updateKeysUi(patch: Partial<UiState>): void {
@@ -38,6 +39,24 @@ export function isTyping(el: Element | null): boolean {
   if (el instanceof HTMLInputElement) return TEXT_INPUTS.has(el.type);
   if ((el as HTMLElement).isContentEditable) return true;
   return el.closest(".cm-editor") !== null;
+}
+
+/** Focus is in the code editor or a select: their Alt+arrows are their own (a line moved, the list opened). */
+export function isEditor(el: Element | null): boolean {
+  if (!el || el === document.body) return false;
+  return el instanceof HTMLSelectElement || el.closest(".cm-editor") !== null;
+}
+
+// the installed app's window: Chromium reserves no key there (⌘W, Ctrl+Tab
+// reach the page); a browser tab keeps them. `data-app-window` lets a native
+// shell or a test say so.
+const APP_MODES = ["standalone", "window-controls-overlay", "minimal-ui"];
+
+export function appWindow(): boolean {
+  if (typeof window === "undefined") return false;
+  if (document.documentElement.hasAttribute("data-app-window")) return true;
+  if (typeof window.matchMedia !== "function") return false;
+  return APP_MODES.some((m) => window.matchMedia(`(display-mode: ${m})`).matches);
 }
 
 // dialogs, menus, a select or a popover's list: their keys are their own

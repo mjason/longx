@@ -35,7 +35,7 @@ export async function run(h) {
   expect((await page.getByText(/not on duty/).count()) >= 1, "the refusal is shown");
 
   // the Agents window lists both with their duty switches
-  await page.keyboard.press("Meta+3");
+  await page.keyboard.press("ControlOrMeta+3");
   await page.getByTestId("session-directory").waitFor({ timeout: 10_000 });
   expect((await page.getByRole("switch", { name: "值班" }).count()) >= 2, "a duty switch per session");
   await h.shot(page, "directory");

@@ -385,6 +385,17 @@ defmodule Longx.Projects.Thread do
       end
     end
 
+    # ⌘K's conversations across projects: the root threads of every project
+    # still open, newest activity first
+    action :list_recent, Types.ListRecent do
+      argument :limit, :integer, default: 30, constraints: [min: 1, max: 200]
+
+      run fn input, _ ->
+        threads = Longx.Projects.recent_threads(input.arguments.limit)
+        {:ok, %{threads: Enum.map(threads, &camelize/1)}}
+      end
+    end
+
     read :with_status do
       argument :project_id, :uuid, allow_nil?: false
       argument :status, :atom, allow_nil?: false

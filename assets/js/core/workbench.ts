@@ -112,6 +112,10 @@ export type WorkbenchStore = {
   renamePath: (from: string, to: string) => void;
   /** the tab active before this one (SPC TAB) */
   back: () => void;
+  /** Ctrl+Tab / Ctrl+Shift+Tab: the next or previous tab by last use, while Ctrl is held */
+  cycle: (delta: number) => void;
+  /** Ctrl let go: the tab reached is the newest */
+  endCycle: () => void;
   /** the last tab closed, open again (SPC b u) */
   reopen: () => void;
   canReopen: () => boolean;
@@ -119,13 +123,18 @@ export type WorkbenchStore = {
 
 export function createWorkbenchStore(storage: Storage | null, key: string): WorkbenchStore {
   let state = load(storage, key);
-  // this session's memory, not the device's: the tab before, the tabs closed
-  let previous: string | null = null;
+  // this session's memory, not the device's: the tabs by last use (newest
+  // first), the tabs closed, and a Ctrl+Tab walk under way
+  let recent: string[] = [state.active];
   const closed: Tab[] = [];
+  let walk: { order: string[]; at: number } | null = null;
   const listeners = new Set<() => void>();
+  const touch = (key: string) => {
+    recent = [key, ...recent.filter((k) => k !== key)];
+  };
   const set = (next: WorkbenchState) => {
     if (next === state) return;
-    if (next.active !== state.active) previous = state.active;
+    if (next.active !== state.active && !walk) touch(next.active);
     state = next;
     try {
       // dirty flags are not remembered: the content they describe is not
@@ -152,7 +161,25 @@ export function createWorkbenchStore(storage: Storage | null, key: string): Work
       set(next);
     },
     back: () => {
-      if (previous && state.tabs.some((t) => tabKey(t) === previous)) set(activate(state, previous));
+      const previous = recent.find((k) => k !== state.active && state.tabs.some((t) => tabKey(t) === k));
+      if (previous) set(activate(state, previous));
+    },
+    cycle: (delta) => {
+      if (!walk) {
+        const open = new Set(state.tabs.map(tabKey));
+        // by last use; a tab never used yet (restored from the device) after them, in the bar's order
+        const order = [...recent.filter((k) => open.has(k)), ...state.tabs.map(tabKey).filter((k) => !recent.includes(k))];
+        walk = { order, at: order.indexOf(state.active) };
+      }
+      const n = walk.order.length;
+      if (n < 2) return;
+      walk.at = (((walk.at + delta) % n) + n) % n;
+      set(activate(state, walk.order[walk.at]!));
+    },
+    endCycle: () => {
+      if (!walk) return;
+      walk = null;
+      touch(state.active);
     },
     reopen: () => {
       const tab = closed.pop();
@@ -187,6 +214,8 @@ export function useWorkbench(projectId: string): WorkbenchState & Omit<Workbench
     markDirty: s.markDirty,
     renamePath: s.renamePath,
     back: s.back,
+    cycle: s.cycle,
+    endCycle: s.endCycle,
     reopen: s.reopen,
     canReopen: s.canReopen,
   };

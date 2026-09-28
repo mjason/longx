@@ -1,44 +1,39 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router";
-import { useProjects } from "@/core/projects";
+import { useMatch, useNavigate } from "react-router";
+import { COMMANDS } from "@/core/keys/commands";
 import { commands } from "@/core/keys/registry";
-import { hintOf, SPACE_TREE, type KeyNode } from "@/core/keys/keymap";
-import { useCommandsVersion } from "@/core/keys/useCommand";
+import { useBindings } from "@/core/keys/overrides";
+import { useCommand, useCommandsVersion } from "@/core/keys/useCommand";
+import { useProjects, useRecentThreads, useRunningThreads, useThreads } from "@/core/projects";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from "@/ui/components/ui/command";
-import { updateKeysUi, useKeysUi } from "@/ui/keys/state";
+import { keysOf } from "@/ui/keys/hint";
+import { keysUi, updateKeysUi, useKeysUi } from "@/ui/keys/state";
 import { t } from "@/ui/strings";
 
-// every command of the space menu's tree, flattened, with its keys
-const ALL: { id: string; label: string; hint: string }[] = [];
-(function walk(nodes: KeyNode[]) {
-  for (const n of nodes) {
-    if (n.command) ALL.push({ id: n.command, label: n.label, hint: hintOf(n.command) ?? "" });
-    else walk(n.children ?? []);
-  }
-})(SPACE_TREE);
+type Conversation = { id: string; title: string | null; preview: string | null; slug: string; project?: string };
+
+const label = (c: Conversation) => c.title || c.preview || `~${c.id.slice(-6)}`;
 
 /**
- * IDEA's Search Everywhere: ⌘K or SPC :. Projects, then every command that
- * can run here with its space-menu keys (the palette teaches them), then a
- * few actions. Desktop only.
+ * The quick switcher: ⌘K or SPC :. The conversations of the project on
+ * screen first (running and waiting on the person marked), then the other
+ * projects' newest conversations, the projects, every command that can run
+ * here with its keys (the palette teaches them), a few actions. Typing
+ * filters them all (Slack's ⌘K). Desktop and tablet.
  */
 export function CommandPalette() {
   const { palette: open } = useKeysUi();
   const setOpen = (value: boolean) => updateKeysUi({ palette: value });
   const navigate = useNavigate();
   const projects = useProjects();
+  const slug = useMatch("/p/:slug/*")?.params.slug;
+  const here = projects.data?.find((p) => p.slug === slug);
+  const threads = useThreads(here?.id);
+  const running = useRunningThreads(3000, open);
+  const recent = useRecentThreads(open);
   useCommandsVersion();
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        updateKeysUi({ palette: !open });
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  useBindings();
+  // ⌘K / SPC : — registered here, with the page, not with the lazily loaded commands; again closes it
+  useCommand("palette.open", () => updateKeysUi({ palette: !keysUi().palette }));
 
   function go(to: string) {
     setOpen(false);
@@ -51,13 +46,35 @@ export function CommandPalette() {
     setTimeout(() => commands.run(id), 0);
   }
 
-  const available = ALL.filter((c) => c.id !== "palette.open" && commands.available(c.id));
+  const state = new Map((running.data ?? []).map((r) => [r.id, r.waiting ? "waiting" : "running"] as const));
+  const mine: Conversation[] = (threads.data ?? []).map((r) => ({ id: r.id, title: r.title, preview: r.preview, slug: slug ?? "" }));
+  const others: Conversation[] = (recent.data ?? [])
+    .filter((r) => r.projectSlug !== slug)
+    .map((r) => ({ id: r.id, title: r.title, preview: r.preview, slug: r.projectSlug, project: r.projectName }));
+  const available = Object.keys(COMMANDS).filter((id) => id !== "palette.open" && !id.startsWith("tab.goto.") && commands.available(id));
+
+  const row = (c: Conversation) => {
+    const s = state.get(c.id);
+    return (
+      <CommandItem key={c.id} value={`${label(c)} ${c.preview ?? ""} ${c.project ?? ""} ${c.id}`} onSelect={() => go(`/p/${c.slug}/t/${c.id}`)}>
+        <span className="min-w-0 truncate">{label(c)}</span>
+        {c.project ? <span className="text-muted-foreground ml-2 shrink-0 truncate text-xs">{c.project}</span> : null}
+        {s ? (
+          <span className={`ml-auto shrink-0 text-xs ${s === "waiting" ? "text-warning" : "text-primary"}`} data-state={s}>
+            {s === "waiting" ? t.keys.waiting : t.keys.running}
+          </span>
+        ) : null}
+      </CommandItem>
+    );
+  };
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen} title={t.commandPalette} description={t.searchEverywhere}>
       <CommandInput placeholder={t.searchEverywhere} />
       <CommandList>
         <CommandEmpty>{t.noResults}</CommandEmpty>
+        {mine.length > 0 ? <CommandGroup heading={t.keys.threadsHere}>{mine.map(row)}</CommandGroup> : null}
+        {others.length > 0 ? <CommandGroup heading={t.keys.recentThreads}>{others.map(row)}</CommandGroup> : null}
         <CommandGroup heading={t.projects}>
           {(projects.data ?? []).map((p) => (
             <CommandItem key={p.id} value={`${p.name} ${p.rootPath}`} onSelect={() => go(`/p/${p.slug}`)}>
@@ -66,12 +83,15 @@ export function CommandPalette() {
           ))}
         </CommandGroup>
         <CommandGroup heading={t.keys.commands}>
-          {available.map((c) => (
-            <CommandItem key={c.id} value={`${c.label} ${c.hint} ${c.id}`} onSelect={() => run(c.id)}>
-              {c.label}
-              <CommandShortcut className="font-mono">{c.hint}</CommandShortcut>
-            </CommandItem>
-          ))}
+          {available.map((id) => {
+            const hint = keysOf(id)[0] ?? "";
+            return (
+              <CommandItem key={id} value={`${COMMANDS[id]} ${hint} ${id}`} onSelect={() => run(id)}>
+                {COMMANDS[id]}
+                <CommandShortcut className="font-mono">{hint}</CommandShortcut>
+              </CommandItem>
+            );
+          })}
         </CommandGroup>
         <CommandGroup heading={t.actions}>
           <CommandItem onSelect={() => go("/new")}>{t.openOrCreate}</CommandItem>

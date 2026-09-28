@@ -28,12 +28,6 @@ export function resizePanel(state: FrameState, width: number): FrameState {
   return { ...state, panelWidth: Math.min(MAX_PANEL, Math.max(MIN_PANEL, Math.round(width))) };
 }
 
-/** ⌘/Ctrl + 1..4 → a tool; null when the key is not a frame shortcut. */
-export function toolForShortcut(key: string): Tool | null {
-  const n = Number.parseInt(key, 10);
-  return n >= 1 && n <= TOOLS.length ? TOOLS[n - 1]! : null;
-}
-
 // ---- store ---------------------------------------------------------------
 
 const KEY = "longx:frame";

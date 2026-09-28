@@ -3,11 +3,12 @@
 // over whichever is active. The chat stays mounted behind a file so its
 // scroll and composer draft survive a look at the code.
 import { AppWindow, Bot, FileCode2, GitCompareArrows, MessagesSquare, X } from "lucide-react";
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { useViewport } from "@/core/viewport";
 import { stepTab, tabAt, tabKey, useWorkbench, type Tab } from "@/core/workbench";
 import { openPicker } from "@/core/keys/picker";
 import { useCommand } from "@/core/keys/useCommand";
+import { onModifierRelease } from "@/core/keys/release";
 import { keysTitle } from "@/ui/keys/hint";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/ui/components/ui/alert-dialog";
@@ -149,6 +150,10 @@ function useTabCommands(wb: ReturnType<typeof useWorkbench>, active: Tab, close:
   useCommand("tab.close", () => close(active), () => active.kind !== "chat");
   useCommand("tab.reopen", wb.reopen, wb.canReopen);
   useCommand("tab.last", wb.back, many);
+  // the installed app's Ctrl+Tab: by last use while Ctrl is held
+  useCommand("tab.recent", () => wb.cycle(1), many);
+  useCommand("tab.recentBack", () => wb.cycle(-1), many);
+  useEffect(() => onModifierRelease(wb.endCycle), [wb.endCycle]);
   useCommand("tab.next", () => wb.activate(stepTab(state, 1).active), many);
   useCommand("tab.prev", () => wb.activate(stepTab(state, -1).active), many);
   useCommand("tab.chat", () => wb.activate("chat"), () => active.kind !== "chat");

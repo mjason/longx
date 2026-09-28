@@ -1,8 +1,12 @@
-// The space menu (Spacemacs' leader, no modes): Esc leaves the composer, the
-// strip says what Space does, Space shows the which-key panel; SPC f f finds
-// a file and opens it, SPC b d closes its tab, SPC ? lists every key, SPC :
-// is the command palette, SPC w 4 the files window, SPC SPC back to the
-// composer. On a phone Space is only a space.
+// The keys: the space menu (Spacemacs' leader, no modes) — Esc leaves the
+// composer, the strip says what Space does, Space shows the which-key panel;
+// SPC f f finds a file and opens it, SPC b d closes its tab, SPC ? lists
+// every key, SPC : is the palette, SPC w 4 the files window, SPC SPC back to
+// the composer — then the chords: ⌥↓ / ⌥↑ between conversations from the
+// composer, ⌘K listing this project's conversations, Esc Esc stopping a real
+// running turn, and in the installed app's window (display-mode standalone,
+// stood in for) ⌘W closing a tab, ⌘⇧T reopening it, Ctrl+Tab by last use.
+// On a phone Space is only a space.
 import fs from "node:fs";
 import path from "node:path";
 import { expect, sleep } from "../lib.mjs";
@@ -97,6 +101,74 @@ export async function run(h) {
   await page.keyboard.press("Space");
   await until("SPC SPC focuses the composer", activeIsComposer);
   await h.noOverflow(page, "desktop with the space menu");
+
+  // ⌥↓ / ⌥↑ from the composer: the conversation below or above in the list
+  const first = await h.thread();
+  const second = await h.thread();
+  await h.open(page, `/p/${h.slug}/t/${second.id}`);
+  await page.locator(".aui-composer-input").click();
+  await page.keyboard.press("Alt+ArrowDown");
+  await until("⌥↓ opens the conversation below", async () => page.url().endsWith(`/t/${first.id}`));
+  await page.keyboard.press("Alt+ArrowUp");
+  await until("⌥↑ goes back up", async () => page.url().endsWith(`/t/${second.id}`));
+
+  // ⌘K: this project's conversations first; one picked opens
+  await page.keyboard.press("ControlOrMeta+k");
+  const here = page.getByRole("group", { name: "这个项目的会话" });
+  await here.waitFor({ timeout: 10_000 });
+  expect((await here.getByRole("option").count()) >= 2, "⌘K lists the project's conversations");
+  await h.shot(page, "palette-threads");
+  await page.keyboard.press("ControlOrMeta+k");
+  await until("⌘K again closes the palette", async () => (await page.getByRole("dialog").count()) === 0);
+
+  // Esc Esc stops a turn that runs: the first leaves the composer and says so, the second stops
+  await h.send(first.id, "用 exec_command 在前台直接运行 `sleep 120`（不要用 start_job，不要改成别的命令），等它结束后说“done”。");
+  await h.open(page, `/p/${h.slug}/t/${first.id}`);
+  await page.getByTestId("tool-command").first().waitFor({ timeout: 90_000 });
+  await page.locator(".aui-composer-input").click();
+  await page.keyboard.press("Escape");
+  await until("the strip says a second Esc stops", async () => (await hint.innerText()).includes("再按 Esc"));
+  await h.shot(page, "esc-armed");
+  await page.keyboard.press("Escape");
+  const turns = await h.idle(first.id, 60_000);
+  expect(turns[0].status === "interrupted", `Esc Esc stopped the turn: ${JSON.stringify(turns)}`);
+
+  // the installed app's window: the browser keeps no key, ⌘W and Ctrl+Tab are the page's
+  const appContext = await h.browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await appContext.addInitScript(() => {
+    const real = window.matchMedia.bind(window);
+    window.matchMedia = (q) =>
+      q.includes("display-mode: standalone")
+        ? { matches: true, media: q, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false }
+        : real(q);
+  });
+  const appPage = await h.watch(await appContext.newPage());
+  await h.open(appPage, `/p/${h.slug}/t/${second.id}`);
+  const appTabs = appPage.getByTestId("workbench-tabs");
+  const openFile = async (name) => {
+    await appPage.keyboard.press("Escape");
+    await appPage.keyboard.press("Space");
+    await appPage.keyboard.press("f");
+    await appPage.keyboard.press("f");
+    const finder = appPage.getByRole("dialog", { name: "找文件" });
+    await finder.waitFor({ timeout: 5_000 });
+    await appPage.keyboard.type(name);
+    await finder.getByRole("option", { name: new RegExp(name) }).first().waitFor({ timeout: 10_000 });
+    await appPage.keyboard.press("Enter");
+    await until(`${name} opens`, async () => (await appTabs.getByRole("tab", { name: new RegExp(name) }).count()) === 1);
+  };
+  await openFile("keyboard_app");
+  await openFile("README");
+  // Ctrl+Tab: the tab used before (keyboard_app), Ctrl let go settles there
+  await appPage.keyboard.press("Escape");
+  await appPage.keyboard.press("Control+Tab");
+  await until("Ctrl+Tab goes to the tab used before", async () => (await appTabs.getByRole("tab", { selected: true }).innerText()).includes("keyboard_app"));
+  await appPage.keyboard.press("ControlOrMeta+w");
+  await until("⌘W closes the tab in the app", async () => (await appTabs.getByRole("tab", { name: /keyboard_app/ }).count()) === 0);
+  await appPage.keyboard.press("ControlOrMeta+Shift+t");
+  await until("⌘⇧T reopens it", async () => (await appTabs.getByRole("tab", { name: /keyboard_app/ }).count()) === 1);
+  await h.shot(appPage, "app-window");
+  await appContext.close();
 
   // a phone: no hint, Space opens nothing
   const phone = await h.phone();

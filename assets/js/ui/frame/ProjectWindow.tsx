@@ -1,9 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, FolderTree, GitBranch, MessagesSquare, Settings, X } from "lucide-react";
-import { lazy, Suspense, useEffect, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from "react";
 import { Link, Outlet, useMatch, useParams } from "react-router";
 import { Workbench } from "@/ui/workbench/Workbench";
-import { TOOLS, toolForShortcut, useFrame, type Tool } from "@/core/frame";
+import { TOOLS, useFrame, type Tool } from "@/core/frame";
 import { joinProjectChannel } from "@/core/projectChannel";
 import { queryKeys, useProject } from "@/core/projects";
 import { invalidateFiles, invalidateGit, wsKeys } from "@/core/workspace";
@@ -15,8 +15,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/components/ui/tool
 import { TopBar } from "@/ui/shell/Shell";
 import { ThemeToggle } from "@/ui/components/ThemeToggle";
 import { ChatProvider } from "@/ui/chat/ChatProvider";
-import { keysTitle } from "@/ui/keys/hint";
+import { keysOf, keysTitle } from "@/ui/keys/hint";
 import { usePreference } from "@/core/keys/preference";
+import { useBindings } from "@/core/keys/overrides";
+import { useCommand } from "@/core/keys/useCommand";
 import { t } from "@/ui/strings";
 import { CopyApiButton } from "./CopyApiButton";
 import { StatusStrip } from "./StatusStrip";
@@ -73,6 +75,18 @@ export function ProjectWindow() {
     });
   }, [client, id]);
 
+  // ⌘1–4 and SPC w: the tool windows, registered here (not with the lazily
+  // loaded ProjectCommands) so the keys work from the first paint
+  const lastTool = useRef<Tool>(frame.tool ?? "threads");
+  useEffect(() => {
+    if (frame.tool) lastTool.current = frame.tool;
+  }, [frame.tool]);
+  useCommand("tool.threads", () => frame.toggle("threads"));
+  useCommand("tool.git", () => frame.toggle("git"));
+  useCommand("tool.agents", () => frame.toggle("agents"));
+  useCommand("tool.files", () => frame.toggle("files"));
+  useCommand("tool.toggle", () => (frame.tool ? frame.close() : frame.open(lastTool.current)));
+
   // sheets start closed: the chat comes first on a phone; the docked layout
   // remembers which tool was open
   const docked = viewport === "desktop";
@@ -80,20 +94,6 @@ export function ProjectWindow() {
     if (!docked) frame.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docked]);
-
-  // ⌘/Ctrl+1..5 toggle tool windows (desktop habit; harmless elsewhere)
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (!(e.metaKey || e.ctrlKey)) return;
-      const tool = toolForShortcut(e.key);
-      if (tool) {
-        e.preventDefault();
-        frame.toggle(tool);
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [frame]);
 
   if (project.isPending) return <Skeleton className="m-4 h-32" />;
   if (project.isError) return <p role="alert" className="text-destructive p-4">{project.error.message}</p>;
@@ -186,10 +186,12 @@ function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
 }
 
 function ToolRail({ active, onToggle }: { active: Tool | null; onToggle: (tool: Tool) => void }) {
-  const spaceMenu = usePreference("spaceMenu");
+  // re-render when the space menu is switched or a key changed
+  usePreference("spaceMenu");
+  useBindings();
   return (
     <nav aria-label="工具窗口" className="bg-sidebar border-sidebar-border flex w-11 shrink-0 flex-col items-center gap-1 border-r py-2" data-testid="tool-rail">
-      {TOOLS.map((tool, i) => {
+      {TOOLS.map((tool) => {
         const Icon = ICONS[tool];
         return (
           <Tooltip key={tool}>
@@ -205,8 +207,12 @@ function ToolRail({ active, onToggle }: { active: Tool | null; onToggle: (tool: 
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">
-              {t.tools[tool]} <kbd className="text-muted-foreground ml-1 text-[10px]">⌘{i + 1}</kbd>
-              {spaceMenu ? <kbd className="text-muted-foreground ml-1 text-[10px]">SPC w {i + 1}</kbd> : null}
+              {t.tools[tool]}
+              {keysOf(`tool.${tool}`).map((k) => (
+                <kbd key={k} className="text-muted-foreground ml-1 text-[10px]">
+                  {k}
+                </kbd>
+              ))}
             </TooltipContent>
           </Tooltip>
         );

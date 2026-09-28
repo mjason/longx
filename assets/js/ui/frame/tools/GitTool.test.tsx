@@ -21,7 +21,7 @@ async function openGit(width = 1280) {
   const user = userEvent.setup();
   const r = renderAt("/p/app-1/t/t1");
   await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-  await user.keyboard("{Meta>}2{/Meta}");
+  await user.keyboard("{Control>}2{/Control}");
   const panel = await screen.findByTestId(width < 1024 ? "tool-sheet" : "tool-panel");
   await within(panel).findByTestId("git-tool");
   return { user, panel, ...r };

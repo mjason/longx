@@ -23,7 +23,7 @@ async function openFiles(width = 1280) {
   const user = userEvent.setup();
   const r = renderAt("/p/app-1/t/t1");
   await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-  await user.keyboard("{Meta>}4{/Meta}");
+  await user.keyboard("{Control>}4{/Control}");
   const panel = await screen.findByTestId(width < 1024 ? "tool-sheet" : "tool-panel");
   await within(panel).findByText("README.md");
   return { user, panel, ...r };

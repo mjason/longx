@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createFrameStore, DEFAULT_FRAME, resizePanel, toggleTool, toolForShortcut } from "./frame";
+import { createFrameStore, DEFAULT_FRAME, resizePanel, toggleTool } from "./frame";
 
 describe("frame transitions", () => {
   test("toggle opens, toggling the same tool closes, another switches", () => {
@@ -16,15 +16,6 @@ describe("frame transitions", () => {
     expect(resizePanel(DEFAULT_FRAME, 10).panelWidth).toBe(240);
     expect(resizePanel(DEFAULT_FRAME, 9999).panelWidth).toBe(560);
     expect(resizePanel(DEFAULT_FRAME, 400.4).panelWidth).toBe(400);
-  });
-
-  test("⌘1..4 map to the tools in rail order (the git turn history went in 0.2.22)", () => {
-    expect(toolForShortcut("1")).toBe("threads");
-    expect(toolForShortcut("2")).toBe("git");
-    expect(toolForShortcut("3")).toBe("agents");
-    expect(toolForShortcut("4")).toBe("files");
-    expect(toolForShortcut("5")).toBeNull();
-    expect(toolForShortcut("k")).toBeNull();
   });
 });
 

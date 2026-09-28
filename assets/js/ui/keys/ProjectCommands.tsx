@@ -4,18 +4,19 @@
 // the which-key panel offers only that. The tabs' own commands live in the
 // Workbench, the editor's and the diff's in their tabs, the Git window's and
 // the file tree's are reached through intents (core/keys/intents).
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMatch, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { archiveThread, compactThread, renameThread, searchFiles } from "@/core/api";
 import { useModelAliases, useModelRows } from "@/core/ai";
 import { stoppedTurn } from "@/core/chat/stopped";
-import { useFrame, type Tool } from "@/core/frame";
+import { useFrame } from "@/core/frame";
 import { requestIntent } from "@/core/keys/intents";
 import { openPicker } from "@/core/keys/picker";
 import { openPrompt } from "@/core/keys/prompt";
 import { useCommand } from "@/core/keys/useCommand";
+import { noteVisit } from "@/core/keys/visits";
 import { queryKeys, unwrap, useGitInfo, useThreads } from "@/core/projects";
 import { tabKey, useWorkbench } from "@/core/workbench";
 import { useGitActions } from "@/core/workspace";
@@ -50,10 +51,6 @@ export function ProjectCommands({ ctx }: { ctx: ProjectContext }) {
   const rows = useModelRows();
   const threads = useThreads(ctx.id);
   const settingsPage = useMatch("/p/:slug/settings") !== null;
-  const lastTool = useRef<Tool>(frame.tool ?? "threads");
-  useEffect(() => {
-    if (frame.tool) lastTool.current = frame.tool;
-  }, [frame.tool]);
 
   const thread = chat.thread;
   const inChat = !settingsPage;
@@ -195,6 +192,19 @@ export function ProjectCommands({ ctx }: { ctx: ProjectContext }) {
   );
   useCommand("subagents.open", () => frame.open("agents"));
 
+  // ⌥↑ / ⌥↓: the conversation above or below in the list (newest activity first); no wrapping round
+  useEffect(() => {
+    if (thread) noteVisit(ctx.slug, thread.id);
+  }, [ctx.slug, thread]);
+  const list = threads.data ?? [];
+  const at = thread ? list.findIndex((r) => r.id === thread.id) : -1;
+  const goTo = (index: number) => {
+    const row = list[index];
+    if (row) navigate(`/p/${ctx.slug}/t/${row.id}`);
+  };
+  useCommand("thread.next", () => goTo(at + 1), () => at + 1 < list.length);
+  useCommand("thread.prev", () => goTo(at < 0 ? list.length - 1 : at - 1), () => (at < 0 ? list.length > 0 : at > 0));
+
   // ---- files: SPC f -----------------------------------------------------------
 
   useCommand(
@@ -257,11 +267,7 @@ export function ProjectCommands({ ctx }: { ctx: ProjectContext }) {
 
   // ---- tool windows: SPC w ------------------------------------------------------
 
-  useCommand("tool.threads", () => frame.toggle("threads"));
-  useCommand("tool.git", () => frame.toggle("git"));
-  useCommand("tool.agents", () => frame.toggle("agents"));
-  useCommand("tool.files", () => frame.toggle("files"));
-  useCommand("tool.toggle", () => (frame.tool ? frame.close() : frame.open(lastTool.current)));
+  // tool.threads … tool.files are the project window's own (ProjectWindow): ⌘1–4 from first paint
   useCommand("agents.panel", () => requestIntent("agents.panel"), () => inChat && agentSummaries(chat.view, chat.subviews).length > 0);
 
   // ---- the project, jumps: SPC p s, SPC j -----------------------------------------

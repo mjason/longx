@@ -172,6 +172,15 @@ defmodule Longx.Projects.Types do
     def graphql_type(_), do: :list_running
   end
 
+  defmodule ListRecent do
+    @moduledoc "the result of `Longx.Projects.Thread.list_recent`"
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [fields: [threads: [type: {:array, :map}, allow_nil?: false]]]
+
+    def graphql_type(_), do: :list_recent
+  end
+
   defmodule Directory do
     @moduledoc "the result of `Longx.Projects.Thread.directory`"
     use Ash.Type.NewType,

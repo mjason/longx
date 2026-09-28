@@ -21,7 +21,7 @@ export async function run(h) {
   await h.project();
   const page = h.page;
   await h.open(page, `/p/${h.slug}`);
-  await page.keyboard.press("Meta+4");
+  await page.keyboard.press("ControlOrMeta+4");
   const panel = page.getByTestId("tool-panel");
   const tree = panel.getByRole("tree");
   await tree.waitFor({ timeout: 10_000 });
@@ -49,7 +49,7 @@ export async function run(h) {
 
   // git: init and a commit — the git window follows (HEAD, the index)
   execFileSync("git", ["init", "-q"], { cwd: h.root });
-  await page.keyboard.press("Meta+2");
+  await page.keyboard.press("ControlOrMeta+2");
   const git = page.getByTestId("tool-panel");
   await until("the git window sees the repository and the untracked file", async () => (await git.getByText("hello.txt").count()) > 0, 15_000);
   execFileSync("git", ["add", "-A"], { cwd: h.root });

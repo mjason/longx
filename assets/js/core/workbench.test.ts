@@ -109,4 +109,29 @@ describe("moving between tabs (the space menu's SPC b / SPC TAB / SPC 1…9)", (
     expect(store.get().active).toBe("diff:a.ex@");
     expect(store.canReopen()).toBe(false);
   });
+
+  test("Ctrl+Tab walks the tabs by last use while Ctrl is held; letting go settles there", () => {
+    const store = createWorkbenchStore(null, "t");
+    store.open({ kind: "file", path: "a.ex" });
+    store.open({ kind: "file", path: "b.ex" });
+    store.open({ kind: "file", path: "c.ex" });
+    // last use: c, b, a, chat
+    store.cycle(1);
+    expect(store.get().active).toBe("file:b.ex");
+    store.cycle(1);
+    expect(store.get().active).toBe("file:a.ex");
+    store.cycle(-1);
+    expect(store.get().active).toBe("file:b.ex");
+    store.endCycle();
+    // b is the newest now: one Ctrl+Tab goes back to c
+    store.cycle(1);
+    expect(store.get().active).toBe("file:c.ex");
+    store.endCycle();
+    store.cycle(1);
+    store.cycle(1);
+    store.cycle(1);
+    expect(store.get().active).toBe("chat");
+    store.cycle(1);
+    expect(store.get().active).toBe("file:c.ex");
+  });
 });

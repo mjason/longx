@@ -1,10 +1,15 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
 import { _resetWorkbenchForTests } from "@/core/workbench";
 import { setPreference } from "@/core/keys/preference";
+import { commands } from "@/core/keys/registry";
+import { CLOSED } from "@/core/keys/engine";
+import { updateKeysUi } from "@/ui/keys/state";
+import * as api from "@/core/api";
+import { ok, thread } from "@/ui/test-mocks";
 
 vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
@@ -22,6 +27,8 @@ async function openProject(path = "/p/app-1/t/t1") {
 describe("the space menu", () => {
   beforeEach(() => {
     localStorage.clear();
+    // a dialog a test left open would hide the next test's page
+    updateKeysUi({ menu: CLOSED, palette: false, help: false, recording: false });
     _resetFrameStoreForTests();
     _resetWorkbenchForTests();
     setViewport(1280);
@@ -110,5 +117,78 @@ describe("the space menu", () => {
     (document.activeElement as HTMLElement | null)?.blur();
     await user.keyboard(" ");
     expect(screen.queryByTestId("which-key")).not.toBeInTheDocument();
+  });
+
+  test("⌥↓ / ⌥↑ move between the project's conversations, from the composer too", async () => {
+    vi.mocked(api.listThreads).mockResolvedValue(ok([thread(1), thread(2), thread(3)]) as never);
+    const { router } = renderAt("/p/app-1/t/t1");
+    const user = userEvent.setup();
+    await screen.findByTestId("chat-area");
+    await user.click(await screen.findByRole("textbox", { name: "随心输入" }));
+    // the project's commands load just after the first paint
+    await waitFor(() => expect(commands.available("thread.next")).toBe(true));
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t2"));
+    await user.keyboard("{Alt>}{ArrowUp}{/Alt}");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t1"));
+  });
+
+  test("Esc Esc runs the stop: the first Esc says so in the status strip, the second stops", async () => {
+    const stop = vi.fn();
+    const user = await openProject();
+    // after the project's own (a turn is running here, as far as the keys know)
+    await waitFor(() => expect(commands.available("thread.switch")).toBe(true));
+    const off = commands.register({ id: "turn.stop", run: stop, available: () => true });
+    try {
+      await user.click(await screen.findByRole("textbox", { name: "随心输入" }));
+      await user.keyboard("{Escape}");
+      expect(screen.getByTestId("status-strip")).toHaveTextContent("再按 Esc：停止这一轮");
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(stop).toHaveBeenCalledOnce());
+    } finally {
+      off();
+    }
+  });
+
+  test("⌘K lists this project's conversations first, then other projects' newest; running ones marked", async () => {
+    vi.mocked(api.listThreads).mockResolvedValue(ok([{ ...thread(1), title: "修登录" }, { ...thread(2), title: "写文档" }]) as never);
+    vi.mocked(api.listRunningThreads).mockResolvedValue(ok({ threads: [{ ...thread(2), waiting: true, projectSlug: "app-1" }] }) as never);
+    vi.mocked(api.listRecentThreads).mockResolvedValue(
+      ok({ threads: [{ id: "x9", title: "别的项目的会话", preview: null, lastActivityAt: null, status: "idle", projectId: "p9", projectSlug: "other", projectName: "Other" }] }) as never,
+    );
+    const { router } = renderAt("/p/app-1/t/t1");
+    const user = userEvent.setup();
+    await screen.findByTestId("chat-area");
+    await user.keyboard("{Control>}k{/Control}");
+    const palette = await screen.findByRole("dialog", { name: "命令面板" });
+    const here = await within(palette).findByRole("group", { name: "这个项目的会话" });
+    expect(here).toHaveTextContent("修登录");
+    await waitFor(() => expect(within(here).getByRole("option", { name: /写文档/ })).toHaveTextContent("等你处理"));
+    const other = await within(palette).findByRole("option", { name: /别的项目的会话/ });
+    expect(other).toHaveTextContent("Other");
+    await user.click(other);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/p/other/t/x9"));
+  });
+
+  test("⌘W closes a tab only in the installed app's window; in a browser tab it is the browser's", async () => {
+    localStorage.setItem(WORKBENCH, JSON.stringify({ tabs: [{ kind: "chat" }, { kind: "file", path: "README.md" }], active: "file:README.md" }));
+    const user = await openProject();
+    expect(await screen.findByTestId("workbench-tabs")).toHaveTextContent("README.md");
+    await user.keyboard("{Control>}w{/Control}");
+    expect(screen.getByTestId("workbench-tabs")).toHaveTextContent("README.md");
+
+    document.documentElement.setAttribute("data-app-window", "");
+    try {
+      _resetWorkbenchForTests();
+      cleanup();
+      const again = await openProject();
+      expect(await screen.findByTestId("workbench-tabs")).toHaveTextContent("README.md");
+      await again.keyboard("{Control>}w{/Control}");
+      await waitFor(() => expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument());
+      await again.keyboard("{Control>}{Shift>}t{/Shift}{/Control}");
+      expect(await screen.findByTestId("workbench-tabs")).toHaveTextContent("README.md");
+    } finally {
+      document.documentElement.removeAttribute("data-app-window");
+    }
   });
 });

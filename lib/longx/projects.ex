@@ -28,6 +28,7 @@ defmodule Longx.Projects do
       read_one Longx.Projects.Thread, :get_thread, :by_id
       list Longx.Projects.Thread, :list_subagents, :subagents_of, paginate_with: nil
       action Longx.Projects.Thread, :list_running_threads, :list_running
+      action Longx.Projects.Thread, :list_recent_threads, :list_recent
       action Longx.Projects.Thread, :directory, :directory
       action Longx.Projects.Files, :list_files, :list_files
       action Longx.Projects.Files, :read_file, :read_file
@@ -787,6 +788,34 @@ defmodule Longx.Projects do
     with :ok <- ensure_usable(thread),
          {:ok, _} <- ensure_agent(thread),
          do: Longx.Agent.compact(thread.kernel_thread_id)
+  end
+
+  @doc """
+  The conversations of every open project, newest activity first, at most
+  `limit`: ⌘K's way to another project's conversation. Root threads only,
+  none archived, none of an archived project.
+  """
+  @spec recent_threads(pos_integer) :: [map]
+  def recent_threads(limit \\ 30) do
+    Thread
+    |> Ash.Query.for_read(:roots)
+    |> Ash.Query.filter(is_nil(project.archived_at))
+    |> Ash.Query.limit(limit)
+    |> Ash.Query.load(:project)
+    |> Ash.read!()
+    |> Enum.map(fn %Thread{} = thread ->
+      %{
+        id: thread.id,
+        kernel_thread_id: thread.kernel_thread_id,
+        title: thread.title,
+        preview: thread.preview,
+        last_activity_at: thread.last_activity_at,
+        status: thread.status,
+        project_id: thread.project_id,
+        project_slug: thread.project.slug,
+        project_name: thread.project.name
+      }
+    end)
   end
 
   @doc """

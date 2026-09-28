@@ -1,7 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import { createRegistry } from "./registry";
-import { formatSequence, lookup, sequenceOf, SPACE_TREE, visibleChildren, type KeyNode } from "./keymap";
-import { CLOSED, press, type KeyInput } from "./engine";
+import { formatSequence, lookup, visibleChildren, type KeyNode } from "./keymap";
+import { CLOSED, ESC_WINDOW_MS, press, type KeyInput, type KeyTable } from "./engine";
+import type { Binding } from "./bindings";
 
 const tree: KeyNode[] = [
   { key: " ", label: "和 AI 对话", command: "ai.focus" },
@@ -16,26 +17,39 @@ const tree: KeyNode[] = [
   },
   { key: "g", label: "Git", children: [{ key: "p", label: "推送", command: "git.push" }] },
 ];
+const bindings: Binding[] = [
+  { keys: "mod+k", command: "palette.open", inLayer: true },
+  { keys: "alt+ArrowDown", command: "thread.next", when: { editor: false } },
+  { keys: "mod+w", command: "tab.close", when: { app: true } },
+  { keys: "Escape Escape", command: "turn.stop" },
+];
+const table: KeyTable = { tree, bindings };
 
+const CODES: Record<string, string> = { k: "KeyK", w: "KeyW", b: "KeyB", d: "KeyD", ArrowDown: "ArrowDown" };
 const key = (k: string, extra: Partial<KeyInput> = {}): KeyInput => ({
   key: k,
-  ctrl: false,
-  meta: false,
-  alt: false,
+  code: CODES[k] ?? "",
+  ctrlKey: false,
+  metaKey: false,
+  altKey: false,
+  shiftKey: false,
   composing: false,
   typing: false,
+  editor: false,
   layerOpen: false,
   nativeSpace: false,
+  app: false,
+  mac: true,
+  leader: true,
+  now: 1_000,
   ...extra,
 });
 
 describe("the key tree", () => {
-  test("a sequence finds its node; a command's sequence is found back and shown", () => {
+  test("a sequence finds its node and is shown", () => {
     expect(lookup(tree, ["b", "d"])).toMatchObject({ command: "tab.close" });
     expect(lookup(tree, ["b"])).toMatchObject({ label: "标签" });
     expect(lookup(tree, ["x"])).toBeNull();
-    expect(sequenceOf(tree, "tab.close")).toEqual(["b", "d"]);
-    expect(sequenceOf(tree, "nope")).toBeNull();
     expect(formatSequence([" ", "b", "d"])).toBe("SPC b d");
     expect(formatSequence(["Tab"])).toBe("TAB");
     expect(formatSequence([" ", " "])).toBe("SPC SPC");
@@ -46,81 +60,119 @@ describe("the key tree", () => {
     expect(visibleChildren(tree, [], available).map((n) => n.key)).toEqual([" ", ":", "b"]);
     expect(visibleChildren(tree, ["b"], available).map((n) => n.key)).toEqual(["d"]);
   });
-
-  test("the shipped tree: every command has one sequence, and the ones the page names are there", () => {
-    const ids: string[] = [];
-    const walk = (nodes: KeyNode[]) => nodes.forEach((n) => (n.command ? ids.push(n.command) : walk(n.children ?? [])));
-    walk(SPACE_TREE);
-    expect(new Set(ids).size).toBe(ids.length);
-    for (const id of ["ai.focus", "palette.open", "help.keys", "turn.stop", "tab.close", "tab.reopen", "file.find", "git.push", "project.switch"]) {
-      expect(ids).toContain(id);
-    }
-    expect(formatSequence([" ", ...sequenceOf(SPACE_TREE, "turn.stop")!])).toBe("SPC a s");
-  });
 });
 
 describe("the space menu", () => {
   const all = () => true;
 
   test("space outside a text field opens it; the keys walk the tree and a command runs and closes it", () => {
-    let s = CLOSED;
-    let r = press(s, key(" "), tree, all);
+    let r = press(CLOSED, key(" "), table, all);
     expect(r.action).toEqual({ type: "open" });
-    s = r.state;
-    expect(s).toMatchObject({ open: true, sequence: [] });
+    expect(r.state).toMatchObject({ open: true, sequence: [] });
 
-    r = press(s, key("b"), tree, all);
+    r = press(r.state, key("b"), table, all);
     expect(r.action).toEqual({ type: "descend" });
     expect(r.state.sequence).toEqual(["b"]);
 
-    r = press(r.state, key("d"), tree, all);
+    r = press(r.state, key("d"), table, all);
     expect(r.action).toEqual({ type: "run", command: "tab.close" });
     expect(r.state).toEqual(CLOSED);
   });
 
   test("SPC SPC is the AI's input", () => {
-    const opened = press(CLOSED, key(" "), tree, all).state;
-    expect(press(opened, key(" "), tree, all).action).toEqual({ type: "run", command: "ai.focus" });
+    const opened = press(CLOSED, key(" "), table, all).state;
+    expect(press(opened, key(" "), table, all).action).toEqual({ type: "run", command: "ai.focus" });
   });
 
   test("backspace goes up a level, escape closes, a key with nothing bound stays and says so", () => {
-    let s = press(press(CLOSED, key(" "), tree, all).state, key("b"), tree, all).state;
-    let r = press(s, key("Backspace"), tree, all);
+    let s = press(press(CLOSED, key(" "), table, all).state, key("b"), table, all).state;
+    let r = press(s, key("Backspace"), table, all);
     expect(r).toMatchObject({ action: { type: "back" }, state: { open: true, sequence: [] } });
-    r = press(r.state, key("Backspace"), tree, all);
+    r = press(r.state, key("Backspace"), table, all);
     expect(r).toMatchObject({ action: { type: "close" }, state: CLOSED });
 
-    s = press(CLOSED, key(" "), tree, all).state;
-    r = press(s, key("z"), tree, all);
+    s = press(CLOSED, key(" "), table, all).state;
+    r = press(s, key("z"), table, all);
     expect(r.action).toEqual({ type: "unknown" });
     expect(r.state).toMatchObject({ open: true, sequence: [] });
     // a command that cannot run now is no command
-    r = press(press(s, key("g"), tree, all).state, key("p"), tree, (id) => id !== "git.push");
+    r = press(press(s, key("g"), table, all).state, key("p"), table, (id) => id !== "git.push");
     expect(r.action.type).toBe("unknown");
 
-    r = press(s, key("Escape"), tree, all);
+    r = press(s, key("Escape"), table, all);
     expect(r).toMatchObject({ action: { type: "close" }, state: CLOSED });
   });
 
-  test("shift, ctrl and the like alone are swallowed; a chord with ctrl or meta leaves the menu to the browser", () => {
-    const s = press(CLOSED, key(" "), tree, all).state;
-    expect(press(s, key("Shift"), tree, all)).toMatchObject({ action: { type: "consume" }, state: s });
-    const r = press(s, key("k", { meta: true }), tree, all);
-    expect(r).toMatchObject({ action: { type: "close-pass" }, state: CLOSED });
+  test("a modifier alone is swallowed; a chord closes the menu and runs what it is bound to, else goes on to the browser", () => {
+    const s = press(CLOSED, key(" "), table, all).state;
+    expect(press(s, key("Shift", { shiftKey: true }), table, all)).toMatchObject({ action: { type: "consume" }, state: s });
+    expect(press(s, key("k", { metaKey: true }), table, all)).toMatchObject({ action: { type: "run", command: "palette.open" }, state: CLOSED });
+    expect(press(s, key("r", { metaKey: true, code: "KeyR" }), table, all)).toMatchObject({ action: { type: "close-pass" }, state: CLOSED });
   });
 
   test("typing: space is a space; escape leaves the field — unless an IME is composing or a popover is open", () => {
-    expect(press(CLOSED, key(" ", { typing: true }), tree, all).action).toEqual({ type: "none" });
-    expect(press(CLOSED, key("Escape", { typing: true }), tree, all).action).toEqual({ type: "leave-input" });
-    expect(press(CLOSED, key("Escape", { typing: true, composing: true }), tree, all).action).toEqual({ type: "none" });
-    expect(press(CLOSED, key("Process", { typing: true }), tree, all).action).toEqual({ type: "none" });
-    expect(press(CLOSED, key("Escape", { typing: true, layerOpen: true }), tree, all).action).toEqual({ type: "none" });
+    const none = () => false;
+    expect(press(CLOSED, key(" ", { typing: true }), table, all).action).toEqual({ type: "none" });
+    expect(press(CLOSED, key("Escape", { typing: true }), table, none).action).toEqual({ type: "leave-input" });
+    expect(press(CLOSED, key("Escape", { typing: true, composing: true }), table, all).action).toEqual({ type: "none" });
+    expect(press(CLOSED, key("Process", { typing: true }), table, all).action).toEqual({ type: "none" });
+    expect(press(CLOSED, key("Escape", { typing: true, layerOpen: true }), table, all).action).toEqual({ type: "none" });
   });
 
-  test("space stays the browser's on a dialog, with a modifier, or on a control reached by keyboard", () => {
-    expect(press(CLOSED, key(" ", { layerOpen: true }), tree, all).action).toEqual({ type: "none" });
-    expect(press(CLOSED, key(" ", { ctrl: true }), tree, all).action).toEqual({ type: "none" });
-    expect(press(CLOSED, key(" ", { nativeSpace: true }), tree, all).action).toEqual({ type: "none" });
+  test("space stays the browser's on a dialog, with a modifier, on a control reached by keyboard, or with the menu turned off", () => {
+    expect(press(CLOSED, key(" ", { layerOpen: true }), table, all).action).toEqual({ type: "none" });
+    expect(press(CLOSED, key(" ", { ctrlKey: true }), table, all).action).toEqual({ type: "none" });
+    expect(press(CLOSED, key(" ", { nativeSpace: true }), table, all).action).toEqual({ type: "none" });
+    expect(press(CLOSED, key(" ", { leader: false }), table, all).action).toEqual({ type: "none" });
+  });
+});
+
+describe("chords", () => {
+  const all = () => true;
+
+  test("a chord runs its command wherever it holds; with nothing to run the key is the browser's", () => {
+    expect(press(CLOSED, key("ArrowDown", { altKey: true, typing: true }), table, all).action).toEqual({ type: "run", command: "thread.next" });
+    expect(press(CLOSED, key("ArrowDown", { altKey: true, typing: true, editor: true }), table, all).action).toEqual({ type: "none" });
+    expect(press(CLOSED, key("k", { metaKey: true, layerOpen: true }), table, all).action).toEqual({ type: "run", command: "palette.open" });
+    // ⌘W: a tab's own, the app's to close a tab
+    expect(press(CLOSED, key("w", { metaKey: true }), table, all).action).toEqual({ type: "none" });
+    expect(press(CLOSED, key("w", { metaKey: true, app: true }), table, all).action).toEqual({ type: "run", command: "tab.close" });
+    // Ctrl off a Mac is mod
+    expect(press(CLOSED, key("k", { ctrlKey: true, mac: false }), table, all).action).toEqual({ type: "run", command: "palette.open" });
+  });
+});
+
+describe("Esc Esc", () => {
+  const running = () => true;
+
+  test("from the composer: the first Esc leaves it and arms the stop, the second within the window stops the turn", () => {
+    let r = press(CLOSED, key("Escape", { typing: true, now: 1_000 }), table, running);
+    expect(r.action).toEqual({ type: "leave-input" });
+    expect(r.state.armed).toEqual({ command: "turn.stop", at: 1_000 });
+    r = press(r.state, key("Escape", { now: 1_000 + ESC_WINDOW_MS - 1 }), table, running);
+    expect(r.action).toEqual({ type: "run", command: "turn.stop" });
+    expect(r.state.armed).toBeNull();
+  });
+
+  test("outside a text field the first Esc arms (and goes on as usual); too late, it only arms again", () => {
+    let r = press(CLOSED, key("Escape", { now: 1_000 }), table, running);
+    expect(r.action).toEqual({ type: "arm", command: "turn.stop" });
+    r = press(r.state, key("Escape", { now: 1_000 + ESC_WINDOW_MS + 1 }), table, running);
+    expect(r.action).toEqual({ type: "arm", command: "turn.stop" });
+  });
+
+  test("nothing running: Esc is just Esc; another key between the two disarms; a dialog's Esc is the dialog's", () => {
+    expect(press(CLOSED, key("Escape"), table, () => false).action).toEqual({ type: "none" });
+
+    let r = press(CLOSED, key("Escape"), table, running);
+    r = press(r.state, key("x"), table, running);
+    expect(r.state.armed).toBeNull();
+    expect(press(r.state, key("Escape", { now: 1_100 }), table, running).action).toEqual({ type: "arm", command: "turn.stop" });
+
+    r = press(CLOSED, key("Escape"), table, running);
+    const layer = press(r.state, key("Escape", { layerOpen: true, now: 1_100 }), table, running);
+    expect(layer.action).toEqual({ type: "none" });
+    expect(layer.state.armed).toBeNull();
   });
 });
 

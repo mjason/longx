@@ -83,9 +83,9 @@ describe("ProjectWindow", () => {
     // the ThreadList element marks the open thread active
     expect(within(panel).getByText("thread 1").closest("[data-active]")).toBeInTheDocument();
 
-    await user.keyboard("{Meta>}2{/Meta}");
+    await user.keyboard("{Control>}2{/Control}");
     expect(within(screen.getByTestId("tool-panel")).getByTestId("git-tool")).toBeInTheDocument();
-    await user.keyboard("{Meta>}2{/Meta}");
+    await user.keyboard("{Control>}2{/Control}");
     expect(screen.queryByTestId("tool-panel")).not.toBeInTheDocument();
 
     expect(screen.getByTestId("status-strip")).toHaveTextContent("372bb036");
@@ -135,7 +135,7 @@ describe("ProjectWindow", () => {
     setViewport(1280);
     const user = userEvent.setup();
     renderAt("/p/app-1/t/t2");
-    await user.keyboard("{Meta>}3{/Meta}");
+    await user.keyboard("{Control>}3{/Control}");
     const directory = await screen.findByTestId("session-directory");
     const rows = await within(directory).findAllByTestId("session-row");
     expect(rows).toHaveLength(2);
@@ -154,7 +154,7 @@ describe("ProjectWindow", () => {
     setViewport(1280);
     const user = userEvent.setup();
     renderAt("/p/app-1/t/t2");
-    await user.keyboard("{Meta>}3{/Meta}");
+    await user.keyboard("{Control>}3{/Control}");
     const directory = await screen.findByTestId("session-directory");
     const rows = await within(directory).findAllByTestId("session-row");
     const named = within(rows[0]!).getByRole("switch", { name: "值班" });

@@ -10,6 +10,7 @@ import {
   createDirectory,
   listDirectory,
   listModels,
+  listRecentThreads,
   listRunningThreads,
   setGoal,
   clearGoal,
@@ -112,6 +113,7 @@ export const queryKeys = {
   models: ["models"] as const,
   subagents: (threadId: string) => ["subagents", threadId] as const,
   running: ["running-threads"] as const,
+  recent: ["recent-threads"] as const,
 };
 
 /** goal mode: set / change (objective, status, budget) or clear the thread's goal. */
@@ -213,13 +215,36 @@ export type RunningThread = {
   working?: string[];
 };
 
-/** Every running thread, refreshed every few seconds while the caller shows. */
-export function useRunningThreads(intervalMs = 3000) {
+/** Every running thread, refreshed every few seconds while the caller shows (and wants them). */
+export function useRunningThreads(intervalMs = 3000, enabled = true) {
   return useQuery({
     queryKey: queryKeys.running,
     queryFn: async () =>
       unwrap(await listRunningThreads()).threads as RunningThread[],
     refetchInterval: intervalMs,
+    enabled,
+  });
+}
+
+/** A conversation of any project, for ⌘K. */
+export type RecentThread = {
+  id: string;
+  title: string | null;
+  preview: string | null;
+  lastActivityAt: string | null;
+  status: string;
+  projectId: string;
+  projectSlug: string;
+  projectName: string;
+};
+
+/** The conversations of every open project, newest activity first (⌘K's other projects). */
+export function useRecentThreads(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.recent,
+    queryFn: async () => unwrap(await listRecentThreads({ input: { limit: 40 } })).threads as RecentThread[],
+    enabled,
+    staleTime: 10_000,
   });
 }
 
