@@ -25,6 +25,11 @@ describe("attachments", () => {
     );
     expect(describeAttachmentError("data.zip", new Error("上传失败（500）"))).toBe("data.zip：上传失败（500）");
     expect(describeAttachmentError("x.bin", "boom")).toBe("x.bin：boom");
+    // an upload that never left the browser: fetch's own words say nothing (Chrome could
+    // not open the file for the request body — net::ERR_ACCESS_DENIED — or the network is down)
+    expect(describeAttachmentError("dump.txt", new TypeError("Failed to fetch"))).toBe(
+      "dump.txt 没有上传出去：浏览器读不了这个文件（选中后被改动、移动，或它所在的位置不允许读取——网络共享、云盘占位文件、正在被写入的文件），或者网络断了。换个位置或重新选一次。",
+    );
   });
 
   test("the reporting adapter tells the person when an add or a send fails, then lets the composer bounce the message as before", async () => {

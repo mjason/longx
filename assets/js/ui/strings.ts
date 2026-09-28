@@ -321,6 +321,9 @@ export const t = {
   attachmentUnreadable: (name: string) =>
     `浏览器读不了 ${name}：选中后文件可能被改动、移动，或它所在的位置不允许读取（网络共享、云盘占位文件、正在被写入的文件）。换个位置或重新选一次。`,
   attachmentFailed: (name: string, why: string) => `${name}：${why}`,
+  // the upload's fetch failed before any answer: the file could not be read for the body, or the network is down
+  attachmentUnsent: (name: string) =>
+    `${name} 没有上传出去：浏览器读不了这个文件（选中后被改动、移动，或它所在的位置不允许读取——网络共享、云盘占位文件、正在被写入的文件），或者网络断了。换个位置或重新选一次。`,
   dictate: "语音输入",
   stopDictation: "停止语音输入",
   commands: {

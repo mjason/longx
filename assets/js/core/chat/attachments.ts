@@ -22,6 +22,9 @@ export function describeAttachmentError(name: string, error: unknown): string {
   const reader = readerError(error);
   if (reader?.name === "NotReadableError") return t.attachmentUnreadable(name);
   if (reader) return t.attachmentFailed(name, reader.name);
+  // fetch's TypeError: the request never left — Chrome could not open the file for
+  // the body (net::ERR_ACCESS_DENIED, the same file FileReader refuses) or no network
+  if (error instanceof TypeError) return t.attachmentUnsent(name);
   const why = error instanceof Error ? error.message : String(error);
   return t.attachmentFailed(name, why);
 }
