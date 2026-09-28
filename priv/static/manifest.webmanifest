@@ -1,11 +1,20 @@
 {
+  "id": "/",
   "name": "Longx",
   "short_name": "Longx",
+  "description": "你自己的 AI 编程助手：项目、会话、Git 和 agent，在任何设备上打开。",
+  "lang": "zh-CN",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#1c1e24",
   "theme_color": "#15171c",
+  "launch_handler": { "client_mode": ["focus-existing", "auto"] },
+  "shortcuts": [
+    { "name": "新建项目", "short_name": "新建", "url": "/new", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "设置", "url": "/settings/models", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] }
+  ],
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },

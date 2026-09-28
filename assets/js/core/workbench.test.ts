@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { activate, closeTab, EMPTY_WORKBENCH, markDirty, openTab, renamePath, tabKey, type WorkbenchState } from "./workbench";
+import { activate, closeTab, EMPTY_WORKBENCH, markDirty, openTab, renamePath, tabKey, type WorkbenchState, stepTab, tabAt, createWorkbenchStore } from "./workbench";
 
 describe("workbench tabs", () => {
   test("the chat is always the first tab; opening a file adds it once and activates it", () => {
@@ -74,5 +74,39 @@ describe("agent tabs", () => {
     const store = createWorkbenchStore(storage, "wb2");
     store.open({ kind: "agent", threadId: "native_c1", rowId: "t9", name: "coder-2" });
     expect(createWorkbenchStore(storage, "wb2").get().tabs.map(tabKey)).toEqual(["chat", "agent:native_c1"]);
+  });
+});
+
+describe("moving between tabs (the space menu's SPC b / SPC TAB / SPC 1…9)", () => {
+  test("next and previous wrap around; a number is the tab at that place", () => {
+    let s = openTab(openTab(EMPTY_WORKBENCH, { kind: "file", path: "a.ex" }), { kind: "file", path: "b.ex" });
+    expect(s.active).toBe("file:b.ex");
+    expect(stepTab(s, 1).active).toBe("chat");
+    expect(stepTab(s, -1).active).toBe("file:a.ex");
+    expect(tabAt(s, 1)).toBe("chat");
+    expect(tabAt(s, 2)).toBe("file:a.ex");
+    expect(tabAt(s, 9)).toBeNull();
+    s = activate(s, "chat");
+    expect(stepTab(s, -1).active).toBe("file:b.ex");
+  });
+
+  test("the store remembers the tab before and the tabs closed: back goes to the one before, reopen brings the last closed", () => {
+    const store = createWorkbenchStore(null, "t");
+    store.open({ kind: "file", path: "a.ex" });
+    store.open({ kind: "diff", path: "a.ex", sha: null });
+    store.back();
+    expect(store.get().active).toBe("file:a.ex");
+    store.back();
+    expect(store.get().active).toBe("diff:a.ex@");
+
+    store.close("diff:a.ex@");
+    store.close("file:a.ex");
+    expect(store.get().tabs).toEqual([{ kind: "chat" }]);
+    expect(store.canReopen()).toBe(true);
+    store.reopen();
+    expect(store.get().active).toBe("file:a.ex");
+    store.reopen();
+    expect(store.get().active).toBe("diff:a.ex@");
+    expect(store.canReopen()).toBe(false);
   });
 });

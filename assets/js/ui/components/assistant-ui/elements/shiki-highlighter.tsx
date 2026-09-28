@@ -1,7 +1,7 @@
 "use client";
 
-import type { FC } from "react";
-import { useShikiHighlighter, type ShikiHighlighterProps } from "react-shiki";
+import { lazy, Suspense, type FC } from "react";
+import type { ShikiHighlighterProps } from "react-shiki";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,24 +23,16 @@ export type SyntaxHighlighterProps = Omit<
 const containerClassName =
   "aui-shiki-base [&_pre]:border-border/50 [&_pre]:bg-muted/30! [&_.line]:px-0! [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:wrap-anywhere [&_pre]:rounded-t-none [&_pre]:rounded-b-xl [&_pre]:border [&_pre]:border-t-0 [&_pre]:p-3.5 [&_pre]:text-[13px] [&_pre]:leading-relaxed";
 
-const PlainCode: FC<{ code: string }> = ({ code }) => (
+export const PlainCode: FC<{ code: string }> = ({ code }) => (
   <pre>
     <code>{code}</code>
   </pre>
 );
 
-const HighlightedCode: FC<{
-  code: string;
-  language: SyntaxHighlighterProps["language"];
-  theme: NonNullable<SyntaxHighlighterProps["theme"]>;
-  options: Omit<ShikiHighlighterProps, "children" | "language" | "theme">;
-}> = ({ code, language, theme, options }) => {
-  const highlighted = useShikiHighlighter(code, language, theme, {
-    ...options,
-    defaultColor: "light-dark()",
-  });
-  return <>{highlighted ?? <PlainCode code={code} />}</>;
-};
+// Shiki (react-shiki, its engine and grammars) loads with the first code
+// block, not with the page: every page loads the entry before anything
+// shows. The plain code stands in until then, as it does while a grammar loads.
+const HighlightedCode = lazy(() => import("./shiki-highlighted"));
 
 /**
  * SyntaxHighlighter component, using react-shiki
@@ -76,12 +68,14 @@ export const SyntaxHighlighter: FC<SyntaxHighlighterProps> = ({
       {streaming ? (
         <PlainCode code={trimmed} />
       ) : (
-        <HighlightedCode
-          code={trimmed}
-          language={language}
-          theme={theme}
-          options={{ ...options, delay }}
-        />
+        <Suspense fallback={<PlainCode code={trimmed} />}>
+          <HighlightedCode
+            code={trimmed}
+            language={language}
+            theme={theme}
+            options={{ ...options, delay }}
+          />
+        </Suspense>
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, FolderTree, GitBranch, MessagesSquare, Settings, X } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { Link, Outlet, useMatch, useParams } from "react-router";
 import { Workbench } from "@/ui/workbench/Workbench";
 import { TOOLS, toolForShortcut, useFrame, type Tool } from "@/core/frame";
@@ -15,6 +15,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/components/ui/tool
 import { TopBar } from "@/ui/shell/Shell";
 import { ThemeToggle } from "@/ui/components/ThemeToggle";
 import { ChatProvider } from "@/ui/chat/ChatProvider";
+import { keysTitle } from "@/ui/keys/hint";
+import { usePreference } from "@/core/keys/preference";
 import { t } from "@/ui/strings";
 import { CopyApiButton } from "./CopyApiButton";
 import { StatusStrip } from "./StatusStrip";
@@ -22,6 +24,8 @@ import { AgentsTool } from "./tools/AgentsTool";
 import { FilesTool } from "./tools/FilesTool";
 import { GitTool } from "./tools/GitTool";
 import { ThreadsTool } from "./tools/ThreadsTool";
+
+const ProjectCommands = lazy(async () => ({ default: (await import("@/ui/keys/ProjectCommands")).ProjectCommands }));
 
 const ICONS: Record<Tool, typeof MessagesSquare> = {
   threads: MessagesSquare,
@@ -109,6 +113,10 @@ export function ProjectWindow() {
       webSearch={project.data.webSearch}
       defaultModelId={project.data.modelId}
     >
+    {/* the space menu's project commands: registered right after the first paint (not in the entry) */}
+    <Suspense fallback={null}>
+      <ProjectCommands ctx={ctx} />
+    </Suspense>
     <div className="flex h-dvh flex-col">
       <TopBar
         wide
@@ -118,7 +126,7 @@ export function ProjectWindow() {
           <>
           <CopyApiButton slug={slug} />
           <ThemeToggle />
-          <Link to={`/p/${slug}/settings`} aria-label={t.settings} className="touch-target flex items-center justify-center rounded-md">
+          <Link to={`/p/${slug}/settings`} aria-label={t.settings} title={keysTitle(t.settings, "project.settings")} className="touch-target flex items-center justify-center rounded-md">
             <Settings className="size-5" />
           </Link>
           </>
@@ -178,6 +186,7 @@ function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
 }
 
 function ToolRail({ active, onToggle }: { active: Tool | null; onToggle: (tool: Tool) => void }) {
+  const spaceMenu = usePreference("spaceMenu");
   return (
     <nav aria-label="工具窗口" className="bg-sidebar border-sidebar-border flex w-11 shrink-0 flex-col items-center gap-1 border-r py-2" data-testid="tool-rail">
       {TOOLS.map((tool, i) => {
@@ -197,6 +206,7 @@ function ToolRail({ active, onToggle }: { active: Tool | null; onToggle: (tool: 
             </TooltipTrigger>
             <TooltipContent side="right">
               {t.tools[tool]} <kbd className="text-muted-foreground ml-1 text-[10px]">⌘{i + 1}</kbd>
+              {spaceMenu ? <kbd className="text-muted-foreground ml-1 text-[10px]">SPC w {i + 1}</kbd> : null}
             </TooltipContent>
           </Tooltip>
         );

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 import { afterEach, describe, expect, test } from "vitest";
-import { compressDir, entryOverBudget } from "./plugins";
+import { compressDir, entryOverBudget, precacheList } from "./plugins";
 
 let dir: string;
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -48,5 +48,43 @@ describe("entry budget: what every page loads before anything shows", () => {
     expect(error).toMatch(/2500/);
     expect(error).toMatch(/elkjs/);
     expect(entryOverBudget(bundle, 3_000)).toBeNull();
+  });
+});
+
+describe("the service worker's precache: what a device fetches ahead of time", () => {
+  const chunk = (fileName: string, modules: Record<string, number>) => ({
+    type: "chunk" as const,
+    fileName,
+    isEntry: false,
+    code: "",
+    modules: Object.fromEntries(Object.entries(modules).map(([id, renderedLength]) => [id, { renderedLength }])),
+  });
+  const asset = (fileName: string) => ({ type: "asset" as const, fileName });
+
+  test("the app's chunks, the stylesheets, KaTeX's woff2 and the two code themes; not every grammar, theme or the diagram renderer", () => {
+    const bundle = {
+      a: chunk("index-A1.js", { "/app/js/index.tsx": 900, "/app/node_modules/react/index.js": 100 }),
+      b: chunk("EditorTab-B2.js", { "/app/js/ui/workbench/EditorTab.tsx": 50 }),
+      c: chunk("elixir-C3.js", { "/app/node_modules/@shikijs/langs/dist/elixir.mjs": 40 }),
+      d: chunk("cobol-D4.js", { "/app/node_modules/@shikijs/langs/dist/cobol.mjs": 40 }),
+      e: chunk("github-dark-default-E5.js", { "/app/node_modules/@shikijs/themes/dist/github-dark-default.mjs": 10 }),
+      f: chunk("dracula-F6.js", { "/app/node_modules/@shikijs/themes/dist/dracula.mjs": 10 }),
+      g: chunk("elk-G7.js", { "/app/node_modules/elkjs/lib/elk.bundled.js": 1000, "/app/js/x.ts": 1 }),
+      h: chunk("mermaid-H8.js", { "/app/node_modules/beautiful-mermaid/dist/index.js": 300 }),
+      i: asset("index-I9.css"),
+      j: asset("KaTeX_Main-Regular-J1.woff2"),
+      k: asset("KaTeX_Main-Regular-K2.woff"),
+      l: asset("KaTeX_Main-Regular-L3.ttf"),
+      m: asset(".vite/manifest.json"),
+      n: asset("index-A1.js.map"),
+    };
+    expect(precacheList(bundle, "/assets/")).toEqual([
+      "/assets/index-A1.js",
+      "/assets/EditorTab-B2.js",
+      "/assets/elixir-C3.js",
+      "/assets/github-dark-default-E5.js",
+      "/assets/index-I9.css",
+      "/assets/KaTeX_Main-Regular-J1.woff2",
+    ]);
   });
 });

@@ -1,13 +1,17 @@
 import { ChevronLeft } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { Link, Outlet } from "react-router";
 import { applyTheme } from "@/core/theme";
 import { useViewport } from "@/core/viewport";
 import { CommandPalette } from "@/ui/components/CommandPalette";
 import { Toaster } from "@/ui/components/ui/sonner";
 import { TooltipProvider } from "@/ui/components/ui/tooltip";
+import { KeysLayer } from "@/ui/keys/KeysLayer";
+import { PwaBridge } from "@/ui/pwa/PwaBridge";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { ShellBridge } from "./ShellBridge";
+
+const GlobalCommands = lazy(async () => ({ default: (await import("@/ui/keys/GlobalCommands")).GlobalCommands }));
 
 /**
  * Mobile-first frame: one column, a thin top bar that respects the notch,
@@ -19,12 +23,18 @@ export function Shell() {
   return (
     <TooltipProvider delayDuration={300}>
       <ShellBridge />
+      <PwaBridge />
       <div className="min-h-dvh flex flex-col">
         <ConnectionBanner />
         <Outlet />
       </div>
       <Toaster />
-      {viewport === "desktop" ? <CommandPalette /> : null}
+      {viewport !== "phone" ? <CommandPalette /> : null}
+      {/* the space menu (Spacemacs' leader) and the commands every page has */}
+      <Suspense fallback={null}>
+        <GlobalCommands />
+      </Suspense>
+      <KeysLayer />
     </TooltipProvider>
   );
 }

@@ -3,18 +3,18 @@ defmodule LongxWeb.NotifyChannel do
   `notify` — `Longx.Notify`'s feed on the wire. The join reply carries what
   runs now (`running`: `Longx.Projects.running_threads/0`, `waiting` marking
   the ones that need the person), so a client that was away sees the
-  current state; then every event is one `"event"` push.
+  current state; then every event is one `"event"` push. The channel's
+  topic is `Longx.Notify.topic/0` itself, which Phoenix subscribes it to at
+  join: no subscribe of its own (one delivered every event twice — two
+  notifications for each turn).
   """
 
   use Phoenix.Channel
 
-  alias Longx.Notify
   alias Longx.Projects
-  alias Phoenix.PubSub
 
   @impl true
   def join("notify", _payload, socket) do
-    :ok = PubSub.subscribe(Longx.PubSub, Notify.topic())
     {:ok, %{running: Projects.running_threads()}, socket}
   end
 

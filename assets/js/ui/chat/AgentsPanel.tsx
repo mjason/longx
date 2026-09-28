@@ -6,6 +6,7 @@
 // waiting, then the last few finished; a click opens a child's tab, ■ stops
 // it. On a phone the same knowledge is a pill that opens the Agent sheet,
 // whose inbox says what each child does.
+import { useIntent } from "@/core/keys/intents";
 import { Bot, ChevronDown, ShieldAlert, Square } from "lucide-react";
 import { useContext, useState } from "react";
 import { toast } from "sonner";
@@ -97,6 +98,8 @@ export function AgentsPanel() {
   const { active, done } = useActive();
   const subagents = useContext(SubagentContext);
   const [folded, setFolded] = useFolded();
+  // SPC w a
+  useIntent("agents.panel", () => setFolded(!folded));
   const [stopping, setStopping] = useState<string | null>(null);
   if (active.length === 0 && done.length === 0) return null;
   const waiting = active.filter((a) => a.state === "waiting").length;

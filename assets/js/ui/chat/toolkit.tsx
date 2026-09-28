@@ -195,7 +195,7 @@ function ToolRow({
   const [open, setOpen] = useState<boolean | null>(null);
   const duration = useDuration(part, running);
   return (
-    <div className="py-1" data-testid={testId}>
+    <div className="py-1" data-testid={testId} data-failed={failed || undefined}>
       <ToolCall
         label={label}
         activeLabel={activeLabel}

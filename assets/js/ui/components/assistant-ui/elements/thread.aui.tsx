@@ -28,6 +28,7 @@ import { Button } from "@/ui/components/ui/button";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { t } from "@/ui/strings";
+import { keysTitle } from "@/ui/keys/hint";
 import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
@@ -412,6 +413,7 @@ const ComposerAction: FC = () => {
               size="icon"
               className="aui-composer-cancel size-7 rounded-full"
               aria-label={t.stopTurn}
+              title={keysTitle(t.stopTurn, "turn.stop")}
             >
               <SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" />
             </Button>

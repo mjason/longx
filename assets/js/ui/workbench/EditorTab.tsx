@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useViewport } from "@/core/viewport";
 import { useWorkbench } from "@/core/workbench";
 import { useFileContent, useSaveFile } from "@/core/workspace";
+import { useCommand } from "@/core/keys/useCommand";
 import { Button } from "@/ui/components/ui/button";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { CodeEditor } from "@/ui/editor/CodeEditor";
@@ -52,6 +53,11 @@ export function EditorTab({ projectId, path, line }: { projectId: string; path: 
       },
     );
   };
+
+  // the space menu: SPC f s / SPC m s save, SPC m v flips a markdown file between preview and editor
+  useCommand("file.save", doSave, () => dirty);
+  useCommand("editor.save", doSave, () => dirty);
+  useCommand("editor.preview", () => setMode(previewing ? "edit" : "preview"), () => markdown && !dirty);
 
   if (file.isPending) return <Skeleton className="m-4 h-32" />;
   if (file.isError) return <p className="text-destructive p-4 text-sm">{t.fileLoadFailed(file.error.message)}</p>;

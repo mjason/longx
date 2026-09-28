@@ -47,4 +47,38 @@ defmodule LongxWeb.StaticAssetsTest do
 
     assert opts[:websocket][:compress] == true
   end
+
+  describe "the PWA" do
+    setup do
+      sw = Application.app_dir(:longx, "priv/static/sw.js")
+      made? = not File.exists?(sw)
+      if made?, do: File.write!(sw, "self.addEventListener('fetch', () => {});\n")
+      on_exit(fn -> if made?, do: File.rm(sw) end)
+      :ok
+    end
+
+    test "the service worker is served at the root (its scope is the whole page) and never kept as immutable",
+         %{conn: conn} do
+      sw = get(conn, "/sw.js")
+      assert sw.status == 200
+      assert [type] = get_resp_header(sw, "content-type")
+      assert type =~ "javascript"
+      refute Enum.any?(get_resp_header(sw, "cache-control"), &(&1 =~ "immutable"))
+    end
+
+    test "the manifest: an id, the language, the shortcuts, an open window reused" do
+      manifest =
+        :longx
+        |> Application.app_dir("priv/static/manifest.webmanifest")
+        |> File.read!()
+        |> Jason.decode!()
+
+      assert %{"id" => "/", "lang" => "zh-CN", "start_url" => "/", "display" => "standalone"} =
+               manifest
+
+      assert Enum.map(manifest["shortcuts"], & &1["url"]) == ["/new", "/settings/models"]
+      assert manifest["launch_handler"] == %{"client_mode" => ["focus-existing", "auto"]}
+      assert is_binary(manifest["description"])
+    end
+  end
 end

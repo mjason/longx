@@ -16,4 +16,11 @@ describe("ConnectionBanner", () => {
     expect(banner).toHaveTextContent("反复断开");
     expect(banner).toHaveTextContent("日志");
   });
+
+  test("the page drawn from this device's cache (the server was out of reach) says so, whatever the socket", () => {
+    render(<ConnectionBanner status="open" offline />);
+    const banner = screen.getByTestId("connection-banner");
+    expect(banner).toHaveAttribute("data-status", "offline");
+    expect(banner).toHaveTextContent("服务器暂时连不上");
+  });
 });

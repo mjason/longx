@@ -7,6 +7,7 @@
 import { useAuiState } from "@assistant-ui/react";
 import type { ThreadGroupPart } from "@/ui/components/assistant-ui/elements/thread.aui";
 import { useMemo, useState } from "react";
+import { usePreference } from "@/core/keys/preference";
 import { reasoningSteps } from "@/core/chat/reasoningSteps";
 import { ReasoningPanel } from "@/ui/components/assistant-ui/elements/reasoning-panel";
 import { t } from "@/ui/strings";
@@ -23,13 +24,15 @@ export function ReasoningSteps({ group }: { group: ThreadGroupPart }) {
   );
   const streaming = group.status.type === "running";
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
+  // folded unless the person chose otherwise for this device (SPC T r)
+  const openByDefault = usePreference("reasoningOpen");
   if (steps.length === 0) return null;
   return (
     <ReasoningPanel
       steps={steps}
       visibleSteps={steps.length}
       streaming={streaming}
-      open={userOpen ?? false}
+      open={userOpen ?? openByDefault}
       onOpenChange={setUserOpen}
       restingLabel={t.reasoningDone}
       className="mb-1 max-w-none"

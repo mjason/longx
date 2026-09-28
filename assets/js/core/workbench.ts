@@ -54,6 +54,20 @@ export function closeTab(state: WorkbenchState, key: string): WorkbenchState {
   return { tabs, active, dirty: state.dirty.filter((d) => d !== key) };
 }
 
+/** The tab `delta` places away from the active one, wrapping around (SPC b n / SPC b p). */
+export function stepTab(state: WorkbenchState, delta: number): WorkbenchState {
+  const i = state.tabs.findIndex((t) => tabKey(t) === state.active);
+  const n = state.tabs.length;
+  const next = state.tabs[(((i + delta) % n) + n) % n]!;
+  return activate(state, tabKey(next));
+}
+
+/** The key of the tab at a place, 1 = the chat (SPC 1…9); null past the last. */
+export function tabAt(state: WorkbenchState, place: number): string | null {
+  const tab = state.tabs[place - 1];
+  return tab ? tabKey(tab) : null;
+}
+
 export function markDirty(state: WorkbenchState, key: string, dirty: boolean): WorkbenchState {
   const has = state.dirty.includes(key);
   if (dirty === has) return state;
@@ -96,13 +110,22 @@ export type WorkbenchStore = {
   close: (key: string) => void;
   markDirty: (key: string, dirty: boolean) => void;
   renamePath: (from: string, to: string) => void;
+  /** the tab active before this one (SPC TAB) */
+  back: () => void;
+  /** the last tab closed, open again (SPC b u) */
+  reopen: () => void;
+  canReopen: () => boolean;
 };
 
 export function createWorkbenchStore(storage: Storage | null, key: string): WorkbenchStore {
   let state = load(storage, key);
+  // this session's memory, not the device's: the tab before, the tabs closed
+  let previous: string | null = null;
+  const closed: Tab[] = [];
   const listeners = new Set<() => void>();
   const set = (next: WorkbenchState) => {
     if (next === state) return;
+    if (next.active !== state.active) previous = state.active;
     state = next;
     try {
       // dirty flags are not remembered: the content they describe is not
@@ -122,7 +145,20 @@ export function createWorkbenchStore(storage: Storage | null, key: string): Work
     },
     open: (tab) => set(openTab(state, tab)),
     activate: (k) => set(activate(state, k)),
-    close: (k) => set(closeTab(state, k)),
+    close: (k) => {
+      const tab = state.tabs.find((t) => tabKey(t) === k);
+      const next = closeTab(state, k);
+      if (tab && next !== state) closed.push(tab);
+      set(next);
+    },
+    back: () => {
+      if (previous && state.tabs.some((t) => tabKey(t) === previous)) set(activate(state, previous));
+    },
+    reopen: () => {
+      const tab = closed.pop();
+      if (tab) set(openTab(state, tab));
+    },
+    canReopen: () => closed.length > 0,
     markDirty: (k, dirty) => set(markDirty(state, k, dirty)),
     renamePath: (from, to) => set(renamePath(state, from, to)),
   };
@@ -143,7 +179,17 @@ function storeFor(projectId: string): WorkbenchStore {
 export function useWorkbench(projectId: string): WorkbenchState & Omit<WorkbenchStore, "get" | "subscribe"> {
   const s = storeFor(projectId);
   const state = useSyncExternalStore(s.subscribe, s.get, s.get);
-  return { ...state, open: s.open, activate: s.activate, close: s.close, markDirty: s.markDirty, renamePath: s.renamePath };
+  return {
+    ...state,
+    open: s.open,
+    activate: s.activate,
+    close: s.close,
+    markDirty: s.markDirty,
+    renamePath: s.renamePath,
+    back: s.back,
+    reopen: s.reopen,
+    canReopen: s.canReopen,
+  };
 }
 
 export function _resetWorkbenchForTests() {

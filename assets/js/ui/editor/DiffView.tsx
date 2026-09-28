@@ -7,7 +7,8 @@
 // folded into a bar that expands on click. Read-only: this is a view of
 // history, the editor tab is where a file is changed.
 import { foldGutter, type LanguageSupport } from "@codemirror/language";
-import { MergeView, unifiedMergeView } from "@codemirror/merge";
+import { goToNextChunk, goToPreviousChunk, MergeView, unifiedMergeView } from "@codemirror/merge";
+import { useCommand } from "@/core/keys/useCommand";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, lineNumbers } from "@codemirror/view";
 import { useEffect, useRef } from "react";
@@ -65,6 +66,14 @@ const diffTheme = EditorView.theme({
 
 export function DiffView({ path, before, after, mode, wrap = false, className }: DiffViewProps) {
   const host = useRef<HTMLDivElement>(null);
+  // the side the reader follows (the new text), for SPC m n / SPC m p
+  const primary = useRef<EditorView | null>(null);
+  const step = (command: typeof goToNextChunk) => () => {
+    const view = primary.current;
+    if (view && command({ state: view.state, dispatch: view.dispatch })) view.focus();
+  };
+  useCommand("diff.next", step(goToNextChunk), () => primary.current !== null);
+  useCommand("diff.prev", step(goToPreviousChunk), () => primary.current !== null);
 
   useEffect(() => {
     const parent = host.current;
@@ -95,7 +104,11 @@ export function DiffView({ path, before, after, mode, wrap = false, className }:
         diffConfig,
       });
       views = [merge.a, merge.b];
-      destroy = () => merge.destroy();
+      primary.current = merge.b;
+      destroy = () => {
+        primary.current = null;
+        merge.destroy();
+      };
     } else {
       const view = new EditorView({
         state: EditorState.create({
@@ -105,7 +118,11 @@ export function DiffView({ path, before, after, mode, wrap = false, className }:
         parent,
       });
       views = [view];
-      destroy = () => view.destroy();
+      primary.current = view;
+      destroy = () => {
+        primary.current = null;
+        view.destroy();
+      };
     }
 
     let cancelled = false;

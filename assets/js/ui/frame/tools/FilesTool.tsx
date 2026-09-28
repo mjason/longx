@@ -3,6 +3,8 @@
 // folders, a row menu for new / rename / delete, and a filter over the project's
 // fuzzy file index. A file opens as a tab in the workbench; on a phone the
 // tree is a sheet, so the tap also closes it.
+import { useIntent } from "@/core/keys/intents";
+import { whenThere } from "@/ui/keys/whenThere";
 import { ChevronRight, File, FilePlus2, Folder, FolderOpen, FolderPlus, ListCollapse, MoreHorizontal, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -62,6 +64,24 @@ export function FilesTool({ ctx }: { ctx: ProjectContext }) {
   const [editing, setEditing] = useState<Editing>(null);
   const [deleting, setDeleting] = useState<FileEntry | null>(null);
   const [version, setVersion] = useState(0);
+
+  // SPC f l: the file in the tree — its folders opened, it scrolled to and focused
+  useIntent("files.reveal", (payload) => {
+    if (typeof payload !== "string") return;
+    const parts = payload.split("/");
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      for (let i = 1; i < parts.length; i++) next.add(parts.slice(0, i).join("/"));
+      return next;
+    });
+    whenThere(
+      () => document.querySelector<HTMLElement>(`[role="treeitem"][data-path="${CSS.escape(payload)}"]`),
+      (el) => {
+        el.scrollIntoView({ block: "center" });
+        el.focus();
+      },
+    );
+  });
 
   const toggle = (path: string) =>
     setExpanded((prev) => {
@@ -208,7 +228,7 @@ function Row({ entry, depth, open, status, ignored, projectId, onToggle, setEdit
   const Icon = entry.kind === "dir" ? (open ? FolderOpen : Folder) : File;
   return (
     <div className="group hover:bg-sidebar-accent/60 flex items-center rounded-md" style={{ paddingLeft: depth * 16 }}>
-      <button type="button" role="treeitem" aria-expanded={entry.kind === "dir" ? open : undefined} aria-label={entry.name} data-git={status} data-ignored={ignored || undefined} className={`touch-target flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-1 text-left ${status ? (GIT_COLOR[status] ?? "") : ignored ? "text-muted-foreground/60" : ""}`} onClick={activate}>
+      <button type="button" role="treeitem" aria-expanded={entry.kind === "dir" ? open : undefined} aria-label={entry.name} data-path={entry.path} data-git={status} data-ignored={ignored || undefined} className={`touch-target flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-1 text-left ${status ? (GIT_COLOR[status] ?? "") : ignored ? "text-muted-foreground/60" : ""}`} onClick={activate}>
         <ChevronRight className={`text-muted-foreground size-3.5 shrink-0 transition-transform ${entry.kind === "dir" ? (open ? "rotate-90" : "") : "invisible"}`} />
         <Icon className="text-muted-foreground size-4 shrink-0" />
         <span className="truncate">{entry.name}</span>

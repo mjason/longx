@@ -1,10 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { useTheme, type ThemePreference } from "@/core/theme";
 import { useViewport } from "@/core/viewport";
-import { Label } from "@/ui/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { Page, TopBar } from "@/ui/shell/Shell";
 import { t } from "@/ui/strings";
 import { ModelsSection } from "./settings/ModelsSection";
@@ -19,6 +16,7 @@ import { ProcessesSection } from "./settings/ProcessesSection";
 import { BrowsersSection } from "./settings/BrowsersSection";
 import { HttpsSection } from "./settings/HttpsSection";
 import { FileRulesSection } from "./settings/FileRulesSection";
+import { AppearanceSection } from "./settings/AppearanceSection";
 
 const SECTIONS = ["models", "dependencies", "knowledge", "agent", "browsers", "https", "files", "credentials", "watches", "processes", "update", "requests", "appearance"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -116,21 +114,7 @@ function SectionBody({ section }: { section: Section }) {
     case "https":
       return <HttpsSection />;
     case "appearance":
-      return <Appearance />;
+      return <AppearanceSection />;
   }
 }
 
-function Appearance() {
-  const { preference, setTheme } = useTheme();
-  return (
-    <div className="grid max-w-sm gap-2" data-testid="section-appearance">
-      <Label>{t.theme}</Label>
-      <Select value={preference} onValueChange={(v) => setTheme(v as ThemePreference)}>
-        <SelectTrigger className="h-11 w-full" aria-label={t.theme}><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {(["system", "dark", "light"] as const).map((k) => <SelectItem key={k} value={k}>{t.themes[k]}</SelectItem>)}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}

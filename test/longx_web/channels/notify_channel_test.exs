@@ -49,5 +49,8 @@ defmodule LongxWeb.NotifyChannelTest do
     assert_push "event", %{kind: "approval", title: "等待审批", body: "ls", url: url, at: at}
     assert url == "/p/#{slug}/t/#{thread.id}"
     assert is_binary(at)
+    # once: the channel's topic is Notify's own, which Phoenix subscribed it
+    # to at join — a second subscribe delivered (and notified) every event twice
+    refute_push "event", _, 200
   end
 end

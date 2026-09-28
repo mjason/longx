@@ -5,7 +5,10 @@
 import { AppWindow, Bot, FileCode2, GitCompareArrows, MessagesSquare, X } from "lucide-react";
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { useViewport } from "@/core/viewport";
-import { tabKey, useWorkbench, type Tab } from "@/core/workbench";
+import { stepTab, tabAt, tabKey, useWorkbench, type Tab } from "@/core/workbench";
+import { openPicker } from "@/core/keys/picker";
+import { useCommand } from "@/core/keys/useCommand";
+import { keysTitle } from "@/ui/keys/hint";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/ui/components/ui/alert-dialog";
 import { t } from "@/ui/strings";
@@ -26,6 +29,7 @@ export function Workbench({ projectId, children }: { projectId: string; children
   // closing a tab with unsaved edits asks first
   const [closing, setClosing] = useState<Tab | null>(null);
   const close = (tab: Tab) => (wb.dirty.includes(tabKey(tab)) ? setClosing(tab) : wb.close(tabKey(tab)));
+  useTabCommands(wb, active, close);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="workbench">
@@ -47,7 +51,7 @@ export function Workbench({ projectId, children }: { projectId: string; children
                   {wb.dirty.includes(key) ? <span className="text-warning" title={t.unsavedChanges}>●</span> : null}
                 </button>
                 {tab.kind !== "chat" ? (
-                  <button type="button" aria-label={`${t.closeTab} ${tabLabel(tab)}`} className="text-muted-foreground hover:text-foreground rounded p-0.5" onClick={() => close(tab)}>
+                  <button type="button" aria-label={`${t.closeTab} ${tabLabel(tab)}`} title={keysTitle(t.closeTab, "tab.close")} className="text-muted-foreground hover:text-foreground rounded p-0.5" onClick={() => close(tab)}>
                     <X className="size-3" />
                   </button>
                 ) : null}
@@ -131,4 +135,43 @@ function tabLabel(tab: Tab): string {
   if (tab.kind === "agent") return tab.name;
   const name = tab.path.split("/").at(-1) ?? tab.path;
   return tab.kind === "diff" ? `${name} ±` : name;
+}
+
+/**
+ * The space menu's tab commands (SPC b, SPC TAB, SPC 1…9), here because
+ * closing a tab with unsaved edits asks first — the same `close` the ×
+ * uses. The same keys work for every kind of tab: a file, a diff, an agent,
+ * an artifact.
+ */
+function useTabCommands(wb: ReturnType<typeof useWorkbench>, active: Tab, close: (tab: Tab) => void) {
+  const state = { tabs: wb.tabs, active: wb.active, dirty: wb.dirty };
+  const many = () => wb.tabs.length > 1;
+  useCommand("tab.close", () => close(active), () => active.kind !== "chat");
+  useCommand("tab.reopen", wb.reopen, wb.canReopen);
+  useCommand("tab.last", wb.back, many);
+  useCommand("tab.next", () => wb.activate(stepTab(state, 1).active), many);
+  useCommand("tab.prev", () => wb.activate(stepTab(state, -1).active), many);
+  useCommand("tab.chat", () => wb.activate("chat"), () => active.kind !== "chat");
+  useCommand(
+    "tab.switch",
+    () =>
+      openPicker({
+        title: t.keys.switchTab,
+        items: wb.tabs.map((tab) => ({
+          id: tabKey(tab),
+          label: tabLabel(tab),
+          ...(tab.kind === "file" || tab.kind === "diff" ? { detail: tab.path } : {}),
+        })),
+        onPick: (item) => wb.activate(item.id),
+      }),
+    many,
+  );
+  // SPC 1…9: nine registrations, always in the same order
+  for (let n = 1; n <= 9; n++) {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useCommand(`tab.goto.${n}`, () => {
+      const key = tabAt(state, n);
+      if (key) wb.activate(key);
+    }, () => wb.tabs.length > 1 && tabAt(state, n) !== null);
+  }
 }

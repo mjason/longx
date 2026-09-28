@@ -18,7 +18,8 @@ defmodule LongxWeb do
   """
 
   def static_paths,
-    do: ~w(assets fonts images favicon.ico favicon-32.png robots.txt manifest.webmanifest icons)
+    do:
+      ~w(assets fonts images favicon.ico favicon-32.png robots.txt manifest.webmanifest icons sw.js)
 
   def router do
     quote do

@@ -1,3 +1,5 @@
+import { useViewport } from "@/core/viewport";
+import { KeysHint } from "@/ui/keys/KeysHint";
 import { AlertTriangle, ArrowUpCircle, Download, GitBranch } from "lucide-react";
 import { Link } from "react-router";
 import { browserBusy, browserPercent, useBrowserStatus } from "@/core/browser";
@@ -13,6 +15,7 @@ const item = (extra = "") => `flex shrink-0 items-center gap-1 whitespace-nowrap
 
 /** IDEA's status bar: HEAD, an update waiting. One thin line. */
 export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
+  const viewport = useViewport();
   const git = useGitInfo(ctx.id);
   const upgrade = useUpgradeStatus({ poll: false });
   const deps = useDependencies();
@@ -46,6 +49,7 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
           <ArrowUpCircle className="size-3" /> {t.updatePage.newVersion(upgrade.data.latest)}
         </Link>
       ) : null}
+      {viewport !== "phone" ? <KeysHint /> : null}
     </div>
   );
 }

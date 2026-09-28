@@ -5,6 +5,8 @@
 // one). Branches live in a popover (switch — with a stash when the tree is
 // dirty — create, delete); the remote in a dialog. Every action is the
 // bundled git on the server; the tool only asks and shows.
+import { useIntent } from "@/core/keys/intents";
+import { whenThere } from "@/ui/keys/whenThere";
 import { ArrowDownUp, Check, ChevronDown, GitBranch, Loader2, Plus, RefreshCw, Trash2, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -48,6 +50,13 @@ function StatusMark({ status }: { status: string }) {
 }
 
 export function GitTool({ ctx }: { ctx: ProjectContext }) {
+  // the space menu reaches in: SPC g l (history), SPC g c (the commit's summary)
+  const [tab, setTab] = useState("changes");
+  useIntent("git.history", () => setTab("history"));
+  useIntent("git.commit", () => {
+    setTab("changes");
+    whenThere(() => document.getElementById("commit-summary"), (el) => (el as HTMLInputElement).focus());
+  });
   const projectId = ctx.id;
   const changes = useGitChanges(projectId, { poll: true });
   const init = useInitGit(projectId);
@@ -73,7 +82,7 @@ export function GitTool({ ctx }: { ctx: ProjectContext }) {
         <BranchButton projectId={projectId} repo={changes.data} />
         <SyncButton projectId={projectId} repo={changes.data} />
       </div>
-      <Tabs defaultValue="changes">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="w-full">
           <TabsTrigger value="changes" className="flex-1">
             {t.gitChanges}
@@ -98,6 +107,7 @@ export function GitTool({ ctx }: { ctx: ProjectContext }) {
 
 function BranchButton({ projectId, repo }: { projectId: string; repo: GitChanges }) {
   const [open, setOpen] = useState(false);
+  useIntent("git.branches", () => setOpen(true));
   const branches = useGitBranches(projectId, open);
   const actions = useGitActions(projectId);
   const [filter, setFilter] = useState("");

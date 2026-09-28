@@ -205,7 +205,10 @@ on first use.
     `Projects.notify/3`, `thread_label/1`). `LongxWeb.NotifyChannel` (`notify` on the user
     socket): the join reply carries `running` (`Projects.running_threads/0`, `waiting`
     marked), then one `"event"` push per event — what the Android shell joins to raise
-    notifications without FCM. `PubSub.broadcast(topic/0, {:notify, event})`.
+    notifications without FCM, and the page itself (`ui/pwa/PwaBridge`, below).
+    `PubSub.broadcast(topic/0, {:notify, event})`. The channel's topic *is* `topic/0`,
+    which Phoenix subscribes it to at join: it subscribes to nothing itself (a subscribe of
+    its own pushed every event twice — two notifications per turn — until 2026-09-28).
 - **The agent kernel — `lib/longx/agent/`.** The kernel is four things — the process, the
   transcript, the execution of model and tool calls, and an interpreter of *phases and
   effects* — and everything else is a **plug**, the one concept. **No sandbox, no approvals,
@@ -1477,7 +1480,11 @@ on first use.
     (beautiful-mermaid + elkjs, `mermaid-diagram`'s `useRenderer`), the code editor and
     the diff (`Workbench`'s lazy `EditorTab` / `DiffTab`), the cards' renderer
     (`toolkit`'s lazy `GenerativeTree`), the settings pages and the wizard (route
-    `lazy`). The endpoint serves `/assets` from its own `Plug.Static` — `gzip` and
+    `lazy`), Shiki with react-shiki (`shiki-highlighter` renders the plain block and a
+    lazy `shiki-highlighted` for the colours), the space menu's dialogs and command
+    registrations (`KeysLayer`'s lazy `HelpDialog` / `PickerDialog` / `PromptDialog`,
+    the Shell's `GlobalCommands`, `ProjectWindow`'s `ProjectCommands`) — the entry is
+    1.49 MB / 448 KB gzip / 371 KB brotli since. The endpoint serves `/assets` from its own `Plug.Static` — `gzip` and
     `brotli`, `cache-control: public, max-age=31536000, immutable` (the names carry
     their hash: no revalidation round trip per file on each load) — and the socket
     compresses its frames (`compress: true`, permessage-deflate). After: the entry 1.58
@@ -1614,6 +1621,61 @@ on first use.
     model and level picker inside a shell); shell → page `LongxShell.back()`,
     `navigate(path)`, `resume()`. `<html data-shell="android">` while installed;
     `--app-height` follows `visualViewport.height`.
+  - **The space menu** — Spacemacs' leader without modes (`core/keys/`, `ui/keys/`;
+    desktop and tablet, off on a phone; 外观 → 空格快捷菜单, `core/keys/preference.ts`,
+    per device in localStorage). Two states only: typing (focus in an input, a
+    textarea, a select, contenteditable, `.cm-editor`) or not. Not typing, **Space opens
+    the which-key panel** (`WhichKey`, bottom of the window: the keys that can follow,
+    `+` for a group, the tabs' 1…9 one row); a key descends or runs, `⌫` goes up, Esc or
+    an unknown key (flashed) closes, a ctrl / meta chord closes and passes through.
+    Typing, Esc only leaves the field (an IME composition's Esc is its own; an open
+    dialog, menu or popover takes Esc and Space itself; Esc never stops a turn), and a
+    keyboard-focused button keeps its Space. `KeysLayer` (the window's keydown in the
+    capture phase) runs the pure `core/keys/engine.ts` `press(state, input, tree,
+    available)` over `keymap.ts`'s `SPACE_TREE` (the one tree: SPC SPC composer, `:`
+    palette, `?` every key, `a` 对话, `t` 会话, `b` 标签, `f` 文件, `g` Git, `w` 工具窗口,
+    `p` 项目, `j` 跳转, `T` 开关, `m` 当前页面). **Commands are registered where their
+    state lives** (`useCommand(id, run, available?)` into `registry.ts`, the last
+    registration winning; the panel and `SPC ?` show only what `available()` allows now,
+    a group with nothing available is hidden): `GlobalCommands` (the Shell),
+    `ProjectCommands` (the project window: the turn, threads, files, Git, tool windows,
+    jumps), the `Workbench`'s tab commands (`stepTab`, `tabAt`, `back`, `reopen` in
+    `core/workbench.ts`), the editor's save / preview and the diff's next / previous
+    change in their tabs; what lives inside a component that may not be mounted yet —
+    the Git window's tabs, the branch popover, the file tree's reveal, the agents panel —
+    is an **intent** (`core/keys/intents.ts`: requested, taken up on mount). Pickers and
+    prompts are stores (`picker.ts`, `prompt.ts`) drawn by `PickerDialog` /
+    `PromptDialog`; the status strip's `KeysHint` says what Space does now, and a
+    button's tooltip names its keys (`keysTitle`, `hintOf` → `SPC b d`). The palette
+    (⌘K or `SPC :`) lists the available commands with their keys. Tests:
+    `core/keys/keys.test.ts`, `support.test.tsx`, `ui/keys/SpaceMenu.test.tsx`, e2e
+    `13-keys`.
+  - **The PWA** (a secure context only: HTTPS through `Longx.Tls` or a proxy, or
+    localhost). `js/sw/sw.ts` over the pure `js/sw/logic.ts` is the service worker,
+    built by `js/build/plugins.ts`'s `serviceWorker()` (esbuild, loaded inside the hook —
+    it refuses jsdom) into `priv/static/sw.js` (gitignored, in `LongxWeb.static_paths`,
+    revalidated, never immutable) with the build's `precacheList` and a version sorting
+    by build time: at install it fetches the app's chunks, the stylesheets, KaTeX's
+    woff2, the two code themes and the common grammars (~1.6 MB brotli; the other Shiki
+    grammars / themes and the diagram renderer when first used) and the shell; hashed
+    `/assets` from the cache first, a page (a top-level document only — a frame is a
+    navigation too, and dev's live-reload frame once replaced the shell) from the
+    network with the cached shell as the fallback, marked `data-offline-shell`; icons
+    and the manifest revalidated; `/gql`, `/api`, the sockets, `/files`, `/callback`…
+    never touched; the build before the current one kept (a page still open loads its
+    lazy chunks from it). `ui/pwa/PwaBridge` (in the Shell): registers it four seconds
+    after load when 外观 → 离线缓存 is on and the build is a production one (else
+    unregisters and drops the `longx-*` caches), turns the worker's
+    `notificationclick` message into a navigation, reloads the offline shell once
+    `/health` answers (`ConnectionBanner` says 服务器暂时连不上 meanwhile), and joins
+    `notify` (`core/notify.ts`): with 外观 → 系统通知 on (the browser's permission asked
+    there) an event while the page is hidden or unfocused raises a system notification
+    through the worker (tag thread + kind, an ask kept until acted on), and the
+    installed app's badge counts the threads that wait (`navigator.setAppBadge`). No Web
+    Push (Chrome's goes through FCM). The manifest has an `id`, `lang`, shortcuts (新建项目,
+    设置) and `launch_handler` focus-existing. Tests: `js/sw/logic.test.ts`,
+    `core/notify.test.ts`, `ui/pwa/PwaBridge.test.tsx`, `AppearanceSection.test.tsx`,
+    `js/build/plugins.test.ts`, `static_assets_test.exs`, e2e `14-pwa`.
   - **Mobile first**: one column; `TopBar` respects the notch, `Page` keeps ≥16 px gutters,
     the primary action sits in a fixed `BottomBar` on phones; touch targets ≥ 44 px; 16 px
     base font; the page never scrolls sideways; dark is the default theme,
@@ -1876,7 +1938,13 @@ Where tests live / what to use:
   `.longx`: asked for a custom tool `greet(name)`, the agent reads `longx/writing-plugs.md`
   first — the Local paragraph names it, the reference no longer rides along —, writes
   `local/plugs/*.exs` + `local/agent.exs`, calls the tool at its next step and answers
-  with its words). A model that refuses an instruction
+  with its words), `13-keys` (the space menu: Esc out of the composer, the which-key
+  panel, `SPC f f` opening a file, `SPC b d` closing it, `SPC ?`, `SPC :`, `SPC w 4`,
+  `SPC SPC` back to the composer; nothing on a phone), `14-pwa` (on a secure origin —
+  `127.0.0.1` counts —, in Chromium's new headless mode, whose permissions are real:
+  the worker active and controlling, the caches filled, an offline reload drawing the
+  marked shell and reloading by itself once back, a finished turn's system notification
+  through the worker while the page is unfocused, the badge set). A model that refuses an instruction
   fails a scenario — that is the point; run it before a release and after a change to the
   kernel, the prompts or the chat.
 - TypeScript/React → also test-first: vitest + testing-library in `assets/` (`npm test`).
