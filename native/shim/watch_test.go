@@ -319,11 +319,17 @@ func TestABurstIsCoalesced(t *testing.T) {
 	ch, stop := startWatch(t, ruleConfig{Root: root})
 	defer stop()
 
+	start := time.Now()
 	for i := 0; i < 200; i++ {
 		write(t, root, "src/f"+string(rune('a'+i%26))+".txt", "x")
 	}
+	took := time.Since(start)
 	_, bs := collect(ch, 800*time.Millisecond)
-	if len(bs) == 0 || len(bs) > 4 {
-		t.Fatalf("200 writes in %d batches", len(bs))
+	// one batch per 200 ms window the writes spanned, one more for the tail: a
+	// loaded CI runner spreads 200 writes over more windows than a laptop does
+	// (a fixed 4 failed the release's CI once, with nothing of the shim changed)
+	limit := int(took/(200*time.Millisecond)) + 2
+	if len(bs) == 0 || len(bs) > limit {
+		t.Fatalf("200 writes over %v in %d batches (at most %d)", took, len(bs), limit)
 	}
 }
