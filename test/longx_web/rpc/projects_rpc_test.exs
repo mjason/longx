@@ -72,6 +72,37 @@ defmodule LongxWeb.ProjectsRpcTest do
     {thread_id, kernel_id}
   end
 
+  test "project_jobs lists background jobs with their conversation, limited to the project", %{
+    conn: conn,
+    dir: dir
+  } do
+    project = create!(conn, dir)
+    {thread_id, kernel_id} = start!(conn, project)
+    {:ok, _} = Longx.Jobs.start(kernel_id, "compile", "sleep 30", cwd: dir, notify: false)
+    on_exit(fn -> Longx.Jobs.delete(kernel_id) end)
+
+    other_dir = Path.join(dir, "other")
+    File.mkdir_p!(other_dir)
+    other_project = create!(conn, other_dir, %{"name" => "Other project"})
+    {_other_thread, other_kernel_id} = start!(conn, other_project)
+
+    {:ok, _} =
+      Longx.Jobs.start(other_kernel_id, "elsewhere", "sleep 30", cwd: other_dir, notify: false)
+
+    on_exit(fn -> Longx.Jobs.delete(other_kernel_id) end)
+
+    assert %{"success" => true, "data" => %{"jobs" => [job]}} =
+             rpc(conn, "project_jobs", %{
+               "fields" => ["jobs"],
+               "input" => %{"projectId" => project["id"]}
+             })
+
+    assert job["name"] == "compile"
+    assert job["status"] == "running"
+    assert job["thread_id"] == thread_id
+    assert job["thread_title"] == nil
+  end
+
   defp sse(conn, chunks) do
     conn =
       conn

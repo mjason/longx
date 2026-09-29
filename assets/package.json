@@ -10,6 +10,7 @@
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run test",
     "present-schema": "node scripts/present-schema.mjs",
+    "check:prompts": "node scripts/check-prompt-changes.mjs",
     "codegen": "node scripts/gql-client.mjs && graphql-codegen --config codegen.ts",
     "codegen:check": "npm run codegen && git diff --exit-code --quiet -- js/gql js/core/api.ts js/core/operations.graphql",
     "e2e": "node scripts/e2e/run.mjs",

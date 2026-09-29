@@ -175,6 +175,19 @@ defmodule Longx.Projects.Types do
     def graphql_type(_), do: :list_running
   end
 
+  defmodule ProjectJobs do
+    @moduledoc "the background jobs for the conversations in one project"
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          jobs: [type: {:array, :map}, allow_nil?: false]
+        ]
+      ]
+
+    def graphql_type(_), do: :project_jobs
+  end
+
   defmodule ListRecent do
     @moduledoc "the result of `Longx.Projects.Thread.list_recent`"
     use Ash.Type.NewType,

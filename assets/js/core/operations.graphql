@@ -82,6 +82,8 @@ query ListRunningThreads { listRunningThreads { threads finished } }
 
 query ListRecentThreads($limit: Int) { listRecentThreads(limit: $limit) { threads } }
 
+query ProjectJobs($projectId: ID!) { projectJobs(projectId: $projectId) { jobs } }
+
 query Directory($projectId: ID!, $scope: String) { directory(projectId: $projectId, scope: $scope) { sessions } }
 
 query ListFiles($projectId: ID!, $path: String!) { listFiles(projectId: $projectId, path: $path) { size path name kind } }

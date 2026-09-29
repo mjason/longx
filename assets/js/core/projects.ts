@@ -13,6 +13,7 @@ import {
   listModels,
   listRecentThreads,
   listRunningThreads,
+  projectJobs,
   setGoal,
   clearGoal,
   listProjects,
@@ -115,7 +116,31 @@ export const queryKeys = {
   subagents: (threadId: string) => ["subagents", threadId] as const,
   running: ["running-threads"] as const,
   recent: ["recent-threads"] as const,
+  projectJobs: (id: string) => ["project", id, "jobs"] as const,
 };
+
+/** A background shell job kept by Longx, together with its owning conversation. */
+export type ProjectJob = {
+  name: string;
+  cmd: string;
+  status: string;
+  exitCode: number | null;
+  reason: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  threadId: string;
+  threadTitle: string | null;
+};
+
+export function useProjectJobs(projectId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.projectJobs(projectId ?? ""),
+    queryFn: async () =>
+      unwrap(await projectJobs({ input: { projectId } })).jobs as ProjectJob[],
+    enabled: !!projectId,
+    refetchInterval: 5_000,
+  });
+}
 
 /** goal mode: set / change (objective, status, budget) or clear the thread's goal. */
 export function useGoalActions(threadId: string | undefined) {

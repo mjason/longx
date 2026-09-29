@@ -29,6 +29,7 @@ defmodule Longx.Projects do
       list Longx.Projects.Thread, :list_subagents, :subagents_of, paginate_with: nil
       action Longx.Projects.Thread, :list_running_threads, :list_running
       action Longx.Projects.Thread, :list_recent_threads, :list_recent
+      action Longx.Projects.Thread, :project_jobs, :project_jobs
       action Longx.Projects.Thread, :directory, :directory
       action Longx.Projects.Files, :list_files, :list_files
       action Longx.Projects.Files, :read_file, :read_file
@@ -139,6 +140,44 @@ defmodule Longx.Projects do
     {:ok, threads} = list_threads(project)
     threads
   end
+
+  @doc "Running and recently finished background jobs belonging to this project's sessions."
+  def project_jobs(%Project{id: project_id}) do
+    now = DateTime.utc_now()
+
+    project_id
+    |> list_threads_for_project!()
+    |> project_thread_tree()
+    |> Enum.flat_map(fn thread ->
+      Enum.map(Longx.Jobs.list(thread.kernel_thread_id), fn job ->
+        Map.merge(job, %{
+          thread_id: thread.id,
+          thread_title: thread.title
+        })
+      end)
+    end)
+    |> Enum.filter(&(&1.status == "running" or recent_job?(&1, now)))
+    |> Enum.sort_by(
+      &{&1.status == "running", &1.started_at || ""},
+      :desc
+    )
+    |> Enum.take(50)
+  end
+
+  defp project_thread_tree(threads) do
+    Enum.flat_map(threads, fn thread ->
+      [thread | project_thread_tree(list_subagents!(thread.id))]
+    end)
+  end
+
+  defp recent_job?(%{finished_at: finished_at}, now) when is_binary(finished_at) do
+    case DateTime.from_iso8601(finished_at) do
+      {:ok, finished, _offset} -> DateTime.diff(now, finished, :second) <= 900
+      _ -> false
+    end
+  end
+
+  defp recent_job?(_, _), do: false
 
   @doc "Turns of a thread, oldest first; reverted ones only with `include_reverted: true`."
   def list_turns(%Thread{id: id}, opts \\ []),

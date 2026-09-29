@@ -402,6 +402,10 @@ type Directory {
   sessions: [Json!]!
 }
 
+type ProjectJobs {
+  jobs: [Json!]!
+}
+
 type ListRecent {
   threads: [Json!]!
 }
@@ -4202,6 +4206,7 @@ type RootQueryType {
   ): [Thread!]!
   listRunningThreads: ListRunning!
   listRecentThreads(limit: Int): ListRecent!
+  projectJobs(projectId: ID!): ProjectJobs!
   directory(projectId: ID!, scope: String): Directory!
   listFiles(projectId: ID!, path: String!): [FilesEntry!]!
   readFile(projectId: ID!, path: String!): ReadFile!

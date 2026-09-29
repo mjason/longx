@@ -268,6 +268,7 @@ export function rpcMock() {
   return {
     listProjects: vi.fn(async () => ok([project(1), project(2)])),
     listRunningThreads: vi.fn(async () => ok({ threads: [] })),
+    projectJobs: vi.fn(async () => ok({ jobs: [] })),
     listRecentThreads: vi.fn(async () => ok({ threads: [] })),
     getProject: vi.fn(async () => ok(project(1))),
     createProject: vi.fn(),

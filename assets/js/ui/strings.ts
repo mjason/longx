@@ -57,6 +57,18 @@ export const t = {
   // the status strip's chip: what runs now, any project
   runningStrip: (n: number, waiting: number, finished = 0) =>
     [n > 0 ? `${n} 个在跑` : "", waiting > 0 ? `${waiting} 个等你` : "", finished > 0 ? `${finished} 个刚完成` : ""].filter(Boolean).join(" · "),
+  projectJobs: {
+    title: "后台任务",
+    chip: (count: number) => `任务 ${count}`,
+    empty: "当前项目没有后台任务",
+    running: "运行中",
+    completed: "已完成",
+    exit: (code: number) => `退出码 ${code}`,
+    stopped: "已停止",
+    failed: "未正常结束",
+    session: (title: string | null, id: string) => title || `会话 ~${id.slice(-6)}`,
+    recent: "最近完成",
+  },
   // how a conversation's last turn ended (the finished list)
   finishedOutcome: { completed: "完成", failed: "失败", interrupted: "已停止" } as Record<string, string>,
   runningTurn: "进行中",

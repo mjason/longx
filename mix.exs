@@ -4,7 +4,7 @@ defmodule Longx.MixProject do
   def project do
     [
       app: :longx,
-      version: "0.2.83",
+      version: "0.2.84",
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -146,6 +146,7 @@ defmodule Longx.MixProject do
         "cmd --cd native/shim go vet ./...",
         "cmd --cd native/shim go test ./...",
         "schema.check",
+        "cmd --cd assets npm run check:prompts",
         "cmd --cd assets npm run present-schema -- --check",
         "cmd --cd assets npm run check",
         "test"

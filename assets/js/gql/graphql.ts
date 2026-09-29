@@ -3499,6 +3499,13 @@ export type ListRecentThreadsQueryVariables = Exact<{
 
 export type ListRecentThreadsQuery = { listRecentThreads: { threads: Array<unknown> } };
 
+export type ProjectJobsQueryVariables = Exact<{
+  projectId: string | number;
+}>;
+
+
+export type ProjectJobsQuery = { projectJobs: { jobs: Array<unknown> } };
+
 export type DirectoryQueryVariables = Exact<{
   projectId: string | number;
   scope?: string | null | undefined;
@@ -4905,6 +4912,13 @@ export const ListRecentThreadsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListRecentThreadsQuery, ListRecentThreadsQueryVariables>;
+export const ProjectJobsDocument = new TypedDocumentString(`
+    query ProjectJobs($projectId: ID!) {
+  projectJobs(projectId: $projectId) {
+    jobs
+  }
+}
+    `) as unknown as TypedDocumentString<ProjectJobsQuery, ProjectJobsQueryVariables>;
 export const DirectoryDocument = new TypedDocumentString(`
     query Directory($projectId: ID!, $scope: String) {
   directory(projectId: $projectId, scope: $scope) {

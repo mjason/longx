@@ -112,6 +112,33 @@ describe("ProjectWindow", () => {
     vi.mocked(gitInfo).mockImplementation(original);
   });
 
+  test("the task chip lists this project's background jobs and opens the matching conversation", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    const { projectJobs } = await import("@/core/api");
+    vi.mocked(projectJobs).mockResolvedValue(ok({
+      jobs: [
+        { name: "release", cmd: "gh run watch 123", status: "running", exitCode: null, startedAt: new Date().toISOString(), finishedAt: null, threadId: "t2", threadTitle: "发布 v0.2.83" },
+        { name: "tests", cmd: "mix test", status: "exited", exitCode: 0, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), threadId: "t3", threadTitle: "验证测试" },
+      ],
+    }) as never);
+    const { router } = renderAt("/p/app-1/t/t1");
+
+    const chip = await screen.findByTestId("project-jobs-chip");
+    expect(chip).toHaveTextContent("任务 2");
+    await user.click(chip);
+
+    const popover = await screen.findByTestId("project-jobs-popover");
+    expect(popover).toHaveTextContent("发布 v0.2.83");
+    expect(popover).toHaveTextContent("运行中");
+    expect(popover).toHaveTextContent("验证测试");
+    expect(popover).toHaveTextContent("已完成");
+
+    await user.click(within(popover).getByRole("link", { name: /发布 v0\.2\.83/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t2"));
+    vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [] }) as never);
+  });
+
   test("the status strip counts the server's faults of the last hour and links to the record", async () => {
     setViewport(1280);
     const { recentFaults } = await import("@/core/api");

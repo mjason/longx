@@ -400,6 +400,20 @@ defmodule Longx.Projects.Thread do
       end
     end
 
+    action :project_jobs, Types.ProjectJobs do
+      argument :project_id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        case Ash.get(Longx.Projects.Project, input.arguments.project_id) do
+          {:ok, project} ->
+            {:ok, %{jobs: Longx.Projects.project_jobs(project)}}
+
+          _ ->
+            argument_error(:project_id, "project not found")
+        end
+      end
+    end
+
     read :with_status do
       argument :project_id, :uuid, allow_nil?: false
       argument :status, :atom, allow_nil?: false
