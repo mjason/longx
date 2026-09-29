@@ -21,7 +21,9 @@ export class Harness {
   }
 
   async start() {
-    this.browser = await chromium.launch();
+    this.browser = process.env.LONGX_E2E_CDP
+      ? await chromium.connectOverCDP(process.env.LONGX_E2E_CDP)
+      : await chromium.launch();
     this.context = await this.browser.newContext({ viewport: { width: 1280, height: 900 } });
     this.page = await this.watch(await this.context.newPage());
     await this.page.goto(BASE + "/");
