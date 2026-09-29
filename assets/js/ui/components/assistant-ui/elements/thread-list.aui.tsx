@@ -22,16 +22,7 @@ import {
   SearchIcon,
   TrashIcon,
 } from "lucide-react";
-import {
-  forwardRef,
-  Fragment,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentPropsWithoutRef,
-  type FC,
-} from "react";
+import { createContext, forwardRef, Fragment, type ComponentPropsWithoutRef, type FC, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 export const ThreadList: FC = () => {
   const [search, setSearch] = useState("");
@@ -278,8 +269,17 @@ const ThreadListSkeleton: FC = () => {
   );
 };
 
+/**
+ * Longx: the conversations at work, by row id — assistant-ui marks only the open
+ * thread as running (the others have no runtime here), so the list reads ours
+ * (`LongxRuntime.runningThreadIds`; `ThreadsTool` provides it).
+ */
+export const RunningIdsContext = createContext<ReadonlySet<string>>(new Set());
+
 export const ThreadListItem: FC = () => {
-  const isRunning = useAuiState((s) => s.threadListItem.isRunning);
+  const id = useAuiState((s) => s.threadListItem.id);
+  const running = useContext(RunningIdsContext);
+  const isRunning = useAuiState((s) => s.threadListItem.isRunning) || running.has(id);
   const [isRenaming, setIsRenaming] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const restoreFocusRef = useRef(false);

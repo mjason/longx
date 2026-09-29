@@ -8,7 +8,7 @@ import { channel, ok } from "@/ui/test-mocks";
 vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
 import { browserStatus, dependencies, setThreadHandle, setThreadOnDuty, startThread, upgradeStatus } from "@/core/api";
-import { browserIdle, dependencyReport, upgradeIdle } from "@/ui/test-mocks";
+import { browserIdle, dependencyReport, thread, upgradeIdle } from "@/ui/test-mocks";
 
 describe("ProjectWindow", () => {
   beforeEach(() => {
@@ -64,6 +64,28 @@ describe("ProjectWindow", () => {
     await user.click(options[0]!);
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/runs/t/t9"));
     vi.mocked(listRunningThreads).mockResolvedValue(ok({ threads: [] }) as never);
+  });
+
+  test("the threads tool marks every conversation at work, not only the open one: the rows' `active`, and one whose sub-agent works", async () => {
+    setViewport(1280);
+    const { listThreads, listRunningThreads } = await import("@/core/api");
+    vi.mocked(listThreads).mockResolvedValue(ok([{ ...thread(1), status: "active" }, { ...thread(2), status: "active" }, thread(3), thread(4)]) as never);
+    vi.mocked(listRunningThreads).mockResolvedValue(
+      ok({ threads: [{ id: "t4", kernelThreadId: "thr_4", title: null, preview: "thread 4", lastActivityAt: null, projectId: "id-1", projectSlug: "app-1", projectName: "App", waiting: false, working: ["coder"], progress: null, turnStartedAt: null }] }) as never,
+    );
+    try {
+      renderAt("/p/app-1/t/t1");
+      const panel = await screen.findByTestId("tool-panel");
+      await within(panel).findByText("thread 4");
+      const marked = () =>
+        Array.from(panel.querySelectorAll('[data-slot="aui_thread-list-item"]'))
+          .filter((item) => item.querySelector('[data-slot="aui_thread-list-item-running"]'))
+          .map((item) => item.querySelector('[data-slot="aui_thread-list-item-title"]')?.textContent?.trim());
+      await waitFor(() => expect(marked()).toEqual(["thread 1", "thread 2", "thread 4"]));
+    } finally {
+      vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
+      vi.mocked(listRunningThreads).mockResolvedValue(ok({ threads: [] }) as never);
+    }
   });
 
   test("the status strip follows the disk: the watcher's git and files events refetch HEAD and the dirty count", async () => {

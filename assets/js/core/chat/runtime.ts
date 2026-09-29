@@ -12,7 +12,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { archiveThread, deleteThread, getThread, releaseWaiting as releaseWaitingRpc, renameThread, retractTurn, sendMessage, steerTurn } from "@/core/api";
-import { queryKeys, unwrap, unwrapOne, useAgentDefinition, useStartThread, useThread, useThreads } from "@/core/projects";
+import { queryKeys, unwrap, unwrapOne, useAgentDefinition, useRunningThreads, useStartThread, useThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
@@ -104,6 +104,8 @@ export type LongxRuntime = {
   history: ThreadHistory;
   /** a page from above a sub-agent's view (its conversation read in a tab) */
   loadEarlierOf: LoadEarlierOf;
+  /** the project's conversations with a turn in flight (their rows' status, the running list) — the thread list's marks: assistant-ui knows only the open one */
+  runningThreadIds: ReadonlySet<string>;
   /** why the thread cannot take messages, if so */
   disabledReason: string | null;
   /** the project's default model id, for the rail to name what a new chat starts on */
@@ -155,6 +157,16 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     [threads.data],
   );
   const listed = threadId ? rows.find((t) => t.id === threadId) : undefined;
+  // every conversation of the project at work, not only the one on screen: the
+  // rows say `active` while a turn runs, the running list adds those whose
+  // sub-agents work (both refreshed by the project channel and the notify feed)
+  const runningAll = useRunningThreads();
+  const runningThreadIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of rows) if (r.status === "active") ids.add(r.id);
+    for (const r of runningAll.data ?? []) if (r.projectId === projectId) ids.add(r.id);
+    return ids;
+  }, [rows, runningAll.data, projectId]);
   // a sub-agent's row is not in the project's list: fetched by id for its own page
   const single = useThread(threadId !== undefined && !threads.isPending && !listed ? threadId : undefined);
   const thread = listed ?? (single.data as ThreadRow | undefined);
@@ -495,6 +507,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     state,
     history,
     loadEarlierOf,
+    runningThreadIds,
     disabledReason,
     defaultModelId,
     definitionModel,

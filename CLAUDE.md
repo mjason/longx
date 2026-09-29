@@ -1673,7 +1673,12 @@ on first use.
     phone = chat full-screen, bottom toolbar, tools as bottom sheets. Tool windows
     `frame/tools/{Threads,Git,Agents,Files}Tool` toggled with ⌘1–4 (`core/frame.ts`,
     remembered per device; a device that remembered the gone `history` tool falls back):
-    Threads is the `thread-list` element; Git is GitHub Desktop's
+    Threads is the `thread-list` element — **every conversation at work spins**, not only
+    the open one: assistant-ui's `threadListItem.isRunning` knows only the thread with a
+    runtime, so `ThreadListItem` also reads `RunningIdsContext`, which `ThreadsTool`
+    provides from `LongxRuntime.runningThreadIds` (the rows `active` plus the running
+    list's rows of this project, so a thread whose sub-agent works counts; the person
+    saw two running and one mark) —; Git is GitHub Desktop's
     shape (branch popover, sync button, Changes, History); Agents is the thread's sub-agents as `background-inbox`;
     Files is the IDE tree (git status coloured, ignored dimmed, new / rename / delete, a
     filter over `search_files`). `frame/StatusStrip`: HEAD and dirty count, missing
