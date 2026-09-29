@@ -1063,7 +1063,10 @@ on first use.
     a non-empty `content` → 400 "array too long … maximum length 0"; a summary alone
     is fine, so another provider's summary from a thread that ran there before stays,
     one left with neither summary nor ciphertext goes) while messages and calls keep
-    their `status` / `phase` / `logprobs` (accepted). The public API's reference
+    their `status` / `phase` / `logprobs` (accepted) — except a part's `logprobs: null`,
+    another provider's (DeepSeek's, qwen's `output_text`), which is 400 "expected an
+    array of unknown values, but got null" (Sentry LONX-N, 2026-09-29): the key goes,
+    the part stays. The public API's reference
     (developers.openai.com, Responses → input → reasoning) allows `content` and
     `status`, so api.openai.com is untouched. Checked with a real thread's mixed
     history (80 items: qwen / deepseek reasoning, uuids, statuses, calls) and a

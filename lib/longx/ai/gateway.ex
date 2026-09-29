@@ -404,12 +404,27 @@ defmodule Longx.AI.Gateway do
            do: [item],
            else: []
 
+      # a part's `logprobs` is taken as an array; another provider's `null`
+      # (DeepSeek's, qwen's output_text) is 400 "expected an array of unknown
+      # values, but got null" (Sentry LONX-N) — the key goes, the part stays
+      %{"type" => "message", "content" => parts} = item when is_list(parts) ->
+        [Map.put(item, "content", Enum.map(parts, &drop_nil(&1, "logprobs")))]
+
       item ->
         [item]
     end)
   end
 
   defp strip_output_fields(input, _target), do: input
+
+  defp drop_nil(%{} = part, key) do
+    case part do
+      %{^key => nil} -> Map.delete(part, key)
+      _ -> part
+    end
+  end
+
+  defp drop_nil(part, _key), do: part
 
   @doc "The degraded form of a request: no encrypted reasoning at all, not even the target's own."
   @spec strip_all_encrypted(map) :: map

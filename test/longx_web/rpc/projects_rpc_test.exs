@@ -611,6 +611,17 @@ defmodule LongxWeb.ProjectsRpcTest do
 
       assert_eventually(fn -> Ash.get!(Projects.Thread, thread_id).preview == "log me in" end)
 
+      # what the model writes rides on the row: a string-keyed map inside an
+      # atom-keyed one (the camelizer once called Atom.to_string on "bytes" —
+      # every list_running_threads while a model wrote arguments, Sentry LONX-K)
+      :ok =
+        ThreadState.ingest(kernel_id, "turn/progress", %{
+          "threadId" => kernel_id,
+          "progress" => %{"kind" => "toolCall", "name" => "apply_patch", "bytes" => 12}
+        })
+
+      assert_receive {:thread, _, "turn/progress", _}, 5_000
+
       assert %{"success" => true, "data" => %{"threads" => [running]}} =
                rpc(conn, "list_running_threads", %{"fields" => ["threads"]})
 
@@ -620,6 +631,14 @@ defmodule LongxWeb.ProjectsRpcTest do
       assert running["preview"] == "log me in"
       assert running["waiting"] == true
       assert is_binary(running["lastActivityAt"])
+
+      assert running["progress"] == %{
+               "kind" => "toolCall",
+               "name" => "apply_patch",
+               "bytes" => 12
+             }
+
+      assert is_number(running["turnStartedAt"])
 
       assert %{"success" => true} =
                rpc(conn, "answer_request", %{

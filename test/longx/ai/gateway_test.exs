@@ -330,7 +330,9 @@ defmodule Longx.AI.GatewayTest do
             "status" => "completed",
             "phase" => "final_answer",
             "content" => [
-              %{"type" => "output_text", "text" => "yo", "annotations" => [], "logprobs" => []}
+              %{"type" => "output_text", "text" => "yo", "annotations" => [], "logprobs" => []},
+              # another provider's part: `logprobs: null` — 400 at the backend (Sentry LONX-N)
+              %{"type" => "output_text", "text" => "and", "annotations" => [], "logprobs" => nil}
             ]
           },
           %{
@@ -356,6 +358,9 @@ defmodule Longx.AI.GatewayTest do
       # the backend takes these as they are: nothing touched
       assert message["status"] == "completed" and message["phase"] == "final_answer"
       assert call["status"] == "completed"
+      # an array of logprobs stays, a null one goes with its key, the part stays
+      assert [%{"logprobs" => []}, %{"text" => "and"} = second] = message["content"]
+      refute Map.has_key?(second, "logprobs")
       # api.openai.com takes reasoning `content` and `status` (the reference says so): untouched
       {:ok, plain} = Gateway.prepare(body, %Target{@target | kind: :openai})
       assert Enum.at(plain.body["input"], 3)["status"] == "completed"

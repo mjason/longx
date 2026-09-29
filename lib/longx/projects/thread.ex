@@ -528,11 +528,18 @@ defmodule Longx.Projects.Thread do
     identity :unique_handle_in_project, [:project_id, :handle]
   end
 
-  # an untyped map crosses the wire as is: camelCase it here (dates as ISO strings)
+  # an untyped map crosses the wire as is: camelCase it here (dates as ISO
+  # strings); a string key is the wire's already (the view's `progress` inside
+  # a running row — `Atom.to_string("bytes")` once failed every running list
+  # while a model wrote arguments, Sentry LONX-K)
   defp camelize(map) do
-    Map.new(map, fn {key, value} ->
-      <<first, rest::binary>> = key |> Atom.to_string() |> Macro.camelize()
-      {<<String.downcase(<<first>>)::binary, rest::binary>>, wire_value(value)}
+    Map.new(map, fn
+      {key, value} when is_atom(key) ->
+        <<first, rest::binary>> = key |> Atom.to_string() |> Macro.camelize()
+        {<<String.downcase(<<first>>)::binary, rest::binary>>, wire_value(value)}
+
+      {key, value} ->
+        {key, wire_value(value)}
     end)
   end
 
