@@ -632,22 +632,32 @@ const UserMessage: FC = () => {
   // question) is a user message for the model, not for the person: it sits
   // on the left under the agent's name, its markdown rendered
   const from = useAuiState((s) => s.message.metadata.custom?.["from"]);
+  // Longx: a message still on its way (core/chat/pending) — shown at once, faded, with
+  // a word under it; in red with the reason when the send failed
+  const pending = useAuiState((s) => s.message.metadata.custom?.["pending"]);
+  const sendError = useAuiState((s) => s.message.metadata.custom?.["error"]);
   if (typeof from === "string" && from !== "") return <AgentMessage from={from} />;
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
       className="fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
       data-role="user"
+      data-pending={typeof pending === "string" ? pending : undefined}
     >
       <UserMessageAttachments />
 
-      <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
+      <div className={`aui-user-message-content-wrapper relative col-start-2 min-w-0 ${pending && !sendError ? "opacity-60" : ""}`}>
         <div className="aui-user-message-content peer bg-muted text-foreground rounded-xl px-4 py-2 wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
             components={{ File: UserFilePart, Image: UserImagePart, ...(UserText ? { Text: UserText } : {}) }}
           />
         </div>
       </div>
+      {pending ? (
+        <p className={`col-start-2 text-end text-xs ${sendError ? "text-destructive" : "text-muted-foreground"}`} data-testid="pending-note">
+          {typeof sendError === "string" ? t.sendFailed(sendError) : pending === "steer" ? t.steerPending : t.sending}
+        </p>
+      ) : null}
 
       <BranchPicker
         data-slot="aui_user-branch-picker"

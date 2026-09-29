@@ -1571,7 +1571,20 @@ on first use.
     yet, and starts a new chat only on the new-chat page (a conversation opened by link on a
     slow network once had the person's first words start a new conversation);
     `/goal <objective>` typed past the popover
-    sets the goal; `onCancel` → `interruptTurn`, always (`not_running` ignored), the
+    sets the goal; **a send is echoed at once** (`core/chat/pending.ts`: the thread is
+    the server's view, so the person's message showed only when the kernel's
+    `item/started` came back over the socket — a GraphQL round trip and a push later,
+    seconds on a slow link with the composer already empty, "老是让我觉得哪里不对";
+    `onNew`, `insertQueued` and `sendText` add a `PendingSend` — text, images, `kind`
+    message / steer, `after` the view's item count — before any round trip, the
+    adapter appends `pendingMessages` after `toMessages`, the user message element
+    draws it faded with 发送中… / 已插入，等 agent 下一步取用 (`data-pending`,
+    `pending-note`), `settled` drops it once the person's own user item with the same
+    words lands past `after` — the same words twice need two items —, a failed send
+    keeps it in red with the reason until the next send, and `onSendFailed` →
+    `queue.notifyIdle()` because assistant-ui's queue counts a dispatched message as a
+    run until a turn ends and a send that failed starts none); `onCancel` →
+    `interruptTurn`, always (`not_running` ignored), the
     composer written only by a take-back (above); `turnHadEffects` decides whether the
     stopped-run card offers 丢弃, `turnAnswered` whether a stop takes the turn back; `extras.answerAction`), `threadList.ts`, `runtime.ts` (**`useLongxRuntime({ projectId, defaults, threadId,
     onOpenThread })`** — the whole thing as one hook; everything the adapter is built

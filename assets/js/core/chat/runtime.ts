@@ -25,6 +25,7 @@ import {
   type ThreadTarget,
 } from "./adapter";
 import { subagentsOf, type SubViews } from "./messages";
+import { forThread, settled, type PendingApi, type PendingSend } from "./pending";
 import { runningTurnId, type ThreadView } from "./thread";
 import { csrfToken } from "@/core/gql";
 import { reportingAdapter } from "./attachments";
@@ -164,6 +165,27 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     [definition.data],
   );
   const { view, ready, error, refetch, loadEarlier } = useThreadView(thread?.kernelThreadId, onSignal);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  // what was sent and the view does not show yet: echoed at the end of the
+  // thread until the kernel's item for it lands (core/chat/pending)
+  const [pending, setPending] = useState<PendingSend[]>([]);
+  useEffect(() => setPending((prev) => settled(prev, view)), [view]);
+  const pendingSeq = useRef(0);
+  const pendingApi = useMemo<PendingApi>(
+    () => ({
+      add: (p) => {
+        const id = `${Date.now().toString(36)}-${++pendingSeq.current}`;
+        // a failed echo stays until the next send
+        setPending((prev) => [...prev.filter((q) => !q.error), { ...p, id, at: Date.now() }]);
+        return id;
+      },
+      update: (id, patch) => setPending((prev) => prev.map((q) => (q.id === id ? { ...q, ...patch } : q))),
+      drop: (id) => setPending((prev) => prev.filter((q) => q.id !== id)),
+    }),
+    [],
+  );
+  const echoes = useMemo(() => forThread(pending, threadId), [pending, threadId]);
   // sub-agents work on their own threads; the parent's activities name
   // them, and a child's activities name its own children
   const { views: subviews, loadEarlier: loadEarlierOf } = useThreadViews(
@@ -275,25 +297,32 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       const item = [...queue.adapter.steerItems, ...queue.adapter.items].find((i) => i.id === queueItemId);
       if (!item || !thread) return;
       const text = item.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
-      const steered = await steerTurn({ input: { threadId: thread.id, text } });
-      if (steered.success) {
-        queue.adapter.remove(queueItemId);
-        void invalidate();
-      } else if (steered.errors.some((e) => e.message === "not_running")) {
-        // the turn is over (a stop pauses assistant-ui's queue, so nothing would go out
-        // by itself): the message goes out as a new turn now, off the queue
-        queue.adapter.remove(queueItemId);
-        unwrap(
-          await sendMessage({
-            input: { threadId: thread.id, text, ...(model ? { model } : {}), ...(effort ? { effort } : {}) },
-          }),
-        );
-        void invalidate();
-      } else {
-        unwrap(steered);
+      const echo = pendingApi.add({ threadId: thread.id, kernelThreadId: thread.kernelThreadId, text, images: [], kind: "steer", after: viewRef.current.items.length });
+      try {
+        const steered = await steerTurn({ input: { threadId: thread.id, text } });
+        if (steered.success) {
+          queue.adapter.remove(queueItemId);
+          void invalidate();
+        } else if (steered.errors.some((e) => e.message === "not_running")) {
+          // the turn is over (a stop pauses assistant-ui's queue, so nothing would go out
+          // by itself): the message goes out as a new turn now, off the queue
+          queue.adapter.remove(queueItemId);
+          pendingApi.update(echo, { kind: "message" });
+          unwrap(
+            await sendMessage({
+              input: { threadId: thread.id, text, ...(model ? { model } : {}), ...(effort ? { effort } : {}) },
+            }),
+          );
+          void invalidate();
+        } else {
+          unwrap(steered);
+        }
+      } catch (e) {
+        pendingApi.update(echo, { error: e instanceof Error ? e.message : String(e) });
+        throw e;
       }
     },
-    [queue, thread, invalidate, model, effort],
+    [queue, thread, invalidate, model, effort, pendingApi],
   );
   // a waiting message in now; one that went meanwhile (the turn ended and took
   // it up, another page sent it) is no error
@@ -308,14 +337,20 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
   const sendText = useCallback(
     async (text: string) => {
       if (!thread) return;
-      unwrap(
-        await sendMessage({
-          input: { threadId: thread.id, text, ...(model ? { model } : {}), ...(effort ? { effort } : {}) },
-        }),
-      );
-      void invalidate();
+      const echo = pendingApi.add({ threadId: thread.id, kernelThreadId: thread.kernelThreadId, text, images: [], kind: "message", after: viewRef.current.items.length });
+      try {
+        unwrap(
+          await sendMessage({
+            input: { threadId: thread.id, text, ...(model ? { model } : {}), ...(effort ? { effort } : {}) },
+          }),
+        );
+        void invalidate();
+      } catch (e) {
+        pendingApi.update(echo, { error: e instanceof Error ? e.message : String(e) });
+        throw e;
+      }
     },
-    [thread, model, effort, invalidate],
+    [thread, model, effort, invalidate, pendingApi],
   );
   const discardTurn = useCallback(
     async (kernelTurnId: string) => {
@@ -400,6 +435,11 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
         queue: queue.adapter,
         attachments,
         dictation,
+        pending: echoes,
+        pendingApi,
+        // assistant-ui's queue counts a dispatched message as a run until the turn
+        // ends; a send that failed starts none, and every later message would wait
+        onSendFailed: () => queue.notifyIdle(),
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -422,6 +462,8 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       attachments,
       dictation,
       queueVersion,
+      echoes,
+      pendingApi,
     ],
   );
   onNewRef.current = adapter.onNew;

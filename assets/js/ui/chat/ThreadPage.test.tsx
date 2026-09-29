@@ -1507,6 +1507,44 @@ describe("ThreadPage", () => {
     fetchMock.mockRestore();
   });
 
+  test("what the person sends shows in the thread at once, marked 发送中…, and gives way to the server's item when it lands", async () => {
+    const user = userEvent.setup();
+    let land!: (value: unknown) => void;
+    vi.mocked(sendMessage).mockImplementationOnce(() => new Promise((resolve) => { land = resolve; }) as never);
+    await open();
+    const box = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(box, "quick one{Enter}");
+    // before the RPC answered, before any event: the message is there, faded, with a word
+    const echo = await screen.findByText("quick one");
+    expect(echo.closest("[data-role=user]")).toHaveAttribute("data-pending", "message");
+    expect(screen.getByTestId("pending-note")).toHaveTextContent("发送中…");
+
+    act(() => land(ok({ id: "turn-row" })));
+    act(() =>
+      channel.deliver("event", {
+        seq: 4,
+        method: "item/started",
+        params: { turnId: "turn_2", item: { id: "u2", type: "userMessage", turnId: "turn_2", content: [{ type: "text", text: "quick one" }] } },
+      }),
+    );
+    await waitFor(() => expect(screen.queryByTestId("pending-note")).not.toBeInTheDocument());
+    expect(screen.getAllByText("quick one")).toHaveLength(1);
+  });
+
+  test("a send that failed keeps its echo, in red, with the reason", async () => {
+    const user = userEvent.setup();
+    vi.mocked(sendMessage).mockResolvedValueOnce(failed("turn_in_progress") as never);
+    await open();
+    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "again{Enter}");
+    await waitFor(() => expect(screen.getByTestId("pending-note")).toHaveTextContent("没发出去：turn_in_progress"));
+    expect(screen.getByText("again").closest("[data-role=user]")).toHaveAttribute("data-pending", "message");
+    // the next message goes out at once (assistant-ui's queue would have held it for a turn that never ended)
+    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "once more{Enter}");
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(2));
+    // the failed echo made way for the new one
+    await waitFor(() => expect(screen.queryByText("again")).not.toBeInTheDocument());
+  });
+
   test("voice input is switched off for now: no mic in the rail", async () => {
     await open();
     expect(screen.queryByRole("button", { name: "语音输入" })).toBeNull();

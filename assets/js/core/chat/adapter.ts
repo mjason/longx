@@ -14,6 +14,7 @@ import type {
 import { answerRequest, interruptTurn, retractTurn, sendMessage, setGoal, steerTurn } from "@/core/api";
 import { unwrap } from "@/core/projects";
 import { toMessages, type SubViews } from "./messages";
+import { pendingMessages, type PendingApi, type PendingSend } from "./pending";
 import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
 import { runningTurnId, type ThreadView } from "./thread";
 
@@ -54,6 +55,12 @@ export type AdapterOptions = {
   dictation?: DictationAdapter;
   /** a stop before the model answered took the person's turn out: its text goes back to the composer */
   onRetract?: (text: string) => void;
+  /** the echoes of what was sent and the view does not show yet (core/chat/pending) */
+  pending?: PendingSend[];
+  /** where a send registers its echo */
+  pendingApi?: PendingApi;
+  /** a send that failed: no turn will end, so the queue must be told it is idle again */
+  onSendFailed?: () => void;
 };
 
 export function textOf(message: AppendMessage): string {
@@ -129,7 +136,7 @@ export function buildAdapter(
     },
   };
   return {
-    messages: opts.target ? toMessages(view, opts.subviews) : [],
+    messages: [...(opts.target ? toMessages(view, opts.subviews) : []), ...pendingMessages(opts.pending ?? [])],
     convertMessage: (m) => m,
     isRunning: opts.target ? runningTurnId(view) !== null : false,
     isDisabled: opts.disabled ?? false,
@@ -146,48 +153,73 @@ export function buildAdapter(
     onNew: async (message) => {
       const { text, images } = inputOf(message);
       if (!text && images.length === 0) return;
-      let target = opts.target;
-      if (!target) {
-        if (!opts.createThread) throw new Error("no thread to send to");
-        target = await opts.createThread();
-      }
       // `/goal <objective>` typed past the command popover: the goal, not a message
       const goal = text.match(/^\/goal\s+(\S[\s\S]*)$/);
-      if (goal) {
-        unwrap(
-          await setGoal({
-            input: { threadId: target.threadId, objective: goal[1]!.trim() },
-          }),
-        );
-        opts.onSent?.(target);
-        return;
-      }
       // a turn in flight: the message goes into it (a steer — the kernel folds
       // it in at its next step); a turn that ended meanwhile is "not_running"
       // and the message a new turn
       const running = runningTurnId(view);
-      if (running && target.threadId === opts.target?.threadId) {
-        const steered = await steerTurn({
-          input: { threadId: target.threadId, text, ...(images.length > 0 ? { images } : {}) },
-        });
-        if (steered.success) {
+      // the echo before any round trip: the thread shows the message at once
+      const echo = goal
+        ? null
+        : (opts.pendingApi?.add({
+            threadId: opts.target?.threadId ?? null,
+            kernelThreadId: opts.target?.kernelThreadId ?? null,
+            text,
+            images,
+            kind: running && opts.target ? "steer" : "message",
+            after: view.items.length,
+          }) ?? null);
+      try {
+        let target = opts.target;
+        if (!target) {
+          if (!opts.createThread) throw new Error("no thread to send to");
+          target = await opts.createThread();
+          if (echo !== null) opts.pendingApi?.update(echo, { threadId: target.threadId, kernelThreadId: target.kernelThreadId });
+        }
+        if (goal) {
+          unwrap(
+            await setGoal({
+              input: { threadId: target.threadId, objective: goal[1]!.trim() },
+            }),
+          );
           opts.onSent?.(target);
           return;
         }
-        if (!steered.errors.some((e) => e.message === "not_running")) unwrap(steered);
+        if (running && target.threadId === opts.target?.threadId) {
+          const steered = await steerTurn({
+            input: { threadId: target.threadId, text, ...(images.length > 0 ? { images } : {}) },
+          });
+          if (steered.success) {
+            opts.onSent?.(target);
+            return;
+          }
+          if (!steered.errors.some((e) => e.message === "not_running")) unwrap(steered);
+          if (echo !== null) opts.pendingApi?.update(echo, { kind: "message" });
+        }
+        unwrap(
+          await sendMessage({
+            input: {
+              threadId: target.threadId,
+              text,
+              ...(images.length > 0 ? { images } : {}),
+              ...(opts.model ? { model: opts.model } : {}),
+              ...(opts.effort ? { effort: opts.effort } : {}),
+            },
+          }),
+        );
+        opts.onSent?.(target);
+      } catch (e) {
+        opts.onSendFailed?.();
+        // the echo stays, in red, with why it did not go — that is the error's
+        // display; a rejection out of here would only be an unhandled one (the
+        // queue runs onNew and forgets the promise)
+        if (echo !== null) {
+          opts.pendingApi?.update(echo, { error: e instanceof Error ? e.message : String(e) });
+          return;
+        }
+        throw e;
       }
-      unwrap(
-        await sendMessage({
-          input: {
-            threadId: target.threadId,
-            text,
-            ...(images.length > 0 ? { images } : {}),
-            ...(opts.model ? { model: opts.model } : {}),
-            ...(opts.effort ? { effort: opts.effort } : {}),
-          },
-        }),
-      );
-      opts.onSent?.(target);
     },
     // a stop before the model answered (thinking is no answer) takes the
     // person's own turn back, as Claude Code does, and its text returns to the

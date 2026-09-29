@@ -50,6 +50,10 @@ export const t = {
   openOrCreate: "新建 / 打开项目",
   searchProjects: "搜索项目…",
   runningNow: "正在进行",
+  // chat: a message's echo while it travels (core/chat/pending)
+  sending: "发送中…",
+  steerPending: "已插入，等 agent 下一步取用",
+  sendFailed: (why: string) => `没发出去：${why}`,
   // the status strip's chip: what runs now, any project
   runningStrip: (n: number, waiting: number) => (waiting > 0 ? `${n} 个在跑 · ${waiting} 个等你` : `${n} 个在跑`),
   runningTurn: "进行中",
