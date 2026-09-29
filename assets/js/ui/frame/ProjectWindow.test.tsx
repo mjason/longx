@@ -38,6 +38,34 @@ describe("ProjectWindow", () => {
     }
   });
 
+  test("the status strip counts what runs now, any project; a click opens the running-conversations picker — the ones waiting on the person first, what each does — and a pick goes to that conversation", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    const { listRunningThreads } = await import("@/core/api");
+    const running = (id: string, over: Record<string, unknown>) => ({
+      id, kernelThreadId: `k-${id}`, title: null, preview: null, lastActivityAt: null, projectId: "id-1", projectSlug: "app-1", projectName: "App", waiting: false, progress: null, turnStartedAt: null, ...over,
+    });
+    vi.mocked(listRunningThreads).mockResolvedValue(
+      ok({
+        threads: [
+          running("t1", { title: "重写解析器", progress: { kind: "toolCall", name: "apply_patch", bytes: 2048 } }),
+          running("t9", { title: "登录 COROS", waiting: true, projectId: "id-2", projectSlug: "runs", projectName: "跑步" }),
+        ],
+      }) as never,
+    );
+    const { router } = renderAt("/p/app-1/t/t1");
+    const chip = await screen.findByTestId("running-chip");
+    expect(chip).toHaveTextContent("2 个在跑 · 1 个等你");
+
+    await user.click(chip);
+    const dialog = await screen.findByRole("dialog");
+    const options = within(dialog).getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["登录 COROS跑步等你处理", "当前重写解析器App正在写 apply_patch 的参数（2.0 KB）"]);
+    await user.click(options[0]!);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/p/runs/t/t9"));
+    vi.mocked(listRunningThreads).mockResolvedValue(ok({ threads: [] }) as never);
+  });
+
   test("the status strip follows the disk: the watcher's git and files events refetch HEAD and the dirty count", async () => {
     setViewport(1280);
     channel.reset();

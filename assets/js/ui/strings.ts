@@ -50,6 +50,8 @@ export const t = {
   openOrCreate: "新建 / 打开项目",
   searchProjects: "搜索项目…",
   runningNow: "正在进行",
+  // the status strip's chip: what runs now, any project
+  runningStrip: (n: number, waiting: number) => (waiting > 0 ? `${n} 个在跑 · ${waiting} 个等你` : `${n} 个在跑`),
   runningTurn: "进行中",
   agentsWorking: (names: string[]) => `${names.join("、")} 工作中`,
   waitingForYou: "等待你",
@@ -549,6 +551,9 @@ export const t = {
     common: "常用",
     armed: (title: string) => `再按 Esc：${title}`,
     noWaiting: "没有等你处理的会话",
+    runningThreads: "正在跑的会话",
+    noRunning: "没有在跑的会话",
+    current: "当前",
     threadsHere: "这个项目的会话",
     recentThreads: "最近的会话",
     running: "运行中",

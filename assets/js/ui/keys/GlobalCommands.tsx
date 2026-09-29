@@ -12,6 +12,7 @@ import { previousVisit } from "@/core/keys/visits";
 import { unwrap, useProjects, type RunningThread } from "@/core/projects";
 import { setTheme } from "@/core/theme";
 import { t } from "@/ui/strings";
+import { openRunningPicker } from "./runningPicker";
 import { updateKeysUi } from "./state";
 
 export function GlobalCommands() {
@@ -50,6 +51,17 @@ export function GlobalCommands() {
         const at = waiting.findIndex((r) => r.id === threadId);
         const next = waiting[(at + 1) % waiting.length]!;
         if (next.id !== threadId) navigate(`/p/${next.projectSlug}/t/${next.id}`);
+      })
+      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)));
+  });
+  // everything running now, any project, as a picker (the status strip's chip opens the same)
+  useCommand("thread.running", () => {
+    void listRunningThreads()
+      .then(unwrap)
+      .then((data) => {
+        const threads = data.threads as RunningThread[];
+        if (threads.length === 0) return void toast(t.keys.noRunning);
+        openRunningPicker(threads, threadId, navigate);
       })
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)));
   });

@@ -1,3 +1,4 @@
+import type { TurnProgress } from "./chat/thread";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ThreadRow } from "@/core/chat/threadList";
 import type { ApiError } from "@/core/gql";
@@ -213,10 +214,17 @@ export type RunningThread = {
   waiting: boolean;
   /** the sub-agents at work while the thread itself is idle */
   working?: string[];
+  /** what the model is writing right now (the view's `turn/progress`), null between calls */
+  progress: TurnProgress | null;
+  /** epoch seconds the turn in flight began; null when only sub-agents work */
+  turnStartedAt: number | null;
 };
 
-/** Every running thread, refreshed every few seconds while the caller shows (and wants them). */
-export function useRunningThreads(intervalMs = 3000, enabled = true) {
+/**
+ * Every running thread. A slow poll: the page's notify channel invalidates the
+ * query on every turn start, end and ask (ui/pwa/PwaBridge), so 15 s is a fallback.
+ */
+export function useRunningThreads(intervalMs = 15_000, enabled = true) {
   return useQuery({
     queryKey: queryKeys.running,
     queryFn: async () =>

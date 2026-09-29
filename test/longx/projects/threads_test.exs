@@ -971,6 +971,29 @@ defmodule Longx.Projects.ThreadsTest do
     assert [%{id: newest}, %{id: older}] = Projects.running_threads()
     assert {newest, older} == {second.id, first.id}
 
+    # the row says what the turn is doing (the store's `turn/progress`) and when it
+    # began — the running-threads picker draws them; a turn writing nothing has no progress
+    :ok = Longx.Agent.ThreadState.subscribe(second.kernel_thread_id)
+
+    :ok =
+      Longx.Agent.ThreadState.ingest(second.kernel_thread_id, "turn/progress", %{
+        "threadId" => second.kernel_thread_id,
+        "progress" => %{"kind" => "toolCall", "name" => "apply_patch", "bytes" => 12}
+      })
+
+    assert_receive {:thread, _, "turn/progress", _}, 2_000
+
+    assert [
+             %{
+               id: ^newest,
+               progress: %{"kind" => "toolCall", "name" => "apply_patch"},
+               turn_started_at: t2
+             },
+             %{id: ^older, progress: nil, turn_started_at: t1}
+           ] = Projects.running_threads()
+
+    assert is_number(t1) and is_number(t2) and t1 <= t2
+
     send(h1, :go)
     send(h2, :go)
     assert_eventually_ok(fn -> Projects.running_threads() == [] end)

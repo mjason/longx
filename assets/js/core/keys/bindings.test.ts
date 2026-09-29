@@ -116,6 +116,9 @@ describe("the shipped key table", () => {
     expect(lookup(tree, ["a", "s"])).toMatchObject({ command: "turn.stop", label: "停止这一轮" });
     expect(lookup(tree, ["t", "n"])).toMatchObject({ command: "thread.next" });
     expect(lookup(tree, ["3"])).toMatchObject({ command: "tab.goto.3" });
+    // what runs now has the lowercase key; renaming, rarer, the capital
+    expect(lookup(tree, ["t", "r"])).toMatchObject({ command: "thread.running", label: "正在跑的会话" });
+    expect(lookup(tree, ["t", "R"])).toMatchObject({ command: "thread.rename" });
   });
 });
 
@@ -124,6 +127,8 @@ describe("which command a key runs", () => {
     expect(chordCommand(DEFAULT_BINDINGS, "alt+ArrowDown", ctx({ typing: true }), all)).toBe("thread.next");
     expect(chordCommand(DEFAULT_BINDINGS, "alt+ArrowUp", ctx(), all)).toBe("thread.prev");
     expect(chordCommand(DEFAULT_BINDINGS, "alt+shift+ArrowDown", ctx(), all)).toBe("thread.waiting");
+    expect(chordCommand(DEFAULT_BINDINGS, "alt+shift+ArrowUp", ctx({ typing: true }), all)).toBe("thread.running");
+    expect(chordCommand(DEFAULT_BINDINGS, "alt+shift+ArrowUp", ctx({ typing: true, editor: true }), all)).toBeNull();
     expect(chordCommand(DEFAULT_BINDINGS, "alt+ArrowDown", ctx({ typing: true, editor: true }), all)).toBeNull();
     expect(chordCommand(DEFAULT_BINDINGS, "alt+ArrowDown", ctx({ layer: true }), all)).toBeNull();
   });

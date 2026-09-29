@@ -4,7 +4,21 @@
 // draws it (ui/keys/PickerDialog); the commands only ask.
 import { useSyncExternalStore } from "react";
 
-export type PickerItem = { id: string; label: string; detail?: string; keywords?: string };
+export type PickerItem = {
+  id: string;
+  label: string;
+  /** a path or an address, in mono, at the right */
+  detail?: string;
+  /** a word after the label, muted (a project's name) */
+  note?: string;
+  /** what it is doing, at the right (the running conversations) */
+  hint?: string;
+  /** the hint's colour: waiting on the person (amber), running (blue) */
+  tone?: "waiting" | "running";
+  /** the one on screen now */
+  current?: boolean;
+  keywords?: string;
+};
 
 export type PickerRequest = {
   title: string;

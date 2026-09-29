@@ -5,12 +5,13 @@
 // (外观 → 系统通知) and the installed app's badge counting the threads that
 // wait on the person; a page served as the offline shell reloads once the
 // server answers again.
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { listRunningThreads } from "@/core/api";
 import { usePreference } from "@/core/keys/preference";
 import { joinNotify, notificationFor, shouldNotify, waitingCount } from "@/core/notify";
-import { unwrap } from "@/core/projects";
+import { queryKeys, unwrap } from "@/core/projects";
 import { getSocket } from "@/core/socket";
 import {
   badgeSupported,
@@ -55,16 +56,24 @@ export function PwaBridge({ prod = import.meta.env.PROD, registerAfterMs = REGIS
     return whenServerBack(() => window.location.reload());
   }, []);
 
+  // the notify feed is joined on every page: it drives the badge, the system
+  // notifications and the running-conversations query (the status strip's chip,
+  // the picker, the welcome page — a slow poll otherwise), so an ask, a turn's
+  // start or end shows within the event, not the poll
+  const client = useQueryClient();
   useEffect(() => {
     const badge = badgeSupported();
-    if (!notifications && !badge) return;
+    const changed = () => void client.invalidateQueries({ queryKey: queryKeys.running });
     const recount = () =>
       void listRunningThreads()
         .then(unwrap)
         .then((data) => setBadge(waitingCount((data as { threads: { waiting?: boolean }[] }).threads)))
         .catch(() => undefined);
     return joinNotify(getSocket(), {
-      onRunning: (running) => setBadge(waitingCount(running)),
+      onRunning: (running) => {
+        if (badge) setBadge(waitingCount(running));
+        changed();
+      },
       onEvent: (event) => {
         const page = { visible: document.visibilityState === "visible", focused: document.hasFocus() };
         if (notifications && notificationPermission() === "granted" && shouldNotify(page)) {
@@ -74,9 +83,10 @@ export function PwaBridge({ prod = import.meta.env.PROD, registerAfterMs = REGIS
           }).catch(() => undefined);
         }
         if (badge) recount();
+        changed();
       },
     });
-  }, [notifications]);
+  }, [notifications, client]);
 
   return null;
 }

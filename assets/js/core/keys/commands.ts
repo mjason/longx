@@ -42,6 +42,7 @@ export const COMMANDS: Record<string, string> = {
   "thread.next": "下一个会话",
   "thread.prev": "上一个会话",
   "thread.waiting": "下一个等你处理的会话",
+  "thread.running": "正在跑的会话",
   "thread.rename": "重命名",
   "thread.archive": "归档",
   "subagents.open": "子 agent",

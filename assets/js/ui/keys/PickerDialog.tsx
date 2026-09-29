@@ -48,9 +48,19 @@ export function PickerDialog() {
           <CommandList>
             <CommandEmpty>{search && found === null ? t.keys.searching : t.keys.noPicked}</CommandEmpty>
             {items.map((item) => (
-              <CommandItem key={item.id} value={`${item.label} ${item.keywords ?? ""} ${item.id}`} onSelect={() => pick(item)}>
+              <CommandItem key={item.id} value={`${item.label} ${item.keywords ?? ""} ${item.id}`} onSelect={() => pick(item)} data-current={item.current ? "true" : undefined}>
+                {item.current ? <span className="text-muted-foreground shrink-0 text-xs">{t.keys.current}</span> : null}
                 <span className="truncate">{item.label}</span>
+                {item.note ? <span className="text-muted-foreground shrink-0 truncate text-xs">{item.note}</span> : null}
                 {item.detail ? <span className="text-muted-foreground ml-auto truncate pl-3 font-mono text-xs">{item.detail}</span> : null}
+                {item.hint ? (
+                  <span
+                    className={`${item.detail ? "ml-3" : "ml-auto"} shrink-0 truncate pl-3 text-xs ${item.tone === "waiting" ? "text-warning" : item.tone === "running" ? "text-primary" : "text-muted-foreground"}`}
+                    data-tone={item.tone}
+                  >
+                    {item.hint}
+                  </span>
+                ) : null}
               </CommandItem>
             ))}
           </CommandList>

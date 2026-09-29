@@ -57,7 +57,10 @@ export const DEFAULT_BINDINGS: Binding[] = [
   { keys: "alt+ArrowUp", command: "thread.prev", when: { editor: false } },
   spc("t w", "thread.waiting"),
   { keys: "alt+shift+ArrowDown", command: "thread.waiting", when: { editor: false } },
-  spc("t r", "thread.rename"),
+  // what runs now, any project: a picker (⌥⇧↑ beside ⌥⇧↓); renaming, rarer, moved to the capital
+  spc("t r", "thread.running"),
+  { keys: "alt+shift+ArrowUp", command: "thread.running", when: { editor: false } },
+  spc("t R", "thread.rename"),
   spc("t a", "thread.archive"),
   spc("t s", "subagents.open"),
 

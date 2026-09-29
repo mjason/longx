@@ -10,6 +10,7 @@ import { useGitInfo } from "@/core/projects";
 import { useUpgradeStatus } from "@/core/upgrade";
 import { t } from "@/ui/strings";
 import type { ProjectContext } from "./ProjectWindow";
+import { RunningChip } from "./RunningChip";
 
 const item = (extra = "") => `flex shrink-0 items-center gap-1 whitespace-nowrap ${extra}`;
 
@@ -29,6 +30,7 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
         <GitBranch className="size-3" /> {git.data ? (git.data.repository ? shortSha(git.data.head) : "no git") : "…"}
         {git.data?.repository && !git.data.clean ? <span className="text-warning">·{git.data.changes}</span> : null}
       </span>
+      <RunningChip className={item()} />
       {deps.data && deps.data.missing > 0 ? (
         <Link to="/settings/dependencies" className={item("text-warning hover:underline")} title={t.dependenciesPage.hint}>
           <AlertTriangle className="size-3" /> {t.dependenciesPage.missing(deps.data.missing)}

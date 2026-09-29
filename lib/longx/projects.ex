@@ -867,6 +867,8 @@ defmodule Longx.Projects do
     )
     |> Enum.map(fn %Thread{} = thread ->
       agents = Map.get(working, thread.id, [])
+      # what the turn is doing and when it began, off the view in ETS (never a call to the agent)
+      meta = Longx.Agent.ThreadState.Store.meta(thread.kernel_thread_id)
 
       %{
         id: thread.id,
@@ -877,6 +879,8 @@ defmodule Longx.Projects do
         project_id: thread.project_id,
         project_slug: thread.project.slug,
         project_name: thread.project.name,
+        progress: meta.progress,
+        turn_started_at: running_turn_started_at(meta.turn),
         waiting:
           Longx.Agent.ThreadState.Store.requests(thread.kernel_thread_id) != [] or
             Enum.any?(active, fn a ->
@@ -888,6 +892,12 @@ defmodule Longx.Projects do
       }
     end)
   end
+
+  # epoch seconds of the turn in flight (the `turn/started` event's stamp); nil when none runs
+  defp running_turn_started_at(%{"status" => "inProgress", "startedAt" => at}) when is_number(at),
+    do: at
+
+  defp running_turn_started_at(_turn), do: nil
 
   # the root of a sub-agent's row: its parent, its parent's parent…
   defp root_of(%Thread{parent_thread_id: nil} = thread), do: {:ok, thread}

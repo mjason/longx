@@ -1712,7 +1712,17 @@ on first use.
     `Projects.recent_threads/1` —, projects, commands with their keys; it registers its
     own `palette.open`), ⌥↑ / ⌥↓ the conversation above / below (`ProjectCommands`, the
     list's order), ⌥⇧↓ the next one waiting on the person in any project
-    (`GlobalCommands`, `thread.waiting`), `SPC t l` the one visited before
+    (`GlobalCommands`, `thread.waiting`), **⌥⇧↑ / `SPC t r` the running-conversations
+    picker** (`thread.running`, `ui/keys/runningPicker.ts`: everything with a turn in
+    flight in any project, the ones waiting on the person first, each with its project,
+    what it does — the ask, the sub-agents at work, `progressLabel` of what the model
+    writes and for how long — and the one on screen marked 当前; the status strip's
+    `RunningChip` — `3 个在跑 · 1 个等你`, amber when someone waits — opens the same;
+    `running_threads/0` gives `progress` and `turn_started_at` off the store's meta for
+    it, and `PickerItem` gained `note` / `hint` / `tone` / `current`; renaming moved to
+    `SPC t R`; the running query is a 15 s poll that the notify feed invalidates on every
+    event — `PwaBridge` joins `notify` on every page now, not only with the badge or the
+    system notifications on), `SPC t l` the one visited before
     (`core/keys/visits.ts`), ⌘S, ⌘1–4 (registered by `ProjectWindow` itself, not the lazy
     `ProjectCommands`, so they work from the first paint). **Esc Esc stops a running
     turn**: the first Esc leaves the text field (or, outside one, only arms) and the

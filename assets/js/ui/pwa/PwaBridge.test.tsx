@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -36,7 +37,12 @@ const clearAppBadge = vi.fn(async () => undefined);
 
 function mount(prod = true) {
   const router = createMemoryRouter([{ path: "*", element: <PwaBridge prod={prod} registerAfterMs={0} /> }], { initialEntries: ["/"] });
-  render(<RouterProvider router={router} />);
+  // the bridge invalidates the running-conversations query on every notify event
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
   return router;
 }
 
