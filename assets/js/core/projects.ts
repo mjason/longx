@@ -220,18 +220,45 @@ export type RunningThread = {
   turnStartedAt: number | null;
 };
 
+/** A root thread whose turn ended lately and that runs nothing now — the way back to a task that finished elsewhere. */
+export type FinishedThread = {
+  id: string;
+  kernelThreadId: string;
+  title: string | null;
+  preview: string | null;
+  lastActivityAt: string | null;
+  projectId: string;
+  projectSlug: string;
+  projectName: string;
+  /** how its last turn ended */
+  outcome: "completed" | "failed" | "interrupted";
+  /** epoch seconds */
+  finishedAt: number | null;
+  error: string | null;
+};
+
+/** what `list_running_threads` answers: what runs, and what ended lately */
+type Attention = { threads: RunningThread[]; finished: FinishedThread[] };
+
+// one query behind both hooks (the same key, a `select` each): one fetch, one poll
+const attentionQuery = {
+  queryKey: queryKeys.running,
+  queryFn: async () => unwrap(await listRunningThreads()) as Attention,
+};
+const selectRunning = (a: Attention) => a.threads;
+const selectFinished = (a: Attention) => a.finished;
+
 /**
  * Every running thread. A slow poll: the page's notify channel invalidates the
  * query on every turn start, end and ask (ui/pwa/PwaBridge), so 15 s is a fallback.
  */
 export function useRunningThreads(intervalMs = 15_000, enabled = true) {
-  return useQuery({
-    queryKey: queryKeys.running,
-    queryFn: async () =>
-      unwrap(await listRunningThreads()).threads as RunningThread[],
-    refetchInterval: intervalMs,
-    enabled,
-  });
+  return useQuery({ ...attentionQuery, select: selectRunning, refetchInterval: intervalMs, enabled });
+}
+
+/** The threads that finished lately (the same query as the running ones). */
+export function useFinishedThreads(intervalMs = 15_000, enabled = true) {
+  return useQuery({ ...attentionQuery, select: selectFinished, refetchInterval: intervalMs, enabled });
 }
 
 /** A conversation of any project, for ⌘K. */

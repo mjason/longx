@@ -3490,7 +3490,7 @@ export type ListSubagentsQuery = { listSubagents: Array<{ id: string, kernelThre
 export type ListRunningThreadsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type ListRunningThreadsQuery = { listRunningThreads: { threads: Array<unknown> } };
+export type ListRunningThreadsQuery = { listRunningThreads: { threads: Array<unknown>, finished: Array<unknown> } };
 
 export type ListRecentThreadsQueryVariables = Exact<{
   limit?: number | null | undefined;
@@ -4896,6 +4896,7 @@ export const ListRunningThreadsDocument = new TypedDocumentString(`
     query ListRunningThreads {
   listRunningThreads {
     threads
+    finished
   }
 }
     `) as unknown as TypedDocumentString<ListRunningThreadsQuery, ListRunningThreadsQueryVariables>;

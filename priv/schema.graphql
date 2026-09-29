@@ -408,6 +408,7 @@ type ListRecent {
 
 type ListRunning {
   threads: [Json!]!
+  finished: [Json!]!
 }
 
 type ClearGoal {

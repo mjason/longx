@@ -9,7 +9,7 @@ import { openPicker } from "@/core/keys/picker";
 import { getPreference, setPreference } from "@/core/keys/preference";
 import { useCommand } from "@/core/keys/useCommand";
 import { previousVisit } from "@/core/keys/visits";
-import { unwrap, useProjects, type RunningThread } from "@/core/projects";
+import { unwrap, useProjects, type FinishedThread, type RunningThread } from "@/core/projects";
 import { setTheme } from "@/core/theme";
 import { t } from "@/ui/strings";
 import { openRunningPicker } from "./runningPicker";
@@ -60,8 +60,9 @@ export function GlobalCommands() {
       .then(unwrap)
       .then((data) => {
         const threads = data.threads as RunningThread[];
-        if (threads.length === 0) return void toast(t.keys.noRunning);
-        openRunningPicker(threads, threadId, navigate);
+        const finished = (data.finished ?? []) as FinishedThread[];
+        if (threads.length === 0 && finished.length === 0) return void toast(t.keys.noRunning);
+        openRunningPicker(threads, finished, threadId, navigate);
       })
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)));
   });

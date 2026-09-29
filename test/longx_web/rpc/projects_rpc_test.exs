@@ -633,8 +633,14 @@ defmodule LongxWeb.ProjectsRpcTest do
       assert_receive {:thread, _, "turn/completed", _}, 5_000
       thread_idle(conn, project["id"], thread_id)
 
-      assert %{"success" => true, "data" => %{"threads" => []}} =
-               rpc(conn, "list_running_threads", %{"fields" => ["threads"]})
+      # done: off the running list, on the finished one (the way back to it)
+      assert %{"success" => true, "data" => %{"threads" => [], "finished" => [finished]}} =
+               rpc(conn, "list_running_threads", %{"fields" => ["threads", "finished"]})
+
+      assert finished["id"] == thread_id
+      assert finished["outcome"] == "completed"
+      assert finished["projectSlug"] == project["slug"]
+      assert is_number(finished["finishedAt"])
     end
 
     test "set_goal / clear_goal", %{conn: conn, dir: dir} do

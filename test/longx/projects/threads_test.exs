@@ -994,9 +994,24 @@ defmodule Longx.Projects.ThreadsTest do
 
     assert is_number(t1) and is_number(t2) and t1 <= t2
 
+    # nothing has finished yet
+    assert Projects.finished_threads() == []
+
+    # the first ends: it moves from running to finished, the newest end first
     send(h1, :go)
+    assert_eventually_ok(fn -> match?([%{id: ^newest}], Projects.running_threads()) end)
+
+    assert [%{id: ^older, outcome: "completed", project_slug: slug, finished_at: at}] =
+             Projects.finished_threads()
+
+    assert slug == project.slug and is_number(at)
+
     send(h2, :go)
     assert_eventually_ok(fn -> Projects.running_threads() == [] end)
+    assert [%{id: ^newest}, %{id: ^older}] = Projects.finished_threads()
+    # only what ended lately, and only so many
+    assert Projects.finished_threads(within: 0) == []
+    assert [%{id: ^newest}] = Projects.finished_threads(limit: 1)
   end
 
   test "a thread whose sub-agent is still working counts as running on the welcome page, naming the agent",

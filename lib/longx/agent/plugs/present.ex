@@ -140,6 +140,25 @@ defmodule Longx.Agent.Plugs.Present do
     "Header" => {"text", ~w(value title content)}
   }
 
+  # a Form with a footer (`confirm` / `cancel` are the Card's words; a Form takes
+  # only `gap` and submits through a child Button) is the Card the model meant,
+  # `asForm` so the footer's confirm submits the named controls — the person
+  # once faced five checkboxes with nothing to press, and the turn waited on
+  # them until they stopped it
+  defp normalize_node(%{"$type" => "Form"} = map)
+       when is_map_key(map, "confirm") or is_map_key(map, "cancel") do
+    map |> Map.put("$type", "Card") |> Map.put("asForm", true) |> normalize_node()
+  end
+
+  # a footer button without an `$action` fires nothing (the library's `fire` is
+  # a no-op then): the confirm submits, the cancel dismisses
+  defp normalize_node(%{"$type" => "Card"} = map) do
+    map
+    |> footer_action("confirm", "submit")
+    |> footer_action("cancel", "cancel")
+    |> normalize_props()
+  end
+
   defp normalize_node(%{"$type" => type} = map) when is_map_key(@prop_aliases, type) do
     {wanted, aliases} = @prop_aliases[type]
 
@@ -159,6 +178,25 @@ defmodule Longx.Agent.Plugs.Present do
   defp normalize_node(map) when is_map(map), do: normalize_props(map)
   defp normalize_node(list) when is_list(list), do: Enum.map(list, &normalize_node/1)
   defp normalize_node(other), do: other
+
+  defp footer_action(map, key, type) do
+    case map[key] do
+      %{"$action" => %{"type" => t}} = button when is_binary(t) and t != "" ->
+        Map.put(map, key, button)
+
+      %{"$action" => t} = button when is_binary(t) and t != "" ->
+        Map.put(map, key, Map.put(button, "$action", %{"type" => t}))
+
+      %{} = button ->
+        Map.put(map, key, Map.put(button, "$action", %{"type" => type}))
+
+      label when is_binary(label) ->
+        Map.put(map, key, %{"label" => label, "$action" => %{"type" => type}})
+
+      _ ->
+        map
+    end
+  end
 
   defp normalize_props(map) do
     Map.new(map, fn
@@ -182,8 +220,49 @@ defmodule Longx.Agent.Plugs.Present do
 
   defp decode_if_json(other), do: other
 
+  @doc """
+  A tree the person can answer: one with a Button, a Card's footer or a control
+  that fires (`$action`) is left alone; anything else — a Form of checkboxes
+  with nothing to press, a Text — gets a Card footer of 确定 / 取消 (a Form
+  becomes the Card itself, `asForm`, never a form inside a form), so an ask
+  always has a way out.
+  """
+  @spec answerable(term) :: term
+  def answerable(%{"$type" => _} = tree) do
+    if answerable?(tree) do
+      tree
+    else
+      card =
+        case tree do
+          %{"$type" => "Form"} -> Map.put(tree, "$type", "Card")
+          %{"$type" => "Card"} -> tree
+          other -> %{"$type" => "Card", "children" => [other]}
+        end
+
+      card
+      |> Map.put("asForm", true)
+      |> Map.put_new("confirm", %{"label" => "确定", "$action" => %{"type" => "submit"}})
+      |> Map.put_new("cancel", %{"label" => "取消", "$action" => %{"type" => "cancel"}})
+    end
+  end
+
+  def answerable(other), do: other
+
+  defp answerable?(%{"$type" => "Button"}), do: true
+
+  defp answerable?(%{"$type" => "Card"} = card)
+       when is_map_key(card, "confirm") or is_map_key(card, "cancel"), do: true
+
+  defp answerable?(%{"$action" => _}), do: true
+
+  defp answerable?(map) when is_map(map),
+    do: Enum.any?(map, fn {_key, value} -> answerable?(value) end)
+
+  defp answerable?(list) when is_list(list), do: Enum.any?(list, &answerable?/1)
+  defp answerable?(_other), do: false
+
   def prompt_user(tree, ctx) do
-    case Context.ask(ctx, title: title_of(tree), spec: tree, timeout: @ask_timeout) do
+    case Context.ask(ctx, title: title_of(tree), spec: answerable(tree), timeout: @ask_timeout) do
       {:ok, %{"action" => action}} -> {:ok, Jason.encode!(action)}
       {:ok, answer} -> {:ok, Jason.encode!(answer)}
       {:error, :cancelled} -> {:error, "the person dismissed it without answering"}

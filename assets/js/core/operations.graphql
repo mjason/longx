@@ -78,7 +78,7 @@ query GetThread($filter: ThreadFilterInput, $id: ID!) { getThread(filter: $filte
 
 query ListSubagents($sort: [ThreadSortInput], $filter: ThreadFilterInput, $parentThreadId: ID!) { listSubagents(sort: $sort, filter: $filter, parentThreadId: $parentThreadId) { id kernelThreadId title preview handle onDuty cwd modelSlug reasoningEffort webSearch agentPath status lastActivityAt insertedAt updatedAt projectId parentThreadId } }
 
-query ListRunningThreads { listRunningThreads { threads } }
+query ListRunningThreads { listRunningThreads { threads finished } }
 
 query ListRecentThreads($limit: Int) { listRecentThreads(limit: $limit) { threads } }
 

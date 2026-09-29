@@ -381,7 +381,11 @@ defmodule Longx.Projects.Thread do
     # untyped: a Json value on the wire)
     action :list_running, Types.ListRunning do
       run fn _input, _ ->
-        {:ok, %{threads: Enum.map(Longx.Projects.running_threads(), &camelize/1)}}
+        {:ok,
+         %{
+           threads: Enum.map(Longx.Projects.running_threads(), &camelize/1),
+           finished: Enum.map(Longx.Projects.finished_threads(), &camelize/1)
+         }}
       end
     end
 

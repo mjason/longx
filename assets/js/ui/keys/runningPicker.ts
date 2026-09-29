@@ -2,15 +2,17 @@
 // strip's chip): every conversation with a turn in flight, any project — the
 // ones waiting on the person first, then by last activity as the server lists
 // them —, each with its project, what it is doing (the ask, the sub-agents at
-// work, what the model writes and for how long) and the one on screen marked.
-// ⌘K lists them too, among everything else; ⌥⇧↓ walks only the waiting ones.
+// work, what the model writes and for how long) and the one on screen marked;
+// under them the ones that finished lately, how their turn ended and when —
+// the way back to a task that ended while the person looked elsewhere. ⌘K
+// lists them too, among everything else; ⌥⇧↓ walks only the waiting ones.
 import { openPicker, type PickerItem } from "@/core/keys/picker";
-import { formatElapsed } from "@/core/format";
-import type { RunningThread } from "@/core/projects";
+import { formatElapsed, relativeTime } from "@/core/format";
+import type { FinishedThread, RunningThread } from "@/core/projects";
 import { progressLabel } from "@/ui/chat/progressLabel";
 import { t } from "@/ui/strings";
 
-const name = (r: RunningThread) => r.title || r.preview || `~${r.id.slice(-6)}`;
+const name = (r: { id: string; title: string | null; preview: string | null }) => r.title || r.preview || `~${r.id.slice(-6)}`;
 
 function doing(r: RunningThread, nowMs: number): { hint: string; tone: "waiting" | "running" } {
   if (r.waiting) return { hint: t.keys.waiting, tone: "waiting" };
@@ -20,26 +22,43 @@ function doing(r: RunningThread, nowMs: number): { hint: string; tone: "waiting"
   return { hint: since !== null && since >= 60 ? `${what} · ${formatElapsed(since)}` : what, tone: "running" };
 }
 
-/** The picker's rows for what runs now. */
-export function runningItems(threads: RunningThread[], currentId: string | null, nowMs: number): PickerItem[] {
+function ended(r: FinishedThread, nowMs: number): string {
+  const outcome = t.finishedOutcome[r.outcome] ?? r.outcome;
+  return r.finishedAt ? `${outcome} · ${relativeTime(new Date(r.finishedAt * 1000).toISOString(), new Date(nowMs))}` : outcome;
+}
+
+/** The picker's rows: what runs now, then what finished lately. */
+export function runningItems(threads: RunningThread[], finished: FinishedThread[], currentId: string | null, nowMs: number): PickerItem[] {
   const ordered = [...threads].sort((a, b) => Number(b.waiting) - Number(a.waiting));
-  return ordered.map((r) => ({
+  const running: PickerItem[] = ordered.map((r) => ({
     id: r.id,
     label: name(r),
     note: r.projectName,
+    group: t.keys.groupRunning,
     ...doing(r, nowMs),
     ...(r.id === currentId ? { current: true } : {}),
     keywords: `${r.projectName} ${r.projectSlug} ${r.preview ?? ""}`,
   }));
+  const done: PickerItem[] = finished.map((r) => ({
+    id: r.id,
+    label: name(r),
+    note: r.projectName,
+    group: t.keys.groupFinished,
+    hint: ended(r, nowMs),
+    tone: "finished",
+    ...(r.id === currentId ? { current: true } : {}),
+    keywords: `${r.projectName} ${r.projectSlug} ${r.preview ?? ""}`,
+  }));
+  return [...running, ...done];
 }
 
-/** Opens the picker over `threads`; a pick goes to that conversation's page. */
-export function openRunningPicker(threads: RunningThread[], currentId: string | null, navigate: (to: string) => void): void {
+/** Opens the picker over `threads` and `finished`; a pick goes to that conversation's page. */
+export function openRunningPicker(threads: RunningThread[], finished: FinishedThread[], currentId: string | null, navigate: (to: string) => void): void {
   openPicker({
     title: t.keys.runningThreads,
-    items: runningItems(threads, currentId, Date.now()),
+    items: runningItems(threads, finished, currentId, Date.now()),
     onPick: (item) => {
-      const picked = threads.find((r) => r.id === item.id);
+      const picked = [...threads, ...finished].find((r) => r.id === item.id);
       if (picked) navigate(`/p/${picked.projectSlug}/t/${picked.id}`);
     },
   });

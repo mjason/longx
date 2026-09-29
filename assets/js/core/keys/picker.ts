@@ -13,10 +13,12 @@ export type PickerItem = {
   note?: string;
   /** what it is doing, at the right (the running conversations) */
   hint?: string;
-  /** the hint's colour: waiting on the person (amber), running (blue) */
-  tone?: "waiting" | "running";
+  /** the hint's colour: waiting on the person (amber), running (blue), finished (muted) */
+  tone?: "waiting" | "running" | "finished";
   /** the one on screen now */
   current?: boolean;
+  /** a heading the item sits under; items without one come first, ungrouped */
+  group?: string;
   keywords?: string;
 };
 

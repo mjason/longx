@@ -51,16 +51,19 @@ describe("ProjectWindow", () => {
           running("t1", { title: "重写解析器", progress: { kind: "toolCall", name: "apply_patch", bytes: 2048 } }),
           running("t9", { title: "登录 COROS", waiting: true, projectId: "id-2", projectSlug: "runs", projectName: "跑步" }),
         ],
+        // and what ended lately, under its own heading: the way back to a finished task
+        finished: [{ ...running("t5", { title: "跑回测" }), outcome: "completed", finishedAt: Math.round(Date.now() / 1000) - 120, error: null }],
       }) as never,
     );
     const { router } = renderAt("/p/app-1/t/t1");
     const chip = await screen.findByTestId("running-chip");
-    expect(chip).toHaveTextContent("2 个在跑 · 1 个等你");
+    expect(chip).toHaveTextContent("2 个在跑 · 1 个等你 · 1 个刚完成");
 
     await user.click(chip);
     const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getAllByRole("group").map((g) => g.getAttribute("aria-label") ?? g.textContent?.slice(0, 3))).toHaveLength(2);
     const options = within(dialog).getAllByRole("option");
-    expect(options.map((o) => o.textContent)).toEqual(["登录 COROS跑步等你处理", "当前重写解析器App正在写 apply_patch 的参数（2.0 KB）"]);
+    expect(options.map((o) => o.textContent)).toEqual(["登录 COROS跑步等你处理", "当前重写解析器App正在写 apply_patch 的参数（2.0 KB）", "跑回测App完成 · 2 分钟前"]);
     await user.click(options[0]!);
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/runs/t/t9"));
     vi.mocked(listRunningThreads).mockResolvedValue(ok({ threads: [] }) as never);

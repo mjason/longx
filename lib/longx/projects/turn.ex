@@ -51,6 +51,18 @@ defmodule Longx.Projects.Turn do
       filter expr(status == :in_progress)
     end
 
+    # the turns that ended lately, the newest end first (the finished-conversations list)
+    read :ended_since do
+      argument :since, :utc_datetime_usec, allow_nil?: false
+
+      filter expr(
+               status in [:completed, :failed, :interrupted] and not is_nil(completed_at) and
+                 completed_at >= ^arg(:since)
+             )
+
+      prepare build(sort: [completed_at: :desc])
+    end
+
     update :mark_reverted do
       change set_attribute(:status, :reverted)
     end

@@ -770,7 +770,15 @@ on first use.
     百炼 and DeepSeek slip like that, and a card once showed its children as raw text; a
     component's words under a prop the vocabulary does not read (`Alert.text`,
     `Text.text`, `Header.value` …) are moved to the one it reads — an Alert once drew as an
-    empty pill.
+    empty pill; **a `Form` with `confirm` / `cancel`** (the Card's footer words — a Form
+    takes only `gap` and submits through a child Button) becomes a `Card` `asForm`, and a
+    footer button without an `$action` gets one (`submit` / `cancel`; the library's `fire`
+    is a no-op without) — a `prompt_user` of five checkboxes once drew with nothing to
+    press and the turn waited on the person until they stopped it (jbt-alab,
+    2026-09-29). **`Present.answerable/1`** (on `prompt_user`'s spec before the ask):
+    a tree with no Button, no footer and no firing control gets a Card footer of 确定 /
+    取消 (a Form becomes the Card itself — never a form in a form), so an ask always has
+    a way out.
     `Context.present(ctx, tree)` (→ `Agent.present/2`, a cast; `Kernel.Calls.present/2`
     appends a completed `longx.present` item as an `:activity` row, `context?: false`,
     never model input) or `"present" => tree` in the result's meta. Tests:
@@ -1737,7 +1745,15 @@ on first use.
     writes and for how long — and the one on screen marked 当前; the status strip's
     `RunningChip` — `3 个在跑 · 1 个等你`, amber when someone waits — opens the same;
     `running_threads/0` gives `progress` and `turn_started_at` off the store's meta for
-    it, and `PickerItem` gained `note` / `hint` / `tone` / `current`; renaming moved to
+    it, and `PickerItem` gained `note` / `hint` / `tone` / `current` / `group`; **under
+    the running ones, 刚完成**: `Projects.finished_threads/1` — the root conversations
+    whose turn ended in the last 6 h and that run nothing now, newest end first, at
+    most 10, each with `outcome` (the turn's status) and `finished_at` — rides on
+    `list_running_threads` as `finished` (`useFinishedThreads`, a `select` over the
+    same query as `useRunningThreads`), the picker groups 在跑 / 刚完成 (`完成 · 5 分钟前`),
+    the chip counts `N 个刚完成` — the way back to a task that ended while the person
+    looked elsewhere (they open several, and finding the one that finished was a
+    scan of ⌘K; no toast: they switch themselves); renaming moved to
     `SPC t R`; the running query is a 15 s poll that the notify feed invalidates on every
     event — `PwaBridge` joins `notify` on every page now, not only with the badge or the
     system notifications on), `SPC t l` the one visited before

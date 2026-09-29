@@ -121,6 +121,7 @@ defmodule Longx.Projects do
       define :get_turn_by_kernel_id, action: :by_kernel_id, args: [:kernel_turn_id]
       define :list_turns_in_progress, action: :in_progress_for_project, args: [:project_id]
       define :list_all_turns_in_progress, action: :in_progress
+      define :list_turns_ended_since, action: :ended_since, args: [:since]
 
       define :list_turns_for_thread,
         action: :for_thread,
@@ -898,6 +899,48 @@ defmodule Longx.Projects do
     do: at
 
   defp running_turn_started_at(_turn), do: nil
+
+  @finished_within 6 * 3600
+  @finished_limit 10
+
+  @doc """
+  The root conversations whose turn ended lately and that run nothing now —
+  the way back to a task that finished while the person looked elsewhere,
+  beside the running ones in the picker. Each row: the thread, its project,
+  `outcome` (the turn's status) and `finished_at` (epoch seconds); the
+  newest end first, `within:` seconds (6 h), at most `limit:` (10).
+  """
+  @spec finished_threads(within: non_neg_integer, limit: pos_integer) :: [map]
+  def finished_threads(opts \\ []) do
+    within = Keyword.get(opts, :within, @finished_within)
+    limit = Keyword.get(opts, :limit, @finished_limit)
+    since = DateTime.add(DateTime.utc_now(), -within, :second)
+    running = MapSet.new(running_threads(), & &1.id)
+
+    since
+    |> list_turns_ended_since!(load: [thread: :project])
+    |> Enum.uniq_by(& &1.thread_id)
+    |> Enum.filter(fn %Turn{thread: %Thread{} = thread} ->
+      is_nil(thread.parent_thread_id) and thread.status not in [:archived, :active] and
+        not MapSet.member?(running, thread.id)
+    end)
+    |> Enum.take(limit)
+    |> Enum.map(fn %Turn{thread: %Thread{} = thread} = turn ->
+      %{
+        id: thread.id,
+        kernel_thread_id: thread.kernel_thread_id,
+        title: thread.title,
+        preview: thread.preview,
+        last_activity_at: thread.last_activity_at,
+        project_id: thread.project_id,
+        project_slug: thread.project.slug,
+        project_name: thread.project.name,
+        outcome: Atom.to_string(turn.status),
+        finished_at: epoch(turn.completed_at),
+        error: turn.error
+      }
+    end)
+  end
 
   # the root of a sub-agent's row: its parent, its parent's parent…
   defp root_of(%Thread{parent_thread_id: nil} = thread), do: {:ok, thread}

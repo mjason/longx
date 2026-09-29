@@ -135,6 +135,30 @@ defmodule Longx.Agent.PlugsTest do
       assert %{"$type" => "Text", "value" => "v", "text" => "t"} =
                Present.normalize(%{"$type" => "Text", "value" => "v", "text" => "t"})
 
+      # a Form with a footer is the Card the model meant (a Form takes only `gap`
+      # and submits through a child Button): five checkboxes once drew with
+      # nothing to press; a footer button without an action fires nothing
+      assert %{
+               "$type" => "Card",
+               "asForm" => true,
+               "children" => [%{"$type" => "Checkbox", "name" => "cache"}],
+               "confirm" => %{"label" => "确认清理", "$action" => %{"type" => "submit"}}
+             } =
+               Present.normalize(%{
+                 "$type" => "Form",
+                 "children" => [%{"$type" => "Checkbox", "name" => "cache"}],
+                 "confirm" => %{"label" => "确认清理"}
+               })
+
+      assert %{"cancel" => %{"label" => "算了", "$action" => %{"type" => "cancel"}}} =
+               Present.normalize(%{"$type" => "Card", "cancel" => "算了"})
+
+      assert %{"confirm" => %{"$action" => %{"type" => "go"}}} =
+               Present.normalize(%{
+                 "$type" => "Card",
+                 "confirm" => %{"label" => "x", "$action" => "go"}
+               })
+
       # a Text whose value happens to look like JSON stays text
       text = %{"$type" => "Text", "value" => ~s({"not": "a tree"})}
       assert Present.normalize(text) == text
@@ -145,6 +169,39 @@ defmodule Longx.Agent.PlugsTest do
       }
 
       assert Present.normalize(tree) == tree
+    end
+
+    test "an ask always has a way out: a tree with nothing to press gets a Card footer of 确定 / 取消 (a Form becomes the Card, never a form in a form); one with a Button, a footer or a firing control is left alone" do
+      boxes = [%{"$type" => "Checkbox", "name" => "a", "label" => "A"}]
+
+      assert %{
+               "$type" => "Card",
+               "asForm" => true,
+               "children" => ^boxes,
+               "confirm" => %{"label" => "确定", "$action" => %{"type" => "submit"}},
+               "cancel" => %{"label" => "取消", "$action" => %{"type" => "cancel"}}
+             } = Present.answerable(%{"$type" => "Form", "children" => boxes})
+
+      text = %{"$type" => "Text", "value" => "just words"}
+
+      assert %{"$type" => "Card", "asForm" => true, "children" => [^text], "confirm" => _} =
+               Present.answerable(text)
+
+      button = %{
+        "$type" => "Col",
+        "children" => [%{"$type" => "Button", "label" => "go", "$action" => %{"type" => "go"}}]
+      }
+
+      assert Present.answerable(button) == button
+
+      footer = %{
+        "$type" => "Card",
+        "confirm" => %{"label" => "ok", "$action" => %{"type" => "ok"}}
+      }
+
+      assert Present.answerable(footer) == footer
+      select = %{"$type" => "Select", "options" => [], "$action" => %{"type" => "pick"}}
+      assert Present.answerable(select) == select
     end
 
     test "prompt_user outside an agent cannot ask", %{ctx: ctx} do

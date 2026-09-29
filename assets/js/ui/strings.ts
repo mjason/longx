@@ -55,7 +55,10 @@ export const t = {
   steerPending: "已插入，等 agent 下一步取用",
   sendFailed: (why: string) => `没发出去：${why}`,
   // the status strip's chip: what runs now, any project
-  runningStrip: (n: number, waiting: number) => (waiting > 0 ? `${n} 个在跑 · ${waiting} 个等你` : `${n} 个在跑`),
+  runningStrip: (n: number, waiting: number, finished = 0) =>
+    [n > 0 ? `${n} 个在跑` : "", waiting > 0 ? `${waiting} 个等你` : "", finished > 0 ? `${finished} 个刚完成` : ""].filter(Boolean).join(" · "),
+  // how a conversation's last turn ended (the finished list)
+  finishedOutcome: { completed: "完成", failed: "失败", interrupted: "已停止" } as Record<string, string>,
   runningTurn: "进行中",
   agentsWorking: (names: string[]) => `${names.join("、")} 工作中`,
   waitingForYou: "等待你",
@@ -555,8 +558,10 @@ export const t = {
     common: "常用",
     armed: (title: string) => `再按 Esc：${title}`,
     noWaiting: "没有等你处理的会话",
-    runningThreads: "正在跑的会话",
-    noRunning: "没有在跑的会话",
+    runningThreads: "正在跑、刚完成的会话",
+    noRunning: "没有在跑、也没有刚完成的会话",
+    groupRunning: "在跑",
+    groupFinished: "刚完成",
     current: "当前",
     threadsHere: "这个项目的会话",
     recentThreads: "最近的会话",

@@ -117,7 +117,7 @@ describe("the shipped key table", () => {
     expect(lookup(tree, ["t", "n"])).toMatchObject({ command: "thread.next" });
     expect(lookup(tree, ["3"])).toMatchObject({ command: "tab.goto.3" });
     // what runs now has the lowercase key; renaming, rarer, the capital
-    expect(lookup(tree, ["t", "r"])).toMatchObject({ command: "thread.running", label: "正在跑的会话" });
+    expect(lookup(tree, ["t", "r"])).toMatchObject({ command: "thread.running", label: "正在跑、刚完成的会话" });
     expect(lookup(tree, ["t", "R"])).toMatchObject({ command: "thread.rename" });
   });
 });

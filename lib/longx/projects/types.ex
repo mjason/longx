@@ -164,10 +164,15 @@ defmodule Longx.Projects.Types do
   end
 
   defmodule ListRunning do
-    @moduledoc "the result of `Longx.Projects.Thread.list_running`"
+    @moduledoc "the result of `Longx.Projects.Thread.list_running`: what runs, and what ended lately"
     use Ash.Type.NewType,
       subtype_of: :map,
-      constraints: [fields: [threads: [type: {:array, :map}, allow_nil?: false]]]
+      constraints: [
+        fields: [
+          threads: [type: {:array, :map}, allow_nil?: false],
+          finished: [type: {:array, :map}, allow_nil?: false]
+        ]
+      ]
 
     def graphql_type(_), do: :list_running
   end

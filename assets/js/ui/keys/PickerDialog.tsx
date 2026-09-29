@@ -2,7 +2,7 @@
 // fixed list filtered as typed, or a search asked as typed (files).
 import { useEffect, useState } from "react";
 import { closePicker, usePicker, type PickerItem } from "@/core/keys/picker";
-import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/ui/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/ui/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
 import { t } from "@/ui/strings";
 
@@ -47,7 +47,23 @@ export function PickerDialog() {
           <CommandInput placeholder={request?.placeholder ?? request?.title} value={query} onValueChange={setQuery} />
           <CommandList>
             <CommandEmpty>{search && found === null ? t.keys.searching : t.keys.noPicked}</CommandEmpty>
-            {items.map((item) => (
+            {groups(items).map(([group, members]) =>
+              group === null ? (
+                members.map(row)
+              ) : (
+                <CommandGroup key={group} heading={group}>
+                  {members.map(row)}
+                </CommandGroup>
+              ),
+            )}
+          </CommandList>
+        </Command>
+      </DialogContent>
+    </Dialog>
+  );
+
+  function row(item: PickerItem) {
+    return (
               <CommandItem key={item.id} value={`${item.label} ${item.keywords ?? ""} ${item.id}`} onSelect={() => pick(item)} data-current={item.current ? "true" : undefined}>
                 {item.current ? <span className="text-muted-foreground shrink-0 text-xs">{t.keys.current}</span> : null}
                 <span className="truncate">{item.label}</span>
@@ -62,10 +78,16 @@ export function PickerDialog() {
                   </span>
                 ) : null}
               </CommandItem>
-            ))}
-          </CommandList>
-        </Command>
-      </DialogContent>
-    </Dialog>
-  );
+    );
+  }
+}
+
+// the items under their headings, in the order the headings first appear; the ungrouped first
+function groups(items: PickerItem[]): [string | null, PickerItem[]][] {
+  const out = new Map<string | null, PickerItem[]>();
+  for (const item of [...items.filter((i) => !i.group), ...items.filter((i) => i.group)]) {
+    const key = item.group ?? null;
+    out.set(key, [...(out.get(key) ?? []), item]);
+  }
+  return [...out.entries()];
 }
