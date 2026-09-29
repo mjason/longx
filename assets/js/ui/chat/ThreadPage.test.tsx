@@ -1516,19 +1516,32 @@ describe("ThreadPage", () => {
     await user.type(box, "quick one{Enter}");
     // before the RPC answered, before any event: the message is there, faded, with a word
     const echo = await screen.findByText("quick one");
-    expect(echo.closest("[data-role=user]")).toHaveAttribute("data-pending", "message");
+    expect(echo.closest("[data-pending]")).toHaveAttribute("data-pending", "message");
     expect(screen.getByTestId("pending-note")).toHaveTextContent("发送中…");
 
     act(() => land(ok({ id: "turn-row" })));
-    act(() =>
+    // as the kernel sends them: the turn's start and the person's item in one batch
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
       channel.deliver("event", {
-        seq: 4,
+        seq: 5,
         method: "item/started",
         params: { turnId: "turn_2", item: { id: "u2", type: "userMessage", turnId: "turn_2", content: [{ type: "text", text: "quick one" }] } },
-      }),
-    );
+      });
+    });
     await waitFor(() => expect(screen.queryByTestId("pending-note")).not.toBeInTheDocument());
     expect(screen.getAllByText("quick one")).toHaveLength(1);
+
+    // the answer streams in under it: no branch picker anywhere — the echo giving way to
+    // the server's item is not an edit (assistant-ui once counted the two as branches, "2 / 2")
+    act(() => {
+      channel.deliver("event", { seq: 6, method: "item/started", params: { turnId: "turn_2", item: { id: "a2", type: "agentMessage", turnId: "turn_2", text: "" } } });
+      channel.deliver("event", { seq: 7, method: "item/completed", params: { turnId: "turn_2", item: { id: "a2", type: "agentMessage", turnId: "turn_2", text: "quick answer" } } });
+      channel.deliver("event", { seq: 8, method: "turn/completed", params: { turn: { id: "turn_2", status: "completed" } } });
+    });
+    await screen.findByText("quick answer");
+    expect(screen.queryByText(/^\d+ \/ \d+$/)).not.toBeInTheDocument();
+    expect(document.querySelector(".aui-branch-picker-root")).toBeNull();
   });
 
   test("a send that failed keeps its echo, in red, with the reason", async () => {
@@ -1537,7 +1550,7 @@ describe("ThreadPage", () => {
     await open();
     await user.type(screen.getByRole("textbox", { name: "随心输入" }), "again{Enter}");
     await waitFor(() => expect(screen.getByTestId("pending-note")).toHaveTextContent("没发出去：turn_in_progress"));
-    expect(screen.getByText("again").closest("[data-role=user]")).toHaveAttribute("data-pending", "message");
+    expect(screen.getByText("again").closest("[data-pending]")).toHaveAttribute("data-pending", "message");
     // the next message goes out at once (assistant-ui's queue would have held it for a turn that never ended)
     await user.type(screen.getByRole("textbox", { name: "随心输入" }), "once more{Enter}");
     await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(2));

@@ -34,7 +34,6 @@ import {
   ActionBarPrimitive,
   AuiIf,
   type AssistantState,
-  BranchPickerPrimitive,
   ComposerPrimitive,
   unstable_useComposerInputHistory,
   ErrorPrimitive,
@@ -52,8 +51,6 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   CheckIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   CopyIcon,
   DownloadIcon,
   MicIcon,
@@ -93,6 +90,8 @@ export type ThreadComponents = {
   AgentLabel?: ComponentType<{ from: string }> | undefined;
   /** Longx: the edge above a long thread's window — the earlier turns waiting there (chat/HistoryEdge) */
   HistoryEdge?: ComponentType | undefined;
+  /** Longx: what was sent and the view does not show yet, after the messages (chat/PendingEchoes) */
+  PendingEchoes?: ComponentType | undefined;
   /** Longx: under a stopped turn's last message (the stopped-run element: 继续 / 丢弃) */
   StoppedNotice?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
@@ -199,7 +198,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
   isEmpty,
   autoFocus,
 }) => {
-  const { Welcome = ThreadWelcome, HistoryEdge } = useContext(ThreadComponentsContext);
+  const { Welcome = ThreadWelcome, HistoryEdge, PendingEchoes } = useContext(ThreadComponentsContext);
 
   return (
     <ThreadPrimitive.Root
@@ -247,6 +246,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
               {() => <ThreadMessage />}
             </ThreadPrimitive.Messages>
           </div>
+          {PendingEchoes ? <PendingEchoes /> : null}
 
           <ThreadPrimitive.ViewportFooter
             className={cn(
@@ -549,7 +549,6 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-footer"
         className={cn("flex items-center", ACTION_BAR_HEIGHT)}
       >
-        <BranchPicker />
         <AssistantActionBar />
         <MessageTiming />
       </div>
@@ -632,37 +631,22 @@ const UserMessage: FC = () => {
   // question) is a user message for the model, not for the person: it sits
   // on the left under the agent's name, its markdown rendered
   const from = useAuiState((s) => s.message.metadata.custom?.["from"]);
-  // Longx: a message still on its way (core/chat/pending) — shown at once, faded, with
-  // a word under it; in red with the reason when the send failed
-  const pending = useAuiState((s) => s.message.metadata.custom?.["pending"]);
-  const sendError = useAuiState((s) => s.message.metadata.custom?.["error"]);
   if (typeof from === "string" && from !== "") return <AgentMessage from={from} />;
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
       className="fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
       data-role="user"
-      data-pending={typeof pending === "string" ? pending : undefined}
     >
       <UserMessageAttachments />
 
-      <div className={`aui-user-message-content-wrapper relative col-start-2 min-w-0 ${pending && !sendError ? "opacity-60" : ""}`}>
+      <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
         <div className="aui-user-message-content peer bg-muted text-foreground rounded-xl px-4 py-2 wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
             components={{ File: UserFilePart, Image: UserImagePart, ...(UserText ? { Text: UserText } : {}) }}
           />
         </div>
       </div>
-      {pending ? (
-        <p className={`col-start-2 text-end text-xs ${sendError ? "text-destructive" : "text-muted-foreground"}`} data-testid="pending-note">
-          {typeof sendError === "string" ? t.sendFailed(sendError) : pending === "steer" ? t.steerPending : t.sending}
-        </p>
-      ) : null}
-
-      <BranchPicker
-        data-slot="aui_user-branch-picker"
-        className="col-span-full col-start-1 row-start-3 -me-1 justify-end"
-      />
     </MessagePrimitive.Root>
   );
 };
@@ -748,32 +732,3 @@ const EditComposer: FC = () => {
   );
 };
 
-const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
-  className,
-  ...rest
-}) => {
-  return (
-    <BranchPickerPrimitive.Root
-      hideWhenSingleBranch
-      className={cn(
-        "aui-branch-picker-root text-muted-foreground -ms-2 me-2 inline-flex items-center text-xs",
-        className,
-      )}
-      {...rest}
-    >
-      <BranchPickerPrimitive.Previous asChild>
-        <TooltipIconButton tooltip="Previous">
-          <ChevronLeftIcon />
-        </TooltipIconButton>
-      </BranchPickerPrimitive.Previous>
-      <span className="aui-branch-picker-state font-medium">
-        <BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
-      </span>
-      <BranchPickerPrimitive.Next asChild>
-        <TooltipIconButton tooltip="Next">
-          <ChevronRightIcon />
-        </TooltipIconButton>
-      </BranchPickerPrimitive.Next>
-    </BranchPickerPrimitive.Root>
-  );
-};

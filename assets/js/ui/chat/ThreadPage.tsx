@@ -9,6 +9,7 @@ import { useChat } from "./ChatProvider";
 import { FileMentions, FileMentionText } from "./FileMentions";
 import { AgentLabel } from "./AgentLabel";
 import { HistoryContext, HistoryEdge } from "./HistoryEdge";
+import { PendingEchoes } from "./PendingEchoes";
 import { AgentsPanel, AgentsPill } from "./AgentsPanel";
 import { GoalBar } from "./GoalBar";
 import { ModelFailedBanner } from "./ModelFailedBanner";
@@ -48,7 +49,7 @@ const ComposerQueue = () => {
   );
 };
 
-const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers, ComposerQueue, UserText: FileMentionText, AgentLabel, ReasoningGroup: ReasoningSteps, HistoryEdge, StoppedNotice };
+const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, ComposerTrailing, ComposerPopovers, ComposerQueue, UserText: FileMentionText, AgentLabel, ReasoningGroup: ReasoningSteps, HistoryEdge, PendingEchoes, StoppedNotice };
 
 /**
  * The centre of the project window: assistant-ui's Thread element over the

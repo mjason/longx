@@ -106,6 +106,8 @@ export type LongxRuntime = {
   loadEarlierOf: LoadEarlierOf;
   /** the project's conversations with a turn in flight (their rows' status, the running list) — the thread list's marks: assistant-ui knows only the open one */
   runningThreadIds: ReadonlySet<string>;
+  /** what was sent from this page and the view does not show yet (core/chat/pending), drawn after the messages */
+  echoes: PendingSend[];
   /** why the thread cannot take messages, if so */
   disabledReason: string | null;
   /** the project's default model id, for the rail to name what a new chat starts on */
@@ -447,7 +449,6 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
         queue: queue.adapter,
         attachments,
         dictation,
-        pending: echoes,
         pendingApi,
         // assistant-ui's queue counts a dispatched message as a run until the turn
         // ends; a send that failed starts none, and every later message would wait
@@ -474,7 +475,6 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       attachments,
       dictation,
       queueVersion,
-      echoes,
       pendingApi,
     ],
   );
@@ -508,6 +508,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     history,
     loadEarlierOf,
     runningThreadIds,
+    echoes,
     disabledReason,
     defaultModelId,
     definitionModel,

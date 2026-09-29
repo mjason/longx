@@ -1584,10 +1584,16 @@ on first use.
     `item/started` came back over the socket — a GraphQL round trip and a push later,
     seconds on a slow link with the composer already empty, "老是让我觉得哪里不对";
     `onNew`, `insertQueued` and `sendText` add a `PendingSend` — text, images, `kind`
-    message / steer, `after` the view's item count — before any round trip, the
-    adapter appends `pendingMessages` after `toMessages`, the user message element
-    draws it faded with 发送中… / 已插入，等 agent 下一步取用 (`data-pending`,
-    `pending-note`), `settled` drops it once the person's own user item with the same
+    message / steer, `after` the view's item count — before any round trip,
+    `LongxRuntime.echoes` carries them and `chat/PendingEchoes` (the Thread's
+    `PendingEchoes` slot, **after the message group, never one of assistant-ui's
+    messages**: the external store's `MessageRepository` never deletes a message that
+    left the list, so an echo giving way to the server's item — another id at the same
+    place — stayed as a phantom sibling with the runtime's optimistic placeholder under
+    it, and the branch picker read "2 / 2" under the next answer; the picker itself is
+    gone from `thread.aui` — Longx never branches, no `setMessages`, a switch would only
+    throw) draws them faded with 发送中… / 已插入，等 agent 下一步取用 (`data-pending`,
+    `pending-note`), `settled` drops one once the person's own user item with the same
     words lands past `after` — the same words twice need two items —, a failed send
     keeps it in red with the reason until the next send, and `onSendFailed` →
     `queue.notifyIdle()` because assistant-ui's queue counts a dispatched message as a

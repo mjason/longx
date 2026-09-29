@@ -14,7 +14,7 @@ import type {
 import { answerRequest, interruptTurn, retractTurn, sendMessage, setGoal, steerTurn } from "@/core/api";
 import { unwrap } from "@/core/projects";
 import { toMessages, type SubViews } from "./messages";
-import { pendingMessages, type PendingApi, type PendingSend } from "./pending";
+import type { PendingApi } from "./pending";
 import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
 import { runningTurnId, type ThreadView } from "./thread";
 
@@ -55,9 +55,7 @@ export type AdapterOptions = {
   dictation?: DictationAdapter;
   /** a stop before the model answered took the person's turn out: its text goes back to the composer */
   onRetract?: (text: string) => void;
-  /** the echoes of what was sent and the view does not show yet (core/chat/pending) */
-  pending?: PendingSend[];
-  /** where a send registers its echo */
+  /** where a send registers its echo (core/chat/pending; the page draws them after the messages — never in this list, see there) */
   pendingApi?: PendingApi;
   /** a send that failed: no turn will end, so the queue must be told it is idle again */
   onSendFailed?: () => void;
@@ -136,7 +134,7 @@ export function buildAdapter(
     },
   };
   return {
-    messages: [...(opts.target ? toMessages(view, opts.subviews) : []), ...pendingMessages(opts.pending ?? [])],
+    messages: opts.target ? toMessages(view, opts.subviews) : [],
     convertMessage: (m) => m,
     isRunning: opts.target ? runningTurnId(view) !== null : false,
     isDisabled: opts.disabled ?? false,

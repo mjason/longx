@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { forThread, pendingMessages, settled, type PendingSend } from "./pending";
+import { forThread, settled, type PendingSend } from "./pending";
 import { emptyView, type ThreadView } from "./thread";
 
 const send = (over: Partial<PendingSend>): PendingSend => ({
@@ -18,20 +18,6 @@ const view = (items: ThreadView["items"], threadId = "thr_1"): ThreadView => ({ 
 const user = (id: string, text: string, extra: Record<string, unknown> = {}) => ({ id, type: "userMessage", turnId: "turn_2", content: [{ type: "text", text }], ...extra });
 
 describe("a message's echo while it travels", () => {
-  test("a pending send is a user message with its text and images, marked pending by kind, its error when it failed", () => {
-    const msgs = pendingMessages([send({ images: ["data:image/png;base64,x"] }), send({ id: "p2", kind: "steer", text: "and this", error: "boom" })]);
-    expect(msgs[0]).toEqual({
-      id: "pending:p1",
-      role: "user",
-      content: [
-        { type: "text", text: "hi" },
-        { type: "image", image: "data:image/png;base64,x" },
-      ],
-      metadata: { custom: { pending: "message" } },
-    });
-    expect(msgs[1]).toMatchObject({ id: "pending:p2", metadata: { custom: { pending: "steer", error: "boom" } } });
-  });
-
   test("the echo goes once the view shows the person's message after the items it was sent over — each item settles one echo, the same words twice need two", () => {
     const pending = [send({ id: "a", text: "继续", after: 1 }), send({ id: "b", text: "继续", after: 1 })];
     // an older 继续 sits before `after`: not this one
