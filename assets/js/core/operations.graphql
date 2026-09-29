@@ -20,7 +20,7 @@ query KnowledgeDocs { knowledgeDocs { writable title tags summary root path alwa
 
 query KnowledgeRead($path: String!) { knowledgeRead(path: $path) { text } }
 
-query AgentSettings { agentSettings { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes commandOomPriority commandMemoryPercent childModel childEffort } }
+query AgentSettings { agentSettings { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes commandShell commandOomPriority commandMemoryPercent childModel childEffort } }
 
 query PublicUrl { publicUrl { url setting } }
 
@@ -152,7 +152,7 @@ mutation KnowledgeWrite($input: KnowledgeWriteInput!) { knowledgeWrite(input: $i
 
 mutation KnowledgeDelete($input: KnowledgeDeleteInput!) { knowledgeDelete(input: $input)  }
 
-mutation SetAgentSettings($input: SetAgentSettingsInput) { setAgentSettings(input: $input) { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes commandOomPriority commandMemoryPercent childModel childEffort } }
+mutation SetAgentSettings($input: SetAgentSettingsInput) { setAgentSettings(input: $input) { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes commandShell commandOomPriority commandMemoryPercent childModel childEffort } }
 
 mutation CheckDependencies { checkDependencies { tools os missing installCommand checkedAt } }
 

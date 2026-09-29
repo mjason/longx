@@ -96,6 +96,7 @@ export const agentSettingsData = () => ({
   commandOomPriority: 800,
   commandMemoryPercent: 90,
   memoryFloorPercent: 8,
+  commandShell: "auto" as const,
   childModel: null,
   childEffort: null,
 });

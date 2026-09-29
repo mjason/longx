@@ -29,6 +29,7 @@ defmodule Longx.Agent.Definition.Settings do
     :command_oom_priority,
     :command_memory_percent,
     :memory_floor_percent,
+    :command_shell,
     :child_model,
     :child_effort
   ]
@@ -44,6 +45,7 @@ defmodule Longx.Agent.Definition.Settings do
     command_oom_priority: 800,
     command_memory_percent: 90,
     memory_floor_percent: 8,
+    command_shell: "auto",
     child_model: nil,
     child_effort: nil
   }
@@ -56,6 +58,7 @@ defmodule Longx.Agent.Definition.Settings do
           command_oom_priority: non_neg_integer,
           command_memory_percent: non_neg_integer,
           memory_floor_percent: non_neg_integer,
+          command_shell: String.t(),
           child_model: String.t() | nil,
           child_effort: String.t() | nil
         }
@@ -106,8 +109,12 @@ defmodule Longx.Agent.Definition.Settings do
 
   @doc "The settings a project runs under: its overrides on the global ones."
   @spec for_project(map) :: t
-  def for_project(%{agent_settings: overrides}),
-    do: Map.merge(global(), normalise(overrides || %{}))
+  def for_project(%{agent_settings: overrides}) do
+    settings = global()
+
+    Map.merge(settings, normalise(overrides || %{}))
+    |> Map.put(:command_shell, settings.command_shell)
+  end
 
   @spec for_project_id(String.t() | nil) :: t
   def for_project_id(nil), do: global()
@@ -196,6 +203,14 @@ defmodule Longx.Agent.Definition.Settings do
       else: {:error, "must be a whole number from 0 to 50"}
   end
 
+  defp check(:command_shell, value, _attrs) when value in ["auto", "bash", "zsh"] do
+    if value == "auto" || shell_available?(value),
+      do: :ok,
+      else: {:error, "#{value} is not installed or is not available on PATH"}
+  end
+
+  defp check(:command_shell, _value, _attrs), do: {:error, "must be auto, bash or zsh"}
+
   defp check(:child_model, slug, attrs) do
     effort = Map.get(attrs, :child_effort)
 
@@ -214,5 +229,10 @@ defmodule Longx.Agent.Definition.Settings do
     if Map.get(attrs, :child_model),
       do: :ok,
       else: {:error, "a level needs a model"}
+  end
+
+  defp shell_available?(name) do
+    System.find_executable(name) ||
+      Enum.any?(["/bin/#{name}", "/usr/bin/#{name}"], &File.regular?/1)
   end
 end

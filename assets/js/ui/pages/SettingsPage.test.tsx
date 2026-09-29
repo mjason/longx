@@ -987,6 +987,7 @@ describe("SettingsPage", () => {
     renderAt("/settings/agent");
     const section = await screen.findByTestId("section-agent");
     const settings = await within(section).findByTestId("agent-settings");
+    expect(within(settings).getByLabelText("命令使用的 Shell")).toHaveTextContent("自动");
     const depth = within(settings).getByLabelText("派出深度上限") as HTMLInputElement;
     expect(depth.value).toBe("2");
     await user.clear(depth);
@@ -998,10 +999,12 @@ describe("SettingsPage", () => {
     expect((within(settings).getByLabelText("命令被 OOM 先杀的优先级") as HTMLInputElement).value).toBe("800");
     await user.clear(floor);
     await user.type(floor, "12");
+    await user.click(within(settings).getByLabelText("命令使用的 Shell"));
+    await user.click(await screen.findByRole("option", { name: "bash" }));
     await user.click(within(settings).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(setAgentSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ input: expect.objectContaining({ maxDepth: 3, maxChildren: 4, idleMinutes: 30, childModel: null, memoryFloorPercent: 12, commandMemoryPercent: 90, commandOomPriority: 800 }) }),
+        expect.objectContaining({ input: expect.objectContaining({ maxDepth: 3, maxChildren: 4, idleMinutes: 30, childModel: null, memoryFloorPercent: 12, commandMemoryPercent: 90, commandOomPriority: 800, commandShell: "bash" }) }),
       ),
     );
   });

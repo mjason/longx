@@ -63,7 +63,9 @@ defmodule Longx.Agent.Plugs.Shell do
           :integer,
           "Kill the command after this many milliseconds (default 120000, max 1800000)."
 
-    param :shell, :string, "Shell binary to launch. Defaults to the user's default shell."
+    param :shell,
+          :string,
+          "Shell binary to launch. Defaults to the shell selected in Agent Kernel settings."
 
     param :login,
           :boolean,

@@ -40,6 +40,7 @@ npm-debug.log
 
 # the dev server's data directory (attachments, the global knowledge; prod uses LONGX_DATA_DIR)
 /data/
+.longx/local/
 
 # Go shim binaries built by `mix compile` (Mix.Tasks.Compile.Shim)
 /priv/bin/

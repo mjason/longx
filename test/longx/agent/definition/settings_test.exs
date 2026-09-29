@@ -3,6 +3,7 @@ defmodule Longx.Agent.Definition.SettingsTest do
 
   alias Longx.Agent.Definition.{Loader, Settings}
   alias Longx.Agent.Plugs.Agents
+  alias Longx.Agent.Tools.ShellEnv
   alias Longx.Projects
 
   setup do
@@ -20,7 +21,8 @@ defmodule Longx.Agent.Definition.SettingsTest do
              max_depth: 2,
              max_children: 4,
              idle_minutes: 30,
-             child_model: nil
+             child_model: nil,
+             command_shell: "auto"
            } =
              Settings.global()
 
@@ -32,6 +34,17 @@ defmodule Longx.Agent.Definition.SettingsTest do
              Settings.put_global(%{max_depth: 3, idle_minutes: 5})
 
     assert %{max_depth: 3, max_children: 4, idle_minutes: 5} = Settings.global()
+
+    if System.find_executable("bash") do
+      assert {:ok, %{command_shell: "bash"}} = Settings.put_global(%{command_shell: "bash"})
+      assert ShellEnv.shell() == System.find_executable("bash")
+
+      assert Settings.for_project(%{agent_settings: %{command_shell: "zsh"}}).command_shell ==
+               "bash"
+    end
+
+    assert {:ok, %{command_shell: "auto"}} = Settings.put_global(%{command_shell: nil})
+    assert {:error, %{field: :command_shell}} = Settings.put_global(%{command_shell: "fish"})
 
     # the machine's guards on commands: OOM priority, address-space share, the memory floor
     assert %{command_oom_priority: 800, command_memory_percent: 90, memory_floor_percent: 8} =

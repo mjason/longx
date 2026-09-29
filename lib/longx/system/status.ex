@@ -118,6 +118,7 @@ defmodule Longx.System.Status do
       argument :command_oom_priority, :integer
       argument :command_memory_percent, :integer
       argument :memory_floor_percent, :integer
+      argument :command_shell, :string
       argument :child_model, :string
       argument :child_effort, :string
 

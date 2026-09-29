@@ -23,6 +23,7 @@ import { Input } from "@/ui/components/ui/input";
 import { Label } from "@/ui/components/ui/label";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { Switch } from "@/ui/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { AgentSettingsFields, agentSettingsForm, agentSettingsInput, type AgentSettingsForm } from "@/ui/components/AgentSettingsFields";
 import { t } from "@/ui/strings";
 
@@ -123,16 +124,31 @@ function SettingsCard() {
   const models = useModelRows();
   if (settings.isPending || models.isPending) return <Skeleton className="h-24 w-full" />;
   if (settings.isError) return <p className="text-destructive text-sm">{settings.error.message}</p>;
-  return <SettingsForm key={JSON.stringify(settings.data)} initial={agentSettingsForm(settings.data)} models={models.data ?? []} />;
+  return <SettingsForm key={JSON.stringify(settings.data)} initial={agentSettingsForm(settings.data)} commandShell={settings.data.commandShell} models={models.data ?? []} />;
 }
 
-function SettingsForm({ initial, models }: { initial: AgentSettingsForm; models: ReturnType<typeof useModelRows>["data"] & object }) {
+function SettingsForm({ initial, commandShell: initialShell, models }: { initial: AgentSettingsForm; commandShell: "auto" | "bash" | "zsh"; models: ReturnType<typeof useModelRows>["data"] & object }) {
   const actions = useAgentSettingsActions();
   const [form, setForm] = useState(initial);
-  const save = () => actions.save.mutateAsync(agentSettingsInput(form)).then(() => toast.success(s.saved), fail);
+  const [commandShell, setCommandShell] = useState(initialShell);
+  const save = () => actions.save.mutateAsync({ ...agentSettingsInput(form), commandShell }).then(() => toast.success(s.saved), fail);
   return (
     <section className="space-y-4 rounded-lg border p-4" data-testid="agent-settings">
       <AgentSettingsFields idPrefix="ak" value={form} onChange={setForm} models={models} />
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="ak-command-shell">{s.commandShell}</Label>
+        <Select value={commandShell} onValueChange={(value) => setCommandShell(value as typeof commandShell)}>
+          <SelectTrigger id="ak-command-shell" className="w-40" aria-label={s.commandShell}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">{s.commandShellAuto}</SelectItem>
+            <SelectItem value="bash">bash</SelectItem>
+            <SelectItem value="zsh">zsh</SelectItem>
+          </SelectContent>
+        </Select>
+        <span className="text-muted-foreground text-xs">{s.commandShellHint}</span>
+      </div>
       <Button size="sm" onClick={save} disabled={actions.save.isPending}>{s.save}</Button>
     </section>
   );

@@ -21,24 +21,26 @@ defmodule Longx.Agent.Tools.ShellEnv do
   @dropped ~w(PWD OLDPWD SHLVL _ TERM)
   @timeout 15_000
 
-  @doc "The person's shell: `$SHELL` when it exists, else bash, else sh."
+  @doc "The configured command shell, or the person's `$SHELL` in automatic mode."
   @spec shell() :: Path.t()
   def shell do
-    Enum.find([System.get_env("SHELL"), "/bin/bash", "/bin/sh"], "/bin/sh", fn
-      nil -> false
-      path -> File.exists?(path)
-    end)
+    case Longx.Agent.Definition.Settings.global().command_shell do
+      "auto" -> auto_shell()
+      name -> System.find_executable(name) || fixed_path(name)
+    end
   end
 
   @doc "The captured environment, as a map (taken on first use)."
   @spec env() :: %{String.t() => String.t()}
   def env do
+    shell = shell()
+
     case :persistent_term.get(@key, nil) do
-      nil ->
-        {:ok, env} = refresh()
+      {^shell, env} ->
         env
 
-      env ->
+      _ ->
+        {:ok, env} = refresh(shell)
         env
     end
   end
@@ -47,23 +49,28 @@ defmodule Longx.Agent.Tools.ShellEnv do
   @spec env_list() :: [{String.t(), String.t()}]
   def env_list, do: Map.to_list(env())
 
-  @doc "Takes a new snapshot (the person changed their shell files)."
+  @doc "Takes a new environment snapshot for the selected shell."
   @spec refresh() :: {:ok, map}
   def refresh do
+    refresh(shell())
+  end
+
+  @doc false
+  def refresh(shell) do
     env =
-      case snapshot(shell()) do
+      case snapshot(shell) do
         {:ok, env} ->
           env
 
         {:error, reason} ->
           Logger.warning(
-            "agent shell env: no snapshot from #{shell()} (#{inspect(reason)}); using Longx's own environment"
+            "agent shell env: no snapshot from #{shell} (#{inspect(reason)}); using Longx's own environment"
           )
 
           System.get_env() |> parse_map()
       end
 
-    :persistent_term.put(@key, env)
+    :persistent_term.put(@key, {shell, env})
     {:ok, env}
   end
 
@@ -88,6 +95,17 @@ defmodule Longx.Agent.Tools.ShellEnv do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp auto_shell do
+    Enum.find([System.get_env("SHELL"), "/bin/bash", "/bin/sh"], "/bin/sh", fn
+      nil -> false
+      path -> File.exists?(path)
+    end)
+  end
+
+  defp fixed_path(name) do
+    Enum.find(["/bin/#{name}", "/usr/bin/#{name}"], &File.regular?/1) || name
   end
 
   @doc "Parses `env -0` output; escape sequences and control noise before an entry are dropped."
