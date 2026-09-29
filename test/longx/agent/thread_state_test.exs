@@ -471,7 +471,16 @@ defmodule Longx.Agent.ThreadStateTest do
       applied =
         live |> Enum.filter(fn {seq, _} -> seq > snapshot.seq end) |> Enum.map(&elem(&1, 1))
 
-      [%{"text" => text}] = snapshot.items
+      # `ingest` is a cast: on a loaded machine the page may join before the
+      # writer folded the first delta — then the snapshot is empty and every
+      # event applies (the join is early, nothing is lost); `[%{"text" => _}] =`
+      # once failed the release precommit on exactly that
+      text =
+        case snapshot.items do
+          [%{"text" => text}] -> text
+          [] -> ""
+        end
+
       assert text <> Enum.join(applied) == Enum.map_join(1..50, &"#{&1},")
 
       seqs = Enum.map(live, &elem(&1, 0))
