@@ -90,6 +90,8 @@ export const t = {
   waitingInsert: "立即插入",
   waitingJob: (name: string) => `后台任务 ${name}`,
   waitingFrom: "消息",
+  // the person's own words, handed to the list by a turn they stopped before the model saw them
+  waitingMine: "你",
   // a stopped turn (assistant-ui's stopped-run element)
   stoppedByPerson: "你停止了这一轮",
   stoppedByWatchdog: "长时间没有进展，Longx 停止了这一轮",

@@ -610,8 +610,11 @@ defmodule Longx.Agent do
         {:reply, {:error, :not_found}, state}
 
       {[item], rest} when state.phase == :idle ->
-        {:started, _turn_id, state} = take_up(%{state | waiting: rest, paused: false}, [item])
-        {:reply, :ok, emit_waiting(state), {:continue, :step}}
+        case take_up(%{state | waiting: rest, paused: false}, [item]) do
+          {:started, _turn_id, state} -> {:reply, :ok, emit_waiting(state), {:continue, :step}}
+          # a job's end the agent saw meanwhile: nothing to say, the item goes
+          {:nothing, state} -> {:reply, :ok, emit_waiting(state)}
+        end
 
       {[item], rest} ->
         {:reply, :ok, %{state | waiting: rest} |> steer_item(item) |> emit_waiting()}
@@ -737,11 +740,14 @@ defmodule Longx.Agent do
   # reads: a bare "interrupted: no details" once read as an environment failure
   # and the parent restarted the task the person had just stopped
   defp on_call(state, {:interrupt, opts}, _from) do
-    state = state |> stop_work() |> end_turn("interrupted", interruption(opts[:by]))
     # the person's stop: what waits stays until they speak (assistant-ui's
     # queue pauses on a cancel the same way) — a report once started a turn
-    # the moment the person had stopped one
-    state = if opts[:by] == :person, do: emit_waiting(%{state | paused: true}), else: state
+    # the moment the person had stopped one; paused before the turn ends, so
+    # a steer the end hands to the list is listed paused from the start
+    person? = opts[:by] == :person
+    state = if person?, do: %{state | paused: true}, else: state
+    state = state |> stop_work() |> end_turn("interrupted", interruption(opts[:by]))
+    state = if person?, do: emit_waiting(state), else: state
     {:reply, :ok, state}
   end
 
@@ -752,7 +758,8 @@ defmodule Longx.Agent do
     ThreadState.drop_turns(state.thread_id, [turn_id])
 
     remaining = state.thread_id |> Transcript.items!() |> Transcript.input()
-    state = %{state | transcript: remaining, steers: []}
+    # the steers the model never saw go to the waiting list with the turn's end
+    state = %{state | transcript: remaining}
     {:reply, :ok, end_turn(state, "interrupted", nil)}
   end
 
@@ -873,7 +880,9 @@ defmodule Longx.Agent do
         origin: Keyword.get(opts, :origin)
       )
 
-    %{touch(state) | steers: state.steers ++ [{user_input(text, images), ui}]}
+    # the words stay with it: a turn that ends before the model saw the steer
+    # hands it to the waiting list instead of dropping it (end_turn)
+    %{touch(state) | steers: state.steers ++ [{user_input(text, images), ui, {text, opts}}]}
   end
 
   # what the agent reads when a job it left running ends
@@ -1042,6 +1051,7 @@ defmodule Longx.Agent do
     |> put_new("source", Keyword.get(opts, :source))
     |> put_new("origin", Keyword.get(opts, :origin))
     |> put_new("question", Keyword.get(opts, :reply_to) && true)
+    |> put_new("mine", Keyword.get(opts, :mine))
   end
 
   defp put_new(map, _key, nil), do: map
@@ -1358,7 +1368,7 @@ defmodule Longx.Agent do
   defp fold_steers(%State{steers: []} = state), do: state
 
   defp fold_steers(%State{steers: steers} = state) do
-    Enum.reduce(steers, %{state | steers: []}, fn {input, ui}, acc ->
+    Enum.reduce(steers, %{state | steers: []}, fn {input, ui, _words}, acc ->
       emit(acc, "item/started", %{"item" => ui, "turnId" => acc.turn_id})
       append(acc, :user_message, input, ui)
     end)
@@ -1704,7 +1714,19 @@ defmodule Longx.Agent do
 
     state = touch(state)
 
-    %{
+    # a steer the model never saw (the turn was stopped, or failed, before its
+    # next step) is not dropped: it waits, listed on the page, for the person
+    # — on a slow link 插入 pressed right after ■ reached the kernel first,
+    # the queue let the message go on the steer's success, and it was gone
+    held =
+      Enum.map(state.steers, fn {_input, _ui, {text, opts}} ->
+        # the person's own words are listed as theirs (an agent's keep its name;
+        # `source` would name the turn's sender, so a flag of its own)
+        opts = if Keyword.get(opts, :from), do: opts, else: Keyword.put_new(opts, :mine, true)
+        waiting_item(text, opts)
+      end)
+
+    state = %{
       state
       | phase: :idle,
         turn_id: nil,
@@ -1716,6 +1738,7 @@ defmodule Longx.Agent do
         calls: [],
         tasks: %{},
         steers: [],
+        waiting: state.waiting ++ held,
         compacting: nil,
         context_overflow: false,
         compact_requested: false,
@@ -1724,6 +1747,8 @@ defmodule Longx.Agent do
         progress: nil,
         quiet: nil
     }
+
+    if held == [], do: state, else: emit_waiting(state)
   end
 
   # kills the model task and the tool tasks; the commands die with their

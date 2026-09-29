@@ -49,6 +49,8 @@ export type WaitingMessage = {
   source?: string;
   /** a question expecting an answer back: taken up in a turn of its own */
   question?: boolean;
+  /** the person's own words: steered into a turn that ended before the model saw them */
+  mine?: boolean;
 };
 
 /** What waits, and whether the person's stop paused it (it waits for them then). */

@@ -15,6 +15,8 @@ describe("what arrives from elsewhere while a turn runs", () => {
             { id: "w1", text: "tests pass", from: "coder", kind: "report", at },
             { id: "w2", text: "[job quick] finished with exit code 2 after 3 s.\nCommand: `exit 2`", source: "job:quick", at },
             { id: "w3", text: "what is left?", from: "~abc123", kind: "question", question: true, at },
+            // the person's own words: steered into a turn they stopped before the model saw them
+            { id: "w4", text: "and this", mine: true, at },
           ],
           paused: false,
         }}
@@ -23,7 +25,9 @@ describe("what arrives from elsewhere while a turn runs", () => {
     );
     expect(screen.getByTestId("waiting-messages")).toHaveTextContent("本轮结束后处理");
     const rows = screen.getAllByTestId("waiting-message");
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
+    expect(rows[3]).toHaveTextContent("你");
+    expect(rows[3]).toHaveTextContent("and this");
     expect(rows[0]).toHaveTextContent("coder");
     expect(rows[0]).toHaveTextContent("汇报");
     expect(rows[0]).toHaveTextContent("tests pass");

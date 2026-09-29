@@ -13,6 +13,7 @@ import { useChat } from "./ChatProvider";
 
 function sender(m: WaitingMessage): string {
   if (m.source?.startsWith("job:")) return t.waitingJob(m.source.slice(4));
+  if (m.mine) return t.waitingMine;
   return m.from ?? t.waitingFrom;
 }
 

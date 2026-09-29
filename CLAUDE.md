@@ -306,7 +306,13 @@ on first use.
     pauses it** (`interrupt(by: :person)` → `paused`; the idle state keeps the agent
     alive while something waits) until the person speaks, sends one in (`release/2`: a
     steer into the running turn, else a turn of its own) or presses 继续; a restarted
-    agent's list is empty (`load/1` clears the view's). `retract/2` takes back the
+    agent's list is empty (`load/1` clears the view's). **A steer the model never saw
+    when its turn ended** — stopped, taken back, failed before the next step — goes to
+    the waiting list instead of being dropped (`end_turn`; the steer tuple keeps its
+    words, `{input, ui, {text, opts}}`; the person's own are flagged `mine` and listed
+    as 你): on a slow link 插入 pressed right after ■ reached the kernel before the stop,
+    the page's queue let the message go on the steer's success, and it was gone —
+    "按下停止之后, 再插入的内容不会执行" (2026-09-29). `retract/2` takes back the
     running turn or, idle, only the last one (`{:error, :not_last}`). `interrupt/2` kills the tasks (a command's shim tree dies with its task) and
     ends the turn `interrupted` — **`by:` names who stopped it** (`:person` from the
     page, `{:watchdog, seconds}` from the Tracker's stall watchdog): the row keeps the

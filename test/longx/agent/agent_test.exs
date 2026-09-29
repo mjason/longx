@@ -635,6 +635,37 @@ defmodule Longx.AgentTest do
     assert %{"status" => "completed"} = await_turn_end()
   end
 
+  test "a message steered into a turn the person then stops is not lost: it waits, paused, and 立即插入 sends it as a turn of its own",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("one")),
+      ResponsesFixture.assistant_message("two")
+    ])
+
+    {:ok, %{turn_id: t1}} = Agent.send(id, "first")
+    assert_receive {:thread, _, "turn/started", %{"turn" => %{"id" => ^t1}}}, 5_000
+    assert_receive {:held, _}, 5_000
+
+    # the steer reaches the kernel before the stop does (a slow link: 插入 pressed right after ■)
+    assert {:ok, %{turn_id: ^t1, steered: true}} = Agent.send(id, "and this")
+    assert :ok = Agent.interrupt(id, by: :person)
+    Bypass.pass(bypass)
+    assert %{"id" => ^t1, "status" => "interrupted"} = await_turn_end()
+    # not in the stopped turn, not gone: it waits for the person, who stopped
+    assert %{
+             "waiting" => [%{"id" => wid, "text" => "and this", "mine" => true}],
+             "paused" => true
+           } =
+             await("thread/waiting/updated")
+
+    refute_receive {:thread, _, "turn/started", _}, 300
+    assert :ok = Agent.release(id, wid)
+    assert_receive {:thread, _, "turn/started", %{"turn" => %{"id" => t2}}}, 5_000
+    assert t2 != t1
+    assert %{"turnId" => ^t2} = await_user_message("and this")
+    assert %{"id" => ^t2, "status" => "completed"} = await_turn_end()
+  end
+
   test "a waiting message goes in on request: into the running turn, or as a turn of its own once the person stopped",
        %{bypass: bypass, thread_id: id} do
     script!(bypass, [
