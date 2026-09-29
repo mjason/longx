@@ -33,10 +33,8 @@ on first use.
   PATH**. `mix precommit` runs `gofmt`, `go vet`, `go test` in `native/shim`; Windows/macOS
   code is `GOOS=windows|darwin go vet`-checked (no machine here to run it). Windows: process
   groups + CTRL_BREAK + `taskkill /T` plus a Job object per child. Resource guards
-  (`native/shim/guard_*.go`, options `oom_score_adj:` / `memory_limit:`, `Shim.stats/1`):
-  Linux `oom_score_adj` is written to the shim so the whole tree inherits it; `memory_limit`
-  is `RLIMIT_AS` (Linux) or the Job's limit (Windows), ignored on macOS — RLIMIT_AS counts
-  address space, so runtimes that reserve it (BEAM, JVM, Go) need generous caps.
+  (`native/shim/guard_*.go`, option `oom_score_adj:`, `Shim.stats/1`):
+  Linux `oom_score_adj` is written to the shim so the whole tree inherits it.
   **Subcommands** besides the port protocol (`native/shim/{watch,rules}.go`, JSON over
   stdio, config on the first line): `shim watch` (fsnotify v1.10 — inotify / kqueue /
   ReadDirectoryChangesW; one watch per directory the rules keep, new ones followed, a
@@ -497,14 +495,12 @@ on first use.
     timed out after N milliseconds" with exit code 124, a kill with 137 (`{:error, text,
     extra}`; `Calls` takes the 3-tuple, the page appends `extra["reason"]` to what
     streamed); `Longx.Agent.Tools.ShellEnv` builds the environment). **The machine is guarded** (the settings'
-    `command_oom_priority` 800 / `command_memory_percent` 90 / `memory_floor_percent`
+    `command_oom_priority` 800 / `memory_floor_percent`
     8, per project too; the loader's settings layer hands them to the plug as
-    `options Shell, oom_score_adj:/memory_percent:/memory_floor_percent:` and the tool
+    `options Shell, oom_score_adj:/memory_floor_percent:` and the tool
     is mounted as a closure carrying them, its description telling the model the
-    limits): the tree's `oom_score_adj` so the kernel kills the agent's command first,
-    `RLIMIT_AS` at that share of RAM (`Longx.System.Memory.total/0`; allocations past
-    it fail inside the command — Linux; Windows through the Job), and the command
-    registers with **`Longx.System.Pressure`** (a watchdog in the tree, every 2 s while
+    limits): the tree's `oom_score_adj` so the kernel prefers the agent's command,
+    the command registers with **`Longx.System.Pressure`** (a watchdog in the tree, every 2 s while
     a command runs, `Pressure.Registry` duplicate keys under `:running`): free memory
     (`MemAvailable`, `vm_stat` on macOS) under the floor → `{:memory_pressure, …}` to
     the tool task, the shim tree killed, the model told "killed by Longx: the machine
@@ -610,7 +606,7 @@ on first use.
     the agent wrote on this machine) → the settings layer (`Longx.Agent.Definition.
     Settings`: `max_depth` 2, `max_children` 4, `idle_minutes` 30, `child_model` /
     `child_effort`, `model_retries` 3, the command guards `command_oom_priority` 800 /
-    `command_memory_percent` 90 / `memory_floor_percent` 8 — global in
+    `memory_floor_percent` 8 — global in
     `Longx.System.Setting`, overridden per project by `Project.agent_settings`). **No global code layer**: no global agents, plugs
     or skills; the only thing shared across projects is the global knowledge. A layer is
     `agent.exs` + `plugs/**/*.exs` + `agents/<name>/agent.exs`; every `defmodule` of a layer

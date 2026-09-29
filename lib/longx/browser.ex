@@ -3,7 +3,7 @@ defmodule Longx.Browser do
   Pages as a real browser sees them, for `web.run`'s `open` on JavaScript
   sites and for the agent's browser tools. Each fetch is one short-lived
   `obscura fetch` process run through `Longx.Shim` (killed with its tree at
-  the deadline, `oom_score_adj` behind the BEAM, optional memory cap); the
+    the deadline, `oom_score_adj` behind the BEAM); the
   number running at once is held by `Longx.Browser.Pool`. An idle system
   runs no browser at all. Stateful sessions (clicking, logging in) are the
   next step and will use `obscura serve` behind the same pool, with idle
@@ -20,8 +20,6 @@ defmodule Longx.Browser do
       has no per-range allowance, so the switch is all or nothing), or by the
       call's own `allow_private_network:` (tests against a local Bypass)
     * `stealth:` — obscura's consistent-fingerprint mode
-    * `memory_limit:` — bytes, `Longx.Shim` `memory_limit` (V8 reserves a lot
-      of address space; leave nil unless you know the box)
   """
 
   alias Longx.Browser.{Html, Installer, Pool, Runtime}
@@ -86,8 +84,7 @@ defmodule Longx.Browser do
         env: env(timeout, private),
         # obscura's own deadline first; ours is the backstop that kills the tree
         timeout: timeout + 2_000,
-        oom_score_adj: @oom_score_adj,
-        memory_limit: config(:memory_limit, nil)
+        oom_score_adj: @oom_score_adj
       )
 
     :telemetry.execute(

@@ -870,17 +870,17 @@ defmodule Longx.Agent.PlugsTest do
       assert home == System.get_env("HOME")
     end
 
-    test "the guards from the options: the tree's oom_score_adj, an address-space cap, and the prompt saying so",
+    test "the command guards: OOM priority and the memory floor, without an address-space cap",
          %{ctx: ctx} do
       step =
         Shell.call(
           Step.new(phase: :request),
-          Shell.init(oom_score_adj: 700, memory_percent: 50, memory_floor_percent: 8)
+          Shell.init(oom_score_adj: 700, memory_floor_percent: 8)
         )
 
       tool = step.tools["exec_command"]
-      assert tool.description =~ "address space"
       assert tool.description =~ "8%"
+      refute tool.description =~ "address space"
 
       # the command's own oom_score_adj is the setting's
       assert {:ok, out, _} =
@@ -888,19 +888,9 @@ defmodule Longx.Agent.PlugsTest do
 
       assert String.trim(out) =~ "700"
 
-      # an allocation past the cap fails inside the command, not in the BEAM (a tiny cap for the test)
-      tiny = Shell.call(Step.new(phase: :request), Shell.init(memory_limit: 256 * 1024 * 1024))
-      cmd = "python3 -c \"b = bytearray(512*1024*1024); print('allocated')\""
-
-      assert {:ok, out, %{"exitCode" => code}} =
-               Tool.call(tiny.tools["exec_command"], %{"cmd" => cmd, "login" => false}, ctx)
-
-      assert out =~ "MemoryError"
-      refute code == 0
-
       # no guards: the plain tool, no note
       plain = Shell.call(Step.new(phase: :request), Shell.init([]))
-      refute plain.tools["exec_command"].description =~ "address space"
+      refute plain.tools["exec_command"].description =~ "free memory"
     end
 
     test "the result reads like codex's format_exec_output_for_model: Exit code, Wall time, Output; a clip is …N tokens truncated…; a timeout says so with exit code 124",

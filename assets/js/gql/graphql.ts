@@ -1866,7 +1866,6 @@ export type SendMessageInput = {
 export type SetAgentSettingsInput = {
   childEffort?: string | null | undefined;
   childModel?: string | null | undefined;
-  commandMemoryPercent?: number | null | undefined;
   commandOomPriority?: number | null | undefined;
   commandShell?: string | null | undefined;
   idleMinutes?: number | null | undefined;
@@ -3306,7 +3305,7 @@ export type KnowledgeReadQuery = { knowledgeRead: { text: string } };
 export type AgentSettingsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type AgentSettingsQuery = { agentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, commandShell: string, commandOomPriority: number, commandMemoryPercent: number, childModel: string | null, childEffort: string | null } };
+export type AgentSettingsQuery = { agentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, commandShell: string, commandOomPriority: number, childModel: string | null, childEffort: string | null } };
 
 export type PublicUrlQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -3460,7 +3459,7 @@ export type AgentDefinitionQueryVariables = Exact<{
 }>;
 
 
-export type AgentDefinitionQuery = { agentDefinition: { trusted: boolean, present: boolean, plugs: Array<string>, model: string | null, localFiles: Array<string>, files: Array<string>, errors: Array<string>, effort: string | null, dir: string, agents: Array<unknown>, settings: { modelRetries: number | null, memoryFloorPercent: number | null, maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, commandOomPriority: number | null, commandMemoryPercent: number | null, childModel: string | null, childEffort: string | null }, overrides: { modelRetries: number | null, memoryFloorPercent: number | null, maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, commandOomPriority: number | null, commandMemoryPercent: number | null, childModel: string | null, childEffort: string | null }, browser: { state: string, maxTabs: number, browser: string | null, alias: string | null } | null } };
+export type AgentDefinitionQuery = { agentDefinition: { trusted: boolean, present: boolean, plugs: Array<string>, model: string | null, localFiles: Array<string>, files: Array<string>, errors: Array<string>, effort: string | null, dir: string, agents: Array<unknown>, settings: { modelRetries: number | null, memoryFloorPercent: number | null, maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, commandOomPriority: number | null, childModel: string | null, childEffort: string | null }, overrides: { modelRetries: number | null, memoryFloorPercent: number | null, maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, commandOomPriority: number | null, childModel: string | null, childEffort: string | null }, browser: { state: string, maxTabs: number, browser: string | null, alias: string | null } | null } };
 
 export type ListThreadsQueryVariables = Exact<{
   sort?: Array<ThreadSortInput | null | undefined> | ThreadSortInput | null | undefined;
@@ -3765,7 +3764,7 @@ export type SetAgentSettingsMutationVariables = Exact<{
 }>;
 
 
-export type SetAgentSettingsMutation = { setAgentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, commandShell: string, commandOomPriority: number, commandMemoryPercent: number, childModel: string | null, childEffort: string | null } };
+export type SetAgentSettingsMutation = { setAgentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, commandShell: string, commandOomPriority: number, childModel: string | null, childEffort: string | null } };
 
 export type CheckDependenciesMutationVariables = Exact<{ [key: string]: never; }>;
 
@@ -4402,7 +4401,6 @@ export const AgentSettingsDocument = new TypedDocumentString(`
     idleMinutes
     commandShell
     commandOomPriority
-    commandMemoryPercent
     childModel
     childEffort
   }
@@ -4792,7 +4790,6 @@ export const AgentDefinitionDocument = new TypedDocumentString(`
       maxChildren
       idleMinutes
       commandOomPriority
-      commandMemoryPercent
       childModel
       childEffort
     }
@@ -4805,7 +4802,6 @@ export const AgentDefinitionDocument = new TypedDocumentString(`
       maxChildren
       idleMinutes
       commandOomPriority
-      commandMemoryPercent
       childModel
       childEffort
     }
@@ -5434,7 +5430,6 @@ export const SetAgentSettingsDocument = new TypedDocumentString(`
     idleMinutes
     commandShell
     commandOomPriority
-    commandMemoryPercent
     childModel
     childEffort
   }

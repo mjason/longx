@@ -7,8 +7,7 @@ defmodule Longx.Agent.Definition.Settings do
   idle agent stays (`idle_minutes`), the model a child runs on when its
   role names none (`child_model` / `child_effort`), and the machine's guards on
   the agent's commands — `command_oom_priority` (the tree's `oom_score_adj`:
-  the kernel kills the agent's command before anything else), `command_memory_percent`
-  (each command's address space capped at this share of RAM; 0 = no cap) and
+  the kernel prefers the agent's command under OOM pressure) and
   `memory_floor_percent` (free memory below this share → every running
   command is killed, `Longx.System.Pressure`; 0 = off).
   No role ships with the kernel, so no role has a fixed model here: a role's
@@ -27,7 +26,6 @@ defmodule Longx.Agent.Definition.Settings do
     :idle_minutes,
     :model_retries,
     :command_oom_priority,
-    :command_memory_percent,
     :memory_floor_percent,
     :command_shell,
     :child_model,
@@ -43,7 +41,6 @@ defmodule Longx.Agent.Definition.Settings do
     # a GPU backtest once took the whole machine down: the driver's memory is no
     # process's, so the OOM killer went for Firefox and the box was rebooted
     command_oom_priority: 800,
-    command_memory_percent: 90,
     memory_floor_percent: 8,
     command_shell: "auto",
     child_model: nil,
@@ -56,7 +53,6 @@ defmodule Longx.Agent.Definition.Settings do
           idle_minutes: pos_integer,
           model_retries: non_neg_integer,
           command_oom_priority: non_neg_integer,
-          command_memory_percent: non_neg_integer,
           memory_floor_percent: non_neg_integer,
           command_shell: String.t(),
           child_model: String.t() | nil,
@@ -189,12 +185,6 @@ defmodule Longx.Agent.Definition.Settings do
     if is_integer(value) and value >= 0 and value <= 1000,
       do: :ok,
       else: {:error, "must be a whole number from 0 to 1000"}
-  end
-
-  defp check(:command_memory_percent, value, _attrs) do
-    if is_integer(value) and value >= 0 and value <= 100,
-      do: :ok,
-      else: {:error, "must be a whole number from 0 to 100"}
   end
 
   defp check(:memory_floor_percent, value, _attrs) do

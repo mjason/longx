@@ -17,7 +17,6 @@ export type AgentSettings = {
   idleMinutes: number;
   modelRetries: number;
   commandOomPriority: number;
-  commandMemoryPercent: number;
   memoryFloorPercent: number;
   commandShell: "auto" | "bash" | "zsh";
   childModel: string | null;
@@ -27,7 +26,7 @@ export type AgentSettings = {
 /** A project's overrides: every field optional, null = inherit the global value. */
 export type AgentOverrides = Partial<{ [K in keyof AgentSettings]: AgentSettings[K] | null }>;
 
-export const agentSettingsFields = ["maxDepth", "maxChildren", "idleMinutes", "modelRetries", "commandOomPriority", "commandMemoryPercent", "memoryFloorPercent", "childModel", "childEffort"] as const;
+export const agentSettingsFields = ["maxDepth", "maxChildren", "idleMinutes", "modelRetries", "commandOomPriority", "memoryFloorPercent", "childModel", "childEffort"] as const;
 
 export const agentKeys = {
   all: ["agent-kernel"] as const,

@@ -8,7 +8,7 @@ defmodule Longx.Agent.Plugs.Jobs do
   twenty `nohup … &` backtests and `tail`ed their logs seventy-two times.
 
   In the shipped pipeline after Shell, with the same guards (`options
-  Jobs, oom_score_adj:/memory_percent:/memory_floor_percent:` from the
+  Jobs, oom_score_adj:/memory_floor_percent:` from the
   settings layer): the memory watchdog and the settings page's 进程 list
   cover a job as they cover a command.
   """
@@ -69,7 +69,7 @@ defmodule Longx.Agent.Plugs.Jobs do
   @impl true
   def call(%Step{phase: :request} = step, opts) do
     g = Shell.guards(opts)
-    guards = [oom_score_adj: g.oom_score_adj, memory_limit: g.memory_limit, floor: g.floor]
+    guards = [oom_score_adj: g.oom_score_adj, floor: g.floor]
     start = Enum.find(__agent_tools__(), &(&1.name == "start_job"))
 
     step

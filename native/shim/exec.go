@@ -21,9 +21,6 @@ type config struct {
 	// the whole tree inherits it: with a positive value the kernel's OOM killer
 	// prefers this tree (fattest process first) over the BEAM.
 	OOMScoreAdj int
-	// MemoryLimit in bytes caps the child tree (Linux: RLIMIT_AS on the child,
-	// Windows: the Job's memory limit); 0 = none.
-	MemoryLimit uint64
 	// CleanEnv gives the child exactly the environment the host sent instead
 	// of the shim's own environment with the host's entries appended.
 	CleanEnv bool

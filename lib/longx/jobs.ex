@@ -39,7 +39,7 @@ defmodule Longx.Jobs do
 
   @doc """
   Starts `cmd` in the background as the thread's job `name`. Options: `cwd`,
-  `shell` / `login`, `guards` (`oom_score_adj`, `memory_limit`, `floor`),
+  `shell` / `login`, `guards` (`oom_score_adj`, `floor`),
   `notify` (true), `on_exit` (the notice's receiver, the agent by default).
   """
   @spec start(String.t(), String.t(), String.t(), keyword) ::

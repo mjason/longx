@@ -12,9 +12,8 @@ defmodule Longx.Agent.Plugs.Shell do
   (isolation, when wanted, is the deployment's job) — but **the machine is
   guarded** (the settings' command guards, given as the plug's options by
   the loader's settings layer): `oom_score_adj:` for the command's tree so
-  the kernel kills it before anything else, `memory_percent:` (or
-  `memory_limit:` in bytes) as the tree's address-space cap, and
-  `memory_floor_percent:`: the command registers with `Longx.System.Pressure`
+  the kernel prefers it under OOM pressure, and `memory_floor_percent:`:
+  the command registers with `Longx.System.Pressure`
   and is killed when free memory falls under that share. The tool's
   description tells the model the limits so it splits heavy work instead of
   looping it.
@@ -104,34 +103,22 @@ defmodule Longx.Agent.Plugs.Shell do
   @doc false
   def guards(opts) do
     total = Longx.System.Memory.total()
-    percent = Keyword.get(opts, :memory_percent)
-
-    limit =
-      cond do
-        is_integer(opts[:memory_limit]) and opts[:memory_limit] > 0 -> opts[:memory_limit]
-        is_integer(percent) and percent > 0 and is_integer(total) -> div(total * percent, 100)
-        true -> nil
-      end
-
     oom = Keyword.get(opts, :oom_score_adj)
     floor = Keyword.get(opts, :memory_floor_percent, 0)
 
     %{
       oom_score_adj: if(is_integer(oom) and oom > 0, do: oom),
-      memory_limit: limit,
       floor: if(is_integer(floor) and floor > 0 and is_integer(total), do: floor, else: 0),
       # `options Shell, timeout_ms:` — a description's default for every command (capped)
       timeout: timeout(Keyword.get(opts, :timeout_ms), @default_timeout)
     }
   end
 
-  defp guard_note(%{memory_limit: nil, floor: 0}), do: ""
+  defp guard_note(%{floor: 0}), do: ""
 
-  defp guard_note(%{memory_limit: limit, floor: floor}) do
+  defp guard_note(%{floor: floor}) do
     lines =
       [
-        limit &&
-          "a command may use at most #{Longx.System.Pressure.human(limit)} of address space (allocations past it fail)",
         floor > 0 &&
           "when the machine's free memory drops below #{floor}% every running command is killed"
       ]
@@ -179,8 +166,7 @@ defmodule Longx.Agent.Plugs.Shell do
     opts =
       [cd: cwd, env: ShellEnv.env_list(), env_clear: true] ++
         if(tty?, do: [pty: true], else: [stderr: :stream, stdin: :null]) ++
-        if(guards.oom_score_adj, do: [oom_score_adj: guards.oom_score_adj], else: []) ++
-        if(guards.memory_limit, do: [memory_limit: guards.memory_limit], else: [])
+        if(guards.oom_score_adj, do: [oom_score_adj: guards.oom_score_adj], else: [])
 
     # the watchdog and the settings page know this command before it starts
     # (`Longx.System.Commands`); the entry dies with this process

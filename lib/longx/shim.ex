@@ -44,7 +44,6 @@ defmodule Longx.Shim do
           | {:grace, non_neg_integer}
           | {:log, :stderr | Path.t()}
           | {:oom_score_adj, -1000..1000}
-          | {:memory_limit, pos_integer}
           | {:env_clear, boolean}
           | {:pty, boolean}
           | {:stdin, :pipe | :null}
@@ -96,8 +95,7 @@ defmodule Longx.Shim do
          {:ok, stderr} <- normalize_stderr(opts[:stderr]),
          {:ok, env} <- normalize_env(opts[:env]),
          {:ok, log} <- normalize_log(opts[:log]),
-         {:ok, oom_score_adj} <- normalize_oom_score_adj(opts[:oom_score_adj]),
-         {:ok, memory_limit} <- normalize_memory_limit(opts[:memory_limit]) do
+         {:ok, oom_score_adj} <- normalize_oom_score_adj(opts[:oom_score_adj]) do
       spec = %{
         cmd: [path | args],
         cd: cd,
@@ -106,7 +104,6 @@ defmodule Longx.Shim do
         log: log,
         grace: Keyword.get(opts, :grace, @default_grace_ms),
         oom_score_adj: oom_score_adj,
-        memory_limit: memory_limit,
         # `env_clear: true` — the child's environment is exactly `env:`, nothing
         # of the BEAM's (the exec-server builds a command's environment itself)
         env_clear: Keyword.get(opts, :env_clear, false) == true,
@@ -609,7 +606,6 @@ defmodule Longx.Shim do
         if(spec.cd, do: ["-cd", spec.cd], else: []) ++
         if(spec.log, do: ["-log", spec.log], else: []) ++
         if(spec.oom_score_adj, do: ["-oom_score_adj", "#{spec.oom_score_adj}"], else: []) ++
-        if(spec.memory_limit, do: ["-memory_limit", "#{spec.memory_limit}"], else: []) ++
         if(spec.env_clear, do: ["-clean_env"], else: []) ++
         if(spec.pty, do: ["-pty"], else: []) ++
         if(spec.null_stdin, do: ["-no_stdin"], else: []) ++
@@ -638,10 +634,6 @@ defmodule Longx.Shim do
   defp normalize_oom_score_adj(0), do: {:ok, nil}
   defp normalize_oom_score_adj(n) when is_integer(n) and n in -1000..1000, do: {:ok, n}
   defp normalize_oom_score_adj(n), do: {:error, {:invalid_option, {:oom_score_adj, n}}}
-
-  defp normalize_memory_limit(nil), do: {:ok, nil}
-  defp normalize_memory_limit(n) when is_integer(n) and n > 0, do: {:ok, n}
-  defp normalize_memory_limit(n), do: {:error, {:invalid_option, {:memory_limit, n}}}
 
   defp normalize_cd(nil), do: {:ok, nil}
 

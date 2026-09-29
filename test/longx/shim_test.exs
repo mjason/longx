@@ -67,23 +67,9 @@ defmodule Longx.ShimTest do
       assert {:ok, _} = Shim.await_exit(shim, 5_000)
     end
 
-    test "memory_limit: makes allocations fail inside the tree, not in the BEAM" do
-      {:ok, %{status: status, stdout: out}} =
-        Shim.run(["python3", "-c", "b = bytearray(512*1024*1024); print('allocated')"],
-          memory_limit: 256 * 1024 * 1024,
-          stderr: :disable
-        )
-
-      refute out =~ "allocated"
-      refute status == 0
-    end
-
     test "invalid guard options are rejected up front" do
       assert {:error, {:invalid_option, {:oom_score_adj, 5000}}} =
                Shim.start_link(["true"], oom_score_adj: 5000)
-
-      assert {:error, {:invalid_option, {:memory_limit, -1}}} =
-               Shim.start_link(["true"], memory_limit: -1)
     end
   end
 

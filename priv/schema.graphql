@@ -246,7 +246,6 @@ type AgentSettings {
   idleMinutes: Int!
   commandShell: String!
   commandOomPriority: Int!
-  commandMemoryPercent: Int!
   childModel: String
   childEffort: String
 }
@@ -450,7 +449,6 @@ type AgentDefinitionOverrides {
   maxChildren: Int
   idleMinutes: Int
   commandOomPriority: Int
-  commandMemoryPercent: Int
   childModel: String
   childEffort: String
 }
@@ -462,7 +460,6 @@ type AgentDefinitionSettings {
   maxChildren: Int
   idleMinutes: Int
   commandOomPriority: Int
-  commandMemoryPercent: Int
   childModel: String
   childEffort: String
 }
@@ -2741,7 +2738,6 @@ input SetAgentSettingsInput {
   idleMinutes: Int
   modelRetries: Int
   commandOomPriority: Int
-  commandMemoryPercent: Int
   memoryFloorPercent: Int
   commandShell: String
   childModel: String

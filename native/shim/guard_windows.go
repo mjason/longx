@@ -9,10 +9,7 @@ import (
 )
 
 // guard holds the Job object the child tree lives in. KILL_ON_JOB_CLOSE makes
-// tree termination reliable (taskkill /T misses re-parented processes) and
-// the optional memory limit makes allocations fail inside the job only —
-// Windows has no OOM killer; without a cap a runaway task exhausts commit
-// and whichever process allocates next (possibly the BEAM) crashes.
+// tree termination reliable (taskkill /T misses re-parented processes).
 type guard struct {
 	job syscall.Handle
 }
@@ -32,7 +29,6 @@ const (
 	jobObjectBasicProcessIdList              = 3
 	jobObjectExtendedLimitInformationClass   = 9
 
-	jobObjectLimitJobMemory      = 0x00000200
 	jobObjectLimitKillOnJobClose = 0x00002000
 
 	processQueryInformation = 0x0400
@@ -108,10 +104,6 @@ func afterStart(c *child, cfg config) error {
 
 	var info jobObjectExtendedLimitInformation
 	info.BasicLimitInformation.LimitFlags = jobObjectLimitKillOnJobClose
-	if cfg.MemoryLimit != 0 {
-		info.BasicLimitInformation.LimitFlags |= jobObjectLimitJobMemory
-		info.JobMemoryLimit = uintptr(cfg.MemoryLimit)
-	}
 	r, _, err := setInformationJobObject.Call(uintptr(job), jobObjectExtendedLimitInformationClass,
 		uintptr(unsafe.Pointer(&info)), unsafe.Sizeof(info))
 	if r == 0 {

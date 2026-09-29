@@ -6,10 +6,10 @@ defmodule Longx.System.Pressure do
   available, total}}` to the process that registered it (`Plugs.Shell`'s tool
   task), which kills its shim tree and hands the model the reason.
 
-  Why not RLIMIT alone: a GPU backtest on a DGX Spark took ~100 GB the NVIDIA
-  driver carved out of RAM — no process's RSS, so neither `RLIMIT_AS` nor a
-  cgroup saw it; the kernel's OOM killer went for Firefox and the box had to
-  be rebooted. `MemAvailable` does see it. Every command runs through the
+  A GPU backtest on a DGX Spark once took ~100 GB the NVIDIA driver carved out
+  of RAM — no process's RSS reflected it, and the kernel's OOM killer went for
+  Firefox; the box had to be rebooted. `MemAvailable` sees machine-wide
+  pressure. Every command runs through the
   shim, so what is killed is exactly what the agent started.
 
   Commands register in `Longx.System.Pressure.Registry` (duplicate keys under

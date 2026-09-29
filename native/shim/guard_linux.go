@@ -5,16 +5,12 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
-	"syscall"
-	"unsafe"
 )
 
-// guard has nothing to hold on Linux: the OOM score is inherited and the
-// address-space limit lives in the child.
+// guard has nothing to hold on Linux: the OOM score is inherited by the child tree.
 type guard struct{}
 
 // kill: nothing beyond the process-group signal on this platform.
@@ -30,21 +26,7 @@ func beforeStart(cfg config) error {
 	return os.WriteFile("/proc/self/oom_score_adj", []byte(strconv.Itoa(cfg.OOMScoreAdj)), 0)
 }
 
-// afterStart caps the child's address space; its descendants inherit the
-// limit. Applied via prlimit(2) so the shim's own Go runtime is untouched.
-func afterStart(c *child, cfg config) error {
-	if cfg.MemoryLimit == 0 {
-		return nil
-	}
-	limit := syscall.Rlimit{Cur: cfg.MemoryLimit, Max: cfg.MemoryLimit}
-	_, _, errno := syscall.RawSyscall6(syscall.SYS_PRLIMIT64,
-		uintptr(c.proc.Process.Pid), uintptr(syscall.RLIMIT_AS),
-		uintptr(unsafe.Pointer(&limit)), 0, 0, 0)
-	if errno != 0 {
-		return fmt.Errorf("prlimit(RLIMIT_AS, %d): %v", cfg.MemoryLimit, errno)
-	}
-	return nil
-}
+func afterStart(_ *child, _ config) error { return nil }
 
 // collectStats walks /proc and sums every descendant of the child (by parent
 // pid, so re-grouped sandboxed commands are included too).

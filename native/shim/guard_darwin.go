@@ -13,16 +13,11 @@ type guard struct{}
 // kill: nothing beyond the process-group signal on this platform.
 func (g guard) kill() {}
 
-// macOS has neither oom_score_adj nor a per-tree limit we can set from
-// here; jetsam and memory compression are what the platform offers.
+// macOS has no oom_score_adj control from here; jetsam and memory compression
+// are what the platform offers.
 func beforeStart(cfg config) error { return nil }
 
-func afterStart(c *child, cfg config) error {
-	if cfg.MemoryLimit != 0 {
-		logf("memory_limit is not supported on macOS; ignored")
-	}
-	return nil
-}
+func afterStart(_ *child, _ config) error { return nil }
 
 // collectStats builds the tree from `ps` (pid, ppid, rss in KiB, cpu time).
 func collectStats(c *child) treeStats {

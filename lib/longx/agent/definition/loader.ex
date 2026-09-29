@@ -205,7 +205,6 @@ defmodule Longx.Agent.Definition.Loader do
     # the machine's guards on every command the agent runs, and on its jobs
     guard_opts = [
       oom_score_adj: settings.command_oom_priority,
-      memory_percent: settings.command_memory_percent,
       memory_floor_percent: settings.memory_floor_percent
     ]
 

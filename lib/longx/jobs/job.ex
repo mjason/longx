@@ -48,7 +48,7 @@ defmodule Longx.Jobs.Job do
 
     shim_opts =
       [cd: spec.cwd, env: spec.env, env_clear: true, stderr: :redirect_to_stdout, stdin: :null] ++
-        Enum.filter(spec.guards, fn {k, v} -> k in [:oom_score_adj, :memory_limit] and v end)
+        Enum.filter(spec.guards, fn {k, v} -> k == :oom_score_adj and v end)
 
     case Shim.start_link([spec.shell, spec.flag, spec.cmd], shim_opts) do
       {:ok, shim} ->

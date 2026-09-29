@@ -11,9 +11,8 @@ import (
 	"time"
 )
 
-// The resource guard rails: OOM ordering, an optional memory cap, and
-// process-tree statistics for the host. Linux only — Windows uses a Job
-// object (compile-checked, exercised in CI).
+// OOM ordering and process-tree statistics for the host. Linux only —
+// Windows uses a Job object (compile-checked, exercised in CI).
 
 func readOOMScoreAdj(t *testing.T, pid int) int {
 	t.Helper()
@@ -81,28 +80,6 @@ func TestStatsAfterExitAreZero(t *testing.T) {
 	}
 	if stats.Processes != 0 || stats.RSSBytes != 0 {
 		t.Fatalf("want empty stats, got %+v", stats)
-	}
-	h.waitRun()
-}
-
-func TestMemoryLimitMakesAllocationsFailInsideTheTree(t *testing.T) {
-	// 256 MiB cap: a 512 MiB allocation must fail, the shim itself is fine
-	cfg := config{
-		Args:        []string{"python3", "-c", "b = bytearray(512*1024*1024); print('allocated')"},
-		Stderr:      "disable",
-		Grace:       time.Second,
-		MemoryLimit: 256 * 1024 * 1024,
-	}
-	h := newHarness(t, cfg, nil)
-	h.expect(TagPid)
-	p := h.readOut(1024)
-	if p.Tag == TagOutput && strings.Contains(string(p.Data), "allocated") {
-		t.Fatal("allocation succeeded despite the memory limit")
-	}
-	e := h.exitPacket()
-	code, _ := decodeUint32(e.Data)
-	if int32(code) == 0 {
-		t.Fatal("child exited 0 despite the memory limit")
 	}
 	h.waitRun()
 }

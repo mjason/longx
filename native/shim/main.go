@@ -35,7 +35,6 @@ func main() {
 	logTarget := flag.String("log", "", "shim diagnostics: stderr or a file path")
 	grace := flag.Duration("grace", 5*time.Second, "soft-kill grace period used when the host disappears")
 	oomScoreAdj := flag.Int("oom_score_adj", 0, "Linux: oom_score_adj for the shim and its child tree (-1000..1000)")
-	memoryLimit := flag.Uint64("memory_limit", 0, "cap the child tree's memory in bytes (0 = none)")
 	cleanEnv := flag.Bool("clean_env", false, "give the child only the environment sent by the host, nothing of the shim's own")
 	pty := flag.Bool("pty", false, "run the child on a pseudo-terminal: one output stream, stdin stays open (unix only)")
 	noStdin := flag.Bool("no_stdin", false, "give the child the null device as stdin instead of a pipe (not with -pty)")
@@ -64,7 +63,6 @@ func main() {
 		Stderr:      *stderr,
 		Grace:       *grace,
 		OOMScoreAdj: *oomScoreAdj,
-		MemoryLimit: *memoryLimit,
 		CleanEnv:    *cleanEnv,
 		PTY:         *pty,
 		NoStdin:     *noStdin,

@@ -46,24 +46,20 @@ defmodule Longx.Agent.Definition.SettingsTest do
     assert {:ok, %{command_shell: "auto"}} = Settings.put_global(%{command_shell: nil})
     assert {:error, %{field: :command_shell}} = Settings.put_global(%{command_shell: "fish"})
 
-    # the machine's guards on commands: OOM priority, address-space share, the memory floor
-    assert %{command_oom_priority: 800, command_memory_percent: 90, memory_floor_percent: 8} =
+    # the machine's guards on commands: OOM priority and the memory floor
+    assert %{command_oom_priority: 800, memory_floor_percent: 8} =
              Settings.global()
 
-    assert {:ok, %{command_memory_percent: 0, memory_floor_percent: 20}} =
-             Settings.put_global(%{command_memory_percent: 0, memory_floor_percent: 20})
+    assert {:ok, %{memory_floor_percent: 20}} =
+             Settings.put_global(%{memory_floor_percent: 20})
 
     assert {:error, %{field: :command_oom_priority}} =
              Settings.put_global(%{command_oom_priority: 1001})
 
-    assert {:error, %{field: :command_memory_percent}} =
-             Settings.put_global(%{command_memory_percent: 101})
-
     assert {:error, %{field: :memory_floor_percent}} =
              Settings.put_global(%{memory_floor_percent: 51})
 
-    assert {:ok, _} =
-             Settings.put_global(%{command_memory_percent: nil, memory_floor_percent: nil})
+    assert {:ok, _} = Settings.put_global(%{memory_floor_percent: nil})
 
     assert {:error, %{field: :max_children}} = Settings.put_global(%{max_children: 0})
     assert {:error, %{field: :child_model}} = Settings.put_global(%{child_model: "no-such-model"})
@@ -111,8 +107,7 @@ defmodule Longx.Agent.Definition.SettingsTest do
     assert {Longx.Agent.Plugs.Shell, shell} =
              Enum.find(main.plugs, &match?({Longx.Agent.Plugs.Shell, _}, &1))
 
-    assert shell[:oom_score_adj] == 800 and shell[:memory_percent] == 90 and
-             shell[:memory_floor_percent] == 8
+    assert shell[:oom_score_adj] == 800 and shell[:memory_floor_percent] == 8
 
     # the main agent keeps whatever the person chose: no model from the settings
     assert main.model == nil

@@ -87,7 +87,6 @@ defmodule Longx.System.Types do
           idle_minutes: [type: :integer, allow_nil?: false],
           model_retries: [type: :integer, allow_nil?: false],
           command_oom_priority: [type: :integer, allow_nil?: false],
-          command_memory_percent: [type: :integer, allow_nil?: false],
           memory_floor_percent: [type: :integer, allow_nil?: false],
           command_shell: [type: :string, allow_nil?: false],
           child_model: [type: :string],
