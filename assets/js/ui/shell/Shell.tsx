@@ -63,8 +63,10 @@ export function TopBar({
   /** full width (the IDE window); pages are centred at a readable width */
   wide?: boolean;
 }) {
-  // the IDE window's bar belongs to its frame; a page's bar sits on the page
-  const surface = wide ? "bg-sidebar border-sidebar-border" : "bg-background";
+  // Keep every route's header on the same frame surface as the conversation
+  // workbench tabs. In light mode, a pure-white page header looked detached
+  // from the cool-grey frame around the session.
+  const surface = "bg-sidebar border-sidebar-border";
   return (
     <header className={`safe-top ${surface} sticky top-0 z-20 border-b`}>
       <div className={`safe-x mx-auto flex h-14 w-full items-center gap-2 ${wide ? "" : "max-w-5xl"}`}>

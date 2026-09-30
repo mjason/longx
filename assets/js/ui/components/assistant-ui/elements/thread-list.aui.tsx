@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 "use client";
 
 import { Button } from "@/ui/components/ui/button";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/ui/components/ui/context-menu";
 import { Input } from "@/ui/components/ui/input";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -296,43 +297,65 @@ export const ThreadListItem: FC = () => {
   }, [isRenaming]);
 
   return (
-    <ThreadListItemPrimitive.Root
-      data-slot="aui_thread-list-item"
-      // Longx: the list sits on the frame surface, so the open thread is the
-      // frame's accent step plus weight — `bg-muted` alone was invisible there
-      className="group hover:bg-sidebar-accent/60 focus-visible:bg-sidebar-accent/60 data-active:bg-primary/12 dark:data-active:bg-primary/22 data-active:font-medium data-active:text-foreground has-focus-visible:bg-sidebar-accent/60 has-data-[state=open]:bg-sidebar-accent/60 text-sidebar-foreground relative flex h-8 items-center rounded-md transition-colors focus-visible:outline-none"
-    >
-      {isRenaming ? (
-        <ThreadListItemRename
-          onDone={(restoreFocus) => {
-            restoreFocusRef.current = restoreFocus;
-            setIsRenaming(false);
-          }}
-        />
-      ) : (
-        <ThreadListItemPrimitive.Trigger
-          ref={triggerRef}
-          data-slot="aui_thread-list-item-trigger"
-          className="focus-visible:ring-ring/50 flex h-full min-w-0 flex-1 items-center rounded-md px-2.5 text-start text-sm outline-none group-hover:pe-9 group-has-focus-visible:pe-9 group-has-data-[state=open]:pe-9 group-data-active:pe-9 focus-visible:ring-1"
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <ThreadListItemPrimitive.Root
+          data-slot="aui_thread-list-item"
+          // Longx: the list sits on the frame surface, so the open thread is the
+          // frame's accent step plus weight — `bg-muted` alone was invisible there
+          className="group hover:bg-sidebar-accent/60 focus-visible:bg-sidebar-accent/60 data-active:bg-primary/12 dark:data-active:bg-primary/22 data-active:font-medium data-active:text-foreground has-focus-visible:bg-sidebar-accent/60 has-data-[state=open]:bg-sidebar-accent/60 text-sidebar-foreground relative flex h-8 items-center rounded-md transition-colors focus-visible:outline-none"
         >
-          {isRunning && (
-            <Loader2Icon
-              aria-hidden
-              data-slot="aui_thread-list-item-running"
-              className="text-muted-foreground me-1.5 size-3.5 shrink-0 animate-spin"
+          {isRenaming ? (
+            <ThreadListItemRename
+              onDone={(restoreFocus) => {
+                restoreFocusRef.current = restoreFocus;
+                setIsRenaming(false);
+              }}
             />
+          ) : (
+            <ThreadListItemPrimitive.Trigger
+              ref={triggerRef}
+              data-slot="aui_thread-list-item-trigger"
+              className="focus-visible:ring-ring/50 flex h-full min-w-0 flex-1 items-center rounded-md px-2.5 text-start text-sm outline-none group-hover:pe-9 group-has-focus-visible:pe-9 group-has-data-[state=open]:pe-9 group-data-active:pe-9 focus-visible:ring-1"
+            >
+              {isRunning && (
+                <Loader2Icon
+                  aria-hidden
+                  data-slot="aui_thread-list-item-running"
+                  className="text-muted-foreground me-1.5 size-3.5 shrink-0 animate-spin"
+                />
+              )}
+              <span
+                data-slot="aui_thread-list-item-title"
+                className="min-w-0 flex-1 truncate"
+              >
+                <ThreadListItemPrimitive.Title fallback={t.untitledThread} />
+              </span>
+              {isRunning && <span className="sr-only">Running</span>}
+            </ThreadListItemPrimitive.Trigger>
           )}
-          <span
-            data-slot="aui_thread-list-item-title"
-            className="min-w-0 flex-1 truncate"
-          >
-            <ThreadListItemPrimitive.Title fallback={t.untitledThread} />
-          </span>
-          {isRunning && <span className="sr-only">Running</span>}
-        </ThreadListItemPrimitive.Trigger>
-      )}
-      <ThreadListItemMore onRename={() => setIsRenaming(true)} />
-    </ThreadListItemPrimitive.Root>
+          <ThreadListItemMore onRename={() => setIsRenaming(true)} />
+        </ThreadListItemPrimitive.Root>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => setIsRenaming(true)}>
+          <PencilIcon />
+          {t.rename}
+        </ContextMenuItem>
+        <ThreadListItemPrimitive.Archive asChild>
+          <ContextMenuItem>
+            <ArchiveIcon />
+            {t.archive}
+          </ContextMenuItem>
+        </ThreadListItemPrimitive.Archive>
+        <ThreadListItemPrimitive.Delete asChild>
+          <ContextMenuItem variant="destructive">
+            <TrashIcon />
+            {t.delete}
+          </ContextMenuItem>
+        </ThreadListItemPrimitive.Delete>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 };
 

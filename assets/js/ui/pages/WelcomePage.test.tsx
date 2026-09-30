@@ -14,6 +14,7 @@ describe("WelcomePage", () => {
   test("recent projects with search, one door to open/create", async () => {
     const user = userEvent.setup();
     renderAt("/");
+    expect(screen.getByRole("banner")).toHaveClass("bg-sidebar", "border-sidebar-border");
     await waitFor(() => expect(screen.getByTestId("project-list")).toBeInTheDocument());
     expect(screen.getByText("App 1").closest("a")).toHaveAttribute("href", "/p/app-1");
     expect(screen.getByRole("link", { name: /新建 \/ 打开项目/ })).toHaveAttribute("href", "/new");

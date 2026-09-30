@@ -93,6 +93,20 @@ describe("ProjectWindow", () => {
     }
   });
 
+  test("right-clicking a conversation opens rename, archive and delete actions without navigating", async () => {
+    setViewport(1280);
+    const { router } = renderAt("/p/app-1/t/t1");
+    const panel = await screen.findByTestId("tool-panel");
+    const row = await within(panel).findByRole("button", { name: "thread 1" });
+    fireEvent.contextMenu(row, { clientX: 181, clientY: 247 });
+
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "归档" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/p/app-1/t/t1");
+  });
+
   test("the status strip follows the disk: the watcher's git and files events refetch HEAD and the dirty count", async () => {
     setViewport(1280);
     channel.reset();
