@@ -61,7 +61,7 @@ describe("FilesTool", () => {
     const editor = await screen.findByTestId("editor-tab");
     await waitFor(() => expect(editor.querySelector(".cm-content")).toHaveTextContent("defmodule A do"));
     // the chat is still there, behind
-    await user.click(within(tabs).getByRole("tab", { name: /会话/ }));
+    await user.click(within(tabs).getAllByRole("button")[0]!);
     expect(screen.getByTestId("chat-area")).toBeVisible();
   });
 

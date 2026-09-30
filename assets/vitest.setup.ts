@@ -1,8 +1,12 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
+import { clearThreadViewCache } from "./js/core/chat/threadViewCache";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  clearThreadViewCache();
+});
 
 // jsdom has no matchMedia; components ask it for the viewport
 if (!window.matchMedia) {

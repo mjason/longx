@@ -42,8 +42,8 @@ describe("the space menu", () => {
     // the project's commands load just after the first paint: the open panel fills in as they register
     await waitFor(() => expect(menu).toHaveTextContent("和 AI 对话"));
     for (const group of ["+对话", "+会话", "+文件", "+Git", "+工具窗口", "+项目"]) expect(menu).toHaveTextContent(group);
-    // only what can run now: with the chat the only tab, nothing of SPC b can
-    expect(menu).not.toHaveTextContent("+标签");
+    // the current conversation is also a closable workspace tab
+    expect(menu).toHaveTextContent("+标签");
 
     await user.keyboard("w");
     expect(screen.getByTestId("which-key")).toHaveTextContent("SPC w");

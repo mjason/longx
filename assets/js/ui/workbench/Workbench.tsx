@@ -2,7 +2,7 @@
 // chat first and always, then the files and diffs opened from the tools —
 // over whichever is active. The chat stays mounted behind a file so its
 // scroll and composer draft survive a look at the code.
-import { AppWindow, Bot, FileCode2, GitCompareArrows, MessagesSquare, X } from "lucide-react";
+import { AppWindow, Bot, FileCode2, GitCompareArrows, MessagesSquare, Settings as SettingsIcon, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { useViewport } from "@/core/viewport";
 import { stepTab, tabAt, tabKey, useWorkbench, type Tab } from "@/core/workbench";
@@ -13,6 +13,8 @@ import { keysTitle } from "@/ui/keys/hint";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/ui/components/ui/alert-dialog";
 import { t } from "@/ui/strings";
+import { useMatch, useNavigate } from "react-router";
+import { useChat } from "@/ui/chat/ChatProvider";
 import { AgentTab } from "./AgentTab";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 
@@ -21,16 +23,57 @@ import { Skeleton } from "@/ui/components/ui/skeleton";
 const EditorTab = lazy(async () => ({ default: (await import("./EditorTab")).EditorTab }));
 const DiffTab = lazy(async () => ({ default: (await import("./DiffTab")).DiffTab }));
 
-export function Workbench({ projectId, children }: { projectId: string; children: ReactNode }) {
+export function Workbench({
+  projectId,
+  slug,
+  threadId,
+  children,
+}: {
+  projectId: string;
+  slug: string;
+  threadId?: string;
+  children: ReactNode;
+}) {
   const wb = useWorkbench(projectId);
   const viewport = useViewport();
+  const navigate = useNavigate();
+  const settingsRoute = useMatch("/p/:slug/settings") !== null;
+  const chat = useChat();
+  const chatTitle = threadId ? chat.thread?.title || chat.thread?.preview || t.chatTab : t.chatTab;
+  useEffect(() => {
+    wb.open(settingsRoute ? { kind: "settings" } : { kind: "chat", ...(threadId ? { threadId, title: chatTitle } : {}) });
+  }, [wb.open, settingsRoute, threadId, chatTitle]);
   const active = wb.tabs.find((tab) => tabKey(tab) === wb.active) ?? wb.tabs[0]!;
   // a phone has no room for a tab strip around an artifact: a full-screen sheet over the chat
   const phoneArtifact = viewport === "phone" && active.kind === "artifact" ? active : null;
   // closing a tab with unsaved edits asks first
   const [closing, setClosing] = useState<Tab | null>(null);
-  const close = (tab: Tab) => (wb.dirty.includes(tabKey(tab)) ? setClosing(tab) : wb.close(tabKey(tab)));
-  useTabCommands(wb, active, close);
+  const routeFor = (tab: Tab) =>
+    tab.kind === "settings" ? `/p/${slug}/settings` :
+      tab.kind === "chat" ? (tab.threadId ? `/p/${slug}/t/${tab.threadId}` : `/p/${slug}`) : null;
+  const select = (tab: Tab) => {
+    wb.activate(tabKey(tab));
+    const path = routeFor(tab);
+    if (path) navigate(path);
+  };
+  const close = (tab: Tab) => {
+    if (wb.dirty.includes(tabKey(tab))) {
+      setClosing(tab);
+      return;
+    }
+    const wasActive = wb.active === tabKey(tab);
+    const index = wb.tabs.findIndex((candidate) => tabKey(candidate) === tabKey(tab));
+    const fallback = wasActive
+      ? wb.tabs.filter((candidate) => tabKey(candidate) !== tabKey(tab))[Math.min(index, wb.tabs.length - 2)]
+      : undefined;
+    wb.close(tabKey(tab));
+    if (wasActive) {
+      const path = fallback && routeFor(fallback);
+      if (path) navigate(path);
+      else if (tab.kind === "chat" && tab.threadId) navigate(`/p/${slug}`);
+    }
+  };
+  useTabCommands(wb, active, close, select);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="workbench">
@@ -46,12 +89,12 @@ export function Workbench({ projectId, children }: { projectId: string; children
                 aria-selected={isActive}
                 className={`group flex shrink-0 items-center gap-1.5 border-r px-3 text-xs ${isActive ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground"}`}
               >
-                <button type="button" className="flex h-full items-center gap-1.5" onClick={() => wb.activate(key)}>
+                <button type="button" className="flex h-full items-center gap-1.5" onClick={() => select(tab)}>
                   <TabIcon tab={tab} />
                   <span className="max-w-48 truncate font-mono">{tabLabel(tab)}</span>
                   {wb.dirty.includes(key) ? <span className="text-warning" title={t.unsavedChanges}>●</span> : null}
                 </button>
-                {tab.kind !== "chat" ? (
+                {tab.kind !== "chat" || !!tab.threadId ? (
                   <button type="button" aria-label={`${t.closeTab} ${tabLabel(tab)}`} title={keysTitle(t.closeTab, "tab.close")} className="text-muted-foreground hover:text-foreground rounded p-0.5" onClick={() => close(tab)}>
                     <X className="size-3" />
                   </button>
@@ -61,7 +104,7 @@ export function Workbench({ projectId, children }: { projectId: string; children
           })}
         </div>
       ) : null}
-      <div className={`min-h-0 flex-1 flex-col ${active.kind === "chat" ? "flex" : "hidden"}`}>{children}</div>
+      <div className={`min-h-0 flex-1 flex-col ${active.kind === "chat" || active.kind === "settings" ? "flex" : "hidden"}`}>{children}</div>
       <Suspense fallback={<Skeleton className="m-4 h-32" />}>
         {active.kind === "file" ? <EditorTab key={active.path} projectId={projectId} path={active.path} line={active.line} /> : null}
         {active.kind === "diff" ? <DiffTab key={tabKey(active)} projectId={projectId} path={active.path} sha={active.sha} /> : null}
@@ -124,6 +167,7 @@ function ArtifactTab({ tab }: { tab: Extract<Tab, { kind: "artifact" }> }) {
 
 function TabIcon({ tab }: { tab: Tab }) {
   if (tab.kind === "chat") return <MessagesSquare className="size-3.5" />;
+  if (tab.kind === "settings") return <SettingsIcon className="size-3.5" />;
   if (tab.kind === "file") return <FileCode2 className="size-3.5" />;
   if (tab.kind === "artifact") return <AppWindow className="size-3.5" />;
   if (tab.kind === "agent") return <Bot className="size-3.5" />;
@@ -131,7 +175,8 @@ function TabIcon({ tab }: { tab: Tab }) {
 }
 
 function tabLabel(tab: Tab): string {
-  if (tab.kind === "chat") return t.chatTab;
+  if (tab.kind === "chat") return tab.title ?? (tab.threadId ? t.chatTab : t.newThread);
+  if (tab.kind === "settings") return t.projectSettingsTab;
   if (tab.kind === "artifact") return tab.title || t.artifactTab;
   if (tab.kind === "agent") return tab.name;
   const name = tab.path.split("/").at(-1) ?? tab.path;
@@ -144,19 +189,40 @@ function tabLabel(tab: Tab): string {
  * uses. The same keys work for every kind of tab: a file, a diff, an agent,
  * an artifact.
  */
-function useTabCommands(wb: ReturnType<typeof useWorkbench>, active: Tab, close: (tab: Tab) => void) {
+function useTabCommands(wb: ReturnType<typeof useWorkbench>, active: Tab, close: (tab: Tab) => void, select: (tab: Tab) => void) {
   const state = { tabs: wb.tabs, active: wb.active, dirty: wb.dirty };
   const many = () => wb.tabs.length > 1;
-  useCommand("tab.close", () => close(active), () => active.kind !== "chat");
+  useCommand("tab.close", () => close(active), () => active.kind !== "chat" || !!active.threadId);
   useCommand("tab.reopen", wb.reopen, wb.canReopen);
-  useCommand("tab.last", wb.back, many);
+  useCommand("tab.last", () => {
+    wb.back();
+    const tab = wb.tabs.find((candidate) => tabKey(candidate) === wb.activeKey());
+    if (tab) select(tab);
+  }, many);
   // the installed app's Ctrl+Tab: by last use while Ctrl is held
-  useCommand("tab.recent", () => wb.cycle(1), many);
-  useCommand("tab.recentBack", () => wb.cycle(-1), many);
+  useCommand("tab.recent", () => {
+    wb.cycle(1);
+    const tab = wb.tabs.find((candidate) => tabKey(candidate) === wb.activeKey());
+    if (tab) select(tab);
+  }, many);
+  useCommand("tab.recentBack", () => {
+    wb.cycle(-1);
+    const tab = wb.tabs.find((candidate) => tabKey(candidate) === wb.activeKey());
+    if (tab) select(tab);
+  }, many);
   useEffect(() => onModifierRelease(wb.endCycle), [wb.endCycle]);
-  useCommand("tab.next", () => wb.activate(stepTab(state, 1).active), many);
-  useCommand("tab.prev", () => wb.activate(stepTab(state, -1).active), many);
-  useCommand("tab.chat", () => wb.activate("chat"), () => active.kind !== "chat");
+  useCommand("tab.next", () => {
+    const tab = wb.tabs.find((candidate) => tabKey(candidate) === stepTab(state, 1).active);
+    if (tab) select(tab);
+  }, many);
+  useCommand("tab.prev", () => {
+    const tab = wb.tabs.find((candidate) => tabKey(candidate) === stepTab(state, -1).active);
+    if (tab) select(tab);
+  }, many);
+  useCommand("tab.chat", () => {
+    const tab = wb.tabs.find((candidate) => tabKey(candidate) === "chat");
+    if (tab) select(tab);
+  }, () => active.kind !== "chat");
   useCommand(
     "tab.switch",
     () =>
@@ -167,7 +233,10 @@ function useTabCommands(wb: ReturnType<typeof useWorkbench>, active: Tab, close:
           label: tabLabel(tab),
           ...(tab.kind === "file" || tab.kind === "diff" ? { detail: tab.path } : {}),
         })),
-        onPick: (item) => wb.activate(item.id),
+        onPick: (item) => {
+          const tab = wb.tabs.find((candidate) => tabKey(candidate) === item.id);
+          if (tab) select(tab);
+        },
       }),
     many,
   );
@@ -176,7 +245,8 @@ function useTabCommands(wb: ReturnType<typeof useWorkbench>, active: Tab, close:
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useCommand(`tab.goto.${n}`, () => {
       const key = tabAt(state, n);
-      if (key) wb.activate(key);
+      const tab = key && wb.tabs.find((candidate) => tabKey(candidate) === key);
+      if (tab) select(tab);
     }, () => wb.tabs.length > 1 && tabAt(state, n) !== null);
   }
 }

@@ -77,6 +77,24 @@ describe("agent tabs", () => {
   });
 });
 
+describe("conversation and project settings tabs", () => {
+  test("each conversation has a stable tab; refreshed titles replace the old details", () => {
+    let s = openTab(EMPTY_WORKBENCH, { kind: "chat", threadId: "t1", title: "first" });
+    s = openTab(s, { kind: "chat", threadId: "t2", title: "second" });
+    s = openTab(s, { kind: "chat", threadId: "t1", title: "renamed" });
+    expect(s.tabs.map(tabKey)).toEqual(["chat:t1", "chat:t2"]);
+    expect(s.tabs[0]).toEqual({ kind: "chat", threadId: "t1", title: "renamed" });
+    expect(closeTab(s, "chat:t1").tabs.map(tabKey)).toEqual(["chat:t2"]);
+    expect(closeTab(openTab(EMPTY_WORKBENCH, { kind: "chat", threadId: "t1" }), "chat:t1").tabs.map(tabKey)).toEqual(["chat"]);
+  });
+
+  test("project settings can be activated and closed like another workspace tab", () => {
+    let s = openTab(EMPTY_WORKBENCH, { kind: "settings" });
+    expect(s.tabs.map(tabKey)).toEqual(["chat", "settings"]);
+    expect(closeTab(s, "settings").tabs.map(tabKey)).toEqual(["chat"]);
+  });
+});
+
 describe("moving between tabs (the space menu's SPC b / SPC TAB / SPC 1…9)", () => {
   test("next and previous wrap around; a number is the tab at that place", () => {
     let s = openTab(openTab(EMPTY_WORKBENCH, { kind: "file", path: "a.ex" }), { kind: "file", path: "b.ex" });

@@ -55,6 +55,30 @@ export function precompress(): Plugin {
   };
 }
 
+/**
+ * Zod's generated prose mentions Rollup's `@__PURE__` marker in the comments
+ * immediately preceding two declarations. Rollup mistakes those words for
+ * executable annotations and warns; rewrite only the prose, leaving the real
+ * annotations (and therefore tree-shaking behavior) untouched.
+ */
+export function zodAnnotationComments(): Plugin {
+  return {
+    name: "longx:zod-annotation-comments",
+    enforce: "pre",
+    transform(code, id) {
+      const source = id.replace(/\\/g, "/");
+      if (!source.includes("/node_modules/zod/v4/core/")) return null;
+      if (source.endsWith("/util.js")) {
+        return code.replace("`@__PURE__` IIFE", "`pure` IIFE");
+      }
+      if (source.endsWith("/regexes.js")) {
+        return code.replace("a `@__PURE__` call", "a pure call");
+      }
+      return null;
+    },
+  };
+}
+
 type Chunkish = { type: string; fileName: string; isEntry?: boolean; code?: string; modules?: Record<string, { renderedLength: number }> };
 
 /** Why the entry chunk is over `maxBytes` (its size and heaviest packages), or null when it is not. */

@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Bot, FolderTree, GitBranch, MessagesSquare, Settings, X } from "lucide-react";
+import { Bot, FolderTree, GitBranch, House, MessagesSquare, Settings, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, type ReactNode } from "react";
-import { Link, Outlet, useMatch, useParams } from "react-router";
+import { Link, Outlet, useMatch, useNavigate, useParams } from "react-router";
 import { Workbench } from "@/ui/workbench/Workbench";
 import { TOOLS, useFrame, type Tool } from "@/core/frame";
 import { joinProjectChannel } from "@/core/projectChannel";
@@ -12,7 +12,6 @@ import { useViewport } from "@/core/viewport";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/ui/sheet";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/components/ui/tooltip";
-import { TopBar } from "@/ui/shell/Shell";
 import { ThemeToggle } from "@/ui/components/ThemeToggle";
 import { ChatProvider } from "@/ui/chat/ChatProvider";
 import { keysOf, keysTitle } from "@/ui/keys/hint";
@@ -49,11 +48,11 @@ export type ProjectContext = {
  * chat fills the screen, tools live in a bottom toolbar and open as sheets.
  */
 export function ProjectWindow() {
-  const { slug = "" } = useParams();
+  const { slug = "", threadId } = useParams();
+  const navigate = useNavigate();
   const project = useProject(slug);
   const viewport = useViewport();
   const frame = useFrame();
-  // the settings page is a page, not part of the editor area
   const settings = useMatch("/p/:slug/settings") !== null;
   const client = useQueryClient();
   const id = project.data?.id;
@@ -118,45 +117,25 @@ export function ProjectWindow() {
       <ProjectCommands ctx={ctx} />
     </Suspense>
     <div className="flex h-dvh flex-col">
-      <TopBar
-        wide
-        title={project.data.name}
-        back="/"
-        actions={
-          <>
-          <CopyApiButton slug={slug} />
-          <ThemeToggle />
-          <Link to={`/p/${slug}/settings`} aria-label={t.settings} title={keysTitle(t.settings, "project.settings")} className="touch-target flex items-center justify-center rounded-md">
-            <Settings className="size-5" />
-          </Link>
-          </>
-        }
-      />
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {docked ? <ToolRail active={frame.tool} onToggle={frame.toggle} /> : null}
+        {docked ? <ToolRail active={frame.tool} onToggle={frame.toggle} slug={slug} settings={settings} onSettings={() => navigate(`/p/${slug}/settings`)} /> : null}
         {docked && frame.tool ? (
           <DockedPanel width={frame.panelWidth} onResize={frame.resize} title={t.tools[frame.tool]!} onClose={frame.close}>
             <ToolBody tool={frame.tool} ctx={ctx} />
           </DockedPanel>
         ) : null}
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {settings ? (
+          <Workbench projectId={project.data.id} slug={slug} threadId={threadId}>
             <div className="min-h-0 flex-1 overflow-y-auto">
               <Outlet context={ctx} />
             </div>
-          ) : (
-            <Workbench projectId={project.data.id}>
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-                <Outlet context={ctx} />
-              </div>
-            </Workbench>
-          )}
+          </Workbench>
         </main>
       </div>
       <StatusStrip ctx={ctx} />
       {!docked ? (
         <>
-          <BottomToolbar active={frame.tool} onToggle={frame.toggle} />
+          <BottomToolbar active={frame.tool} onToggle={frame.toggle} onHome={() => navigate("/")} onSettings={() => navigate(`/p/${slug}/settings`)} />
           <Sheet open={frame.tool != null} onOpenChange={(open) => (open ? null : frame.close())}>
             <SheetContent side="bottom" className="safe-bottom max-h-[85dvh] overflow-y-auto rounded-t-xl" data-testid="tool-sheet">
               <SheetHeader className="pb-2">
@@ -185,7 +164,7 @@ function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
   }
 }
 
-function ToolRail({ active, onToggle }: { active: Tool | null; onToggle: (tool: Tool) => void }) {
+function ToolRail({ active, onToggle, slug, settings, onSettings }: { active: Tool | null; onToggle: (tool: Tool) => void; slug: string; settings: boolean; onSettings: () => void }) {
   // re-render when the space menu is switched or a key changed
   usePreference("spaceMenu");
   useBindings();
@@ -217,6 +196,25 @@ function ToolRail({ active, onToggle }: { active: Tool | null; onToggle: (tool: 
           </Tooltip>
         );
       })}
+      <div className="flex-1" />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link to="/" aria-label={t.home} title={t.home} className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground">
+            <House className="size-5" />
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent side="right">{t.home}</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button type="button" aria-label={t.projectSettingsTab} aria-pressed={settings} title={keysTitle(t.projectSettingsTab, "project.settings")} onClick={onSettings} className={`flex size-9 items-center justify-center rounded-md ${settings ? "bg-sidebar-accent text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+            <Settings className="size-5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">{t.projectSettingsTab}</TooltipContent>
+      </Tooltip>
+      <CopyApiButton slug={slug} />
+      <ThemeToggle />
     </nav>
   );
 }
@@ -247,7 +245,7 @@ function DockedPanel({ width, onResize, title, onClose, children }: { width: num
   );
 }
 
-function BottomToolbar({ active, onToggle }: { active: Tool | null; onToggle: (tool: Tool) => void }) {
+function BottomToolbar({ active, onToggle, onHome, onSettings }: { active: Tool | null; onToggle: (tool: Tool) => void; onHome: () => void; onSettings: () => void }) {
   return (
     <nav aria-label="工具窗口" className="safe-bottom bg-sidebar border-sidebar-border sticky bottom-0 z-20 border-t" data-testid="bottom-toolbar">
       <div className="flex">
@@ -260,13 +258,19 @@ function BottomToolbar({ active, onToggle }: { active: Tool | null; onToggle: (t
               aria-label={t.tools[tool]}
               aria-pressed={active === tool}
               onClick={() => onToggle(tool)}
-              className={`flex h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${active === tool ? "text-primary" : "text-muted-foreground"}`}
+              className={`min-w-0 flex h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] ${active === tool ? "text-primary" : "text-muted-foreground"}`}
             >
               <Icon className="size-5" />
-              {t.tools[tool]}
+              <span className="max-w-full truncate">{t.tools[tool]}</span>
             </button>
           );
         })}
+        <button type="button" aria-label={t.home} onClick={onHome} className="min-w-0 flex h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] text-muted-foreground">
+          <House className="size-5" /><span className="max-w-full truncate">{t.home}</span>
+        </button>
+        <button type="button" aria-label={t.projectSettingsTab} onClick={onSettings} className="min-w-0 flex h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] text-muted-foreground">
+          <Settings className="size-5" /><span className="max-w-full truncate">{t.settings}</span>
+        </button>
       </div>
     </nav>
   );

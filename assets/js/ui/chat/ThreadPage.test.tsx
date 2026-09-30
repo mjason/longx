@@ -1726,7 +1726,7 @@ describe("ThreadPage", () => {
     act(() => channel.reply("ok", { ...snapshot, items: [...snapshot.items, surfaceItem("s0", "show_file", { path: "old.ex" }, { path: "old.ex", line: null })] }));
     await screen.findByText("run the tests");
     expect(screen.getByTestId("tool-show-file")).toHaveTextContent("old.ex");
-    expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("workbench-tabs")).toBeNull();
     // live: the editor tab opens at once
     act(() => {
       channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });

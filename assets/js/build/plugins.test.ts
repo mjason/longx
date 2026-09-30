@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 import { afterEach, describe, expect, test } from "vitest";
-import { compressDir, entryOverBudget, precacheList } from "./plugins";
+import { compressDir, entryOverBudget, precacheList, zodAnnotationComments } from "./plugins";
 
 let dir: string;
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -48,6 +48,27 @@ describe("entry budget: what every page loads before anything shows", () => {
     expect(error).toMatch(/2500/);
     expect(error).toMatch(/elkjs/);
     expect(entryOverBudget(bundle, 3_000)).toBeNull();
+  });
+});
+
+describe("Zod dependency comments: keep Rollup from treating documentation as annotations", () => {
+  test("rewrites only the two prose mentions; executable pure annotations and other files stay intact", () => {
+    const plugin = zodAnnotationComments();
+    const source = [
+      "// Wrapped in a `@__PURE__` IIFE: esbuild keeps this initializer.",
+      "export const ranges = /*@__PURE__*/ (() => ({}))();",
+      "/** The helper avoids a `@__PURE__` call with an interpolated argument. */",
+      "export const date = /*@__PURE__*/ anchor(source);",
+    ].join("\n");
+    const transform = plugin.transform as (code: string, id: string) => string | null;
+    const result = transform(source, "/project/node_modules/zod/v4/core/util.js")!;
+    expect(result).not.toContain("`@__PURE__` IIFE");
+    expect(result).toContain("/*@__PURE__*/ (() =>");
+    expect(result).toContain("`@__PURE__` call");
+    const regexes = transform(source, "/project/node_modules/zod/v4/core/regexes.js")!;
+    expect(regexes).not.toContain("`@__PURE__` call");
+    expect(regexes).toContain("/*@__PURE__*/ anchor(source)");
+    expect(transform(source, "/project/src/app.js")).toBeNull();
   });
 });
 

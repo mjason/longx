@@ -5,6 +5,7 @@ import { t } from "@/ui/strings";
 import { createBatcher } from "./batch";
 import { applyEvent, emptyView, fromSnapshot, HISTORY_PAGE, prependEarlier, type EarlierPage, type ThreadEvent, type ThreadSnapshot, type ThreadView } from "./thread";
 import { joinThreadChannel, type ThreadChannelHandle } from "./threadChannel";
+import { cacheThreadView, getCachedThreadView } from "./threadViewCache";
 
 type Action =
   | { type: "snapshot"; snapshot: ThreadSnapshot }
@@ -70,7 +71,10 @@ export function useThreadView(
 ): ThreadViewState & { refetch: () => Promise<void>; loadEarlier: LoadEarlier } {
   const signal = useRef(onSignal);
   signal.current = onSignal;
-  const [state, dispatch] = useReducer(reduce, kernelThreadId ?? "", (id) => ({ view: emptyView(id), ready: false, error: null }));
+  const [state, dispatch] = useReducer(reduce, kernelThreadId ?? "", (id) => {
+    const view = getCachedThreadView(id);
+    return { view: view ?? emptyView(id), ready: !!view, error: null };
+  });
   const latest = useRef(state);
   latest.current = state;
   const handle = useRef<ThreadChannelHandle | null>(null);
@@ -78,7 +82,19 @@ export function useThreadView(
   current.current = kernelThreadId;
 
   useEffect(() => {
-    dispatch({ type: "reset", id: kernelThreadId ?? "" });
+    if (state.view.threadId === kernelThreadId) cacheThreadView(state.view);
+  }, [kernelThreadId, state.view]);
+
+  useEffect(() => {
+    const cached = kernelThreadId ? getCachedThreadView(kernelThreadId) : undefined;
+    if (cached) dispatch({ type: "snapshot", snapshot: {
+      seq: cached.seq, thread_id: cached.threadId, thread: cached.thread, turn: cached.turn,
+      turns: cached.turns, status: cached.status, token_usage: cached.tokenUsage, items: cached.items,
+      pending_requests: cached.requests, goal: cached.goal,
+      waiting: { waiting: cached.waiting.items, paused: cached.waiting.paused },
+      progress: cached.progress, earlier: cached.earlier,
+    } });
+    else dispatch({ type: "reset", id: kernelThreadId ?? "" });
     if (!kernelThreadId) return;
     const events = createBatcher<ThreadEvent>((batch) => dispatch({ type: "events", events: batch }));
     const joined = joinThreadChannel(getSocket(), kernelThreadId, {
@@ -121,5 +137,11 @@ export function useThreadView(
       if (current.current === id) await joined.snapshot().catch(() => {});
     }
   }, []);
-  return { ...state, refetch, loadEarlier };
+  const visible = state.view.threadId === (kernelThreadId ?? "")
+    ? state
+    : (() => {
+        const cached = kernelThreadId ? getCachedThreadView(kernelThreadId) : undefined;
+        return { view: cached ?? emptyView(kernelThreadId ?? ""), ready: !!cached, error: null };
+      })();
+  return { ...visible, refetch, loadEarlier };
 }

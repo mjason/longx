@@ -150,6 +150,9 @@ export const t = {
     agents: "Agent 与会话",
     files: "文件",
   } as Record<string, string>,
+  home: "Home",
+  projectSettingsTab: "项目设置",
+  chatHistory: "聊天记录",
   // workbench (the centre: chat + files + diffs as tabs)
   chatTab: "会话",
   closeTab: "关闭",

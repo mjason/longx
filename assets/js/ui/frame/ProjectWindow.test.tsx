@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
+import { _resetWorkbenchForTests } from "@/core/workbench";
 import { channel, ok } from "@/ui/test-mocks";
 
 vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
@@ -14,6 +15,7 @@ describe("ProjectWindow", () => {
   beforeEach(() => {
     localStorage.clear();
     _resetFrameStoreForTests();
+    _resetWorkbenchForTests();
   });
 
   test("phone: chat fills the screen, tools are a bottom toolbar opening sheets", async () => {
@@ -230,6 +232,55 @@ describe("ProjectWindow", () => {
     expect(screen.getByTestId("status-strip")).not.toHaveTextContent("codex");
   });
 
+  test("conversations and project settings are workspace tabs; Home and settings live at the rail bottom", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    const { router } = renderAt("/p/app-1/t/t1");
+    await screen.findByTestId("tool-rail");
+    expect(screen.queryByText("App 1")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "项目设置" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "项目设置" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/settings"));
+    expect(await screen.findByTestId("project-settings")).toBeInTheDocument();
+    const tabs = screen.getByTestId("workbench-tabs");
+    expect(within(tabs).getByRole("tab", { name: /thread 1/i })).toBeInTheDocument();
+    expect(within(tabs).getByRole("tab", { name: "项目设置" })).toHaveAttribute("aria-selected", "true");
+
+    await user.click(screen.getByRole("link", { name: "Home" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  });
+
+  test("opening another conversation creates a separate tab and selecting it follows its route", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    const { listThreads } = await import("@/core/api");
+    vi.mocked(listThreads).mockResolvedValue(ok([thread(1), thread(2)]) as never);
+    try {
+      const { router } = renderAt("/p/app-1/t/t1");
+      const panel = await screen.findByTestId("tool-panel");
+      await user.click(await within(panel).findByRole("button", { name: "thread 2" }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t2"));
+      const tabs = await screen.findByTestId("workbench-tabs");
+      expect(within(tabs).getByRole("tab", { name: "thread 1" })).toBeInTheDocument();
+      expect(within(tabs).getByRole("tab", { name: "thread 2" })).toHaveAttribute("aria-selected", "true");
+      await user.click(within(tabs).getByRole("button", { name: "thread 1" }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t1"));
+    } finally {
+      vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
+    }
+  });
+
+  test("chat history is opened from the status bar and on phones remains a sheet", async () => {
+    setViewport(390);
+    const user = userEvent.setup();
+    renderAt("/p/app-1/t/t1");
+    const strip = await screen.findByTestId("status-strip");
+    await user.click(within(strip).getByRole("button", { name: "聊天记录" }));
+    const sheet = await screen.findByTestId("tool-sheet");
+    expect(await within(sheet).findByTestId("threads-tool")).toBeInTheDocument();
+  });
+
   test("missing dependencies are an amber count in the status bar, linking to the dependencies page", async () => {
     setViewport(1280);
     vi.mocked(dependencies).mockResolvedValue(ok(dependencyReport({ missing: 3, installCommand: "sudo apt install fzf bat jq" })) as never);
@@ -308,7 +359,7 @@ describe("ProjectWindow", () => {
     const user = userEvent.setup();
     const { router } = renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(screen.getByTestId("threads-tool")).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: /新会话/ }));
+    await user.click(within(screen.getByTestId("tool-panel")).getByRole("button", { name: /新会话/ }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1"));
     expect(startThread).not.toHaveBeenCalled();
   });

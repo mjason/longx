@@ -1,6 +1,6 @@
 import { useViewport } from "@/core/viewport";
 import { KeysHint } from "@/ui/keys/KeysHint";
-import { AlertTriangle, ArrowUpCircle, Download, GitBranch } from "lucide-react";
+import { AlertTriangle, ArrowUpCircle, Download, GitBranch, History } from "lucide-react";
 import { Link } from "react-router";
 import { browserBusy, browserPercent, useBrowserStatus } from "@/core/browser";
 import { shortSha } from "@/core/format";
@@ -11,6 +11,7 @@ import { useUpgradeStatus } from "@/core/upgrade";
 import { t } from "@/ui/strings";
 import type { ProjectContext } from "./ProjectWindow";
 import { RunningChip } from "./RunningChip";
+import { useFrame } from "@/core/frame";
 import { ProjectJobsChip } from "./ProjectJobsChip";
 import { ScheduledWatchesChip } from "./ScheduledWatchesChip";
 
@@ -19,6 +20,7 @@ const item = (extra = "") => `flex shrink-0 items-center gap-1 whitespace-nowrap
 /** IDEA's status bar: HEAD, an update waiting. One thin line. */
 export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
   const viewport = useViewport();
+  const frame = useFrame();
   const git = useGitInfo(ctx.id);
   const upgrade = useUpgradeStatus({ poll: false });
   const deps = useDependencies();
@@ -55,6 +57,9 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
           <ArrowUpCircle className="size-3" /> {t.updatePage.newVersion(upgrade.data.latest)}
         </Link>
       ) : null}
+      <button type="button" className={item("ml-auto hover:text-foreground")} aria-label={t.chatHistory} onClick={() => frame.open("threads")}>
+        <History className="size-3" /> {t.chatHistory}
+      </button>
       {viewport !== "phone" ? <KeysHint /> : null}
     </div>
   );

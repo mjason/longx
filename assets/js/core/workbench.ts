@@ -8,7 +8,8 @@ import { useSyncExternalStore } from "react";
 // Tab kinds are plain data: a native client may open a kind in a window of
 // its own (an artifact in a WebView, a file in its editor) instead of a tab.
 export type Tab =
-  | { kind: "chat" }
+  | { kind: "chat"; threadId?: string; title?: string }
+  | { kind: "settings" }
   | { kind: "file"; path: string; line?: number }
   | { kind: "diff"; path: string; sha: string | null }
   // an html document the agent wrote (`show_html`), or a URL; drawn in a sandboxed frame
@@ -22,7 +23,9 @@ export const EMPTY_WORKBENCH: WorkbenchState = { tabs: [{ kind: "chat" }], activ
 export function tabKey(tab: Tab): string {
   switch (tab.kind) {
     case "chat":
-      return "chat";
+      return tab.threadId ? `chat:${tab.threadId}` : "chat";
+    case "settings":
+      return "settings";
     case "file":
       return `file:${tab.path}`;
     case "diff":
@@ -36,6 +39,17 @@ export function tabKey(tab: Tab): string {
 
 export function openTab(state: WorkbenchState, tab: Tab): WorkbenchState {
   const key = tabKey(tab);
+  // The original single chat placeholder becomes the first real conversation
+  // tab when a deep link opens; otherwise every workspace would carry a
+  // redundant unnamed chat beside its named conversation.
+  if (tab.kind === "chat" && tab.threadId && state.tabs.some((t) => t.kind === "chat" && !t.threadId)) {
+    const alreadyOpen = state.tabs.some((t) => tabKey(t) === key);
+    const tabs = state.tabs.flatMap((t) => {
+      if (t.kind === "chat" && !t.threadId) return alreadyOpen ? [] : [tab];
+      return tabKey(t) === key ? [tab] : [t];
+    });
+    return { ...state, tabs, active: key };
+  }
   // the same tab opened again takes the new details (a file at another line)
   const tabs = state.tabs.some((t) => tabKey(t) === key) ? state.tabs.map((t) => (tabKey(t) === key ? tab : t)) : [...state.tabs, tab];
   return { ...state, tabs, active: key };
@@ -49,7 +63,9 @@ export function closeTab(state: WorkbenchState, key: string): WorkbenchState {
   if (key === "chat") return state;
   const index = state.tabs.findIndex((t) => tabKey(t) === key);
   if (index === -1) return state;
-  const tabs = state.tabs.filter((_, i) => i !== index);
+  if (state.tabs[index]?.kind === "chat" && !state.tabs[index]?.threadId) return state;
+  const remaining = state.tabs.filter((_, i) => i !== index);
+  const tabs = remaining.length ? remaining : [{ kind: "chat" } as const];
   const active = state.active === key ? tabKey(tabs[Math.min(index, tabs.length - 1)]!) : state.active;
   return { tabs, active, dirty: state.dirty.filter((d) => d !== key) };
 }
@@ -95,7 +111,11 @@ function load(storage: Storage | null, key: string): WorkbenchState {
     if (!raw) return EMPTY_WORKBENCH;
     const parsed = JSON.parse(raw) as Partial<WorkbenchState>;
     const tabs = Array.isArray(parsed.tabs) ? parsed.tabs.filter((t): t is Tab => t && typeof t === "object" && "kind" in t) : [];
-    const state: WorkbenchState = { tabs: [{ kind: "chat" }, ...tabs.filter((t) => t.kind !== "chat")], active: "chat", dirty: [] };
+    const state: WorkbenchState = {
+      tabs: [{ kind: "chat" }, ...tabs.filter((t) => !(t.kind === "chat" && !t.threadId))],
+      active: "chat",
+      dirty: [],
+    };
     return typeof parsed.active === "string" ? activate(state, parsed.active) : state;
   } catch {
     return EMPTY_WORKBENCH;
@@ -104,6 +124,7 @@ function load(storage: Storage | null, key: string): WorkbenchState {
 
 export type WorkbenchStore = {
   get: () => WorkbenchState;
+  activeKey: () => string;
   subscribe: (cb: () => void) => () => void;
   open: (tab: Tab) => void;
   activate: (key: string) => void;
@@ -148,6 +169,7 @@ export function createWorkbenchStore(storage: Storage | null, key: string): Work
   };
   return {
     get: () => state,
+    activeKey: () => state.active,
     subscribe: (cb) => {
       listeners.add(cb);
       return () => listeners.delete(cb);
@@ -208,6 +230,7 @@ export function useWorkbench(projectId: string): WorkbenchState & Omit<Workbench
   const state = useSyncExternalStore(s.subscribe, s.get, s.get);
   return {
     ...state,
+    activeKey: s.activeKey,
     open: s.open,
     activate: s.activate,
     close: s.close,

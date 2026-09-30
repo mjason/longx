@@ -3,7 +3,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
-import { entryBudget, precompress, serviceWorker } from "./js/build/plugins";
+import { entryBudget, precompress, serviceWorker, zodAnnotationComments } from "./js/build/plugins";
 
 // Phoenix serves the page and the built files under /assets (see
 // LongxWeb.Vite); in dev the browser loads scripts straight from this
@@ -27,13 +27,16 @@ export default defineConfig(({ command }) => ({
   },
   build: {
     manifest: true,
+    // The entry has its own 1.6 MB hard budget. Other >500 KB outputs are
+    // explicitly deferred diagram / Shiki chunks (ELK and standalone grammars).
+    chunkSizeWarningLimit: 1_650,
     outDir: "../priv/static/assets",
     assetsDir: ".",
     emptyOutDir: true,
     rollupOptions: { input: ["js/index.tsx"] },
   },
   resolve: { alias: { "@": path.resolve(__dirname, "js") } },
-  plugins: [react(), tailwindcss(), entryBudget(ENTRY_BUDGET), precompress(), serviceWorker("js/sw/sw.ts", "../priv/static/sw.js")],
+  plugins: [zodAnnotationComments(), react(), tailwindcss(), entryBudget(ENTRY_BUDGET), precompress(), serviceWorker("js/sw/sw.ts", "../priv/static/sw.js")],
   test: {
     environment: "jsdom",
     globals: true,
