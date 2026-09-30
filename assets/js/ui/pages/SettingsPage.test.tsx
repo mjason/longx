@@ -988,6 +988,7 @@ describe("SettingsPage", () => {
     const section = await screen.findByTestId("section-agent");
     const settings = await within(section).findByTestId("agent-settings");
     expect(within(settings).getByLabelText("命令使用的 Shell")).toHaveTextContent("自动");
+    expect(within(settings).queryByTestId("command-shell-manual-warning")).not.toBeInTheDocument();
     const depth = within(settings).getByLabelText("派出深度上限") as HTMLInputElement;
     expect(depth.value).toBe("2");
     await user.clear(depth);
@@ -1000,6 +1001,7 @@ describe("SettingsPage", () => {
     await user.type(floor, "12");
     await user.click(within(settings).getByLabelText("命令使用的 Shell"));
     await user.click(await screen.findByRole("option", { name: "bash" }));
+    expect(within(settings).getByTestId("command-shell-manual-warning")).toHaveTextContent("不会自动继承另一种 Shell 的 PATH 或环境变量");
     const extraPath = within(settings).getByLabelText("额外 PATH 目录") as HTMLTextAreaElement;
     await user.type(extraPath, "/opt/tools");
     await user.click(within(settings).getByRole("button", { name: "恢复默认" }));

@@ -839,6 +839,7 @@ export const t = {
     commandShell: "命令使用的 Shell",
     commandShellAuto: "自动（系统默认）",
     commandShellHint: "exec_command 和 start_job 共用此选择；自动模式沿用启动 Longx 的用户 Shell。",
+    commandShellManualWarning: "手动选择后会读取所选 Shell 自己的登录/交互配置，不会自动继承另一种 Shell 的 PATH 或环境变量。比如凭证只在 .zshrc 中导出，选择 bash 后命令就看不到它。请确认所选 Shell 中配置了需要的 PATH 和变量；不要把凭证复制到共享环境文件。",
     extraPath: "额外 PATH 目录",
     extraPathHint: "每行一个目录；会置于命令环境 PATH 的前面。默认包含内置 web_fetch 浏览器目录，可编辑、清空或恢复默认。",
     extraPathReset: "恢复默认",

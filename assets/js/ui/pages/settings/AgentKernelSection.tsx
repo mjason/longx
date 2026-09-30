@@ -149,6 +149,11 @@ function SettingsForm({ initial, commandShell: initialShell, extraPath: initialE
           </SelectContent>
         </Select>
         <span className="text-muted-foreground text-xs">{s.commandShellHint}</span>
+        {commandShell !== "auto" ? (
+          <p className="text-warning text-xs" data-testid="command-shell-manual-warning">
+            {s.commandShellManualWarning}
+          </p>
+        ) : null}
       </div>
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-3">
