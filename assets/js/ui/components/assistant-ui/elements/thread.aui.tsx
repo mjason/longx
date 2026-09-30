@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 "use client";
 
 import {
@@ -248,9 +249,13 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
           shiki and KaTeX, content-visibility sizing), so the reader watched it slide
           for seconds */}
       <ThreadPrimitive.Viewport
+        autoScroll
         ref={viewportRef}
         data-slot="aui_thread-viewport"
-        className={cn("relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll", THREAD_COLUMN)}
+        // The auto-scroll hook owns following the tail. Native scroll anchoring
+        // can move scrollTop during streamed markdown/tool reflow and look like
+        // a deliberate user scroll-up, which disables follow mode mid-turn.
+        className={cn("relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll [overflow-anchor:none]", THREAD_COLUMN)}
       >
         <div
           className={cn(
@@ -308,6 +313,7 @@ const ThreadMessage: FC = () => {
 };
 
 const ThreadScrollToBottom: FC = () => {
+    useTranslation();
   return (
     <ThreadPrimitive.ScrollToBottom asChild>
       <TooltipIconButton
@@ -322,6 +328,7 @@ const ThreadScrollToBottom: FC = () => {
 };
 
 const ThreadWelcome: FC = () => {
+    useTranslation();
   return (
     <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
       <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
@@ -332,6 +339,7 @@ const ThreadWelcome: FC = () => {
 };
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
+    useTranslation();
   const { ComposerPopovers, ComposerQueue } = useContext(ThreadComponentsContext);
   // ↑ / ↓ on an empty draft walk the messages sent before (a terminal's habit)
   const history = unstable_useComposerInputHistory();
@@ -369,6 +377,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
 
 // the send button names what it does: a turn, or a place in the queue while one runs
 const SendButton: FC = () => {
+    useTranslation();
   const running = useAuiState((s) => s.thread.isRunning);
   const label = running ? t.queueSend : t.send;
   return (
@@ -389,6 +398,7 @@ const SendButton: FC = () => {
 };
 
 const ComposerAction: FC = () => {
+    useTranslation();
   const { ComposerLeading, ComposerTrailing } = useContext(ThreadComponentsContext);
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
@@ -592,6 +602,7 @@ const AssistantMessage: FC = () => {
 // says so instead of looking finished; the backend's stall watchdog ends
 // it for good after `stall_after`.
 const StalledHint: FC = () => {
+    useTranslation();
   const { stalled, stalledForMs } = unstable_useMessageStallDetection({ thresholdMs: 15_000 });
   if (!stalled) return null;
   return (
@@ -602,6 +613,7 @@ const StalledHint: FC = () => {
 };
 
 const AssistantActionBar: FC = () => {
+    useTranslation();
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -690,6 +702,7 @@ const UserMessage: FC = () => {
 // markdown. Consecutive messages of one agent and kind arrive folded into one
 // message by `messages.ts`: its text parts stack under one label, a rule between
 const AgentMessage: FC<{ from: string }> = ({ from }) => {
+    useTranslation();
   const { AgentLabel } = useContext(ThreadComponentsContext);
   const kind = useAuiState((s) => s.message.metadata.custom?.["kind"]);
   const count = useAuiState((s) => s.message.content.filter((p) => p.type === "text").length);
@@ -733,6 +746,7 @@ const AgentMessage: FC<{ from: string }> = ({ from }) => {
 };
 
 const EditComposer: FC = () => {
+    useTranslation();
   return (
     <MessagePrimitive.Root
       data-slot="aui_edit-composer-wrapper"

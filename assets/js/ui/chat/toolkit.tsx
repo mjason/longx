@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
   ShimmerLabel,
@@ -56,11 +57,14 @@ const LazyGenerativeTree = lazy(async () => ({
   default: (await import("@/ui/components/assistant-ui/elements/generative-ui")).GenerativeTree,
 }));
 type GenerativeTreeProps = ComponentProps<typeof LazyGenerativeTree>;
-const GenerativeTree = (props: GenerativeTreeProps) => (
+const GenerativeTree = (props: GenerativeTreeProps) => {
+    useTranslation();
+    return (
   <Suspense fallback={<ShimmerLabel className="text-xs">{t.presentDrawing}</ShimmerLabel>}>
     <LazyGenerativeTree {...props} />
   </Suspense>
 );
+  };
 import { TerminalBlock } from "@/ui/components/assistant-ui/elements/terminal-block";
 import { ToolCall } from "@/ui/components/assistant-ui/elements/tool-call";
 import { ToolError } from "@/ui/components/assistant-ui/elements/tool-error";
@@ -218,6 +222,7 @@ export const CommandExecutionTool: ToolCallMessagePartComponent<
   CommandArgs,
   CommandResult
 > = (p) => {
+    useTranslation();
   const command = p.args.command ?? "";
   const output =
     p.result?.output ?? (typeof p.artifact === "string" ? p.artifact : "");
@@ -285,6 +290,7 @@ export const FileChangeTool: ToolCallMessagePartComponent<
   FileChangeArgs,
   FileChangeResult
 > = (p) => {
+    useTranslation();
   const changes = p.args.changes ?? [];
   const parsed = changes.map((c) => ({
     change: c,
@@ -414,6 +420,7 @@ export const WebSearchTool: ToolCallMessagePartComponent<
   WebSearchArgs,
   WebSearchResult
 > = (p) => {
+    useTranslation();
   const results = (p.result?.results ?? [])
     .filter((r) => typeof r?.url === "string")
     .map((r) => ({ title: r.title ?? "", url: r.url! }));
@@ -481,6 +488,7 @@ function ReadPage({
   title: string;
   running: boolean;
 }) {
+    useTranslation();
   const domain = domainOf(url);
   return (
     <div
@@ -533,6 +541,7 @@ function detailsOf(p: { result?: unknown }): SurfaceDetails {
 
 /** One line: an icon, the label, the thing (mono), and 打开 when the window can open it. */
 function SurfaceRow({ icon, label, name, tab, testId, failed, children }: { icon: ReactNode; label: string; name: string; tab: Tab | null; testId: string; failed: boolean; children?: ReactNode }) {
+    useTranslation();
   const surface = useContext(SurfaceContext);
   return (
     <div className="my-1 flex w-full flex-col gap-1.5 text-xs" data-testid={testId}>
@@ -553,6 +562,7 @@ function SurfaceRow({ icon, label, name, tab, testId, failed, children }: { icon
 
 /** `longx.show_file`: the file (and line) opened in the editor; 打开 brings the tab back. */
 export const ShowFileTool: ToolCallMessagePartComponent<{ path?: string; line?: number }, unknown> = (p) => {
+    useTranslation();
   const details = detailsOf(p);
   const path = String(details?.["path"] ?? p.args.path ?? "");
   const line = typeof details?.["line"] === "number" ? (details["line"] as number) : typeof p.args.line === "number" ? p.args.line : undefined;
@@ -562,6 +572,7 @@ export const ShowFileTool: ToolCallMessagePartComponent<{ path?: string; line?: 
 
 /** `longx.show_diff`: a file's diff — uncommitted, or at one commit. */
 export const ShowDiffTool: ToolCallMessagePartComponent<{ path?: string; sha?: string }, unknown> = (p) => {
+    useTranslation();
   const details = detailsOf(p);
   const path = String(details?.["path"] ?? p.args.path ?? "");
   const sha = typeof details?.["sha"] === "string" ? (details["sha"] as string) : null;
@@ -576,9 +587,12 @@ export function fileUrl(projectId: string, path: string, attachment: boolean, in
 }
 
 /** `longx.send_file`: a download card — the name, the size, the link; an image drawn inline. */
-export const SendFileTool: ToolCallMessagePartComponent<{ path?: string; title?: string }, unknown> = (p) => (
+export const SendFileTool: ToolCallMessagePartComponent<{ path?: string; title?: string }, unknown> = (p) => {
+    useTranslation();
+    return (
   <FileCard part={p} label={t.sentFile} icon={<Download className="size-3.5" />} testId="tool-send-file" />
 );
+  };
 
 /**
  * `longx.image_generation`: the provider drew a picture on its side (OpenAI's
@@ -587,6 +601,7 @@ export const SendFileTool: ToolCallMessagePartComponent<{ path?: string; title?:
  * says the provider is drawing.
  */
 export const ImageGenerationTool: ToolCallMessagePartComponent<{ prompt?: string; size?: string }, unknown> = (p) => {
+    useTranslation();
   const running = p.status.type === "running";
   if (running || !detailsOf(p)) {
     return (
@@ -604,6 +619,7 @@ export const ImageGenerationTool: ToolCallMessagePartComponent<{ prompt?: string
 type FilePart = { args: Record<string, unknown>; result?: unknown; isError?: boolean };
 
 function FileCard({ part: p, label, icon, testId }: { part: FilePart; label: string; icon: ReactNode; testId: string }) {
+    useTranslation();
   const surface = useContext(SurfaceContext);
   const details = detailsOf(p);
   const name = String(details?.["name"] ?? p.args.path ?? "");
@@ -636,6 +652,7 @@ function FileCard({ part: p, label, icon, testId }: { part: FilePart; label: str
 
 /** `longx.show_html`: an artifact — html of the model's own, or a URL — opened in the workbench; the row reopens it. */
 export const ShowHtmlTool: ToolCallMessagePartComponent<{ title?: string; html?: string; url?: string }, unknown> = (p) => {
+    useTranslation();
   const details = detailsOf(p);
   const title = String(details?.["title"] ?? p.args.title ?? "");
   const html = typeof p.args.html === "string" && p.args.html ? p.args.html : undefined;
@@ -653,6 +670,7 @@ export const ShowHtmlTool: ToolCallMessagePartComponent<{ title?: string; html?:
  * a shimmer says so.
  */
 export const PresentTool: ToolCallMessagePartComponent<Record<string, unknown>, unknown> = (p) => {
+    useTranslation();
   const streaming = p.status.type === "running";
   return (
     <div className="aui-present my-2 flex flex-col gap-2" data-testid="tool-present">
@@ -664,6 +682,7 @@ export const PresentTool: ToolCallMessagePartComponent<Record<string, unknown>, 
 
 /** A `longx.prompt_user` call's own row: the form itself is the ask (ActionTool); this just says the turn waits on it. */
 export const PromptUserTool: ToolCallMessagePartComponent<Record<string, unknown>, unknown> = (p) => {
+    useTranslation();
   const waiting = p.status.type === "running" || p.status.type === "requires-action";
   return (
     <div className="text-muted-foreground flex items-center gap-2 py-1 text-xs" data-testid="tool-prompt-user">
@@ -680,6 +699,7 @@ export const PromptUserTool: ToolCallMessagePartComponent<Record<string, unknown
 export const ActionTool: ToolCallMessagePartComponent<ActionArgs, unknown> = (
   p,
 ) => {
+    useTranslation();
   const answerAction = useContext(ActionAnswerContext);
   const [values, setValues] = useState<Record<string, string>>({});
   const [state, setState] = useState<"request" | "accepted" | "declined">(
@@ -803,6 +823,7 @@ export const SubagentTool: ToolCallMessagePartComponent<
   SubagentArgs,
   SubagentResult
 > = (p) => {
+    useTranslation();
   const elapsed = useToolCallElapsed();
   const subagents = useContext(SubagentContext);
   const [stopping, setStopping] = useState(false);
@@ -880,6 +901,7 @@ function lastWords(view: ThreadView | undefined): string | null {
 // ---- the kernel compacted the conversation here (older turns summarised away)
 
 export function CompactionView() {
+    useTranslation();
   return (
     <div
       role="separator"
@@ -897,6 +919,7 @@ export function CompactionView() {
 // ---- goal mode handed the model its objective again (the kernel's words, not the person's)
 
 export function GoalContinuationView({ round, objective }: { round: number | null; objective: string | null }) {
+    useTranslation();
   const label = round === null ? t.goalRoundUnknown : t.goalRound(round);
   return (
     <div
@@ -916,6 +939,7 @@ export function GoalContinuationView({ round, objective }: { round: number | nul
 // ---- a background job ended and woke the agent (the kernel's words, not the person's)
 
 export function JobNoticeView({ name, status, exitCode, durationMs, text }: { name: string; status: string; exitCode: number | null; durationMs: number | null; text: string }) {
+    useTranslation();
   const [open, setOpen] = useState(false);
   const how = status === "exited" ? t.jobEnded(name) : t.jobStopped(name);
   const bits = [how, exitCode !== null ? t.jobExitCode(exitCode) : null, durationMs !== null ? formatDuration(durationMs) : null].filter(Boolean).join(" · ");
@@ -954,6 +978,7 @@ export const CompactionUI = makeAssistantDataUI<{ id: string }>({
  * later as that agent's message.
  */
 export const SendMessageTool: ToolCallMessagePartComponent<{ to?: string; message?: string }, unknown> = (p) => {
+    useTranslation();
   const to = typeof p.args.to === "string" ? p.args.to : "";
   const message = typeof p.args.message === "string" ? p.args.message : "";
   const [open, setOpen] = useState(false);
@@ -995,6 +1020,7 @@ function SessionName({ address }: { address: string }) {
  * output as a terminal block, the screenshots inline from the attachments.
  */
 export const JavascriptTool: ToolCallMessagePartComponent<{ title?: string; code?: string }, unknown> = (p) => {
+    useTranslation();
   const surface = useContext(SurfaceContext);
   const details = detailsOf(p);
   const title = typeof p.args.title === "string" && p.args.title ? p.args.title : "javascript";

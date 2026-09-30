@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { CalendarClock, CircleDot } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -20,6 +21,7 @@ function WatchDetails({
   projectId: string;
   rootPath: string;
 }) {
+    useTranslation();
   const [open, setOpen] = useState(false);
   const path = scriptPath(watch.path, rootPath);
   const source = useFileContent(projectId, open ? path : null);
@@ -55,6 +57,7 @@ export function ScheduledWatchesChip({
   rootPath: string;
   className?: string;
 }) {
+    useTranslation();
   const watches = useWatches(projectId);
   const scheduled = (watches.data ?? [])
     .filter((watch) => watch.enabled && (watch.kind === "cron" || watch.kind === "once"))

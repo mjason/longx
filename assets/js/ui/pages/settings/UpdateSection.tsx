@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // Settings → 版本与更新: the running version, the latest release on GitHub
 // (checked on request, and every few hours by the server), the upgrade
 // button with its stages through the restart, and the GitHub token that
@@ -43,6 +44,7 @@ export function UpdateSection() {
 }
 
 function Version() {
+    useTranslation();
   const status = useUpgradeStatus();
   const actions = useUpgradeActions();
   const [confirm, setConfirm] = useState(false);

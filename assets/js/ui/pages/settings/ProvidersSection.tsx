@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // Settings → Provider: where the models come from — every provider as a
 // card folded to one line (kind, key or login, how many models, which tiers
 // use them, the last check or error), unfolded to its models (window,
@@ -253,6 +254,7 @@ function PresetDialog({
   /** a subscription template: the credential is made, the login comes next */
   onLogin: (credentialId: string) => void;
 }) {
+    useTranslation();
   const actions = useAiActions();
   const providers = useProviders();
   // an installed provider without a key still wants one — unless its key is a login
@@ -443,6 +445,7 @@ function ProviderCard({
   onAddFromPreset: (preset: Preset) => void;
   onLogin: (credentialId: string) => void;
 }) {
+    useTranslation();
   const actions = useAiActions();
   // a provider on a credential (a ChatGPT subscription): its login is its key
   const credentials = useCredentials({ refetchInterval: provider.credentialId ? 5000 : false });
@@ -495,7 +498,7 @@ function ProviderCard({
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-8 shrink-0" aria-label={`${provider.name} 的操作`}>
+            <Button variant="ghost" size="icon" className="size-8 shrink-0" aria-label={t.actionsFor(provider.name)}>
               <MoreHorizontal className="size-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -571,6 +574,7 @@ export function SearchBadge({ own }: { own: boolean }) {
 }
 
 function ModelRowView({ model, searches, onEdit }: { model: ModelRow; searches: boolean; onEdit: () => void }) {
+    useTranslation();
   const actions = useAiActions();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [checked, setChecked] = useState<{ ok: boolean; latencyMs: number | null; error: string | null } | null>(null);
@@ -621,7 +625,7 @@ function ModelRowView({ model, searches, onEdit }: { model: ModelRow; searches: 
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="size-7" aria-label={`${model.name} 的操作`}>
+          <Button variant="ghost" size="icon" className="size-7" aria-label={t.actionsFor(model.name)}>
             <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -676,6 +680,7 @@ function ProviderDialog({
   provider: Provider | null;
   onClose: () => void;
 }) {
+    useTranslation();
   const actions = useAiActions();
   const [form, setForm] = useState({
     name: provider?.name ?? "",
@@ -877,6 +882,7 @@ function ModelDialog({
   model: ModelRow | null;
   onClose: () => void;
 }) {
+    useTranslation();
   const actions = useAiActions();
   const [form, setForm] = useState({
     name: model?.name ?? "",
@@ -1250,6 +1256,7 @@ function DiscoverDialog({
   provider: Provider;
   onClose: () => void;
 }) {
+    useTranslation();
   const discovery = useDiscoverModels(provider.id);
   const actions = useAiActions();
   const [filter, setFilter] = useState("");

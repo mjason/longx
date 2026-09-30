@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // Settings → 知识: the native kernel's knowledge — the person's global
 // docs (edited here, each save a commit) and Longx's shipped ones (read).
 import { Plus, Trash2, X } from "lucide-react";
@@ -76,6 +77,7 @@ function DocList({ title, docs, empty, onOpen, action }: { title: string; docs: 
 }
 
 function Editor({ path, writable, onClose }: { path: string; writable: boolean; onClose: () => void }) {
+    useTranslation();
   const doc = useKnowledgeDoc(path);
   const actions = useKnowledgeActions();
   const [draft, setDraft] = useState<string | null>(null);
@@ -123,6 +125,7 @@ function Editor({ path, writable, onClose }: { path: string; writable: boolean; 
 }
 
 function NewDoc({ onClose, onCreated }: { onClose: () => void; onCreated: (path: string) => void }) {
+    useTranslation();
   const actions = useKnowledgeActions();
   const [name, setName] = useState("");
   const clean = name.trim().replace(/\.md$/, "");

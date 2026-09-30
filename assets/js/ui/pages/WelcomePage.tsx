@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { FolderGit2, FolderPlus, Search, Settings } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -13,6 +14,7 @@ import { t } from "@/ui/strings";
 
 /** IDEA's welcome screen: recent projects, search, one door into a project. */
 export function WelcomePage() {
+    useTranslation();
   const projects = useProjects();
   const running = useRunningThreads();
   const [query, setQuery] = useState("");
@@ -98,6 +100,7 @@ export function WelcomePage() {
 
 /** The threads with a turn in flight right now — a way back into each, the ones waiting on the person first. */
 function RunningThreads({ threads }: { threads: RunningThread[] }) {
+    useTranslation();
   const ordered = [...threads].sort((a, b) => Number(b.waiting) - Number(a.waiting));
   return (
     <section className="mb-5" data-testid="running-threads" aria-label={t.runningNow}>

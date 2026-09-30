@@ -31,6 +31,7 @@ import {
   writeFile,
 } from "@/core/api";
 import { csrfToken } from "@/core/gql";
+import i18n from "./i18n";
 import type { WatchStatus } from "./projectChannel";
 import { queryKeys, unwrap } from "./projects";
 
@@ -126,7 +127,7 @@ export async function uploadWorkspaceFile(projectId: string, directory: string, 
   });
   const result = await response.json().catch(() => ({})) as Partial<UploadedFile> & { error?: string };
   if (!response.ok || typeof result.path !== "string" || typeof result.name !== "string") {
-    throw new Error(result.error ?? `上传失败（${response.status}）`);
+    throw new Error(result.error ?? i18n.t("core.attachment.uploadFailed", { status: response.status }));
   }
   return result as UploadedFile;
 }

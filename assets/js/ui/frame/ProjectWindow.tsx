@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, FolderTree, GitBranch, House, MessagesSquare, Settings, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, type ReactNode } from "react";
@@ -47,6 +48,7 @@ export type ProjectContext = {
  * chat fills the screen, tools live in a bottom toolbar and open as sheets.
  */
 export function ProjectWindow() {
+    useTranslation();
   const { slug = "", threadId } = useParams();
   const navigate = useNavigate();
   const project = useProject(slug);
@@ -167,11 +169,12 @@ function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
 }
 
 function ToolRail({ active, onToggle, settings, onSettings }: { active: Tool | null; onToggle: (tool: Tool) => void; settings: boolean; onSettings: () => void }) {
+    useTranslation();
   // re-render when the space menu is switched or a key changed
   usePreference("spaceMenu");
   useBindings();
   return (
-    <nav aria-label="工具窗口" className="bg-sidebar border-sidebar-border flex w-11 shrink-0 flex-col items-center gap-1 border-r py-2" data-testid="tool-rail">
+    <nav aria-label={t.toolWindows} className="bg-sidebar border-sidebar-border flex w-11 shrink-0 flex-col items-center gap-1 border-r py-2" data-testid="tool-rail">
       {TOOLS.map((tool) => {
         const Icon = ICONS[tool];
         return (
@@ -221,6 +224,7 @@ function ToolRail({ active, onToggle, settings, onSettings }: { active: Tool | n
 }
 
 function DockedPanel({ width, onResize, title, onClose, children }: { width: number; onResize: (w: number) => void; title: string; onClose: () => void; children: ReactNode }) {
+    useTranslation();
   function startDrag(e: React.PointerEvent) {
     const startX = e.clientX;
     const startW = width;
@@ -247,8 +251,9 @@ function DockedPanel({ width, onResize, title, onClose, children }: { width: num
 }
 
 function BottomToolbar({ active, onToggle, onHome, onSettings }: { active: Tool | null; onToggle: (tool: Tool) => void; onHome: () => void; onSettings: () => void }) {
+    useTranslation();
   return (
-    <nav aria-label="工具窗口" className="safe-bottom bg-sidebar border-sidebar-border sticky bottom-0 z-20 border-t" data-testid="bottom-toolbar">
+    <nav aria-label={t.toolWindows} className="safe-bottom bg-sidebar border-sidebar-border sticky bottom-0 z-20 border-t" data-testid="bottom-toolbar">
       <div className="flex">
         {TOOLS.map((tool) => {
           const Icon = ICONS[tool];

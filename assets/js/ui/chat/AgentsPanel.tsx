@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // Who is working for this session, wherever the page is scrolled: the
 // children's rows sit where they were spawned in the transcript, and a long
 // session hid who was still at work. On a desktop a card floats at the
@@ -95,6 +96,7 @@ function useActive() {
 
 /** the floating card, a desktop's */
 export function AgentsPanel() {
+    useTranslation();
   const { active, done } = useActive();
   const subagents = useContext(SubagentContext);
   const [folded, setFolded] = useFolded();
@@ -163,6 +165,7 @@ export function AgentsPanel() {
 }
 
 function Pill({ active, waiting, onClick }: { active: number; waiting: number; onClick: () => void }) {
+    useTranslation();
   return (
     <button
       type="button"

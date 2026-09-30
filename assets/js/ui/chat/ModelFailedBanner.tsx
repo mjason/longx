@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // A turn that ended because its model gave up (the kernel's `model_failed`:
 // the retries spent, the chain exhausted) — the person picks another model
 // and the thread goes on with 继续 on it, for this and later turns.
@@ -14,6 +15,7 @@ import { useChat } from "./ChatProvider";
 type TurnError = { message?: string; code?: string; model?: string };
 
 export function ModelFailedBanner() {
+    useTranslation();
   const { view, thread, state, setModel } = useChat();
   const models = useModels();
   const [picked, setPicked] = useState<string | null>(null);

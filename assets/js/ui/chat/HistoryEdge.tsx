@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // The edge above a long thread's window: what waits above the items the view
 // holds (the server sends the tail — how many turns whole, how many items of
 // the turn it cut), and the way to fetch it, a page at a time or all of it.
@@ -21,6 +22,7 @@ export const HistoryContext = createContext<ThreadHistory | null>(null);
 const SETTLE_MS = 1200;
 
 export function HistoryEdge() {
+    useTranslation();
   const history = useContext(HistoryContext);
   const ref = useRef<HTMLDivElement>(null);
   // the messages are rendered by index, so the message that was first is found

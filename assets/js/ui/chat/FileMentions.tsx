@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // `@` in the composer: the project's files from the server's fuzzy index
 // (search_files → fuzzyFileSearch), picked into the text as a path — the
 // registry's composer-trigger-popover over a live-completion adapter; the
@@ -18,6 +19,7 @@ const ICONS = { file: FileIcon, directory: FolderIcon };
 export const FileMentionText = createDirectiveText(mentionFormatter, { iconMap: { ...ICONS, skill: Sparkles, attachment: Paperclip }, fallbackIcon: FileIcon });
 
 export function FileMentions() {
+    useTranslation();
   const { projectId } = useChat();
   const files = unstable_useLiveCompletionAdapter({
     cacheKey: projectId,

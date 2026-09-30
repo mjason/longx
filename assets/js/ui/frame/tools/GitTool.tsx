@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // GitHub Desktop's git, in a tool window: a branch button and a sync button
 // on top, then Changes (files with their status, a checkbox each, the diff
 // a tap away in the workbench, summary + description, commit / discard)
@@ -42,6 +43,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 function StatusMark({ status }: { status: string }) {
+    useTranslation();
   return (
     <span className={`w-10 shrink-0 text-right text-[10px] ${STATUS_COLOR[status] ?? "text-muted-foreground"}`} title={status}>
       {t.gitStatus[status] ?? status}
@@ -50,6 +52,7 @@ function StatusMark({ status }: { status: string }) {
 }
 
 export function GitTool({ ctx }: { ctx: ProjectContext }) {
+    useTranslation();
   // the space menu reaches in: SPC g l (history), SPC g c (the commit's summary)
   const [tab, setTab] = useState("changes");
   useIntent("git.history", () => setTab("history"));
@@ -106,6 +109,7 @@ export function GitTool({ ctx }: { ctx: ProjectContext }) {
 // ---- branches ----------------------------------------------------------------
 
 function BranchButton({ projectId, repo }: { projectId: string; repo: GitChanges }) {
+    useTranslation();
   const [open, setOpen] = useState(false);
   useIntent("git.branches", () => setOpen(true));
   const branches = useGitBranches(projectId, open);
@@ -234,6 +238,7 @@ function BranchButton({ projectId, repo }: { projectId: string; repo: GitChanges
 // ---- sync ----------------------------------------------------------------------
 
 function SyncButton({ projectId, repo }: { projectId: string; repo: GitChanges }) {
+    useTranslation();
   const actions = useGitActions(projectId);
   const [remoteDialog, setRemoteDialog] = useState(false);
   const [url, setUrl] = useState(repo.remotes[0]?.url ?? "");
@@ -303,6 +308,7 @@ function SyncButton({ projectId, repo }: { projectId: string; repo: GitChanges }
 // ---- changes -------------------------------------------------------------------
 
 function ChangesView({ projectId, repo }: { projectId: string; repo: GitChanges }) {
+    useTranslation();
   const actions = useGitActions(projectId);
   const workbench = useWorkbench(projectId);
   const frame = useFrame();
@@ -418,6 +424,7 @@ function ChangesView({ projectId, repo }: { projectId: string; repo: GitChanges 
 }
 
 function MergeBanner({ projectId }: { projectId: string }) {
+    useTranslation();
   const actions = useGitActions(projectId);
   const [aborting, setAborting] = useState(false);
   return (
@@ -458,6 +465,7 @@ function MergeBanner({ projectId }: { projectId: string }) {
 const PAGE = 30;
 
 function HistoryView({ projectId }: { projectId: string }) {
+    useTranslation();
   const [pages, setPages] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
   const [undoing, setUndoing] = useState(false);

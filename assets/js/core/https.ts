@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { setTls, tlsDisable, tlsIssue, tlsProviders, tlsResolution, tlsStatus } from "@/core/api";
 import type { SetTlsInput, TlsProvidersQuery, TlsResolutionQuery, TlsStatusQuery } from "@/gql/graphql";
 import { unwrap } from "./projects";
+import i18n from "./i18n";
 
 export type TlsStatus = TlsStatusQuery["tlsStatus"];
 export type TlsProvider = TlsProvidersQuery["tlsProviders"]["providers"][number];
@@ -122,14 +123,10 @@ export function parseDomains(text: string): string[] {
 }
 
 /** the providers people here mostly use, first and by their Chinese names */
-export const FEATURED_PROVIDERS: { code: string; label: string }[] = [
-  { code: "tencentcloud", label: "腾讯云 DNSPod" },
-  { code: "alidns", label: "阿里云 DNS" },
-  { code: "huaweicloud", label: "华为云 DNS" },
-  { code: "cloudflare", label: "Cloudflare" },
-  { code: "dnsupdate", label: "自建 DNS（RFC 2136）" },
-  { code: "exec", label: "自己的脚本" },
-];
+export const FEATURED_PROVIDERS = ["tencentcloud", "alidns", "huaweicloud", "cloudflare", "dnsupdate", "exec"].map((code) => ({
+  code,
+  get label() { return i18n.t(`core.dnsProviders.${code}`); },
+}));
 
 export function providerLabel(provider: Pick<TlsProvider, "code" | "name"> | undefined | null): string {
   if (!provider) return "";

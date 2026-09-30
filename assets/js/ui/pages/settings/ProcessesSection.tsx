@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // Settings → 进程: the commands the agents are running right now — what,
 // for which session (the sub-agent named), since when — refreshed every two
 // seconds while shown, each with 结束: the shim tree is killed and the model
@@ -16,6 +17,7 @@ import { t } from "@/ui/strings";
 const s = t.processes;
 
 export function ProcessesSection() {
+    useTranslation();
   const commands = useRunningCommands();
   const kill = useKillCommand();
   const [ending, setEnding] = useState<RunningCommand | null>(null);

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // The which-key panel: what the next key can do, right away and in Chinese
 // (Spacemacs' which-key). A group ends in "+"; only what can run now is
 // listed; the tabs' 1…9 are one row.
@@ -22,6 +23,7 @@ function entries(nodes: KeyNode[], top: boolean): Entry[] {
 }
 
 export function WhichKey({ tree, sequence, flash }: { tree: KeyNode[]; sequence: string[]; flash: number }) {
+    useTranslation();
   useCommandsVersion();
   const nodes = visibleChildren(tree, sequence, commands.available);
   return (

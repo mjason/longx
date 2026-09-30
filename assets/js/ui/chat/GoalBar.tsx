@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // The thread's goal (Plugs.Goal), above the thread: the objective, its status, the
 // budget spent and the time; pause / resume / clear, and a dialog that sets
 // or edits the objective and the token budget (also opened by /goal).
@@ -60,6 +61,7 @@ export function GoalProvider({
   goal: ThreadGoal | null;
   children: ReactNode;
 }) {
+    useTranslation();
   const [open, setOpen] = useState(false);
   const actions = useGoalActions(threadId);
   const show = useCallback(() => {
@@ -106,6 +108,7 @@ function GoalBarView({
   onEdit: () => void;
   actions: Actions;
 }) {
+    useTranslation();
   const active = goal.status === "active";
   const done = goal.status === "complete";
   const set = (status: "active" | "paused") =>
@@ -198,6 +201,7 @@ function GoalDialog({
   goal: ThreadGoal | null;
   actions: Actions;
 }) {
+    useTranslation();
   const [objective, setObjective] = useState("");
   const [budget, setBudget] = useState("");
   useEffect(() => {

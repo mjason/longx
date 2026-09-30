@@ -1,5 +1,8 @@
-// UI copy in one place (zh-CN today; i18n later without touching screens).
-export const t = {
+// Simplified Chinese copy. See strings.en.ts for the parallel English catalog.
+import i18n from "@/core/i18n";
+import { en } from "./strings.en";
+
+const zh = {
   app: "Longx",
   projects: "项目",
   newProject: "新建项目",
@@ -13,6 +16,15 @@ export const t = {
   cancel: "取消",
   back: "返回",
   settings: "设置",
+  toolWindows: "工具窗口",
+  workbench: "工作区",
+  switchToTab: "切换到此标签",
+  path: "路径",
+  runningJobs: (n: number) => `${n} 个运行中`,
+  entryActions: (name: string) => `${name} 的操作`,
+  levelFor: (label: string) => `${label} 档位`,
+  extensionVersionLabel: (version: string) => `扩展 ${version}`,
+  actionsFor: (name: string) => `${name} 的操作`,
   threads: "会话",
   newThread: "新会话",
   noThreads: "还没有会话",
@@ -1187,4 +1199,151 @@ export const t = {
     string,
     string
   >,
+  core: {
+    keyGroups: {
+      a: "对话", t: "会话", b: "标签", f: "文件", g: "Git", w: "工具窗口",
+      p: "项目", j: "跳转", T: "开关", m: "当前页面",
+    },
+    keyCommands: {
+      "ai.focus": "和 AI 对话",
+      "palette.open": "命令面板",
+      "help.keys": "全部快捷键",
+      "settings.open": "设置",
+      "turn.stop": "停止这一轮",
+      "turn.continue": "继续",
+      "turn.discard": "丢弃这一轮",
+      "thread.new": "新会话",
+      "thread.compact": "压缩上下文",
+      "goal.open": "目标",
+      "model.pick": "换模型",
+      "effort.pick": "换档位",
+      "waiting.release": "立即插入等着的消息",
+      "ask.open": "处理等你的请求",
+      "thread.switch": "切换会话",
+      "thread.last": "回到上一个会话",
+      "thread.next": "下一个会话",
+      "thread.prev": "上一个会话",
+      "thread.waiting": "下一个等你处理的会话",
+      "thread.running": "正在跑、刚完成的会话",
+      "thread.rename": "重命名",
+      "thread.archive": "归档",
+      "subagents.open": "子 agent",
+      "tab.switch": "切换标签",
+      "tab.close": "关闭标签",
+      "tab.reopen": "重开刚关的标签",
+      "tab.next": "下一个标签",
+      "tab.prev": "上一个标签",
+      "tab.last": "上一次的标签",
+      "tab.recent": "按最近使用切换标签",
+      "tab.recentBack": "按最近使用反向切换标签",
+      "tab.chat": "回到聊天",
+      "tab.goto.1": "第 1 个标签", "tab.goto.2": "第 2 个标签", "tab.goto.3": "第 3 个标签",
+      "tab.goto.4": "第 4 个标签", "tab.goto.5": "第 5 个标签", "tab.goto.6": "第 6 个标签",
+      "tab.goto.7": "第 7 个标签", "tab.goto.8": "第 8 个标签", "tab.goto.9": "第 9 个标签",
+      "file.find": "找文件",
+      "files.open": "文件树",
+      "file.save": "保存",
+      "file.reveal": "在文件树里定位",
+      "git.open": "Git 窗口",
+      "git.commit": "提交",
+      "git.push": "推送",
+      "git.pull": "拉取",
+      "git.history": "历史",
+      "git.branches": "分支",
+      "tool.threads": "会话窗口",
+      "tool.git": "Git 窗口开关",
+      "tool.agents": "Agents 窗口",
+      "tool.files": "文件窗口",
+      "tool.toggle": "显示 / 隐藏侧栏",
+      "agents.panel": "Agents 面板",
+      "project.switch": "切换项目",
+      "project.settings": "项目设置",
+      "project.new": "新建项目",
+      "jump.bottom": "最新消息",
+      "jump.ask": "等你处理的请求",
+      "jump.error": "最近的错误",
+      "toggle.theme": "深色 / 浅色",
+      "toggle.reasoning": "思考过程默认展开",
+      "editor.preview": "预览 / 编辑",
+      "diff.next": "下一处改动",
+      "diff.prev": "上一处改动",
+    },
+    keyErrors: {
+      ime: "输入法在用这个键（切换输入法或中英文标点），换一个",
+      conflict: (command: string) => `已经是「${command}」的快捷键`,
+    },
+    format: {
+      never: "从未",
+      justNow: "刚刚",
+      seconds: (n: number) => `${n} 秒`,
+      minutesAgo: (n: number) => `${n} 分钟前`,
+      hoursAgo: (n: number) => `${n} 小时前`,
+      daysAgo: (n: number) => `${n} 天前`,
+      elapsedSeconds: (n: number) => `${n} 秒`,
+      elapsedMinutes: (n: number) => `${n} 分钟`,
+      elapsedHours: (hours: number, minutes: number) => minutes ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`,
+    },
+    attachment: {
+      saved: "（文件已存到服务器上的这个路径，需要时直接读取或解压）",
+      uploadFailed: (status: number) => `上传失败（${status}）`,
+      notUploaded: (name: string) => `附件 ${name} 没有上传成功`,
+    },
+    dnsProviders: {
+      tencentcloud: "腾讯云 DNSPod",
+      alidns: "阿里云 DNS",
+      huaweicloud: "华为云 DNS",
+      cloudflare: "Cloudflare",
+      dnsupdate: "自建 DNS（RFC 2136）",
+      exec: "自己的脚本",
+    },
+  },
 } as const;
+
+type DeepPartial<T> = T extends (...args: infer A) => unknown
+  ? (...args: A) => unknown
+  : T extends object
+    ? { [K in keyof T]?: DeepPartial<T[K]> }
+    : T extends string
+      ? string
+    : T;
+
+const english: DeepPartial<typeof zh> = en;
+
+function plainStrings(value: unknown): unknown {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, child]) => [key, plainStrings(child)] as const)
+      .filter((entry): entry is readonly [string, {}] => entry[1] !== undefined),
+  );
+}
+
+i18n.addResourceBundle("zh-CN", "translation", plainStrings(zh), true, true);
+i18n.addResourceBundle("en", "translation", plainStrings(en), true, true);
+
+function atPath(root: unknown, path: string[]): unknown {
+  return path.reduce<unknown>((value, key) => (value && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined), root);
+}
+
+function localized<T extends object>(source: T, path: string[] = []): T {
+  return new Proxy(source, {
+    get(target, property, receiver) {
+      if (typeof property !== "string") return Reflect.get(target, property, receiver);
+      const value = Reflect.get(target, property, receiver) as unknown;
+      const keyPath = [...path, property];
+      if (typeof value === "string") return i18n.t(keyPath.join("."), { defaultValue: value });
+      if (typeof value === "function") {
+        return (...args: unknown[]) => {
+          const translated = i18n.resolvedLanguage === "en" ? atPath(en, keyPath) : undefined;
+          return (typeof translated === "function" ? translated : value)(...args);
+        };
+      }
+      if (value && typeof value === "object") return localized(value, keyPath);
+      return value;
+    },
+  });
+}
+
+/** Reactive localized strings. UI components subscribe with react-i18next. */
+export const t: typeof zh = localized(zh);

@@ -110,7 +110,7 @@ export function AgentSettingsFields({
           </Select>
           {levels.length > 0 ? (
             <Select value={value[effortKey] || NONE} onValueChange={(v) => set(effortKey, v === NONE ? "" : v)}>
-              <SelectTrigger className="w-40" aria-label={`${label} 档位`}>
+              <SelectTrigger className="w-40" aria-label={t.levelFor(label)}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 "use client";
 
 import {
@@ -218,6 +219,7 @@ const AttachmentUI: FC = () => {
 };
 
 const AttachmentRemove: FC = () => {
+    useTranslation();
   return (
     <AttachmentPrimitive.Remove asChild>
       <TooltipIconButton
@@ -252,6 +254,7 @@ export const ComposerAttachments: FC = () => {
 };
 
 export const ComposerAddAttachment: FC = () => {
+    useTranslation();
   return (
     <ComposerPrimitive.AddAttachment asChild>
       <TooltipIconButton

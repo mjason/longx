@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { AssistantRuntimeProvider, useAui } from "@assistant-ui/react";
 import { answerRequest, interruptTurn } from "@/core/api";
 import { unwrap, useSubagents } from "@/core/projects";
@@ -51,6 +52,7 @@ export function ChatProvider({
   defaultModelId?: string | null;
   children: ReactNode;
 }) {
+    useTranslation();
   const { threadId } = useParams();
   const navigate = useNavigate();
 

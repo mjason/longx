@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // Copy a conversation's JSON API address for another agent to inspect.
 import { Braces } from "lucide-react";
 import { useParams } from "react-router";
@@ -9,6 +10,7 @@ import { t } from "@/ui/strings";
 export const apiUrl = (slug: string, threadId: string) => `${window.location.origin}/api/p/${slug}/t/${threadId}`;
 
 export function CopyApiButton({ slug, compact = false }: { slug: string; compact?: boolean }) {
+    useTranslation();
   const { threadId } = useParams();
   if (!threadId) return null;
   const copy = async () => {

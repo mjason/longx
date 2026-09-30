@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // One file's change as VS Code's diff editor draws it, with CodeMirror's
 // merge view: the two versions side by side (or the old text inline above
 // the new, for a phone), every line syntax-highlighted by the file's
@@ -65,6 +66,7 @@ const diffTheme = EditorView.theme({
 // scrolls sideways on its own for long lines, a rule between them
 
 export function DiffView({ path, before, after, mode, wrap = false, className }: DiffViewProps) {
+    useTranslation();
   const host = useRef<HTMLDivElement>(null);
   // the side the reader follows (the new text), for SPC m n / SPC m p
   const primary = useRef<EditorView | null>(null);

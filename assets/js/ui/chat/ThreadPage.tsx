@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Thread, type ThreadComponents } from "@/ui/components/assistant-ui/elements/thread.aui";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { Link, useOutletContext, useParams } from "react-router";
@@ -20,12 +21,15 @@ import { MessageQueue } from "@/ui/components/assistant-ui/elements/message-queu
 import { StoppedNotice } from "./StoppedTurn";
 import { WaitingMessages } from "./WaitingMessages";
 
-const Welcome = () => (
+const Welcome = () => {
+    useTranslation();
+    return (
   <div className="mb-6 flex flex-col items-center px-4 text-center">
     <h1 className="text-2xl font-medium tracking-tight">{t.welcomeChat}</h1>
     <p className="text-muted-foreground mt-2 text-sm">{t.welcomeChatHint}</p>
   </div>
 );
+  };
 
 // the composer's trigger popovers: `@` files, `/` commands
 const ComposerPopovers = () => (
@@ -40,6 +44,7 @@ const ComposerPopovers = () => (
 // above the composer: what arrived from elsewhere and waits for the turn to
 // end (its own rows, never the composer), then what the person typed meanwhile
 const ComposerQueue = () => {
+    useTranslation();
   const { insertQueued } = useChat();
   return (
     <>
@@ -57,6 +62,7 @@ const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, Composer
  * whose first message creates the thread.
  */
 export function ThreadPage() {
+    useTranslation();
   const chat = useChat();
   const viewport = useViewport();
   const ctx = useOutletContext<ProjectContext>();

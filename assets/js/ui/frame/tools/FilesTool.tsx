@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // IDEA's / VS Code's project tree: folders first, children loaded when a
 // folder opens, git status coloured on files and rolled up onto their
 // folders, upload/download and row actions for new / rename / delete, and a
@@ -54,6 +55,7 @@ function statusOf(git: GitStatus, entry: FileEntry): string | undefined {
 type Editing = { kind: "new-file" | "new-folder"; parent: string } | { kind: "rename"; entry: FileEntry } | null;
 
 export function FilesTool({ ctx }: { ctx: ProjectContext }) {
+    useTranslation();
   const projectId = ctx.id;
   const client = useQueryClient();
   const changes = useGitChanges(projectId);
@@ -174,6 +176,7 @@ export function FilesTool({ ctx }: { ctx: ProjectContext }) {
 
 /** VS Code's quick open, inside the tool: the project's fuzzy file index, a tap opens. */
 function FilterResults({ projectId, query, git }: { projectId: string; query: string; git: GitStatus }) {
+    useTranslation();
   const workbench = useWorkbench(projectId);
   const frame = useFrame();
   const viewport = useViewport();
@@ -222,6 +225,7 @@ function Level(props: {
   onDelete: (entry: FileEntry) => void;
   onUpload: (directory: string) => void;
 }) {
+    useTranslation();
   const { projectId, path, depth, git, ignored, expanded, onToggle, editing, setEditing, onDelete, onUpload } = props;
   const files = useFiles(projectId, path);
   if (files.isPending) return <Skeleton className="my-1 ml-4 h-5 w-1/2" />;
@@ -253,6 +257,7 @@ function Level(props: {
 }
 
 function Row({ entry, depth, open, status, ignored, projectId, onToggle, setEditing, onDelete, onUpload }: { entry: FileEntry; depth: number; open: boolean; status: string | undefined; ignored: boolean; projectId: string; onToggle: (p: string) => void; setEditing: (e: Editing) => void; onDelete: (e: FileEntry) => void; onUpload: (directory: string) => void }) {
+    useTranslation();
   const workbench = useWorkbench(projectId);
   const frame = useFrame();
   const viewport = useViewport();
@@ -273,7 +278,7 @@ function Row({ entry, depth, open, status, ignored, projectId, onToggle, setEdit
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button type="button" aria-label={`${entry.name} 的操作`} className="text-muted-foreground hover:text-foreground touch-target flex items-center justify-center rounded p-1 opacity-0 group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100 max-lg:opacity-100">
+              <button type="button" aria-label={t.entryActions(entry.name)} className="text-muted-foreground hover:text-foreground touch-target flex items-center justify-center rounded p-1 opacity-0 group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100 max-lg:opacity-100">
                 <MoreHorizontal className="size-4" />
               </button>
             </DropdownMenuTrigger>
@@ -328,6 +333,7 @@ function fileDownloadUrl(projectId: string, path: string): string {
 
 /** The inline name field for a new entry or a rename; Enter confirms, Escape cancels. */
 function NameRow({ depth, projectId, editing, onDone }: { depth: number; projectId: string; editing: NonNullable<Editing>; onDone: () => void }) {
+    useTranslation();
   const create = useCreateEntry(projectId);
   const rename = useRenameEntry(projectId);
   const workbench = useWorkbench(projectId);
@@ -356,6 +362,7 @@ function NameRow({ depth, projectId, editing, onDone }: { depth: number; project
 }
 
 function DeleteDialog({ projectId, entry, onClose }: { projectId: string; entry: FileEntry | null; onClose: () => void }) {
+    useTranslation();
   const del = useDeleteEntry(projectId);
   const workbench = useWorkbench(projectId);
   return (

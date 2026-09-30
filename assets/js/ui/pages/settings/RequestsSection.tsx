@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // Settings → 请求记录: the gateway's last requests (Longx.AI.Gateway.Log) —
 // what the kernel asked the provider for and what came of it, newest first. The
 // place to look when the level or the model on screen does not match what
@@ -140,6 +141,7 @@ export function RequestsSection() {
 
 // what went wrong on the server lately: the serializer, the wire cleaner
 function FaultsList() {
+    useTranslation();
   const faults = useFaults({ refetchInterval: 15_000 });
   const f = t.faults;
   return (

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 "use client";
 
 import {
@@ -171,6 +172,7 @@ function ReasoningTrigger({
   active?: boolean;
   duration?: number;
 }) {
+    useTranslation();
   const durationText = duration ? ` (${duration}s)` : "";
 
   return (

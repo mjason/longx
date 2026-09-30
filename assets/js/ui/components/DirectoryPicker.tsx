@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { ChevronRight, CornerLeftUp, Folder, FolderGit2, FolderPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCreateDirectory, useDirectory } from "@/core/projects";
@@ -20,6 +21,7 @@ export function DirectoryPicker({
   value: string | null;
   onChange: (path: string, git: boolean) => void;
 }) {
+    useTranslation();
   const [showHidden, setShowHidden] = useState(false);
   const [typed, setTyped] = useState("");
   const [naming, setNaming] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export function DirectoryPicker({
 
   return (
     <div className="flex flex-col gap-3" data-testid="directory-picker">
-      <nav aria-label="路径" className="flex flex-wrap items-center gap-1 text-sm">
+      <nav aria-label={t.path} className="flex flex-wrap items-center gap-1 text-sm">
         <button type="button" className="touch-target text-muted-foreground hover:text-foreground rounded px-1" onClick={() => onChange("/", false)}>
           /
         </button>

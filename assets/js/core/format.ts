@@ -1,4 +1,5 @@
 // Small pure formatters shared by every screen (and, later, the phone app).
+import i18n from "./i18n";
 
 const UNITS = ["B", "KB", "MB", "GB", "TB"];
 
@@ -18,20 +19,20 @@ export function shortSha(sha: string | null | undefined): string {
   return sha ? sha.slice(0, 8) : "—";
 }
 
-/** "3 分钟前" style, relative to `now` (injectable for tests). */
+/** Relative time, localized and relative to `now` (injectable for tests). */
 export function relativeTime(iso: string | null | undefined, now: Date = new Date()): string {
-  if (!iso) return "从未";
+  if (!iso) return i18n.t("core.format.never");
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "—";
   const seconds = Math.max(0, Math.round((now.getTime() - then) / 1000));
-  if (seconds < 45) return "刚刚";
+  if (seconds < 45) return i18n.t("core.format.justNow");
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} 分钟前`;
+  if (minutes < 60) return i18n.t("core.format.minutesAgo", { count: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
+  if (hours < 24) return i18n.t("core.format.hoursAgo", { count: hours });
   const days = Math.round(hours / 24);
-  if (days < 30) return `${days} 天前`;
-  return new Date(iso).toLocaleDateString();
+  if (days < 30) return i18n.t("core.format.daysAgo", { count: days });
+  return new Date(iso).toLocaleDateString(i18n.resolvedLanguage);
 }
 
 export function formatDuration(ms: number): string {
@@ -53,9 +54,11 @@ export function formatTokens(tokens: number): string {
 
 /** seconds → "45 秒" / "2 分钟" / "1 小时 5 分钟" */
 export function formatElapsed(seconds: number): string {
-  if (seconds < 60) return `${seconds} 秒`;
+  if (seconds < 60) return i18n.t("core.format.elapsedSeconds", { count: seconds });
   const m = Math.floor(seconds / 60);
-  if (m < 60) return `${m} 分钟`;
+  if (m < 60) return i18n.t("core.format.elapsedMinutes", { count: m });
   const h = Math.floor(m / 60);
-  return m % 60 ? `${h} 小时 ${m % 60} 分钟` : `${h} 小时`;
+  return m % 60
+    ? i18n.t("core.format.elapsedHours", { hours: h, minutes: m % 60 })
+    : i18n.t("core.format.elapsedHoursWhole", { hours: h });
 }

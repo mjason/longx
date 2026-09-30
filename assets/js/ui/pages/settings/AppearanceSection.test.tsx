@@ -2,6 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { getPreference } from "@/core/keys/preference";
+import i18n from "@/core/i18n";
 import { renderAt, setViewport } from "@/ui/test-utils";
 
 vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
@@ -24,12 +25,28 @@ beforeEach(() => {
   FakeNotification.permission = "default";
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await i18n.changeLanguage("zh-CN");
   vi.unstubAllGlobals();
   Object.defineProperty(window, "isSecureContext", { configurable: true, value: false });
 });
 
 describe("外观: this device's choices", () => {
+  test("the language selector switches the full page immediately and remembers the choice", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings/appearance");
+    const language = await screen.findByRole("combobox", { name: "界面语言" }, LAZY);
+    await user.click(language);
+    await user.click(await screen.findByRole("option", { name: "English" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Theme")).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: "Interface language" })).toBeInTheDocument();
+      expect(localStorage.getItem("longx:language")).toBe("en");
+      expect(document.documentElement.lang).toBe("en");
+    });
+  });
+
   test("the space menu and the reasoning's default are switches kept on this device", async () => {
     const user = userEvent.setup();
     renderAt("/settings/appearance");

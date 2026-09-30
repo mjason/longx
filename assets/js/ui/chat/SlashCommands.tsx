@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // `/` in the composer, over the registry's composer-trigger-popover with
 // the slash-command adapter. Thread commands (/compact, /init, /goal) go to
 // the backend; the rest open a tool or a page. The text clears on pick — a command is not part of the message.
@@ -17,6 +18,7 @@ import { useGoalDialog } from "./GoalBar";
 const ICONS = { new: MessageSquarePlus, compact: Minimize2, init: ScrollText, goal: Target, git: GitBranch, files: FolderTree, settings: Settings };
 
 export function SlashCommands() {
+    useTranslation();
   const { thread } = useChat();
   const aui = useAui();
   const goalDialog = useGoalDialog();

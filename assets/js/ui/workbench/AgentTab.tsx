@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // A sub-agent's conversation in a workbench tab: live (its channel joined
 // here, its own sub-agents' too), read-only, with the way to its own page
 // where it can be spoken to. Under a runtime of its own so the thread
@@ -20,6 +21,7 @@ import { t } from "@/ui/strings";
 const READ_ONLY_COMPONENTS = { HistoryEdge };
 
 export function AgentTab({ threadId, rowId, name }: { threadId: string; rowId: string | null; name: string }) {
+    useTranslation();
   const { slug } = useParams();
   // the parent's page already follows its children (and theirs): share that
   // view; join the channel only when the thread on screen is another one

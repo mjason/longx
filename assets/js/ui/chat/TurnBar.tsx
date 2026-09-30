@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { useMemo } from "react";
 import { contextUsage } from "@/core/chat/thread";
@@ -27,6 +28,7 @@ import { useChat } from "./ChatProvider";
  * or waiting on the person to act).
  */
 export function ComposerLeading() {
+    useTranslation();
   const { state, view } = useChat();
   return (
     <div
@@ -56,6 +58,7 @@ export function ComposerLeading() {
  * context registration.
  */
 export function ComposerTrailing() {
+    useTranslation();
   const { thread, view, model, setModel, effort, setEffort, defaultModelId, definitionModel } =
     useChat();
   const models = useModels();

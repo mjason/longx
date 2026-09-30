@@ -3,6 +3,7 @@
 // itself (⌘W, Ctrl+Tab) is taken as the installed app's; a key an input
 // method uses, or one another command holds in the same scene, is refused.
 import { useSyncExternalStore } from "react";
+import i18n from "@/core/i18n";
 import { commandTitle } from "./commands";
 import { DEFAULT_BINDINGS, holds, imeKey, reservedInTab, type Binding, type KeyContext } from "./bindings";
 import { canonical, isMacPlatform, parseLeader } from "./notation";
@@ -99,14 +100,14 @@ const SCENES: Omit<KeyContext, "mac">[] = [false, true].flatMap((app) =>
 
 /** Whether `keys` may be bound to `command`: not an input method's, not another command's where both would hold. */
 export function validateKeys(keys: string, command: string, bindings: Binding[], mac: boolean): Validation {
-  if (imeKey(keys, mac)) return { ok: false, reason: "输入法在用这个键（切换输入法或中英文标点），换一个" };
+  if (imeKey(keys, mac)) return { ok: false, reason: i18n.t("core.keyErrors.ime") };
   const appOnly = parseLeader(keys) === null && keys !== "Escape Escape" && reservedInTab(keys, mac);
   const mine: Binding = appOnly ? { keys, command, when: { app: true } } : { keys, command };
   const key = canonical(keys, mac);
   for (const other of bindings) {
     if (other.command === command || canonical(other.keys, mac) !== key) continue;
     const clash = SCENES.some((scene) => holds(mine, { ...scene, mac }) && holds(other, { ...scene, mac }));
-    if (clash) return { ok: false, reason: `已经是「${commandTitle(other.command)}」的快捷键` };
+    if (clash) return { ok: false, reason: i18n.t("core.keyErrors.conflict", { command: commandTitle(other.command) }) };
   }
   return { ok: true, appOnly };
 }

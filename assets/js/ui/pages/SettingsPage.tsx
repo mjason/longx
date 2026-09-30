@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { ChevronRight } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router";
@@ -28,6 +29,7 @@ type Section = (typeof SECTIONS)[number];
  * phone it is the iOS pattern — a list, then a sub page.
  */
 export function SettingsPage() {
+    useTranslation();
   const { section } = useParams<{ section?: Section }>();
   const viewport = useViewport();
   const navigate = useNavigate();
@@ -71,6 +73,7 @@ export function SettingsPage() {
 }
 
 function SectionList() {
+    useTranslation();
   return (
     <>
       <TopBar title={t.settings} back="/" />

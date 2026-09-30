@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 "use client";
 
 import {
@@ -102,6 +103,7 @@ function ToolGroupTrigger({
   count: number;
   active?: boolean;
 }) {
+    useTranslation();
   const label = t.toolCalls(count);
 
   return (

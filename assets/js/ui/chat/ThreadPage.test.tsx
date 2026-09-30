@@ -140,6 +140,13 @@ describe("ThreadPage", () => {
     await waitFor(() => expect(viewport.scrollTop).toBe(900));
   });
 
+  test("the chat viewport leaves scroll anchoring to auto-follow during streamed layout changes", async () => {
+    await open();
+    const viewport = document.querySelector<HTMLElement>('[data-slot="aui_thread-viewport"]')!;
+    expect(viewport.className.split(" ")).toContain("[overflow-anchor:none]");
+    expect(viewport).toHaveAttribute("data-slot", "aui_thread-viewport");
+  });
+
   test("a window that starts inside a turn says how much of that turn is above it", async () => {
     renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));

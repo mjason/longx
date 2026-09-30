@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useMatch, useNavigate } from "react-router";
 import { COMMANDS } from "@/core/keys/commands";
 import { commands } from "@/core/keys/registry";
@@ -21,6 +22,7 @@ const label = (c: Conversation) => c.title || c.preview || `~${c.id.slice(-6)}`;
  * filters them all (Slack's ⌘K). Desktop and tablet.
  */
 export function CommandPalette() {
+    useTranslation();
   const { palette: open } = useKeysUi();
   const setOpen = (value: boolean) => updateKeysUi({ palette: value });
   const navigate = useNavigate();

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // Logging a ChatGPT subscription in (the `chatgpt` preset's OAuth2
 // credential): the device code first — a short code to type at OpenAI's
 // page, no port, no address to catch, Longx polling until it is done —
@@ -17,6 +18,7 @@ import { t } from "@/ui/strings";
 const s = t.chatgptLogin;
 
 export function ChatGptLoginDialog({ credentialId, onClose }: { credentialId: string; onClose: () => void }) {
+    useTranslation();
   const actions = useCredentialActions();
   const credentials = useCredentials({ refetchInterval: 3000 });
   const credential = credentials.data?.find((c) => c.id === credentialId) ?? null;

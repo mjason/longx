@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // SPC ?: every command with the keys this window has for it — the chords
 // (⌘W only in the installed app), Esc Esc and the space menu's — by group,
 // what cannot run now greyed. Settings → 快捷键 changes them.
@@ -15,6 +16,7 @@ import { updateKeysUi, useKeysUi } from "./state";
 const TAB_GOTO = /^tab\.goto\.(\d)$/;
 
 function Row({ title, keys, available }: { title: string; keys: string[]; available: boolean }) {
+    useTranslation();
   return (
     <li className={`flex items-start gap-3 text-sm ${available ? "" : "text-muted-foreground/60"}`}>
       <span className="flex min-w-32 shrink-0 flex-wrap gap-1">
@@ -33,6 +35,7 @@ function Row({ title, keys, available }: { title: string; keys: string[]; availa
 }
 
 export function HelpDialog() {
+    useTranslation();
   const { help } = useKeysUi();
   useCommandsVersion();
   useBindings();

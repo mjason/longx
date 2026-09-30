@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, GitBranch } from "lucide-react";
 import { shortSha } from "@/core/format";
 import { useInitGit } from "@/core/projects";
@@ -11,6 +12,7 @@ export type GitInfo = { repository: boolean; head: string | null; clean: boolean
 
 /** Git is the safety net: no repository → a warning and a one-tap init. */
 export function GitCard({ git, loading, projectId }: { git: GitInfo | undefined; loading: boolean; projectId: string }) {
+    useTranslation();
   const init = useInitGit(projectId);
 
   return (

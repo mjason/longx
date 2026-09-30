@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // A turn stopped once the model had answered stays where it is and says so,
 // with 继续 and — for a turn the person started that ran nothing — 丢弃
 // (assistant-ui's stopped-run element). A turn stopped before the model
@@ -9,6 +10,7 @@ import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 
 export function StoppedTurnView({ byPerson, onContinue, onDiscard }: { byPerson: boolean; onContinue: () => void; onDiscard?: (() => void) | undefined }) {
+    useTranslation();
   return (
     <StoppedRun
       data-testid="stopped-turn"
@@ -27,6 +29,7 @@ const turnOfMessage = (id: string): string | undefined => id.match(/^turn:([^:]+
 
 /** Under the thread's last message when its turn was stopped (the Thread's `StoppedNotice` slot). */
 export function StoppedNotice() {
+    useTranslation();
   const cancelled = useAuiState((s) => s.message.role === "assistant" && s.message.status?.type === "incomplete" && s.message.status.reason === "cancelled");
   const isLast = useAuiState((s) => s.message.isLast);
   const messageId = useAuiState((s) => s.message.id);

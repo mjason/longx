@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // Settings → 浏览器: the person's browsers reached through the Longx Chrome
 // extension — the extension to download and install unpacked, the pairing
 // requests to allow, every paired browser (name, device, online, the tabs
@@ -113,11 +114,12 @@ function PendingList({ browsers }: { browsers: ChromeBrowser[] }) {
 }
 
 function deviceLine(b: ChromeBrowser) {
-  const parts = [b.device?.platform, b.device?.extension ? `扩展 ${b.device.extension}` : null].filter(Boolean);
+  const parts = [b.device?.platform, b.device?.extension ? t.extensionVersionLabel(b.device.extension) : null].filter(Boolean);
   return parts.join(" · ");
 }
 
 function BrowserRow({ browser: b }: { browser: ChromeBrowser }) {
+    useTranslation();
   const rename = useRenameBrowser();
   const limit = useSetBrowserMaxTabs();
   const revoke = useRevokeBrowser();
@@ -200,6 +202,7 @@ function BrowserRow({ browser: b }: { browser: ChromeBrowser }) {
 }
 
 function AliasesCard({ browsers }: { browsers: ChromeBrowser[] }) {
+    useTranslation();
   const aliases = useChromeAliases();
   const save = useSetChromeAlias();
   const remove = useDeleteChromeAlias();

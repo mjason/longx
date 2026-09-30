@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { RpcFailure, useCreateProject } from "@/core/projects";
@@ -17,6 +18,7 @@ type Step = "directory" | "details";
  * way. Two steps on every screen size.
  */
 export function ProjectWizard() {
+    useTranslation();
   const navigate = useNavigate();
   const create = useCreateProject();
   const [step, setStep] = useState<Step>("directory");

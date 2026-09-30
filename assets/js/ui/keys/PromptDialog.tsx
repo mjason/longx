@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // The text prompt the space menu's commands open (core/keys/prompt).
 import { useEffect, useState } from "react";
 import { closePrompt, usePrompt } from "@/core/keys/prompt";
@@ -8,6 +9,7 @@ import { Label } from "@/ui/components/ui/label";
 import { t } from "@/ui/strings";
 
 export function PromptDialog() {
+    useTranslation();
   const request = usePrompt();
   const [value, setValue] = useState("");
   useEffect(() => setValue(request?.value ?? ""), [request]);

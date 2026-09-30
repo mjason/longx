@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // The centre of the project window as an editor area: a tab strip — the
 // chat first and always, then the files and diffs opened from the tools —
 // over whichever is active. The chat stays mounted behind a file so its
@@ -35,6 +36,7 @@ export function Workbench({
   threadId?: string;
   children: ReactNode;
 }) {
+    useTranslation();
   const wb = useWorkbench(projectId);
   const viewport = useViewport();
   const navigate = useNavigate();
@@ -79,7 +81,7 @@ export function Workbench({
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="workbench">
       {wb.tabs.length > 1 ? (
-        <div role="tablist" aria-label="工作区" className="bg-sidebar border-sidebar-border flex h-9 shrink-0 items-stretch overflow-x-auto border-b" data-testid="workbench-tabs">
+        <div role="tablist" aria-label={t.workbench} className="bg-sidebar border-sidebar-border flex h-9 shrink-0 items-stretch overflow-x-auto border-b" data-testid="workbench-tabs">
           {wb.tabs.map((tab) => {
             const key = tabKey(tab);
             const isActive = key === wb.active;
@@ -104,7 +106,7 @@ export function Workbench({
                   </div>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
-                  <ContextMenuItem onSelect={() => select(tab)}>切换到此标签</ContextMenuItem>
+                  <ContextMenuItem onSelect={() => select(tab)}>{t.switchToTab}</ContextMenuItem>
                   {tab.kind !== "chat" || !!tab.threadId ? <ContextMenuItem onSelect={() => close(tab)}>{t.closeTab}</ContextMenuItem> : null}
                 </ContextMenuContent>
               </ContextMenu>

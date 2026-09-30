@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // The model's thinking as the reasoning element's step-panel design: titled
 // steps down a timeline, a shimmering "思考中" while it streams that settles
 // into a resting label. The steps come from the group's reasoning parts
@@ -13,6 +14,7 @@ import { ReasoningPanel } from "@/ui/components/assistant-ui/elements/reasoning-
 import { t } from "@/ui/strings";
 
 export function ReasoningSteps({ group }: { group: ThreadGroupPart }) {
+    useTranslation();
   const parts = useAuiState((s) => s.message.parts);
   const steps = useMemo(
     () =>

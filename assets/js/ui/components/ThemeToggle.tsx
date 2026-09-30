@@ -1,9 +1,11 @@
+import { useTranslation } from "react-i18next";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { nextTheme, useTheme } from "@/core/theme";
 import { t } from "@/ui/strings";
 
 /** One tap cycles dark → light → system; the icon shows the current choice. */
 export function ThemeToggle() {
+    useTranslation();
   const { preference, setTheme } = useTheme();
   const Icon = preference === "dark" ? Moon : preference === "light" ? Sun : Monitor;
   return (

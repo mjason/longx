@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // Settings → 模型: what a person sets day to day — which model new
 // conversations, projects and sub-agents run on, at which reasoning level.
 // The default model (a name: a tier by preference), the tiers and the
@@ -345,6 +346,7 @@ function ModelChips({ rows }: { rows: ModelRow[] }) {
 
 /** The search service's key (Tavily): set, kept unseen, replaced when typed. */
 function SearchKey({ needed }: { needed: boolean }) {
+    useTranslation();
   const search = useSearchProviders();
   const actions = useAiActions();
   const [key, setKey] = useState("");

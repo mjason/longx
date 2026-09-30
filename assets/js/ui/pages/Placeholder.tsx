@@ -1,8 +1,10 @@
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { Page, TopBar } from "@/ui/shell/Shell";
 import { t } from "@/ui/strings";
 
 export function NotFoundPage() {
+    useTranslation();
   return (
     <>
       <TopBar title={t.app} />

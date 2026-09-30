@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useParams } from "react-router";
 import { relativeTime } from "@/core/format";
 import { useSubagents } from "@/core/projects";
@@ -33,6 +34,7 @@ export function AgentsTool({ ctx }: { ctx: ProjectContext }) {
 }
 
 function Subagents({ ctx }: { ctx: ProjectContext }) {
+    useTranslation();
   const { threadId } = useParams();
   const workbench = useWorkbench(ctx.id);
   const subagents = useSubagents(threadId);

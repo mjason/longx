@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { onSocketStatus, socketStatus, type SocketStatus } from "@/core/socket";
 import { offlineShell } from "@/ui/pwa/device";
@@ -15,6 +16,7 @@ export function useSocketStatusValue(): SocketStatus {
  * because the server was out of reach (it reloads once the server answers).
  */
 export function ConnectionBanner({ status, offline = offlineShell() }: { status?: SocketStatus; offline?: boolean }) {
+    useTranslation();
   const live = useSocketStatusValue();
   const current = offline ? "offline" : (status ?? live);
   if (current !== "closed" && current !== "unstable" && current !== "offline") return null;

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // One open file: CodeMirror over the file's content, a draft while typing,
 // save with the button or ⌘S. Binary or over-large files are shown as
 // such rather than mangled; a phone wraps lines.
@@ -15,6 +16,7 @@ import { isMarkdownPath, MarkdownPreview } from "@/ui/editor/MarkdownPreview";
 import { t } from "@/ui/strings";
 
 export function EditorTab({ projectId, path, line }: { projectId: string; path: string; line?: number }) {
+    useTranslation();
   const file = useFileContent(projectId, path);
   const save = useSaveFile(projectId);
   const workbench = useWorkbench(projectId);

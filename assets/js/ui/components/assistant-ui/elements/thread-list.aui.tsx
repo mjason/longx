@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 "use client";
 
 import { Button } from "@/ui/components/ui/button";
@@ -46,6 +47,7 @@ export const ThreadListSearch = forwardRef<
     onValueChange: (value: string) => void;
   }
 >(({ className, value, onValueChange, ...props }, ref) => {
+    useTranslation();
   return (
     <div data-slot="aui_thread-list-search" className="relative px-0.5 py-1">
       <SearchIcon
@@ -215,6 +217,7 @@ export const ThreadListNew = forwardRef<
   HTMLButtonElement,
   ComponentPropsWithoutRef<typeof Button> & { labelClassName?: string }
 >(({ className, labelClassName, children, ...props }, ref) => {
+    useTranslation();
   return (
     <ThreadListPrimitive.New asChild>
       <Button
@@ -249,6 +252,7 @@ export const ThreadListNew = forwardRef<
 ThreadListNew.displayName = "ThreadListNew";
 
 const ThreadListSkeleton: FC = () => {
+    useTranslation();
   return (
     <div className="flex flex-col gap-0.5">
       {Array.from({ length: 5 }, (_, i) => (
@@ -277,6 +281,7 @@ const ThreadListSkeleton: FC = () => {
 export const RunningIdsContext = createContext<ReadonlySet<string>>(new Set());
 
 export const ThreadListItem: FC = () => {
+    useTranslation();
   const id = useAuiState((s) => s.threadListItem.id);
   const running = useContext(RunningIdsContext);
   const isRunning = useAuiState((s) => s.threadListItem.isRunning) || running.has(id);
@@ -334,6 +339,7 @@ export const ThreadListItem: FC = () => {
 const ThreadListItemRename: FC<{
   onDone: (restoreFocus: boolean) => void;
 }> = ({ onDone }) => {
+    useTranslation();
   const aui = useAui();
   const title = useAuiState((s) => s.threadListItem.title) ?? "";
   const [value, setValue] = useState(title);
@@ -396,6 +402,7 @@ const ThreadListItemRename: FC<{
 };
 
 const ThreadListItemMore: FC<{ onRename: () => void }> = ({ onRename }) => {
+    useTranslation();
   return (
     <ThreadListItemMorePrimitive.Root sharedFocusGroup>
       <ThreadListItemMorePrimitive.Trigger asChild>

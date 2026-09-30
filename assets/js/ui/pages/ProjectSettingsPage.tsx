@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router";
@@ -50,6 +51,7 @@ export function ProjectSettingsPage() {
 type Project = NonNullable<ReturnType<typeof useProject>["data"]>;
 
 function SettingsForm({ project, slug }: { project: Project; slug: string }) {
+    useTranslation();
   // the .longx files, for the watches card to point at shared ones the trust switch keeps off
   const definitionFiles = useAgentDefinition(project.id);
   const client = useQueryClient();
@@ -239,6 +241,7 @@ function AgentSection({
   overrides: AgentSettingsForm;
   onOverrides: (v: AgentSettingsForm) => void;
 }) {
+    useTranslation();
   const definition = useAgentDefinition(projectId);
   const models = useModelRows();
   const promote = usePromoteLocal(projectId);
@@ -327,6 +330,7 @@ function AgentSection({
 
 /** the project's own ignore / watch rules, saved on their own (the watcher reloads) */
 function ProjectFileRules({ projectId, slug, initial }: { projectId: string; slug: string; initial: FileRules }) {
+    useTranslation();
   const [value, setValue] = useState(initial);
   const save = useSaveProjectFileRules(projectId, slug);
   const dirty = value.ignore !== initial.ignore || value.watch !== initial.watch;

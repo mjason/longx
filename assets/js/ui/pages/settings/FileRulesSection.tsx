@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // Settings → 文件监控: the global rules every project's file watcher, tree
 // and @ search follow, beside the built-in lists they stack on.
 import { useState } from "react";
@@ -11,6 +12,7 @@ import { t } from "@/ui/strings";
 const s = t.fileRules;
 
 export function FileRulesSection() {
+    useTranslation();
   const rules = useFileRules();
   const save = useSaveFileRules();
   const [draft, setDraft] = useState<FileRules | null>(null);

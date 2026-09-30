@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // Settings → HTTPS: Longx served over https with a certificate Let's Encrypt
 // signs through the DNS-01 challenge (Longx.Tls) — the state (off, being
 // obtained, served at an address until a date, failed), the names with the
@@ -70,6 +71,7 @@ export function HttpsSection() {
 }
 
 function StateCard({ status }: { status: TlsStatus }) {
+    useTranslation();
   const issue = useIssueTls();
   const disable = useDisableTls();
   const [confirming, setConfirming] = useState(false);

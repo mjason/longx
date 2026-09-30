@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useViewport } from "@/core/viewport";
 import { KeysHint } from "@/ui/keys/KeysHint";
 import { AlertTriangle, ArrowUpCircle, Download, GitBranch } from "lucide-react";
@@ -19,6 +20,7 @@ const item = (extra = "") => `flex shrink-0 items-center gap-1 whitespace-nowrap
 
 /** IDEA's status bar: HEAD, an update waiting. One thin line. */
 export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
+    useTranslation();
   const viewport = useViewport();
   const git = useGitInfo(ctx.id);
   const upgrade = useUpgradeStatus({ poll: false });

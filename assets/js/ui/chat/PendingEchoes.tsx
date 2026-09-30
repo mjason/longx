@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // The echoes of what was sent and the view does not show yet
 // (core/chat/pending): drawn after the messages, as user bubbles — faded,
 // 发送中… under them, or 已插入 for a steer, in red with the reason when the
@@ -9,6 +10,7 @@ import { useChat } from "./ChatProvider";
 import { t } from "@/ui/strings";
 
 export function PendingEchoes() {
+    useTranslation();
   const { echoes } = useChat();
   if (echoes.length === 0) return null;
   return (

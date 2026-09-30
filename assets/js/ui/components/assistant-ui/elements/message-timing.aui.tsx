@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 "use client";
 
 import { useAuiState, useMessageTiming } from "@assistant-ui/react";
@@ -43,6 +44,7 @@ export const MessageTiming: FC<{
   className?: string;
   side?: "top" | "right" | "bottom" | "left";
 }> = ({ className, side = "right" }) => {
+    useTranslation();
   const timing = useMessageTiming();
   // Longx: the turn's own token usage (the kernel stamps every turn)
   const usage = useAuiState((s) => s.message.metadata.custom?.["usage"] as TurnUsage | undefined);

@@ -2,6 +2,7 @@
 // reasoning's default, system notifications and the offline cache (both
 // need a secure context: HTTPS, or localhost on the machine itself).
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { usePreference, setPreference, type Preference } from "@/core/keys/preference";
 import { useTheme, type ThemePreference } from "@/core/theme";
 import { Label } from "@/ui/components/ui/label";
@@ -9,11 +10,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/ui/components/ui/switch";
 import { notificationPermission, notificationsSupported, offlineCacheSupported, requestNotifications } from "@/ui/pwa/device";
 import { t } from "@/ui/strings";
+import i18n from "@/core/i18n";
 
 export function AppearanceSection() {
   const { preference, setTheme } = useTheme();
+  const { t: translate } = useTranslation();
   return (
     <div className="grid max-w-lg gap-6" data-testid="section-appearance">
+      <div className="grid max-w-sm gap-2">
+        <Label>{translate("language")}</Label>
+        <Select value={i18n.resolvedLanguage === "en" ? "en" : "zh-CN"} onValueChange={(language) => void i18n.changeLanguage(language)}>
+          <SelectTrigger className="h-11 w-full" aria-label={translate("language")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="zh-CN">{translate("languages.zh-CN")}</SelectItem>
+            <SelectItem value="en">{translate("languages.en")}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       <div className="grid max-w-sm gap-2">
         <Label>{t.theme}</Label>
         <Select value={preference} onValueChange={(v) => setTheme(v as ThemePreference)}>
@@ -35,6 +50,7 @@ export function AppearanceSection() {
 }
 
 function DeviceChoices() {
+    useTranslation();
   const s = t.pwa;
   const notifications = usePreference("notifications");
   const [denied, setDenied] = useState(notificationPermission() === "denied");

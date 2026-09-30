@@ -3,6 +3,9 @@ import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 import { clearThreadViewCache } from "./js/core/chat/threadViewCache";
 
+// UI tests pin the legacy/default copy; locale-switching tests opt into English.
+localStorage.setItem("longx:language", "zh-CN");
+
 afterEach(() => {
   cleanup();
   clearThreadViewCache();

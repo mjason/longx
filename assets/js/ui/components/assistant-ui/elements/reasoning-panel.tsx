@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 "use client";
 
 import { ChevronDownIcon } from "lucide-react";
@@ -37,6 +38,7 @@ export function ReasoningPanel({
   elapsed,
   className,
 }: ReasoningPanelProps) {
+    useTranslation();
   const shown = take(steps, visibleSteps);
 
   return (

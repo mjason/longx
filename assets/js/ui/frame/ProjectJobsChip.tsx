@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { CircleDot } from "lucide-react";
 import { Link } from "react-router";
 import { relativeTime } from "@/core/format";
@@ -6,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/ui/components/ui/popo
 import { t } from "@/ui/strings";
 
 function JobRow({ job, slug }: { job: ProjectJob; slug: string }) {
+    useTranslation();
   return (
     <Link
       to={`/p/${slug}/t/${job.threadId}`}
@@ -28,6 +30,7 @@ function JobRow({ job, slug }: { job: ProjectJob; slug: string }) {
 
 /** The project's Longx-managed shell jobs, kept visible from every conversation. */
 export function ProjectJobsChip({ projectId, slug, className = "" }: { projectId: string; slug: string; className?: string }) {
+    useTranslation();
   const query = useProjectJobs(projectId);
   const running = (query.data ?? []).filter((job) => job.status === "running");
   if (running.length === 0) return null;
@@ -48,7 +51,7 @@ export function ProjectJobsChip({ projectId, slug, className = "" }: { projectId
       <PopoverContent side="top" align="start" className="w-[min(28rem,calc(100vw-1.5rem))] overflow-hidden p-0" data-testid="project-jobs-popover">
         <div className="flex items-center justify-between border-b px-3 py-2.5">
           <span className="text-sm font-medium">{t.projectJobs.title}</span>
-          <span className="text-muted-foreground text-xs">{running.length} 运行中</span>
+          <span className="text-muted-foreground text-xs">{t.runningJobs(running.length)}</span>
         </div>
         <section aria-label={t.projectJobs.running} className="max-h-64 overflow-y-auto">
           {running.map((job) => <JobRow key={`${job.threadId}:${job.name}`} job={job} slug={slug} />)}

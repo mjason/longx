@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // What arrives from elsewhere while a turn runs — another agent's report or
 // question, a session's message, a background job's end, a watch — waits for
 // the turn to end, listed above the composer (never put in it: a stop once
@@ -21,6 +22,7 @@ function sender(m: WaitingMessage): string {
 const firstLine = (text: string) => text.split("\n", 1)[0] ?? "";
 
 export function WaitingMessagesView({ waiting, onRelease }: { waiting: Waiting; onRelease: (id: string) => void }) {
+    useTranslation();
   if (waiting.items.length === 0) return null;
   return (
     <div className="flex w-full flex-col gap-1.5 pb-2" data-testid="waiting-messages">

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // One file's diff — the working tree against HEAD, or what a commit did —
 // as GitHub's file view: both versions in CodeMirror's merge view, split on
 // a desktop, inline on a phone, either on request.
@@ -10,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/ui/components/ui/tabs";
 import { t } from "@/ui/strings";
 
 export function DiffTab({ projectId, path, sha }: { projectId: string; path: string; sha: string | null }) {
+    useTranslation();
   const viewport = useViewport();
   const query = useGitFileVersions(projectId, sha, path);
   const [mode, setMode] = useState<"split" | "unified" | null>(null);
@@ -44,6 +46,7 @@ export function DiffTab({ projectId, path, sha }: { projectId: string; path: str
 }
 
 function DiffBody({ path, versions, mode, wrap }: { path: string; versions: FileVersions; mode: "split" | "unified"; wrap: boolean }) {
+    useTranslation();
   if (versions.binary) return <p className="text-muted-foreground p-3 text-sm">{t.binaryDiff}</p>;
   if (versions.before === versions.after) return <p className="text-muted-foreground p-3 text-sm">{t.noDiff}</p>;
   return <DiffView path={path} before={versions.before} after={versions.after} mode={mode} wrap={wrap} />;

@@ -1,8 +1,10 @@
 import { ChevronLeft } from "lucide-react";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, Outlet } from "react-router";
 import { applyTheme } from "@/core/theme";
 import { useViewport } from "@/core/viewport";
+import i18n from "@/core/i18n";
 import { CommandPalette } from "@/ui/components/CommandPalette";
 import { Toaster } from "@/ui/components/ui/sonner";
 import { TooltipProvider } from "@/ui/components/ui/tooltip";
@@ -10,6 +12,7 @@ import { KeysLayer } from "@/ui/keys/KeysLayer";
 import { PwaBridge } from "@/ui/pwa/PwaBridge";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { ShellBridge } from "./ShellBridge";
+import { t } from "@/ui/strings";
 
 const GlobalCommands = lazy(async () => ({ default: (await import("@/ui/keys/GlobalCommands")).GlobalCommands }));
 
@@ -19,7 +22,16 @@ const GlobalCommands = lazy(async () => ({ default: (await import("@/ui/keys/Glo
  */
 export function Shell() {
   const viewport = useViewport();
+  useTranslation();
   useEffect(() => applyTheme(), []);
+  useEffect(() => {
+    const setDocumentLanguage = (language: string) => {
+      document.documentElement.lang = language === "en" ? "en" : "zh-CN";
+    };
+    setDocumentLanguage(i18n.resolvedLanguage ?? i18n.language);
+    i18n.on("languageChanged", setDocumentLanguage);
+    return () => { i18n.off("languageChanged", setDocumentLanguage); };
+  }, []);
   return (
     <TooltipProvider delayDuration={300}>
       <ShellBridge />
@@ -57,7 +69,7 @@ export function TopBar({
     <header className={`safe-top ${surface} sticky top-0 z-20 border-b`}>
       <div className={`safe-x mx-auto flex h-14 w-full items-center gap-2 ${wide ? "" : "max-w-5xl"}`}>
         {back ? (
-          <Link to={back} aria-label="返回" className="touch-target -ml-2 flex items-center justify-center rounded-md">
+          <Link to={back} aria-label={t.back} className="touch-target -ml-2 flex items-center justify-center rounded-md">
             <ChevronLeft className="size-6" />
           </Link>
         ) : null}

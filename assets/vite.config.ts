@@ -33,7 +33,14 @@ export default defineConfig(({ command }) => ({
     outDir: "../priv/static/assets",
     assetsDir: ".",
     emptyOutDir: true,
-    rollupOptions: { input: ["js/index.tsx"] },
+    rollupOptions: {
+      input: ["js/index.tsx"],
+      output: {
+        manualChunks: {
+          i18n: ["i18next", "i18next-browser-languagedetector", "react-i18next"],
+        },
+      },
+    },
   },
   resolve: { alias: { "@": path.resolve(__dirname, "js") } },
   plugins: [

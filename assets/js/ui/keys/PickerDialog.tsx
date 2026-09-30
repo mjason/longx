@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // The picker the space menu's choosing commands open (core/keys/picker): a
 // fixed list filtered as typed, or a search asked as typed (files).
 import { useEffect, useState } from "react";
@@ -7,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { t } from "@/ui/strings";
 
 export function PickerDialog() {
+    useTranslation();
   const request = usePicker();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<PickerItem[] | null>(null);

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 // The status strip's word on what runs now, any project: `3 个在跑 · 1 个等你 ·
 // 2 个刚完成`, amber when someone waits on the person, a breathing blue dot
 // while something runs, a check when only finished ones are left; a click
@@ -10,6 +11,7 @@ import { openRunningPicker } from "@/ui/keys/runningPicker";
 import { t } from "@/ui/strings";
 
 export function RunningChip({ className = "" }: { className?: string }) {
+    useTranslation();
   const navigate = useNavigate();
   const threadId = useMatch("/p/:slug/t/:threadId")?.params.threadId ?? null;
   const running = useRunningThreads();
