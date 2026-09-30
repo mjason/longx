@@ -1868,6 +1868,7 @@ export type SetAgentSettingsInput = {
   childModel?: string | null | undefined;
   commandOomPriority?: number | null | undefined;
   commandShell?: string | null | undefined;
+  extraPath?: string | null | undefined;
   idleMinutes?: number | null | undefined;
   maxChildren?: number | null | undefined;
   maxDepth?: number | null | undefined;
@@ -3305,7 +3306,7 @@ export type KnowledgeReadQuery = { knowledgeRead: { text: string } };
 export type AgentSettingsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type AgentSettingsQuery = { agentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, commandShell: string, commandOomPriority: number, childModel: string | null, childEffort: string | null } };
+export type AgentSettingsQuery = { agentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, extraPath: string, defaultExtraPath: string, commandShell: string, commandOomPriority: number, childModel: string | null, childEffort: string | null } };
 
 export type PublicUrlQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -3771,7 +3772,7 @@ export type SetAgentSettingsMutationVariables = Exact<{
 }>;
 
 
-export type SetAgentSettingsMutation = { setAgentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, commandShell: string, commandOomPriority: number, childModel: string | null, childEffort: string | null } };
+export type SetAgentSettingsMutation = { setAgentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, extraPath: string, defaultExtraPath: string, commandShell: string, commandOomPriority: number, childModel: string | null, childEffort: string | null } };
 
 export type CheckDependenciesMutationVariables = Exact<{ [key: string]: never; }>;
 
@@ -4406,6 +4407,8 @@ export const AgentSettingsDocument = new TypedDocumentString(`
     maxDepth
     maxChildren
     idleMinutes
+    extraPath
+    defaultExtraPath
     commandShell
     commandOomPriority
     childModel
@@ -5442,6 +5445,8 @@ export const SetAgentSettingsDocument = new TypedDocumentString(`
     maxDepth
     maxChildren
     idleMinutes
+    extraPath
+    defaultExtraPath
     commandShell
     commandOomPriority
     childModel

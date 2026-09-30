@@ -1,13 +1,14 @@
 defmodule Longx.Agent.Tools.ShellEnv do
   @moduledoc """
   The environment a command runs in: the person's own shell's, captured
-  once per BEAM (codex's *shell snapshot*). A command started by Longx
+  once per BEAM. A command started by Longx
   would otherwise inherit the BEAM's environment — the shell Longx was
   launched from, or a service's — and `bash -lc` reads bash's files, not
   the `.zshrc` where the PATH with Go, brew, nvm actually is. So
   `snapshot/1` runs `$SHELL -ilc 'env -0'` (interactive and login: every
   file the person's shell reads), parses it, and every `exec_command`
-  gets exactly that environment (`env_clear`). `LONGX_*` and the shell's
+  gets that environment plus the configured command paths (`env_clear`).
+  `LONGX_*` and the shell's
   own bookkeeping (`PWD`, `SHLVL`, `_`) are dropped; `TERM` is `dumb`.
   A shell that fails to answer falls back to a login shell, then to the
   BEAM's environment. `refresh/0` takes a new snapshot.
@@ -16,6 +17,7 @@ defmodule Longx.Agent.Tools.ShellEnv do
   require Logger
 
   alias Longx.Shim
+  alias Longx.Agent.Definition.Settings
 
   @key {__MODULE__, :env}
   @dropped ~w(PWD OLDPWD SHLVL _ TERM)
@@ -37,17 +39,37 @@ defmodule Longx.Agent.Tools.ShellEnv do
 
     case :persistent_term.get(@key, nil) do
       {^shell, env} ->
-        env
+        apply_extra_path(env)
 
       _ ->
         {:ok, env} = refresh(shell)
-        env
+        apply_extra_path(env)
     end
   end
 
   @doc "The captured environment as the `env:` list a shim takes."
   @spec env_list() :: [{String.t(), String.t()}]
   def env_list, do: Map.to_list(env())
+
+  @doc false
+  def merge_path(path, extra_path) do
+    separator = if match?({:win32, _}, :os.type()), do: ";", else: ":"
+
+    [extra_path, path]
+    |> Enum.flat_map(fn
+      nil -> []
+      value -> String.split(value, ["\n", "\r", separator], trim: true)
+    end)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+    |> Enum.join(separator)
+  end
+
+  defp apply_extra_path(env) do
+    configured = Settings.global().extra_path
+    Map.update!(env, "PATH", &merge_path(&1, configured))
+  end
 
   @doc "Takes a new environment snapshot for the selected shell."
   @spec refresh() :: {:ok, map}

@@ -89,6 +89,8 @@ defmodule Longx.System.Types do
           command_oom_priority: [type: :integer, allow_nil?: false],
           memory_floor_percent: [type: :integer, allow_nil?: false],
           command_shell: [type: :string, allow_nil?: false],
+          extra_path: [type: :string, allow_nil?: false],
+          default_extra_path: [type: :string, allow_nil?: false],
           child_model: [type: :string],
           child_effort: [type: :string]
         ]

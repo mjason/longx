@@ -17,12 +17,15 @@ defmodule Longx.Agent.Definition.SettingsTest do
   end
 
   test "the global settings start at the defaults, are saved as one setting and validated" do
+    default_path = default_obscura_path()
+
     assert %{
              max_depth: 2,
              max_children: 4,
              idle_minutes: 30,
              child_model: nil,
-             command_shell: "auto"
+             command_shell: "auto",
+             extra_path: ^default_path
            } =
              Settings.global()
 
@@ -34,6 +37,23 @@ defmodule Longx.Agent.Definition.SettingsTest do
              Settings.put_global(%{max_depth: 3, idle_minutes: 5})
 
     assert %{max_depth: 3, max_children: 4, idle_minutes: 5} = Settings.global()
+
+    assert {:ok, %{extra_path: "/opt/tools\n/usr/local/bin"}} =
+             Settings.put_global(%{extra_path: "/opt/tools\n/usr/local/bin"})
+
+    assert "/opt/tools" in String.split(ShellEnv.env()["PATH"], ":")
+    assert "/usr/local/bin" in String.split(ShellEnv.env()["PATH"], ":")
+    assert {:ok, %{extra_path: ""}} = Settings.put_global(%{extra_path: ""})
+
+    refute default_obscura_path() in String.split(ShellEnv.env()["PATH"], ":")
+    assert {:ok, %{extra_path: ^default_path}} = Settings.put_global(%{extra_path: nil})
+
+    assert {:ok, %{extra_path: ^default_path}} =
+             Settings.put_global(%{extra_path: default_path})
+
+    refute Map.has_key?(Settings.global_overrides(), :extra_path)
+
+    assert default_path in String.split(ShellEnv.env()["PATH"], ":")
 
     if System.find_executable("bash") do
       assert {:ok, %{command_shell: "bash"}} = Settings.put_global(%{command_shell: "bash"})
@@ -65,6 +85,22 @@ defmodule Longx.Agent.Definition.SettingsTest do
     assert {:error, %{field: :child_model}} = Settings.put_global(%{child_model: "no-such-model"})
     # nil clears a value back to the default
     assert {:ok, %{max_depth: 2}} = Settings.put_global(%{max_depth: nil})
+  end
+
+  defp default_obscura_path do
+    case Longx.Browser.Runtime.executable() do
+      {:ok, executable} ->
+        Path.dirname(executable)
+
+      {:error, :not_installed} ->
+        case Longx.Browser.Runtime.current_target() do
+          nil ->
+            nil
+
+          target ->
+            Longx.Browser.Runtime.root(Longx.Browser.Runtime.dir(), target)
+        end
+    end
   end
 
   test "a project's overrides sit on the global ones", %{dir: dir} do

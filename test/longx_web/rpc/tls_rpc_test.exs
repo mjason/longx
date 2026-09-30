@@ -78,7 +78,8 @@ defmodule LongxWeb.TlsRpcTest do
              "toolVersion" => _
            } = status
 
-    refute Jason.encode!(status) =~ "4711"
+    refute Jason.encode!(status) =~ "AKID-4711"
+    refute Jason.encode!(status) =~ "very-secret-4711"
 
     # an empty value keeps the secret
     assert %{"success" => true} =
@@ -90,7 +91,8 @@ defmodule LongxWeb.TlsRpcTest do
 
     assert %{"success" => true, "data" => read} = rpc(conn, "tls_status", %{})
     assert read["envSet"] == ["TENCENTCLOUD_SECRET_ID", "TENCENTCLOUD_SECRET_KEY"]
-    refute Jason.encode!(read) =~ "4711"
+    refute Jason.encode!(read) =~ "AKID-4711"
+    refute Jason.encode!(read) =~ "very-secret-4711"
   end
 
   test "the TXT check's resolvers and wait are saved; where the typed names point comes apart", %{

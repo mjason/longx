@@ -720,7 +720,7 @@ defmodule Longx.Agent.PlugsTest do
                """
                <environment_context>
                  <cwd>#{dir}</cwd>
-                 <shell>bash</shell>
+                 <shell>#{Path.basename(Longx.Agent.Tools.ShellEnv.shell())}</shell>
                  <current_date>#{Date.to_iso8601(Date.utc_today())}</current_date>
                  <operating_system>unix linux, #{:erlang.system_info(:system_architecture)}</operating_system>
                  <model>deepseek-flash (asked for as `plus`) at reasoning effort `high`</model>

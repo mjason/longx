@@ -21,7 +21,9 @@ defmodule LongxWeb.AgentSettingsRpcTest do
     "maxChildren",
     "idleMinutes",
     "childModel",
-    "childEffort"
+    "childEffort",
+    "extraPath",
+    "defaultExtraPath"
   ]
 
   test "read and write the settings; a bad value is an error on its field", %{conn: conn} do
@@ -33,6 +35,12 @@ defmodule LongxWeb.AgentSettingsRpcTest do
 
     assert %{"success" => true, "data" => %{"maxDepth" => 3}} =
              rpc(conn, "set_agent_settings", %{"fields" => @fields, "input" => %{"maxDepth" => 3}})
+
+    assert %{"success" => true, "data" => %{"extraPath" => ""}} =
+             rpc(conn, "set_agent_settings", %{
+               "fields" => @fields,
+               "input" => %{"extraPath" => ""}
+             })
 
     assert %{"success" => false, "errors" => [%{"fields" => ["maxChildren"]}]} =
              rpc(conn, "set_agent_settings", %{

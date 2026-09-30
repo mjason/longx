@@ -112,6 +112,50 @@ describe("ProjectWindow", () => {
     vi.mocked(gitInfo).mockImplementation(original);
   });
 
+  test("the status strip lists enabled scheduled watches and lets me inspect their script", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    const { listWatches, readFile } = await import("@/core/api");
+    const originalWatches = vi.mocked(listWatches).getMockImplementation()!;
+    const originalReadFile = vi.mocked(readFile).getMockImplementation()!;
+    vi.mocked(listWatches).mockResolvedValue(ok([
+      {
+        id: "w-health", name: "health", path: "/srv/app-1/.longx/local/watches/health.exs", layer: "local",
+        kind: "cron", cron: "*/5 * * * *", at: null, enabled: true, disabledReason: null, loadError: null,
+        nextDueAt: "2026-09-30T08:15:00Z", runningSince: null, lastRunAt: null, lastDurationMs: null,
+        lastError: null, lastOutput: null, lastSentTo: null, runs: 0, sends: 0, webhookToken: null, state: {},
+      },
+      {
+        id: "w-off", name: "off", path: "/srv/app-1/.longx/local/watches/off.exs", layer: "local",
+        kind: "cron", cron: "*/5 * * * *", at: null, enabled: false, disabledReason: "by_person", loadError: null,
+        nextDueAt: null, runningSince: null, lastRunAt: null, lastDurationMs: null,
+        lastError: null, lastOutput: null, lastSentTo: null, runs: 0, sends: 0, webhookToken: null, state: {},
+      },
+    ]) as never);
+    vi.mocked(readFile).mockResolvedValue(ok({
+      path: ".longx/local/watches/health.exs",
+      content: 'shell(ctx, "mix test")',
+      size: 22,
+      binary: false,
+      truncated: false,
+    }) as never);
+    renderAt("/p/app-1/t/t1");
+
+    const chip = await screen.findByTestId("scheduled-watches-chip");
+    expect(chip).toHaveTextContent("定时 1");
+    await user.click(chip);
+    const popover = await screen.findByTestId("scheduled-watches-popover");
+    expect(popover).toHaveTextContent("health");
+    expect(popover).not.toHaveTextContent("off");
+    await user.click(within(popover).getByText("查看将执行的脚本"));
+    await within(popover).findByText('shell(ctx, "mix test")');
+    expect(readFile).toHaveBeenCalledWith(expect.objectContaining({
+      input: { projectId: "id-1", path: ".longx/local/watches/health.exs" },
+    }));
+    vi.mocked(listWatches).mockImplementation(originalWatches);
+    vi.mocked(readFile).mockImplementation(originalReadFile);
+  });
+
   test("the task chip lists this project's background jobs and opens the matching conversation", async () => {
     setViewport(1280);
     const user = userEvent.setup();
@@ -125,17 +169,30 @@ describe("ProjectWindow", () => {
     const { router } = renderAt("/p/app-1/t/t1");
 
     const chip = await screen.findByTestId("project-jobs-chip");
-    expect(chip).toHaveTextContent("任务 2");
+    expect(chip).toHaveTextContent("任务 1");
     await user.click(chip);
 
     const popover = await screen.findByTestId("project-jobs-popover");
     expect(popover).toHaveTextContent("发布 v0.2.83");
     expect(popover).toHaveTextContent("运行中");
-    expect(popover).toHaveTextContent("验证测试");
-    expect(popover).toHaveTextContent("已完成");
+    expect(popover).not.toHaveTextContent("验证测试");
 
     await user.click(within(popover).getByRole("link", { name: /发布 v0\.2\.83/ }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t2"));
+    vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [] }) as never);
+  });
+
+  test("the task chip is hidden when this project has only completed jobs", async () => {
+    setViewport(1280);
+    const { projectJobs } = await import("@/core/api");
+    vi.mocked(projectJobs).mockResolvedValue(ok({
+      jobs: [
+        { name: "tests", cmd: "mix test", status: "exited", exitCode: 0, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), threadId: "t3", threadTitle: "验证测试" },
+      ],
+    }) as never);
+    renderAt("/p/app-1/t/t1");
+
+    await waitFor(() => expect(screen.queryByTestId("project-jobs-chip")).not.toBeInTheDocument());
     vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [] }) as never);
   });
 

@@ -7,6 +7,8 @@ defmodule Longx.Agent.Plugs.Environment do
 
   use Longx.Agent.Plug
 
+  alias Longx.Agent.Tools.ShellEnv
+
   @impl true
   def call(%Step{phase: phase} = step, _opts) when phase != :request, do: step
 
@@ -21,7 +23,7 @@ defmodule Longx.Agent.Plugs.Environment do
       step,
       "<environment_context>\n" <>
         element("cwd", cwd || File.cwd!()) <>
-        element("shell", "bash") <>
+        element("shell", Path.basename(ShellEnv.shell())) <>
         element("current_date", Date.to_iso8601(Date.utc_today())) <>
         element(
           "operating_system",

@@ -244,6 +244,8 @@ type AgentSettings {
   maxDepth: Int!
   maxChildren: Int!
   idleMinutes: Int!
+  extraPath: String!
+  defaultExtraPath: String!
   commandShell: String!
   commandOomPriority: Int!
   childModel: String
@@ -2744,6 +2746,7 @@ input SetAgentSettingsInput {
   commandOomPriority: Int
   memoryFloorPercent: Int
   commandShell: String
+  extraPath: String
   childModel: String
   childEffort: String
 }

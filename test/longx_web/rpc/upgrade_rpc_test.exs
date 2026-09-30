@@ -7,6 +7,8 @@ defmodule LongxWeb.UpgradeRpcTest do
   setup do
     bypass = Bypass.open()
     previous = Application.get_env(:longx, Upgrade, [])
+    release_root = System.get_env("RELEASE_ROOT")
+    System.delete_env("RELEASE_ROOT")
 
     Application.put_env(:longx, Upgrade,
       repo: "mjason/longx",
@@ -19,6 +21,7 @@ defmodule LongxWeb.UpgradeRpcTest do
     on_exit(fn ->
       Application.put_env(:longx, Upgrade, previous)
       Upgrade.reset()
+      if release_root, do: System.put_env("RELEASE_ROOT", release_root)
     end)
 
     %{bypass: bypass}

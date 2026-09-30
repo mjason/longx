@@ -18,6 +18,11 @@ defmodule Longx.Agent.Tools.ShellEnvTest do
     refute Map.has_key?(env, "LONGX_SECRET")
   end
 
+  test "merges configured paths first, without duplicates" do
+    assert ShellEnv.merge_path("/bin:/usr/bin", "/opt/tools\n/app/obscura\n/bin") ==
+             "/opt/tools:/app/obscura:/bin:/usr/bin"
+  end
+
   test "a snapshot of a real shell has PATH and HOME; the user's shell is preferred" do
     assert {:ok, env} = ShellEnv.snapshot("/bin/sh")
     assert is_binary(env["PATH"])

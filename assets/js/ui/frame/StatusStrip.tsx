@@ -12,6 +12,7 @@ import { t } from "@/ui/strings";
 import type { ProjectContext } from "./ProjectWindow";
 import { RunningChip } from "./RunningChip";
 import { ProjectJobsChip } from "./ProjectJobsChip";
+import { ScheduledWatchesChip } from "./ScheduledWatchesChip";
 
 const item = (extra = "") => `flex shrink-0 items-center gap-1 whitespace-nowrap ${extra}`;
 
@@ -33,6 +34,7 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
       </span>
       <RunningChip className={item()} />
       <ProjectJobsChip projectId={ctx.id} slug={ctx.slug} className={item()} />
+      <ScheduledWatchesChip projectId={ctx.id} slug={ctx.slug} rootPath={ctx.rootPath} className={item()} />
       {deps.data && deps.data.missing > 0 ? (
         <Link to="/settings/dependencies" className={item("text-warning hover:underline")} title={t.dependenciesPage.hint}>
           <AlertTriangle className="size-3" /> {t.dependenciesPage.missing(deps.data.missing)}

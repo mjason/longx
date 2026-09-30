@@ -96,6 +96,8 @@ export const agentSettingsData = () => ({
   commandOomPriority: 800,
   memoryFloorPercent: 8,
   commandShell: "auto" as const,
+  extraPath: "/custom/tools",
+  defaultExtraPath: "/data/obscura/0.2.2/x86_64-linux",
   childModel: null,
   childEffort: null,
 });

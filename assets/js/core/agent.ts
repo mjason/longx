@@ -19,6 +19,8 @@ export type AgentSettings = {
   commandOomPriority: number;
   memoryFloorPercent: number;
   commandShell: "auto" | "bash" | "zsh";
+  extraPath: string;
+  defaultExtraPath: string;
   childModel: string | null;
   childEffort: string | null;
 };

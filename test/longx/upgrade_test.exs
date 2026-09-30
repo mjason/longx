@@ -265,10 +265,17 @@ defmodule Longx.UpgradeTest do
         Keyword.put(Application.get_env(:longx, Upgrade), :app_dir, nil)
       )
 
-      refute Upgrade.installed?()
-      assert {:error, message} = Upgrade.apply()
-      assert message =~ "安装"
-      assert File.read!(Path.join(app, "bin/longx")) =~ "longx 0.0.1"
+      release_root = System.get_env("RELEASE_ROOT")
+      System.delete_env("RELEASE_ROOT")
+
+      try do
+        refute Upgrade.installed?()
+        assert {:error, message} = Upgrade.apply()
+        assert message =~ "安装"
+        assert File.read!(Path.join(app, "bin/longx")) =~ "longx 0.0.1"
+      after
+        if release_root, do: System.put_env("RELEASE_ROOT", release_root)
+      end
     end
 
     test "inside a container (LONGX_CONTAINER, set by the image) nothing is installable: the upgrade is a new image; the status says so",

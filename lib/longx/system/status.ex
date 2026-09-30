@@ -107,7 +107,7 @@ defmodule Longx.System.Status do
 
     # the native kernel's settings (Longx.Agent.Definition.Settings): the global layer
     action :agent_settings, Types.AgentSettings do
-      run fn _input, _ -> {:ok, Longx.Agent.Definition.Settings.global()} end
+      run fn _input, _ -> {:ok, Longx.Agent.Definition.Settings.for_settings_page()} end
     end
 
     action :set_agent_settings, Types.AgentSettings do
@@ -118,6 +118,7 @@ defmodule Longx.System.Status do
       argument :command_oom_priority, :integer
       argument :memory_floor_percent, :integer
       argument :command_shell, :string
+      argument :extra_path, :string, constraints: [allow_empty?: true, trim?: false]
       argument :child_model, :string
       argument :child_effort, :string
 
@@ -127,7 +128,12 @@ defmodule Longx.System.Status do
 
         case Longx.Agent.Definition.Settings.put_global(given) do
           {:ok, settings} ->
-            {:ok, settings}
+            {:ok,
+             Map.put(
+               settings,
+               :default_extra_path,
+               Longx.Agent.Definition.Settings.defaults().extra_path
+             )}
 
           {:error, %{field: field, message: message}} ->
             {:error,

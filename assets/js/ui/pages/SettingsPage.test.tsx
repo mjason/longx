@@ -1000,10 +1000,13 @@ describe("SettingsPage", () => {
     await user.type(floor, "12");
     await user.click(within(settings).getByLabelText("命令使用的 Shell"));
     await user.click(await screen.findByRole("option", { name: "bash" }));
+    const extraPath = within(settings).getByLabelText("额外 PATH 目录") as HTMLTextAreaElement;
+    await user.type(extraPath, "/opt/tools");
+    await user.click(within(settings).getByRole("button", { name: "恢复默认" }));
     await user.click(within(settings).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(setAgentSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ input: expect.objectContaining({ maxDepth: 3, maxChildren: 4, idleMinutes: 30, childModel: null, memoryFloorPercent: 12, commandOomPriority: 800, commandShell: "bash" }) }),
+        expect.objectContaining({ input: expect.objectContaining({ maxDepth: 3, maxChildren: 4, idleMinutes: 30, childModel: null, memoryFloorPercent: 12, commandOomPriority: 800, commandShell: "bash", extraPath: "/data/obscura/0.2.2/x86_64-linux" }) }),
       ),
     );
   });

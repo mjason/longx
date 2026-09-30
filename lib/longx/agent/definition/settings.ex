@@ -28,6 +28,7 @@ defmodule Longx.Agent.Definition.Settings do
     :command_oom_priority,
     :memory_floor_percent,
     :command_shell,
+    :extra_path,
     :child_model,
     :child_effort
   ]
@@ -43,6 +44,7 @@ defmodule Longx.Agent.Definition.Settings do
     command_oom_priority: 800,
     memory_floor_percent: 8,
     command_shell: "auto",
+    extra_path: "",
     child_model: nil,
     child_effort: nil
   }
@@ -55,6 +57,7 @@ defmodule Longx.Agent.Definition.Settings do
           command_oom_priority: non_neg_integer,
           memory_floor_percent: non_neg_integer,
           command_shell: String.t(),
+          extra_path: String.t(),
           child_model: String.t() | nil,
           child_effort: String.t() | nil
         }
@@ -63,15 +66,20 @@ defmodule Longx.Agent.Definition.Settings do
   def fields, do: @fields
 
   @spec defaults() :: t
-  def defaults, do: @defaults
+  def defaults, do: Map.put(@defaults, :extra_path, default_extra_path())
 
   @doc "The global settings: the defaults under what was saved."
   @spec global() :: t
   def global do
     case Longx.System.get_setting(@key) do
-      {:ok, %{value: json}} when is_binary(json) -> Map.merge(@defaults, decode(json))
-      _ -> @defaults
+      {:ok, %{value: json}} when is_binary(json) -> Map.merge(defaults(), decode(json))
+      _ -> defaults()
     end
+  end
+
+  @doc "The global values plus the computed default path used by the settings UI."
+  def for_settings_page do
+    Map.put(global(), :default_extra_path, defaults().extra_path)
   end
 
   @doc "The saved overrides alone (what the page edits), nil values dropped."
@@ -90,9 +98,19 @@ defmodule Longx.Agent.Definition.Settings do
   """
   @spec put_global(map) :: {:ok, t} | {:error, %{field: atom, message: String.t()}}
   def put_global(attrs) when is_map(attrs) do
+    normalised = normalise(attrs)
+
     # a key given as nil clears the saved value; one absent stays
     cleared = for {key, nil} <- attrs, field = to_field(key), field in @fields, do: field
-    merged = global_overrides() |> Map.drop(cleared) |> Map.merge(normalise(attrs))
+
+    # Keep the browser's path as a computed default, not a stale versioned
+    # path saved into the setting when the form submits its unchanged value.
+    cleared =
+      if Map.get(normalised, :extra_path) == defaults().extra_path,
+        do: [:extra_path | cleared],
+        else: cleared
+
+    merged = global_overrides() |> Map.drop(cleared) |> Map.merge(Map.drop(normalised, cleared))
 
     with :ok <- validate(merged),
          {:ok, _} <- Longx.System.put_setting(@key, Jason.encode!(merged)) do
@@ -143,7 +161,7 @@ defmodule Longx.Agent.Definition.Settings do
     for {key, value} <- attrs,
         field = to_field(key),
         field in @fields,
-        value = clean(value),
+        value = clean_field(field, value),
         not is_nil(value),
         into: %{},
         do: {field, value}
@@ -159,6 +177,11 @@ defmodule Longx.Agent.Definition.Settings do
     do: value |> String.trim() |> then(&if(&1 == "", do: nil, else: &1))
 
   defp clean(value), do: value
+
+  # An empty extra_path is an intentional override: it removes the browser
+  # path from PATH. nil, in contrast, clears the setting back to its default.
+  defp clean_field(:extra_path, value) when is_binary(value), do: String.trim(value)
+  defp clean_field(_field, value), do: clean(value)
 
   defp decode(json) do
     case Jason.decode(json) do
@@ -201,6 +224,8 @@ defmodule Longx.Agent.Definition.Settings do
 
   defp check(:command_shell, _value, _attrs), do: {:error, "must be auto, bash or zsh"}
 
+  defp check(:extra_path, value, _attrs) when is_binary(value), do: :ok
+
   defp check(:child_model, slug, attrs) do
     effort = Map.get(attrs, :child_effort)
 
@@ -224,5 +249,18 @@ defmodule Longx.Agent.Definition.Settings do
   defp shell_available?(name) do
     System.find_executable(name) ||
       Enum.any?(["/bin/#{name}", "/usr/bin/#{name}"], &File.regular?/1)
+  end
+
+  defp default_extra_path do
+    case Longx.Browser.Runtime.executable() do
+      {:ok, executable} ->
+        Path.dirname(executable)
+
+      {:error, :not_installed} ->
+        case Longx.Browser.Runtime.current_target() do
+          nil -> ""
+          target -> Longx.Browser.Runtime.root(Longx.Browser.Runtime.dir(), target)
+        end
+    end
   end
 end

@@ -124,14 +124,15 @@ function SettingsCard() {
   const models = useModelRows();
   if (settings.isPending || models.isPending) return <Skeleton className="h-24 w-full" />;
   if (settings.isError) return <p className="text-destructive text-sm">{settings.error.message}</p>;
-  return <SettingsForm key={JSON.stringify(settings.data)} initial={agentSettingsForm(settings.data)} commandShell={settings.data.commandShell} models={models.data ?? []} />;
+  return <SettingsForm key={JSON.stringify(settings.data)} initial={agentSettingsForm(settings.data)} commandShell={settings.data.commandShell} extraPath={settings.data.extraPath} defaultExtraPath={settings.data.defaultExtraPath} models={models.data ?? []} />;
 }
 
-function SettingsForm({ initial, commandShell: initialShell, models }: { initial: AgentSettingsForm; commandShell: "auto" | "bash" | "zsh"; models: ReturnType<typeof useModelRows>["data"] & object }) {
+function SettingsForm({ initial, commandShell: initialShell, extraPath: initialExtraPath, defaultExtraPath, models }: { initial: AgentSettingsForm; commandShell: "auto" | "bash" | "zsh"; extraPath: string; defaultExtraPath: string; models: ReturnType<typeof useModelRows>["data"] & object }) {
   const actions = useAgentSettingsActions();
   const [form, setForm] = useState(initial);
   const [commandShell, setCommandShell] = useState(initialShell);
-  const save = () => actions.save.mutateAsync({ ...agentSettingsInput(form), commandShell }).then(() => toast.success(s.saved), fail);
+  const [extraPath, setExtraPath] = useState(initialExtraPath);
+  const save = () => actions.save.mutateAsync({ ...agentSettingsInput(form), commandShell, extraPath }).then(() => toast.success(s.saved), fail);
   return (
     <section className="space-y-4 rounded-lg border p-4" data-testid="agent-settings">
       <AgentSettingsFields idPrefix="ak" value={form} onChange={setForm} models={models} />
@@ -148,6 +149,23 @@ function SettingsForm({ initial, commandShell: initialShell, models }: { initial
           </SelectContent>
         </Select>
         <span className="text-muted-foreground text-xs">{s.commandShellHint}</span>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="ak-extra-path">{s.extraPath}</Label>
+          <Button size="sm" variant="outline" onClick={() => setExtraPath(defaultExtraPath)}>
+            {s.extraPathReset}
+          </Button>
+        </div>
+        <textarea
+          id="ak-extra-path"
+          aria-label={s.extraPath}
+          value={extraPath}
+          onChange={(e) => setExtraPath(e.target.value)}
+          rows={3}
+          className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border px-3 py-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        />
+        <span className="text-muted-foreground text-xs">{s.extraPathHint}</span>
       </div>
       <Button size="sm" onClick={save} disabled={actions.save.isPending}>{s.save}</Button>
     </section>
