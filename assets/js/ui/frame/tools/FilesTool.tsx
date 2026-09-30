@@ -1,12 +1,12 @@
 // IDEA's / VS Code's project tree: folders first, children loaded when a
 // folder opens, git status coloured on files and rolled up onto their
-// folders, a row menu for new / rename / delete, and a filter over the project's
-// fuzzy file index. A file opens as a tab in the workbench; on a phone the
-// tree is a sheet, so the tap also closes it.
+// folders, upload/download and row actions for new / rename / delete, and a
+// filter over the project's fuzzy file index. On a phone the tree is a sheet,
+// so opening a file also closes it.
 import { useIntent } from "@/core/keys/intents";
 import { whenThere } from "@/ui/keys/whenThere";
-import { ChevronRight, File, FilePlus2, Folder, FolderOpen, FolderPlus, ListCollapse, MoreHorizontal, RefreshCw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ChevronRight, Download, File, FilePlus2, Folder, FolderOpen, FolderPlus, ListCollapse, MoreHorizontal, RefreshCw, Upload } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFrame } from "@/core/frame";
@@ -15,7 +15,7 @@ import { useWorkbench } from "@/core/workbench";
 import { searchFiles } from "@/core/api";
 import { unwrap } from "@/core/projects";
 import { useQuery } from "@tanstack/react-query";
-import { useCreateEntry, useDeleteEntry, useFiles, useGitChanges, useIgnored, useRenameEntry, useWatchStatus, wsKeys, type FileEntry } from "@/core/workspace";
+import { useCreateEntry, useDeleteEntry, useFiles, useGitChanges, useIgnored, useRenameEntry, useUploadFile, useWatchStatus, wsKeys, type FileEntry } from "@/core/workspace";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/ui/components/ui/alert-dialog";
 import { Button } from "@/ui/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/ui/components/ui/dropdown-menu";
@@ -64,6 +64,29 @@ export function FilesTool({ ctx }: { ctx: ProjectContext }) {
   const [editing, setEditing] = useState<Editing>(null);
   const [deleting, setDeleting] = useState<FileEntry | null>(null);
   const [version, setVersion] = useState(0);
+  const upload = useUploadFile(projectId);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const uploadDirectory = useRef("");
+
+  const chooseFiles = (directory: string) => {
+    uploadDirectory.current = directory;
+    fileInput.current?.click();
+  };
+
+  const uploadSelected = async (files: FileList | null) => {
+    if (!files?.length) return;
+    let uploaded = 0;
+    for (const file of Array.from(files)) {
+      try {
+        await upload.mutateAsync({ directory: uploadDirectory.current, file });
+        uploaded++;
+      } catch (error) {
+        toast.error(`${file.name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (uploaded) toast.success(t.uploadedFiles(uploaded));
+    if (fileInput.current) fileInput.current.value = "";
+  };
 
   // SPC f l: the file in the tree — its folders opened, it scrolled to and focused
   useIntent("files.reveal", (payload) => {
@@ -94,6 +117,9 @@ export function FilesTool({ ctx }: { ctx: ProjectContext }) {
   return (
     <div className="flex flex-col gap-2" data-testid="files-tool">
       <div className="flex items-center gap-1">
+        <Button variant="ghost" size="icon" className="size-8" aria-label={t.uploadFiles} title={t.uploadFiles} onClick={() => chooseFiles("")} disabled={upload.isPending}>
+          <Upload />
+        </Button>
         <Button variant="ghost" size="icon" className="size-8" aria-label={t.newFile} title={t.newFile} onClick={() => setEditing({ kind: "new-file", parent: "" })}>
           <FilePlus2 />
         </Button>
@@ -118,6 +144,14 @@ export function FilesTool({ ctx }: { ctx: ProjectContext }) {
           <RefreshCw />
         </Button>
       </div>
+      <input
+        ref={fileInput}
+        type="file"
+        multiple
+        className="hidden"
+        aria-label={t.uploadFiles}
+        onChange={(event) => void uploadSelected(event.currentTarget.files)}
+      />
       {watch && (!watch.watching || watch.error) ? (
         <p className="text-muted-foreground rounded-md border border-dashed px-2 py-1.5 text-xs" data-testid="watch-hint" title={watch.error ?? undefined}>
           {watch.watching ? t.watchPartial : t.watchOff}
@@ -129,7 +163,7 @@ export function FilesTool({ ctx }: { ctx: ProjectContext }) {
       ) : (
         <div role="tree" aria-label={t.tools["files"]} className="text-sm">
           {editing && editing.kind !== "rename" && editing.parent === "" ? <NameRow depth={0} projectId={projectId} editing={editing} onDone={() => setEditing(null)} /> : null}
-          <Level key={version} projectId={projectId} path="" depth={0} git={git} ignored={ignored} expanded={expanded} onToggle={toggle} editing={editing} setEditing={setEditing} onDelete={setDeleting} />
+          <Level key={version} projectId={projectId} path="" depth={0} git={git} ignored={ignored} expanded={expanded} onToggle={toggle} editing={editing} setEditing={setEditing} onDelete={setDeleting} onUpload={chooseFiles} />
         </div>
       )}
       <DeleteDialog projectId={projectId} entry={deleting} onClose={() => setDeleting(null)} />
@@ -185,8 +219,9 @@ function Level(props: {
   editing: Editing;
   setEditing: (e: Editing) => void;
   onDelete: (entry: FileEntry) => void;
+  onUpload: (directory: string) => void;
 }) {
-  const { projectId, path, depth, git, ignored, expanded, onToggle, editing, setEditing, onDelete } = props;
+  const { projectId, path, depth, git, ignored, expanded, onToggle, editing, setEditing, onDelete, onUpload } = props;
   const files = useFiles(projectId, path);
   if (files.isPending) return <Skeleton className="my-1 ml-4 h-5 w-1/2" />;
   if (files.isError) return <p className="text-destructive px-2 py-1 text-xs">{t.filesLoadFailed(files.error.message)}</p>;
@@ -201,7 +236,7 @@ function Level(props: {
             {editing?.kind === "rename" && editing.entry.path === entry.path ? (
               <NameRow depth={depth} projectId={projectId} editing={editing} onDone={() => setEditing(null)} />
             ) : (
-              <Row entry={entry} depth={depth} open={open} status={statusOf(git, entry)} ignored={ignoredEntry(ignored, entry)} projectId={projectId} onToggle={onToggle} setEditing={setEditing} onDelete={onDelete} />
+              <Row entry={entry} depth={depth} open={open} status={statusOf(git, entry)} ignored={ignoredEntry(ignored, entry)} projectId={projectId} onToggle={onToggle} setEditing={setEditing} onDelete={onDelete} onUpload={onUpload} />
             )}
             {open ? (
               <>
@@ -216,7 +251,7 @@ function Level(props: {
   );
 }
 
-function Row({ entry, depth, open, status, ignored, projectId, onToggle, setEditing, onDelete }: { entry: FileEntry; depth: number; open: boolean; status: string | undefined; ignored: boolean; projectId: string; onToggle: (p: string) => void; setEditing: (e: Editing) => void; onDelete: (e: FileEntry) => void }) {
+function Row({ entry, depth, open, status, ignored, projectId, onToggle, setEditing, onDelete, onUpload }: { entry: FileEntry; depth: number; open: boolean; status: string | undefined; ignored: boolean; projectId: string; onToggle: (p: string) => void; setEditing: (e: Editing) => void; onDelete: (e: FileEntry) => void; onUpload: (directory: string) => void }) {
   const workbench = useWorkbench(projectId);
   const frame = useFrame();
   const viewport = useViewport();
@@ -242,9 +277,18 @@ function Row({ entry, depth, open, status, ignored, projectId, onToggle, setEdit
         <DropdownMenuContent align="end">
           {entry.kind === "dir" ? (
             <>
+              <DropdownMenuItem onSelect={() => onUpload(entry.path)}>{t.uploadFiles}</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => { onToggle(entry.path); if (!open) onToggle(entry.path); setEditing({ kind: "new-file", parent: entry.path }); }}>{t.newFile}</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => { if (!open) onToggle(entry.path); setEditing({ kind: "new-folder", parent: entry.path }); }}>{t.newFolder}</DropdownMenuItem>
             </>
+          ) : null}
+          {entry.kind === "file" ? (
+            <DropdownMenuItem asChild>
+              <a href={fileDownloadUrl(projectId, entry.path)} download={entry.name}>
+                <Download className="size-4" aria-hidden="true" />
+                {t.downloadFile}
+              </a>
+            </DropdownMenuItem>
           ) : null}
           <DropdownMenuItem onSelect={() => setEditing({ kind: "rename", entry })}>{t.renameEntry}</DropdownMenuItem>
           <DropdownMenuItem className="text-destructive" onSelect={() => onDelete(entry)}>{t.deleteEntry}</DropdownMenuItem>
@@ -252,6 +296,11 @@ function Row({ entry, depth, open, status, ignored, projectId, onToggle, setEdit
       </DropdownMenu>
     </div>
   );
+}
+
+function fileDownloadUrl(projectId: string, path: string): string {
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return `/files/${encodeURIComponent(projectId)}/${encoded}`;
 }
 
 /** The inline name field for a new entry or a rename; Enter confirms, Escape cancels. */

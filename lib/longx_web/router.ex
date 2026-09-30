@@ -54,6 +54,8 @@ defmodule LongxWeb.Router do
 
     # the composer's file attachments (multipart; CSRF like the GraphQL calls)
     post "/attachments/:project_id", AttachmentController, :create
+    # files dropped into a project's working tree from the Files tool
+    post "/uploads/:project_id", WorkspaceUploadController, :create
   end
 
   # a container's healthcheck, a proxy's probe: plain text, no session

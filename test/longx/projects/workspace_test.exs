@@ -105,4 +105,21 @@ defmodule Longx.Projects.WorkspaceTest do
     assert {:error, :outside_root} = Workspace.delete(root, "")
     assert {:error, :outside_root} = Workspace.delete(root, ".git")
   end
+
+  test "upload/3 copies binary files into an existing directory without replacing entries", %{
+    root: root
+  } do
+    source = Path.join(root, "upload.tmp")
+    bytes = <<0, 1, 2, 255, 128>>
+    File.write!(source, bytes)
+
+    assert {:ok, %{path: "lib/app/photo.png", kind: :file, size: 5}} =
+             Workspace.upload(root, "lib/app/photo.png", source)
+
+    assert File.read!(Path.join(root, "lib/app/photo.png")) == bytes
+    assert {:error, :exists} = Workspace.upload(root, "lib/app/photo.png", source)
+    assert {:error, :not_found} = Workspace.upload(root, "missing/photo.png", source)
+    assert {:error, :outside_root} = Workspace.upload(root, "../photo.png", source)
+    assert {:error, :outside_root} = Workspace.upload(root, ".git/config", source)
+  end
 end

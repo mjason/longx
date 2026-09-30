@@ -1,6 +1,6 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
 import { _resetWorkbenchForTests } from "@/core/workbench";
@@ -30,6 +30,8 @@ async function openFiles(width = 1280) {
 }
 
 describe("FilesTool", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   beforeEach(() => {
     localStorage.clear();
     _resetFrameStoreForTests();
@@ -177,6 +179,35 @@ describe("FilesTool", () => {
     const dialog = await screen.findByRole("alertdialog");
     await user.click(within(dialog).getByRole("button", { name: "删除" }));
     await waitFor(() => expect(deleteEntry).toHaveBeenCalledWith(expect.objectContaining({ input: { projectId: "id-1", path: "README.md" } })));
+  });
+
+  test("uploads multiple files into the project and offers direct downloads from file actions", async () => {
+    const { user, panel } = await openFiles();
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      path: "icon.png", name: "icon.png", kind: "file", size: 3,
+    }), { status: 201, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetch);
+    const input = panel.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+    const file = new File([new Uint8Array([0, 1, 255])], "icon.png", { type: "image/png" });
+    fireEvent.change(input!, { target: { files: [file] } });
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/uploads/id-1", expect.any(Object)));
+
+    const body = fetch.mock.calls[0]![1]!.body as FormData;
+    expect(body.get("path")).toBe("");
+    expect((body.get("file") as File).name).toBe("icon.png");
+
+    await user.click(within(panel).getByRole("button", { name: "lib 的操作" }));
+    await user.click(await screen.findByRole("menuitem", { name: "上传文件" }));
+    const nestedFile = new File(["nested"], "nested.bin");
+    fireEvent.change(input!, { target: { files: [nestedFile] } });
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect((fetch.mock.calls[1]![1]!.body as FormData).get("path")).toBe("lib");
+
+    await user.click(within(panel).getByRole("button", { name: "README.md 的操作" }));
+    const download = await screen.findByRole("menuitem", { name: "下载" });
+    expect(download).toHaveAttribute("href", "/files/id-1/README.md");
+    expect(download).toHaveAttribute("download", "README.md");
   });
 
   test("the filter finds files through the server's fuzzy index and opens one", async () => {

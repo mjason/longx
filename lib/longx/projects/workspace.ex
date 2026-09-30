@@ -142,6 +142,26 @@ defmodule Longx.Projects.Workspace do
     end
   end
 
+  @doc "Copies an uploaded file into an existing project directory without replacing an entry."
+  @spec upload(Path.t(), String.t(), Path.t()) :: {:ok, entry} | {:error, error}
+  def upload(root, rel, source) do
+    if git_path?(rel) do
+      {:error, :outside_root}
+    else
+      with {:ok, full} <- resolve(root, rel),
+           :ok <- if(File.dir?(Path.dirname(full)), do: :ok, else: {:error, :not_found}),
+           :ok <- absent(full),
+           :ok <- File.cp(source, full) do
+        {:ok, entry(root, Path.dirname(full), Path.basename(full))}
+      end
+    end
+  end
+
+  defp git_path?(rel) do
+    expanded = Path.expand(rel)
+    expanded == ".git" or String.starts_with?(expanded, ".git/")
+  end
+
   defp touch(full) do
     with :ok <- File.mkdir_p(Path.dirname(full)), do: File.write(full, "")
   end

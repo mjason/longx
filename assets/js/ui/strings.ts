@@ -249,6 +249,9 @@ export const t = {
   // files tool
   newFile: "新建文件",
   newFolder: "新建文件夹",
+  uploadFiles: "上传文件",
+  downloadFile: "下载",
+  uploadedFiles: (count: number) => `已上传 ${count} 个文件`,
   refresh: "刷新",
   collapseAll: "全部折叠",
   renameEntry: "重命名",

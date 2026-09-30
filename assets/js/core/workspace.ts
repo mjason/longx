@@ -30,11 +30,13 @@ import {
   renameEntry,
   writeFile,
 } from "@/core/api";
+import { csrfToken } from "@/core/gql";
 import type { WatchStatus } from "./projectChannel";
 import { queryKeys, unwrap } from "./projects";
 
 export type FileEntry = { name: string; path: string; kind: "file" | "dir"; size: number };
 export type FileContent = { path: string; content: string | null; size: number; binary: boolean; truncated: boolean };
+export type UploadedFile = Pick<FileEntry, "name" | "path" | "kind" | "size">;
 export type Change = { path: string; status: string };
 export type GitChanges = {
   repository: boolean;
@@ -110,6 +112,25 @@ export function useFileContent(projectId: string, path: string | null) {
   });
 }
 
+/** Uploads raw bytes into an existing project directory, never into chat attachments. */
+export async function uploadWorkspaceFile(projectId: string, directory: string, file: File): Promise<UploadedFile> {
+  const body = new FormData();
+  body.append("path", directory);
+  body.append("file", file, file.name);
+  const token = csrfToken();
+  const response = await fetch(`/uploads/${encodeURIComponent(projectId)}`, {
+    method: "POST",
+    body,
+    headers: token ? { "X-CSRF-Token": token } : {},
+    credentials: "same-origin",
+  });
+  const result = await response.json().catch(() => ({})) as Partial<UploadedFile> & { error?: string };
+  if (!response.ok || typeof result.path !== "string" || typeof result.name !== "string") {
+    throw new Error(result.error ?? `上传失败（${response.status}）`);
+  }
+  return result as UploadedFile;
+}
+
 /** the tree, open files and git status are stale (the server reported a change under the root) */
 export function invalidateFiles(client: QueryClient, projectId: string) {
   void client.invalidateQueries({ queryKey: wsKeys.filesOf(projectId) });
@@ -159,6 +180,15 @@ export function useDeleteEntry(projectId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (path: string) => unwrap(await deleteEntry({ input: { projectId, path } })),
+    onSuccess: () => invalidateFiles(client, projectId),
+  });
+}
+
+export function useUploadFile(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ directory, file }: { directory: string; file: File }) =>
+      uploadWorkspaceFile(projectId, directory, file),
     onSuccess: () => invalidateFiles(client, projectId),
   });
 }
