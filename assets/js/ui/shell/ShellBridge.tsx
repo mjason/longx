@@ -15,7 +15,7 @@ export function ShellBridge() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { resolved } = useTheme();
+  const { preference } = useTheme();
 
   useEffect(
     () =>
@@ -32,7 +32,15 @@ export function ShellBridge() {
 
   // Navigation is only a refresh point: the page reports its current palette;
   // the shell never infers colors from a URL or reads the page's storage.
-  useEffect(() => setNativeChrome(resolved), [location.pathname, resolved]);
+  useEffect(() => setNativeChrome(preference), [location.pathname, preference]);
+
+  useEffect(() => {
+    if (preference !== "system" || typeof window.matchMedia !== "function") return;
+    const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const refreshChrome = () => setNativeChrome("system");
+    colorScheme.addEventListener("change", refreshChrome);
+    return () => colorScheme.removeEventListener("change", refreshChrome);
+  }, [preference]);
 
   return null;
 }

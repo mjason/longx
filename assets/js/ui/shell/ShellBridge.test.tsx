@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt } from "@/ui/test-utils";
 import { setTheme } from "@/core/theme";
@@ -20,6 +20,7 @@ describe("ShellBridge", () => {
     document.documentElement.style.setProperty("--sidebar", "#15171c");
   });
   afterEach(() => {
+    vi.restoreAllMocks();
     delete window.LongxAndroid;
     delete window.LongxShell;
     delete (window as unknown as { longxNative?: unknown }).longxNative;
@@ -41,5 +42,36 @@ describe("ShellBridge", () => {
     setTheme("light");
     document.documentElement.style.setProperty("--sidebar", "#f3f4f7");
     await waitFor(() => expect(setChrome).toHaveBeenLastCalledWith({ background: "#f3f4f7", theme: "light" }));
+
+    setTheme("system");
+    document.documentElement.style.setProperty("--sidebar", "#15171c");
+    await waitFor(() => expect(setChrome).toHaveBeenLastCalledWith({ background: "#15171c", theme: "system" }));
+  });
+
+  test("system appearance changes refresh the page background sent to the native shell", async () => {
+    const listeners: (() => void)[] = [];
+    let systemDark = false;
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      () =>
+        ({
+          matches: systemDark,
+          media: "(prefers-color-scheme: dark)",
+          onchange: null,
+          addEventListener: (_type: string, listener: EventListener) => listeners.push(listener as () => void),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+    localStorage.setItem("longx:theme", "system");
+    document.documentElement.style.setProperty("--sidebar", "#f3f4f7");
+    renderAt("/");
+    await waitFor(() => expect(setChrome).toHaveBeenLastCalledWith({ background: "#f3f4f7", theme: "system" }));
+
+    systemDark = true;
+    document.documentElement.style.setProperty("--sidebar", "#15171c");
+    act(() => listeners.forEach((listener) => listener()));
+    await waitFor(() => expect(setChrome).toHaveBeenLastCalledWith({ background: "#15171c", theme: "system" }));
   });
 });

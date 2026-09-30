@@ -1,3 +1,5 @@
+import type { ThemePreference } from "@/core/theme";
+
 // The bridge to a native shell around the SPA — the Android app (a WebView
 // that injects `LongxAndroid.post(json)`), later iOS (`webkit.messageHandlers
 // .longx`). Everything is asynchronous JSON in both directions, the smallest
@@ -11,7 +13,7 @@
 
 export type ShellPlatform = "android" | "ios";
 
-export type ShellChrome = { background: string; theme: "dark" | "light" };
+export type ShellChrome = { background: string; theme: ThemePreference };
 export type LongxNativeApi = { setChrome: (chrome: ShellChrome) => void };
 
 /** A native single-choice list: sections of options, one selected; the answer is `picked(id, optionId | null)`. */
@@ -69,7 +71,7 @@ export function shellPost(message: ShellMessage): void {
 }
 
 /** The page owns the palette; the native shell only paints the values it is given. */
-export function setNativeChrome(theme: "dark" | "light"): void {
+export function setNativeChrome(theme: ThemePreference): void {
   if (!window.longxNative?.setChrome) return;
   const root = document.documentElement;
   const styles = getComputedStyle(root);
