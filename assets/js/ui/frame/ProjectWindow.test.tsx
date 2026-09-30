@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
@@ -269,6 +269,18 @@ describe("ProjectWindow", () => {
     } finally {
       vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
     }
+  });
+
+  test("right-clicking a workbench tab opens its context actions", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    const { router } = renderAt("/p/app-1/t/t1");
+    await screen.findByTestId("tool-rail");
+    await user.click(screen.getByRole("button", { name: "项目设置" }));
+    const settingsTab = await screen.findByRole("tab", { name: "项目设置" });
+    fireEvent.contextMenu(settingsTab, { clientX: 40, clientY: 40 });
+    await user.click(await screen.findByRole("menuitem", { name: "关闭" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t1"));
   });
 
   test("the status bar keeps API copy at the bottom-right, without a redundant chat-history button", async () => {

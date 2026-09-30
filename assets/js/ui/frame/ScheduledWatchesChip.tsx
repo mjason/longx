@@ -5,6 +5,7 @@ import { useFileContent } from "@/core/workspace";
 import { useWatches, type Watch } from "@/core/watches";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/components/ui/popover";
 import { t } from "@/ui/strings";
+import { shellCanRenderSurface, shellSurface } from "@/ui/shell/longxShell";
 
 function scriptPath(path: string, rootPath: string): string | null {
   const prefix = rootPath.endsWith("/") ? rootPath : `${rootPath}/`;
@@ -60,6 +61,15 @@ export function ScheduledWatchesChip({
     .filter((watch) => watch.enabled && (watch.kind === "cron" || watch.kind === "once"))
     .sort((left, right) => (left.nextDueAt ?? "").localeCompare(right.nextDueAt ?? ""));
   if (scheduled.length === 0) return null;
+  if (shellCanRenderSurface()) {
+    return (
+      <button type="button" className={`${className} text-primary cursor-pointer hover:underline`} title={t.watches.title} data-testid="scheduled-watches-chip"
+        onClick={() => void shellSurface({ surface: "watches", title: t.watches.title, placement: "bottom", data: { projectId, slug, rootPath, watches: scheduled } })}>
+        <CalendarClock className="size-3" aria-hidden="true" />
+        {t.watches.scheduledChip(scheduled.length)}
+      </button>
+    );
+  }
 
   return (
     <Popover>

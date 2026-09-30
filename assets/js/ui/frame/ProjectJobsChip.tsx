@@ -4,6 +4,7 @@ import { relativeTime } from "@/core/format";
 import { useProjectJobs, type ProjectJob } from "@/core/projects";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/components/ui/popover";
 import { t } from "@/ui/strings";
+import { shellCanRenderSurface, shellSurface } from "@/ui/shell/longxShell";
 
 function JobRow({ job, slug }: { job: ProjectJob; slug: string }) {
   return (
@@ -31,6 +32,15 @@ export function ProjectJobsChip({ projectId, slug, className = "" }: { projectId
   const query = useProjectJobs(projectId);
   const running = (query.data ?? []).filter((job) => job.status === "running");
   if (running.length === 0) return null;
+  if (shellCanRenderSurface()) {
+    return (
+      <button type="button" className={`${className} text-primary cursor-pointer hover:underline`} title={t.projectJobs.title} data-testid="project-jobs-chip"
+        onClick={() => void shellSurface({ surface: "tasks", title: t.projectJobs.title, placement: "bottom", data: { projectId, slug, jobs: running } })}>
+        <span className="bg-primary size-2 shrink-0 animate-pulse rounded-full" aria-hidden="true" />
+        {t.projectJobs.chip(running.length)}
+      </button>
+    );
+  }
 
   return (
     <Popover>
