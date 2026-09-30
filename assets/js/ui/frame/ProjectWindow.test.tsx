@@ -280,6 +280,16 @@ describe("ProjectWindow", () => {
     expect(apiButton.parentElement).toHaveClass("ml-auto");
   });
 
+  test("chat content is constrained so its thread viewport, not the page wrapper, owns scrolling", async () => {
+    setViewport(1280);
+    renderAt("/p/app-1/t/t1");
+    const content = await screen.findByTestId("project-content");
+    expect(content).toHaveClass("flex", "flex-col", "overflow-hidden");
+    expect(content).not.toHaveClass("overflow-y-auto");
+    const viewport = content.querySelector<HTMLElement>('[data-slot="aui_thread-viewport"]');
+    expect(viewport).toHaveClass("overflow-y-scroll");
+  });
+
   test("missing dependencies are an amber count in the status bar, linking to the dependencies page", async () => {
     setViewport(1280);
     vi.mocked(dependencies).mockResolvedValue(ok(dependencyReport({ missing: 3, installCommand: "sudo apt install fzf bat jq" })) as never);

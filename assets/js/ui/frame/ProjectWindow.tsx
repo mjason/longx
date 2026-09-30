@@ -125,7 +125,10 @@ export function ProjectWindow() {
         ) : null}
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <Workbench projectId={project.data.id} slug={slug} threadId={threadId}>
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div
+              data-testid="project-content"
+              className={`min-h-0 flex-1 ${settings ? "overflow-y-auto" : "flex flex-col overflow-hidden"}`}
+            >
               <Outlet context={ctx} />
             </div>
           </Workbench>
