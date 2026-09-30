@@ -6,28 +6,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/ui/components/ui/input";
 import { Label } from "@/ui/components/ui/label";
 import { t } from "@/ui/strings";
-import { shellCanRenderSurface, shellSurface } from "@/ui/shell/longxShell";
 
 export function PromptDialog() {
   const request = usePrompt();
   const [value, setValue] = useState("");
   useEffect(() => setValue(request?.value ?? ""), [request]);
-  useEffect(() => {
-    if (!request || !shellCanRenderSurface()) return;
-    let live = true;
-    void shellSurface({
-      surface: "prompt",
-      title: request.title,
-      placement: "bottom",
-      data: { label: request.label, value: request.value, submit: request.submit },
-    }).then((result) => {
-      if (!live) return;
-      closePrompt();
-      const submitted = typeof result === "string" ? result : (result as { value?: unknown } | null)?.value;
-      if (typeof submitted === "string" && submitted.trim()) request.onSubmit(submitted.trim());
-    });
-    return () => { live = false; };
-  }, [request]);
   const submit = () => {
     const trimmed = value.trim();
     if (!request || trimmed === "") return;
@@ -35,7 +18,6 @@ export function PromptDialog() {
     closePrompt();
     onSubmit(trimmed);
   };
-  if (request && shellCanRenderSurface()) return null;
   return (
     <Dialog open={request !== null} onOpenChange={(open) => (open ? null : closePrompt())}>
       <DialogContent>

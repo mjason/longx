@@ -16,21 +16,12 @@ export type ShellTheme = { scheme: "dark" | "light"; frame: string; ground: stri
 export type ShellPickOption = { id: string; label: string; detail?: string };
 export type ShellPickSection = { label?: string; options: ShellPickOption[] };
 export type ShellPickRequest = { title: string; sections: ShellPickSection[]; selected: string | null };
-/** A renderer-neutral native surface. `data` is JSON-only; actions return through `surfaceResult`. */
-export type ShellSurfaceRequest = {
-  id: string;
-  surface: "menu" | "picker" | "prompt" | "tasks" | "watches";
-  title: string;
-  placement?: "bottom" | "center" | "anchor";
-  data: Record<string, unknown>;
-};
 
 export type ShellMessage =
   | { type: "ready"; version: number; theme: ShellTheme }
   | { type: "theme"; theme: ShellTheme }
   | { type: "openExternal"; url: string }
-  | ({ type: "pick"; id: string } & ShellPickRequest)
-  | ({ type: "surface" } & ShellSurfaceRequest);
+  | ({ type: "pick"; id: string } & ShellPickRequest);
 
 export type ShellApi = {
   version: number;
@@ -42,10 +33,6 @@ export type ShellApi = {
   resume: () => void;
   /** the answer to a `pick`: the chosen option's id, null when dismissed */
   picked: (id: string, value: string | null) => void;
-  /** Complete a native menu/picker/prompt/popover; value is JSON data owned by that surface. */
-  surfaceResult: (id: string, value: unknown) => void;
-  /** Native host opts in after implementing the `surface` message contract. */
-  setCapabilities: (capabilities: string[]) => void;
 };
 
 type AndroidBridge = { post: (json: string) => void };
@@ -59,7 +46,7 @@ declare global {
   }
 }
 
-export const SHELL_VERSION = 2;
+export const SHELL_VERSION = 1;
 
 export function shellPlatform(): ShellPlatform | null {
   if (typeof window === "undefined") return null;
@@ -102,10 +89,7 @@ export function closeTopLayer(): boolean {
 }
 
 const picks = new Map<string, (value: string | null) => void>();
-const surfaces = new Map<string, (value: unknown) => void>();
 let pickSeq = 0;
-let surfaceSeq = 0;
-let nativeCapabilities = new Set<string>();
 
 /**
  * Asks the shell for a native single-choice list (a bottom sheet on Android)
@@ -127,27 +111,6 @@ function picked(id: string, value: string | null): void {
   resolve(value);
 }
 
-/** Requests a native UI surface; null means no shell is installed or it dismissed it. */
-export function shellSurface(request: Omit<ShellSurfaceRequest, "id">): Promise<unknown | null> {
-  if (!shellCanRenderSurface()) return Promise.resolve(null);
-  const id = `surface-${++surfaceSeq}`;
-  return new Promise((resolve) => {
-    surfaces.set(id, resolve);
-    shellPost({ type: "surface", id, ...request });
-  });
-}
-
-export function shellCanRenderSurface(): boolean {
-  return shellPresent() && nativeCapabilities.has("surfaces");
-}
-
-function surfaceResult(id: string, value: unknown): void {
-  const resolve = surfaces.get(id);
-  if (!resolve) return;
-  surfaces.delete(id);
-  resolve(value);
-}
-
 export type ShellHandlers = {
   navigate: (path: string) => void;
   resume: () => void;
@@ -163,7 +126,6 @@ export type ShellHandlers = {
 export function installShell(handlers: ShellHandlers): () => void {
   const platform = shellPlatform();
   if (!platform) return () => {};
-  nativeCapabilities = new Set();
   const root = document.documentElement;
   root.setAttribute("data-shell", platform);
 
@@ -173,8 +135,6 @@ export function installShell(handlers: ShellHandlers): () => void {
     navigate: handlers.navigate,
     resume: handlers.resume,
     picked,
-    surfaceResult,
-    setCapabilities: (capabilities) => { nativeCapabilities = new Set(capabilities); },
   };
 
   const vv = window.visualViewport;
@@ -202,6 +162,5 @@ export function installShell(handlers: ShellHandlers): () => void {
     root.style.removeProperty("--app-height");
     root.removeAttribute("data-shell");
     delete window.LongxShell;
-    nativeCapabilities = new Set();
   };
 }

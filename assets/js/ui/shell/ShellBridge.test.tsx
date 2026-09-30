@@ -27,17 +27,4 @@ describe("ShellBridge", () => {
     await screen.findByText("设置");
     expect(router.state.location.pathname).toMatch(/^\/settings/);
   });
-
-  test("native surfaces carry JSON data and resolve their asynchronous result", async () => {
-    const { shellSurface } = await import("./longxShell");
-    renderAt("/");
-    await waitFor(() => expect(window.LongxShell).toBeDefined());
-
-    window.LongxShell!.setCapabilities(["surfaces"]);
-    const result = shellSurface({ surface: "menu", title: "Tab", data: { actions: ["close"] } });
-    const message = JSON.parse(post.mock.calls.at(-1)![0] as string);
-    expect(message).toMatchObject({ type: "surface", surface: "menu", title: "Tab", data: { actions: ["close"] } });
-    window.LongxShell!.surfaceResult(message.id, { action: "close" });
-    await expect(result).resolves.toEqual({ action: "close" });
-  });
 });

@@ -5,7 +5,6 @@ import { closePicker, usePicker, type PickerItem } from "@/core/keys/picker";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/ui/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
 import { t } from "@/ui/strings";
-import { shellCanRenderSurface, shellSurface } from "@/ui/shell/longxShell";
 
 export function PickerDialog() {
   const request = usePicker();
@@ -16,25 +15,6 @@ export function PickerDialog() {
   useEffect(() => {
     setQuery("");
     setFound(null);
-  }, [request]);
-
-  useEffect(() => {
-    if (!request || request.search || !shellCanRenderSurface()) return;
-    let live = true;
-    void shellSurface({
-      surface: "picker",
-      title: request.title,
-      placement: "bottom",
-      data: { placeholder: request.placeholder, items: request.items ?? [] },
-    }).then((result) => {
-      if (!live) return;
-      if (result === null) { closePicker(); return; }
-      const id = typeof result === "string" ? result : (result as { id?: unknown })?.id;
-      const item = request.items?.find((candidate) => candidate.id === id);
-      closePicker();
-      if (item) request.onPick(item);
-    });
-    return () => { live = false; };
   }, [request]);
 
   useEffect(() => {
@@ -50,7 +30,6 @@ export function PickerDialog() {
   }, [search, query]);
 
   const items = search ? (found ?? []) : (request?.items ?? []);
-  if (request && !request.search && shellCanRenderSurface()) return null;
   const pick = (item: PickerItem) => {
     const onPick = request?.onPick;
     closePicker();

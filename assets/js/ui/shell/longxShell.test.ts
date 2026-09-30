@@ -31,7 +31,7 @@ describe("LongxShell bridge", () => {
     const off = installShell({ navigate: vi.fn(), resume: vi.fn() });
     expect(shellPresent()).toBe(true);
     expect(document.documentElement.getAttribute("data-shell")).toBe("android");
-    expect(window.LongxShell?.version).toBe(2);
+    expect(window.LongxShell?.version).toBe(1);
     const msg = JSON.parse(post.mock.calls[0]![0] as string);
     expect(msg.type).toBe("ready");
     expect(msg.theme.scheme).toBe("dark");

@@ -18,7 +18,6 @@ import { useChat } from "@/ui/chat/ChatProvider";
 import { AgentTab } from "./AgentTab";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/ui/components/ui/context-menu";
-import { shellCanRenderSurface, shellSurface } from "@/ui/shell/longxShell";
 
 // the code editor and the diff (CodeMirror, ~1 MB of source) load when a file
 // or a diff is first opened, not with every page
@@ -84,25 +83,12 @@ export function Workbench({
           {wb.tabs.map((tab) => {
             const key = tabKey(tab);
             const isActive = key === wb.active;
-            const tabActions = async (point?: { x: number; y: number }) => {
-              const result = await shellSurface({
-                surface: "menu",
-                title: tabLabel(tab),
-                placement: "anchor",
-                data: { point, actions: [{ id: "activate", label: "切换到此标签" }, { id: "close", label: t.closeTab }] },
-              });
-              if (result === null) return;
-              const action = typeof result === "string" ? result : (result as { action?: unknown })?.action;
-              if (action === "activate") select(tab);
-              if (action === "close" && (tab.kind !== "chat" || !!tab.threadId)) close(tab);
-            };
             return (
               <ContextMenu key={key}>
                 <ContextMenuTrigger asChild>
                   <div
                     role="tab"
                     aria-selected={isActive}
-                    onContextMenu={shellCanRenderSurface() ? (event) => { event.preventDefault(); void tabActions({ x: event.clientX, y: event.clientY }); } : undefined}
                     className={`group flex shrink-0 items-center gap-1.5 border-r px-3 text-xs ${isActive ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                   >
                     <button type="button" className="flex h-full items-center gap-1.5" onClick={() => select(tab)}>
