@@ -19,6 +19,7 @@ import { useCreateEntry, useDeleteEntry, useFiles, useGitChanges, useIgnored, us
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/ui/components/ui/alert-dialog";
 import { Button } from "@/ui/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/ui/components/ui/dropdown-menu";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/ui/components/ui/context-menu";
 import { Input } from "@/ui/components/ui/input";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { t } from "@/ui/strings";
@@ -262,39 +263,61 @@ function Row({ entry, depth, open, status, ignored, projectId, onToggle, setEdit
   };
   const Icon = entry.kind === "dir" ? (open ? FolderOpen : Folder) : File;
   return (
-    <div className="group hover:bg-sidebar-accent/60 flex items-center rounded-md" style={{ paddingLeft: depth * 16 }}>
-      <button type="button" role="treeitem" aria-expanded={entry.kind === "dir" ? open : undefined} aria-label={entry.name} data-path={entry.path} data-git={status} data-ignored={ignored || undefined} className={`touch-target flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-1 text-left ${status ? (GIT_COLOR[status] ?? "") : ignored ? "text-muted-foreground/60" : ""}`} onClick={activate}>
-        <ChevronRight className={`text-muted-foreground size-3.5 shrink-0 transition-transform ${entry.kind === "dir" ? (open ? "rotate-90" : "") : "invisible"}`} />
-        <Icon className="text-muted-foreground size-4 shrink-0" />
-        <span className="truncate">{entry.name}</span>
-      </button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button type="button" aria-label={`${entry.name} 的操作`} className="text-muted-foreground hover:text-foreground touch-target flex items-center justify-center rounded p-1 opacity-0 group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100 max-lg:opacity-100">
-            <MoreHorizontal className="size-4" />
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div className="group hover:bg-sidebar-accent/60 flex select-none items-center rounded-md" style={{ paddingLeft: depth * 16 }}>
+          <button type="button" role="treeitem" aria-expanded={entry.kind === "dir" ? open : undefined} aria-label={entry.name} data-path={entry.path} data-git={status} data-ignored={ignored || undefined} className={`touch-target flex min-w-0 flex-1 select-none items-center gap-1.5 py-1 pr-1 text-left ${status ? (GIT_COLOR[status] ?? "") : ignored ? "text-muted-foreground/60" : ""}`} onClick={activate}>
+            <ChevronRight className={`text-muted-foreground size-3.5 shrink-0 transition-transform ${entry.kind === "dir" ? (open ? "rotate-90" : "") : "invisible"}`} />
+            <Icon className="text-muted-foreground size-4 shrink-0" />
+            <span className="truncate">{entry.name}</span>
           </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {entry.kind === "dir" ? (
-            <>
-              <DropdownMenuItem onSelect={() => onUpload(entry.path)}>{t.uploadFiles}</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => { onToggle(entry.path); if (!open) onToggle(entry.path); setEditing({ kind: "new-file", parent: entry.path }); }}>{t.newFile}</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => { if (!open) onToggle(entry.path); setEditing({ kind: "new-folder", parent: entry.path }); }}>{t.newFolder}</DropdownMenuItem>
-            </>
-          ) : null}
-          {entry.kind === "file" ? (
-            <DropdownMenuItem asChild>
-              <a href={fileDownloadUrl(projectId, entry.path)} download={entry.name}>
-                <Download className="size-4" aria-hidden="true" />
-                {t.downloadFile}
-              </a>
-            </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem onSelect={() => setEditing({ kind: "rename", entry })}>{t.renameEntry}</DropdownMenuItem>
-          <DropdownMenuItem className="text-destructive" onSelect={() => onDelete(entry)}>{t.deleteEntry}</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" aria-label={`${entry.name} 的操作`} className="text-muted-foreground hover:text-foreground touch-target flex items-center justify-center rounded p-1 opacity-0 group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100 max-lg:opacity-100">
+                <MoreHorizontal className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {entry.kind === "dir" ? (
+                <>
+                  <DropdownMenuItem onSelect={() => onUpload(entry.path)}>{t.uploadFiles}</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => { if (!open) onToggle(entry.path); setEditing({ kind: "new-file", parent: entry.path }); }}>{t.newFile}</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => { if (!open) onToggle(entry.path); setEditing({ kind: "new-folder", parent: entry.path }); }}>{t.newFolder}</DropdownMenuItem>
+                </>
+              ) : null}
+              {entry.kind === "file" ? (
+                <DropdownMenuItem asChild>
+                  <a href={fileDownloadUrl(projectId, entry.path)} download={entry.name}>
+                    <Download className="size-4" aria-hidden="true" />
+                    {t.downloadFile}
+                  </a>
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem onSelect={() => setEditing({ kind: "rename", entry })}>{t.renameEntry}</DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive" onSelect={() => onDelete(entry)}>{t.deleteEntry}</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        {entry.kind === "dir" ? (
+          <>
+            <ContextMenuItem onSelect={() => onUpload(entry.path)}>{t.uploadFiles}</ContextMenuItem>
+            <ContextMenuItem onSelect={() => { if (!open) onToggle(entry.path); setEditing({ kind: "new-file", parent: entry.path }); }}>{t.newFile}</ContextMenuItem>
+            <ContextMenuItem onSelect={() => { if (!open) onToggle(entry.path); setEditing({ kind: "new-folder", parent: entry.path }); }}>{t.newFolder}</ContextMenuItem>
+          </>
+        ) : (
+          <ContextMenuItem asChild>
+            <a href={fileDownloadUrl(projectId, entry.path)} download={entry.name}>
+              <Download className="size-4" aria-hidden="true" />
+              {t.downloadFile}
+            </a>
+          </ContextMenuItem>
+        )}
+        <ContextMenuItem onSelect={() => setEditing({ kind: "rename", entry })}>{t.renameEntry}</ContextMenuItem>
+        <ContextMenuItem variant="destructive" onSelect={() => onDelete(entry)}>{t.deleteEntry}</ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

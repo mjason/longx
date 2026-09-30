@@ -210,6 +210,21 @@ describe("FilesTool", () => {
     expect(download).toHaveAttribute("download", "README.md");
   });
 
+  test("right-clicking a file row opens its actions at the pointer without selecting its name", async () => {
+    const { panel } = await openFiles();
+    const row = within(panel).getByRole("treeitem", { name: "README.md" });
+    fireEvent.contextMenu(row, { clientX: 127, clientY: 333 });
+    const menu = await screen.findByRole("menu");
+    const positioner = menu.closest<HTMLElement>("[data-radix-popper-content-wrapper]");
+    expect(positioner).not.toBeNull();
+    const coordinates = positioner!.style.transform.match(/translate\(([-\d.]+)px, ([-\d.]+)px\)/);
+    expect(coordinates).not.toBeNull();
+    expect(Math.abs(Number(coordinates![1]) - 127)).toBeLessThanOrEqual(2);
+    expect(Number(coordinates![2])).toBe(333);
+    expect(row).toHaveClass("select-none");
+    expect(await screen.findByRole("menuitem", { name: "下载" })).toBeInTheDocument();
+  });
+
   test("the filter finds files through the server's fuzzy index and opens one", async () => {
     const { searchFiles } = await import("@/core/api");
     vi.mocked(searchFiles).mockResolvedValue(ok([{ path: "lib/deep/gateway.ex", fileName: "gateway.ex", matchType: "file", root: "/", score: 1, indices: null }]) as never);

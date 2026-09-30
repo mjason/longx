@@ -278,7 +278,14 @@ describe("ProjectWindow", () => {
     await screen.findByTestId("tool-rail");
     await user.click(screen.getByRole("button", { name: "项目设置" }));
     const settingsTab = await screen.findByRole("tab", { name: "项目设置" });
-    fireEvent.contextMenu(settingsTab, { clientX: 40, clientY: 40 });
+    fireEvent.contextMenu(settingsTab, { clientX: 83, clientY: 157 });
+    const menu = await screen.findByRole("menu");
+    const positioner = menu.closest<HTMLElement>("[data-radix-popper-content-wrapper]");
+    expect(positioner).not.toBeNull();
+    const coordinates = positioner!.style.transform.match(/translate\(([-\d.]+)px, ([-\d.]+)px\)/);
+    expect(coordinates).not.toBeNull();
+    expect(Math.abs(Number(coordinates![1]) - 83)).toBeLessThanOrEqual(2);
+    expect(Number(coordinates![2])).toBe(157);
     await user.click(await screen.findByRole("menuitem", { name: "关闭" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t1"));
   });
