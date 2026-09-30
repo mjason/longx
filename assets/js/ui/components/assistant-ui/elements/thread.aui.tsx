@@ -209,15 +209,25 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
 
   useEffect(() => {
     if (didInitialScroll.current || loading || messageCount === 0) return;
-    didInitialScroll.current = true;
+    let settled = false;
     let frames = 0;
     let frame = 0;
     const settleAtBottom = () => {
       scrollToBottom(viewportRef.current);
-      if (++frames < 6) frame = requestAnimationFrame(settleAtBottom);
+      if (++frames < 12) {
+        frame = requestAnimationFrame(settleAtBottom);
+      } else {
+        settled = true;
+        didInitialScroll.current = true;
+      }
     };
     frame = requestAnimationFrame(settleAtBottom);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      // In development StrictMode immediately cleans up and re-runs effects.
+      // A cancelled first pass must not make the second pass think we scrolled.
+      if (!settled) didInitialScroll.current = false;
+    };
   }, [loading, messageCount]);
 
   return (

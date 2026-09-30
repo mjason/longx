@@ -1,13 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
+import { StrictMode } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { routes } from "./routes";
 
 /** Renders the real route tree at `path` with a fresh query client. */
-export function renderAt(path: string) {
+export function renderAt(path: string, options: { strict?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(routes, { initialEntries: [path] });
-  return { router, ...render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>) };
+  const tree = <QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>;
+  return { router, ...render(options.strict ? <StrictMode>{tree}</StrictMode> : tree) };
 }
 
 /** Phone or desktop viewport for a test. */

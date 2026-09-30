@@ -130,7 +130,7 @@ describe("ThreadPage", () => {
   });
 
   test("opening a conversation scrolls straight to its latest message", async () => {
-    renderAt("/p/app-1/t/t1");
+    renderAt("/p/app-1/t/t1", { strict: true });
     await waitFor(() => expect(document.querySelector('[data-slot="aui_thread-viewport"]')).not.toBeNull());
     const viewport = document.querySelector<HTMLElement>('[data-slot="aui_thread-viewport"]')!;
     Object.defineProperty(viewport, "scrollHeight", { configurable: true, value: 900 });
