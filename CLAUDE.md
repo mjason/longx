@@ -1725,7 +1725,13 @@ on first use.
     `ready`, `theme`, `openExternal`, `pick` (a native single-choice list; the composer's
     model and level picker inside a shell); shell → page `LongxShell.back()`,
     `navigate(path)`, `resume()`. `<html data-shell="android">` while installed;
-    `--app-height` follows `visualViewport.height`.
+    `--app-height` follows `visualViewport.height`. Version 2 adds the opt-in
+    `surfaces` capability for native command menus, pickers, prompts, project
+    jobs and scheduled watches; the page keeps its React fallback unless the
+    shell calls `LongxShell.setCapabilities(["surfaces"])`. The protocol,
+    placement hints, payloads and result formats are documented in
+    `docs/native-shell-surfaces.md`; update that contract alongside any bridge
+    change.
   - **The keys: one table** (`core/keys/`, `ui/keys/`). **`bindings.ts`** is every key the
     page answers to — a chord (`mod+k`; `mod` is ⌘ on a Mac and Ctrl elsewhere, `ctrl` the
     Control key itself), a space-menu sequence (`SPC a s`) or `Escape Escape` — each naming

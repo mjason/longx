@@ -62,9 +62,12 @@ export function ScheduledWatchesChip({
     .sort((left, right) => (left.nextDueAt ?? "").localeCompare(right.nextDueAt ?? ""));
   if (scheduled.length === 0) return null;
   if (shellCanRenderSurface()) {
+    const nativeWatches = scheduled.map(({ id, name, path, kind, cron, at, nextDueAt, runningSince, lastRunAt, lastDurationMs, lastError }) => ({
+      id, name, path, kind, cron, at, nextDueAt, runningSince, lastRunAt, lastDurationMs, lastError,
+    }));
     return (
       <button type="button" className={`${className} text-primary cursor-pointer hover:underline`} title={t.watches.title} data-testid="scheduled-watches-chip"
-        onClick={() => void shellSurface({ surface: "watches", title: t.watches.title, placement: "bottom", data: { projectId, slug, rootPath, watches: scheduled } })}>
+        onClick={() => void shellSurface({ surface: "watches", title: t.watches.title, placement: "bottom", data: { projectId, slug, rootPath, watches: nativeWatches } })}>
         <CalendarClock className="size-3" aria-hidden="true" />
         {t.watches.scheduledChip(scheduled.length)}
       </button>
