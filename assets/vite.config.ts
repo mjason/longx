@@ -36,7 +36,21 @@ export default defineConfig(({ command }) => ({
     rollupOptions: { input: ["js/index.tsx"] },
   },
   resolve: { alias: { "@": path.resolve(__dirname, "js") } },
-  plugins: [zodAnnotationComments(), react(), tailwindcss(), entryBudget(ENTRY_BUDGET), precompress(), serviceWorker("js/sw/sw.ts", "../priv/static/sw.js")],
+  plugins: [
+    zodAnnotationComments(),
+    react({
+      // Must be first in Babel's pipeline so it can analyze original React code.
+      babel: {
+        plugins: [
+          ["babel-plugin-react-compiler", { target: "19", compilationMode: "annotation" }],
+        ],
+      },
+    }),
+    tailwindcss(),
+    entryBudget(ENTRY_BUDGET),
+    precompress(),
+    serviceWorker("js/sw/sw.ts", "../priv/static/sw.js"),
+  ],
   test: {
     environment: "jsdom",
     globals: true,
