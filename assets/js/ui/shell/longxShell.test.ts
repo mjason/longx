@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { closeTopLayer, installShell, shellPick, shellPost, shellPresent } from "./longxShell";
+import { closeTopLayer, installShell, setNativeChrome, shellPick, shellPost, shellPresent } from "./longxShell";
 
-// the Android shell injects `LongxAndroid.post(json)`; iOS will inject
-// `webkit.messageHandlers.longx`; a browser has neither
+// The shell injects `longxNative.setChrome`; Android/iOS may also provide a
+// post bridge for the rest of the shell contract. A browser has neither.
 describe("LongxShell bridge", () => {
   const post = vi.fn();
   beforeEach(() => {
@@ -13,6 +13,7 @@ describe("LongxShell bridge", () => {
   afterEach(() => {
     delete (window as unknown as { LongxAndroid?: unknown }).LongxAndroid;
     delete (window as unknown as { LongxShell?: unknown }).LongxShell;
+    delete window.longxNative;
     document.documentElement.removeAttribute("data-shell");
     document.body.innerHTML = "";
   });
@@ -27,16 +28,28 @@ describe("LongxShell bridge", () => {
     off();
   });
 
-  test("with a shell: LongxShell is installed, the page marked, ready posted with the theme", () => {
+  test("with a shell: LongxShell is installed, the page marked, ready posted", () => {
     const off = installShell({ navigate: vi.fn(), resume: vi.fn() });
     expect(shellPresent()).toBe(true);
     expect(document.documentElement.getAttribute("data-shell")).toBe("android");
     expect(window.LongxShell?.version).toBe(1);
-    const msg = JSON.parse(post.mock.calls[0]![0] as string);
-    expect(msg.type).toBe("ready");
-    expect(msg.theme.scheme).toBe("dark");
+    expect(JSON.parse(post.mock.calls[0]![0] as string)).toEqual({ type: "ready", version: 1 });
     off();
     expect(window.LongxShell).toBeUndefined();
+  });
+
+  test("the native chrome API alone identifies the shell and receives the page palette", () => {
+    delete (window as unknown as { LongxAndroid?: unknown }).LongxAndroid;
+    const setChrome = vi.fn();
+    window.longxNative = { setChrome };
+    document.documentElement.style.setProperty("--sidebar", "#15171c");
+
+    expect(shellPresent()).toBe(true);
+    const off = installShell({ navigate: vi.fn(), resume: vi.fn() });
+    expect(document.documentElement.getAttribute("data-shell")).toBe("android");
+    setNativeChrome("dark");
+    expect(setChrome).toHaveBeenCalledWith({ background: "#15171c", theme: "dark" });
+    off();
   });
 
   test("back() closes the top layer (a dialog, a sheet, a popover) with Escape and says so; nothing open → false", () => {

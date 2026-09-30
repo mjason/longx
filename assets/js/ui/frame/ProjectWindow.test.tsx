@@ -105,6 +105,9 @@ describe("ProjectWindow", () => {
     expect(within(menu).getByRole("menuitem", { name: "归档" })).toBeInTheDocument();
     expect(within(menu).getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/p/app-1/t/t1");
+    const item = row.closest('[data-slot="aui_thread-list-item"]');
+    expect(item).toHaveAttribute("data-state", "open");
+    expect(item).toHaveClass("select-none");
   });
 
   test("the status strip follows the disk: the watcher's git and files events refetch HEAD and the dirty count", async () => {

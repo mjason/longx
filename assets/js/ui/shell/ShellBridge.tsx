@@ -1,17 +1,19 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { reconnectSocket } from "@/core/socket";
 import { useTheme } from "@/core/theme";
-import { installShell, readShellTheme, shellPost, shellPresent } from "./longxShell";
+import { installShell, setNativeChrome } from "./longxShell";
 
 /**
  * The app's half of the native-shell bridge, inside the router: installs
  * `window.LongxShell` (back / navigate / resume) when a shell is present and
- * tells it the colours whenever the theme changes. Renders nothing.
+ * reports the page's chrome palette after navigation or a theme change.
+ * Renders nothing.
  */
 export function ShellBridge() {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { resolved } = useTheme();
 
@@ -28,9 +30,9 @@ export function ShellBridge() {
     [navigate, queryClient],
   );
 
-  useEffect(() => {
-    if (shellPresent()) shellPost({ type: "theme", theme: readShellTheme() });
-  }, [resolved]);
+  // Navigation is only a refresh point: the page reports its current palette;
+  // the shell never infers colors from a URL or reads the page's storage.
+  useEffect(() => setNativeChrome(resolved), [location.pathname, resolved]);
 
   return null;
 }

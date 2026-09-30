@@ -303,7 +303,7 @@ export const ThreadListItem: FC = () => {
           data-slot="aui_thread-list-item"
           // Longx: the list sits on the frame surface, so the open thread is the
           // frame's accent step plus weight — `bg-muted` alone was invisible there
-          className="group hover:bg-sidebar-accent/60 focus-visible:bg-sidebar-accent/60 data-active:bg-primary/12 dark:data-active:bg-primary/22 data-active:font-medium data-active:text-foreground has-focus-visible:bg-sidebar-accent/60 has-data-[state=open]:bg-sidebar-accent/60 text-sidebar-foreground relative flex h-8 items-center rounded-md transition-colors focus-visible:outline-none"
+          className="group hover:bg-sidebar-accent/60 focus-visible:bg-sidebar-accent/60 data-active:bg-primary/12 dark:data-active:bg-primary/22 data-active:font-medium data-active:text-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground has-focus-visible:bg-sidebar-accent/60 text-sidebar-foreground relative flex h-8 select-none items-center rounded-md transition-colors focus-visible:outline-none"
         >
           {isRenaming ? (
             <ThreadListItemRename

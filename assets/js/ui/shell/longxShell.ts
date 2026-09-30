@@ -3,14 +3,16 @@
 // .longx`). Everything is asynchronous JSON in both directions, the smallest
 // contract both platforms can implement:
 //
-//   page → shell   shellPost({type, …})           ready · theme · openExternal · pick
+//   page → shell   window.longxNative.setChrome({background, theme})
+//                  shellPost({type, …})           ready · openExternal · pick
 //   shell → page   window.LongxShell.<fn>(…)      back() · navigate(path) · resume() · picked(id, value)
 //
 // In a plain browser nothing is installed and every call is a no-op.
 
 export type ShellPlatform = "android" | "ios";
 
-export type ShellTheme = { scheme: "dark" | "light"; frame: string; ground: string };
+export type ShellChrome = { background: string; theme: "dark" | "light" };
+export type LongxNativeApi = { setChrome: (chrome: ShellChrome) => void };
 
 /** A native single-choice list: sections of options, one selected; the answer is `picked(id, optionId | null)`. */
 export type ShellPickOption = { id: string; label: string; detail?: string };
@@ -18,8 +20,7 @@ export type ShellPickSection = { label?: string; options: ShellPickOption[] };
 export type ShellPickRequest = { title: string; sections: ShellPickSection[]; selected: string | null };
 
 export type ShellMessage =
-  | { type: "ready"; version: number; theme: ShellTheme }
-  | { type: "theme"; theme: ShellTheme }
+  | { type: "ready"; version: number }
   | { type: "openExternal"; url: string }
   | ({ type: "pick"; id: string } & ShellPickRequest);
 
@@ -43,6 +44,7 @@ declare global {
     LongxAndroid?: AndroidBridge;
     webkit?: IosBridge;
     LongxShell?: ShellApi;
+    longxNative?: LongxNativeApi;
   }
 }
 
@@ -50,6 +52,7 @@ export const SHELL_VERSION = 1;
 
 export function shellPlatform(): ShellPlatform | null {
   if (typeof window === "undefined") return null;
+  if (window.longxNative?.setChrome) return "android";
   if (window.LongxAndroid?.post) return "android";
   if (window.webkit?.messageHandlers?.longx?.postMessage) return "ios";
   return null;
@@ -65,16 +68,15 @@ export function shellPost(message: ShellMessage): void {
   else window.webkit?.messageHandlers?.longx?.postMessage(json);
 }
 
-/** The colours the shell paints its own bars with: our frame and ground tokens. */
-export function readShellTheme(): ShellTheme {
+/** The page owns the palette; the native shell only paints the values it is given. */
+export function setNativeChrome(theme: "dark" | "light"): void {
+  if (!window.longxNative?.setChrome) return;
   const root = document.documentElement;
   const styles = getComputedStyle(root);
-  const scheme = root.getAttribute("data-theme") === "light" ? "light" : "dark";
-  return {
-    scheme,
-    frame: styles.getPropertyValue("--sidebar").trim(),
-    ground: styles.getPropertyValue("--background").trim(),
-  };
+  const background =
+    styles.getPropertyValue("--sidebar").trim() ||
+    styles.getPropertyValue("--background").trim();
+  window.longxNative.setChrome({ background, theme });
 }
 
 // Radix layers (dialogs, sheets, popovers, menus) close on Escape; an open
@@ -154,7 +156,7 @@ export function installShell(handlers: ShellHandlers): () => void {
   };
   document.addEventListener("click", onClick);
 
-  shellPost({ type: "ready", version: SHELL_VERSION, theme: readShellTheme() });
+  shellPost({ type: "ready", version: SHELL_VERSION });
 
   return () => {
     document.removeEventListener("click", onClick);

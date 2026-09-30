@@ -1,5 +1,51 @@
 # Longx
 
+[简体中文](README.md) · [English](README.en.md) · [日本語](README.ja.md)
+
+**把 AI coding agent 放进你的项目里工作。** Longx 是一个本地优先的 agent 工作台：会话、文件、终端和 Git 在同一个界面里；模型直连你配置的 provider；agent 可按项目定制。
+
+文档提供简体中文、English 和日本語入口；应用界面目前支持简体中文与 English。
+
+![Longx 项目主页](docs/media/welcome.png)
+
+<details>
+<summary>查看工作区截图</summary>
+
+![会话工作区](docs/media/session.png)
+
+![文件树](docs/media/files.png)
+
+![文件浏览与 Markdown 预览](docs/media/file-preview.png)
+
+</details>
+
+**演示视频**：桌面 [▶ 播放工作区导览](docs/media/tour.webm) · 手机 [▶ 播放手机导览](docs/media/tour-mobile.webm)
+
+手机截图：[项目主页](docs/media/welcome-mobile.png) · [会话工作区](docs/media/session-mobile.png)
+
+## 为什么用 Longx
+
+- **用自己的模型**：接入 DeepSeek、GLM、阿里云百炼、OpenAI，或任何兼容 OpenAI Responses API 的服务。
+- **直接对项目工作**：agent 可读写文件、运行命令、查看 Git 变更；文件树和会话共享一个工作区。
+- **按项目塑造 agent**：用 `.longx/` 里的描述、plug、子 agent 和知识定制它的工作方式。
+- **桌面和手机都能用**：响应式网页界面；也提供 Android WebView 壳。
+
+> 安全提示：Longx **没有命令沙箱**。agent 命令以运行 Longx 的系统用户身份执行；只对你信任的项目使用，或把整个 Longx 部署在容器/隔离环境中。
+
+## 快速开始
+
+Linux x86_64 / arm64 可直接安装完整发行版：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install.sh | sh
+```
+
+安装后打开 `http://<主机>:7788`，在「设置 → Provider」配置模型。也可以从 [Releases](https://github.com/mjason/longx/releases) 下载，或用 [Docker Compose](docker-compose.yml) 启动。
+
+开发者请从下方的「启动（开发）」开始；完整安装、HTTPS、升级、Docker、模型和内核说明仍保留在本页。
+
+---
+
 Ash + Phoenix 上的 agent 应用，跑的是 **Longx 自己的 agent 内核**（`Longx.Agent`）：一个会话一个 OTP 进程，
 模型调用和工具调用都是 task，其余一切都是 **plug**。模型请求直接发到你配置的上游（DeepSeek、GLM、阿里云百炼、
 OpenAI，或任何 OpenAI 兼容接口）；agent 的行为、工具、角色、知识都长在项目的 `.longx/` 目录里，用 Elixir 写、
@@ -30,7 +76,7 @@ Erlang 运行时、Go 中间件和构建好的前端都在里面，**不需要**
 或者用 `LONGX_OBSCURA` 指向镜像里自带的二进制。
 
 **要求**：Linux x86_64 或 arm64，glibc ≥ 2.39（Ubuntu 24.04、Debian 13 及更新的发行版；包在 `ubuntu-24.04`
-runner 上构建）。机器上要有 `git`（项目的轮次书签、全局知识的版本控制都靠它；没有也能跑，只是这些功能退化）。
+runner 上构建）。机器上要有 `git`（全局知识的版本控制和项目 Git 工具靠它；没有也能跑，只是这些功能退化）。
 其余命令行工具见下面的「系统依赖」。**没有沙箱**：agent 的命令以运行 Longx 的用户身份直接在这台机器上跑，
 需要隔离就把整个 Longx 放进容器。
 
@@ -432,7 +478,7 @@ lib/longx/agent/plugs/      出厂 plug：Environment、Base、Shell、Patch、V
 lib/longx/agent/            Step、Plug、Tool、Context、Pipeline、Transcript（对话日志）、ThreadState（ETS 视图）、Knowledge、Model
 lib/longx/ai/               模型 provider / 档位与别名 / 搜索 provider（密钥加密存库）、请求整形、请求记录
 lib/longx/browser*          obscura 无头浏览器：按需下载（Installer，带进度）、一次一进程、许可池限并发
-lib/longx/projects/         项目、会话、轮次（git 书签）、Tracker、文件与 git 工具、附件
+lib/longx/projects/         项目、会话、轮次、Tracker、文件与 git 工具、附件
 lib/longx/system/           系统依赖检测、目录浏览、设置项；lib/longx/upgrade.ex 自升级；lib/longx/git.ex 机器上的 git
 lib/longx/shim*             Go 中间件：带背压、可干净终止的外部进程（命令、git、浏览器都通过它）
 lib/longx_web/              SPA 壳（所有路径）、/gql（AshGraphql，schema 在 priv/schema.graphql）、/socket（thread / project / notify channel）、/callback、/attachments
