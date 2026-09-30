@@ -484,9 +484,11 @@ export const AssistantParts: FC = () => {
     ToolGroup,
     ReasoningGroup,
   } = useContext(ThreadComponentsContext);
+  const { stalled } = unstable_useMessageStallDetection({ thresholdMs: 15_000 });
 
   return (
     <MessagePrimitive.GroupedParts
+      indicator={stalled ? "never" : "no-text"}
       groupBy={groupPartByType({
         reasoning: ["group-chainOfThought", "group-reasoning"],
         "tool-call": ["group-chainOfThought", "group-tool"],

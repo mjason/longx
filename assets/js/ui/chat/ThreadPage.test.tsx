@@ -1672,6 +1672,44 @@ describe("ThreadPage", () => {
     r.unmount();
   });
 
+  test("the synthetic activity dot hides during a stall and the no-output hint clears when the turn completes", async () => {
+    const r = renderAt("/p/app-1/t/t1");
+    await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
+    act(() =>
+      channel.reply("ok", {
+        ...snapshot,
+        turn: { id: "turn_1", status: "inProgress" },
+        items: [
+          { id: "u1", type: "userMessage", turnId: "turn_1", content: [{ type: "text", text: "thinking" }] },
+          { id: "c1", type: "commandExecution", turnId: "turn_1", command: "long-running command", cwd: "/p", status: "inProgress", aggregatedOutput: "" },
+        ],
+      }),
+    );
+    await screen.findByText("thinking");
+    const indicator = () => document.querySelector('[data-slot="aui_assistant-message-indicator"]');
+    expect(indicator()).toBeInTheDocument();
+    await act(async () => new Promise((resolve) => globalThis.setTimeout(resolve, 15_100)));
+    expect(indicator()).toBeNull();
+    const hint = document.querySelector("[data-slot=aui_assistant-message-stalled]");
+    expect(hint).toBeInTheDocument();
+    const firstElapsed = Number(hint!.textContent!.match(/\d+/)?.[0]);
+    await act(async () => new Promise((resolve) => globalThis.setTimeout(resolve, 1_100)));
+    const secondElapsed = Number(document.querySelector("[data-slot=aui_assistant-message-stalled]")!.textContent!.match(/\d+/)?.[0]);
+    expect(secondElapsed).toBeGreaterThan(firstElapsed);
+
+    act(() =>
+      channel.deliver("event", {
+        seq: 4,
+        method: "turn/completed",
+        params: { turn: { id: "turn_1", status: "completed" } },
+      }),
+    );
+    await waitFor(() =>
+      expect(document.querySelector("[data-slot=aui_assistant-message-stalled]")).toBeNull(),
+    );
+    r.unmount();
+  }, 25_000);
+
   test("phone: the chat still shows the command block and the bottom toolbar", async () => {
     setViewport(390);
     await open();
