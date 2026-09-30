@@ -129,6 +129,17 @@ describe("ThreadPage", () => {
     expect(screen.queryByTestId("history-edge")).not.toBeInTheDocument();
   });
 
+  test("opening a conversation scrolls straight to its latest message", async () => {
+    renderAt("/p/app-1/t/t1");
+    await waitFor(() => expect(document.querySelector('[data-slot="aui_thread-viewport"]')).not.toBeNull());
+    const viewport = document.querySelector<HTMLElement>('[data-slot="aui_thread-viewport"]')!;
+    Object.defineProperty(viewport, "scrollHeight", { configurable: true, value: 900 });
+    await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
+    act(() => channel.reply("ok", { ...snapshot, items: turnItems(1, 45) }));
+    await screen.findByText("回答 45");
+    await waitFor(() => expect(viewport.scrollTop).toBe(900));
+  });
+
   test("a window that starts inside a turn says how much of that turn is above it", async () => {
     renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));

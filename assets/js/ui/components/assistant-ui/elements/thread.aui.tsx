@@ -26,6 +26,7 @@ import {
 import { TooltipIconButton } from "@/ui/components/assistant-ui/elements/tooltip-icon-button";
 import { Button } from "@/ui/components/ui/button";
 import { Skeleton } from "@/ui/components/ui/skeleton";
+import { scrollToBottom } from "@/ui/chat/scroll";
 import { cn } from "@/lib/utils";
 import { t } from "@/ui/strings";
 import { keysTitle } from "@/ui/keys/hint";
@@ -60,6 +61,8 @@ import {
 import {
   createContext,
   useContext,
+  useEffect,
+  useRef,
   type ComponentType,
   type FC,
   type PropsWithChildren,
@@ -199,6 +202,23 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
   autoFocus,
 }) => {
   const { Welcome = ThreadWelcome, HistoryEdge, PendingEchoes } = useContext(ThreadComponentsContext);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const didInitialScroll = useRef(false);
+  const messageCount = useAuiState((s) => s.thread.messages.length);
+  const loading = useAuiState((s) => s.thread.isLoading);
+
+  useEffect(() => {
+    if (didInitialScroll.current || loading || messageCount === 0) return;
+    didInitialScroll.current = true;
+    let frames = 0;
+    let frame = 0;
+    const settleAtBottom = () => {
+      scrollToBottom(viewportRef.current);
+      if (++frames < 6) frame = requestAnimationFrame(settleAtBottom);
+    };
+    frame = requestAnimationFrame(settleAtBottom);
+    return () => cancelAnimationFrame(frame);
+  }, [loading, messageCount]);
 
   return (
     <ThreadPrimitive.Root
@@ -218,6 +238,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
           shiki and KaTeX, content-visibility sizing), so the reader watched it slide
           for seconds */}
       <ThreadPrimitive.Viewport
+        ref={viewportRef}
         data-slot="aui_thread-viewport"
         className={cn("relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll", THREAD_COLUMN)}
       >

@@ -1,6 +1,4 @@
-// The top bar's "复制 API 地址" on a conversation's page: the page's address
-// with /api in front — the conversation as JSON (LongxWeb.ApiController) for
-// another agent to look into what happened.
+// Copy a conversation's JSON API address for another agent to inspect.
 import { Braces } from "lucide-react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
@@ -10,7 +8,7 @@ import { t } from "@/ui/strings";
 /** The JSON address of a conversation's page. */
 export const apiUrl = (slug: string, threadId: string) => `${window.location.origin}/api/p/${slug}/t/${threadId}`;
 
-export function CopyApiButton({ slug }: { slug: string }) {
+export function CopyApiButton({ slug, compact = false }: { slug: string; compact?: boolean }) {
   const { threadId } = useParams();
   if (!threadId) return null;
   const copy = async () => {
@@ -23,8 +21,8 @@ export function CopyApiButton({ slug }: { slug: string }) {
     }
   };
   return (
-    <button type="button" aria-label={t.copyApi} title={t.copyApi} onClick={() => void copy()} className="touch-target text-muted-foreground hover:text-foreground flex items-center justify-center rounded-md">
-      <Braces className="size-5" />
+    <button type="button" aria-label={t.copyApi} title={t.copyApi} onClick={() => void copy()} className={`${compact ? "h-6 w-6" : "touch-target"} text-muted-foreground hover:text-foreground flex items-center justify-center rounded-md`}>
+      <Braces className={compact ? "size-3" : "size-5"} />
     </button>
   );
 }

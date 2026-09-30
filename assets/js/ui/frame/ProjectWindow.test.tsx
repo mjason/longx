@@ -271,14 +271,13 @@ describe("ProjectWindow", () => {
     }
   });
 
-  test("chat history is opened from the status bar and on phones remains a sheet", async () => {
+  test("the status bar keeps API copy at the bottom-right, without a redundant chat-history button", async () => {
     setViewport(390);
-    const user = userEvent.setup();
     renderAt("/p/app-1/t/t1");
     const strip = await screen.findByTestId("status-strip");
-    await user.click(within(strip).getByRole("button", { name: "聊天记录" }));
-    const sheet = await screen.findByTestId("tool-sheet");
-    expect(await within(sheet).findByTestId("threads-tool")).toBeInTheDocument();
+    expect(within(strip).queryByRole("button", { name: "聊天记录" })).not.toBeInTheDocument();
+    const apiButton = within(strip).getByRole("button", { name: "复制 API 地址" });
+    expect(apiButton.parentElement).toHaveClass("ml-auto");
   });
 
   test("missing dependencies are an amber count in the status bar, linking to the dependencies page", async () => {

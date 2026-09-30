@@ -104,7 +104,12 @@ export function Workbench({
           })}
         </div>
       ) : null}
-      <div className={`min-h-0 flex-1 flex-col ${active.kind === "chat" || active.kind === "settings" ? "flex" : "hidden"}`}>{children}</div>
+      <div
+        data-chat-workbench-active={active.kind === "chat" ? "true" : "false"}
+        className={`min-h-0 flex-1 flex-col ${active.kind === "chat" || active.kind === "settings" ? "flex" : "hidden"}`}
+      >
+        {children}
+      </div>
       <Suspense fallback={<Skeleton className="m-4 h-32" />}>
         {active.kind === "file" ? <EditorTab key={active.path} projectId={projectId} path={active.path} line={active.line} /> : null}
         {active.kind === "diff" ? <DiffTab key={tabKey(active)} projectId={projectId} path={active.path} sha={active.sha} /> : null}

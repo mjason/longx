@@ -1,6 +1,6 @@
 import { Thread, type ThreadComponents } from "@/ui/components/assistant-ui/elements/thread.aui";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
-import { Link, useOutletContext } from "react-router";
+import { Link, useOutletContext, useParams } from "react-router";
 import { useViewport } from "@/core/viewport";
 import { Alert, AlertDescription } from "@/ui/components/ui/alert";
 import { Button } from "@/ui/components/ui/button";
@@ -60,6 +60,7 @@ export function ThreadPage() {
   const chat = useChat();
   const viewport = useViewport();
   const ctx = useOutletContext<ProjectContext>();
+  const { threadId } = useParams();
 
   if (chat.missing) {
     return (
@@ -93,7 +94,7 @@ export function ThreadPage() {
       <div className="relative min-h-0 flex-1">
         {viewport === "phone" ? <AgentsPill /> : <AgentsPanel />}
         <HistoryContext.Provider value={chat.history}>
-          <Thread components={THREAD_COMPONENTS} autoFocus={false} />
+          <Thread key={threadId ?? "new"} components={THREAD_COMPONENTS} autoFocus={false} />
         </HistoryContext.Provider>
       </div>
     </div>

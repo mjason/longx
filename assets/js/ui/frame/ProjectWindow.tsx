@@ -19,7 +19,6 @@ import { usePreference } from "@/core/keys/preference";
 import { useBindings } from "@/core/keys/overrides";
 import { useCommand } from "@/core/keys/useCommand";
 import { t } from "@/ui/strings";
-import { CopyApiButton } from "./CopyApiButton";
 import { StatusStrip } from "./StatusStrip";
 import { AgentsTool } from "./tools/AgentsTool";
 import { FilesTool } from "./tools/FilesTool";
@@ -118,7 +117,7 @@ export function ProjectWindow() {
     </Suspense>
     <div className="flex h-dvh flex-col">
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {docked ? <ToolRail active={frame.tool} onToggle={frame.toggle} slug={slug} settings={settings} onSettings={() => navigate(`/p/${slug}/settings`)} /> : null}
+        {docked ? <ToolRail active={frame.tool} onToggle={frame.toggle} settings={settings} onSettings={() => navigate(`/p/${slug}/settings`)} /> : null}
         {docked && frame.tool ? (
           <DockedPanel width={frame.panelWidth} onResize={frame.resize} title={t.tools[frame.tool]!} onClose={frame.close}>
             <ToolBody tool={frame.tool} ctx={ctx} />
@@ -164,7 +163,7 @@ function ToolBody({ tool, ctx }: { tool: Tool; ctx: ProjectContext }) {
   }
 }
 
-function ToolRail({ active, onToggle, slug, settings, onSettings }: { active: Tool | null; onToggle: (tool: Tool) => void; slug: string; settings: boolean; onSettings: () => void }) {
+function ToolRail({ active, onToggle, settings, onSettings }: { active: Tool | null; onToggle: (tool: Tool) => void; settings: boolean; onSettings: () => void }) {
   // re-render when the space menu is switched or a key changed
   usePreference("spaceMenu");
   useBindings();
@@ -213,7 +212,6 @@ function ToolRail({ active, onToggle, slug, settings, onSettings }: { active: To
         </TooltipTrigger>
         <TooltipContent side="right">{t.projectSettingsTab}</TooltipContent>
       </Tooltip>
-      <CopyApiButton slug={slug} />
       <ThemeToggle />
     </nav>
   );
