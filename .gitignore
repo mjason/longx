@@ -47,7 +47,7 @@ npm-debug.log
 
 # dialyzer PLT
 /priv/plts/
-.claude/worktrees/
+.agents/worktrees/
 assets/scripts/e2e/out/
 
 # the Chrome extension build (npm run build:extension), zipped on request

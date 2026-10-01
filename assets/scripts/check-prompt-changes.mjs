@@ -18,8 +18,8 @@ const changed = new Set([
 ].filter(Boolean));
 
 const isPromptPath = (file) =>
-  /(^|\/)(CLAUDE|AGENTS)\.md$/i.test(file) ||
-  /(^|\/)\.claude\//i.test(file) ||
+  /(^|\/)AGENTS\.md$/i.test(file) ||
+  /(^|\/)\.agents\//i.test(file) ||
   /(^|\/)\.longx\//i.test(file) ||
   /^priv\/agent\//i.test(file) ||
   /^lib\/longx\/agent\//i.test(file) ||

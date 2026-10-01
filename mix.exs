@@ -162,13 +162,11 @@ defmodule Longx.MixProject do
   end
 
   defp usage_rules do
-    # Example for those using claude.
     [
-      file: "CLAUDE.md",
-      # rules to include directly in CLAUDE.md
+      file: "AGENTS.md",
       usage_rules: ["usage_rules:all"],
       skills: [
-        location: ".claude/skills",
+        location: ".agents/skills",
         # build skills that combine multiple usage rules
         build: [
           "ash-framework": [

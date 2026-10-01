@@ -25,7 +25,7 @@ config :longx, Longx.Repo,
 # to bundle .js and .css sources.
 config :longx, LongxWeb.Endpoint,
   # Bind to all interfaces on port 7798 so the dev server is reachable over the LAN.
-  # See CLAUDE.md "Dev server" — do not change these.
+  # See AGENTS.md "Dev server" — do not change these.
   http: [ip: {0, 0, 0, 0}, port: 7798],
   check_origin: false,
   code_reloader: true,

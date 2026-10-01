@@ -1,7 +1,7 @@
 # Longx 内核的设计模式（0.2.0）
 
 这份文档说的是 `Longx.Agent` 现在是什么样、为什么是这样，以及往里加东西时遵守哪些形状。
-来龙去脉（决策过程）在 `docs/agent-kernel-plan.md`；每个模块的实现细节在 `CLAUDE.md`。
+来龙去脉（决策过程）在 `docs/agent-kernel-plan.md`；每个模块的实现细节在 `AGENTS.md`。
 这里只讲模式。
 
 ## 1. 内核只做四件事，其余全是 plug
