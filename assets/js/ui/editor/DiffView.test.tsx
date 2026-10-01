@@ -5,6 +5,29 @@ import { describe, expect, test } from "vitest";
 import { DiffView } from "./DiffView";
 
 describe("DiffView (@codemirror/merge)", () => {
+  test.each(["split", "unified"] as const)("%s wraps long lines by default", async (mode) => {
+    render(<DiffView path="prompt.md" before={"old ".repeat(400)} after={"new ".repeat(400)} mode={mode} />);
+    const view = await screen.findByTestId("diff-view");
+    for (const content of view.querySelectorAll(".cm-content")) {
+      expect(content).toHaveClass("cm-lineWrapping");
+    }
+  });
+
+  test.each(["split", "unified"] as const)("%s shows twelve context lines and can reveal the full file", async (mode) => {
+    const lines = Array.from({ length: 81 }, (_, i) => `context ${i}`);
+    const before = lines.join("\n");
+    const after = lines.map((line, i) => i === 40 ? "changed prompt" : line).join("\n");
+    const { rerender } = render(<DiffView path="prompt.md" before={before} after={after} mode={mode} />);
+    const view = await screen.findByTestId("diff-view");
+    expect(view.querySelector(".cm-collapsedLines")).not.toBeNull();
+    expect(view.querySelector(".cm-content")).toHaveTextContent("context 28");
+    expect(view.querySelector(".cm-content")).toHaveTextContent("context 52");
+
+    rerender(<DiffView path="prompt.md" before={before} after={after} mode={mode} fullContext />);
+    expect(view.querySelector(".cm-collapsedLines")).toBeNull();
+    expect(view.querySelector(".cm-content")).toHaveTextContent("context 0");
+  });
+
   test("split: both versions side by side, the changed line marked, unchanged stretches collapsed", async () => {
     const before = ["a", ...Array.from({ length: 20 }, (_, i) => `same ${i}`), "old"].join("\n");
     const after = ["a", ...Array.from({ length: 20 }, (_, i) => `same ${i}`), "new"].join("\n");

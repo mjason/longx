@@ -9,18 +9,29 @@ import { DiffView } from "@/ui/editor/DiffView";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/ui/components/ui/tabs";
 import { t } from "@/ui/strings";
+import { Button } from "@/ui/components/ui/button";
 
 export function DiffTab({ projectId, path, sha }: { projectId: string; path: string; sha: string | null }) {
     useTranslation();
   const viewport = useViewport();
   const query = useGitFileVersions(projectId, sha, path);
   const [mode, setMode] = useState<"split" | "unified" | null>(null);
+  const [fullContext, setFullContext] = useState(false);
   const effective = mode ?? (viewport === "phone" ? "unified" : "split");
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-testid="diff-tab">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="diff-tab">
       <div className="bg-sidebar border-sidebar-border flex h-9 shrink-0 items-center gap-2 border-b px-3 text-xs">
         <span className="text-muted-foreground min-w-0 flex-1 truncate font-mono">{path}</span>
         {sha ? <span className="font-mono">{sha.slice(0, 7)}</span> : null}
+        <Button
+          size="sm"
+          variant={fullContext ? "secondary" : "ghost"}
+          className="h-7 shrink-0 px-2 text-xs"
+          aria-pressed={fullContext}
+          onClick={() => setFullContext((value) => !value)}
+        >
+          {t.diffFullContext}
+        </Button>
         <Tabs value={effective} onValueChange={(v) => setMode(v as "split" | "unified")}>
           <TabsList className="h-7">
             <TabsTrigger value="split" className="h-6 px-2 text-xs">
@@ -32,22 +43,22 @@ export function DiffTab({ projectId, path, sha }: { projectId: string; path: str
           </TabsList>
         </Tabs>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
         {query.isPending ? (
           <Skeleton className="m-3 h-24" />
         ) : query.isError ? (
           <p className="text-destructive p-3 text-sm">{query.error.message}</p>
         ) : (
-          <DiffBody path={path} versions={query.data} mode={effective} wrap={viewport === "phone"} />
+          <DiffBody path={path} versions={query.data} mode={effective} fullContext={fullContext} />
         )}
       </div>
     </div>
   );
 }
 
-function DiffBody({ path, versions, mode, wrap }: { path: string; versions: FileVersions; mode: "split" | "unified"; wrap: boolean }) {
+function DiffBody({ path, versions, mode, fullContext }: { path: string; versions: FileVersions; mode: "split" | "unified"; fullContext: boolean }) {
     useTranslation();
   if (versions.binary) return <p className="text-muted-foreground p-3 text-sm">{t.binaryDiff}</p>;
   if (versions.before === versions.after) return <p className="text-muted-foreground p-3 text-sm">{t.noDiff}</p>;
-  return <DiffView path={path} before={versions.before} after={versions.after} mode={mode} wrap={wrap} />;
+  return <DiffView path={path} before={versions.before} after={versions.after} mode={mode} fullContext={fullContext} />;
 }

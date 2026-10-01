@@ -37,13 +37,15 @@ end
 - `run/1` answers `{:ok, state}` — a map kept as `ctx.state` for the next run (that is how "only when it changed" is written: compare, then remember) — or `{:error, why}`. A raise is an error too; both land on the watch's row and in `watch_list`.
 - `ctx`: `name`, `project_root`, `state`, `payload` (a webhook's JSON body or text), `run_at`.
 - Helpers: `shell(ctx, cmd, timeout: ms)` → `{exit_code, output}` (bash in the project root, as the person, stdout and stderr together); `http(ctx, url, method:, headers:, body:)` → `{:ok, %{status, body}}`; `credential_request(ctx, credential_name, url, method:, …)` for an API that needs a stored credential (the secret never enters the script); `knowledge_read(ctx, "local/monitor/normal.md")` for the normal state to compare against; `log(ctx, line)` for what the person sees as the last output.
-- `send(ctx, to, text)`: `to` is a session's address — a handle (`"main"`, `"ops"`), `~` + the last six characters of its id, `"<project>:<handle>"` — or **`:self`**, the session named `watch-<name>`, started the first time and kept (its history is the watch's own memory; the person can open it). The message is delivered when that session is idle, never in the middle of its turn. At most `budget` sends per hour; past it the watch is switched off and the person told.
+- `send(ctx, to, text)`: `to` is a session's address — a handle (`"main"`, `"ops"`), `~` + the last six characters of its id, `"<project>:<handle>"` — or **`:callback`** (the watch's bound creator), or **`:self`** (a separate session named `watch-<name>`, started the first time and kept). The message is delivered when that session is idle, never in the middle of its turn. At most `budget` sends per hour; past it the watch is switched off and the person told.
+
+New watch files created by an agent through `apply_patch`, and watches written by `wait_until`, are bound to that creator's stable session ID. Their callback can return to the creator while it is off duty without opening it to other agents. `send(ctx, :callback, text)` keeps working if the creator's handle changes or its process leaves idle; a deleted or archived creator is not replaced. A bound watch can also send to its creator's current address. Other recipients still have to be on duty. Editing an existing file does not take over its callback; old watches and files written outside these tools have no implicit creator binding.
 
 ## Three uses, one shape
 
 | Want | Write |
 |---|---|
-| Come back to this task later (a loop) | `send(ctx, "<your address>", "continue: …")` — or just call `wait_until(at | every, message)` and end your turn |
+| Come back to this task later (a loop) | `send(ctx, :callback, "continue: …")` in a bound watch — or just call `wait_until(at | every, message)` and end your turn |
 | Monitor something | check, compare with `ctx.state` (or the knowledge), send only when it matters, return the new state |
 | A standing duty with its own history | `send(ctx, :self, "…")` — the `watch-<name>` session accumulates what it saw |
 
@@ -55,7 +57,7 @@ Never `sleep` or poll inside a turn to wait for time to pass: write the watch, s
 
 ## After writing it
 
-The file loads by itself within a minute (or at once when you call a watch tool); a broken head or a compile error comes back as a `⚠` notice naming the file. **Run `watch_run(name)` once** — a dry run: what it logged, what it would send, its result — before leaving it. `watch_list` shows every watch with its schedule, next and last run, last output, state and errors; `watch_enable(name, false)` keeps one without running it. A `once` watch is consumed (file removed) when it ran; an expired one stays, marked expired, until deleted. Deleting the file deletes the watch.
+The file loads by itself within a minute (or at once when you call a watch tool); a broken head or a compile error comes back as a `⚠` notice naming the file. **Run `watch_run(name)` once** — a dry run: what it logged, what it would send, its result — before leaving it. It checks delivery eligibility and the send budget, and reports refused sends as errors, without waking a session, creating a `:self` session, counting sends, or changing the stored state. `watch_list` shows every watch with its schedule, next and last run, last output, state and errors; `watch_enable(name, false)` keeps one without running it. A `once` watch is consumed (file removed) when it ran; an expired one stays, marked expired, until deleted. Deleting the file deletes the watch.
 
 ## Sessions and addresses
 

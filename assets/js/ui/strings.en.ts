@@ -156,6 +156,7 @@ export const en = {
   noDiff: "No changes",
   diffSplit: "Side by side",
   diffUnified: "Unified",
+  diffFullContext: "Full context",
   unchangedLines: "$ unchanged lines",
   binaryDiff: "Binary file; no diff to display.",
   gitChanges: "Changes",

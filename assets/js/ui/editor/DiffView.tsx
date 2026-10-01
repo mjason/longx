@@ -17,6 +17,7 @@ import { languageFor } from "./languages";
 import { lineDiff } from "./lineDiff";
 import { editorHighlighting, editorTheme } from "./theme";
 import { t } from "@/ui/strings";
+import { cn } from "@/lib/utils";
 
 export type DiffViewProps = {
   path: string;
@@ -26,10 +27,11 @@ export type DiffViewProps = {
   after: string | null;
   mode: "split" | "unified";
   wrap?: boolean;
+  fullContext?: boolean;
   className?: string;
 };
 
-const collapse = { margin: 3, minSize: 4 };
+const collapse = { margin: 12, minSize: 8 };
 const diffConfig = { override: lineDiff };
 
 // VS Code's diff colours on our tokens: a changed line faintly tinted
@@ -62,10 +64,10 @@ const diffTheme = EditorView.theme({
     fontSize: "12px",
   },
 });
-// the two panes' own layout (outside the editors, so in app.css): each side
-// scrolls sideways on its own for long lines, a rule between them
+// The panes fit their available width; wrapped lines remain readable
+// without a horizontal scroll, with a rule between the two versions.
 
-export function DiffView({ path, before, after, mode, wrap = false, className }: DiffViewProps) {
+export function DiffView({ path, before, after, mode, wrap = true, fullContext = false, className }: DiffViewProps) {
     useTranslation();
   const host = useRef<HTMLDivElement>(null);
   // the side the reader follows (the new text), for SPC m n / SPC m p
@@ -102,7 +104,7 @@ export function DiffView({ path, before, after, mode, wrap = false, className }:
         parent,
         highlightChanges: true,
         gutter: true,
-        collapseUnchanged: collapse,
+        collapseUnchanged: fullContext ? undefined : collapse,
         diffConfig,
       });
       views = [merge.a, merge.b];
@@ -115,7 +117,7 @@ export function DiffView({ path, before, after, mode, wrap = false, className }:
       const view = new EditorView({
         state: EditorState.create({
           doc: after ?? "",
-          extensions: [...base, unifiedMergeView({ original: before ?? "", mergeControls: false, highlightChanges: true, gutter: true, collapseUnchanged: collapse, diffConfig })],
+          extensions: [...base, unifiedMergeView({ original: before ?? "", mergeControls: false, highlightChanges: true, gutter: true, collapseUnchanged: fullContext ? undefined : collapse, diffConfig })],
         }),
         parent,
       });
@@ -137,7 +139,7 @@ export function DiffView({ path, before, after, mode, wrap = false, className }:
       cancelled = true;
       destroy();
     };
-  }, [path, before, after, mode, wrap]);
+  }, [path, before, after, mode, wrap, fullContext]);
 
-  return <div ref={host} data-testid="diff-view" data-mode={mode} className={className} />;
+  return <div ref={host} data-testid="diff-view" data-mode={mode} className={cn("min-w-0 w-full", className)} />;
 }

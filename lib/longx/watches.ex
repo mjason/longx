@@ -65,6 +65,7 @@ defmodule Longx.Watches do
       define :count_send, action: :count_send
       define :set_enabled, action: :set_enabled, args: [:enabled, :disabled_reason]
       define :put_state, action: :set_state, args: [:state]
+      define :bind_creator, action: :bind_creator, args: [:creator_id]
       define :put_due, action: :set_due, args: [:next_due_at]
       define :list_for_project, action: :for_project, args: [:project_id]
       define :get_watch, action: :by_name, args: [:project_id, :name]
@@ -75,6 +76,54 @@ defmodule Longx.Watches do
   end
 
   ## Files → rows
+
+  @doc """
+  Records the creator of new watch files written by a tool in this session.
+  The caller supplies only paths it actually created, not existing files
+  it edited. The binding is kept through reloads and cannot be reassigned.
+  """
+  @spec record_created(map, [String.t()]) :: :ok | {:error, term}
+  def record_created(_ctx, []), do: :ok
+
+  def record_created(%{project_id: project_id, thread_id: kernel_id}, paths)
+      when is_binary(project_id) and is_binary(kernel_id) do
+    with {:ok, project} <- Ash.get(Project, project_id),
+         {:ok, %Projects.Thread{project_id: ^project_id} = creator} <-
+           Projects.get_thread_by_kernel_id(kernel_id) do
+      names =
+        for path <- paths,
+            relative = Path.relative_to(Path.expand(path), project.root_path),
+            [".longx", layer, "watches", file] <- [Path.split(relative)],
+            layer in ["local", "shared"],
+            Path.extname(file) == ".exs",
+            do: Path.basename(file, ".exs")
+
+      if names == [] do
+        :ok
+      else
+        with :ok <- reconcile_project(project) do
+          Enum.reduce_while(names, :ok, fn name, :ok ->
+            case get_watch(project_id, name) do
+              {:ok, watch} ->
+                case bind_creator(watch, creator.id) do
+                  {:ok, %{creator_thread_id: id}} when id == creator.id -> {:cont, :ok}
+                  {:ok, _already_bound} -> {:halt, {:error, :already_bound}}
+                  {:error, reason} -> {:halt, {:error, reason}}
+                end
+
+              {:error, reason} ->
+                {:halt, {:error, reason}}
+            end
+          end)
+        end
+      end
+    else
+      {:ok, _other_project} -> {:error, :wrong_project}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def record_created(_ctx, _paths), do: :ok
 
   @doc "Every active project's watch files reconciled into rows."
   @spec reconcile() :: :ok
@@ -307,10 +356,11 @@ defmodule Longx.Watches do
     fn to, text, opts ->
       with {:ok, watch} <- Ash.get(Watch, id),
            {:ok, watch} <- within_budget(watch),
-           {:ok, address} <- address_of(project, to, name),
+           {:ok, address} <- watch_address(project, watch, to),
            {:ok, _thread} <-
              Projects.deliver(project.id, address, text,
                from: from,
+               callback_thread_id: watch.creator_thread_id,
                deliver: Keyword.get(opts, :deliver, :idle)
              ) do
         {:ok, _} =
@@ -335,7 +385,7 @@ defmodule Longx.Watches do
         {:error, reason} = error ->
           Projects.notify_project(project.id, "watch",
             title: "watch #{name} 没能叫醒 #{address_text(to)}",
-            body: refusal_zh(reason)
+            body: refusal_zh(reason, Ash.get!(Watch, id))
           )
 
           error
@@ -346,18 +396,57 @@ defmodule Longx.Watches do
   defp address_text(to) when is_binary(to), do: to
   defp address_text(to), do: inspect(to)
 
+  defp refusal(:off_duty, %Watch{creator_thread_id: nil}),
+    do:
+      "off duty — this watch has no creator binding, so it cannot use the creator-callback exemption; other recipients must be on duty"
+
+  defp refusal(reason, _watch), do: refusal(reason)
+
   defp refusal(:off_duty),
     do:
-      "off duty — a conversation the person had, not on duty; the Agents window's 值班 switch puts it on duty"
+      "off duty — the target is not this watch's bound creator; other recipients must be on duty (the Agents window's 值班 switch)"
 
   defp refusal(:not_found), do: "no session at that address"
+
+  defp refusal(:callback_unbound),
+    do:
+      "no creator binding — :callback requires a watch created by apply_patch or wait_until in a session; this existing watch was not automatically adopted"
+
+  defp refusal(:callback_target_gone),
+    do: "the bound creator session no longer exists; the callback will not create a replacement"
+
+  defp refusal(:callback_wrong_project),
+    do: "the bound creator belongs to another project; the callback binding is invalid"
+
+  defp refusal(:thread_archived), do: "the target session is archived and cannot be woken"
+
+  defp refusal(:thread_unrecoverable),
+    do: "the target session is unrecoverable and cannot be woken"
+
+  defp refusal(:budget), do: "hourly send budget exhausted; no message was delivered"
+
+  defp refusal({:bad_address, to}),
+    do: "invalid recipient #{inspect(to)}; use a session address, :callback, or :self"
+
   defp refusal(:self), do: "that is the watch's own session"
   defp refusal(other), do: inspect(other)
 
+  defp refusal_zh(:off_duty, %Watch{creator_thread_id: nil}),
+    do: "对方不在值班，且此 watch 未绑定创建者，不能使用自身回调豁免；其他接收方需要在 Agent 与会话窗口开启值班"
+
+  defp refusal_zh(reason, _watch), do: refusal_zh(reason)
+
   defp refusal_zh(:off_duty),
-    do: "对方不在值班：人的普通会话不能被 watch 叫醒；在 Agent 与会话窗口打开它的值班开关"
+    do: "对方不是此 watch 绑定的创建者，且不在值班；其他接收方需要在 Agent 与会话窗口开启值班"
 
   defp refusal_zh(:not_found), do: "没有这个地址的会话"
+  defp refusal_zh(:callback_unbound), do: "此 watch 未绑定创建者，无法使用 :callback；旧 watch 不会自动认领创建者"
+  defp refusal_zh(:callback_target_gone), do: "绑定的创建者会话已不存在，不会另建会话代替"
+  defp refusal_zh(:callback_wrong_project), do: "绑定的创建者属于其他项目，回调绑定无效"
+  defp refusal_zh(:thread_archived), do: "目标会话已归档，不能唤醒"
+  defp refusal_zh(:thread_unrecoverable), do: "目标会话无法恢复，不能唤醒"
+  defp refusal_zh(:budget), do: "此 watch 一小时内的发送预算已用完，未投递消息"
+  defp refusal_zh({:bad_address, to}), do: "接收方 #{inspect(to)} 无效；请使用会话地址、:callback 或 :self"
   defp refusal_zh(other), do: "投递失败：#{inspect(other)}"
 
   # the hour's window rolls with the first send; at the budget the row is off
@@ -383,6 +472,30 @@ defmodule Longx.Watches do
   defp address_of(_project, to, _name) when is_binary(to), do: {:ok, to}
   defp address_of(_project, to, _name), do: {:error, {:bad_address, to}}
 
+  defp watch_address(_project, %Watch{creator_thread_id: nil}, :callback),
+    do: {:error, :callback_unbound}
+
+  defp watch_address(project, %Watch{creator_thread_id: id}, :callback) do
+    case Ash.get(Projects.Thread, id, not_found_error?: false) do
+      {:ok, nil} ->
+        {:error, :callback_target_gone}
+
+      {:ok, %Projects.Thread{project_id: project_id}} when project_id != project.id ->
+        {:error, :callback_wrong_project}
+
+      {:ok, %Projects.Thread{status: :archived}} ->
+        {:error, :thread_archived}
+
+      {:ok, _creator} ->
+        {:ok, "~" <> id}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp watch_address(project, watch, to), do: address_of(project, to, watch.name)
+
   defp finish(project, %Watch{} = watch, loaded, outcome, duration_ms) do
     # the row as the run left it (the sends counted, a budget stop applied)
     {:ok, fresh} = Ash.get(Watch, watch.id)
@@ -393,14 +506,12 @@ defmodule Longx.Watches do
     # a send the target refused (off duty, no such address) is the run's error
     # even when the script went on regardless — an agent's own alarm once
     # vanished without a trace
-    refused =
-      for %{to: to, result: {:error, reason}} <- sends,
-          do: "could not wake #{address_text(to)}: #{refusal(reason)}"
+    refused = refused_sends(sends, watch)
 
     {state, error} =
       case result do
         {:ok, state} -> {state, if(refused == [], do: nil, else: Enum.join(refused, "\n"))}
-        {:error, message} -> {fresh.state, message}
+        {:error, message} -> {fresh.state, Enum.join(Enum.uniq([message | refused]), "\n")}
       end
 
     if error, do: Longx.System.Faults.record(:watch, watch.name, error)
@@ -408,11 +519,7 @@ defmodule Longx.Watches do
     output =
       (log ++
          Enum.map(sends, fn send ->
-           "→ #{inspect(send.to)}: #{String.slice(send.text, 0, 200)}" <>
-             case send[:result] do
-               {:error, reason} -> " (refused: #{refusal(reason)})"
-               _ -> ""
-             end
+           "→ " <> describe_send(watch, %{send | text: String.slice(send.text, 0, 200)})
          end))
       |> Enum.join("\n")
       |> String.slice(0, @output_bytes)
@@ -504,11 +611,77 @@ defmodule Longx.Watches do
         project_root: project.root_path,
         state: watch.state,
         payload: nil,
-        deliver: :dry
+        deliver: :dry,
+        validate_send: fn ctx, to, _text, _opts ->
+          planned =
+            Elixir.Agent.get(
+              ctx.collector,
+              &Enum.count(&1.sends, fn send -> send.result == :ok end)
+            )
+
+          with {:ok, current} <- within_budget(watch),
+               do:
+                 check_send(
+                   project,
+                   %{current | sends_this_hour: current.sends_this_hour + planned},
+                   to
+                 )
+        end
       }
 
-      {:ok, run_script(loaded.module, ctx, loaded.definition.timeout)}
+      outcome = run_script(loaded.module, ctx, loaded.definition.timeout)
+      errors = refused_sends(outcome.sends, watch)
+
+      result =
+        case outcome.result do
+          {:ok, _} when errors != [] -> {:error, Enum.join(errors, "\n")}
+          {:error, message} -> {:error, Enum.join(Enum.uniq([message | errors]), "\n")}
+          other -> other
+        end
+
+      {:ok, %{outcome | result: result}}
     end
+  end
+
+  # Read-only preflight: no model, row writes, budget debit, notification,
+  # or creation of a watch's own session, even for send(:self).
+  defp check_send(project, watch, :self) do
+    with {:ok, _} <- within_budget(watch) do
+      case Projects.resolve_address(project.id, "watch-" <> watch.name) do
+        {:error, :not_found} -> :ok
+        {:ok, target} -> check_target(project, watch, Projects.agent_name(target))
+      end
+    end
+  end
+
+  defp check_send(project, watch, to) do
+    with {:ok, _} <- within_budget(watch),
+         {:ok, address} <- watch_address(project, watch, to),
+         do: check_target(project, watch, address)
+  end
+
+  defp check_target(project, watch, address) do
+    case Projects.delivery_target(project.id, address,
+           callback_thread_id: watch.creator_thread_id
+         ) do
+      {:ok, _} -> :ok
+      {:error, _} = error -> error
+    end
+  end
+
+  @doc "A send's text and readable refusal reason, shared by the tools, page and run log."
+  @spec describe_send(Watch.t(), map) :: String.t()
+  def describe_send(watch, send) do
+    "#{inspect(send.to)}: #{send.text}" <>
+      case send[:result] do
+        {:error, reason} -> " (refused: #{refusal(reason, watch)})"
+        _ -> ""
+      end
+  end
+
+  defp refused_sends(sends, watch) do
+    for %{to: to, result: {:error, reason}} <- sends,
+        do: "could not wake #{address_text(to)}: #{refusal(reason, watch)}"
   end
 
   @doc "The person's switch: off with `:by_person`, on again with the next time computed."

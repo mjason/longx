@@ -39,6 +39,7 @@ defmodule Longx.Agent.Plugs.Watches do
   ```
 
   It runs without you (no model call), in the project root as the person: `shell(ctx, cmd)` → `{exit_code, output}`, `http(ctx, url)`, `credential_request(ctx, name, url)`, `knowledge_read(ctx, path)`, `log(ctx, line)`; `send(ctx, to, text)` puts a message in a session's mailbox — `to` an address from the directory (your own handle to be told yourself) or `:self`, a session named after the watch that is started when there is none — delivered once that session is idle. Decide everything in the script (what changed, whom to tell); write the normal state you compare against into the knowledge. The file loads by itself (a broken one comes back as a ⚠ notice); **run `watch_run(name)` once after writing it** to see what it would do. Six sends per hour per watch. A once-only watch is consumed when it ran. **Where it lives**: `local/watches/` runs on this machine only (yours, not in git); a watch the team should have on every machine — the project's own health checks, its nightly jobs — goes to `.longx/shared/watches/<name>.exs` (in git; it runs where the project's trust switch is on; ask the person to promote a local one, or write it there when they asked for a shared one). To simply continue later, `wait_until(at | every, message)` writes such a file for you: call it, then end your turn saying when you will look again.
+  Watches created with apply_patch or wait_until are bound to this session. Use send(ctx, :callback, text) to return here without requiring duty. :self is a separate watch session; other recipients must be on duty.
   """
 
   tool :watch_list,
@@ -108,10 +109,11 @@ defmodule Longx.Agent.Plugs.Watches do
          {:ok, %{result: result, sends: sends, log: log}} <- Watches.dry_run(watch) do
       lines =
         Enum.map(log, &"log: #{&1}") ++
-          Enum.map(sends, &"would send to #{inspect(&1.to)}: #{&1.text}") ++
+          Enum.map(sends, &("would send to " <> Watches.describe_send(watch, &1))) ++
           ["result: #{inspect(result)}"]
 
-      {:ok, Enum.join(lines, "\n")}
+      output = Enum.join(lines, "\n")
+      if match?({:error, _}, result), do: {:error, output}, else: {:ok, output}
     else
       {:error, message} when is_binary(message) -> {:error, message}
       {:error, reason} -> {:error, "could not run #{name}: #{inspect(reason)}"}
@@ -142,32 +144,35 @@ defmodule Longx.Agent.Plugs.Watches do
     with {:ok, schedule} <- schedule_of(args),
          {:ok, project} <- Ash.get(Projects.Project, project_id),
          {:ok, thread} <- Projects.get_thread_by_kernel_id(thread_id) do
-      address = Projects.agent_name(thread)
       name = "wait-" <> Base.encode16(:crypto.strong_rand_bytes(3), case: :lower)
       module = "Wait" <> String.upcase(String.slice(name, -6, 6))
       dir = Path.join(project.root_path, ".longx/local/watches")
       File.mkdir_p!(dir)
       Longx.Agent.Definition.Layout.ensure_ignored(project.root_path)
 
-      File.write!(Path.join(dir, name <> ".exs"), """
+      path = Path.join(dir, name <> ".exs")
+
+      File.write!(path, """
       defmodule #{module} do
         use Longx.Agent.Watch
         #{schedule}
 
         def run(ctx) do
-          send(ctx, #{inspect(address)}, #{inspect(message)})
+          send(ctx, :callback, #{inspect(message)})
           {:ok, %{}}
         end
       end
       """)
 
-      :ok = Watches.reconcile_project(project)
+      :ok =
+        Watches.record_created(%{project_id: project_id, thread_id: thread.kernel_thread_id}, [
+          path
+        ])
 
       case Watches.get_watch(project_id, name) do
         {:ok, %{enabled: true, next_due_at: next}} ->
           {:ok,
-           "watch #{name} written: at #{next || args["every"]} the message comes back to you as a new turn — end your turn now, saying when you will look again" <>
-             on_duty_note(thread)}
+           "watch #{name} written: at #{next || args["every"]} the message comes back to you as a new turn — end your turn now, saying when you will look again"}
 
         {:ok, %{load_error: error}} ->
           {:error, "the watch could not load: #{error}"}
@@ -182,22 +187,6 @@ defmodule Longx.Agent.Plugs.Watches do
   end
 
   def wait_until(_args, _ctx), do: {:error, "not inside a project"}
-
-  # a session that asked to be woken is on duty from now on: only a session on
-  # duty may be woken by a watch, and a plain conversation's own alarm was once
-  # refused as off duty, silently
-  defp on_duty_note(thread) do
-    cond do
-      Projects.on_duty?(thread) ->
-        ""
-
-      match?({:ok, _}, Projects.set_on_duty(thread, true)) ->
-        "; this session is on duty now (the Agents window's 值班 switch), so its watch may wake it"
-
-      true ->
-        ""
-    end
-  end
 
   def notify(%{"title" => title} = args, %{thread_id: thread_id}) when is_binary(thread_id) do
     case Projects.get_thread_by_kernel_id(thread_id) do

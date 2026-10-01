@@ -105,6 +105,18 @@ defmodule Longx.Watches.Watch do
       accept [:state]
     end
 
+    # Runtime provenance, never supplied by the watch script or resynced
+    # from its head. Editing someone else's watch does not take ownership.
+    update :bind_creator do
+      accept []
+      argument :creator_id, :uuid, allow_nil?: false
+
+      change atomic_update(
+               :creator_thread_id,
+               expr(if(is_nil(creator_thread_id), do: ^arg(:creator_id), else: creator_thread_id))
+             )
+    end
+
     update :set_due do
       accept [:next_due_at]
     end
@@ -169,7 +181,7 @@ defmodule Longx.Watches.Watch do
                  ok: match?({:ok, _}, result),
                  result: inspect(result, limit: 50, printable_limit: 2_000),
                  log: log,
-                 sends: Enum.map(sends, &"#{inspect(&1.to)}: #{&1.text}")
+                 sends: Enum.map(sends, &Longx.Watches.describe_send(watch, &1))
                }}
 
             # the file does not load: that is the result of the try
@@ -233,6 +245,10 @@ defmodule Longx.Watches.Watch do
 
     # what the last run returned: the next run's ctx.state
     attribute :state, :map, allow_nil?: false, default: %{}, public?: true
+
+    # Stable row id, not a mutable handle or an address suffix. Keeping it
+    # after the creator is deleted cannot grant a new session this callback.
+    attribute :creator_thread_id, :uuid
 
     attribute :running_since, :utc_datetime_usec, public?: true
     attribute :last_run_at, :utc_datetime_usec, public?: true

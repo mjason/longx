@@ -166,7 +166,7 @@ defmodule Longx.Watches.PlugTest do
     [path] = Path.wildcard(Path.join(dir, ".longx/local/watches/wait-*.exs"))
     text = File.read!(path)
     assert text =~ ~s(once "2030-01-01T09:00:00+08:00")
-    assert text =~ ~s(send(ctx, "main", )
+    assert text =~ "send(ctx, :callback,"
     assert text =~ "canary"
 
     assert %Watches.Watch{kind: :once, enabled: true} =
@@ -195,7 +195,7 @@ defmodule Longx.Watches.PlugTest do
     assert [] == Path.wildcard(Path.join(dir, ".longx/local/watches/wait-*.exs"))
   end
 
-  test "wait_until puts the session on duty: it asked to be woken, so its own watch may wake it (a plain conversation's alarm was once refused as off duty, silently)",
+  test "wait_until binds its callback without putting the session on duty",
        %{bypass: bypass, dir: dir, project: project} do
     script!(bypass, [
       ResponsesFixture.function_call("wait_until", nil, %{
@@ -213,10 +213,151 @@ defmodule Longx.Watches.PlugTest do
     assert_receive {:request, _first}
     assert_receive {:request, second}
     assert [written] = outputs(second)
-    assert written =~ "on duty"
-    assert %Thread{on_duty: true} = thread = Ash.get!(Thread, thread.id)
-    assert Projects.on_duty?(thread)
+    refute written =~ "on duty now"
+    assert %Thread{on_duty: false} = thread = Ash.get!(Thread, thread.id)
+    refute Projects.on_duty?(thread)
     [path] = Path.wildcard(Path.join(dir, ".longx/local/watches/wait-*.exs"))
-    assert File.read!(path) =~ ~s(send(ctx, "#{Projects.agent_name(thread)}", )
+    assert File.read!(path) =~ "send(ctx, :callback,"
+    watch = Watches.get_watch!(project.id, Path.basename(path, ".exs"))
+    assert Map.get(watch, :creator_thread_id) == thread.id
+
+    # Its callback is an identity, not the handle it happened to have when
+    # the alarm was written. An idle process can leave and be woken again.
+    {:ok, thread} = Projects.set_handle(thread, "renamed")
+    {:ok, thread} = Projects.set_handle(thread, nil)
+    :ok = Longx.Agent.stop(thread.kernel_thread_id)
+    script!(bypass, [ResponsesFixture.assistant_message("back")])
+    assert {:ok, %{sends: 1, last_error: nil}} = Watches.run(watch)
+
+    eventually(fn ->
+      turns = Projects.list_turns!(thread)
+      length(turns) == 2 and Enum.all?(turns, &(&1.status == :completed))
+    end)
+
+    refute Projects.on_duty?(Ash.get!(Thread, thread.id))
+  end
+
+  test "a hand-written watch created by apply_patch can call back its off-duty creator",
+       %{bypass: bypass, dir: dir, project: project} do
+    {:ok, thread} = Projects.start_thread(project)
+    address = Projects.agent_name(thread)
+
+    patch = """
+    *** Begin Patch
+    *** Add File: .longx/local/watches/progress.exs
+    +defmodule Progress do
+    +  use Longx.Agent.Watch
+    +  every "*/10 * * * *"
+    +  def run(ctx) do
+    +    send(ctx, "#{address}", "download progress")
+    +    {:ok, %{}}
+    +  end
+    +end
+    *** End Patch
+    """
+
+    ctx = %Longx.Agent.Context{
+      project_id: project.id,
+      thread_id: thread.kernel_thread_id,
+      cwd: dir
+    }
+
+    assert {:ok, _, _} = Longx.Agent.Plugs.Patch.apply_patch(%{"input" => patch}, ctx)
+    :ok = Watches.reconcile_project(project)
+    watch = Watches.get_watch!(project.id, "progress")
+    assert Map.get(watch, :creator_thread_id) == thread.id
+    refute Projects.on_duty?(Ash.get!(Thread, thread.id))
+
+    assert {:ok, %{result: {:ok, %{}}, sends: [%{result: :ok}]}} = Watches.dry_run(watch)
+    assert [] == Projects.list_turns!(thread)
+    assert %{runs: 0, sends: 0} = Watches.get_watch!(project.id, "progress")
+
+    # Reload the row, as a restart would; no in-memory creator capability.
+    script!(bypass, [ResponsesFixture.assistant_message("reported")])
+    assert {:ok, %{sends: 1, last_error: nil}} = Watches.run(Ash.get!(Watches.Watch, watch.id))
+
+    eventually(fn ->
+      match?([%Turn{status: :completed}], Projects.list_turns!(thread))
+    end)
+
+    refute Projects.on_duty?(Ash.get!(Thread, thread.id))
+  end
+
+  test "editing or overwriting a watch does not steal its callback or permit other off-duty targets",
+       %{dir: dir, project: project} do
+    {:ok, creator} = Projects.start_thread(project)
+    {:ok, other} = Projects.start_thread(project)
+
+    patch = fn target ->
+      """
+      *** Begin Patch
+      *** Add File: .longx/local/watches/progress.exs
+      +defmodule Progress do
+      +  use Longx.Agent.Watch
+      +  every "*/10 * * * *"
+      +  def run(ctx) do
+      +    send(ctx, "#{Projects.agent_name(target)}", "progress")
+      +    {:ok, %{}}
+      +  end
+      +end
+      *** End Patch
+      """
+    end
+
+    ctx = fn thread ->
+      %Longx.Agent.Context{project_id: project.id, thread_id: thread.kernel_thread_id, cwd: dir}
+    end
+
+    assert {:ok, _, _} =
+             Longx.Agent.Plugs.Patch.apply_patch(%{"input" => patch.(creator)}, ctx.(creator))
+
+    assert {:ok, _, _} =
+             Longx.Agent.Plugs.Patch.apply_patch(%{"input" => patch.(other)}, ctx.(other))
+
+    File.touch!(Path.join(dir, ".longx/local/watches/progress.exs"), System.os_time(:second) + 1)
+    :ok = Watches.reconcile_project(project)
+    watch = Watches.get_watch!(project.id, "progress")
+    assert Map.get(watch, :creator_thread_id) == creator.id
+    assert {:ok, %{result: {:error, error}}} = Watches.dry_run(watch)
+    assert error =~ "off duty"
+    assert {:ok, %{sends: 0, last_error: error}} = Watches.run(watch)
+    assert error =~ "off duty"
+    assert [] == Projects.list_turns!(other)
+  end
+
+  test "a deleted creator cannot redirect its callback to another conversation",
+       %{dir: dir, project: project} do
+    {:ok, creator} = Projects.start_thread(project, handle: "original")
+
+    patch = """
+    *** Begin Patch
+    *** Add File: .longx/local/watches/callback.exs
+    +defmodule Callback do
+    +  use Longx.Agent.Watch
+    +  every "*/10 * * * *"
+    +  def run(ctx) do
+    +    send(ctx, :callback, "progress")
+    +    {:ok, %{}}
+    +  end
+    +end
+    *** End Patch
+    """
+
+    ctx = %Longx.Agent.Context{
+      project_id: project.id,
+      thread_id: creator.kernel_thread_id,
+      cwd: dir
+    }
+
+    assert {:ok, _, _} = Longx.Agent.Plugs.Patch.apply_patch(%{"input" => patch}, ctx)
+    watch = Watches.get_watch!(project.id, "callback")
+    :ok = Projects.delete_thread(creator)
+    {:ok, replacement} = Projects.start_thread(project, handle: "original")
+
+    assert {:ok, %{result: {:error, error}}} = Watches.dry_run(watch)
+    assert error =~ "creator session no longer exists"
+    assert {:ok, %{sends: 0, last_error: error}} = Watches.run(watch)
+    assert error =~ "creator session no longer exists"
+    assert [] == Projects.list_turns!(replacement)
   end
 end

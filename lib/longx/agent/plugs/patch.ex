@@ -67,7 +67,21 @@ defmodule Longx.Agent.Plugs.Patch do
 
     with {:ok, hunks} <- Patch.parse(text),
          {:ok, changes} <- Patch.apply(hunks, cwd) do
-      {:ok, "Done!\n" <> summary(changes), %{"changes" => changes}}
+      created =
+        for %{"kind" => "add", "path" => path, "diff" => diff} <- changes,
+            String.starts_with?(diff, "--- /dev/null\n"),
+            do: path
+
+      note =
+        case Longx.Watches.record_created(ctx, created) do
+          :ok ->
+            ""
+
+          {:error, reason} ->
+            "\nThe files were saved, but the watch callback could not be bound: #{inspect(reason)}"
+        end
+
+      {:ok, "Done!\n" <> summary(changes) <> note, %{"changes" => changes}}
     end
   end
 

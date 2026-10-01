@@ -260,10 +260,38 @@ defmodule Longx.WatchesTest do
     assert {:ok, %Watch{} = ran} = Watches.run(Watches.get_watch!(project.id, "nudge"))
     assert ran.sends == 0
     assert ran.last_error =~ "off duty"
+    assert ran.last_error =~ "no creator binding"
     assert_receive {:notify, %{kind: "watch", title: title, body: body}}, 5_000
     assert title =~ "没能叫醒"
     assert body =~ "值班"
     assert [] == Projects.list_turns!(plain)
+  end
+
+  test "dry runs check delivery refusal without waking targets, counting sends, or changing state",
+       %{dir: dir, project: project} do
+    {:ok, plain} = Projects.start_thread(project)
+
+    write!(dir, "check_delivery", """
+    defmodule CheckDelivery do
+      use Longx.Agent.Watch
+      every "*/10 * * * *"
+      def run(ctx) do
+        send(ctx, "#{Projects.agent_name(plain)}", "progress")
+        send(ctx, "missing-session", "progress")
+        {:ok, %{"checked" => true}}
+      end
+    end
+    """)
+
+    :ok = Watches.reconcile_project(project)
+    watch = Watches.get_watch!(project.id, "check_delivery")
+    assert {:ok, outcome} = Watches.dry_run(watch)
+    assert {:error, error} = outcome.result
+    assert error =~ "off duty"
+    assert error =~ "no session at that address"
+    assert [%{result: {:error, :off_duty}}, %{result: {:error, :not_found}}] = outcome.sends
+    assert [] == Projects.list_turns!(plain)
+    assert %{runs: 0, sends: 0, state: %{}, last_error: nil} = Ash.get!(Watch, watch.id)
   end
 
   test "send(:self) is the session named after the watch, started when there is none; a once watch is consumed with its file",
@@ -305,6 +333,63 @@ defmodule Longx.WatchesTest do
     # the next reconcile drops the row: the file is gone
     assert :ok = Watches.reconcile_project(project)
     assert [] = Watches.list_for_project!(project.id)
+  end
+
+  test "a dry run accounts for its planned sends and never creates a :self session",
+       %{dir: dir, project: project} do
+    write!(dir, "dry_budget", """
+    defmodule DryBudget do
+      use Longx.Agent.Watch
+      every "*/10 * * * *"
+      budget 1
+      def run(ctx) do
+        send(ctx, :self, "first")
+        send(ctx, :self, "second")
+        {:ok, %{}}
+      end
+    end
+    """)
+
+    :ok = Watches.reconcile_project(project)
+    watch = Watches.get_watch!(project.id, "dry_budget")
+    assert {:ok, %{result: {:error, _}, sends: [first, second]}} = Watches.dry_run(watch)
+    assert first.result == :ok
+    assert second.result == {:error, :budget}
+    assert {:ok, %{result: {:error, error}}} = Watches.dry_run(watch)
+    assert error =~ "hourly send budget exhausted"
+    assert [] == Projects.list_threads!(project)
+    assert %{enabled: true, runs: 0, sends: 0, sends_this_hour: 0} = Ash.get!(Watch, watch.id)
+  end
+
+  test "unbound callback failures are explicit in the tool result and persisted watch error",
+       %{dir: dir, project: project} do
+    write!(dir, "unbound", """
+    defmodule Unbound do
+      use Longx.Agent.Watch
+      every "*/10 * * * *"
+      def run(ctx) do
+        send(ctx, :callback, "progress")
+        {:ok, %{}}
+      end
+    end
+    """)
+
+    :ok = Watches.reconcile_project(project)
+    watch = Watches.get_watch!(project.id, "unbound")
+
+    assert {:error, error} =
+             Longx.Agent.Plugs.Watches.watch_run(%{"name" => "unbound"}, %{project_id: project.id})
+
+    assert error =~ "no creator binding"
+    assert error =~ "refused:"
+    refute error =~ "no session at that address"
+    assert %{runs: 0, sends: 0, last_error: nil} = Ash.get!(Watch, watch.id)
+
+    assert {:ok, %{last_error: error}} = Watches.run(watch)
+    assert error =~ "no creator binding"
+    assert {:ok, listed} = Longx.Agent.Plugs.Watches.watch_list(%{}, %{project_id: project.id})
+    assert listed =~ "no creator binding"
+    assert [] == Projects.list_threads!(project)
   end
 
   test "the tick queues a run for every due watch (unique per watch) and the runner runs it; a restart clears a run left marked running",

@@ -426,10 +426,7 @@ defmodule Longx.Projects do
   @spec deliver(String.t(), String.t(), String.t(), keyword) ::
           {:ok, Thread.t()} | {:error, :self | :not_found | :off_duty | term}
   def deliver(project_id, address, text, opts) when is_binary(text) do
-    with {:ok, %Thread{} = target} <- resolve_address(project_id, address),
-         :ok <- not_self(target, opts[:from_thread]),
-         :ok <- ensure_usable(target),
-         :ok <- ensure_on_duty(target),
+    with {:ok, target} <- delivery_target(project_id, address, opts),
          {:ok, send_opts} <- delivery_opts(target, opts),
          :ok <- wake(target),
          {:ok, _} <- sent(Longx.Agent.send(target.kernel_thread_id, text, send_opts)) do
@@ -437,10 +434,27 @@ defmodule Longx.Projects do
     end
   end
 
+  @doc """
+  Checks whether an address can receive a message without waking it.
+  `callback_thread_id:` is a watch's persisted creator row id: only that
+  exact session can receive its own callback while off duty.
+  """
+  @spec delivery_target(String.t(), String.t(), keyword) :: {:ok, Thread.t()} | {:error, term}
+  def delivery_target(project_id, address, opts \\ []) do
+    with {:ok, target} <- resolve_address(project_id, address),
+         :ok <- not_self(target, opts[:from_thread]),
+         :ok <- ensure_usable(target),
+         :ok <- ensure_on_duty(target, opts[:callback_thread_id]),
+         do: {:ok, target}
+  end
+
   defp not_self(%Thread{kernel_thread_id: id}, id), do: {:error, :self}
   defp not_self(_target, _from), do: :ok
 
-  defp ensure_on_duty(target), do: if(on_duty?(target), do: :ok, else: {:error, :off_duty})
+  defp ensure_on_duty(%Thread{id: id}, id) when is_binary(id), do: :ok
+
+  defp ensure_on_duty(target, _creator),
+    do: if(on_duty?(target), do: :ok, else: {:error, :off_duty})
 
   defp delivery_opts(target, opts) do
     base = [deliver: Keyword.get(opts, :deliver, :now), hops: Keyword.get(opts, :hops, 0)]

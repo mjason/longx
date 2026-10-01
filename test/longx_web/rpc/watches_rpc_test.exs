@@ -40,6 +40,8 @@ defmodule LongxWeb.Rpc.WatchesRpcTest do
   @fields ~w(id name path layer kind cron at enabled disabledReason loadError nextDueAt runningSince lastRunAt lastDurationMs lastError lastOutput lastSentTo runs sends webhookToken state)
 
   test "list, switch, dry run, delete; the global overview", %{conn: conn, project: project} do
+    {:ok, main} = Projects.start_thread(project, handle: "main")
+
     assert %{"success" => true, "data" => [row]} =
              rpc(conn, "list_watches", %{
                "fields" => @fields,
@@ -73,6 +75,7 @@ defmodule LongxWeb.Rpc.WatchesRpcTest do
 
     assert %{"ok" => true, "log" => ["fine"], "sends" => [~s("main": hello)]} = dry
     assert dry["result"] =~ "{:ok"
+    assert [] == Projects.list_turns!(main)
 
     assert %{"success" => true, "data" => %{"watches" => [all]}} =
              rpc(conn, "list_all_watches", %{"fields" => ~w(watches)})
@@ -144,5 +147,24 @@ defmodule LongxWeb.Rpc.WatchesRpcTest do
 
     assert %{"onDuty" => true, "handle" => nil} =
              Enum.find(sessions, &(&1["threadId"] == other.id))
+  end
+
+  test "a refused dry run is marked failed with a readable per-send reason", %{
+    conn: conn,
+    project: project
+  } do
+    watch = Watches.get_watch!(project.id, "health")
+
+    assert %{"success" => true, "data" => dry} =
+             rpc(conn, "dry_run_watch", %{
+               "fields" => ~w(ok result log sends),
+               "input" => %{"id" => watch.id}
+             })
+
+    assert dry["ok"] == false
+    assert dry["result"] =~ "no session at that address"
+    assert [line] = dry["sends"]
+    assert line =~ "refused: no session at that address"
+    assert %{runs: 0, sends: 0, last_error: nil} = Ash.get!(Watch, watch.id)
   end
 end

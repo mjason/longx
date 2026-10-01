@@ -183,6 +183,7 @@ const zh = {
   noDiff: "没有改动",
   diffSplit: "并排",
   diffUnified: "单栏",
+  diffFullContext: "全文上下文",
   unchangedLines: "$ 行未改动",
   binaryDiff: "二进制文件，没有可显示的差异。",
   // git tool (GitHub Desktop's shape)

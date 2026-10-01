@@ -8,7 +8,7 @@ import { channel, ok } from "@/ui/test-mocks";
 
 vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { gitBranches, gitChanges, gitCommit, gitCreateBranch, gitDeleteBranch, gitDiscard, gitFetch, gitLog, gitPull, gitPush, gitSetRemote, gitShow, gitSwitch, gitUndoCommit } from "@/core/api";
+import { gitBranches, gitChanges, gitCommit, gitCreateBranch, gitDeleteBranch, gitDiscard, gitFetch, gitFileVersions, gitLog, gitPull, gitPush, gitSetRemote, gitShow, gitSwitch, gitUndoCommit } from "@/core/api";
 
 const repo = { repository: true, branch: "main", head: "abc123def", changes: [{ path: "lib/a.ex", status: "modified" }, { path: "new.txt", status: "untracked" }], ahead: 1, behind: 2, remotes: [{ name: "origin", url: "git@example.com:x/y.git" }], lfs: false, ignored: [], merging: false };
 const log = [
@@ -36,6 +36,7 @@ describe("GitTool", () => {
     vi.mocked(gitChanges).mockResolvedValue(ok(repo) as never);
     vi.mocked(gitLog).mockResolvedValue(ok(log) as never);
     vi.mocked(gitShow).mockResolvedValue(ok({ ...log[0]!, body: "the body", parents: ["b0b0b0b0"], files: [{ path: "lib/a.ex", status: "modified" }] }) as never);
+    vi.mocked(gitFileVersions).mockResolvedValue(ok({ before: "one\n", after: "two\n", binary: false }) as never);
     vi.mocked(gitBranches).mockResolvedValue(ok({ current: "main", branches: [{ name: "main", sha: "abc", current: true, upstream: "origin/main" }, { name: "feature", sha: "def", current: false, upstream: null }], stashes: [] }) as never);
     for (const m of [gitCommit, gitDiscard, gitSwitch, gitCreateBranch, gitDeleteBranch, gitFetch, gitPull, gitPush, gitSetRemote, gitUndoCommit]) vi.mocked(m).mockClear();
   });
@@ -53,6 +54,7 @@ describe("GitTool", () => {
     // GitHub's file view: both versions in the merge view, side by side on a desktop
     const diff = await screen.findByTestId("diff-view");
     await waitFor(() => expect(diff.querySelectorAll(".cm-mergeViewEditor")).toHaveLength(2));
+    for (const content of diff.querySelectorAll(".cm-content")) expect(content).toHaveClass("cm-lineWrapping");
     await user.click(screen.getByRole("tab", { name: "单栏" }));
     await waitFor(() => expect(screen.getByTestId("diff-view")).toHaveAttribute("data-mode", "unified"));
 
@@ -61,6 +63,26 @@ describe("GitTool", () => {
     await user.type(within(panel).getByRole("textbox", { name: "描述（可选）" }), "why");
     await user.click(within(panel).getByRole("button", { name: /提交到 main/ }));
     await waitFor(() => expect(gitCommit).toHaveBeenCalledWith(expect.objectContaining({ input: { projectId: "id-1", paths: ["lib/a.ex"], message: "fix a\n\nwhy" } })));
+  });
+
+  test("a file diff can show full context and restore the nearby context", async () => {
+    const lines = Array.from({ length: 81 }, (_, i) => `context ${i}`);
+    vi.mocked(gitFileVersions).mockResolvedValue(ok({
+      before: lines.join("\n"),
+      after: lines.map((line, i) => i === 40 ? "changed" : line).join("\n"),
+      binary: false,
+    }) as never);
+    const { user, panel } = await openGit();
+    await user.click(within(panel).getByRole("button", { name: /lib\/a\.ex/ }));
+    const diff = await screen.findByTestId("diff-view");
+    expect(diff.querySelector(".cm-collapsedLines")).not.toBeNull();
+    const full = screen.getByRole("button", { name: "全文上下文" });
+    expect(full).toHaveAttribute("aria-pressed", "false");
+    await user.click(full);
+    await waitFor(() => expect(diff.querySelector(".cm-collapsedLines")).toBeNull());
+    expect(full).toHaveAttribute("aria-pressed", "true");
+    await user.click(full);
+    await waitFor(() => expect(diff.querySelector(".cm-collapsedLines")).not.toBeNull());
   });
 
   test("discarding the checked files asks first", async () => {

@@ -24,6 +24,19 @@
 `send` 默认 `deliver: :idle`：**永远不插话**，对方在跑就留在它邮箱里，空了作为新一轮
 （内核 gen_statem 的 postpone，见 `docs/agent-directory-design.md`）。
 
+### 创建者回调（2026-10-01）
+
+agent 通过 `apply_patch` 新建的 watch 和 `wait_until` 新建的 watch 会记录
+`creator_thread_id`（完整会话行 ID，数据库持久化，不属于脚本 state 或文件头）。
+`send(ctx, :callback, text)` 回到这个确定的创建者，免除 duty 检查，但不会把创建者设为值班；
+普通地址若恰好解析为同一个创建者也可回调。其他目标仍然需要值班，预算、不可用会话和等待队列
+限制不变。`:self` 仍是独立的 `watch-<name>` 会话，不是创建者。
+
+编辑或覆盖已有文件不接管绑定。旧 watch 不会仅凭目标地址被自动认领；
+创建者删除或归档后，回调失败，不创建替代会话。绑定采用首次写入的原子更新，重载与重启不丢失。
+试跑检查实际投递资格和预算（包含本次计划的多条发送），但不唤醒会话、不创建 `:self`、
+不计数、不改持久状态、不发送通知。
+
 ## 2. 文件格式：`use Longx.Agent.Watch`
 
 ```elixir

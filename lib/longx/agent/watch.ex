@@ -368,17 +368,24 @@ defmodule Longx.Agent.Watch do
 
     @doc """
     A message to a session: `to` is an address (a handle, `~<id suffix>`,
-    `<project>:<handle>`) or `:self`, the session named after the watch
-    (started when there is none). Delivered when the session is idle
+    `<project>:<handle>`), `:callback` (the bound creator), or `:self`,
+    the session named after the watch (started when there is none).
+    Delivered when the session is idle
     (`deliver: :idle`; `:now` steers). `:ok`, `{:error, :not_found}`,
     `{:error, :budget}` when the hour's sends are spent.
     """
-    @spec send(map, String.t() | :self, String.t(), keyword) :: :ok | {:error, term}
+    @spec send(map, String.t() | :self | :callback, String.t(), keyword) :: :ok | {:error, term}
     def send(ctx, to, text, opts \\ []) when is_binary(text) do
       result =
         case ctx.deliver do
-          :dry -> :ok
-          fun when is_function(fun, 3) -> fun.(to, text, opts)
+          :dry ->
+            case Map.get(ctx, :validate_send) do
+              fun when is_function(fun, 4) -> fun.(ctx, to, text, opts)
+              _ -> :ok
+            end
+
+          fun when is_function(fun, 3) ->
+            fun.(to, text, opts)
         end
 
       # the result rides along: a refused send is the run's error, not a secret
