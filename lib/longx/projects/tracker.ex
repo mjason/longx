@@ -269,8 +269,11 @@ defmodule Longx.Projects.Tracker do
         })
 
         notify_turn_end(thread, status, error)
-        # every failed turn, sub-agents' too: what the person will want to debug
-        if status == :failed, do: Longx.Sentry.turn_failed(kernel_thread_id, turn_id, error)
+        # Only the first failure is a new fault. A completion replay after
+        # boot cleanup (or the monitor's crash report) must not report a
+        # settled turn again; its persisted reason still stays on the page.
+        if status == :failed and row.status == :in_progress,
+          do: Longx.Sentry.turn_failed(kernel_thread_id, turn_id, error)
       end
 
       Projects.broadcast_changed(thread.project_id)

@@ -26,13 +26,18 @@ defmodule Longx.Projects.Project.Changes.DeleteThreads do
         Longx.Jobs.delete(id)
       end
 
+      # The writer needs its own SQLite connection. Flush outside the
+      # transaction too: a pending item from another project would wait for
+      # our write lock while this delete waited for its flush.
+      :ok = Longx.Agent.Transcript.flush()
+
       changeset
     end)
     |> Ash.Changeset.before_action(fn changeset ->
       threads = threads(project_id)
       thread_ids = Enum.map(threads, & &1.id)
 
-      for %{kernel_thread_id: id} <- threads, do: Longx.Agent.Transcript.delete!(id)
+      Longx.Agent.Transcript.delete_flushed!(Enum.map(threads, & &1.kernel_thread_id))
 
       Longx.Projects.Turn
       |> Ash.Query.filter(thread_id in ^thread_ids)

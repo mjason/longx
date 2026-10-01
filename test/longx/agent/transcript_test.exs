@@ -5,6 +5,90 @@ defmodule Longx.Agent.TranscriptTest do
 
   @thread "th-#{System.unique_integer([:positive])}"
 
+  test "an absent turn id cannot truncate the whole thread" do
+    assert_raise FunctionClauseError, fn -> Transcript.truncate!(@thread, nil) end
+  end
+
+  for operation <- [:delete, :truncate] do
+    test "overlapping #{operation} requests do not delete stale transcript records" do
+      thread = "delete-race-#{Ash.UUID.generate()}"
+
+      for {turn, seq} <- [{"remove", 1}, {"keep", 2}] do
+        Transcript.append!(%{
+          thread_id: thread,
+          turn_id: turn,
+          seq: seq,
+          kind: :user_message,
+          input: %{"role" => "user", "content" => turn}
+        })
+      end
+
+      assert :ok = Transcript.flush()
+      handler = "delete-read-#{Ash.UUID.generate()}"
+
+      :ok =
+        :telemetry.attach(
+          handler,
+          [:longx, :repo, :query],
+          &__MODULE__.hold_delete_read/4,
+          self()
+        )
+
+      try do
+        tasks =
+          for _ <- 1..2 do
+            Task.async(fn ->
+              Process.put(:hold_delete_read, true)
+
+              try do
+                case unquote(operation) do
+                  :delete -> Transcript.delete!(thread)
+                  :truncate -> Transcript.truncate!(thread, "remove")
+                end
+              rescue
+                error -> {:error, error}
+              end
+            end)
+          end
+
+        # The old implementation reads a list, then destroys each record.
+        # Hold both reads so both requests obtain the same stale list.
+        # Atomic deletion does not read a list at all.
+        for task <- tasks do
+          receive do
+            {:delete_read, pid} when pid == task.pid -> :ok
+          after
+            300 -> :ok
+          end
+        end
+
+        for task <- tasks, do: send(task.pid, :delete_continue)
+        for task <- tasks, do: assert(:ok == Task.await(task, 5_000))
+
+        case unquote(operation) do
+          :delete -> assert Transcript.items!(thread) == []
+          :truncate -> assert [%{turn_id: "keep"}] = Transcript.items!(thread)
+        end
+      after
+        :telemetry.detach(handler)
+      end
+    end
+  end
+
+  @doc false
+  def hold_delete_read(_event, _measurements, metadata, test) do
+    if Process.get(:hold_delete_read) == true and String.starts_with?(metadata.query, "SELECT") and
+         metadata.query =~ "agent_items" do
+      send(test, {:delete_read, self()})
+
+      receive do
+        :delete_continue -> :ok
+      after
+        5_000 -> raise "transcript deletion read was not released"
+      end
+    end
+  end
+
   test "a write that meets SQLite's lock is tried again before it fails (a locked database once crashed the agent mid-turn)" do
     # a writer that is refused twice, then goes through
     {:ok, counter} = Agent.start_link(fn -> 0 end)

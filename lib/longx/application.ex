@@ -7,7 +7,13 @@ defmodule Longx.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
+    opts = [strategy: :one_for_one, name: Longx.Supervisor]
+    Supervisor.start_link(children(), opts)
+  end
+
+  @doc false
+  def children do
+    [
       LongxWeb.Telemetry,
       Longx.Vault,
       # the migrations first, on one connection of their own (Longx.Migrator says why)
@@ -60,8 +66,6 @@ defmodule Longx.Application do
       # the one writer of transcript items (the agents' event log)
       Longx.Agent.Transcript.Writer,
       {DynamicSupervisor, name: Longx.Agent.Supervisor, strategy: :one_for_one},
-      # keeps project thread/turn rows in step with the agents' events
-      Longx.Projects.Tracker,
       # a project's file watcher, only while a page has it open
       # the agents' background jobs (Longx.Jobs): each its own process, outliving
       # the tool call, the turn and the agent's idle exit
@@ -73,19 +77,12 @@ defmodule Longx.Application do
       Longx.Credentials.Logins,
       # the watches' scripts run here, one task per run (Longx.Watches)
       {Task.Supervisor, name: Longx.Watches.TaskSupervisor},
+      # Settle the previous boot before any consumer can see stale state or
+      # start new work. A Task here raced the Tracker and Oban (LONX-M).
+      Longx.BootRecovery,
+      # keeps project thread/turn rows in step with the agents' events
+      Longx.Projects.Tracker,
       {Oban, Application.fetch_env!(:longx, Oban)},
-      # rows a previous boot left running: no agent survives the BEAM, nor a watch's run
-      Supervisor.child_spec(
-        {Task,
-         fn ->
-           Longx.Projects.settle_after_restart()
-           Longx.Watches.settle_after_restart()
-           # the jobs a previous run left running died with it: lost, said so
-           Longx.Jobs.settle_after_restart()
-         end},
-        id: :settle_after_restart,
-        restart: :temporary
-      ),
       # Start to serve requests, typically the last entry
       LongxWeb.Endpoint,
       # the person's browsers through the Chrome extension (Longx.Chrome): the
@@ -108,11 +105,6 @@ defmodule Longx.Application do
       {Task.Supervisor, name: Longx.Tls.TaskSupervisor},
       Longx.Tls.Manager
     ]
-
-    # See https://elixir.hexdocs.pm/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: Longx.Supervisor]
-    Supervisor.start_link(children, opts)
   end
 
   # Tell Phoenix to update the endpoint configuration

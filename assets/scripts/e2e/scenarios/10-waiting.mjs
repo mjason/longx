@@ -7,6 +7,7 @@
 import { expect, sleep } from "../lib.mjs";
 
 export async function run(h) {
+  await h.context.addInitScript(() => localStorage.setItem("longx:language", "zh-CN"));
   await h.project();
   const t = await h.thread();
   await h.send(

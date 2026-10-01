@@ -13,7 +13,9 @@ defmodule Longx.Agent.Transcript do
   alias Longx.Agent.Transcript.Item
 
   resources do
-    resource Item
+    resource Item do
+      define :delete_items, action: :delete_items
+    end
   end
 
   @interrupted_output "[interrupted before the tool finished]"
@@ -177,20 +179,29 @@ defmodule Longx.Agent.Transcript do
 
   @doc "Drops one turn's items (a retract / revert)."
   @spec truncate!(String.t(), String.t()) :: :ok
-  def truncate!(thread_id, turn_id) do
+  def truncate!(thread_id, turn_id) when is_binary(thread_id) and is_binary(turn_id) do
     flushed!()
-
-    Item
-    |> Ash.Query.for_read(:for_turn, %{thread_id: thread_id, turn_id: turn_id})
-    |> Ash.read!()
-    |> Enum.each(&Ash.destroy!/1)
+    delete_items!(%{thread_ids: [thread_id], turn_id: turn_id})
+    :ok
   end
 
   @doc "Drops the whole thread's log."
   @spec delete!(String.t()) :: :ok
   def delete!(thread_id) do
-    # items! flushed
-    thread_id |> items!() |> Enum.each(&Ash.destroy!/1)
+    flushed!()
+    delete_flushed!([thread_id])
+  end
+
+  @doc """
+  Deletes already-flushed logs without waiting on the writer. Only for
+  project deletion: stop the agents and flush before the Ash transaction
+  starts, then delete its logs inside the transaction. Waiting on the
+  writer while holding SQLite's write lock deadlocks unrelated writes.
+  """
+  @spec delete_flushed!([String.t()]) :: :ok
+  def delete_flushed!(thread_ids) do
+    delete_items!(%{thread_ids: thread_ids})
+    :ok
   end
 
   @doc """

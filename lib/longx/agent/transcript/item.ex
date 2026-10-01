@@ -25,6 +25,33 @@ defmodule Longx.Agent.Transcript.Item do
   actions do
     defaults [:read, :destroy]
 
+    # SQLite's Ash bulk-destroy falls back to read-and-destroy streaming.
+    # Logs need an idempotent set deletion, not a stale list of records.
+    action :delete_items, :integer do
+      argument :thread_ids, {:array, :string}, allow_nil?: false
+      argument :turn_id, :string
+
+      run fn input, _ ->
+        import Ecto.Query
+
+        query =
+          from item in "agent_items",
+            where: item.thread_id in ^input.arguments.thread_ids
+
+        turn_id = Map.get(input.arguments, :turn_id)
+
+        query =
+          if turn_id do
+            from item in query, where: item.turn_id == ^turn_id
+          else
+            query
+          end
+
+        {count, _} = Longx.Repo.delete_all(query)
+        {:ok, count}
+      end
+    end
+
     create :append do
       primary? true
       accept [:thread_id, :turn_id, :seq, :kind, :input, :ui, :model]
