@@ -38,15 +38,16 @@ describe("LongxShell bridge", () => {
     expect(window.LongxShell).toBeUndefined();
   });
 
-  test("the native chrome API alone identifies the shell and receives the page palette", () => {
+  test("the macOS chrome API keeps web menus and still receives the page palette", () => {
     delete (window as unknown as { LongxAndroid?: unknown }).LongxAndroid;
     const setChrome = vi.fn();
     window.longxNative = { setChrome };
     document.documentElement.style.setProperty("--sidebar", "#15171c");
 
-    expect(shellPresent()).toBe(true);
+    expect(shellPresent()).toBe(false);
     const off = installShell({ navigate: vi.fn(), resume: vi.fn() });
-    expect(document.documentElement.getAttribute("data-shell")).toBe("android");
+    expect(document.documentElement.getAttribute("data-shell")).toBeNull();
+    expect(window.LongxShell).toBeUndefined();
     setNativeChrome("dark");
     expect(setChrome).toHaveBeenCalledWith({ background: "#15171c", theme: "dark" });
     off();

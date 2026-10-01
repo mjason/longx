@@ -54,7 +54,7 @@ export const SHELL_VERSION = 1;
 
 export function shellPlatform(): ShellPlatform | null {
   if (typeof window === "undefined") return null;
-  if (window.longxNative?.setChrome) return "android";
+  // Chrome-only desktop hosts keep the webpage menus; they cannot handle pick messages.
   if (window.LongxAndroid?.post) return "android";
   if (window.webkit?.messageHandlers?.longx?.postMessage) return "ios";
   return null;
