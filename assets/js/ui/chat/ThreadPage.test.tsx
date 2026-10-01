@@ -188,6 +188,34 @@ describe("ThreadPage", () => {
     );
   });
 
+  test("a chrome-only macOS host keeps the web model picker and shell callbacks", async () => {
+    delete window.LongxAndroid;
+    delete window.webkit;
+    const setChrome = vi.fn();
+    window.longxNative = { setChrome };
+    try {
+      const user = userEvent.setup();
+      vi.mocked(listModels).mockResolvedValue(
+        ok([
+          model(1, { slug: "deepseek-flash", default: true, reasoningLevels: ["low"], reasoningEffort: "low" }),
+          model(2, { slug: "glm-5", reasoningLevels: ["low"], reasoningEffort: "low" }),
+        ]) as never,
+      );
+      await open();
+      expect(window.LongxShell).toBeDefined();
+      expect(document.documentElement.getAttribute("data-shell")).toBe("macos");
+
+      await user.click(screen.getByTestId("model-picker"));
+      await user.click(await screen.findByRole("option", { name: /^glm-5/ }));
+      expect(screen.getByTestId("model-picker")).toHaveTextContent("glm-5");
+      expect(setChrome).toHaveBeenCalled();
+    } finally {
+      delete window.longxNative;
+      delete window.LongxShell;
+      document.documentElement.removeAttribute("data-shell");
+    }
+  });
+
   test("inside a native shell the model picker is the shell's own list: model, then its levels; the choice rides on the turn", async () => {
     const posts: Record<string, unknown>[] = [];
     window.LongxAndroid = { post: (json: string) => posts.push(JSON.parse(json)) };
@@ -1383,6 +1411,34 @@ describe("ThreadPage", () => {
       ),
     );
     r.unmount();
+  });
+
+  test.each(["然后发给 ", "然后发给", "成果接收会话："])("@notes completes an on-duty cross-project recipient after %s and finishes the content here before sharing", async (prefix) => {
+    vi.mocked(directory).mockResolvedValue(ok({ sessions: [
+      session(1, { onDuty: true, handle: "main", address: "main" }),
+      session(9, { projectId: "id-2", projectSlug: "逛论坛", onDuty: true, handle: "notes", address: "逛论坛:notes", title: "接受数据写报告" }),
+      session(8, { projectId: "id-2", projectSlug: "逛论坛", address: "逛论坛:off", title: "notes 私人聊天" }),
+    ] }) as never);
+    try {
+      const user = userEvent.setup();
+      await open();
+      const composer = screen.getByRole("textbox", { name: "随心输入" });
+      await user.type(composer, `写好这次研究的文章，${prefix}@notes`);
+      await user.click(await screen.findByRole("option", { name: /逛论坛:notes/ }));
+      expect(screen.queryByRole("option", { name: /私人聊天/ })).not.toBeInTheDocument();
+      expect(composer).toHaveValue(`写好这次研究的文章，${prefix}@session("逛论坛:notes") `);
+      expect(sendMessage).not.toHaveBeenCalled();
+      await user.type(composer, "{Enter}");
+      await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+        input: expect.objectContaining({ text: expect.stringContaining("先在当前会话完成") }),
+      })));
+      const text = vi.mocked(sendMessage).mock.calls.at(-1)?.[0]?.input?.text as string;
+      expect(text).toContain('逛论坛:notes');
+      expect(text).toContain("完整正文");
+      expect(text).toContain("send_message");
+    } finally {
+      vi.mocked(directory).mockImplementation(async () => ok({ sessions: [session(1, { handle: "main", address: "main", title: "值班", state: "running", onDuty: true }), session(2)] }) as never);
+    }
   });
 
   test("/ in the composer lists the commands: /compact compacts, /init sends the prompt, /git opens the tool; no /review", async () => {

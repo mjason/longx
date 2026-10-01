@@ -17,6 +17,7 @@ import { toMessages, type SubViews } from "./messages";
 import type { PendingApi } from "./pending";
 import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
 import { runningTurnId, type ThreadView } from "./thread";
+import { withSessionDelivery } from "./mentions";
 
 export type ThreadTarget = { threadId: string; kernelThreadId: string };
 
@@ -81,7 +82,7 @@ export function inputOf(message: AppendMessage): {
       else if (part.type === "text") texts.push(part.text);
     }
   }
-  const text = [textOf(message), ...texts]
+  const text = [withSessionDelivery(textOf(message)), ...texts]
     .filter((t) => t.length > 0)
     .join("\n\n");
   return { text, images };

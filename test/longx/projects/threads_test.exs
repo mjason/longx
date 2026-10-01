@@ -521,6 +521,39 @@ defmodule Longx.Projects.ThreadsTest do
     assert [%{handle: "main", state: :asleep}] = Projects.directory(project.id)
   end
 
+  test "the all-project directory addresses resolve and deliver to a session without a handle", %{
+    bypass: bypass,
+    project: project
+  } do
+    dir =
+      Path.join(System.tmp_dir!(), "longx-cross-project-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(dir)
+
+    other_project =
+      Projects.create_project!(%{name: "Other", root_path: dir})
+
+    {:ok, target} = Projects.start_thread(other_project)
+    {:ok, target} = Projects.set_on_duty(target, true)
+    [row] = Projects.directory(project.id, scope: :all)
+    assert row.address == "#{other_project.slug}:#{Projects.agent_name(target)}"
+    assert {:ok, %Thread{id: id}} = Projects.resolve_address(project.id, row.address)
+    assert id == target.id
+
+    script!(bypass, [ResponsesFixture.assistant_message("received")])
+
+    assert {:ok, %Thread{id: id}} =
+             Projects.deliver(project.id, row.address, "cross-project task", [])
+
+    assert id == target.id
+
+    assert_eventually_ok(fn ->
+      match?([%Turn{status: :completed}], Projects.list_turns!(target))
+    end)
+
+    on_exit(fn -> File.rm_rf!(dir) end)
+  end
+
   test "on duty: a plain conversation of the person's cannot be woken by another agent; the switch, a handle or an active goal put a session on duty",
        %{bypass: bypass, project: project} do
     {:ok, asker} = Projects.start_thread(project)

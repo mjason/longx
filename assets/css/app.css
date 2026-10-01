@@ -254,6 +254,18 @@
   border-left: 1px solid var(--border);
 }
 
+/* Sonner's mobile container is viewport-wide but also inset from the left,
+   so its box extends past the screen. Keep the same visible toast width
+   and margins, with the container itself inside those margins too. */
+@media (max-width: 600px) {
+  .toaster[data-sonner-toaster] {
+    width: calc(100% - var(--mobile-offset-left) - var(--mobile-offset-right));
+  }
+  .toaster[data-sonner-toaster] [data-sonner-toast] {
+    width: 100%;
+  }
+}
+
 /* assistant-ui elements: open/closed state variants (Radix data-state or Base UI data-open) */
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));

@@ -351,6 +351,9 @@ const zh = {
   welcomeChatHint: "描述要做的事；命令、改动和需要你操作的地方都会显示在这里。",
   composerPlaceholder: "随心输入",
   mentionFiles: {
+    sessionHint: "成果接收会话 · 先完成内容，再发送全文",
+    sessionSearch: "输入文件名或会话名称",
+    sessionEmpty: "没有匹配的文件或值班会话",
     back: "返回",
     empty: "没有匹配的文件",
     loading: "搜索中…",
@@ -523,7 +526,16 @@ const zh = {
   subagentsHint: "点开一个子 agent，它的完整会话在旁边的标签页里打开。",
   directory: {
     title: "本项目的会话",
-    hint: "每个会话都有一个地址：句柄（@名字）或 ~ 加 id 末六位。只有值班中的会话会被别的 agent 和定时任务叫醒；聊完搁下的对话默认不值班。给会话起个句柄、或设了目标，就一直值班。",
+    otherProjects: "其他项目",
+    otherEmpty: "其他项目还没有值班会话。请先在目标会话中开启值班，或设置句柄。",
+    search: "搜索会话或地址",
+    noMatches: "没有匹配的会话",
+    copyAddress: "复制完整地址",
+    addressCopied: "已复制完整地址",
+    handoff: "交给此会话",
+    handoffHint: "选择“交给此会话”，将协作指令放入输入框；确认任务后再发送。",
+    handoffDraft: (address: string) => `请调用 send_message，将以下任务交给会话 ${JSON.stringify(address)}（to 参数使用此完整地址），并把完成后的回复转告我：`,
+    hint: "跨项目请使用完整地址“项目:句柄”（或 项目:~末六位）。只有值班会话能接收其他 agent 的任务；设置句柄或活动目标也会开启值班。",
     onDuty: "值班",
     onDutyImplied: "有句柄或目标的会话始终值班",
     states: {

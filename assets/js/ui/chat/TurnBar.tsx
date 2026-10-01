@@ -19,7 +19,7 @@ import {
   type ModelOption,
 } from "@/ui/components/assistant-ui/elements/model-selector";
 import { Button } from "@/ui/components/ui/button";
-import { shellPick, shellPresent } from "@/ui/shell/longxShell";
+import { nativePickerAvailable, shellPick } from "@/ui/shell/longxShell";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
 
@@ -190,7 +190,7 @@ export function ComposerTrailing() {
     />
   ) : null;
 
-  if (shellPresent()) {
+  if (nativePickerAvailable()) {
     return (
       <>
         {ring}

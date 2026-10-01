@@ -4,11 +4,11 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
 import { _resetWorkbenchForTests } from "@/core/workbench";
-import { channel, ok } from "@/ui/test-mocks";
+import { channel, ok, session } from "@/ui/test-mocks";
 
 vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { browserStatus, dependencies, setThreadHandle, setThreadOnDuty, startThread, upgradeStatus } from "@/core/api";
+import { browserStatus, dependencies, directory as directoryRpc, sendMessage, setThreadHandle, setThreadOnDuty, startThread, upgradeStatus } from "@/core/api";
 import { browserIdle, dependencyReport, thread, upgradeIdle } from "@/ui/test-mocks";
 
 describe("ProjectWindow", () => {
@@ -397,6 +397,51 @@ describe("ProjectWindow", () => {
     expect(plain).not.toBeChecked();
     await user.click(plain);
     expect(setThreadOnDuty).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t2", onDuty: true } }));
+  });
+
+  test.each([1280, 390])("other projects show on-duty sessions with full addresses; handing off preserves the draft without sending (%i)", async (width) => {
+    setViewport(width);
+    const local = session(1, { projectId: "id-1", handle: "main", address: "main", onDuty: true });
+    const remote = session(9, { projectId: "id-2", projectSlug: "逛论坛", address: "逛论坛:notes", handle: "notes", title: "接受数据写报告", onDuty: true });
+    vi.mocked(directoryRpc).mockImplementation(async (args) =>
+      ok({ sessions: args?.input?.scope === "all" ? [local, remote, session(8, { projectId: "id-2", projectSlug: "逛论坛", address: "逛论坛:~t8", title: "私人聊天" })] : [local] }) as never,
+    );
+    try {
+      const user = userEvent.setup();
+      const copy = vi.spyOn(navigator.clipboard, "writeText");
+      const { router } = renderAt("/p/app-1/t/t1");
+      const composer = await screen.findByRole("textbox", { name: "随心输入" });
+      await user.type(composer, "把研究写成 MDX");
+      await user.keyboard("{Control>}3{/Control}");
+      const panel = await screen.findByTestId("session-directory");
+      await user.click(within(panel).getByRole("button", { name: "其他项目" }));
+      await within(panel).findByText("逛论坛:notes");
+      const row = (await within(panel).findAllByTestId("session-row"))[0]!;
+      expect(row).toHaveTextContent("逛论坛:notes");
+      expect(within(panel).queryByText("私人聊天")).not.toBeInTheDocument();
+      expect(within(row).queryByRole("switch")).not.toBeInTheDocument();
+      await user.click(within(row).getByRole("button", { name: "复制完整地址" }));
+      expect(copy).toHaveBeenCalledWith("逛论坛:notes");
+      const search = within(panel).getByRole("textbox", { name: "搜索会话或地址" });
+      await user.type(search, "不存在");
+      expect(within(panel).getByText("没有匹配的会话")).toBeInTheDocument();
+      await user.clear(search);
+      const target = (await within(panel).findAllByTestId("session-row"))[0]!;
+      await user.click(within(target).getByRole("button", { name: "交给此会话" }));
+      expect((composer as HTMLTextAreaElement).value).toContain("send_message");
+      expect((composer as HTMLTextAreaElement).value).toContain("逛论坛:notes");
+      expect((composer as HTMLTextAreaElement).value).toContain("把研究写成 MDX");
+      expect(sendMessage).not.toHaveBeenCalled();
+      expect(router.state.location.pathname).toBe("/p/app-1/t/t1");
+      if (width === 390) {
+        expect(screen.queryByTestId("tool-sheet")).not.toBeInTheDocument();
+        return;
+      }
+      await user.click(within(target).getByRole("button", { name: /接受数据写报告/ }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/p/逛论坛/t/t9"));
+    } finally {
+      vi.mocked(directoryRpc).mockImplementation(async () => ok({ sessions: [session(1, { handle: "main", address: "main", title: "值班", state: "running", onDuty: true }), session(2)] }) as never);
+    }
   });
 
   test("新会话 from the threads tool opens the new-chat page (no row until the first message)", async () => {

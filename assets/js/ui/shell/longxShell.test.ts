@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { closeTopLayer, installShell, setNativeChrome, shellPick, shellPost, shellPresent } from "./longxShell";
+import { closeTopLayer, installShell, nativePickerAvailable, setNativeChrome, shellPick, shellPlatform, shellPost, shellPresent } from "./longxShell";
 
 // The shell injects `longxNative.setChrome`; Android/iOS may also provide a
 // post bridge for the rest of the shell contract. A browser has neither.
@@ -12,6 +12,7 @@ describe("LongxShell bridge", () => {
   });
   afterEach(() => {
     delete (window as unknown as { LongxAndroid?: unknown }).LongxAndroid;
+    delete window.webkit;
     delete (window as unknown as { LongxShell?: unknown }).LongxShell;
     delete window.longxNative;
     document.documentElement.removeAttribute("data-shell");
@@ -38,18 +39,46 @@ describe("LongxShell bridge", () => {
     expect(window.LongxShell).toBeUndefined();
   });
 
-  test("the native chrome API alone identifies the shell and receives the page palette", () => {
+  test("a chrome-only native host keeps its shell callbacks but does not claim native picker support", () => {
     delete (window as unknown as { LongxAndroid?: unknown }).LongxAndroid;
     const setChrome = vi.fn();
     window.longxNative = { setChrome };
     document.documentElement.style.setProperty("--sidebar", "#15171c");
 
     expect(shellPresent()).toBe(true);
+    expect(shellPlatform()).toBe("macos");
+    expect(nativePickerAvailable()).toBe(false);
     const off = installShell({ navigate: vi.fn(), resume: vi.fn() });
-    expect(document.documentElement.getAttribute("data-shell")).toBe("android");
+    expect(document.documentElement.getAttribute("data-shell")).toBe("macos");
+    expect(window.LongxShell).toBeDefined();
     setNativeChrome("dark");
     expect(setChrome).toHaveBeenCalledWith({ background: "#15171c", theme: "dark" });
+
+    const external = document.createElement("a");
+    external.href = "https://example.com/";
+    document.body.append(external);
+    let wasPrevented = true;
+    document.addEventListener(
+      "click",
+      (event) => {
+        wasPrevented = event.defaultPrevented;
+        event.preventDefault();
+      },
+      { once: true },
+    );
+    external.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(wasPrevented).toBe(false);
     off();
+  });
+
+  test("an iOS message bridge enables native pick support", () => {
+    delete (window as unknown as { LongxAndroid?: unknown }).LongxAndroid;
+    const postMessage = vi.fn();
+    window.webkit = { messageHandlers: { longx: { postMessage } } };
+    expect(shellPlatform()).toBe("ios");
+    expect(nativePickerAvailable()).toBe(true);
+    shellPost({ type: "ready", version: 1 });
+    expect(postMessage).toHaveBeenCalledWith(JSON.stringify({ type: "ready", version: 1 }));
   });
 
   test("back() closes the top layer (a dialog, a sheet, a popover) with Escape and says so; nothing open → false", () => {

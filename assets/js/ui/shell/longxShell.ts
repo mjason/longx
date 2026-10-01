@@ -11,7 +11,7 @@ import type { ThemePreference } from "@/core/theme";
 //
 // In a plain browser nothing is installed and every call is a no-op.
 
-export type ShellPlatform = "android" | "ios";
+export type ShellPlatform = "android" | "ios" | "macos";
 
 export type ShellChrome = { background: string; theme: ThemePreference };
 export type LongxNativeApi = { setChrome: (chrome: ShellChrome) => void };
@@ -54,14 +54,20 @@ export const SHELL_VERSION = 1;
 
 export function shellPlatform(): ShellPlatform | null {
   if (typeof window === "undefined") return null;
-  if (window.longxNative?.setChrome) return "android";
   if (window.LongxAndroid?.post) return "android";
   if (window.webkit?.messageHandlers?.longx?.postMessage) return "ios";
+  if (window.longxNative?.setChrome) return "macos";
   return null;
 }
 
 export function shellPresent(): boolean {
   return shellPlatform() !== null;
+}
+
+/** Whether the host can receive native menu requests, not just chrome updates. */
+export function nativePickerAvailable(): boolean {
+  const platform = shellPlatform();
+  return platform === "android" || platform === "ios";
 }
 
 export function shellPost(message: ShellMessage): void {
@@ -151,6 +157,9 @@ export function installShell(handlers: ShellHandlers): () => void {
   const onClick = (event: MouseEvent) => {
     const anchor = (event.target as Element | null)?.closest?.("a[href]");
     if (!anchor) return;
+    // Chrome-only desktop hosts have no message channel for openExternal.
+    // Leave the normal browser/native link handling intact for them.
+    if (!nativePickerAvailable()) return;
     const url = new URL((anchor as HTMLAnchorElement).href, location.href);
     if (url.origin === location.origin) return;
     event.preventDefault();

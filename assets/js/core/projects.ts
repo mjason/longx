@@ -374,13 +374,13 @@ export function sessionTitle(session: { title: string | null; preview: string | 
   return chars.length > 24 ? chars.slice(0, 24).join("") + "…" : preview;
 }
 
-export function useSessions(projectId: string | undefined) {
+export function useSessions(projectId: string | undefined, scope: "project" | "all" = "project") {
   return useQuery({
-    queryKey: ["sessions", projectId ?? ""] as const,
+    queryKey: ["sessions", projectId ?? "", scope] as const,
     enabled: !!projectId,
     refetchInterval: 5_000,
     queryFn: async () =>
-      unwrap(await directory({ input: { projectId: projectId! } })).sessions as SessionEntry[],
+      unwrap(await directory({ input: { projectId: projectId!, ...(scope === "all" ? { scope } : {}) } })).sessions as SessionEntry[],
   });
 }
 
