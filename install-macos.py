@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import time
 import urllib.request
 
 LABEL = "com.longx.agent"
@@ -98,6 +99,33 @@ def launch_agent(app, data, port, home):
     }
 
 
+def wait_until_unloaded(service, timeout=30):
+    # bootout returns before launchd has finished terminating/removing the job.
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if subprocess.run(["launchctl", "print", service], capture_output=True).returncode != 0:
+            return
+        time.sleep(0.2)
+    raise RuntimeError("LaunchAgent did not finish stopping: " + service)
+
+
+def wait_until_ready(port, logs, timeout=60):
+    # Local readiness must not depend on a user's HTTP proxy configuration.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with opener.open("http://127.0.0.1:" + str(port) + "/", timeout=2) as response:
+                if response.status == 200:
+                    return
+        except OSError:
+            pass
+        time.sleep(0.5)
+    raise RuntimeError("Longx did not respond within " + str(timeout) +
+                       " seconds; inspect " + str(logs / "stderr.log") +
+                       " and " + str(logs / "stdout.log"))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("version", nargs="?", help="release version; default latest")
@@ -176,9 +204,11 @@ def install(args, home, app, data, port):
             raise ValueError("Refusing to stop an unrecognized LaunchAgent")
         if active:
             subprocess.run(["launchctl", "bootout", service], check=True)
+            wait_until_unloaded(service)
         stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         previous = home / "backups" / ("app-" + stamp)
         swapped = False
+        registered = False
         try:
             with tarfile.open(home / "backups" / ("data-" + stamp + ".tar.gz"), "w:gz") as backup:
                 backup.add(data, arcname="data")
@@ -192,7 +222,15 @@ def install(args, home, app, data, port):
                 pending.write_bytes(plistlib.dumps(launch_agent(app, data, port, home)))
                 os.replace(pending, unit)
                 subprocess.run(["launchctl", "bootstrap", domain, str(unit)], check=True)
+                registered = True
+                # RunAtLoad can remain pending in a GUI domain's on-demand-only mode
+                # (observed on macOS 26). Explicitly demand startup, then check HTTP.
+                subprocess.run(["launchctl", "kickstart", service], check=True)
+                wait_until_ready(port, home / "logs")
         except BaseException:
+            if registered:
+                subprocess.run(["launchctl", "bootout", service], check=False)
+                wait_until_unloaded(service)
             if swapped:
                 app.rename(home / "backups" / ("failed-app-" + stamp))
             if previous.exists():
@@ -203,6 +241,7 @@ def install(args, home, app, data, port):
                 unit.unlink()
             if active:
                 subprocess.run(["launchctl", "bootstrap", domain, str(unit)], check=False)
+                subprocess.run(["launchctl", "kickstart", service], check=False)
             raise
     print("Installed. Open http://localhost:" + str(port) if not args.no_service else "Installed; service not started.")
     print("Backups: " + str(home / "backups") + " (program rollback does not undo database migrations).")

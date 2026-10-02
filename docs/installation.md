@@ -53,8 +53,11 @@ and uses your account's permissions. Logs are in `~/.longx/logs`.
 Repeat the installer to upgrade (the web self-upgrader currently supports Linux
 only). It retains previous applications and stopped-service data snapshots in
 `~/.longx/backups`, uses an exclusive install lock, and restores the prior program
-if swapping or registering the service fails. A successful service registration
-is not a guarantee of application health: check the logs after upgrading.
+if swapping, registering, or starting the service fails. After registration the
+installer explicitly starts the LaunchAgent and waits up to 60 seconds for HTTP 200
+on the local port before reporting success. Check the logs for later runtime issues.
+On upgrades it also waits for launchd to fully remove the old service before
+backing up data or registering the replacement.
 Restoring an old application does not reverse database migrations; use its matching
 data backup if needed.
 
