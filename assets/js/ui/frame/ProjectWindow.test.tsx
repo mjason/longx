@@ -4,12 +4,13 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
 import { _resetWorkbenchForTests } from "@/core/workbench";
+import { commands } from "@/core/keys/registry";
 import { channel, ok, session } from "@/ui/test-mocks";
 
 vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
 import { browserStatus, dependencies, directory as directoryRpc, sendMessage, setThreadHandle, setThreadOnDuty, startThread, upgradeStatus } from "@/core/api";
-import { browserIdle, dependencyReport, thread, upgradeIdle } from "@/ui/test-mocks";
+import { browserIdle, dependencyReport, project, thread, upgradeIdle } from "@/ui/test-mocks";
 
 describe("ProjectWindow", () => {
   beforeEach(() => {
@@ -288,6 +289,78 @@ describe("ProjectWindow", () => {
     }
   });
 
+  test.each([1280, 390])("opening a project restores its conversation tabs without adding a new session (%i)", async (width) => {
+    setViewport(width);
+    localStorage.setItem("longx:workbench:id-1", JSON.stringify({
+      tabs: [{ kind: "chat", threadId: "t1", title: "thread 1" }],
+      active: "chat:t1",
+    }));
+    const { router } = renderAt("/p/app-1");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t1"));
+    expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument();
+    expect(startThread).not.toHaveBeenCalled();
+
+    await act(() => router.navigate("/"));
+    await act(() => router.navigate("/p/app-1"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t1"));
+    expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument();
+  });
+
+  test("switching projects restores each workspace, including the settings tab", async () => {
+    setViewport(1280);
+    const { getProject } = await import("@/core/api");
+    const original = vi.mocked(getProject).getMockImplementation()!;
+    vi.mocked(getProject).mockImplementation(async (args) => ok(project(args?.input?.slug === "app-1" ? 1 : 2)) as never);
+    localStorage.setItem("longx:workbench:id-2", JSON.stringify({
+      tabs: [{ kind: "settings" }],
+      active: "settings",
+    }));
+    try {
+      const { router } = renderAt("/p/app-1/t/t1");
+      await screen.findByTestId("workbench");
+      await act(() => router.navigate("/p/app-2"));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-2/settings"));
+      await screen.findByTestId("project-settings");
+      expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument();
+      await act(() => router.navigate("/p/app-1"));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t1"));
+      expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument();
+    } finally {
+      vi.mocked(getProject).mockImplementation(original);
+    }
+  });
+
+  test("opening a project with only a file tab keeps that file, without creating a conversation tab", async () => {
+    setViewport(1280);
+    localStorage.setItem("longx:workbench:id-1", JSON.stringify({
+      tabs: [{ kind: "file", path: "README.md" }],
+      active: "file:README.md",
+    }));
+    const { router } = renderAt("/p/app-1");
+    await screen.findByTestId("workbench");
+    await waitFor(() => expect(JSON.parse(localStorage.getItem("longx:workbench:id-1")!).tabs).toEqual([
+      { kind: "file", path: "README.md" },
+    ]));
+    expect(router.state.location.pathname).toBe("/p/app-1");
+    expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument();
+    expect(startThread).not.toHaveBeenCalled();
+  });
+
+  test("closing the last restored settings tab opens a new conversation in the now-empty workspace", async () => {
+    setViewport(1280);
+    localStorage.setItem("longx:workbench:id-1", JSON.stringify({
+      tabs: [{ kind: "settings" }],
+      active: "settings",
+    }));
+    const { router } = renderAt("/p/app-1");
+    await screen.findByTestId("project-settings");
+    await waitFor(() => expect(commands.available("tab.close")).toBe(true));
+    act(() => { commands.run("tab.close"); });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1"));
+    await screen.findByText("让 agent 在这个项目里干活");
+    expect(startThread).not.toHaveBeenCalled();
+  });
+
   test("right-clicking a workbench tab opens its context actions", async () => {
     setViewport(1280);
     const user = userEvent.setup();
@@ -451,6 +524,8 @@ describe("ProjectWindow", () => {
     await waitFor(() => expect(screen.getByTestId("threads-tool")).toBeInTheDocument());
     await user.click(within(screen.getByTestId("tool-panel")).getByRole("button", { name: /新会话/ }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1"));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem("longx:workbench:id-1")!).active).toBe("chat"));
+    await waitFor(() => expect(router.state.location.state?.newChat).not.toBe(true));
     expect(startThread).not.toHaveBeenCalled();
   });
 });

@@ -75,7 +75,7 @@ export function ThreadPage() {
           <AlertDescription>{t.threadNotFound}</AlertDescription>
         </Alert>
         <Button asChild variant="outline" className="mt-3">
-          <Link to={`/p/${ctx.slug}`}>{t.newThread}</Link>
+          <Link to={`/p/${ctx.slug}`} state={{ newChat: true }}>{t.newThread}</Link>
         </Button>
       </div>
     );

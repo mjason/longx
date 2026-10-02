@@ -91,6 +91,47 @@ defmodule Longx.Chrome.SessionTest do
     assert %{tabs: [%{attached: true}]} = Session.info(ctx.thread)
   end
 
+  test "rebinding an alias releases the old session and requires a fresh cell", ctx do
+    ensure!(ctx.thread)
+    assert {:ok, %{value: []}} = run(ctx, "let oldDevice = 'old'; return await tabs.list()")
+    assert %{browser_id: old_id} = Session.info(ctx.thread)
+    assert old_id == ctx.browser_id
+
+    {new_socket, new_id} = FakeChrome.connect!("replacement-#{ctx.thread}")
+    :ok = Aliases.put("qa", [new_id])
+    # Even though the old device is still online, it is no longer the binding.
+    assert {:error, message} =
+             Session.execute(ctx.thread, "await tabs.open('http://wrong.test/')", 5_000)
+
+    assert message =~ "binding changed"
+    assert %{browser_id: nil, tabs: []} = Session.info(ctx.thread)
+    assert FakeChrome.commands(ctx.state, "chrome.tabs.create") == []
+
+    assert {:ok, %{value: "undefined", error: nil}} =
+             run(%{ctx | socket: new_socket}, "await tabs.list(); return typeof oldDevice")
+
+    assert %{browser_id: ^new_id} = Session.info(ctx.thread)
+  end
+
+  test "a binding changed during a cell refuses commands to the old device", ctx do
+    ensure!(ctx.thread)
+    assert {:ok, %{value: []}} = run(ctx, "return await tabs.list()")
+    session = Session.whereis(ctx.thread)
+    {_, new_id} = FakeChrome.connect!("mid-cell-#{ctx.thread}")
+    :ok = Aliases.put("qa", [new_id])
+
+    assert {:error, message} =
+             Session.cdp(session, %{
+               target: "longx",
+               method: "longx.tabs.open",
+               params: %{"url" => "http://wrong.test"},
+               runtime: nil
+             })
+
+    assert message =~ "binding changed"
+    assert FakeChrome.commands(ctx.state, "chrome.tabs.create") == []
+  end
+
   test "the project's tab limit counts, and tabs.close frees a slot", ctx do
     ensure!(ctx.thread, max_tabs: 1)
     assert {:ok, %{error: nil}} = run(ctx, "await page.goto('http://site.test/')")

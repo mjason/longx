@@ -14,7 +14,12 @@ defmodule LongxWeb.ChromeRpcTest do
   test "a pending browser is listed, approved, renamed, limited, and revoked", %{
     conn: conn
   } do
-    {:ok, b} = Chrome.connect("rpc-1", nil, %{"name" => "Test Chrome", "platform" => "linux"})
+    {:ok, b} =
+      Chrome.connect("rpc-1", nil, %{
+        "name" => "Test Chrome",
+        "platform" => "linux",
+        "peer_ip" => "192.168.1.42"
+      })
 
     assert %{"success" => true, "data" => %{"browsers" => [row]}} =
              rpc(conn, "list_chrome_browsers", %{"fields" => ["browsers"]})
@@ -25,6 +30,7 @@ defmodule LongxWeb.ChromeRpcTest do
              "status" => "pending",
              "connected" => false,
              "maxTabs" => 6,
+             "device" => %{"peer_ip" => "192.168.1.42"},
              "tabs" => []
            } = row
 

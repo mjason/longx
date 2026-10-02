@@ -13,6 +13,11 @@ Longx は、会話、ファイル、コマンド、Git をひとつにまとめ�
 
 ## インストール
 
+macOS 14+ Apple Silicon 向けのネイティブ版もあります。`install-macos.py` を確認して
+`python3 install-macos.py` を実行してください（インストール時のみ Python 3.9+ が必要）。
+ユーザー単位の LaunchAgent として動作し、既定では `http://localhost:7788` のみで待ち受けます。
+署名と更新の詳細は[インストールガイド](docs/installation.md)を参照してください。
+
 Linux x86_64 / arm64：
 
 ```sh

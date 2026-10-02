@@ -78,6 +78,20 @@ describe("agent tabs", () => {
 });
 
 describe("conversation and project settings tabs", () => {
+  test.each([
+    { tabs: [{ kind: "chat", threadId: "t1" }, { kind: "chat", threadId: "t2" }], active: "chat:t2" },
+    { tabs: [{ kind: "file", path: "README.md" }], active: "file:README.md" },
+  ])("restoring existing tabs does not inject a new conversation: $active", (saved) => {
+    const storage = { getItem: () => JSON.stringify(saved), setItem: () => {} };
+    expect(createWorkbenchStore(storage, "wb").get()).toEqual({ ...saved, dirty: [] });
+  });
+
+  test("restoring an empty workspace opens a new conversation; a missing active key falls back to an existing tab", () => {
+    const load = (saved: unknown) => createWorkbenchStore({ getItem: () => JSON.stringify(saved), setItem: () => {} }, "wb").get();
+    expect(load({ tabs: [], active: "chat:t1" })).toEqual(EMPTY_WORKBENCH);
+    expect(load({ tabs: [{ kind: "chat", threadId: "t1" }], active: "missing" }).active).toBe("chat:t1");
+  });
+
   test("each conversation has a stable tab; refreshed titles replace the old details", () => {
     let s = openTab(EMPTY_WORKBENCH, { kind: "chat", threadId: "t1", title: "first" });
     s = openTab(s, { kind: "chat", threadId: "t2", title: "second" });

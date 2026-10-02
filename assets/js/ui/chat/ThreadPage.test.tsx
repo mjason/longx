@@ -311,7 +311,8 @@ describe("ThreadPage", () => {
     // a new chat starts the thread on the picked model and level
     first.unmount();
     vi.mocked(sendMessage).mockClear();
-    const { router } = renderAt("/p/app-1");
+    const { router } = renderAt("/p/app-1/t/t1");
+    await user.click(within(await screen.findByTestId("threads-tool")).getByRole("button", { name: /新会话/ }));
     await screen.findByText("让 agent 在这个项目里干活");
     await user.click(screen.getByTestId("model-picker"));
     await user.click(await screen.findByRole("option", { name: /^glm-5/ }));

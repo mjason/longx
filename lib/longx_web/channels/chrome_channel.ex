@@ -34,6 +34,7 @@ defmodule LongxWeb.ChromeChannel do
         {:ok,
          %{
            "browser_id" => browser.id,
+           "peer_ip" => browser.device["peer_ip"],
            "status" => Atom.to_string(status),
            "name" => browser.name
          }, assign(socket, browser_id: browser.id, pending: %{}, next: 0)}

@@ -112,12 +112,18 @@ if config_env() == :prod do
   port = String.to_integer(System.get_env("PORT") || "7788")
   host = System.get_env("PHX_HOST") || "localhost"
 
+  bind_ip =
+    case :inet.parse_address(String.to_charlist(System.get_env("LONGX_BIND_IP") || "::")) do
+      {:ok, address} -> address
+      {:error, _} -> raise "LONGX_BIND_IP must be an IPv4 or IPv6 address"
+    end
+
   # the release serves on its own, plain http on every interface (put a
   # reverse proxy in front for TLS); PHX_HOST is the name links are built with
   config :longx, LongxWeb.Endpoint,
     server: true,
     url: [host: host, port: port, scheme: "http"],
-    http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}, port: port],
+    http: [ip: bind_ip, port: port],
     secret_key_base: secret_key_base
 
   # ## SSL Support

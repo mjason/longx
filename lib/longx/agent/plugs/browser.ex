@@ -76,7 +76,7 @@ defmodule Longx.Agent.Plugs.Browser do
         "This project uses the person's default browser (Settings → 浏览器). Tab limit for this project: #{Keyword.get(opts, :max_tabs)}."
 
       name ->
-        "This project's browser is the one named `#{name}` (Settings → 浏览器). Tab limit for this project: #{Keyword.get(opts, :max_tabs)}."
+        "This project's browser alias is `#{name}` (Settings → 浏览器); this is an alias, not a device's display name. Tab limit for this project: #{Keyword.get(opts, :max_tabs)}."
     end
   end
 
@@ -108,6 +108,7 @@ defmodule Longx.Agent.Plugs.Browser do
     else
       {:error, :busy} -> {:error, "a cell of this conversation is still running; wait for it"}
       {:error, :timeout} -> {:error, "the cell did not answer in time"}
+      {:error, message} when is_binary(message) -> {:error, message}
       {:error, reason} -> {:error, "the browser runtime could not start: #{inspect(reason)}"}
     end
   end

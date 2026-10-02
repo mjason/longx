@@ -20,6 +20,52 @@ under **Settings → Providers**, then add a project directory.
 No root access is needed. Provider credentials are encrypted in the data directory;
 configure them in the UI rather than pasting secrets into a conversation.
 
+## macOS Apple Silicon release
+
+macOS 14 or newer, native ARM64 (M1 and later; not a Rosetta terminal). Download
+[install-macos.py](../install-macos.py), review it, and run with Python 3.9 or newer:
+
+```sh
+python3 install-macos.py
+# Or a specific version:
+python3 install-macos.py 0.2.101
+```
+
+Python is needed only by the installer, not by the installed application. The native
+archive includes ERTS, the shim, UI, and non-system native libraries. No Elixir,
+Node, Go, Docker, or sudo is required. `git` is optional for workspace Git features.
+
+The installer defaults to `~/.longx`, verifies SHA-256 and archive paths before
+stopping the existing service, and starts the user LaunchAgent `com.longx.agent`.
+It listens **only on 127.0.0.1**, at `http://localhost:7788`. It starts at login
+and uses your account's permissions. Logs are in `~/.longx/logs`.
+
+Repeat the installer to upgrade (the web self-upgrader currently supports Linux
+only). It retains previous applications and stopped-service data snapshots in
+`~/.longx/backups`, uses an exclusive install lock, and restores the prior program
+if swapping or registering the service fails. A successful service registration
+is not a guarantee of application health: check the logs after upgrading.
+Restoring an old application does not reverse database migrations; use its matching
+data backup if needed.
+
+Options: `LONGX_HOME` (a directory underneath your home), `LONGX_PORT`, `--no-service`,
+or `--tarball /path/to/longx-VERSION-darwin-arm64.tar.gz` (the adjacent `.sha256`
+file is mandatory, including local installs). `--no-service` stops an existing
+managed service but leaves the new installation stopped.
+
+```sh
+launchctl bootout "gui/$(id -u)/com.longx.agent"
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.longx.agent.plist"
+```
+
+The release is **ad-hoc signed, not Apple Developer ID signed or notarized**.
+Checksums detect corruption; a checksum downloaded from the same GitHub release
+is not independent proof of publisher identity. The installer does not remove
+quarantine or disable Gatekeeper. If macOS blocks execution, do not disable system
+protections; inspect the source and follow your organization's software policy.
+
+## Linux installer options
+
 To choose installation options, download [install.sh](../install.sh), review it, then run:
 
 ```sh

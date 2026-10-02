@@ -13,9 +13,20 @@ defmodule LongxWeb.ChromeSocket do
   channel "chrome:bridge", LongxWeb.ChromeChannel
 
   @impl true
-  def connect(%{"install_id" => install_id} = params, socket, _connect_info)
+  def connect(%{"install_id" => install_id} = params, socket, connect_info)
       when is_binary(install_id) and install_id != "" do
     device = if is_map(params["device"]), do: params["device"], else: %{}
+    device = Map.delete(device, "peer_ip")
+
+    device =
+      case connect_info do
+        %{peer_data: %{address: address}} when is_tuple(address) ->
+          Map.put(device, "peer_ip", address |> :inet.ntoa() |> to_string())
+
+        _ ->
+          device
+      end
+
     {:ok, assign(socket, install_id: install_id, token: params["token"], device: device)}
   end
 

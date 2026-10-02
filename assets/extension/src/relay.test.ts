@@ -108,6 +108,26 @@ describe("handleCommand", () => {
 });
 
 describe("Bridge commands", () => {
+  test("a superseded bridge ignores late approval, revocation and commands", async () => {
+    const { b, ch, storage, host, chromeApi } = bridge({ token: "current" });
+    b.stop();
+    ch.fire("approved", { token: "stale", name: "old" });
+    ch.fire("revoked");
+    ch.fire("cmd", { id: "k1", method: "chrome.tabs.create", params: [{ url: "http://wrong.test" }] });
+    await Promise.resolve();
+    expect(storage.data.token).toBe("current");
+    expect(host.reconnect).not.toHaveBeenCalled();
+    expect(host.disconnect).not.toHaveBeenCalled();
+    expect(chromeApi.tabs.create).not.toHaveBeenCalled();
+  });
+
+  test("the pairing reply identifies the exact device and transport IP", () => {
+    const { b, ch } = bridge();
+    ch.replies.ok?.({ browser_id: "device-id", peer_ip: "192.168.1.42", status: "pending", name: "Chrome" });
+    expect(b.browserId).toBe("device-id");
+    expect(b.peerIp).toBe("192.168.1.42");
+  });
+
   test("a cmd is answered as a result with the same id; a void result is {}; a throw is its message", async () => {
     const { ch } = bridge();
     ch.replies.ok?.({ browser_id: "b1", status: "approved", name: "Chrome" });

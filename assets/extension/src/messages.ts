@@ -5,7 +5,11 @@ import type { BridgeStatus, SessionInfo } from "./relay";
 
 export type PopupStatus = BridgeStatus | "disconnected";
 
-export type PopupMessage = { type: "status" } | { type: "connect"; serverUrl: string } | { type: "disconnect" };
+export type PopupMessage =
+  | { type: "status" }
+  | { type: "connect"; serverUrl: string; deviceName?: string }
+  | { type: "rename"; deviceName: string }
+  | { type: "disconnect" };
 
 /** the worker's answer: the status, or why the request itself was bad (an address that is no URL) */
 export type PopupReply = StatusReport | { failed: string };
@@ -13,7 +17,10 @@ export type PopupReply = StatusReport | { failed: string };
 export interface StatusReport {
   status: PopupStatus;
   name: string | null;
+  deviceName?: string;
   serverUrl: string | null;
+  browserId?: string | null;
+  peerIp?: string | null;
   sessions: SessionInfo[];
   error: string | null;
 }

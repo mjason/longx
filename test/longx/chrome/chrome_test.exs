@@ -63,6 +63,27 @@ defmodule Longx.ChromeTest do
       assert {:ok, %Browser{max_tabs: 2}} = Chrome.set_max_tabs(b.id, 2)
     end
 
+    test "an explicit extension rename follows its revision, not an ordinary reconnect" do
+      device = Map.put(@device, "name_revision", 0)
+      {:ok, b} = Chrome.connect("named-extension", nil, device)
+      {:ok, _, token} = Chrome.approve(b.id)
+      {:ok, _} = Chrome.rename(b.id, "Server-side name")
+
+      assert {:ok, %Browser{name: "Server-side name"}} =
+               Chrome.connect("named-extension", token, device)
+
+      renamed = Map.merge(device, %{"name" => "桌面 Mac", "name_revision" => 1})
+
+      assert {:ok, %Browser{id: id, name: "桌面 Mac"}} =
+               Chrome.connect("named-extension", token, renamed)
+
+      assert id == b.id
+      {:ok, _} = Chrome.rename(id, "New server-side name")
+
+      assert {:ok, %Browser{name: "New server-side name"}} =
+               Chrome.connect("named-extension", token, renamed)
+    end
+
     test "the directory says whether a browser is connected" do
       {:ok, b} = Chrome.connect("install-6", nil, @device)
       assert [%{connected: false, status: "pending", tabs: []}] = Chrome.directory()

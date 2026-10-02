@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 // The centre of the project window as an editor area: a tab strip — the
-// chat first and always, then the files and diffs opened from the tools —
-// over whichever is active. The chat stays mounted behind a file so its
+// conversations, files and diffs opened from the tools — over whichever
+// is active. The chat stays mounted behind a file so its
 // scroll and composer draft survive a look at the code.
 import { AppWindow, Bot, FileCode2, GitCompareArrows, MessagesSquare, Settings as SettingsIcon, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
@@ -14,7 +14,7 @@ import { keysTitle } from "@/ui/keys/hint";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/ui/components/ui/alert-dialog";
 import { t } from "@/ui/strings";
-import { useMatch, useNavigate } from "react-router";
+import { useLocation, useMatch, useNavigate } from "react-router";
 import { useChat } from "@/ui/chat/ChatProvider";
 import { AgentTab } from "./AgentTab";
 import { Skeleton } from "@/ui/components/ui/skeleton";
@@ -40,12 +40,28 @@ export function Workbench({
   const wb = useWorkbench(projectId);
   const viewport = useViewport();
   const navigate = useNavigate();
+  const location = useLocation();
   const settingsRoute = useMatch("/p/:slug/settings") !== null;
   const chat = useChat();
   const chatTitle = threadId ? chat.thread?.title || chat.thread?.preview || t.chatTab : t.chatTab;
   useEffect(() => {
-    wb.open(settingsRoute ? { kind: "settings" } : { kind: "chat", ...(threadId ? { threadId, title: chatTitle } : {}) });
-  }, [wb.open, settingsRoute, threadId, chatTitle]);
+    if (settingsRoute) wb.open({ kind: "settings" });
+    else if (threadId) wb.open({ kind: "chat", threadId, title: chatTitle });
+    else if (location.state?.newChat) {
+      wb.open({ kind: "chat" });
+      // Consume the request: reloading later must restore the active tab,
+      // not replay an old "new session" action from browser history.
+      navigate(`/p/${slug}`, { replace: true });
+    } else {
+      // The project root restores its workspace; it is not a request for
+      // a new conversation. Files and other non-route tabs stay active.
+      const saved = wb.tabs.find((tab) => tabKey(tab) === wb.active);
+      if (saved?.kind === "chat" && saved.threadId) navigate(`/p/${slug}/t/${saved.threadId}`, { replace: true });
+      else if (saved?.kind === "settings") navigate(`/p/${slug}/settings`, { replace: true });
+    }
+    // Snapshot tabs on navigation, not on activation of a file or surface.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wb.open, settingsRoute, threadId, chatTitle, location.key, navigate, slug]);
   const active = wb.tabs.find((tab) => tabKey(tab) === wb.active) ?? wb.tabs[0]!;
   // a phone has no room for a tab strip around an artifact: a full-screen sheet over the chat
   const phoneArtifact = viewport === "phone" && active.kind === "artifact" ? active : null;
@@ -67,7 +83,7 @@ export function Workbench({
     const wasActive = wb.active === tabKey(tab);
     const index = wb.tabs.findIndex((candidate) => tabKey(candidate) === tabKey(tab));
     const fallback = wasActive
-      ? wb.tabs.filter((candidate) => tabKey(candidate) !== tabKey(tab))[Math.min(index, wb.tabs.length - 2)]
+      ? wb.tabs.filter((candidate) => tabKey(candidate) !== tabKey(tab))[Math.min(index, wb.tabs.length - 2)] ?? { kind: "chat" as const }
       : undefined;
     wb.close(tabKey(tab));
     if (wasActive) {

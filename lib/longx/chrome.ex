@@ -112,8 +112,17 @@ defmodule Longx.Chrome do
   defp seen(browser, name, device) do
     attrs = %{last_seen_at: DateTime.utc_now(), device: device}
     # the person's own name for it stays; a device-named row follows the device
+    # An explicit edit in the extension may replace a server-side display name;
+    # ordinary reconnects never do. The revision is kept inside the device map.
+    revision = device["name_revision"]
+    previous_revision = browser.device["name_revision"]
+    previous_revision = if is_integer(previous_revision), do: previous_revision, else: 0
+    renamed? = is_integer(revision) and revision > previous_revision
+
     attrs =
-      if browser.name == device_name(browser.device), do: Map.put(attrs, :name, name), else: attrs
+      if renamed? or browser.name == device_name(browser.device),
+        do: Map.put(attrs, :name, name),
+        else: attrs
 
     Ash.update(browser, attrs, action: :seen)
   end

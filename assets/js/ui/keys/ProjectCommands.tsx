@@ -77,7 +77,7 @@ export function ProjectCommands({ ctx }: { ctx: ProjectContext }) {
     },
     () => chat.state === "idle" && stoppedTurn(chat.view)?.discardable === true,
   );
-  useCommand("thread.new", () => navigate(`/p/${ctx.slug}`), () => inChat && thread !== undefined);
+  useCommand("thread.new", () => navigate(`/p/${ctx.slug}`, { state: { newChat: true } }), () => inChat && thread !== undefined);
   useCommand(
     "thread.compact",
     () => {
@@ -185,7 +185,7 @@ export function ProjectCommands({ ctx }: { ctx: ProjectContext }) {
         .then(() => {
           void client.invalidateQueries({ queryKey: queryKeys.threads(ctx.id) });
           toast.success(t.keys.archived);
-          navigate(`/p/${ctx.slug}`);
+          navigate(`/p/${ctx.slug}`, { state: { newChat: true } });
         }, fail);
     },
     () => thread !== undefined && chat.state === "idle",

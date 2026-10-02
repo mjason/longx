@@ -134,6 +134,8 @@ export interface BridgeOptions {
 export class Bridge {
   status: BridgeStatus = "connecting";
   name: string | null = null;
+  browserId: string | null = null;
+  peerIp: string | null = null;
   sessions: SessionInfo[] = [];
   error: string | null = null;
   /**
@@ -143,6 +145,7 @@ export class Bridge {
    */
   token: string | null;
   private joined = false;
+  private stopped = false;
   private readonly opts: BridgeOptions;
 
   constructor(opts: BridgeOptions) {
@@ -163,6 +166,12 @@ export class Bridge {
       .receive("timeout", () => this.fail("join timed out"));
   }
 
+  /** A superseded socket must not handle late pairing replies or commands. */
+  stop(): void {
+    this.stopped = true;
+    this.joined = false;
+  }
+
   /** A chrome.* event for the server; nothing goes out before the join (the server drops it anyway). */
   sendEvent(method: string, params: unknown[]): void {
     if (!this.joined) return;
@@ -170,8 +179,11 @@ export class Bridge {
   }
 
   private async joinReply(reply: unknown): Promise<void> {
+    if (this.stopped) return;
     const r = asRecord(reply);
     const name = typeof r.name === "string" ? r.name : null;
+    this.browserId = typeof r.browser_id === "string" ? r.browser_id : null;
+    this.peerIp = typeof r.peer_ip === "string" ? r.peer_ip : null;
     switch (r.status) {
       case "approved":
       case "pending":
@@ -183,7 +195,9 @@ export class Bridge {
         const hadToken = this.token !== null;
         this.token = null;
         await this.opts.storage.remove("token");
+        if (this.stopped) return;
         await this.setStatus("bad_token");
+        if (this.stopped) return;
         // without a token there is nothing to retry with: the row is approved
         // on the server and this install lost its copy — the person revokes it
         // there and connects again
@@ -197,22 +211,31 @@ export class Bridge {
   }
 
   private async approved(payload: unknown): Promise<void> {
+    if (this.stopped) return;
     const p = asRecord(payload);
     if (typeof p.token !== "string") return;
     if (typeof p.name === "string") this.name = p.name;
     this.token = p.token;
+    // The socket's params closure must see the token immediately, including
+    // a transport reconnect before storage finishes persisting it.
+    this.opts.host.changed();
     await this.opts.storage.set({ token: p.token });
+    if (this.stopped) return;
     await this.setStatus("approved");
   }
 
   private async revoked(): Promise<void> {
+    if (this.stopped) return;
     this.token = null;
     await this.opts.storage.remove("token");
+    if (this.stopped) return;
     await this.setStatus("revoked");
+    if (this.stopped) return;
     this.opts.host.disconnect();
   }
 
   private state(payload: unknown): void {
+    if (this.stopped) return;
     const sessions = asRecord(payload).sessions;
     this.sessions = Array.isArray(sessions)
       ? sessions.map((s) => {
@@ -224,6 +247,7 @@ export class Bridge {
   }
 
   private async command(payload: unknown): Promise<void> {
+    if (this.stopped) return;
     const { id, method, params } = asRecord(payload);
     const args = Array.isArray(params) ? params : [];
     let answer: { id: unknown; result: unknown } | { id: unknown; error: string };
@@ -234,16 +258,18 @@ export class Bridge {
     } catch (e) {
       answer = { id, error: errorMessage(e) };
     }
-    this.opts.channel.push("result", answer);
+    if (!this.stopped) this.opts.channel.push("result", answer);
   }
 
   private fail(message: string): void {
+    if (this.stopped) return;
     this.error = message;
     this.status = "error";
     this.opts.host.changed();
   }
 
   private async setStatus(status: BridgeStatus): Promise<void> {
+    if (this.stopped) return;
     this.status = status;
     this.error = null;
     this.opts.host.changed();

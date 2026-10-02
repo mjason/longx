@@ -102,4 +102,16 @@ defmodule LongxWeb.ChromeChannelTest do
   test "a socket without an install id is refused" do
     assert :error = connect(LongxWeb.ChromeSocket, %{"device" => @device})
   end
+
+  test "connection IP comes from the transport, never from extension claims" do
+    params = %{"install_id" => "ip-test", "device" => Map.put(@device, "peer_ip", "spoofed")}
+
+    assert {:ok, socket} =
+             connect(LongxWeb.ChromeSocket, params,
+               connect_info: %{peer_data: %{address: {192, 168, 1, 42}}}
+             )
+
+    assert {:ok, %{"browser_id" => id}, _} = subscribe_and_join(socket, "chrome:bridge", %{})
+    assert {:ok, %{device: %{"peer_ip" => "192.168.1.42"}}} = Chrome.get_browser(id)
+  end
 end

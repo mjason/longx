@@ -34,7 +34,7 @@ export function SlashCommands() {
       void run(threadId).catch(fail);
     };
     return [
-      { id: "new", description: t.commands.new, icon: "new", execute: () => navigate(`/p/${slug}`) },
+      { id: "new", description: t.commands.new, icon: "new", execute: () => navigate(`/p/${slug}`, { state: { newChat: true } }) },
       {
         id: "compact",
         description: t.commands.compact,

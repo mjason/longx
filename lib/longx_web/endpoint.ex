@@ -29,7 +29,7 @@ defmodule LongxWeb.Endpoint do
   # the Longx Chrome extension (Longx.Chrome): it connects out to Longx from
   # a chrome-extension:// origin, so no origin check — its token is the trust
   socket "/chrome/socket", LongxWeb.ChromeSocket,
-    websocket: [check_origin: false, compress: true],
+    websocket: [check_origin: false, compress: true, connect_info: [:peer_data]],
     longpoll: false
 
   socket "/live", Phoenix.LiveView.Socket,

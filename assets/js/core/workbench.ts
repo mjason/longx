@@ -1,6 +1,7 @@
 // The centre of the project window as an IDE's editor area: a row of tabs
-// — the chat first and always, then files and diffs opened from the tree
-// or the git tool — with one active. Pure transitions plus a small store
+// — conversations, files and diffs opened from the tree or the git tool —
+// with one active, and a new chat only as the empty-workspace fallback.
+// Pure transitions plus a small store
 // (remembered per project on this device); DOM-free so the phone app can
 // share it.
 import { useSyncExternalStore } from "react";
@@ -78,7 +79,7 @@ export function stepTab(state: WorkbenchState, delta: number): WorkbenchState {
   return activate(state, tabKey(next));
 }
 
-/** The key of the tab at a place, 1 = the chat (SPC 1…9); null past the last. */
+/** The key of the tab at a place, 1 = the first tab (SPC 1…9); null past the last. */
 export function tabAt(state: WorkbenchState, place: number): string | null {
   const tab = state.tabs[place - 1];
   return tab ? tabKey(tab) : null;
@@ -111,9 +112,10 @@ function load(storage: Storage | null, key: string): WorkbenchState {
     if (!raw) return EMPTY_WORKBENCH;
     const parsed = JSON.parse(raw) as Partial<WorkbenchState>;
     const tabs = Array.isArray(parsed.tabs) ? parsed.tabs.filter((t): t is Tab => t && typeof t === "object" && "kind" in t) : [];
+    if (tabs.length === 0) return EMPTY_WORKBENCH;
     const state: WorkbenchState = {
-      tabs: [{ kind: "chat" }, ...tabs.filter((t) => !(t.kind === "chat" && !t.threadId))],
-      active: "chat",
+      tabs,
+      active: tabKey(tabs[0]!),
       dirty: [],
     };
     return typeof parsed.active === "string" ? activate(state, parsed.active) : state;

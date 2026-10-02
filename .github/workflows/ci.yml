@@ -45,6 +45,7 @@ jobs:
       - run: mix deps.get
       - run: npm ci --prefix assets
 
+      - run: python3 -B -m unittest discover -s test -p '*_test.py'
       - run: mix compile --warnings-as-errors
       - run: mix format --check-formatted
       - run: mix deps.unlock --check-unused

@@ -21,7 +21,7 @@ import { unwrap } from "./projects";
 export type ChromeBrowser = {
   id: string;
   name: string;
-  device: { name?: string; platform?: string; ua?: string; extension?: string };
+  device: { name?: string; platform?: string; ua?: string; extension?: string; peerIp?: string };
   status: "pending" | "approved" | "revoked";
   connected: boolean;
   maxTabs: number;
@@ -55,6 +55,7 @@ export function useChromeBrowsers(options: { refetchInterval?: number | false } 
 export function useChromeAliases() {
   return useQuery({
     queryKey: chromeKeys.aliases,
+    refetchInterval: 3000,
     queryFn: async () => unwrap(await chromeAliases()) as ChromeAliases,
   });
 }

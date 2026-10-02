@@ -57,7 +57,12 @@ Socket `/chrome/socket`（`LongxWeb.ChromeSocket`，`check_origin: false` ——
  "device": {"name": "MJ 的 MacBook · Chrome 153", "ua": "…", "platform": "mac", "extension": "0.1.0"}}
 ```
 
-Channel `chrome:bridge`，join 回复 `{"browser_id", "status": "pending"|"approved", "name"}`。
+Channel `chrome:bridge`，join 回复 `{"browser_id", "status": "pending"|"approved", "name", "peer_ip"}`。
+扩展首次打开即生成并保存设备名（Chrome / 平台 / install_id 短后缀），弹窗可在注册前修改，
+连接后可用「保存名称」改名。`device.name_revision` 仅在本地名称被主动修改时递增；
+服务器据此接受主动改名，普通重连不覆盖设置页手动起的显示名称。设备名与别名分开。
+`peer_ip` 由 socket transport 的 peer_data 得到，不信任扩展提交的 IP；
+经过反向代理时它可能是代理 IP，不是设备身份凭据。
 之后：
 
 | 方向 | 事件 | 载荷 |
@@ -109,6 +114,9 @@ native/shim/js.go                   `shim js`：goja + eventloop + JSON 行协�
 按 thread_id），第一次 `javascript` 调用时起：
 
 - 解析别名 → `browser_id`；订阅 `chrome:<browser_id>`。
+- 每次 cell 和浏览器命令重新核对别名；换绑或切换在线目标后拒绝继续用旧句柄。
+  下一次 cell 前清空 JavaScript realm、解除旧标签的所有权并 detach（旧页面仍留给人），
+  明确报告需要新 cell 检查新设备，不把旧 Chrome 的标签 ID 带到另一台电脑。
 - **标签组**：第一个标签 `chrome.tabs.create({url: "about:blank", active: false})` →
   `chrome.tabs.group` → `chrome.tabGroups.update(groupId, {title: "Longx · <会话>", color})`；
   之后的标签进同一组。`tabs.list()` 只列本组的；人把标签拖出组就是收回，拖进来就是交给它
@@ -207,6 +215,9 @@ snapshot() / screenshot()    = page 的
 - **Settings → 浏览器**（`BrowsersSection`）：待批准（允许 / 拒绝）；已配对列表（名字可改、
   设备、在线、几个会话在用、`max_tabs`、吊销）；别名卡（别名 → 浏览器们、
   默认别名）；扩展卡（下载 zip、版本、安装步骤、需要 Chrome 118+）。
+  设备行和扩展弹窗均显示设备 ID、连接来源 IP；设备名字不等于别名。
+  别名显示优先顺序与当前在线目标，已有别名必须点「编辑」才可换绑，防止同名误覆盖。
+  扩展连接使用 generation 防止旧的异步设备读取覆盖新配置；被替换的 Bridge 不接收晚到的令牌或命令。
 - **项目设置**：定义卡里 `Browser` 插件出现时显示解析到哪台、是否在线（只读）。
 - **聊天**：`javascript` 是一个 tool-call 行：`title`、代码折叠、输出是终端块、截图内联。
 

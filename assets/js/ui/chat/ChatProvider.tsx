@@ -58,7 +58,7 @@ export function ChatProvider({
 
   // null: the thread on screen was deleted or archived → the project's new chat
   const onOpenThread = useCallback(
-    (id: string | null) => navigate(id ? `/p/${slug}/t/${id}` : `/p/${slug}`),
+    (id: string | null) => navigate(id ? `/p/${slug}/t/${id}` : `/p/${slug}`, id ? undefined : { state: { newChat: true } }),
     [navigate, slug],
   );
   // where the agent's surfaces open: the project's workbench (a tab; a sheet on a phone)

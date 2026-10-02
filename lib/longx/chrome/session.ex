@@ -203,9 +203,18 @@ defmodule Longx.Chrome.Session do
   def handle_call(:runtime, _from, state) do
     state = watch_agent(state)
 
-    case ensure_runtime(state) do
-      {:ok, state} -> {:reply, {:ok, state.runtime}, state}
-      {:error, reason} -> {:reply, {:error, reason}, state}
+    case refresh_binding(state) do
+      {:changed, state} ->
+        {:reply,
+         {:error,
+          "the browser binding changed in Settings → 浏览器; JavaScript state and old tab handles were cleared. Inspect the newly bound browser in a fresh cell before acting. The old browser's tabs were left open."},
+         state}
+
+      {:ok, state} ->
+        case ensure_runtime(state) do
+          {:ok, state} -> {:reply, {:ok, state.runtime}, state}
+          {:error, reason} -> {:reply, {:error, reason}, state}
+        end
     end
   end
 
@@ -299,6 +308,46 @@ defmodule Longx.Chrome.Session do
     case Runtime.start_link(prelude: state.prelude, cdp: fn call -> cdp(me, call) end) do
       {:ok, pid} -> {:ok, %{state | runtime: pid}}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp binding_changed?(state) do
+    case Aliases.resolve(state.alias) do
+      {:ok, browser} ->
+        browser.id != state.browser_id
+
+      {:error, _} ->
+        name = state.alias || Aliases.default()
+        rows = if is_binary(name), do: Aliases.browsers(name), else: []
+        not Enum.any?(rows, &(&1.id == state.browser_id))
+    end
+  end
+
+  defp refresh_binding(%{browser_id: nil} = state), do: {:ok, state}
+
+  defp refresh_binding(state) do
+    if binding_changed?(state) do
+      # Do not carry tab IDs to another machine (Chrome may reuse the same IDs).
+      # Leave the person's tabs open, release only our ownership and debugger.
+      old_id = state.browser_id
+
+      if Connection.online?(old_id) do
+        attached = for {id, %{attached: true}} <- state.tabs, do: id
+
+        if attached != [] do
+          Task.Supervisor.start_child(Longx.Agent.TaskSupervisor, fn ->
+            for id <- attached,
+                do: Connection.call(old_id, "chrome.debugger.detach", [%{"tabId" => id}], 5_000)
+          end)
+        end
+      end
+
+      state = Enum.reduce(Map.keys(state.tabs), state, &forget_tab(&2, &1))
+      Phoenix.PubSub.unsubscribe(Longx.PubSub, Chrome.events_topic(old_id))
+      if state.runtime && Process.alive?(state.runtime), do: Runtime.stop(state.runtime)
+      {:changed, %{state | browser_id: nil, group_id: nil, runtime: nil}}
+    else
+      {:ok, state}
     end
   end
 
@@ -406,11 +455,17 @@ defmodule Longx.Chrome.Session do
 
   # the browser an alias names, kept once resolved while it stays online
   defp resolve_browser(%{browser_id: id} = state) when is_binary(id) do
-    if Connection.online?(id),
-      do: {:ok, state},
-      else:
+    cond do
+      binding_changed?(state) ->
+        {:error, "the browser binding changed; inspect the newly bound browser in a fresh cell"}
+
+      Connection.online?(id) ->
+        {:ok, state}
+
+      true ->
         {:error,
          "the browser #{browser_name(id)} is not connected: open Chrome on that machine and check the Longx extension"}
+    end
   end
 
   defp resolve_browser(state) do

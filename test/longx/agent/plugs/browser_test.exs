@@ -115,7 +115,8 @@ defmodule Longx.Agent.Plugs.BrowserTest do
     text = Enum.join(step.instructions, "\n")
     assert text =~ "# Browser"
     assert text =~ "Browser Use Confirmation Policy"
-    assert text =~ "named `qa`"
+    assert text =~ "browser alias is `qa`"
+    assert text =~ "not a device's display name"
     assert text =~ "Tab limit for this project: 2"
     refute text =~ "online"
     assert %{"javascript" => tool} = step.tools
