@@ -62,6 +62,24 @@ CUA's default content-free telemetry is not silently changed.
 
 ## Updates and permission recovery
 
+`.github/workflows/computer.yml` builds native macOS ARM64/x86_64, Linux
+ARM64/x86_64 and Windows x86_64 installers on every `v*` release tag, or as
+downloadable artifacts through `workflow_dispatch`. Windows ARM64 is not yet
+part of this matrix. App/Longx versions follow the release tag together.
+macOS reuses the repository's `DEVELOPER_ID_*` and `NOTARY_*` secrets, signs
+all embedded Mach-O helpers with that team, and verifies the notarized bundle.
+Windows installers are not Authenticode-signed until a Windows publisher
+identity is separately configured.
+
+Set repository secret `COMPUTER_UPDATER_PRIVATE_KEY` (and optionally
+`COMPUTER_UPDATER_PRIVATE_KEY_PASSWORD`), and variable
+`COMPUTER_UPDATER_PUBLIC_KEY` to enable updater artifacts. If both key entries
+are absent, CI explicitly builds installers with self-update disabled; a
+partially configured key pair fails the build. The publish job waits for every
+platform, then emits `computer-latest.json` with verified artifact signatures.
+Never publish a partial update manifest. The feed URL is
+`https://github.com/mjason/longx/releases/latest/download/computer-latest.json`.
+
 The app offers explicit check/install actions through Tauri's signed updater.
 Release builds embed `LONGX_COMPUTER_UPDATE_URL` (HTTPS Tauri update manifest)
 and `LONGX_COMPUTER_UPDATE_PUBLIC_KEY` (public key only). Both must be present

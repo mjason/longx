@@ -41,7 +41,8 @@ const extraction = path.join(cache, "extracted");
 await mkdir(extraction, { recursive: true });
 if (target.startsWith("windows")) {
   execFileSync("powershell", ["-NoProfile", "-NonInteractive", "-Command",
-    "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force", archive, extraction]);
+    "Expand-Archive -LiteralPath $env:LONGX_DRIVER_ARCHIVE -DestinationPath $env:LONGX_DRIVER_EXTRACT -Force"],
+    { env: { ...process.env, LONGX_DRIVER_ARCHIVE: archive, LONGX_DRIVER_EXTRACT: extraction } });
 } else {
   execFileSync("tar", ["-xzf", archive, "-C", extraction]);
 }

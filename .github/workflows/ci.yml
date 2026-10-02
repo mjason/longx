@@ -12,6 +12,19 @@ env:
   MIX_ENV: test
 
 jobs:
+  computer:
+    name: Computer bridge and release metadata
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: node apps/computer/scripts/release-artifacts.mjs version
+      - run: npm --prefix apps/computer run test:release
+      - run: cargo test --locked --manifest-path apps/computer/src-tauri/Cargo.toml --no-default-features --features test-fixture
+
   test:
     name: precommit (linux x86_64)
     runs-on: ubuntu-24.04
