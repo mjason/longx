@@ -22,8 +22,18 @@ configure them in the UI rather than pasting secrets into a conversation.
 
 ## macOS Apple Silicon release
 
-macOS 14 or newer, native ARM64 (M1 and later; not a Rosetta terminal). Download
-[install-macos.py](../install-macos.py), review it, and run with Python 3.9 or newer:
+macOS 14 or newer, native ARM64 (M1 and later; not a Rosetta terminal), Python 3.9+:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh | sh
+# Or a specific application version:
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh | sh -s -- 0.2.106
+```
+
+The shell entry point downloads the latest released Python installer completely over
+HTTPS before running it. It does not install Python or bypass system protections.
+Piping a script executes downloaded code; to inspect it first, download
+[install-macos.py](../install-macos.py), review it, and run:
 
 ```sh
 python3 install-macos.py

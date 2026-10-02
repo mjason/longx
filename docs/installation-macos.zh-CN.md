@@ -24,6 +24,23 @@ Git 工作区功能另需机器上安装 `git`。
 
 ## 2. 下载并安装
 
+一行安装最新版（升级也可重跑）：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh | sh
+```
+
+指定应用版本：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh | sh -s -- 0.2.106
+```
+
+入口脚本检查平台、架构和 Python，完整下载最新版发布附件中的 Python 安装器后才执行，
+再由安装器校验、备份和安装。所有参数原样传入，支持 `--no-service` 和 `--tarball`。
+它不会自动安装 Python，也不会绕过系统安全保护。
+一行安装会执行远端代码，并不比下载审查更安全；若希望先检查内容，可以用下面的方式：
+
 打开 [v0.2.106 发布页](https://github.com/mjason/longx/releases/tag/v0.2.106)，
 下载附件 `install-macos.py`，检查脚本内容，然后运行：
 
@@ -64,7 +81,8 @@ codesign -dv --verbose=4 "$HOME/.longx/app/erts-"*/bin/beam.smp
 
 ## 4. 升级与备份
 
-Mac 暂不支持网页自升级。下载新版安装器并重跑，或不指定版本安装最新版：
+Mac 暂不支持网页自升级。重跑一行安装命令即可升级；
+也可下载新版安装器并重跑，或不指定版本安装最新版：
 
 ```sh
 python3 install-macos.py

@@ -24,10 +24,15 @@ project's working directory. The release includes the Erlang runtime and built U
 you do not need a development toolchain. It requires glibc ≥ 2.39 (Ubuntu 24.04,
 Debian 13, or newer). Install `git` for the Git workspace features.
 
-For macOS 14+ Apple Silicon, download and review `install-macos.py`, then run
-`python3 install-macos.py`. It installs a native user LaunchAgent and listens only on
+On macOS 14+ Apple Silicon:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh | sh
+```
+
+It installs a native user LaunchAgent and listens only on
 `http://localhost:7788`. Python 3.9+ is required for installation; see the guide below
-for security, signing status, and upgrade details.
+for security, signing status, upgrades, and the download-and-review alternative.
 
 From v0.2.106, macOS releases are Developer ID signed and Apple notarized.
 [macOS step-by-step guide (中文)](docs/installation-macos.zh-CN.md).
