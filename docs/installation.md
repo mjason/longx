@@ -28,7 +28,7 @@ macOS 14 or newer, native ARM64 (M1 and later; not a Rosetta terminal). Download
 ```sh
 python3 install-macos.py
 # Or a specific version:
-python3 install-macos.py 0.2.101
+python3 install-macos.py 0.2.106
 ```
 
 Python is needed only by the installer, not by the installed application. The native
@@ -58,11 +58,18 @@ launchctl bootout "gui/$(id -u)/com.longx.agent"
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.longx.agent.plist"
 ```
 
-The release is **ad-hoc signed, not Apple Developer ID signed or notarized**.
+Starting with **v0.2.106**, the macOS release is **Developer ID Application signed
+and Apple notarized**. Earlier v0.2.104–v0.2.105 packages were ad-hoc signed only.
+CI requires Apple's explicit `Accepted` result before publishing the macOS archive.
+Bare executables and tarballs cannot carry stapled tickets, so Gatekeeper may need
+network access to retrieve Apple's notarization record.
 Checksums detect corruption; a checksum downloaded from the same GitHub release
 is not independent proof of publisher identity. The installer does not remove
 quarantine or disable Gatekeeper. If macOS blocks execution, do not disable system
 protections; inspect the source and follow your organization's software policy.
+
+See the [step-by-step macOS guide (中文)](installation-macos.zh-CN.md) or
+[release signing configuration](MACOS-SIGNING.md).
 
 ## Linux installer options
 

@@ -15,6 +15,8 @@ Longx 是一个本地优先的 agent 工作台：会话、文件、命令和 Git
 macOS 14+ Apple Silicon 也有原生包：下载并检查 `install-macos.py`，运行
 `python3 install-macos.py`（安装时需要 Python 3.9+）。用户级 LaunchAgent，
 默认仅监听 `http://localhost:7788`；签名状态和升级说明见[安装文档](docs/installation.md)。
+从 v0.2.106 起，Mac 原生包使用 Developer ID 正式签名并通过 Apple 公证。
+详见 [Mac 安装、升级与排障指南](docs/installation-macos.zh-CN.md)。
 
 Linux x86_64 / arm64：
 

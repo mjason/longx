@@ -29,6 +29,9 @@ For macOS 14+ Apple Silicon, download and review `install-macos.py`, then run
 `http://localhost:7788`. Python 3.9+ is required for installation; see the guide below
 for security, signing status, and upgrade details.
 
+From v0.2.106, macOS releases are Developer ID signed and Apple notarized.
+[macOS step-by-step guide (中文)](docs/installation-macos.zh-CN.md).
+
 [Manual installation, Docker, HTTPS, and upgrades](docs/installation.md) ·
 [Releases](https://github.com/mjason/longx/releases)
 

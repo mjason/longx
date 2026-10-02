@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Longx 浏览器桥",
   "description": "把这个浏览器接到你的 Longx，让 agent 在你的 Chrome 里打开页面、调试自己写的网页",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "minimum_chrome_version": "118",
   "permissions": ["debugger", "tabs", "tabGroups", "storage", "alarms"],
   "background": { "service_worker": "background.js", "type": "module" },

@@ -10,14 +10,20 @@
       <h1>Longx 浏览器桥</h1>
     </header>
     <form id="form">
-      <label for="device-name">设备名称</label>
-      <input id="device-name" type="text" maxlength="80" required autocomplete="off" placeholder="自动生成；可改为「桌面 Mac」" />
-      <button id="save-name" type="button" class="secondary">保存名称</button>
-      <p class="hint">此名称显示在 Longx 的接入请求和设备列表中，不是项目使用的别名。</p>
-      <label for="server">Longx 地址</label>
-      <input id="server" type="url" placeholder="http://192.168.2.70:7788" autocomplete="off" spellcheck="false" />
+      <div class="field">
+        <label for="device-name">设备名称</label>
+        <div class="name-row">
+          <input id="device-name" type="text" maxlength="80" required autocomplete="off" aria-describedby="name-hint" placeholder="自动生成；可改为「桌面 Mac」" />
+          <button id="save-name" type="button" class="secondary">保存名称</button>
+        </div>
+        <p id="name-hint" class="hint">此名称显示在 Longx 的接入请求和设备列表中，不是项目使用的别名。</p>
+      </div>
+      <div class="field">
+        <label for="server">Longx 地址</label>
+        <input id="server" type="url" placeholder="http://192.168.2.70:7788" autocomplete="off" spellcheck="false" />
+      </div>
       <div class="row">
-        <button id="connect" type="submit">连接</button>
+        <button id="connect" type="submit" disabled>连接</button>
         <button id="disconnect" type="button" class="secondary" hidden>断开</button>
       </div>
     </form>

@@ -73,10 +73,26 @@ input:focus {
   outline: 2px solid var(--primary);
   outline-offset: -1px;
 }
+form {
+  display: grid;
+  gap: 12px;
+}
+.name-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.name-row input {
+  min-width: 0;
+}
+.name-row button {
+  padding: 0 10px;
+  white-space: nowrap;
+}
 .row {
   display: flex;
   gap: 8px;
-  margin-top: 10px;
 }
 button {
   flex: 1;
@@ -103,6 +119,7 @@ button:disabled {
   padding: 8px 10px;
   border-radius: 8px;
   background: var(--frame);
+  overflow-wrap: anywhere;
 }
 .status::before {
   content: "";
@@ -130,6 +147,7 @@ button:disabled {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 .hint.error {
   color: var(--bad);

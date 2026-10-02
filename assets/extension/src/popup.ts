@@ -34,12 +34,17 @@ const sessions = $<HTMLElement>("sessions");
 
 let addressShown = false;
 let nameDirty = false;
+let connectPending = false;
 // a refused address (no URL): shown under the field until the person edits it,
 // over the status hint the poll would otherwise put there
 let fieldError: string | null = null;
 
 function ask(message: PopupMessage): Promise<PopupReply> {
   return chrome.runtime.sendMessage(message);
+}
+
+function updateConnectButton(): void {
+  connectButton.disabled = connectPending || !server.value.trim();
 }
 
 function render(reply: PopupReply): void {
@@ -57,6 +62,7 @@ function render(reply: PopupReply): void {
     server.value = r.serverUrl;
     addressShown = true;
   }
+  updateConnectButton();
   status.dataset.status = r.status;
   status.textContent =
     r.status === "approved" && r.name
@@ -98,8 +104,9 @@ function render(reply: PopupReply): void {
 form.addEventListener("submit", (e) => {
   e.preventDefault();
   const serverUrl = server.value.trim();
-  if (!serverUrl) return;
-  connectButton.disabled = true;
+  if (!serverUrl || connectPending) return;
+  connectPending = true;
+  updateConnectButton();
   fieldError = null;
   const submittedName = deviceName.value;
   ask({ type: "connect", serverUrl, deviceName: submittedName })
@@ -107,11 +114,16 @@ form.addEventListener("submit", (e) => {
       if (!("failed" in reply) && deviceName.value === submittedName) nameDirty = false;
       render(reply);
     }, (err: unknown) => render({ failed: err instanceof Error ? err.message : String(err) }))
-    .finally(() => (connectButton.disabled = false));
+    .finally(() => {
+      connectPending = false;
+      updateConnectButton();
+    });
 });
 
 server.addEventListener("input", () => {
+  addressShown = true;
   fieldError = null;
+  updateConnectButton();
 });
 
 deviceName.addEventListener("input", () => { nameDirty = true; fieldError = null; });
@@ -127,5 +139,6 @@ saveName.addEventListener("click", () => {
 });
 disconnectButton.addEventListener("click", () => void ask({ type: "disconnect" }).then(render));
 
+updateConnectButton();
 void ask({ type: "status" }).then(render);
 setInterval(() => void ask({ type: "status" }).then(render), 1000);
