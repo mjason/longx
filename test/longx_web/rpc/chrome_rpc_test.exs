@@ -87,6 +87,22 @@ defmodule LongxWeb.ChromeRpcTest do
              rpc(conn, "list_chrome_browsers", %{"fields" => ["browsers"]})
   end
 
+  test "deleting a paired browser removes the record and its default alias", %{conn: conn} do
+    {:ok, b} = Chrome.connect("rpc-delete", nil, %{"name" => "Delete me"})
+    {:ok, _, _} = Chrome.approve(b.id)
+    :ok = Aliases.put("delete-me", [b.id])
+    :ok = Aliases.set_default("delete-me")
+
+    assert %{"success" => true, "data" => %{"ok" => true}} =
+             rpc(conn, "delete_chrome_browser", %{"fields" => ["ok"], "input" => %{"id" => b.id}})
+
+    assert %{"data" => %{"browsers" => []}} =
+             rpc(conn, "list_chrome_browsers", %{"fields" => ["browsers"]})
+
+    assert %{"data" => %{"aliases" => [], "default" => nil}} =
+             rpc(conn, "chrome_aliases", %{"fields" => ["aliases", "default"]})
+  end
+
   test "aliases: set, default, delete; a bad one is an error on its field", %{conn: conn} do
     {:ok, a} = Chrome.connect("rpc-a", nil, %{"name" => "A"})
     fields = ["aliases", "default"]

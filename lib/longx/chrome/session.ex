@@ -259,6 +259,17 @@ defmodule Longx.Chrome.Session do
 
   def handle_info({:chrome_event, _other, _method, _params}, state), do: {:noreply, state}
 
+  def handle_info({:chrome_deleted, id}, %{browser_id: id} = state) do
+    # Release quotas and interrupt the realm without closing the person's pages.
+    # Keep the old browser ID until the next cell so refresh_binding reports the
+    # boundary explicitly before using any replacement device.
+    state = Enum.reduce(Map.keys(state.tabs), state, &forget_tab(&2, &1))
+    if state.runtime && Process.alive?(state.runtime), do: Runtime.stop(state.runtime)
+    {:noreply, %{state | runtime: nil, group_id: nil}}
+  end
+
+  def handle_info({:chrome_deleted, _id}, state), do: {:noreply, state}
+
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{agent_ref: ref} = state) do
     timer = Process.send_after(self(), :maybe_close, @close_grace_ms)
     {:noreply, %{state | agent_ref: nil, close_timer: timer}}

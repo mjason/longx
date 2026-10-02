@@ -8,6 +8,7 @@ import {
   chromeAliases,
   chromeExtension,
   deleteChromeAlias,
+  deleteChromeBrowser,
   listChromeBrowsers,
   rejectChromeBrowser,
   renameChromeBrowser,
@@ -89,6 +90,10 @@ export function useRejectBrowser() {
 
 export function useRevokeBrowser() {
   return useBrowsersMutation(async (id: string) => unwrap(await revokeChromeBrowser({ input: { id } })));
+}
+
+export function useDeleteBrowser() {
+  return useBrowsersMutation(async (id: string) => unwrap(await deleteChromeBrowser({ input: { id } })));
 }
 
 export function useRenameBrowser() {

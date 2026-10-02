@@ -34,6 +34,7 @@ defmodule Longx.Chrome do
       action Bridge, :approve_chrome_browser, :approve_chrome_browser
       action Bridge, :reject_chrome_browser, :reject_chrome_browser
       action Bridge, :revoke_chrome_browser, :revoke_chrome_browser
+      action Bridge, :delete_chrome_browser, :delete_chrome_browser
       action Bridge, :rename_chrome_browser, :rename_chrome_browser
       action Bridge, :set_chrome_browser_max_tabs, :set_chrome_browser_max_tabs
       action Bridge, :set_chrome_alias, :set_chrome_alias
@@ -145,9 +146,21 @@ defmodule Longx.Chrome do
   @doc "A pending request the person refused: the row goes, the extension is told."
   @spec reject(String.t()) :: :ok | {:error, term}
   def reject(id) do
-    with {:ok, browser} <- get_browser(id) do
-      Connection.push(browser.id, "revoked", %{})
-      :ok = destroy_browser(browser)
+    delete(id)
+  end
+
+  @doc "Forget a browser, void its token, and remove its alias references."
+  @spec delete(String.t()) :: :ok | {:error, term}
+  def delete(id) do
+    with {:ok, browser} <- revoke(id),
+         :ok <- Aliases.remove_browser(browser.id),
+         :ok <- destroy_browser(browser) do
+      Phoenix.PubSub.broadcast(
+        Longx.PubSub,
+        events_topic(browser.id),
+        {:chrome_deleted, browser.id}
+      )
+
       changed()
       :ok
     end

@@ -332,6 +332,7 @@ export function rpcMock() {
     approveChromeBrowser: vi.fn(async () => ok({ ok: true })),
     rejectChromeBrowser: vi.fn(async () => ok({ ok: true })),
     revokeChromeBrowser: vi.fn(async () => ok({ ok: true })),
+    deleteChromeBrowser: vi.fn(async () => ok({ ok: true })),
     renameChromeBrowser: vi.fn(async () => ok({ ok: true })),
     setChromeBrowserMaxTabs: vi.fn(async () => ok({ ok: true })),
     chromeAliases: vi.fn(async () => ok({ aliases: [{ name: "qa-chrome", browsers: ["b2"] }], default: "qa-chrome" })),

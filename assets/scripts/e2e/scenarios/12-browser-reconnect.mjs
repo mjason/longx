@@ -11,6 +11,7 @@ const UNPACKED = path.resolve(path.dirname(new URL(import.meta.url).pathname), "
 export async function run(h) {
   const profiles = [];
   const contexts = [];
+  const popups = [];
   const ids = [];
   const alias = `e2e-reconnect-${Date.now()}`;
   try {
@@ -25,6 +26,7 @@ export async function run(h) {
       let [worker] = context.serviceWorkers();
       if (!worker) worker = await context.waitForEvent("serviceworker", { timeout: 15_000 });
       const popup = await context.newPage();
+      popups.push(popup);
       await popup.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html`);
       await popup.waitForFunction(() => document.querySelector("#device-name")?.value.length > 0);
       const generated = await popup.getByLabel("设备名称").inputValue();
@@ -33,8 +35,10 @@ export async function run(h) {
       await popup.getByLabel("Longx 地址").fill(BASE);
       await popup.getByRole("button", { name: "连接", exact: true }).click();
       await popup.locator('#status[data-status="pending"]').waitFor({ timeout: 15_000 });
+      const ownId = /设备 ID：([0-9a-f-]{36})/.exec(await popup.locator("#identity").textContent())?.[1];
+      expect(ownId, "the popup identifies this test extension");
       const before = await h.rpc("list_chrome_browsers", {}, ["browsers"]);
-      const pending = before.browsers.find((b) => b.status === "pending" && b.connected && !ids.includes(b.id));
+      const pending = before.browsers.find((b) => b.id === ownId && b.status === "pending" && b.connected);
       expect(pending, "this test extension has a pending connected row");
       expect(pending.name === "E2E 同名 Chrome", "registration uses the extension's chosen name");
       ids.push(pending.id);
@@ -77,6 +81,20 @@ export async function run(h) {
     await phone.getByTestId("browser-row").first().waitFor();
     await h.noOverflow(phone, "phone browser settings");
     await h.shot(phone, "phone");
+
+    // Delete the exact paired device from the real settings UI.
+    const deviceRow = h.page.getByTestId("browser-row").filter({ hasText: ids[1] });
+    await deviceRow.getByRole("button", { name: /^(删除|Delete)$/ }).click();
+    await h.page.getByRole("alertdialog").getByRole("button", { name: /^(确认删除|Confirm delete)$/ }).click();
+    await popups[1].locator('#status[data-status="revoked"]').waitFor({ timeout: 15_000 });
+    await h.page.waitForFunction((id) => ![...document.querySelectorAll('[data-testid="browser-row"]')]
+      .some((row) => row.textContent.includes(id)), ids[1]);
+    const afterDelete = await h.rpc("list_chrome_browsers", {}, ["browsers"]);
+    expect(!afterDelete.browsers.some((b) => b.id === ids[1]), "deleted browser record is gone");
+    expect(afterDelete.browsers.some((b) => b.id === ids[0]), "the other paired device remains");
+    const remainingAliases = await h.rpc("chrome_aliases", {}, ["aliases"]);
+    expect(!remainingAliases.aliases.some((a) => a.name === alias), "empty alias is removed");
+    expect(contexts[1].pages().includes(popups[1]), "deletion does not close the browser page");
   } finally {
     await h.rpc("delete_chrome_alias", { name: alias }, ["aliases"]).catch(() => {});
     for (const id of ids) await h.rpc("reject_chrome_browser", { id }).catch(() => {});

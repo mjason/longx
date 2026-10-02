@@ -2788,6 +2788,10 @@ input RenameChromeBrowserInput {
   name: String!
 }
 
+input DeleteChromeBrowserInput {
+  id: String!
+}
+
 input RevokeChromeBrowserInput {
   id: String!
 }
@@ -4250,6 +4254,7 @@ type RootMutationType {
   approveChromeBrowser(input: ApproveChromeBrowserInput!): Ok!
   rejectChromeBrowser(input: RejectChromeBrowserInput!): Ok!
   revokeChromeBrowser(input: RevokeChromeBrowserInput!): Ok!
+  deleteChromeBrowser(input: DeleteChromeBrowserInput!): Ok!
   renameChromeBrowser(input: RenameChromeBrowserInput!): Ok!
   setChromeBrowserMaxTabs(input: SetChromeBrowserMaxTabsInput!): Ok!
   setChromeAlias(input: SetChromeAliasInput!): ChromeAliases!

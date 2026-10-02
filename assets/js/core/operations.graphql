@@ -138,6 +138,8 @@ mutation RejectChromeBrowser($input: RejectChromeBrowserInput!) { rejectChromeBr
 
 mutation RevokeChromeBrowser($input: RevokeChromeBrowserInput!) { revokeChromeBrowser(input: $input) { ok } }
 
+mutation DeleteChromeBrowser($input: DeleteChromeBrowserInput!) { deleteChromeBrowser(input: $input) { ok } }
+
 mutation RenameChromeBrowser($input: RenameChromeBrowserInput!) { renameChromeBrowser(input: $input) { ok } }
 
 mutation SetChromeBrowserMaxTabs($input: SetChromeBrowserMaxTabsInput!) { setChromeBrowserMaxTabs(input: $input) { ok } }

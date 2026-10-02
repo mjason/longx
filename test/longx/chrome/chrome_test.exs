@@ -13,6 +13,31 @@ defmodule Longx.ChromeTest do
   end
 
   describe "pairing" do
+    test "deleting an approved device invalidates its token and cleans aliases and defaults" do
+      {:ok, a} = Chrome.connect("delete-a", nil, @device)
+      {:ok, b} = Chrome.connect("delete-b", nil, @device)
+      {:ok, _, token} = Chrome.approve(a.id)
+      :ok = Aliases.put("only-a", [a.id])
+      :ok = Aliases.put("shared", [a.id, b.id])
+      :ok = Aliases.set_default("only-a")
+
+      assert :ok = Chrome.delete(a.id)
+      assert {:error, _} = Chrome.get_browser(a.id)
+      assert {:error, :bad_token} = Chrome.connect("delete-a", token, @device)
+      assert [%{name: "shared", browsers: [id]}] = Aliases.all()
+      assert id == b.id
+      assert Aliases.default() == nil
+      assert {:ok, %{status: :pending}} = Chrome.connect("delete-a", nil, @device)
+    end
+
+    test "deleting a revoked device removes it without affecting other records" do
+      {:ok, a} = Chrome.connect("delete-revoked", nil, @device)
+      {:ok, _} = Chrome.revoke(a.id)
+      assert :ok = Chrome.delete(a.id)
+      assert [] = Chrome.list_browsers!()
+      assert {:error, _} = Chrome.delete(a.id)
+    end
+
     test "an extension without a token is a pending row named after its device; the same install is the same row" do
       assert {:ok, %Browser{status: :pending, name: "MJ 的 MacBook · Chrome 153"} = b} =
                Chrome.connect("install-1", nil, @device)

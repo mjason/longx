@@ -99,6 +99,16 @@ defmodule LongxWeb.ChromeChannelTest do
     refute Chrome.online?(id)
   end
 
+  test "deleting an online browser tells the extension and refuses further commands" do
+    {:ok, %{"browser_id" => id}, _socket} = join!("ext-delete")
+    {:ok, _, _} = Chrome.approve(id)
+    assert_push "approved", _
+    assert :ok = Chrome.delete(id)
+    assert_push "revoked", %{}
+    assert {:error, :pending} = Connection.call(id, "chrome.tabs.query", [%{}])
+    assert {:error, _} = Chrome.get_browser(id)
+  end
+
   test "a socket without an install id is refused" do
     assert :error = connect(LongxWeb.ChromeSocket, %{"device" => @device})
   end

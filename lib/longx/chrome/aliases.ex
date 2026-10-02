@@ -71,6 +71,19 @@ defmodule Longx.Chrome.Aliases do
     save(Map.delete(saved(), name))
   end
 
+  @doc "Remove a deleted browser from all aliases; empty aliases and their default go too."
+  def remove_browser(id) do
+    remaining =
+      for {name, ids} <- saved(),
+          kept = Enum.reject(ids, &(&1 == id)),
+          kept != [],
+          into: %{},
+          do: {name, kept}
+
+    if default() && not Map.has_key?(remaining, default()), do: clear_default()
+    save(remaining)
+  end
+
   @doc "The browsers an alias names, as rows, in order; `[]` for an unknown alias."
   @spec browsers(String.t()) :: [Chrome.Browser.t()]
   def browsers(name) when is_binary(name) do

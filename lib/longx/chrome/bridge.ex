@@ -57,6 +57,17 @@ defmodule Longx.Chrome.Bridge do
       end
     end
 
+    action :delete_chrome_browser, Types.Ok do
+      argument :id, :string, allow_nil?: false
+
+      run fn input, _ ->
+        case Chrome.delete(input.arguments.id) do
+          :ok -> {:ok, %{ok: true}}
+          {:error, _} -> argument_error(:id, "could not delete browser")
+        end
+      end
+    end
+
     action :rename_chrome_browser, Types.Ok do
       argument :id, :string, allow_nil?: false
       argument :name, :string, allow_nil?: false

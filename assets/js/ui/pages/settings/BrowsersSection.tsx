@@ -15,6 +15,7 @@ import {
   useChromeBrowsers,
   useChromeExtension,
   useDeleteChromeAlias,
+  useDeleteBrowser,
   useRejectBrowser,
   useRenameBrowser,
   useRevokeBrowser,
@@ -140,9 +141,11 @@ function BrowserRow({ browser: b }: { browser: ChromeBrowser }) {
   const rename = useRenameBrowser();
   const limit = useSetBrowserMaxTabs();
   const revoke = useRevokeBrowser();
+  const remove = useDeleteBrowser();
   const [name, setName] = useState(b.name);
   const [maxTabs, setMaxTabs] = useState(String(b.maxTabs));
   const [revoking, setRevoking] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   useEffect(() => setName(b.name), [b.name]);
   useEffect(() => setMaxTabs(String(b.maxTabs)), [b.maxTabs]);
   const onError = (e: Error) => toast.error(e.message);
@@ -172,6 +175,9 @@ function BrowserRow({ browser: b }: { browser: ChromeBrowser }) {
         ) : null}
         <Button size="sm" variant="ghost" className="ms-auto" onClick={() => setRevoking(true)} disabled={b.status === "revoked"}>
           {s.revoke}
+        </Button>
+        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleting(true)} disabled={remove.isPending}>
+          {t.delete}
         </Button>
       </div>
       <BrowserIdentity browser={b} />
@@ -215,6 +221,21 @@ function BrowserRow({ browser: b }: { browser: ChromeBrowser }) {
           <AlertDialogFooter>
             <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
             <AlertDialogAction onClick={() => revoke.mutate(b.id, { onError })}>{s.revokeConfirm}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={deleting} onOpenChange={setDeleting}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{s.deleteTitle(b.name)}</AlertDialogTitle>
+            <AlertDialogDescription>{s.deleteHint}</AlertDialogDescription>
+            <BrowserIdentity browser={b} />
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => remove.mutate(b.id, { onError })} disabled={remove.isPending}>
+              {s.deleteConfirm}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

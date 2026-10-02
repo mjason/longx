@@ -666,6 +666,10 @@ export type DeleteChromeAliasInput = {
   name: string;
 };
 
+export type DeleteChromeBrowserInput = {
+  id: string;
+};
+
 export type DeleteEntryInput = {
   path: string;
   projectId: string | number;
@@ -3711,6 +3715,13 @@ export type RevokeChromeBrowserMutationVariables = Exact<{
 
 export type RevokeChromeBrowserMutation = { revokeChromeBrowser: { ok: boolean } };
 
+export type DeleteChromeBrowserMutationVariables = Exact<{
+  input: DeleteChromeBrowserInput;
+}>;
+
+
+export type DeleteChromeBrowserMutation = { deleteChromeBrowser: { ok: boolean } };
+
 export type RenameChromeBrowserMutationVariables = Exact<{
   input: RenameChromeBrowserInput;
 }>;
@@ -5371,6 +5382,13 @@ export const RevokeChromeBrowserDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<RevokeChromeBrowserMutation, RevokeChromeBrowserMutationVariables>;
+export const DeleteChromeBrowserDocument = new TypedDocumentString(`
+    mutation DeleteChromeBrowser($input: DeleteChromeBrowserInput!) {
+  deleteChromeBrowser(input: $input) {
+    ok
+  }
+}
+    `) as unknown as TypedDocumentString<DeleteChromeBrowserMutation, DeleteChromeBrowserMutationVariables>;
 export const RenameChromeBrowserDocument = new TypedDocumentString(`
     mutation RenameChromeBrowser($input: RenameChromeBrowserInput!) {
   renameChromeBrowser(input: $input) {

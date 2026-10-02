@@ -132,6 +132,17 @@ defmodule Longx.Chrome.SessionTest do
     assert FakeChrome.commands(ctx.state, "chrome.tabs.create") == []
   end
 
+  test "deleting a browser releases owned tabs without removing the person's pages", ctx do
+    ensure!(ctx.thread)
+    assert {:ok, %{error: nil}} = run(ctx, "await page.goto('http://site.test/')")
+    assert Longx.Chrome.Tabs.count_of_browser(ctx.browser_id) == 1
+    assert :ok = Chrome.delete(ctx.browser_id)
+    assert %{tabs: []} = Session.info(ctx.thread)
+    assert Longx.Chrome.Tabs.count_of_browser(ctx.browser_id) == 0
+    assert map_size(FakeChrome.tabs(ctx.state)) == 1
+    assert FakeChrome.commands(ctx.state, "chrome.tabs.remove") == []
+  end
+
   test "the project's tab limit counts, and tabs.close frees a slot", ctx do
     ensure!(ctx.thread, max_tabs: 1)
     assert {:ok, %{error: nil}} = run(ctx, "await page.goto('http://site.test/')")
