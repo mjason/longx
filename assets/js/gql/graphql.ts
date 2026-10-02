@@ -3364,6 +3364,11 @@ export type BrowserStatusQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type BrowserStatusQuery = { browserStatus: { version: string, upgradable: boolean, total: number | null, target: string | null, stage: string, source: string | null, received: number, path: string | null, latest: string, installedVersion: string | null, error: string | null } };
 
+export type ComputerStatusQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ComputerStatusQuery = { computerStatus: { version: string, upgradable: boolean, total: number | null, target: string | null, stage: string, source: string | null, received: number, path: string | null, latest: string, installedVersion: string | null, error: string | null, downloadSize: number | null, appPath: string | null } };
+
 export type TlsStatusQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -3844,6 +3849,11 @@ export type BrowserInstallMutationVariables = Exact<{ [key: string]: never; }>;
 
 
 export type BrowserInstallMutation = { browserInstall: { version: string, upgradable: boolean, total: number | null, target: string | null, stage: string, source: string | null, received: number, path: string | null, latest: string, installedVersion: string | null, error: string | null } };
+
+export type ComputerInstallMutationVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ComputerInstallMutation = { computerInstall: { version: string, upgradable: boolean, total: number | null, target: string | null, stage: string, source: string | null, received: number, path: string | null, latest: string, installedVersion: string | null, error: string | null, downloadSize: number | null, appPath: string | null } };
 
 export type SetBrowserPrivateNetworkMutationVariables = Exact<{
   input: SetBrowserPrivateNetworkInput;
@@ -4533,6 +4543,25 @@ export const BrowserStatusDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<BrowserStatusQuery, BrowserStatusQueryVariables>;
+export const ComputerStatusDocument = new TypedDocumentString(`
+    query ComputerStatus {
+  computerStatus {
+    version
+    upgradable
+    total
+    target
+    stage
+    source
+    received
+    path
+    latest
+    installedVersion
+    error
+    downloadSize
+    appPath
+  }
+}
+    `) as unknown as TypedDocumentString<ComputerStatusQuery, ComputerStatusQueryVariables>;
 export const TlsStatusDocument = new TypedDocumentString(`
     query TlsStatus {
   tlsStatus {
@@ -5600,6 +5629,25 @@ export const BrowserInstallDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<BrowserInstallMutation, BrowserInstallMutationVariables>;
+export const ComputerInstallDocument = new TypedDocumentString(`
+    mutation ComputerInstall {
+  computerInstall {
+    version
+    upgradable
+    total
+    target
+    stage
+    source
+    received
+    path
+    latest
+    installedVersion
+    error
+    downloadSize
+    appPath
+  }
+}
+    `) as unknown as TypedDocumentString<ComputerInstallMutation, ComputerInstallMutationVariables>;
 export const SetBrowserPrivateNetworkDocument = new TypedDocumentString(`
     mutation SetBrowserPrivateNetwork($input: SetBrowserPrivateNetworkInput!) {
   setBrowserPrivateNetwork(input: $input) {

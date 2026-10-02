@@ -273,6 +273,23 @@ defmodule Longx.System.Status do
       end
     end
 
+    # The local desktop driver's download (permissions and MCP are separate).
+    action :computer_status, Types.ComputerStatus do
+      run fn _input, _ -> {:ok, computer_status()} end
+    end
+
+    action :computer_install, Types.ComputerStatus do
+      run fn _input, _ ->
+        case Longx.Computer.Installer.install() do
+          :ok ->
+            {:ok, computer_status()}
+
+          {:error, :unsupported_platform} ->
+            argument_error(:platform, "CUA Driver has no build for this platform")
+        end
+      end
+    end
+
     # HTTPS with a certificate longx-cert obtains through DNS-01 (Longx.Tls)
     action :tls_status, Types.TlsStatus do
       run fn _input, _ -> {:ok, Longx.Tls.report()} end
@@ -471,6 +488,11 @@ defmodule Longx.System.Status do
 
   defp browser_status do
     st = Longx.Browser.Installer.status()
+    %{st | stage: Atom.to_string(st.stage), source: st.source && Atom.to_string(st.source)}
+  end
+
+  defp computer_status do
+    st = Longx.Computer.Installer.status()
     %{st | stage: Atom.to_string(st.stage), source: st.source && Atom.to_string(st.source)}
   end
 

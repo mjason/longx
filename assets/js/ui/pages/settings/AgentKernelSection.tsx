@@ -26,6 +26,7 @@ import { Switch } from "@/ui/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { AgentSettingsFields, agentSettingsForm, agentSettingsInput, type AgentSettingsForm } from "@/ui/components/AgentSettingsFields";
 import { t } from "@/ui/strings";
+import { ComputerCard } from "./ComputerCard";
 
 const s = t.agentKernel;
 const fail = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e));
@@ -37,6 +38,7 @@ export function AgentKernelSection() {
       <SettingsCard />
       <PublicUrlCard />
       <BrowserCard />
+      <ComputerCard />
     </div>
   );
 }

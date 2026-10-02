@@ -1,5 +1,21 @@
 // English UI copy. Keep this tree aligned with strings.ts; tests check coverage.
 export const en = {
+  computer: {
+    title: "Computer-use driver (CUA Driver)",
+    hint: "Download a pinned, checksummed local desktop driver into Longx's data directory. No installer scripts, system configuration changes or automatic permission grants. LONGX_CUA_DRIVER can select an existing installation.",
+    version: (version: string, target: string | null) => `CUA Driver ${version} · ${target ?? "unsupported platform"}`,
+    installed: (path: string) => `Downloaded: ${path}`,
+    override: (path: string) => `Using LONGX_CUA_DRIVER: ${path}`,
+    notInstalled: (bytes: number | null) => `Not downloaded${bytes ? ` (about ${Math.ceil(bytes / 1_000_000)} MB)` : ""}.`,
+    failed: (error: string) => `Download failed: ${error}`,
+    upgradable: (from: string | null, to: string) => `Upgrade to ${to}${from ? ` (currently ${from})` : ""}.`,
+    unsupported: "No CUA Driver build is available for this platform.",
+    appPath: (path: string) => `Permission-owning app: ${path}`,
+    macPermissions: "macOS Accessibility and Screen Recording permissions belong to CuaDriver.app; grant them in System Settings. Downloading does not launch the app or grant permissions.",
+    windowsSession: "Windows requires the logged-in user's interactive desktop; a Session 0 system service cannot control it.",
+    linuxSession: "Linux requires a graphical desktop and the user's accessibility session. X11/Wayland capabilities differ; a terminal-only environment is not supported.",
+    scope: "Currently manages local Driver downloads only. Computer tools and the local MCP connection are not enabled yet; remote access is not supported.",
+  },
   app: "Longx",
   projects: "Projects",
   newProject: "New project",

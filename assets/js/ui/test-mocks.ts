@@ -421,6 +421,8 @@ export function rpcMock() {
     tlsDisable: vi.fn(async () => ok({ ...tlsIdle, enabled: false })),
     browserStatus: vi.fn(async () => ok({ ...browserIdle, stage: "installed", path: "/data/obscura/0.2.2/x86_64-linux/obscura" })),
     browserInstall: vi.fn(async () => ok({ ...browserIdle, stage: "downloading", received: 0, total: 60_000_000 })),
+    computerStatus: vi.fn(async () => ok({ ...browserIdle, version: "0.32.0", latest: "0.32.0", target: "darwin-arm64", appPath: null, downloadSize: 74_965_063 })),
+    computerInstall: vi.fn(async () => ok({ ...browserIdle, version: "0.32.0", latest: "0.32.0", target: "darwin-arm64", stage: "downloading", appPath: null, downloadSize: 74_965_063 })),
     setBrowserPrivateNetwork: vi.fn(async ({ input }: { input: { enabled: boolean } }) => ok({ allowPrivateNetwork: input.enabled, available: true })),
     knowledgeDocs: vi.fn(async () =>
       ok([

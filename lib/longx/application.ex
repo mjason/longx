@@ -96,6 +96,8 @@ defmodule Longx.Application do
       Longx.Browser.Pool,
       {Task.Supervisor, name: Longx.Browser.TaskSupervisor},
       Longx.Browser.Installer,
+      {Task.Supervisor, name: Longx.Computer.TaskSupervisor},
+      Longx.Computer.Installer,
       # new releases on GitHub, and the upgrade itself (Longx.Upgrade)
       {Task.Supervisor, name: Longx.Upgrade.TaskSupervisor},
       Longx.Upgrade,

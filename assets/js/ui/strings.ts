@@ -3,6 +3,22 @@ import i18n from "@/core/i18n";
 import { en } from "./strings.en";
 
 const zh = {
+  computer: {
+    title: "电脑操作驱动（CUA Driver）",
+    hint: "下载并校验固定版本的本地桌面驱动，保存在 Longx 数据目录。不会执行安装脚本、修改系统配置或自动获取权限。也可用 LONGX_CUA_DRIVER 指向已安装的驱动。",
+    version: (version: string, target: string | null) => `CUA Driver ${version} · ${target ?? "不支持的平台"}`,
+    installed: (path: string) => `已下载：${path}`,
+    override: (path: string) => `使用 LONGX_CUA_DRIVER：${path}`,
+    notInstalled: (bytes: number | null) => `尚未下载${bytes ? `（约 ${Math.ceil(bytes / 1_000_000)} MB）` : ""}。`,
+    failed: (error: string) => `下载失败：${error}`,
+    upgradable: (from: string | null, to: string) => `可升级到 ${to}${from ? `（当前 ${from}）` : ""}。`,
+    unsupported: "这个平台没有 CUA Driver 的构建。",
+    appPath: (path: string) => `权限应用：${path}`,
+    macPermissions: "macOS 需要由 CuaDriver.app 承接辅助功能与屏幕录制权限；请通过系统设置授权。下载不会启动应用或授予权限。",
+    windowsSession: "Windows 需要在已登录用户的交互式桌面中运行；系统服务的 Session 0 不能操作用户桌面。",
+    linuxSession: "Linux 需要图形桌面及当前用户的无障碍会话；X11/Wayland 的可用能力不同，纯终端环境不可用。",
+    scope: "当前仅管理本地 Driver 的下载；电脑操作工具和本机 MCP 连接尚未启用，不支持远程。",
+  },
   app: "Longx",
   projects: "项目",
   newProject: "新建项目",

@@ -45,6 +45,8 @@ config :longx, Longx.Browser,
   # want one give `path:` or set this to their own directory)
   queue_timeout: 1_000
 
+config :longx, Longx.Computer, dir: Path.join(System.tmp_dir!(), "longx-cua-driver-test")
+
 # HTTPS (Longx.Tls): certificates and the downloaded tool never in the real data
 config :longx, Longx.Tls,
   dir: Path.join(System.tmp_dir!(), "longx-tls-test"),

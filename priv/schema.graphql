@@ -166,6 +166,22 @@ type TlsStatus {
   addresses: [String!]!
 }
 
+type ComputerStatus {
+  version: String!
+  upgradable: Boolean!
+  total: Int
+  target: String
+  stage: String!
+  source: String
+  received: Int!
+  path: String
+  latest: String!
+  installedVersion: String
+  error: String
+  downloadSize: Int
+  appPath: String
+}
+
 type BrowserStatus {
   version: String!
   upgradable: Boolean!
@@ -4137,6 +4153,7 @@ type RootQueryType {
   runningCommands: RunningCommands!
   browserSettings: Browser!
   browserStatus: BrowserStatus!
+  computerStatus: ComputerStatus!
   tlsStatus: TlsStatus!
   tlsProviders: TlsProviders!
   tlsResolution(domains: [String!]!): TlsResolutionReport!
@@ -4274,6 +4291,7 @@ type RootMutationType {
   setGithubToken(input: SetGithubTokenInput): Upgrade!
   killCommand(input: KillCommandInput!): KillCommand!
   browserInstall: BrowserStatus!
+  computerInstall: ComputerStatus!
   setBrowserPrivateNetwork(input: SetBrowserPrivateNetworkInput!): Browser!
   setTls(input: SetTlsInput): TlsStatus!
   tlsIssue: TlsStatus!

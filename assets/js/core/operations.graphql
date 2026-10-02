@@ -42,6 +42,8 @@ query BrowserSettings { browserSettings { available allowPrivateNetwork } }
 
 query BrowserStatus { browserStatus { version upgradable total target stage source received path latest installedVersion error } }
 
+query ComputerStatus { computerStatus { version upgradable total target stage source received path latest installedVersion error downloadSize appPath } }
+
 query TlsStatus { tlsStatus { url total toolVersion toolInstalled startedAt stage serving resolvers redirect received provider propagationWait propagationCheck port httpPort finishedAt error envSet enabled email domains directory certificate { serial notBefore notAfter issuedAt domains } addresses } }
 
 query TlsProviders { tlsProviders { providers { url name credentials { name description } code aliases additional { name description } } } }
@@ -177,6 +179,8 @@ mutation SetGithubToken($input: SetGithubTokenInput) { setGithubToken(input: $in
 mutation KillCommand($input: KillCommandInput!) { killCommand(input: $input) { ok } }
 
 mutation BrowserInstall { browserInstall { version upgradable total target stage source received path latest installedVersion error } }
+
+mutation ComputerInstall { computerInstall { version upgradable total target stage source received path latest installedVersion error downloadSize appPath } }
 
 mutation SetBrowserPrivateNetwork($input: SetBrowserPrivateNetworkInput!) { setBrowserPrivateNetwork(input: $input) { available allowPrivateNetwork } }
 
