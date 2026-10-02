@@ -97,7 +97,21 @@ defmodule Longx.Application do
       {Task.Supervisor, name: Longx.Browser.TaskSupervisor},
       Longx.Browser.Installer,
       {Task.Supervisor, name: Longx.Computer.TaskSupervisor},
-      Longx.Computer.Installer,
+      Supervisor.child_spec(
+        {Finch,
+         name: Longx.Computer.Finch,
+         pools: %{
+           default: [
+             size: 1,
+             count: 1,
+             conn_max_idle_time: :infinity,
+             pool_max_idle_time: :infinity,
+             conn_opts: [protocols: [:http1], timeout: 1_000]
+           ]
+         }},
+        id: Longx.Computer.Finch
+      ),
+      Longx.Computer.Connection,
       # new releases on GitHub, and the upgrade itself (Longx.Upgrade)
       {Task.Supervisor, name: Longx.Upgrade.TaskSupervisor},
       Longx.Upgrade,

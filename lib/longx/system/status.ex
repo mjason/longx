@@ -274,19 +274,61 @@ defmodule Longx.System.Status do
     end
 
     # The local desktop driver's download (permissions and MCP are separate).
-    action :computer_status, Types.ComputerStatus do
-      run fn _input, _ -> {:ok, computer_status()} end
+    action :computer_settings, Types.ComputerSettings do
+      run fn _input, _ -> {:ok, Longx.Computer.Service.settings()} end
     end
 
-    action :computer_install, Types.ComputerStatus do
-      run fn _input, _ ->
-        case Longx.Computer.Installer.install() do
-          :ok ->
-            {:ok, computer_status()}
+    action :computer_configure, Types.ComputerSettings do
+      argument :url, :string, allow_nil?: false
 
-          {:error, :unsupported_platform} ->
-            argument_error(:platform, "CUA Driver has no build for this platform")
+      argument :token, :string,
+        sensitive?: true,
+        default: "",
+        constraints: [allow_empty?: true, trim?: false]
+
+      run fn input, _ ->
+        case Longx.Computer.Service.save(input.arguments.url, input.arguments.token) do
+          {:ok, settings} ->
+            :ok = Longx.Computer.Connection.disconnect()
+            {:ok, settings}
+
+          {:error, :token_required} ->
+            argument_error(
+              :token,
+              "Enter a service access key (32+ characters); changing the URL requires a new key"
+            )
+
+          {:error, :invalid_url} ->
+            argument_error(
+              :url,
+              "Use an http(s) service URL ending in /mcp, without credentials, query or fragment"
+            )
+
+          {:error, _} ->
+            argument_error(:connection, "Could not save the computer service settings")
         end
+      end
+    end
+
+    action :computer_connection, Types.ComputerConnection do
+      run fn _input, _ -> {:ok, Longx.Computer.Connection.status()} end
+    end
+
+    action :computer_connect, Types.ComputerConnection do
+      argument :foreground, :boolean, default: false, allow_nil?: false
+
+      run fn input, _ ->
+        case Longx.Computer.Connection.connect(input.arguments.foreground) do
+          {:ok, status} -> {:ok, status}
+          {:error, message} -> argument_error(:connection, message)
+        end
+      end
+    end
+
+    action :computer_disconnect, Types.ComputerConnection do
+      run fn _input, _ ->
+        :ok = Longx.Computer.Connection.disconnect()
+        {:ok, Longx.Computer.Connection.status()}
       end
     end
 
@@ -488,11 +530,6 @@ defmodule Longx.System.Status do
 
   defp browser_status do
     st = Longx.Browser.Installer.status()
-    %{st | stage: Atom.to_string(st.stage), source: st.source && Atom.to_string(st.source)}
-  end
-
-  defp computer_status do
-    st = Longx.Computer.Installer.status()
     %{st | stage: Atom.to_string(st.stage), source: st.source && Atom.to_string(st.source)}
   end
 

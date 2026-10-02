@@ -1,24 +1,22 @@
 defmodule LongxWeb.ComputerRpcTest do
   use LongxWeb.ConnCase, async: false
 
-  test "local Driver status is available over the settings API", %{conn: conn} do
+  test "service configuration reports only URL and credential presence", %{conn: conn} do
     assert %{"success" => true, "data" => data} =
-             rpc(conn, "computer_status", %{
-               "fields" => [
-                 "stage",
-                 "source",
-                 "path",
-                 "appPath",
-                 "latest",
-                 "downloadSize",
-                 "upgradable"
-               ]
-             })
+             rpc(conn, "computer_settings", %{"fields" => ["url", "hasToken"]})
 
-    assert data["latest"] == Longx.Computer.Runtime.version()
-    assert data["stage"] in ["idle", "installed", "failed"]
-    assert is_integer(data["downloadSize"])
-    assert is_boolean(data["upgradable"])
+    assert String.ends_with?(data["url"], "/mcp")
+    assert is_boolean(data["hasToken"])
     refute Map.has_key?(data, "token")
+  end
+
+  test "connection status and disconnect do not expose credentials", %{conn: conn} do
+    assert %{"success" => true, "data" => data} =
+             rpc(conn, "computer_connection", %{"fields" => ["phase", "foreground", "busy"]})
+
+    assert data["phase"] in ["disconnected", "connecting", "ready"]
+
+    assert %{"success" => true, "data" => %{"phase" => "disconnected"}} =
+             rpc(conn, "computer_disconnect", %{"fields" => ["phase"]})
   end
 end

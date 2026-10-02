@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Longx Computer</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" type="module"></script>
+</head>
+<body>
+  <div class="app-bar">
+    <svg class="app-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+    <span class="app-name">Longx Computer</span>
+    <span id="service-badge" class="badge" role="status">正在检查</span>
+  </div>
+  <main>
+    <header><h1>电脑操作</h1><p>把这台电脑连接到 Longx，由你管理权限和访问范围。</p></header>
+    <section aria-labelledby="permission-title">
+      <div class="section-head"><h2 id="permission-title">系统权限</h2><p>权限归属于 Longx Computer，不需要单独授权 Driver。</p></div>
+      <div class="permission-row">
+        <div><div class="permission-label">辅助功能</div><div id="accessibility-state" class="permission-state">正在检查…</div></div>
+        <div class="actions"><button data-permission="accessibility">申请权限</button><button data-settings="accessibility">打开设置</button><button data-reset="accessibility">重新授权</button></div>
+      </div>
+      <div class="permission-row">
+        <div><div class="permission-label">屏幕录制</div><div id="screen-recording-state" class="permission-state">正在检查…</div></div>
+        <div class="actions"><button data-permission="screen_recording">申请权限</button><button data-settings="screen_recording">打开设置</button><button data-reset="screen_recording">重新授权</button></div>
+      </div>
+      <p id="permission-note" class="hint divider"></p>
+      <p class="hint">首次真实截图还可能需要系统确认。权限已授权不等于截图已验证；请在交互桌面中使用。</p>
+      <div class="actions"><button id="refresh-permissions">刷新权限状态</button></div>
+      <p id="permission-feedback" class="hint" role="status"></p>
+    </section>
+    <section aria-labelledby="service-title">
+      <div class="section-head"><h2 id="service-title">HTTP 服务</h2><p>默认仅允许本机访问。启动服务后，在 Longx 中连接。</p></div>
+      <form id="service">
+        <div class="field-grid">
+          <label>监听地址<input id="bind" value="127.0.0.1" required spellcheck="false"></label>
+          <label>端口<input id="port" type="number" min="1" max="65535" value="7797" required></label>
+        </div>
+        <label class="check"><input id="remote" type="checkbox">允许非本机地址监听</label>
+        <p class="warning">远程设备必须使用访问密钥。HTTP 不加密；只在可信网络使用，跨不可信网络请通过 HTTPS 反向代理或加密隧道访问。还需自行配置防火墙。</p>
+        <label class="check"><input id="foreground" type="checkbox"><span>允许前台控制和整屏观察<span class="hint">可能改变焦点、移动指针及捕获整屏。授权只限你交给 Longx 的具体任务。</span></span></label>
+        <div class="actions divider"><button class="primary" type="submit">保存并启动 / 重启服务</button><button id="stop" type="button" class="danger">立即停止电脑控制</button></div>
+      </form>
+      <p id="status" role="status"></p>
+      <p id="url" class="mono endpoint"></p>
+    </section>
+    <section aria-labelledby="connection-title">
+      <div class="section-head"><h2 id="connection-title">连接 Longx</h2><p>在 Longx 设置 → Agent kernel 中填写上面的地址和访问密钥。本机与远程使用相同接口。</p></div>
+      <label>访问密钥<input id="key" type="password" readonly autocomplete="off" placeholder="存放在系统凭据库"></label>
+      <div class="actions"><button id="reveal">显示 / 隐藏密钥</button><button id="rotate" class="danger">撤销旧密钥并停止服务</button></div>
+      <p class="hint divider">截图可能含私人信息，会传给 Longx 的模型并保存在会话中。CUA 默认开启不含内容的产品遥测，本应用不自动修改该设置。</p>
+    </section>
+    <section aria-labelledby="update-title">
+      <div class="section-head"><h2 id="update-title">应用更新</h2><p>验证更新包签名后原位升级，保留配置与访问密钥。升级前请结束电脑操作任务。</p></div>
+      <p id="update-status" role="status">正在读取版本…</p>
+      <div class="actions"><button id="check-update">检查更新</button><button id="install-update" class="primary" hidden>下载并安装更新</button></div>
+      <p id="update-note" class="hint"></p>
+    </section>
+    <p id="error" role="alert"></p>
+    <footer>Longx Computer · CUA Driver 0.32.0</footer>
+  </main>
+</body>
+</html>

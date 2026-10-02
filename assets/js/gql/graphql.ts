@@ -33,6 +33,15 @@ export type CompactThreadInput = {
   threadId: string | number;
 };
 
+export type ComputerConfigureInput = {
+  token?: string | null | undefined;
+  url: string;
+};
+
+export type ComputerConnectInput = {
+  foreground?: boolean | null | undefined;
+};
+
 export type CreateCredentialApiKeyInput = {
   allowedHosts?: Array<string> | null | undefined;
   header?: string | null | undefined;
@@ -3364,10 +3373,15 @@ export type BrowserStatusQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type BrowserStatusQuery = { browserStatus: { version: string, upgradable: boolean, total: number | null, target: string | null, stage: string, source: string | null, received: number, path: string | null, latest: string, installedVersion: string | null, error: string | null } };
 
-export type ComputerStatusQueryVariables = Exact<{ [key: string]: never; }>;
+export type ComputerSettingsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type ComputerStatusQuery = { computerStatus: { version: string, upgradable: boolean, total: number | null, target: string | null, stage: string, source: string | null, received: number, path: string | null, latest: string, installedVersion: string | null, error: string | null, downloadSize: number | null, appPath: string | null } };
+export type ComputerSettingsQuery = { computerSettings: { url: string, hasToken: boolean } };
+
+export type ComputerConnectionQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ComputerConnectionQuery = { computerConnection: { toolCount: number, phase: string, permissions: string | null, foreground: boolean, error: string | null, busy: boolean } };
 
 export type TlsStatusQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -3850,10 +3864,24 @@ export type BrowserInstallMutationVariables = Exact<{ [key: string]: never; }>;
 
 export type BrowserInstallMutation = { browserInstall: { version: string, upgradable: boolean, total: number | null, target: string | null, stage: string, source: string | null, received: number, path: string | null, latest: string, installedVersion: string | null, error: string | null } };
 
-export type ComputerInstallMutationVariables = Exact<{ [key: string]: never; }>;
+export type ComputerConfigureMutationVariables = Exact<{
+  input: ComputerConfigureInput;
+}>;
 
 
-export type ComputerInstallMutation = { computerInstall: { version: string, upgradable: boolean, total: number | null, target: string | null, stage: string, source: string | null, received: number, path: string | null, latest: string, installedVersion: string | null, error: string | null, downloadSize: number | null, appPath: string | null } };
+export type ComputerConfigureMutation = { computerConfigure: { url: string, hasToken: boolean } };
+
+export type ComputerConnectMutationVariables = Exact<{
+  input?: ComputerConnectInput | null | undefined;
+}>;
+
+
+export type ComputerConnectMutation = { computerConnect: { toolCount: number, phase: string, permissions: string | null, foreground: boolean, error: string | null, busy: boolean } };
+
+export type ComputerDisconnectMutationVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ComputerDisconnectMutation = { computerDisconnect: { toolCount: number, phase: string, permissions: string | null, foreground: boolean, error: string | null, busy: boolean } };
 
 export type SetBrowserPrivateNetworkMutationVariables = Exact<{
   input: SetBrowserPrivateNetworkInput;
@@ -4543,25 +4571,26 @@ export const BrowserStatusDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<BrowserStatusQuery, BrowserStatusQueryVariables>;
-export const ComputerStatusDocument = new TypedDocumentString(`
-    query ComputerStatus {
-  computerStatus {
-    version
-    upgradable
-    total
-    target
-    stage
-    source
-    received
-    path
-    latest
-    installedVersion
-    error
-    downloadSize
-    appPath
+export const ComputerSettingsDocument = new TypedDocumentString(`
+    query ComputerSettings {
+  computerSettings {
+    url
+    hasToken
   }
 }
-    `) as unknown as TypedDocumentString<ComputerStatusQuery, ComputerStatusQueryVariables>;
+    `) as unknown as TypedDocumentString<ComputerSettingsQuery, ComputerSettingsQueryVariables>;
+export const ComputerConnectionDocument = new TypedDocumentString(`
+    query ComputerConnection {
+  computerConnection {
+    toolCount
+    phase
+    permissions
+    foreground
+    error
+    busy
+  }
+}
+    `) as unknown as TypedDocumentString<ComputerConnectionQuery, ComputerConnectionQueryVariables>;
 export const TlsStatusDocument = new TypedDocumentString(`
     query TlsStatus {
   tlsStatus {
@@ -5629,25 +5658,38 @@ export const BrowserInstallDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<BrowserInstallMutation, BrowserInstallMutationVariables>;
-export const ComputerInstallDocument = new TypedDocumentString(`
-    mutation ComputerInstall {
-  computerInstall {
-    version
-    upgradable
-    total
-    target
-    stage
-    source
-    received
-    path
-    latest
-    installedVersion
-    error
-    downloadSize
-    appPath
+export const ComputerConfigureDocument = new TypedDocumentString(`
+    mutation ComputerConfigure($input: ComputerConfigureInput!) {
+  computerConfigure(input: $input) {
+    url
+    hasToken
   }
 }
-    `) as unknown as TypedDocumentString<ComputerInstallMutation, ComputerInstallMutationVariables>;
+    `) as unknown as TypedDocumentString<ComputerConfigureMutation, ComputerConfigureMutationVariables>;
+export const ComputerConnectDocument = new TypedDocumentString(`
+    mutation ComputerConnect($input: ComputerConnectInput) {
+  computerConnect(input: $input) {
+    toolCount
+    phase
+    permissions
+    foreground
+    error
+    busy
+  }
+}
+    `) as unknown as TypedDocumentString<ComputerConnectMutation, ComputerConnectMutationVariables>;
+export const ComputerDisconnectDocument = new TypedDocumentString(`
+    mutation ComputerDisconnect {
+  computerDisconnect {
+    toolCount
+    phase
+    permissions
+    foreground
+    error
+    busy
+  }
+}
+    `) as unknown as TypedDocumentString<ComputerDisconnectMutation, ComputerDisconnectMutationVariables>;
 export const SetBrowserPrivateNetworkDocument = new TypedDocumentString(`
     mutation SetBrowserPrivateNetwork($input: SetBrowserPrivateNetworkInput!) {
   setBrowserPrivateNetwork(input: $input) {

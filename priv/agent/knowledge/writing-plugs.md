@@ -1,6 +1,6 @@
 ---
 title: Writing plugs and the agent description
-summary: The .longx layout (shared/ and local/), the agent.exs description DSL, declared agents (roles), the Longx.Agent.Plug module API, phases and effects
+summary: The .longx layout (shared/ and local/), the agent.exs description DSL, opt-in Browser and Computer capabilities, declared agents (roles), the Longx.Agent.Plug module API, phases and effects
 tags: [longx, plugs, agent]
 ---
 
@@ -39,6 +39,12 @@ end
 ```
 
 The shipped pipeline: `Environment`, `Base`, `AgentsMd` (the project's AGENTS.md; `drop AgentsMd` leaves it out), `Shell` (exec_command), `Jobs` (start_job / jobs / job_output / wait_job / stop_job — long commands in the background, by name), `Patch` (apply_patch), `ViewImage`, `Present` (present / prompt_user — cards for the person; show_file / show_diff / send_file / show_html), `Knowledge` (knowledge_read / knowledge_search / knowledge_write), `WebSearch` (web_search), `WebFetch` (web_fetch — a headless browser on this Longx reads a page), `Credentials` (credentials_list / http_request / credential_login / credential_create / credential_rotate), `Agents` (spawn_agent / send_message / close_agent / agents_directory / claim_handle), `Watches` (watch_list / watch_run / watch_enable / wait_until / notify), `Goal` (create_goal / update_goal / get_goal), `Compaction` (get_context_remaining / new_context_window; folds the context at 90 % of the window), `Request` (all under `Longx.Agent.Plugs`). Not in it, added by a project that wants it: `Browser` (the person's own browser) — `plug Browser` (their default alias) or `plug Browser, browser: "qa-chrome", max_tabs: 3` in `local/agent.exs` mounts the `javascript` tool.
+
+**Computer use is also available as an opt-in built-in plug.** Add `plug Computer` inside the `agent do … end` block in `.longx/local/agent.exs` to mount its instructions and `computer_status` tool. Once the service is connected, it also mounts the curated desktop tools with the `computer_` prefix. No custom plug module is needed. Like Browser, Computer is not in the default pipeline; connecting a service in Settings does not enable it for a project.
+
+The person runs the independent **Longx Computer** app on the computer to operate, grants its system permissions, and starts its HTTP MCP service. In Longx **Settings → Agent kernel**, they enter the service URL and access key, save, and connect. The default local URL is `http://127.0.0.1:7797/mcp`; a remote computer uses its reachable address through the same interface. Longx does not install or start the Driver, grant permissions, or enable remote listening. The app requires explicit opt-in for non-loopback listening; use HTTPS or an encrypted tunnel across untrusted networks. Have the person enter the key into the masked settings field, never into chat.
+
+Use `computer_status` to check the connection and permission report after enabling the plug. The tools operate the **service's computer**, which may differ from Longx's host. A connected service or a positive permission report is not proof that capture works. Observe the requested app/window before input, follow the mounted Computer instructions, and never automatically replay an action after interruption or connection loss. Foreground control and full-display observation require explicit opt-in in both the app and Longx; screenshots can contain private data and are sent to the selected model and retained in the conversation.
 
 **Declared agents (roles)** — `shared/agents/<name>/agent.exs` (or `local/agents/<name>/`) is a description of its own, applied on top of the project's when that agent is spawned:
 

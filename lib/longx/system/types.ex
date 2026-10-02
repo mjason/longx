@@ -278,29 +278,34 @@ defmodule Longx.System.Types do
     def graphql_type(_), do: :browser_status
   end
 
-  defmodule ComputerStatus do
-    @moduledoc "The local CUA Driver download; installed does not mean desktop permissions granted."
+  defmodule ComputerSettings do
     use Ash.Type.NewType,
       subtype_of: :map,
       constraints: [
         fields: [
-          stage: [type: :string, allow_nil?: false],
-          received: [type: :integer, allow_nil?: false],
-          total: [type: :integer],
-          error: [type: :string],
-          version: [type: :string, allow_nil?: false],
-          latest: [type: :string, allow_nil?: false],
-          target: [type: :string],
-          path: [type: :string],
-          app_path: [type: :string],
-          source: [type: :string],
-          installed_version: [type: :string],
-          download_size: [type: :integer],
-          upgradable: [type: :boolean, allow_nil?: false]
+          url: [type: :string, allow_nil?: false],
+          has_token: [type: :boolean, allow_nil?: false]
         ]
       ]
 
-    def graphql_type(_), do: :computer_status
+    def graphql_type(_), do: :computer_settings
+  end
+
+  defmodule ComputerConnection do
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          phase: [type: :string, allow_nil?: false],
+          foreground: [type: :boolean, allow_nil?: false],
+          busy: [type: :boolean, allow_nil?: false],
+          tool_count: [type: :integer, allow_nil?: false],
+          permissions: [type: :string],
+          error: [type: :string]
+        ]
+      ]
+
+    def graphql_type(_), do: :computer_connection
   end
 
   defmodule RunningCommands do

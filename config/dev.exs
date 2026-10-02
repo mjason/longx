@@ -68,7 +68,6 @@ config :longx, Longx.Jobs, dir: Path.expand("../data/jobs", __DIR__)
 config :longx, Longx.Agent.Knowledge, global_dir: Path.expand("../data/agent/knowledge", __DIR__)
 # the headless browser is downloaded here on first use (Longx.Browser.Installer)
 config :longx, Longx.Browser, dir: Path.expand("../data/obscura", __DIR__)
-config :longx, Longx.Computer, dir: Path.expand("../data/cua-driver", __DIR__)
 
 # HTTPS (Longx.Tls): the certificate, and longx-cert downloaded on first use
 config :longx, Longx.Tls,

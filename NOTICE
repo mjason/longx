@@ -36,3 +36,11 @@ verbatim from OpenAI's codex (codex-rs/sandboxing/src/*.sbpl):
   codex — https://github.com/openai/codex
   Copyright (c) OpenAI. Licensed under the Apache License, Version 2.0
   (https://www.apache.org/licenses/LICENSE-2.0).
+
+apps/computer packages CUA Driver 0.32.0 as its desktop actuator:
+
+  cua-driver — https://github.com/trycua/cua/tree/cua-driver-rs-v0.32.0/libs/cua-driver
+  Copyright (c) Cua AI, Inc. Licensed under the MIT License.
+
+Its LICENSE and THIRD_PARTY_NOTICES.md are retained in the packaged driver
+resources. Optional perception artifacts and CUA Spaces are not bundled.

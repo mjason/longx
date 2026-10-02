@@ -421,8 +421,11 @@ export function rpcMock() {
     tlsDisable: vi.fn(async () => ok({ ...tlsIdle, enabled: false })),
     browserStatus: vi.fn(async () => ok({ ...browserIdle, stage: "installed", path: "/data/obscura/0.2.2/x86_64-linux/obscura" })),
     browserInstall: vi.fn(async () => ok({ ...browserIdle, stage: "downloading", received: 0, total: 60_000_000 })),
-    computerStatus: vi.fn(async () => ok({ ...browserIdle, version: "0.32.0", latest: "0.32.0", target: "darwin-arm64", appPath: null, downloadSize: 74_965_063 })),
-    computerInstall: vi.fn(async () => ok({ ...browserIdle, version: "0.32.0", latest: "0.32.0", target: "darwin-arm64", stage: "downloading", appPath: null, downloadSize: 74_965_063 })),
+    computerSettings: vi.fn(async () => ok({ url: "http://127.0.0.1:7797/mcp", hasToken: false })),
+    computerConfigure: vi.fn(async () => ok({ url: "http://127.0.0.1:7797/mcp", hasToken: true })),
+    computerConnection: vi.fn(async () => ok({ phase: "disconnected", foreground: false, busy: false, toolCount: 0, permissions: null, error: null })),
+    computerConnect: vi.fn(async () => ok({ phase: "connecting", foreground: false, busy: true, toolCount: 0, permissions: null, error: null })),
+    computerDisconnect: vi.fn(async () => ok({ phase: "disconnected", foreground: false, busy: false, toolCount: 0, permissions: null, error: null })),
     setBrowserPrivateNetwork: vi.fn(async ({ input }: { input: { enabled: boolean } }) => ok({ allowPrivateNetwork: input.enabled, available: true })),
     knowledgeDocs: vi.fn(async () =>
       ok([

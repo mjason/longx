@@ -7,6 +7,10 @@
 # General application configuration
 import Config
 
+# Never log the access key entered in computer service settings (including
+# nested GraphQL variables).
+config :phoenix, :filter_parameters, ["password", "token", "secret", "api_key", "client_secret"]
+
 # an untyped map (a resource's `agent_settings`, a browser's `device`) is a JSON
 # object on the wire, not a string holding one
 config :ash_graphql, :json_type, :json

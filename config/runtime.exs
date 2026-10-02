@@ -101,7 +101,6 @@ if config_env() == :prod do
   config :longx, Longx.Jobs, dir: Path.join(data_dir, "jobs")
   # the headless browser, downloaded on first use (Longx.Browser.Installer)
   config :longx, Longx.Browser, dir: Path.join(data_dir, "obscura")
-  config :longx, Longx.Computer, dir: Path.join(data_dir, "cua-driver")
   # HTTPS: the certificate, and longx-cert downloaded on first use (Longx.Tls)
   config :longx, Longx.Tls,
     dir: Path.join(data_dir, "tls"),

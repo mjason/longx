@@ -22,7 +22,8 @@ defmodule Longx.System do
       action Longx.System.Status, :running_commands, :running_commands
       action Longx.System.Status, :browser_settings, :browser_settings
       action Longx.System.Status, :browser_status, :browser_status
-      action Longx.System.Status, :computer_status, :computer_status
+      action Longx.System.Status, :computer_settings, :computer_settings
+      action Longx.System.Status, :computer_connection, :computer_connection
       action Longx.System.Status, :tls_status, :tls_status
       action Longx.System.Status, :tls_providers, :tls_providers
       action Longx.System.Status, :tls_resolution, :tls_resolution
@@ -43,7 +44,9 @@ defmodule Longx.System do
       action Longx.System.Status, :set_github_token, :set_github_token
       action Longx.System.Status, :kill_command, :kill_command
       action Longx.System.Status, :browser_install, :browser_install
-      action Longx.System.Status, :computer_install, :computer_install
+      action Longx.System.Status, :computer_configure, :computer_configure
+      action Longx.System.Status, :computer_connect, :computer_connect
+      action Longx.System.Status, :computer_disconnect, :computer_disconnect
       action Longx.System.Status, :set_browser_private_network, :set_browser_private_network
       action Longx.System.Status, :set_tls, :set_tls
       action Longx.System.Status, :tls_issue, :tls_issue

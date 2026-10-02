@@ -1,0 +1,39 @@
+[package]
+name = "longx-computer"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+default-run = "longx-computer"
+
+[features]
+default = ["desktop"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:keyring", "dep:core-foundation", "dep:tauri-plugin-updater"]
+test-fixture = []
+
+[dependencies]
+axum = "0.8"
+base64 = "0.22"
+getrandom = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+subtle = "2"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }
+tempfile = "3"
+tauri = { version = "2", features = ["tray-icon"], optional = true }
+tauri-plugin-updater = { version = "2", optional = true }
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"], optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = { version = "0.10", optional = true }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [], optional = true }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+
+[[bin]]
+name = "longx-computer"
+path = "src/main.rs"
+required-features = ["desktop"]
