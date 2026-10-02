@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { mergeUpdates } from "./release-artifacts.mjs";
 const targets = ["darwin-aarch64", "darwin-x86_64", "linux-x86_64", "linux-aarch64", "windows-x86_64"];
 const records = () => targets.map(target => ({ target, version: "0.2.107", signature: "test-signature", url: `https://example.test/${target}` }));
@@ -20,4 +21,10 @@ test("unsigned and insecure update records are refused", () => {
   assert.throws(() => mergeUpdates(unsigned));
   const insecure = records(); insecure[0].url = "http://example.test/package";
   assert.throws(() => mergeUpdates(insecure));
+});
+test("macOS packaging keeps app alongside dmg and repair dispatch preserves tag", () => {
+  const workflow = readFileSync(new URL("../../../.github/workflows/computer.yml", import.meta.url), "utf8");
+  assert.equal((workflow.match(/bundles: app,dmg/g) || []).length, 2);
+  assert.equal((workflow.match(/ref: \$\{\{ inputs\.release_tag \|\| github\.ref \}\}/g) || []).length, 2);
+  assert(workflow.includes("tag_name: ${{ inputs.release_tag || github.ref_name }}"));
 });

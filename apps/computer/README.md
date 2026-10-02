@@ -66,6 +66,10 @@ CUA's default content-free telemetry is not silently changed.
 ARM64/x86_64 and Windows x86_64 installers on every `v*` release tag, or as
 downloadable artifacts through `workflow_dispatch`. Windows ARM64 is not yet
 part of this matrix. App/Longx versions follow the release tag together.
+macOS builds `app,dmg` together so Tauri retains the signed app for
+verification and ZIP packaging. To repair packaging without moving a published
+tag, dispatch the workflow from `main` with `release_tag` set to that existing
+tag; it checks out the tagged source and attaches only the rebuilt app assets.
 macOS reuses the repository's `DEVELOPER_ID_*` and `NOTARY_*` secrets, signs
 all embedded Mach-O helpers with that team, and verifies the notarized bundle.
 Windows installers are not Authenticode-signed until a Windows publisher

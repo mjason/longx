@@ -4,6 +4,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing v-tag to rebuild and attach app assets to (empty for artifacts only)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -26,10 +31,10 @@ jobs:
         include:
           - runner: macos-14
             target: darwin-aarch64
-            bundles: dmg
+            bundles: app,dmg
           - runner: macos-15-intel
             target: darwin-x86_64
-            bundles: dmg
+            bundles: app,dmg
           - runner: ubuntu-24.04
             target: linux-x86_64
             bundles: appimage,deb
@@ -41,6 +46,8 @@ jobs:
             bundles: nsis
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -57,8 +64,13 @@ jobs:
         env:
           UPDATE_KEY: ${{ secrets.COMPUTER_UPDATER_PRIVATE_KEY }}
           UPDATE_PUBLIC_KEY: ${{ vars.COMPUTER_UPDATER_PUBLIC_KEY }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           node scripts/release-artifacts.mjs version
+          if [[ -n "$RELEASE_TAG" ]]; then
+            source_tag="v$(node -p 'require("./package.json").version')"
+            [[ "$RELEASE_TAG" == "$source_tag" ]] || { echo "::error::Requested tag differs from source version"; exit 1; }
+          fi
           if [[ -n "$UPDATE_KEY" && -n "$UPDATE_PUBLIC_KEY" ]]; then
             echo "updater=true" >> "$GITHUB_OUTPUT"
           elif [[ -z "$UPDATE_KEY" && -z "$UPDATE_PUBLIC_KEY" ]]; then
@@ -143,12 +155,14 @@ jobs:
   publish:
     name: Publish desktop assets
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -160,6 +174,7 @@ jobs:
       - run: node apps/computer/scripts/release-artifacts.mjs manifest
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
           files: apps/computer/dist/*
           fail_on_unmatched_files: true
           generate_release_notes: true
