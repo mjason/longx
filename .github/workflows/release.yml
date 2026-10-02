@@ -42,6 +42,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Import Developer ID and notarization credentials
+        if: matrix.os == 'darwin'
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          SIGNING_IDENTITY: ${{ secrets.DEVELOPER_ID_IDENTITY }}
+          APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          APPLE_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for value in CERTIFICATE CERTIFICATE_PASSWORD SIGNING_IDENTITY APPLE_ID TEAM_ID APPLE_PASSWORD; do
+            [[ -n "${!value}" ]] || { echo "Missing required secret: $value"; exit 1; }
+          done
+          keychain="$RUNNER_TEMP/longx-signing.keychain-db"
+          keychain_password=$(openssl rand -hex 24)
+          echo "::add-mask::$keychain_password"
+          umask 077
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/longx-signing.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/longx-signing.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" "$HOME/Library/Keychains/login.keychain-db"
+          xcrun notarytool store-credentials Longx-CI --keychain "$keychain" --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APPLE_PASSWORD"
+          rm "$RUNNER_TEMP/longx-signing.p12"
+
+
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "28"
@@ -74,9 +103,32 @@ jobs:
       - run: rm -rf _build/prod/rel
       - run: mix release --overwrite
 
-      - name: Bundle native macOS libraries and ad-hoc sign
+      - name: Bundle native macOS libraries and relocate dependencies
         if: matrix.os == 'darwin'
         run: python3 scripts/bundle-macos.py _build/prod/rel/longx
+
+      - name: Developer ID sign native macOS release
+        if: matrix.os == 'darwin'
+        env:
+          SIGNING_IDENTITY: ${{ secrets.DEVELOPER_ID_IDENTITY }}
+          TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+        run: python3 scripts/sign-macos.py _build/prod/rel/longx --identity "$SIGNING_IDENTITY" --team "$TEAM_ID"
+
+      - name: Notarize native macOS release
+        if: matrix.os == 'darwin'
+        run: |
+          set -euo pipefail
+          ditto -c -k --keepParent _build/prod/rel/longx "$RUNNER_TEMP/longx-notarization.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/longx-notarization.zip" --keychain-profile Longx-CI --keychain "$RUNNER_TEMP/longx-signing.keychain-db" --wait --output-format json > "$RUNNER_TEMP/notarization.json"
+          python3 scripts/check-notarization.py "$RUNNER_TEMP/notarization.json"
+          # Bare executables/tarballs cannot be stapled. Apple records their code hashes;
+          # Gatekeeper can retrieve tickets online. Do not alter code after this point.
+
+      - name: Remove macOS signing material
+        if: always() && matrix.os == 'darwin'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/longx-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/longx-signing.p12" "$RUNNER_TEMP/longx-notarization.zip"
 
       - name: Package
         id: package
