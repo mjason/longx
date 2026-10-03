@@ -145,6 +145,7 @@ describe("ThreadPage", () => {
     const viewport = document.querySelector<HTMLElement>('[data-slot="aui_thread-viewport"]')!;
     expect(viewport.className.split(" ")).toContain("[overflow-anchor:none]");
     expect(viewport).toHaveAttribute("data-slot", "aui_thread-viewport");
+    expect(viewport.querySelector('[data-slot="aui_thread-content"]')).not.toBeNull();
   });
 
   test("a window that starts inside a turn says how much of that turn is above it", async () => {

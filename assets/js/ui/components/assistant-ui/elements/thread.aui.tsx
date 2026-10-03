@@ -27,7 +27,7 @@ import {
 import { TooltipIconButton } from "@/ui/components/assistant-ui/elements/tooltip-icon-button";
 import { Button } from "@/ui/components/ui/button";
 import { Skeleton } from "@/ui/components/ui/skeleton";
-import { scrollToBottom } from "@/ui/chat/scroll";
+import { observeThreadContentSize, scrollToBottom } from "@/ui/chat/scroll";
 import { cn } from "@/lib/utils";
 import { t } from "@/ui/strings";
 import { keysTitle } from "@/ui/keys/hint";
@@ -173,6 +173,14 @@ export const Thread: FC<ThreadProps> = ({
 const THREAD_COLUMN =
   "px-(--thread-margin) [--thread-margin:1rem] @min-[40rem]:[--thread-margin:1.5rem] @min-[56rem]:[--thread-margin:4rem] [--thread-max-width:40rem] @min-[56rem]:[--thread-max-width:48rem]";
 
+const ThreadContent: FC<PropsWithChildren<{ className: string }>> = ({ className, children }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (ref.current) return observeThreadContentSize(ref.current);
+  }, []);
+  return <div ref={ref} data-slot="aui_thread-content" className={className}>{children}</div>;
+};
+
 /**
  * Longx: a conversation to read, not to write in — a sub-agent's, in a
  * workbench tab: the viewport, the messages and the way back down, no
@@ -184,7 +192,7 @@ export const ReadOnlyThread: FC<{ components?: ThreadComponents | undefined }> =
   <ThreadComponentsContext.Provider value={components}>
     <ThreadPrimitive.Root className="aui-root aui-thread-root bg-background @container flex h-full flex-col">
       <ThreadPrimitive.Viewport data-slot="aui_thread-viewport" className={cn("relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll", THREAD_COLUMN)}>
-        <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col pt-4">
+        <ThreadContent className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col pt-4">
           {components.HistoryEdge ? <components.HistoryEdge /> : null}
           <div data-slot="aui_message-group" className="mb-6 flex flex-col gap-y-6 empty:hidden">
             <ThreadPrimitive.Messages>{() => <ThreadMessage />}</ThreadPrimitive.Messages>
@@ -192,7 +200,7 @@ export const ReadOnlyThread: FC<{ components?: ThreadComponents | undefined }> =
           <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto flex flex-col items-center pb-3">
             <ThreadScrollToBottom />
           </ThreadPrimitive.ViewportFooter>
-        </div>
+        </ThreadContent>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
   </ThreadComponentsContext.Provider>
@@ -257,7 +265,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
         // a deliberate user scroll-up, which disables follow mode mid-turn.
         className={cn("relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll [overflow-anchor:none]", THREAD_COLUMN)}
       >
-        <div
+        <ThreadContent
           className={cn(
             "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col pt-4",
             // new chat: anchored below the top rather than vertically centred, so the
@@ -294,7 +302,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
             <ThreadScrollToBottom />
             <Composer autoFocus={autoFocus} />
           </ThreadPrimitive.ViewportFooter>
-        </div>
+        </ThreadContent>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
   );
