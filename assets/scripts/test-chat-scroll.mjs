@@ -86,10 +86,29 @@ try {
         const el = document.querySelector('[data-testid="viewport"]');
         return el.scrollHeight - el.scrollTop - el.clientHeight > 150;
       });
+      // wheel() returns before scrolling finishes. WebKit can apply its delta
+      // over multiple frames; crossing the gap threshold isn't a settled reading
+      // position. Keep sampling geometry instead of racing that input with growth.
+      await page.evaluate(() => new Promise((resolve, reject) => {
+        const el = document.querySelector('[data-testid="viewport"]');
+        let previous = el.scrollTop;
+        let stableFrames = 0;
+        const started = performance.now();
+        function sample() {
+          const current = el.scrollTop;
+          stableFrames = current === previous ? stableFrames + 1 : 0;
+          previous = current;
+          if (stableFrames >= 12) return resolve();
+          if (performance.now() - started > 5000) return reject(new Error("wheel scroll did not settle"));
+          requestAnimationFrame(sample);
+        }
+        requestAnimationFrame(sample);
+      }));
       const readingAt = await page.locator('[data-testid="viewport"]').evaluate((el) => el.scrollTop);
       await grow(1000);
-      assert.ok(Math.abs(await page.locator('[data-testid="viewport"]').evaluate((el) => el.scrollTop) - readingAt) <= 1,
-        "growth must not pull a reader who scrolled up back to the tail");
+      const afterGrowth = await page.locator('[data-testid="viewport"]').evaluate((el) => el.scrollTop);
+      assert.ok(Math.abs(afterGrowth - readingAt) <= 1,
+        `growth must preserve reading position: before=${readingAt}, after=${afterGrowth}, gap=${await gap()}`);
       // The scroll button lives in the footer; dispatch its click without
       // scrolling it into view (that would change the state under test).
       await page.locator('[data-testid="bottom"]').evaluate((el) => el.click());
