@@ -284,6 +284,103 @@ defmodule Longx.Computer.ConnectionTest do
     assert {:error, _, _} = Computer.format(Map.put(result, "isError", true), "click", %Context{})
   end
 
+  test "Computer corrects the known macOS double-click coordinate contract without changing input",
+       %{bypass: bypass, log: log} do
+    schema = double_click_schema()
+    catalog_fixture(bypass, log, "double_click", schema)
+    connect()
+    step = Computer.call(Step.new(thread_id: "coords", turn_id: "test"), [])
+    tool = step.tools["computer_double_click"]
+
+    for axis <- ~w(x y) do
+      description = get_in(tool.schema, ["properties", axis, "description"])
+      assert description =~ "returned window screenshot pixels"
+      assert description =~ "not screen coordinates or AX frame points"
+      assert description =~ "Do not apply Retina"
+    end
+
+    assert Map.keys(tool.schema["properties"]) == Map.keys(schema["properties"])
+    assert Map.drop(tool.schema, ["properties"]) == Map.drop(schema, ["properties"])
+    assert tool.schema["properties"]["element_token"] == schema["properties"]["element_token"]
+    refute Map.has_key?(tool.schema["properties"], "from_zoom")
+    refute Map.has_key?(tool.schema["properties"], "capture_id")
+    refute Map.has_key?(tool.schema["properties"], "target")
+    assert Connection.catalog() |> hd() |> Map.fetch!("inputSchema") == schema
+
+    assert {:ok, _} = Connection.call({"coords", "test"}, "get_window_state", %{})
+    args = %{"pid" => 26591, "window_id" => 54931, "x" => 345, "y" => 221}
+    assert {:ok, _, _} = tool.fun.(args, %Context{thread_id: "coords", turn_id: "test"})
+    request = Enum.find(Agent.get(log, & &1), &(get_in(&1, ["params", "name"]) == "double_click"))
+    assert get_in(request, ["params", "arguments"]) == args
+  end
+
+  test "Computer leaves other platforms, tools and corrected double-click schemas intact",
+       %{bypass: bypass, log: log} do
+    for {name, schema} <- [
+          {"double_click",
+           put_in(double_click_schema(), ["properties", "window_id", "description"], "Window ID.")},
+          {"click", double_click_schema()},
+          {"double_click",
+           put_in(double_click_schema(), ["properties", "x", "description"], "Screenshot X.")}
+        ] do
+      catalog_fixture(bypass, log, name, schema)
+      connect()
+      thread = "schema-#{System.unique_integer([:positive])}"
+      step = Computer.call(Step.new(thread_id: thread, turn_id: name), [])
+      assert step.tools["computer_" <> name].schema == schema
+      Connection.disconnect()
+    end
+  end
+
+  defp double_click_schema do
+    %{
+      "type" => "object",
+      "required" => ["pid"],
+      "additionalProperties" => false,
+      "properties" => %{
+        "pid" => %{"type" => "integer"},
+        "window_id" => %{
+          "type" => "integer",
+          "description" =>
+            "CGWindowID. Omit when element_token is supplied (the token carries it)."
+        },
+        "element_token" => %{"type" => "string"},
+        "x" => %{"type" => "number", "description" => "Screen X coordinate (pixel path)."},
+        "y" => %{"type" => "number", "description" => "Screen Y coordinate (pixel path)."}
+      }
+    }
+  end
+
+  defp catalog_fixture(bypass, log, name, schema) do
+    Bypass.stub(bypass, "POST", "/mcp", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      request = Jason.decode!(body)
+      Agent.update(log, &[request | &1])
+
+      result =
+        if request["method"] == "tools/list",
+          do: %{
+            "tools" => [
+              %{"name" => name, "description" => "Double-click", "inputSchema" => schema},
+              %{
+                "name" => "get_window_state",
+                "description" => "Observe",
+                "inputSchema" => %{"type" => "object", "properties" => %{}}
+              }
+            ]
+          },
+          else: reply(request)
+
+      conn
+      |> Plug.Conn.put_resp_header("mcp-session-id", "fixture-http-session")
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(
+        200,
+        Jason.encode!(%{"jsonrpc" => "2.0", "id" => request["id"], "result" => result})
+      )
+    end)
+  end
+
   test "two computers have independent leases, permissions and interruption boundaries", %{
     log: local_log
   } do

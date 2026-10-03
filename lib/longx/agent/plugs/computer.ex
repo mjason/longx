@@ -66,6 +66,7 @@ defmodule Longx.Agent.Plugs.Computer do
         schema
         |> Map.update("properties", %{}, &Map.drop(&1, @hidden))
         |> Map.update("required", [], &(&1 -- @hidden))
+        |> correct_double_click_coordinates(name)
 
       Step.tool(step, %Tool{
         name: "computer_" <> name,
@@ -82,6 +83,41 @@ defmodule Longx.Agent.Plugs.Computer do
   end
 
   def call(step, _opts), do: step
+
+  # CUA Driver macOS 0.32.0 says "Screen" here, but double_click.rs reverses
+  # screenshot downscaling, divides the backing scale and adds the window origin.
+  # Match the known schema, not the Longx host OS (the computer may be remote).
+  # Only repair documentation: never rescale input or invent Driver capabilities.
+  defp correct_double_click_coordinates(schema, "double_click") do
+    properties = schema["properties"]
+
+    if get_in(properties, ["x", "description"]) == "Screen X coordinate (pixel path)." and
+         get_in(properties, ["y", "description"]) == "Screen Y coordinate (pixel path)." and
+         String.starts_with?(
+           get_in(properties, ["window_id", "description"]) || "",
+           "CGWindowID."
+         ) do
+      hint =
+        "With window_id, use window-local pixels of the PNG returned by the latest " <>
+          "get_window_state for that exact window, not screen coordinates or AX frame points. " <>
+          "Prefer a fresh element_token; screenshot_frame is in returned-image pixels, " <>
+          "while frame is in screen points. Do not apply Retina, screenshot or document zoom scaling yourself."
+
+      schema
+      |> put_in(
+        ["properties", "x", "description"],
+        "X in returned window screenshot pixels. " <> hint
+      )
+      |> put_in(
+        ["properties", "y", "description"],
+        "Y in returned window screenshot pixels. " <> hint
+      )
+    else
+      schema
+    end
+  end
+
+  defp correct_double_click_coordinates(schema, _name), do: schema
 
   def computer_status(_args, _ctx), do: {:ok, Jason.encode!(Connection.status())}
 
