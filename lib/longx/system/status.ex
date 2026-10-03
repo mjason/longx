@@ -275,10 +275,13 @@ defmodule Longx.System.Status do
 
     # The local desktop driver's download (permissions and MCP are separate).
     action :computer_settings, Types.ComputerSettings do
-      run fn _input, _ -> {:ok, Longx.Computer.Service.settings()} end
+      argument :id, :string, default: "local", allow_nil?: false
+      run fn input, _ -> {:ok, Longx.Computer.Service.settings(input.arguments.id)} end
     end
 
     action :computer_configure, Types.ComputerSettings do
+      argument :id, :string, default: "local", allow_nil?: false
+      argument :name, :string, default: "Local", allow_nil?: false
       argument :url, :string, allow_nil?: false
 
       argument :token, :string,
@@ -287,9 +290,14 @@ defmodule Longx.System.Status do
         constraints: [allow_empty?: true, trim?: false]
 
       run fn input, _ ->
-        case Longx.Computer.Service.save(input.arguments.url, input.arguments.token) do
+        case Longx.Computer.Service.save(
+               input.arguments.id,
+               input.arguments.name,
+               input.arguments.url,
+               input.arguments.token
+             ) do
           {:ok, settings} ->
-            :ok = Longx.Computer.Connection.disconnect()
+            :ok = Longx.Computer.Connection.disconnect(input.arguments.id)
             {:ok, settings}
 
           {:error, :token_required} ->
@@ -304,6 +312,9 @@ defmodule Longx.System.Status do
               "Use an http(s) service URL ending in /mcp, without credentials, query or fragment"
             )
 
+          {:error, :duplicate_url} ->
+            argument_error(:url, "This computer service URL is already configured")
+
           {:error, _} ->
             argument_error(:connection, "Could not save the computer service settings")
         end
@@ -311,14 +322,16 @@ defmodule Longx.System.Status do
     end
 
     action :computer_connection, Types.ComputerConnection do
-      run fn _input, _ -> {:ok, Longx.Computer.Connection.status()} end
+      argument :id, :string, default: "local", allow_nil?: false
+      run fn input, _ -> {:ok, Longx.Computer.Connection.status(input.arguments.id)} end
     end
 
     action :computer_connect, Types.ComputerConnection do
+      argument :id, :string, default: "local", allow_nil?: false
       argument :foreground, :boolean, default: false, allow_nil?: false
 
       run fn input, _ ->
-        case Longx.Computer.Connection.connect(input.arguments.foreground) do
+        case Longx.Computer.Connection.connect(input.arguments.id, input.arguments.foreground) do
           {:ok, status} -> {:ok, status}
           {:error, message} -> argument_error(:connection, message)
         end
@@ -326,9 +339,71 @@ defmodule Longx.System.Status do
     end
 
     action :computer_disconnect, Types.ComputerConnection do
-      run fn _input, _ ->
-        :ok = Longx.Computer.Connection.disconnect()
-        {:ok, Longx.Computer.Connection.status()}
+      argument :id, :string, default: "local", allow_nil?: false
+
+      run fn input, _ ->
+        :ok = Longx.Computer.Connection.disconnect(input.arguments.id)
+        {:ok, Longx.Computer.Connection.status(input.arguments.id)}
+      end
+    end
+
+    action :computer_devices, {:array, Types.ComputerDevice} do
+      run fn _, _ ->
+        with {:ok, devices} <- Longx.Computer.Service.list() do
+          {:ok,
+           Enum.map(devices, &Map.put(&1, :connection, Longx.Computer.Connection.status(&1.id)))}
+        end
+      end
+    end
+
+    action :computer_aliases, Types.ComputerAliases do
+      run fn _, _ -> Longx.Computer.Service.aliases() end
+    end
+
+    action :computer_delete do
+      argument :id, :string, allow_nil?: false
+
+      run fn input, _ ->
+        :ok = Longx.Computer.Connection.stop(input.arguments.id)
+        Longx.Computer.Service.delete(input.arguments.id)
+      end
+    end
+
+    action :computer_set_alias, Types.ComputerAliases do
+      argument :name, :string, allow_nil?: false
+      argument :computers, {:array, :string}, allow_nil?: false
+
+      run fn input, _ ->
+        case Longx.Computer.Service.put_alias(input.arguments.name, input.arguments.computers) do
+          :ok ->
+            Longx.Computer.Service.aliases()
+
+          {:error, _} ->
+            argument_error(
+              :computers,
+              "Use a valid alias name and an ordered, nonempty list of known computers without duplicates"
+            )
+        end
+      end
+    end
+
+    action :computer_delete_alias, Types.ComputerAliases do
+      argument :name, :string, allow_nil?: false
+
+      run fn input, _ ->
+        with :ok <- Longx.Computer.Service.delete_alias(input.arguments.name),
+             do: Longx.Computer.Service.aliases()
+      end
+    end
+
+    action :computer_set_default, Types.ComputerAliases do
+      argument :name, :string
+
+      run fn input, _ ->
+        case Longx.Computer.Service.set_default(input.arguments.name) do
+          :ok -> Longx.Computer.Service.aliases()
+          {:error, _} -> argument_error(:name, "Select an existing computer alias")
+        end
       end
     end
 

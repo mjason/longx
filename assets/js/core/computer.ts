@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { computerSettings, computerConfigure, computerConnection, computerConnect, computerDisconnect } from "@/core/api";
+import { computerSettings, computerConfigure, computerConnection, computerConnect, computerDisconnect, computerDevices, computerAliases, computerDelete, computerSetAlias, computerDeleteAlias, computerSetDefault } from "@/core/api";
 import { unwrap } from "./projects";
 
 export type ComputerSettings = { url: string; hasToken: boolean };
@@ -43,4 +43,35 @@ export function useComputerConnectionActions() {
     onSuccess: update,
   });
   return { connect, disconnect };
+}
+
+export type ComputerDevice = ComputerSettings & { id: string; name: string; connection: ComputerConnection };
+export type ComputerAliases = { default: string | null; aliases: { name: string; computers: string[] }[] };
+const devicesKey = ["computer-devices"] as const;
+const aliasesKey = ["computer-aliases"] as const;
+export function useComputerDevices() {
+  return useQuery({ queryKey: devicesKey, retry: false, refetchInterval: 2000,
+    queryFn: async () => unwrap(await computerDevices()) as ComputerDevice[] });
+}
+export function useComputerAliases() {
+  return useQuery({ queryKey: aliasesKey, retry: false,
+    queryFn: async () => unwrap(await computerAliases()) as ComputerAliases });
+}
+export function useComputerDeviceActions() {
+  const client = useQueryClient();
+  const refresh = () => {
+    void client.invalidateQueries({ queryKey: devicesKey });
+    void client.invalidateQueries({ queryKey: aliasesKey });
+    void client.invalidateQueries({ queryKey: settingsKey });
+    void client.invalidateQueries({ queryKey: connectionKey });
+  };
+  return {
+    save: useMutation({ mutationFn: async (input: { id: string; name: string; url: string; token: string }) => unwrap(await computerConfigure({ input })), onSuccess: refresh }),
+    connect: useMutation({ mutationFn: async (input: { id: string; foreground: boolean }) => unwrap(await computerConnect({ input })), onSuccess: refresh }),
+    disconnect: useMutation({ mutationFn: async (id: string) => unwrap(await computerDisconnect({ input: { id } })), onSuccess: refresh }),
+    remove: useMutation({ mutationFn: async (id: string) => unwrap(await computerDelete({ input: { id } })), onSuccess: refresh }),
+    alias: useMutation({ mutationFn: async (input: { name: string; computers: string[] }) => unwrap(await computerSetAlias({ input })), onSuccess: refresh }),
+    deleteAlias: useMutation({ mutationFn: async (name: string) => unwrap(await computerDeleteAlias({ input: { name } })), onSuccess: refresh }),
+    defaultAlias: useMutation({ mutationFn: async (name: string) => unwrap(await computerSetDefault({ input: { name } })), onSuccess: refresh }),
+  };
 }

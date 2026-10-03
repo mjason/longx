@@ -60,6 +60,23 @@ the app and Longx. Screenshots contain real computer data and are sent to
 Longx's configured model. Optional perception and CUA Spaces are not bundled.
 CUA's default content-free telemetry is not silently changed.
 
+## Multiple computers
+
+In Longx Settings → Agent kernel, add each computer with its own name,
+`/mcp` URL and access key, then connect it independently. Ordered aliases
+work like browser aliases: `plug Computer` uses the default alias, while
+`plug Computer, computer: "qa"` selects `qa`. The first connected member
+is selected when a turn binds. A turn stays pinned to that computer
+and connection generation; disconnects never replay input on another machine.
+Start a new turn and observe again after reconnecting.
+
+Different computers can serve different conversations concurrently. Each
+desktop remains exclusive to one controlling turn. Existing single-service
+settings are preserved as the `local` computer and default `local` alias.
+Foreground edits are applied only with the explicit Apply and reconnect
+button; the desktop app's own foreground setting must also allow them.
+This adds endpoint routing, not automatic discovery or network tunneling.
+
 ## Updates and permission recovery
 
 `.github/workflows/computer.yml` builds native macOS ARM64/x86_64, Linux

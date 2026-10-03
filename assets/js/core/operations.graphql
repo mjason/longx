@@ -42,9 +42,13 @@ query BrowserSettings { browserSettings { available allowPrivateNetwork } }
 
 query BrowserStatus { browserStatus { version upgradable total target stage source received path latest installedVersion error } }
 
-query ComputerSettings { computerSettings { url hasToken } }
+query ComputerSettings($id: String) { computerSettings(id: $id) { url hasToken } }
 
-query ComputerConnection { computerConnection { toolCount phase permissions foreground error busy } }
+query ComputerConnection($id: String) { computerConnection(id: $id) { toolCount phase permissions foreground error busy } }
+
+query ComputerDevices { computerDevices { url name id hasToken connection { toolCount phase permissions foreground error busy } } }
+
+query ComputerAliases { computerAliases { default aliases { name computers } } }
 
 query TlsStatus { tlsStatus { url total toolVersion toolInstalled startedAt stage serving resolvers redirect received provider propagationWait propagationCheck port httpPort finishedAt error envSet enabled email domains directory certificate { serial notBefore notAfter issuedAt domains } addresses } }
 
@@ -186,7 +190,15 @@ mutation ComputerConfigure($input: ComputerConfigureInput!) { computerConfigure(
 
 mutation ComputerConnect($input: ComputerConnectInput) { computerConnect(input: $input) { toolCount phase permissions foreground error busy } }
 
-mutation ComputerDisconnect { computerDisconnect { toolCount phase permissions foreground error busy } }
+mutation ComputerDisconnect($input: ComputerDisconnectInput) { computerDisconnect(input: $input) { toolCount phase permissions foreground error busy } }
+
+mutation ComputerDelete($input: ComputerDeleteInput!) { computerDelete(input: $input)  }
+
+mutation ComputerSetAlias($input: ComputerSetAliasInput!) { computerSetAlias(input: $input) { default aliases { name computers } } }
+
+mutation ComputerDeleteAlias($input: ComputerDeleteAliasInput!) { computerDeleteAlias(input: $input) { default aliases { name computers } } }
+
+mutation ComputerSetDefault($input: ComputerSetDefaultInput) { computerSetDefault(input: $input) { default aliases { name computers } } }
 
 mutation SetBrowserPrivateNetwork($input: SetBrowserPrivateNetworkInput!) { setBrowserPrivateNetwork(input: $input) { available allowPrivateNetwork } }
 

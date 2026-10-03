@@ -6,7 +6,7 @@ defmodule Longx.Agent.Plugs.Computer do
   """
   use Longx.Agent.Plug
 
-  alias Longx.Computer.Connection
+  alias Longx.Computer.{Connection, Pool}
 
   @external_resource "priv/agent/computer/prompt.md"
   @prompt File.read!("priv/agent/computer/prompt.md")
@@ -17,10 +17,48 @@ defmodule Longx.Agent.Plugs.Computer do
   end
 
   @impl true
-  def call(%Step{phase: :request} = step, _opts) do
+  def call(%Step{phase: :request} = step, opts) do
     step = Longx.Agent.Plug.mount(step, __MODULE__) |> Step.instructions(@prompt)
+    name = Keyword.get(opts, :computer)
+    target = Pool.resolve({step.thread_id, step.turn_id}, name)
+    label = name || "default"
 
-    Enum.reduce(Connection.catalog(), step, fn definition, step ->
+    step =
+      Step.instructions(
+        step,
+        "Computer alias: #{label}. A turn stays on its selected computer; never replay input on a different machine."
+      )
+
+    status_tool = step.tools["computer_status"]
+
+    step =
+      Step.tool(step, %{
+        status_tool
+        | fun: fn _, _ ->
+            case target do
+              {:ok, id} ->
+                {:ok,
+                 Jason.encode!(%{computer: id, alias: label, connection: Connection.status(id)})}
+
+              {:error, reason} ->
+                {:error, reason}
+            end
+          end
+      })
+
+    tools =
+      case target do
+        {:ok, id} -> Connection.catalog(id)
+        _ -> []
+      end
+
+    generation =
+      case target do
+        {:ok, id} -> Connection.generation(id)
+        _ -> nil
+      end
+
+    Enum.reduce(tools, step, fn definition, step ->
       name = definition["name"]
       schema = definition["inputSchema"]
 
@@ -35,7 +73,10 @@ defmodule Longx.Agent.Plugs.Computer do
         description: definition["description"],
         schema: schema,
         timeout: 45_000,
-        fun: fn args, ctx -> execute(name, args, ctx) end
+        fun: fn args, ctx ->
+          {:ok, id} = target
+          execute(id, name, args, ctx, generation)
+        end
       })
     end)
   end
@@ -48,7 +89,18 @@ defmodule Longx.Agent.Plugs.Computer do
     do: {:error, "computer control belongs to a conversation"}
 
   def execute(name, args, ctx) do
-    case Connection.call({ctx.thread_id, ctx.turn_id}, name, args) do
+    execute("local", name, args, ctx)
+  end
+
+  def execute(id, name, args, ctx, generation \\ nil) do
+    owner = {ctx.thread_id, ctx.turn_id}
+
+    result =
+      if generation,
+        do: Connection.call(id, owner, name, args, generation),
+        else: Connection.call(id, owner, name, args)
+
+    case result do
       {:ok, result} -> format(result, name, ctx)
       {:error, message} -> {:error, message}
     end

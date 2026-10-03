@@ -166,6 +166,24 @@ type TlsStatus {
   addresses: [String!]!
 }
 
+type ComputerAlias {
+  name: String!
+  computers: [String!]!
+}
+
+type ComputerAliases {
+  default: String
+  aliases: [ComputerAlias]!
+}
+
+type ComputerDevice {
+  url: String!
+  name: String!
+  id: String!
+  hasToken: Boolean!
+  connection: ComputerConnection!
+}
+
 type ComputerConnection {
   toolCount: Int!
   phase: String!
@@ -2731,11 +2749,35 @@ input SetBrowserPrivateNetworkInput {
   enabled: Boolean!
 }
 
+input ComputerSetDefaultInput {
+  name: String
+}
+
+input ComputerDeleteAliasInput {
+  name: String!
+}
+
+input ComputerSetAliasInput {
+  name: String!
+  computers: [String!]!
+}
+
+input ComputerDeleteInput {
+  id: String!
+}
+
+input ComputerDisconnectInput {
+  id: String
+}
+
 input ComputerConnectInput {
+  id: String
   foreground: Boolean
 }
 
 input ComputerConfigureInput {
+  id: String
+  name: String
   url: String!
   token: String
 }
@@ -4160,8 +4202,10 @@ type RootQueryType {
   runningCommands: RunningCommands!
   browserSettings: Browser!
   browserStatus: BrowserStatus!
-  computerSettings: ComputerSettings!
-  computerConnection: ComputerConnection!
+  computerSettings(id: String): ComputerSettings!
+  computerConnection(id: String): ComputerConnection!
+  computerDevices: [ComputerDevice!]!
+  computerAliases: ComputerAliases!
   tlsStatus: TlsStatus!
   tlsProviders: TlsProviders!
   tlsResolution(domains: [String!]!): TlsResolutionReport!
@@ -4301,7 +4345,11 @@ type RootMutationType {
   browserInstall: BrowserStatus!
   computerConfigure(input: ComputerConfigureInput!): ComputerSettings!
   computerConnect(input: ComputerConnectInput): ComputerConnection!
-  computerDisconnect: ComputerConnection!
+  computerDisconnect(input: ComputerDisconnectInput): ComputerConnection!
+  computerDelete(input: ComputerDeleteInput!): Boolean!
+  computerSetAlias(input: ComputerSetAliasInput!): ComputerAliases!
+  computerDeleteAlias(input: ComputerDeleteAliasInput!): ComputerAliases!
+  computerSetDefault(input: ComputerSetDefaultInput): ComputerAliases!
   setBrowserPrivateNetwork(input: SetBrowserPrivateNetworkInput!): Browser!
   setTls(input: SetTlsInput): TlsStatus!
   tlsIssue: TlsStatus!

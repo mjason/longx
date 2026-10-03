@@ -34,12 +34,36 @@ export type CompactThreadInput = {
 };
 
 export type ComputerConfigureInput = {
+  id?: string | null | undefined;
+  name?: string | null | undefined;
   token?: string | null | undefined;
   url: string;
 };
 
 export type ComputerConnectInput = {
   foreground?: boolean | null | undefined;
+  id?: string | null | undefined;
+};
+
+export type ComputerDeleteAliasInput = {
+  name: string;
+};
+
+export type ComputerDeleteInput = {
+  id: string;
+};
+
+export type ComputerDisconnectInput = {
+  id?: string | null | undefined;
+};
+
+export type ComputerSetAliasInput = {
+  computers: Array<string>;
+  name: string;
+};
+
+export type ComputerSetDefaultInput = {
+  name?: string | null | undefined;
 };
 
 export type CreateCredentialApiKeyInput = {
@@ -3373,15 +3397,29 @@ export type BrowserStatusQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type BrowserStatusQuery = { browserStatus: { version: string, upgradable: boolean, total: number | null, target: string | null, stage: string, source: string | null, received: number, path: string | null, latest: string, installedVersion: string | null, error: string | null } };
 
-export type ComputerSettingsQueryVariables = Exact<{ [key: string]: never; }>;
+export type ComputerSettingsQueryVariables = Exact<{
+  id?: string | null | undefined;
+}>;
 
 
 export type ComputerSettingsQuery = { computerSettings: { url: string, hasToken: boolean } };
 
-export type ComputerConnectionQueryVariables = Exact<{ [key: string]: never; }>;
+export type ComputerConnectionQueryVariables = Exact<{
+  id?: string | null | undefined;
+}>;
 
 
 export type ComputerConnectionQuery = { computerConnection: { toolCount: number, phase: string, permissions: string | null, foreground: boolean, error: string | null, busy: boolean } };
+
+export type ComputerDevicesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ComputerDevicesQuery = { computerDevices: Array<{ url: string, name: string, id: string, hasToken: boolean, connection: { toolCount: number, phase: string, permissions: string | null, foreground: boolean, error: string | null, busy: boolean } }> };
+
+export type ComputerAliasesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ComputerAliasesQuery = { computerAliases: { default: string | null, aliases: Array<{ name: string, computers: Array<string> } | null> } };
 
 export type TlsStatusQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -3878,10 +3916,40 @@ export type ComputerConnectMutationVariables = Exact<{
 
 export type ComputerConnectMutation = { computerConnect: { toolCount: number, phase: string, permissions: string | null, foreground: boolean, error: string | null, busy: boolean } };
 
-export type ComputerDisconnectMutationVariables = Exact<{ [key: string]: never; }>;
+export type ComputerDisconnectMutationVariables = Exact<{
+  input?: ComputerDisconnectInput | null | undefined;
+}>;
 
 
 export type ComputerDisconnectMutation = { computerDisconnect: { toolCount: number, phase: string, permissions: string | null, foreground: boolean, error: string | null, busy: boolean } };
+
+export type ComputerDeleteMutationVariables = Exact<{
+  input: ComputerDeleteInput;
+}>;
+
+
+export type ComputerDeleteMutation = { computerDelete: boolean };
+
+export type ComputerSetAliasMutationVariables = Exact<{
+  input: ComputerSetAliasInput;
+}>;
+
+
+export type ComputerSetAliasMutation = { computerSetAlias: { default: string | null, aliases: Array<{ name: string, computers: Array<string> } | null> } };
+
+export type ComputerDeleteAliasMutationVariables = Exact<{
+  input: ComputerDeleteAliasInput;
+}>;
+
+
+export type ComputerDeleteAliasMutation = { computerDeleteAlias: { default: string | null, aliases: Array<{ name: string, computers: Array<string> } | null> } };
+
+export type ComputerSetDefaultMutationVariables = Exact<{
+  input?: ComputerSetDefaultInput | null | undefined;
+}>;
+
+
+export type ComputerSetDefaultMutation = { computerSetDefault: { default: string | null, aliases: Array<{ name: string, computers: Array<string> } | null> } };
 
 export type SetBrowserPrivateNetworkMutationVariables = Exact<{
   input: SetBrowserPrivateNetworkInput;
@@ -4572,16 +4640,16 @@ export const BrowserStatusDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<BrowserStatusQuery, BrowserStatusQueryVariables>;
 export const ComputerSettingsDocument = new TypedDocumentString(`
-    query ComputerSettings {
-  computerSettings {
+    query ComputerSettings($id: String) {
+  computerSettings(id: $id) {
     url
     hasToken
   }
 }
     `) as unknown as TypedDocumentString<ComputerSettingsQuery, ComputerSettingsQueryVariables>;
 export const ComputerConnectionDocument = new TypedDocumentString(`
-    query ComputerConnection {
-  computerConnection {
+    query ComputerConnection($id: String) {
+  computerConnection(id: $id) {
     toolCount
     phase
     permissions
@@ -4591,6 +4659,35 @@ export const ComputerConnectionDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComputerConnectionQuery, ComputerConnectionQueryVariables>;
+export const ComputerDevicesDocument = new TypedDocumentString(`
+    query ComputerDevices {
+  computerDevices {
+    url
+    name
+    id
+    hasToken
+    connection {
+      toolCount
+      phase
+      permissions
+      foreground
+      error
+      busy
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ComputerDevicesQuery, ComputerDevicesQueryVariables>;
+export const ComputerAliasesDocument = new TypedDocumentString(`
+    query ComputerAliases {
+  computerAliases {
+    default
+    aliases {
+      name
+      computers
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ComputerAliasesQuery, ComputerAliasesQueryVariables>;
 export const TlsStatusDocument = new TypedDocumentString(`
     query TlsStatus {
   tlsStatus {
@@ -5679,8 +5776,8 @@ export const ComputerConnectDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<ComputerConnectMutation, ComputerConnectMutationVariables>;
 export const ComputerDisconnectDocument = new TypedDocumentString(`
-    mutation ComputerDisconnect {
-  computerDisconnect {
+    mutation ComputerDisconnect($input: ComputerDisconnectInput) {
+  computerDisconnect(input: $input) {
     toolCount
     phase
     permissions
@@ -5690,6 +5787,44 @@ export const ComputerDisconnectDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComputerDisconnectMutation, ComputerDisconnectMutationVariables>;
+export const ComputerDeleteDocument = new TypedDocumentString(`
+    mutation ComputerDelete($input: ComputerDeleteInput!) {
+  computerDelete(input: $input)
+}
+    `) as unknown as TypedDocumentString<ComputerDeleteMutation, ComputerDeleteMutationVariables>;
+export const ComputerSetAliasDocument = new TypedDocumentString(`
+    mutation ComputerSetAlias($input: ComputerSetAliasInput!) {
+  computerSetAlias(input: $input) {
+    default
+    aliases {
+      name
+      computers
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ComputerSetAliasMutation, ComputerSetAliasMutationVariables>;
+export const ComputerDeleteAliasDocument = new TypedDocumentString(`
+    mutation ComputerDeleteAlias($input: ComputerDeleteAliasInput!) {
+  computerDeleteAlias(input: $input) {
+    default
+    aliases {
+      name
+      computers
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ComputerDeleteAliasMutation, ComputerDeleteAliasMutationVariables>;
+export const ComputerSetDefaultDocument = new TypedDocumentString(`
+    mutation ComputerSetDefault($input: ComputerSetDefaultInput) {
+  computerSetDefault(input: $input) {
+    default
+    aliases {
+      name
+      computers
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ComputerSetDefaultMutation, ComputerSetDefaultMutationVariables>;
 export const SetBrowserPrivateNetworkDocument = new TypedDocumentString(`
     mutation SetBrowserPrivateNetwork($input: SetBrowserPrivateNetworkInput!) {
   setBrowserPrivateNetwork(input: $input) {

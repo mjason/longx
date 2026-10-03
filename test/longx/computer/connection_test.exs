@@ -1,7 +1,7 @@
 defmodule Longx.Computer.ConnectionTest do
-  use ExUnit.Case, async: false
+  use Longx.DataCase, async: false
 
-  alias Longx.Computer.{Connection, MCP}
+  alias Longx.Computer.{Connection, MCP, Pool, Service}
   alias Longx.Agent.{Context, Step}
   alias Longx.Agent.Plugs.Computer
 
@@ -282,6 +282,130 @@ defmodule Longx.Computer.ConnectionTest do
     assert text =~ "unverifiable"
     assert meta["images"] == ["data:image/png;base64,aW1hZ2U="]
     assert {:error, _, _} = Computer.format(Map.put(result, "isError", true), "click", %Context{})
+  end
+
+  test "two computers have independent leases, permissions and interruption boundaries", %{
+    log: local_log
+  } do
+    %{id: id, log: other_log} = second_computer()
+    connect()
+    assert {:ok, _} = Connection.connect(id, true)
+    eventually(fn -> Connection.status(id).phase == "ready" end)
+    assert {:ok, _} = Connection.call({"local-owner", "turn"}, "get_window_state", %{})
+    assert {:ok, _} = Connection.call(id, {"remote-owner", "turn"}, "get_window_state", %{})
+    assert Connection.status().busy
+    assert Connection.status(id).busy
+    assert {:error, _} = Connection.call(id, {"local-owner", "turn"}, "click", %{})
+    assert {:ok, _} = Connection.call(id, {"remote-owner", "turn"}, "get_desktop_state", %{})
+    assert {:error, _} = Connection.call({"local-owner", "turn"}, "get_desktop_state", %{})
+    assert :ok = Connection.disconnect()
+    assert Connection.status(id).phase == "ready"
+    assert {:ok, _} = Connection.call(id, {"remote-owner", "turn"}, "click", %{})
+    refute Enum.any?(Agent.get(local_log, & &1), &(get_in(&1, ["params", "name"]) == "click"))
+    assert Enum.any?(Agent.get(other_log, & &1), &(get_in(&1, ["params", "name"]) == "click"))
+  end
+
+  test "aliases bind per turn; disconnect, alias edits and reconnect never reroute old tools" do
+    %{id: id} = second_computer()
+    connect()
+    assert {:ok, _} = Connection.connect(id, false)
+    eventually(fn -> Connection.status(id).phase == "ready" end)
+    assert :ok = Service.put_alias("qa", [id, "local"])
+    owner = {"multi-binding-thread", "multi-binding-turn"}
+    assert {:ok, ^id} = Pool.resolve(owner, "qa")
+
+    step =
+      Computer.call(Step.new(thread_id: elem(owner, 0), turn_id: elem(owner, 1)), computer: "qa")
+
+    tool = step.tools["computer_click"]
+    context = %Context{thread_id: elem(owner, 0), turn_id: elem(owner, 1)}
+    assert :ok = Service.put_alias("qa", ["local", id])
+    assert {:ok, ^id} = Pool.resolve(owner, "qa")
+    assert :ok = Connection.disconnect(id)
+    assert {:error, _} = Pool.resolve(owner, "qa")
+    assert {:ok, "local"} = Pool.resolve({"new-binding-thread", "new-turn"}, "qa")
+    assert {:ok, _} = Connection.connect(id, false)
+    eventually(fn -> Connection.status(id).phase == "ready" end)
+    assert {:error, message} = tool.fun.(%{}, context)
+    assert message =~ "changed"
+    assert {:error, _} = Pool.resolve(owner, "qa")
+    complete(owner)
+    eventually(fn -> Pool.resolve(owner, "qa") == {:ok, "local"} end)
+    complete(owner)
+    complete({"new-binding-thread", "new-turn"})
+  end
+
+  defp complete({thread, turn}) do
+    Phoenix.PubSub.broadcast(
+      Longx.PubSub,
+      "thread:#{thread}",
+      {:thread, 1, "turn/completed", %{"threadId" => thread, "turn" => %{"id" => turn}}}
+    )
+  end
+
+  defp second_computer do
+    bypass = Bypass.open()
+    id = "other-#{System.unique_integer([:positive])}"
+    {:ok, log} = Agent.start_link(fn -> [] end)
+    url = "http://127.0.0.1:#{bypass.port}/mcp"
+    assert {:ok, _} = Service.save(id, "Other", url, @token)
+    Bypass.stub(bypass, "DELETE", "/mcp", &Plug.Conn.resp(&1, 204, ""))
+
+    Bypass.stub(bypass, "POST", "/mcp", fn conn ->
+      assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer " <> @token]
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      request = Jason.decode!(body)
+      Agent.update(log, &[request | &1])
+
+      conn
+      |> Plug.Conn.put_resp_header("mcp-session-id", "other-session")
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(%{"id" => request["id"], "result" => reply(request)}))
+    end)
+
+    on_exit(fn -> Connection.stop(id) end)
+    %{id: id, log: log}
+  end
+
+  test "a slow request on one computer does not serialize another computer", %{bypass: bypass} do
+    %{id: id} = second_computer()
+    connect()
+    assert {:ok, _} = Connection.connect(id, false)
+    eventually(fn -> Connection.status(id).phase == "ready" end)
+    parent = self()
+
+    Bypass.stub(bypass, "POST", "/mcp", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      request = Jason.decode!(body)
+
+      if get_in(request, ["params", "name"]) == "get_window_state" do
+        send(parent, {:blocked_local, self()})
+
+        receive do
+          :finish -> :ok
+        after
+          5_000 -> :ok
+        end
+      end
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(%{"id" => request["id"], "result" => reply(request)}))
+    end)
+
+    task = Task.async(fn -> Connection.call({"slow-local", "turn"}, "get_window_state", %{}) end)
+    assert_receive {:blocked_local, handler}, 2_000
+    assert {:ok, _} = Connection.call(id, {"fast-other", "turn"}, "get_window_state", %{})
+    assert Process.alive?(task.pid)
+    send(handler, :finish)
+    assert {:ok, _} = Task.await(task)
+  end
+
+  test "unknown ids do not create persistent connection processes" do
+    id = "unknown-#{System.unique_integer([:positive])}"
+    assert %{phase: "disconnected", error: "Unknown computer"} = Connection.status(id)
+    assert {:error, "Unknown computer"} = Connection.connect(id, false)
+    assert Registry.lookup(Longx.Computer.Registry, id) == []
   end
 
   defp connect do

@@ -111,7 +111,10 @@ defmodule Longx.Application do
          }},
         id: Longx.Computer.Finch
       ),
+      {Registry, keys: :unique, name: Longx.Computer.Registry},
+      {DynamicSupervisor, strategy: :one_for_one, name: Longx.Computer.Supervisor},
       Longx.Computer.Connection,
+      Longx.Computer.Pool,
       # new releases on GitHub, and the upgrade itself (Longx.Upgrade)
       {Task.Supervisor, name: Longx.Upgrade.TaskSupervisor},
       Longx.Upgrade,

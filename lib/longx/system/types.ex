@@ -308,6 +308,48 @@ defmodule Longx.System.Types do
     def graphql_type(_), do: :computer_connection
   end
 
+  defmodule ComputerDevice do
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          id: [type: :string, allow_nil?: false],
+          name: [type: :string, allow_nil?: false],
+          url: [type: :string, allow_nil?: false],
+          has_token: [type: :boolean, allow_nil?: false],
+          connection: [type: ComputerConnection, allow_nil?: false]
+        ]
+      ]
+
+    def graphql_type(_), do: :computer_device
+  end
+
+  defmodule ComputerAlias do
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          name: [type: :string, allow_nil?: false],
+          computers: [type: {:array, :string}, allow_nil?: false]
+        ]
+      ]
+
+    def graphql_type(_), do: :computer_alias
+  end
+
+  defmodule ComputerAliases do
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          default: [type: :string],
+          aliases: [type: {:array, ComputerAlias}, allow_nil?: false]
+        ]
+      ]
+
+    def graphql_type(_), do: :computer_aliases
+  end
+
   defmodule RunningCommands do
     @moduledoc "the result of `Longx.System.Status.running_commands`"
     use Ash.Type.NewType,

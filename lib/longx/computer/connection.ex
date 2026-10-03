@@ -1,6 +1,6 @@
 defmodule Longx.Computer.Connection do
   @moduledoc """
-  One local desktop connection and one controller at a time. HTTP work runs in
+  One connection process per computer and one controller per desktop. HTTP work runs in
   monitored tasks, not the kernel or this server. Killing a tool closes the
   transport and invalidates the observation; unknown actions are never replayed.
   """
@@ -15,21 +15,113 @@ defmodule Longx.Computer.Connection do
   @observations ~w(get_window_state get_desktop_state)
   @hidden ~w(session screenshot_out_file debug_image_out _session_id _transport_session_id)
 
-  def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-  def status, do: GenServer.call(__MODULE__, :status)
-  def catalog, do: GenServer.call(__MODULE__, :catalog)
-  def connect(foreground \\ false), do: GenServer.call(__MODULE__, {:connect, foreground}, 15_000)
-  def disconnect, do: GenServer.call(__MODULE__, :disconnect)
-  def call(owner, name, args), do: GenServer.call(__MODULE__, {:call, owner, name, args}, 40_000)
-  def release(owner), do: GenServer.cast(__MODULE__, {:release, owner})
+  def start_link(opts \\ []) do
+    id = Keyword.get(opts, :id, "local")
+    GenServer.start_link(__MODULE__, opts, name: server(id))
+  end
+
+  def child_spec(opts),
+    do: %{
+      id: {__MODULE__, Keyword.get(opts, :id, "local")},
+      start: {__MODULE__, :start_link, [opts]}
+    }
+
+  defp server("local"), do: __MODULE__
+  defp server(id), do: {:via, Registry, {Longx.Computer.Registry, id}}
+  def ensure("local"), do: :ok
+
+  def ensure(id) do
+    with {:ok, config} <- Service.configuration(),
+         true <- Map.has_key?(config["computers"], id) do
+      case Registry.lookup(Longx.Computer.Registry, id) do
+        [{_, _}] ->
+          :ok
+
+        [] ->
+          case DynamicSupervisor.start_child(Longx.Computer.Supervisor, {__MODULE__, id: id}) do
+            {:ok, _} -> :ok
+            {:error, {:already_started, _}} -> :ok
+            _ -> {:error, "Could not start computer connection"}
+          end
+      end
+    else
+      _ -> {:error, "Unknown computer"}
+    end
+  end
+
+  def status(id \\ "local") do
+    case request(id, :status) do
+      {:error, message} ->
+        %{
+          phase: "disconnected",
+          foreground: false,
+          busy: false,
+          tool_count: 0,
+          permissions: nil,
+          error: message
+        }
+
+      status ->
+        status
+    end
+  end
+
+  def catalog(id \\ "local") do
+    case request(id, :catalog) do
+      {:error, _} -> []
+      catalog -> catalog
+    end
+  end
+
+  def connect(foreground \\ false), do: connect("local", foreground)
+
+  def connect(id, foreground), do: request(id, {:connect, foreground}, 15_000)
+
+  def disconnect(id \\ "local") do
+    case request(id, :disconnect) do
+      {:error, _} -> :ok
+      result -> result
+    end
+  end
+
+  def stop("local"), do: disconnect()
+
+  def stop(id) do
+    case Registry.lookup(Longx.Computer.Registry, id) do
+      [{pid, _}] ->
+        GenServer.call(pid, :disconnect)
+        DynamicSupervisor.terminate_child(Longx.Computer.Supervisor, pid)
+
+      [] ->
+        :ok
+    end
+  end
+
+  def call(owner, name, args), do: call("local", owner, name, args)
+
+  def call(id, owner, name, args), do: request(id, {:call, owner, name, args}, 40_000)
+
+  def release(owner), do: release("local", owner)
+  def release(id, owner), do: GenServer.cast(server(id), {:release, owner})
+  def generation(id), do: GenServer.call(server(id), :generation)
+
+  def call(id, owner, name, args, generation),
+    do: GenServer.call(server(id), {:pinned_call, generation, owner, name, args}, 40_000)
+
   def tools, do: @tools
 
+  defp request(id, message, timeout \\ 5_000) do
+    with :ok <- ensure(id), do: GenServer.call(server(id), message, timeout)
+  end
+
   @impl true
-  def init(_) do
+  def init(opts) do
     Process.send_after(self(), :heartbeat, 15_000)
 
     {:ok,
      %{
+       id: Keyword.get(opts, :id, "local"),
+       generation: System.unique_integer([:positive, :monotonic]),
        phase: :disconnected,
        endpoint: nil,
        catalog: [],
@@ -47,6 +139,16 @@ defmodule Longx.Computer.Connection do
   @impl true
   def handle_call(:status, _from, state), do: {:reply, public(state), state}
   def handle_call(:catalog, _from, state), do: {:reply, state.catalog, state}
+  def handle_call(:generation, _from, state), do: {:reply, state.generation, state}
+
+  def handle_call({:pinned_call, generation, owner, name, args}, from, state) do
+    if generation == state.generation,
+      do: handle_call({:call, owner, name, args}, from, state),
+      else:
+        {:reply,
+         {:error, "Computer connection changed; start a new turn and observe before input"},
+         state}
+  end
 
   def handle_call({:connect, _}, _from, %{task: task} = state) when not is_nil(task),
     do: {:reply, {:error, "a desktop request is still running"}, state}
@@ -61,7 +163,7 @@ defmodule Longx.Computer.Connection do
     state =
       spawn_work(state, nil, :connect, fn ->
         with {:ok, endpoint, tools} <-
-               Service.ensure(fn endpoint ->
+               Service.ensure(state.id, fn endpoint ->
                  send(server, {:endpoint, self(), endpoint})
                  :ok
                end),
@@ -70,7 +172,15 @@ defmodule Longx.Computer.Connection do
         end
       end)
 
-    state = %{state | phase: :connecting, foreground: foreground, error: nil}
+    state = %{
+      state
+      | phase: :connecting,
+        foreground: foreground,
+        error: nil,
+        generation: System.unique_integer([:positive, :monotonic]),
+        observed: false
+    }
+
     {:reply, {:ok, public(state)}, state}
   end
 

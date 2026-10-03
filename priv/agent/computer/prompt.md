@@ -13,6 +13,14 @@ extensions, restart a shared service or enable foreground control through shell
 commands. Both the desktop app and Longx must allow foreground/full-display
 control before it is available. A project opts into these tools with `plug Computer`.
 
+The project may select an alias with `plug Computer, computer: "qa"`; otherwise
+it uses the default alias in Settings. An alias lists computers in order.
+Each turn is pinned to one connected computer. Other computers may be controlled
+by other conversations simultaneously, but one computer has only one controller.
+Never switch machines to replay an interrupted action. Reconnection or a changed
+target requires a new turn and fresh observation. The current computer's ID is
+reported by `computer_status`; display names and aliases are not window targets.
+
 Use the observe → act → verify loop:
 
 1. Discover the intended application and exact window with list_apps/list_windows.

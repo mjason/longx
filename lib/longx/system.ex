@@ -24,6 +24,8 @@ defmodule Longx.System do
       action Longx.System.Status, :browser_status, :browser_status
       action Longx.System.Status, :computer_settings, :computer_settings
       action Longx.System.Status, :computer_connection, :computer_connection
+      action Longx.System.Status, :computer_devices, :computer_devices
+      action Longx.System.Status, :computer_aliases, :computer_aliases
       action Longx.System.Status, :tls_status, :tls_status
       action Longx.System.Status, :tls_providers, :tls_providers
       action Longx.System.Status, :tls_resolution, :tls_resolution
@@ -47,6 +49,10 @@ defmodule Longx.System do
       action Longx.System.Status, :computer_configure, :computer_configure
       action Longx.System.Status, :computer_connect, :computer_connect
       action Longx.System.Status, :computer_disconnect, :computer_disconnect
+      action Longx.System.Status, :computer_delete, :computer_delete
+      action Longx.System.Status, :computer_set_alias, :computer_set_alias
+      action Longx.System.Status, :computer_delete_alias, :computer_delete_alias
+      action Longx.System.Status, :computer_set_default, :computer_set_default
       action Longx.System.Status, :set_browser_private_network, :set_browser_private_network
       action Longx.System.Status, :set_tls, :set_tls
       action Longx.System.Status, :tls_issue, :tls_issue
