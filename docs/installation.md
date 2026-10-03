@@ -153,6 +153,12 @@ and makes remote OAuth callbacks easier. For Android, the
 For a packaged release, use **Settings → Version & Updates**, or rerun the installer.
 Active turns may be interrupted by a restart. The UI upgrade creates a database snapshot;
 the installer backs up the data directory and keeps the previous application as `app.old`.
+The UI selects Linux x86_64/ARM64 or macOS Apple Silicon release packages.
+On macOS it restarts the installer-managed `com.longx.agent` LaunchAgent in
+the current user's GUI domain; Linux uses its systemd user service. Set
+`LONGX_SERVICE` for a custom service label. An unregistered service requires
+a manual restart after installation. Intel macOS and Windows main-program
+self-upgrade packages are not currently published.
 
 Back up the entire `~/.longx/data` directory, including `cloak_key` and `secret_key_base`.
 Losing `cloak_key` makes existing encrypted provider credentials unreadable.

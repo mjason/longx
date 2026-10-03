@@ -94,10 +94,12 @@ HTTPS 开在 7443 端口，和 http 的 7788 并存；打开 http 页面会自�
 **在网页里升级**：「设置 → 版本与更新」显示当前版本，「检查更新」问 GitHub Releases 有没有新版本
 （服务端每 6 小时也自己查一次，有新版本时状态栏会提示）。点「升级到 x.y.z 并重启」：服务端下载对应架构的包
 （有进度条）并校验 sha256 → 把数据库快照存到 `~/.longx/backups/longx-<旧版本>-<时间>.db`（`VACUUM INTO`，运行中也一致）→
-解到 `app.new`、旧程序改名 `app.old`、新程序就位 → `systemctl --user restart longx`。页面会等新版本起来后自动刷新。
-正在跑的一轮会被打断。没有 systemd 的环境会停在「已安装，等待手动重启」——自己重启进程就行。
+解到 `app.new`、旧程序改名 `app.old`、新程序就位 → 重启用户服务。Linux 使用 `systemctl --user restart longx`；
+macOS Apple Silicon 选择 `darwin-arm64` 包，使用 `launchctl kickstart -k gui/<uid>/com.longx.agent` 重启安装器创建的 LaunchAgent。
+页面会等新版本起来后自动刷新。正在跑的一轮会被打断。没有注册用户服务的环境会停在「已安装，等待手动重启」——自己重启进程就行。
 匿名调用 GitHub API 每小时限 60 次，同一页面可以填一个 GitHub token（只需读公开仓库的权限，加密存在数据目录里）来避开。
-镜像或 fork 用 `LONGX_UPDATE_REPO=<owner>/<repo>`、`LONGX_UPDATE_API=<host>` 换来源；服务名不是 `longx` 时设 `LONGX_SERVICE`。
+镜像或 fork 用 `LONGX_UPDATE_REPO=<owner>/<repo>`、`LONGX_UPDATE_API=<host>` 换来源；自定义服务名时设 `LONGX_SERVICE`
+（Linux 默认 `longx`，macOS 默认 `com.longx.agent`）。Intel macOS 和 Windows 主程序目前没有对应的自动升级包。
 
 **用脚本升级**：再跑一遍安装命令：
 

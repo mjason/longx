@@ -21,8 +21,9 @@ if System.get_env("PHX_SERVER") do
 end
 
 # Where the self-upgrade looks for releases (Longx.Upgrade): a fork or a
-# mirror sets its own repository / API host; the systemd unit's name is
-# LONGX_SERVICE (default longx), read by Longx.Upgrade itself.
+# mirror sets its own repository / API host; the user service's name is
+# LONGX_SERVICE (Linux default longx; macOS default com.longx.agent),
+# read by Longx.Upgrade itself.
 if repo = System.get_env("LONGX_UPDATE_REPO") do
   config :longx, Longx.Upgrade, repo: repo
 end

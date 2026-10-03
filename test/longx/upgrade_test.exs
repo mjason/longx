@@ -25,6 +25,7 @@ defmodule Longx.UpgradeTest do
       repo: "mjason/longx",
       api_url: "http://127.0.0.1:#{bypass.port}",
       app_dir: app,
+      platform: {:linux, :x86_64},
       restart_command: ["sh", "-c", "echo yes > #{marker}"],
       tick: nil
     )
@@ -43,7 +44,7 @@ defmodule Longx.UpgradeTest do
 
   # a release tarball the way the workflow packs it: one top directory
   defp tarball!(root, version) do
-    name = "longx-#{version}-linux-#{Upgrade.arch()}.tar.gz"
+    name = Upgrade.asset_name(version)
     build = Path.join(root, "build")
     top = Path.join(build, "longx-#{version}")
     File.mkdir_p!(Path.join(top, "bin"))
@@ -140,6 +141,107 @@ defmodule Longx.UpgradeTest do
       Bypass.down(bypass)
       assert {:error, message} = Upgrade.check(force: true)
       assert message =~ "GitHub"
+    end
+  end
+
+  describe "platform compatibility" do
+    test "default macOS restart invokes launchctl for the current GUI user", %{
+      bypass: bypass,
+      root: root,
+      marker: marker
+    } do
+      config = Application.get_env(:longx, Upgrade)
+
+      Application.put_env(
+        :longx,
+        Upgrade,
+        config
+        |> Keyword.put(:platform, {:darwin, :aarch64})
+        |> Keyword.put(:restart_command, nil)
+      )
+
+      previous_path = System.get_env("PATH")
+      fake_bin = Path.join(root, "fake-bin")
+      File.mkdir_p!(fake_bin)
+      command = Path.join(fake_bin, "launchctl")
+      File.write!(command, "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"#{marker}\"\n")
+      File.chmod!(command, 0o755)
+      System.put_env("PATH", fake_bin <> ":" <> previous_path)
+      on_exit(fn -> System.put_env("PATH", previous_path) end)
+      {uid, 0} = System.cmd("/usr/bin/id", ["-u"])
+      {name, path, sha} = tarball!(root, @version)
+
+      Bypass.expect(bypass, "GET", "/repos/mjason/longx/releases/latest", fn conn ->
+        Plug.Conn.resp(conn, 200, release_json(bypass, @version, [name, name <> ".sha256"]))
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/dl/#{name}", &Plug.Conn.send_file(&1, 200, path))
+      Bypass.expect_once(bypass, "GET", "/dl/#{name}.sha256", &Plug.Conn.resp(&1, 200, sha))
+      assert {:ok, _} = Upgrade.apply()
+      assert_receive {:upgrade, %{stage: :restarting}}, 10_000
+
+      assert File.read!(marker) |> String.split("\n", trim: true) ==
+               ["kickstart", "-k", "gui/#{String.trim(uid)}/com.longx.agent"]
+    end
+
+    test "selects the actual release names, including native Apple Silicon" do
+      assert Upgrade.arch({:darwin, :aarch64}) == "arm64"
+
+      assert Upgrade.asset_name(@version, {:darwin, :aarch64}) ==
+               "longx-9.9.9-darwin-arm64.tar.gz"
+
+      assert Upgrade.asset_name(@version, {:linux, :x86_64}) ==
+               "longx-9.9.9-linux-x86_64.tar.gz"
+
+      assert Upgrade.asset_name(@version, {:linux, :aarch64}) ==
+               "longx-9.9.9-linux-arm64.tar.gz"
+
+      assert Upgrade.asset_name(@version, {:darwin, :x86_64}) == nil
+      assert Upgrade.asset_name(@version, {:windows, :x86_64}) == nil
+    end
+
+    test "macOS installations default to the installer LaunchAgent label", %{app: app} do
+      config = Application.get_env(:longx, Upgrade)
+      Application.put_env(:longx, Upgrade, Keyword.put(config, :platform, {:darwin, :aarch64}))
+      assert %{service: "com.longx.agent"} = Upgrade.install(%{"RELEASE_ROOT" => app})
+
+      assert %{service: "com.longx.test"} =
+               Upgrade.install(%{"RELEASE_ROOT" => app, "LONGX_SERVICE" => "com.longx.test"})
+    end
+
+    test "macOS restart targets the current user's GUI LaunchAgent, not systemd" do
+      assert {:ok, ["launchctl", "kickstart", "-k", "gui/501/com.longx.agent"]} =
+               Upgrade.restart_command(%{service: "com.longx.agent"}, {:darwin, :aarch64}, "501")
+
+      assert {:ok, ["systemctl", "--user", "restart", "--no-block", "longx"]} =
+               Upgrade.restart_command(%{service: "longx"}, {:linux, :x86_64}, nil)
+
+      assert {:error, _} =
+               Upgrade.restart_command(%{service: "com.longx.agent"}, {:darwin, :aarch64}, "")
+    end
+
+    test "downloads and applies a macOS archive instead of searching for Linux", %{
+      bypass: bypass,
+      root: root,
+      app: app,
+      marker: marker
+    } do
+      config = Application.get_env(:longx, Upgrade)
+      Application.put_env(:longx, Upgrade, Keyword.put(config, :platform, {:darwin, :aarch64}))
+      {name, path, sha} = tarball!(root, @version)
+      assert name == "longx-9.9.9-darwin-arm64.tar.gz"
+
+      Bypass.expect(bypass, "GET", "/repos/mjason/longx/releases/latest", fn conn ->
+        Plug.Conn.resp(conn, 200, release_json(bypass, @version, [name, name <> ".sha256"]))
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/dl/#{name}", &Plug.Conn.send_file(&1, 200, path))
+      Bypass.expect_once(bypass, "GET", "/dl/#{name}.sha256", &Plug.Conn.resp(&1, 200, sha))
+      assert {:ok, _} = Upgrade.apply()
+      assert_receive {:upgrade, %{stage: :restarting}}, 10_000
+      assert File.read!(Path.join(app, "bin/longx")) =~ @version
+      assert File.read!(Path.join(root, "app.old/bin/longx")) =~ "0.0.1"
+      assert File.read!(marker) =~ "yes"
     end
   end
 

@@ -10,14 +10,15 @@ defmodule Longx.Upgrade do
   version is out" without a request per page.
 
   **Apply** (only inside an install — `RELEASE_ROOT/bin/longx` exists, or
-  `app_dir:` is configured): download `longx-<v>-linux-<arch>.tar.gz` and
+  `app_dir:` is configured): download `longx-<v>-<os>-<arch>.tar.gz` and
   its `.sha256` into `<home>/downloads`, verify, snapshot the database to
   `<home>/backups/longx-<current>-<stamp>.db` (`VACUUM INTO`, consistent
   while running), unpack into `app.new`, swap `app` → `app.old` → `app`
   (the running VM keeps its open files; nothing else starts from the new
   tree before the restart), then run `restart_command` — `systemctl --user
-  restart --no-block <service>` by default, which stops this VM. When that
-  fails (no systemd) the swap stays and the status asks for a manual
+  restart --no-block <service>` on Linux, or `launchctl kickstart -k
+  gui/<uid>/<label>` on macOS. When the service manager is unavailable,
+  the swap stays and the status asks for a manual
   restart. Every stage is broadcast on `topic/0` as `{:upgrade, status}`.
 
       config :longx, Longx.Upgrade,
@@ -56,24 +57,35 @@ defmodule Longx.Upgrade do
 
   @doc "The release asset's architecture word for this machine (nil: no prebuilt release)."
   @spec arch() :: String.t() | nil
-  def arch do
-    case Longx.Platform.current() do
+  def arch(platform \\ platform()) do
+    case platform do
       {:linux, :x86_64} -> "x86_64"
       {:linux, :aarch64} -> "arm64"
+      {:darwin, :aarch64} -> "arm64"
       _ -> nil
     end
   end
 
   @doc "The tarball a release carries for this machine."
-  def asset_name(version), do: "longx-#{version}-linux-#{arch()}.tar.gz"
+  def asset_name(version, platform \\ platform()) do
+    case {platform, arch(platform)} do
+      {_, nil} -> nil
+      {{os, _}, arch} -> "longx-#{version}-#{os}-#{arch}.tar.gz"
+    end
+  end
+
+  defp platform, do: config(:platform) || Longx.Platform.current()
 
   @doc """
   Where the program lives, when this is an install: `app` (the release
   root — `app_dir:` config, else `RELEASE_ROOT`, which `bin/longx` sets),
   `home` (its parent: downloads, backups, `app.old` go there) and the
-  systemd user `service` (`LONGX_SERVICE`, default `longx`). nil in dev.
+  user `service` (`LONGX_SERVICE`, Linux default `longx`, macOS default
+  `com.longx.agent`). nil in dev.
   """
-  @spec install(map) :: %{app: String.t(), home: String.t(), service: String.t()} | nil
+  @spec install(map) ::
+          %{app: String.t(), home: String.t(), service: String.t(), platform: Longx.Platform.t()}
+          | nil
   def install(env \\ System.get_env()) do
     app = config(:app_dir) || env["RELEASE_ROOT"]
 
@@ -84,10 +96,14 @@ defmodule Longx.Upgrade do
       %{
         app: Path.expand(app),
         home: Path.dirname(Path.expand(app)),
-        service: env["LONGX_SERVICE"] || "longx"
+        service: env["LONGX_SERVICE"] || default_service(platform()),
+        platform: platform()
       }
     end
   end
+
+  defp default_service({:darwin, _}), do: "com.longx.agent"
+  defp default_service(_), do: "longx"
 
   def installed?, do: install() != nil
 
@@ -252,7 +268,7 @@ defmodule Longx.Upgrade do
   defp ensure_install do
     case {install(), container?()} do
       {nil, true} -> {:error, "容器里的 Longx 用新镜像升级（docker compose pull && docker compose up -d）"}
-      {nil, false} -> {:error, "只有用 install.sh 安装的版本能在这里升级（开发环境请用 git）"}
+      {nil, false} -> {:error, "只有用安装脚本安装的版本能在这里升级（开发环境请用 git）"}
       {install, _} -> {:ok, install}
     end
   end
@@ -264,9 +280,9 @@ defmodule Longx.Upgrade do
     name = asset_name(version)
     url = fn n -> Enum.find_value(assets, &(&1["name"] == n && &1["browser_download_url"])) end
 
-    case {arch(), url.(name), url.(name <> ".sha256")} do
-      {nil, _, _} -> {:error, "这台机器没有预编译包（只有 linux x86_64 / arm64）"}
-      {_, nil, _} -> {:error, "v#{version} 没有 linux-#{arch()} 的包（#{name}）"}
+    case {name, name && url.(name), name && url.(name <> ".sha256")} do
+      {nil, _, _} -> {:error, "这台机器没有预编译包（支持 Linux x86_64 / arm64、macOS Apple Silicon）"}
+      {_, nil, _} -> {:error, "v#{version} 没有这台机器的包（#{name}）"}
       {_, _, nil} -> {:error, "v#{version} 缺少 #{name}.sha256，无法校验"}
       {_, tarball, sha} -> {:ok, %{name: name, tarball: tarball, sha256: sha}}
     end
@@ -550,12 +566,51 @@ defmodule Longx.Upgrade do
   end
 
   defp restart(install) do
-    [exe | args] =
-      config(:restart_command) ||
-        ["systemctl", "--user", "restart", "--no-block", install.service]
-
     manual = "新版本已经装到 #{install.app}，但自动重启失败，请手动重启服务"
 
+    case configured_restart(install) do
+      {:ok, [exe | args]} -> execute_restart(exe, args, manual)
+      {:error, reason} -> {:installed, "#{manual}（#{reason}）"}
+    end
+  end
+
+  defp configured_restart(install) do
+    case config(:restart_command) do
+      [_ | _] = command ->
+        {:ok, command}
+
+      nil ->
+        uid = if match?({:darwin, _}, install.platform), do: current_uid()
+        restart_command(install, install.platform, uid)
+    end
+  end
+
+  defp current_uid do
+    case System.cmd("/usr/bin/id", ["-u"], stderr_to_stdout: true) do
+      {uid, 0} -> String.trim(uid)
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  @doc false
+  def restart_command(%{service: service}, {:darwin, _}, uid) do
+    if is_binary(uid) and Regex.match?(~r/\A[0-9]+\z/, uid) and
+         Regex.match?(~r/\A[A-Za-z0-9_.-]+\z/, service) do
+      {:ok, ["launchctl", "kickstart", "-k", "gui/#{uid}/#{service}"]}
+    else
+      {:error, "无法确定 macOS 用户或 LaunchAgent 名称"}
+    end
+  end
+
+  def restart_command(%{service: service}, {:linux, _}, _uid),
+    do: {:ok, ["systemctl", "--user", "restart", "--no-block", service]}
+
+  def restart_command(_install, _platform, _uid),
+    do: {:error, "此平台没有自动重启方式"}
+
+  defp execute_restart(exe, args, manual) do
     case System.find_executable(exe) do
       nil ->
         {:installed, "#{manual}（没有 #{exe}）"}
