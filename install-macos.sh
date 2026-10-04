@@ -8,10 +8,11 @@ die() { printf 'longx: %s\n' "$*" >&2; exit 1; }
 case "${1:-}" in
   -h | --help)
     printf '%s\n' \
-      'Usage: sh install-macos.sh [VERSION] [--no-service] [--tarball PATH]' \
+      'Usage: sh install-macos.sh [VERSION] [--bind IP] [--no-service] [--tarball PATH]' \
       'Requires macOS 14+, native Apple Silicon, Python 3.9+, and curl. Do not use sudo.' \
       'Downloads the latest released installer; passes all arguments to it.' \
-      'Options: LONGX_HOME (under your home), LONGX_PORT.'
+      'Options: LONGX_HOME (under your home), LONGX_PORT.' \
+      '--bind: IPv4/IPv6 address; upgrades preserve it, new installs default to 127.0.0.1.'
     exit 0
     ;;
 esac

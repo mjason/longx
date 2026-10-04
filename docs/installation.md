@@ -47,8 +47,25 @@ Node, Go, Docker, or sudo is required. `git` is optional for workspace Git featu
 
 The installer defaults to `~/.longx`, verifies SHA-256 and archive paths before
 stopping the existing service, and starts the user LaunchAgent `com.longx.agent`.
-It listens **only on 127.0.0.1**, at `http://localhost:7788`. It starts at login
+New installations default to **127.0.0.1**, at `http://localhost:7788`. It starts at login
 and uses your account's permissions. Logs are in `~/.longx/logs`.
+
+To allow trusted LAN devices to connect, pass `--bind 0.0.0.0`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh | sh -s -- --bind 0.0.0.0
+# Or use a reviewed local installer:
+python3 install-macos.py --bind 0.0.0.0
+```
+
+Connect from other devices using `http://<Mac-LAN-IP>:7788`, not `0.0.0.0`.
+Without `--bind`, upgrades preserve the existing LaunchAgent's listen address.
+Use `--bind 127.0.0.1` to restrict access again. Specific IPv4/IPv6 addresses and
+`--bind ::` are also supported; ports and interface scopes are not part of the argument.
+Check the macOS firewall if remote connections are blocked.
+Longx currently has no login access control: network clients may operate projects and
+execute commands. Use a trusted network only; do not expose it directly to the Internet.
+The installer warns when listening beyond loopback but does not change firewall settings.
 
 Repeat the installer to upgrade (the web self-upgrader currently supports Linux
 only). It retains previous applications and stopped-service data snapshots in
@@ -61,7 +78,7 @@ backing up data or registering the replacement.
 Restoring an old application does not reverse database migrations; use its matching
 data backup if needed.
 
-Options: `LONGX_HOME` (a directory underneath your home), `LONGX_PORT`, `--no-service`,
+Options: `LONGX_HOME` (a directory underneath your home), `LONGX_PORT`, `--bind IP`, `--no-service`,
 or `--tarball /path/to/longx-VERSION-darwin-arm64.tar.gz` (the adjacent `.sha256`
 file is mandatory, including local installs). `--no-service` stops an existing
 managed service but leaves the new installation stopped.

@@ -4,6 +4,7 @@ import argparse
 import datetime
 import fcntl
 import hashlib
+import ipaddress
 import os
 from pathlib import Path, PurePosixPath
 import platform
@@ -77,7 +78,24 @@ def verify(tarball, checksum):
         raise ValueError("SHA-256 mismatch; installation untouched")
 
 
-def launch_agent(app, data, port, home):
+def bind_address(value):
+    try:
+        if "%" in value:
+            raise ValueError("scoped addresses are not supported")
+        return str(ipaddress.ip_address(value))
+    except (ValueError, TypeError):
+        raise ValueError("Bind address must be an IPv4 or IPv6 address without a port or scope") from None
+
+
+def local_url(port, bind_ip):
+    address = ipaddress.ip_address(bind_address(bind_ip))
+    if address.is_unspecified:
+        address = ipaddress.ip_address("127.0.0.1" if address.version == 4 else "::1")
+    host = "[" + str(address) + "]" if address.version == 6 else str(address)
+    return "http://" + host + ":" + str(port) + "/"
+
+
+def launch_agent(app, data, port, home, bind_ip="127.0.0.1"):
     return {
         "Label": LABEL,
         "ProgramArguments": [str(app / "bin/longx"), "start"],
@@ -88,7 +106,7 @@ def launch_agent(app, data, port, home):
             "LONGX_DATA_DIR": str(data),
             "PORT": str(port),
             "PHX_HOST": "localhost",
-            "LONGX_BIND_IP": "127.0.0.1",
+            "LONGX_BIND_IP": bind_address(bind_ip),
             "LONGX_SERVICE": LABEL,
         },
         "RunAtLoad": True,
@@ -109,13 +127,14 @@ def wait_until_unloaded(service, timeout=30):
     raise RuntimeError("LaunchAgent did not finish stopping: " + service)
 
 
-def wait_until_ready(port, logs, timeout=60):
+def wait_until_ready(port, logs, timeout=60, *, bind_ip="127.0.0.1"):
     # Local readiness must not depend on a user's HTTP proxy configuration.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    url = local_url(port, bind_ip)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            with opener.open("http://127.0.0.1:" + str(port) + "/", timeout=2) as response:
+            with opener.open(url, timeout=2) as response:
                 if response.status == 200:
                     return
         except OSError:
@@ -131,6 +150,8 @@ def main():
     parser.add_argument("version", nargs="?", help="release version; default latest")
     parser.add_argument("--tarball", type=Path, help="local archive (requires adjacent .sha256)")
     parser.add_argument("--no-service", action="store_true", help="install only; stop an existing managed service")
+    parser.add_argument("--bind", type=bind_address, metavar="IP",
+                        help="IPv4/IPv6 listen address; preserve existing setting on upgrade, otherwise 127.0.0.1")
     args = parser.parse_args()
     if platform.system() != "Darwin" or platform.machine() != "arm64":
         parser.error("Requires native Apple Silicon macOS (not a Rosetta terminal)")
@@ -166,11 +187,19 @@ def install(args, home, app, data, port):
     service = domain + "/" + LABEL
     if unit.is_symlink():
         raise ValueError("Refusing symlink LaunchAgent")
+    old = {}
     if unit.exists():
         old = plistlib.loads(unit.read_bytes())
         if old.get("ProgramArguments") != [str(app / "bin/longx"), "start"]:
             raise ValueError("Existing LaunchAgent belongs to a different installation")
     old_unit = unit.read_bytes() if unit.exists() else None
+    bind_ip = bind_address(
+        args.bind if args.bind is not None
+        else old.get("EnvironmentVariables", {}).get("LONGX_BIND_IP", "127.0.0.1")
+    )
+    if not args.no_service and not ipaddress.ip_address(bind_ip).is_loopback:
+        print("WARNING: listening on " + bind_ip +
+              " exposes Longx to the network. There is no login access control; use a trusted network only.")
     with tempfile.TemporaryDirectory(prefix=".install-", dir=home) as temporary:
         stage = Path(temporary)
         tarball = args.tarball
@@ -219,14 +248,14 @@ def install(args, home, app, data, port):
             if not args.no_service:
                 unit.parent.mkdir(parents=True, exist_ok=True)
                 pending = stage / "agent.plist"
-                pending.write_bytes(plistlib.dumps(launch_agent(app, data, port, home)))
+                pending.write_bytes(plistlib.dumps(launch_agent(app, data, port, home, bind_ip)))
                 os.replace(pending, unit)
                 subprocess.run(["launchctl", "bootstrap", domain, str(unit)], check=True)
                 registered = True
                 # RunAtLoad can remain pending in a GUI domain's on-demand-only mode
                 # (observed on macOS 26). Explicitly demand startup, then check HTTP.
                 subprocess.run(["launchctl", "kickstart", service], check=True)
-                wait_until_ready(port, home / "logs")
+                wait_until_ready(port, home / "logs", bind_ip=bind_ip)
         except BaseException:
             if registered:
                 subprocess.run(["launchctl", "bootout", service], check=False)
@@ -243,7 +272,14 @@ def install(args, home, app, data, port):
                 subprocess.run(["launchctl", "bootstrap", domain, str(unit)], check=False)
                 subprocess.run(["launchctl", "kickstart", service], check=False)
             raise
-    print("Installed. Open http://localhost:" + str(port) if not args.no_service else "Installed; service not started.")
+    if args.no_service:
+        print("Installed; service not started.")
+    else:
+        host = "[" + bind_ip + "]" if ":" in bind_ip else bind_ip
+        print("Installed. Listening on " + host + ":" + str(port))
+        print("Open " + local_url(port, bind_ip))
+        if ipaddress.ip_address(bind_ip).is_unspecified:
+            print("For other devices, use this Mac's LAN IP and port " + str(port) + ".")
     print("Backups: " + str(home / "backups") + " (program rollback does not undo database migrations).")
 
 

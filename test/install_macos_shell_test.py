@@ -58,6 +58,13 @@ exit "$TEST_DOWNLOAD_STATUS"
         self.assertIn("https://github.com/mjason/longx/releases/latest/download/install-macos.py", calls)
         self.assertIn("\n0.2.106\n--tarball\n/path with spaces/archive.tar.gz\n--no-service\n", calls)
 
+    def test_forwards_bind_argument_without_modification(self):
+        for address in ("0.0.0.0", "::"):
+            with self.subTest(address=address):
+                result, calls = self.run_script("0.2.115", "--bind", address)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("\n0.2.115\n--bind\n" + address + "\n", calls)
+
     def test_refuses_wrong_platform_rosetta_root_and_old_python_before_download(self):
         for options in [{"platform": "Linux"}, {"arch": "x86_64"}, {"uid": "0"}, {"python_status": "1"}]:
             with self.subTest(options=options):
@@ -79,4 +86,5 @@ exit "$TEST_DOWNLOAD_STATUS"
         result, calls = self.run_script("--help", platform="Linux")
         self.assertEqual(result.returncode, 0)
         self.assertIn("Usage:", result.stdout)
+        self.assertIn("--bind IP", result.stdout)
         self.assertEqual(calls, "")

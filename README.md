@@ -30,8 +30,22 @@ On macOS 14+ Apple Silicon:
 curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh | sh
 ```
 
-It installs a native user LaunchAgent and listens only on
-`http://localhost:7788`. Python 3.9+ is required for installation; see the guide below
+It installs a native user LaunchAgent; new installations default to
+`http://localhost:7788`. For access from a trusted LAN:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh | sh -s -- --bind 0.0.0.0
+# Optionally select an application version too:
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh | sh -s -- 0.2.115 --bind 0.0.0.0
+```
+
+Connect using `http://<Mac-LAN-IP>:7788`. Upgrades without `--bind` preserve the
+existing listen address; use `--bind 127.0.0.1` to restrict access again.
+The shell entry point forwards arguments to the Python installer; it does not
+remove the Python requirement. Longx has no login access control; do not expose
+it directly to the Internet.
+
+Python 3.9+ is required for installation; see the guide below
 for security, signing status, upgrades, and the download-and-review alternative.
 
 From v0.2.106, macOS releases are Developer ID signed and Apple notarized.

@@ -19,7 +19,18 @@ curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh 
 ```
 
 安装时需要 Python 3.9+，无需 sudo。用户级 LaunchAgent，
-默认仅监听 `http://localhost:7788`；签名状态和升级说明见[安装文档](docs/installation.md)。
+首次安装默认仅监听 `http://localhost:7788`。如需可信局域网访问：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh | sh -s -- --bind 0.0.0.0
+# 也可同时指定应用版本：
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh | sh -s -- 0.2.115 --bind 0.0.0.0
+```
+
+其他设备访问 `http://Mac的局域网IP:7788`。升级不传 `--bind` 时保留已有监听地址；
+使用 `--bind 127.0.0.1` 可恢复仅本机访问。`sh` 入口会原样传递参数，
+但安装时仍需 Python。Longx 目前没有登录访问控制，请勿直接暴露公网。
+签名状态和升级说明见[安装文档](docs/installation.md)。
 从 v0.2.106 起，Mac 原生包使用 Developer ID 正式签名并通过 Apple 公证。
 详见 [Mac 安装、升级与排障指南](docs/installation-macos.zh-CN.md)。
 

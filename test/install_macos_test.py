@@ -82,6 +82,60 @@ class InstallerTest(unittest.TestCase):
         self.assertEqual(agent["EnvironmentVariables"]["LONGX_BIND_IP"], "127.0.0.1")
         self.assertEqual(agent["ProgramArguments"], [str(home / "app/bin/longx"), "start"])
 
+    def test_agent_accepts_explicit_ipv4_and_ipv6_bind_addresses(self):
+        home = Path("/Users/example/.longx")
+        for address in ("0.0.0.0", "192.168.2.203", "::", "::1"):
+            with self.subTest(address=address):
+                agent = installer.launch_agent(home / "app", home / "data", 7788, home, address)
+                self.assertEqual(agent["EnvironmentVariables"]["LONGX_BIND_IP"], address)
+
+    def test_invalid_bind_argument_is_rejected_before_installation(self):
+        for address in ("localhost", "0.0.0.0:7788", "999.1.2.3", "fe80::1%en0", ""):
+            with self.subTest(address=address), patch(
+                "sys.argv", ["install-macos.py", "--bind", address]
+            ), patch.object(installer, "install") as install, patch(
+                "sys.stderr", new_callable=io.StringIO
+            ), self.assertRaises(SystemExit) as error:
+                installer.main()
+            self.assertEqual(error.exception.code, 2)
+            install.assert_not_called()
+
+    def test_bind_argument_reaches_installation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with patch("sys.argv", ["install-macos.py", "0.2.115", "--bind", "0.0.0.0"]), patch.object(
+                installer.platform, "system", return_value="Darwin"
+            ), patch.object(installer.platform, "machine", return_value="arm64"), patch.object(
+                installer.os, "getuid", return_value=501
+            ), patch.object(installer.os, "umask"), patch.object(
+                installer.Path, "stat", autospec=True,
+                return_value=SimpleNamespace(st_uid=501, st_mode=0o40700)
+            ), patch.object(installer.Path, "home", return_value=root), patch.dict(
+                installer.os.environ, {}, clear=True
+            ), patch.object(installer, "install") as install:
+                installer.main()
+            self.assertEqual(install.call_args.args[0].bind, "0.0.0.0")
+            self.assertEqual(install.call_args.args[0].version, "0.2.115")
+
+    def test_health_check_uses_loopback_for_wildcards_and_specific_address_otherwise(self):
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.__enter__.return_value.status = 200
+        cases = [
+            ("0.0.0.0", "http://127.0.0.1:7788/"),
+            ("192.168.2.203", "http://192.168.2.203:7788/"),
+            ("::", "http://[::1]:7788/"),
+            ("::1", "http://[::1]:7788/"),
+        ]
+        for address, url in cases:
+            with self.subTest(address=address), patch.object(
+                installer.urllib.request, "build_opener"
+            ) as opener:
+                opener.return_value.open.return_value = response
+                installer.wait_until_ready(7788, Path("/example/logs"), bind_ip=address)
+                self.assertEqual(opener.return_value.open.call_args.args[0], url)
+                self.assertEqual(opener.call_args.args[0].proxies, {})
+
     def test_health_check_retries_until_http_200_without_proxy(self):
         from unittest.mock import MagicMock
         response = MagicMock()
@@ -125,8 +179,56 @@ class InstallerTest(unittest.TestCase):
             member.size = 3
             tar.addfile(member, io.BytesIO(b"new"))
         Path(str(archive) + ".sha256").write_text(hashlib.sha256(archive.read_bytes()).hexdigest())
-        args = SimpleNamespace(tarball=archive, no_service=True)
+        args = SimpleNamespace(tarball=archive, no_service=True, bind=None)
         return home, args
+
+    def test_install_persists_bind_and_preserves_it_on_upgrade_unless_overridden(self):
+        cases = [
+            (None, None, "127.0.0.1"),
+            (None, "0.0.0.0", "0.0.0.0"),
+            ("0.0.0.0", None, "0.0.0.0"),
+            ("192.168.2.203", None, "192.168.2.203"),
+            ("0.0.0.0", "127.0.0.1", "127.0.0.1"),
+            (None, "::", "::"),
+        ]
+        for previous, requested, expected in cases:
+            with self.subTest(previous=previous, requested=requested), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                home, args = self.fixture(root)
+                args.no_service = False
+                args.bind = requested
+                unit = root / "Library/LaunchAgents/com.longx.agent.plist"
+                if previous is not None:
+                    unit.parent.mkdir(parents=True)
+                    old = installer.launch_agent(home / "app", home / "data", 7788, home)
+                    old["EnvironmentVariables"]["LONGX_BIND_IP"] = previous
+                    unit.write_bytes(plistlib.dumps(old))
+                with patch.object(installer.Path, "home", return_value=root), patch.object(
+                    installer.subprocess, "run", return_value=SimpleNamespace(returncode=1)
+                ), patch.object(installer, "wait_until_ready") as ready:
+                    installer.install(args, home, home / "app", home / "data", 7788)
+                agent = plistlib.loads(unit.read_bytes())
+                self.assertEqual(agent["EnvironmentVariables"]["LONGX_BIND_IP"], expected)
+                self.assertEqual(ready.call_args.kwargs["bind_ip"], expected)
+
+    def test_invalid_existing_bind_fails_before_touching_the_running_service(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            home, args = self.fixture(root)
+            args.no_service = False
+            unit = root / "Library/LaunchAgents/com.longx.agent.plist"
+            unit.parent.mkdir(parents=True)
+            old = installer.launch_agent(home / "app", home / "data", 7788, home)
+            old["EnvironmentVariables"]["LONGX_BIND_IP"] = "invalid"
+            original = plistlib.dumps(old)
+            unit.write_bytes(original)
+            with patch.object(installer.Path, "home", return_value=root), patch.object(
+                installer.subprocess, "run"
+            ) as command, self.assertRaises(ValueError):
+                installer.install(args, home, home / "app", home / "data", 7788)
+            command.assert_not_called()
+            self.assertEqual(unit.read_bytes(), original)
+            self.assertEqual((home / "app/old").read_text(), "old application")
 
     def test_install_preserves_data_and_previous_application(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -166,7 +268,7 @@ class InstallerTest(unittest.TestCase):
 
             with patch.object(installer.Path, "home", return_value=root), patch.object(
                 installer.subprocess, "run", side_effect=command
-            ), patch.object(installer, "wait_until_ready", side_effect=lambda *a: events.append(["health"])):
+            ), patch.object(installer, "wait_until_ready", side_effect=lambda *a, **kw: events.append(["health"])):
                 installer.install(args, home, home / "app", home / "data", 7788)
             self.assertEqual(events[-3:], [["launchctl", "bootstrap"], ["launchctl", "kickstart"], ["health"]])
 
@@ -175,9 +277,10 @@ class InstallerTest(unittest.TestCase):
             root = Path(temp)
             home, args = self.fixture(root)
             args.no_service = False
+            args.bind = "127.0.0.1"
             unit = root / "Library/LaunchAgents/com.longx.agent.plist"
             unit.parent.mkdir(parents=True)
-            original = plistlib.dumps(installer.launch_agent(home / "app", home / "data", 7789, home))
+            original = plistlib.dumps(installer.launch_agent(home / "app", home / "data", 7789, home, "0.0.0.0"))
             unit.write_bytes(original)
             events = []
 

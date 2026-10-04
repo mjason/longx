@@ -37,7 +37,7 @@ curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh 
 ```
 
 入口脚本检查平台、架构和 Python，完整下载最新版发布附件中的 Python 安装器后才执行，
-再由安装器校验、备份和安装。所有参数原样传入，支持 `--no-service` 和 `--tarball`。
+再由安装器校验、备份和安装。所有参数原样传入，支持 `--bind`、`--no-service` 和 `--tarball`。
 它不会自动安装 Python，也不会绕过系统安全保护。
 一行安装会执行远端代码，并不比下载审查更安全；若希望先检查内容，可以用下面的方式：
 
@@ -58,6 +58,27 @@ python3 install-macos.py 0.2.106
 安装完成后打开 <http://localhost:7788>，在「设置 → Provider」配置模型，
 再添加项目的工作目录。服务默认仅监听 `127.0.0.1`，其他机器不能直接访问。
 Provider 密钥请在设置中填写，不要发到聊天里。
+
+### 局域网访问
+
+安装或升级时用 `--bind 0.0.0.0` 监听所有 IPv4 网卡：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install-macos.sh | sh -s -- --bind 0.0.0.0
+# 使用下载后审查过的安装器，也可指定应用版本：
+python3 install-macos.py 0.2.115 --bind 0.0.0.0
+```
+
+其他设备通过 `http://Mac的局域网IP:7788` 访问，不能把 `0.0.0.0` 当作访问地址。
+访问不了时检查 macOS 防火墙是否允许该服务的入站连接。
+首次安装不传 `--bind` 时仅监听 `127.0.0.1`；升级不传时保留已有 LaunchAgent
+的监听地址。重新限制为本机使用 `--bind 127.0.0.1`。
+也可指定单个网卡的 IPv4/IPv6 地址，或用 `--bind ::` 监听 IPv6 通配地址；
+地址不能包含端口或 `%en0` 等接口作用域。
+
+Longx 当前没有登录访问控制，能访问服务的人可能操作项目和执行命令。
+开放监听只适用于可信网络，不要直接暴露公网。安装器会显示警告，
+但不会修改防火墙、路由器或关闭系统安全保护。
 
 ## 3. 签名与安全
 
