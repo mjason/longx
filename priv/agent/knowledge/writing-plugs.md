@@ -40,6 +40,20 @@ end
 
 The shipped pipeline: `Environment`, `Base`, `AgentsMd` (the project's AGENTS.md; `drop AgentsMd` leaves it out), `Shell` (exec_command), `Jobs` (start_job / jobs / job_output / wait_job / stop_job — long commands in the background, by name), `Patch` (apply_patch), `ViewImage`, `Present` (present / prompt_user — cards for the person; show_file / show_diff / send_file / show_html), `Knowledge` (knowledge_read / knowledge_search / knowledge_write), `WebSearch` (web_search), `WebFetch` (web_fetch — a headless browser on this Longx reads a page), `Credentials` (credentials_list / http_request / credential_login / credential_create / credential_rotate), `Agents` (spawn_agent / send_message / close_agent / agents_directory / claim_handle), `Watches` (watch_list / watch_run / watch_enable / wait_until / notify), `Goal` (create_goal / update_goal / get_goal), `Compaction` (get_context_remaining / new_context_window; folds the context at 90 % of the window), `Request` (all under `Longx.Agent.Plugs`). Not in it, added by a project that wants it: `Browser` (the person's own browser) — `plug Browser` (their default alias) or `plug Browser, browser: "qa-chrome", max_tabs: 3` in `local/agent.exs` mounts the `javascript` tool.
 
+**Skills is also built in and enabled by default**.
+It occupies the capability section after tool instructions (`Credentials`) and
+before multi-agent guidance (`Agents`), matching Codex's capability ordering.
+It discovers project `.agents/skills` directories, offers a short catalog and
+`skill_list` / `skill_read`, and loads an unambiguous `$skill-name` before the model
+request. Every selected instruction must be read completely; references resolve
+relative to its skill directory. Same-name paths stay distinct. Optional
+`agents/openai.yaml` can set `policy.allow_implicit_invocation: false`.
+Use `options Longx.Agent.Plugs.Skills, disabled: ["relative/path/SKILL.md"]` to disable
+individual paths, or `drop Longx.Agent.Plugs.Skills` to remove the capability.
+The catalog is a turn-local snapshot, refreshed next turn. Instruction text does not
+require the executable `.longx` trust switch, and discovery never runs scripts,
+installs dependencies or grants permissions. No global skill root is scanned by default.
+
 **Computer use is also available as an opt-in built-in plug.** Add `plug Computer` inside the `agent do … end` block in `.longx/local/agent.exs` to mount its instructions and `computer_status` tool. Once the service is connected, it also mounts the curated desktop tools with the `computer_` prefix. No custom plug module is needed. Like Browser, Computer is not in the default pipeline; connecting a service in Settings does not enable it for a project.
 
 **Multiple computers work like browser aliases.** Settings → Agent kernel lists independent computers (name, service URL, masked access key, connection and foreground opt-in) and ordered aliases. `plug Computer` uses the default alias; `plug Computer, computer: "qa"` selects a named alias. The first connected member is selected when a turn first binds. Different computers can serve different conversations concurrently; each computer still has only one controlling turn. A bound turn never fails over to another member. Disconnecting, reconnecting or replacing its service invalidates old tool calls; begin a new turn and observe again. The previous single-service configuration appears as the `local` computer and default `local` alias, preserving its saved key.

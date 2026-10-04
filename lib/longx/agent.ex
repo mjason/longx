@@ -253,7 +253,9 @@ defmodule Longx.Agent do
   A user message: a new turn when the thread is idle (`turn_id:` names it,
   else one is made), a steer into the running one otherwise. `model:` /
   `effort:` set the level for this and later turns; `images:` are data
-  urls. From another agent: `from:` (its name — the text is shown and sent
+  urls. `skills:` explicitly selects SKILL.md paths (or maps with `path`);
+  the optional Skills plug interprets them before the model request.
+  From another agent: `from:` (its name — the text is shown and sent
   as `[agent name] …`) and `reply_to:` (its thread id — the answer of the
   turn this starts goes to it instead of the parent, signed `reply_as:`
   when this agent has no team name; `hops:` counts the bounces of an
@@ -861,6 +863,7 @@ defmodule Longx.Agent do
       |> append_user(text, Keyword.get(opts, :images, []),
         from: from,
         kind: kind_of(opts),
+        skills: Keyword.get(opts, :skills, []),
         origin: Keyword.get(opts, :origin)
       )
 
@@ -1343,6 +1346,9 @@ defmodule Longx.Agent do
   # children the plugs asked for (a failure to start one is a message from it)
   defp take_effects(%State{} = state, %Step{state: st, effects: effects}) do
     Enum.reduce(effects, %{state | turn_state: st}, fn
+      {:context, input, ui}, acc ->
+        append(acc, :context, input, ui)
+
       {:goal, attrs}, acc ->
         Goal.update_goal(acc, attrs)
 
@@ -1368,9 +1374,9 @@ defmodule Longx.Agent do
   defp fold_steers(%State{steers: []} = state), do: state
 
   defp fold_steers(%State{steers: steers} = state) do
-    Enum.reduce(steers, %{state | steers: []}, fn {input, ui, _words}, acc ->
+    Enum.reduce(steers, %{state | steers: []}, fn {input, ui, {text, opts}}, acc ->
       emit(acc, "item/started", %{"item" => ui, "turnId" => acc.turn_id})
-      append(acc, :user_message, input, ui)
+      acc |> State.record_user_input(text, opts) |> append(:user_message, input, ui)
     end)
   end
 

@@ -89,6 +89,8 @@ defmodule Longx.Agent.Transcript.Item do
                     :function_call_output,
                     :compaction,
                     :hosted_call,
+                    # capability-provided input, not the person's own words
+                    :context,
                     # a browser screenshot for the model: a user message of images
                     # of which the context keeps only the latest few
                     :screenshot,

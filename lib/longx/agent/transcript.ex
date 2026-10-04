@@ -96,7 +96,7 @@ defmodule Longx.Agent.Transcript do
             else: take_outputs(more, wanted, outputs, [out | others])
 
         [%Item{kind: kind} = item | more]
-        when kind in [:user_message, :agent_message, :reasoning, :screenshot] ->
+        when kind in [:user_message, :agent_message, :reasoning, :screenshot, :context] ->
           take_outputs(more, wanted, outputs, [item | others])
 
         _ ->

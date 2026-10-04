@@ -4,7 +4,7 @@ defmodule Longx.MixProject do
   def project do
     [
       app: :longx,
-      version: "0.2.111",
+      version: "0.2.112",
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -106,6 +106,8 @@ defmodule Longx.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:gettext, "~> 1.0"},
       {:jason, "~> 1.2"},
+      # Agent Skills frontmatter (already a transitive dependency of Reactor)
+      {:yaml_elixir, "~> 2.12"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"}
     ]

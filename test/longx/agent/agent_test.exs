@@ -195,6 +195,87 @@ defmodule Longx.AgentTest do
 
   ## tests
 
+  test "skills reach the first real request and old mentions do not activate a later turn",
+       %{bypass: bypass, thread_id: id, dir: dir} do
+    path = Path.join(dir, ".agents/skills/build/SKILL.md")
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "---\nname: build\ndescription: Build the project\n---\nFIRST_SKILL_BODY")
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("done"),
+      ResponsesFixture.assistant_message("hello")
+    ])
+
+    assert {:ok, _} = Agent.send(id, "use $build")
+    assert %{"status" => "completed"} = await_turn_end()
+    assert_receive {:request, first}
+    assert first["instructions"] =~ path
+    assert Jason.encode!(first["input"]) =~ "FIRST_SKILL_BODY"
+
+    File.write!(path, "---\nname: build\ndescription: New description\n---\nSECOND_SKILL_BODY")
+    assert {:ok, _} = Agent.send(id, "hello")
+    assert %{"status" => "completed"} = await_turn_end()
+    assert_receive {:request, next}
+    assert next["instructions"] =~ "New description"
+    assert Jason.encode!(next["input"]) =~ "FIRST_SKILL_BODY"
+    refute Jason.encode!(next["input"]) =~ "SECOND_SKILL_BODY"
+  end
+
+  test "selected skill is persisted once and remains a stable prefix across tool steps",
+       %{bypass: bypass, thread_id: id, dir: dir} do
+    path = Path.join(dir, ".agents/skills/build/SKILL.md")
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "---\nname: build\ndescription: Build\n---\nCACHED_SKILL_BODY")
+    script!(bypass, [exec_call("true"), ResponsesFixture.assistant_message("done")])
+    assert {:ok, _} = Agent.send(id, "$build")
+    assert %{"status" => "completed"} = await_turn_end()
+    assert_receive {:request, first}
+    assert_receive {:request, next}
+    assert Enum.take(next["input"], length(first["input"])) == first["input"]
+    assert length(Regex.scan(~r/CACHED_SKILL_BODY/, Jason.encode!(next["input"]))) == 1
+    assert Enum.any?(Transcript.items!(id), &(&1.kind == :context))
+  end
+
+  test "structured skill input selects a path even without a textual mention",
+       %{bypass: bypass, thread_id: id, dir: dir} do
+    path = Path.join(dir, ".agents/skills/build/SKILL.md")
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "---\nname: build\ndescription: Build\n---\nSTRUCTURED_SKILL_BODY")
+    script!(bypass, [ResponsesFixture.assistant_message("done")])
+    assert {:ok, _} = Agent.send(id, "do it", skills: [path])
+    assert %{"status" => "completed"} = await_turn_end()
+    assert_receive {:request, body}
+    assert Jason.encode!(body["input"]) =~ "STRUCTURED_SKILL_BODY"
+  end
+
+  test "structured selections survive both steers and idle-delivery queues",
+       %{bypass: bypass, thread_id: id, dir: dir} do
+    path = Path.join(dir, ".agents/skills/build/SKILL.md")
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "---\nname: build\ndescription: Build\n---\nQUEUED_SKILL_BODY")
+
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("first")),
+      ResponsesFixture.assistant_message("steer seen"),
+      ResponsesFixture.assistant_message("queued seen")
+    ])
+
+    assert {:ok, _} = Agent.send(id, "first")
+    assert_receive {:held, handler}, 5_000
+    assert {:ok, %{steered: true}} = Agent.send(id, "steer", skills: [path])
+    assert :ok = Agent.send(id, "queued", deliver: :idle, skills: [path])
+    send(handler, :go)
+    assert %{"status" => "completed"} = await_turn_end()
+    assert %{"status" => "completed"} = await_turn_end()
+    assert_receive {:request, first}
+    assert_receive {:request, steered}
+    assert_receive {:request, queued}
+    refute Jason.encode!(first["input"]) =~ "QUEUED_SKILL_BODY"
+    assert Jason.encode!(steered["input"]) =~ "QUEUED_SKILL_BODY"
+    # One prior historical body plus this queued turn's newly explicit body.
+    assert length(Regex.scan(~r/QUEUED_SKILL_BODY/, Jason.encode!(queued["input"]))) == 2
+  end
+
   test "a question, an answer: events, transcript, request", %{bypass: bypass, thread_id: id} do
     script!(bypass, [ResponsesFixture.assistant_message("hello there")])
 

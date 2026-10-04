@@ -37,6 +37,12 @@ verbatim from OpenAI's codex (codex-rs/sandboxing/src/*.sbpl):
   Copyright (c) OpenAI. Licensed under the Apache License, Version 2.0
   (https://www.apache.org/licenses/LICENSE-2.0).
 
+priv/agent/skills/prompt.md and test/support/fixtures/codex_skills_usage.md
+adapt and retain the host skills usage prompt from the same Apache-2.0
+licensed Codex project, commit 3e238776e857eccd3bde6bff3026e2e9798f6524
+(codex-rs/ext/skills/src/catalog_prompt.rs). Changes are documented in
+priv/agent/skills/README.md.
+
 apps/computer packages CUA Driver 0.32.0 as its desktop actuator:
 
   cua-driver — https://github.com/trycua/cua/tree/cua-driver-rs-v0.32.0/libs/cua-driver

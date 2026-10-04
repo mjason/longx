@@ -72,6 +72,33 @@ useful, review it and promote it to `shared/`. Shared definitions travel with th
 repository; credentials, provider configuration, and private machine state do not.
 Configure the same model aliases on another machine to reuse the definition there.
 
+### Project skills
+
+Skills are discovered automatically from `.agents/skills/` between the project root
+(the nearest `.git` marker) and the thread's working directory. Each skill is a
+directory with a `SKILL.md` containing YAML frontmatter (`name`, `description`) and
+workflow instructions, optionally with `references/`, `scripts/`, and `assets/`.
+The agent sees a short catalog and reads relevant instructions completely on demand.
+Mention `$skill-name` to load an unambiguous skill before the first model request;
+same-name skills at different paths are kept distinct.
+
+Skills are a built-in, removable plug, not kernel policy. In an agent definition:
+
+```elixir
+options Longx.Agent.Plugs.Skills,
+  disabled: [".agents/skills/old-workflow/SKILL.md"],
+  catalog_chars: 8_000
+# Or disable the capability entirely:
+# drop Longx.Agent.Plugs.Skills
+```
+
+Optional `agents/openai.yaml` supports `policy.allow_implicit_invocation: false`
+for explicit-only skills. Invalid optional metadata does not reject a valid skill.
+Discovery is bounded, links stay within the project, and resource reads stay within
+the skill directory. Skills never execute scripts, install dependencies, or grant
+permissions merely by being discovered. Personal/global directories are not scanned
+automatically. These file-read boundaries do not sandbox the agent's other tools.
+
 ## Memory is knowledge you can own
 
 What is worth keeping is written down, not just “remembered.”

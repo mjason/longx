@@ -33,6 +33,9 @@ defmodule Longx.Agent.Pipelines.Default do
         plug Longx.Agent.Plugs.WebSearch
         plug Longx.Agent.Plugs.WebFetch
         plug Longx.Agent.Plugs.Credentials
+        # Codex's developer capability slot: after tools/apps, before multi-agent
+        # guidance. `drop Skills` leaves the capability out.
+        plug Longx.Agent.Plugs.Skills
         plug Longx.Agent.Plugs.Agents
         plug Longx.Agent.Plugs.Watches
         plug Longx.Agent.Plugs.Goal

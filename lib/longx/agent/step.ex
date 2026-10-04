@@ -30,7 +30,10 @@ defmodule Longx.Agent.Step do
   @type phase :: :request | :response | :turn_end
   @type call :: %{id: String.t() | nil, call_id: String.t(), name: String.t(), arguments: map}
   @type effect ::
-          {:call, String.t(), map} | {:continue, String.t()} | {:compact, keyword}
+          {:call, String.t(), map}
+          | {:continue, String.t()}
+          | {:compact, keyword}
+          | {:context, map, map | nil}
 
   @type t :: %__MODULE__{
           thread_id: String.t() | nil,
@@ -140,6 +143,18 @@ defmodule Longx.Agent.Step do
     do: %{step | state: Map.put(st, key, value)}
 
   ## Effects
+
+  @doc """
+  Adds a capability input to this request and records it in the transcript.
+  Unlike instructions, this keeps a stable conversation prefix across tool
+  steps and process restarts. A plug tracks in `state` whether it already added
+  its input. `ui` may be nil for context not drawn as a person's message.
+  """
+  @spec context_input(t, map, map | nil) :: t
+  def context_input(%__MODULE__{} = step, input, ui \\ nil) when is_map(input) do
+    %{step | transcript: step.transcript ++ [input]}
+    |> effect({:context, input, ui})
+  end
 
   @doc "Asks the kernel to run a tool call of the plug's own (with the model's, at `:response`)."
   @spec enqueue_call(t, String.t(), map) :: t

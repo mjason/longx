@@ -117,7 +117,18 @@ defmodule Longx.Agent.Kernel.State do
   def append_user(state, text, images, opts \\ []) do
     ui = user_ui(new_id("item"), state.turn_id, text, images, opts)
     emit(state, "item/started", %{"item" => ui, "turnId" => state.turn_id})
-    append(state, :user_message, user_input(text, images), ui)
+
+    state
+    |> record_user_input(text, opts)
+    |> append(:user_message, user_input(text, images), ui)
+  end
+
+  # Turn-local input metadata for capabilities, independent of transcript
+  # history. Steers are recorded only once they reach the model.
+  def record_user_input(state, text, opts) do
+    input = %{text: text, skills: Keyword.get(opts, :skills, [])}
+    turn_state = Map.update(state.turn_state, :user_inputs, [input], &(&1 ++ [input]))
+    %{state | turn_state: turn_state}
   end
 
   def user_input(text, images) do
