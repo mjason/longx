@@ -120,8 +120,12 @@ defmodule LongxWeb.ProjectsRpcTest do
   # gets a 503 instead of crashing the handler
   defp script!(bypass, replies) do
     {:ok, queue} = Elixir.Agent.start_link(fn -> replies end)
+    test = self()
 
     Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      send(test, {:request, Jason.decode!(body)})
+
       case Elixir.Agent.get_and_update(queue, fn
              [h | t] -> {h, t}
              [] -> {:exhausted, []}
@@ -265,6 +269,83 @@ defmodule LongxWeb.ProjectsRpcTest do
   end
 
   describe "threads and turns" do
+    test "send_message accepts an image without typed text but rejects a completely empty message",
+         %{conn: conn, dir: dir, bypass: bypass} do
+      script!(bypass, [ResponsesFixture.assistant_message("looked")])
+      project = create!(conn, dir)
+      {thread_id, kernel_id} = start!(conn, project)
+      :ok = ThreadState.subscribe(kernel_id)
+
+      for text <- ["", "   \n"] do
+        assert %{"success" => false, "errors" => [%{"fields" => ["text"]} | _]} =
+                 rpc(conn, "send_message", %{
+                   "fields" => ["id"],
+                   "input" => %{"threadId" => thread_id, "text" => text}
+                 })
+      end
+
+      assert %{"success" => true} =
+               rpc(conn, "send_message", %{
+                 "fields" => ["id"],
+                 "input" => %{
+                   "threadId" => thread_id,
+                   "text" => "",
+                   "images" => ["data:image/png;base64,iVBORw0KGgo="]
+                 }
+               })
+
+      assert_receive {:thread, _, "turn/completed", _}, 5_000
+      assert_receive {:request, request}
+      assert [%{"role" => "user", "content" => content}] = request["input"]
+      assert Enum.any?(content, &(&1["type"] == "input_image"))
+    end
+
+    test "steer_turn accepts an image without text and still refuses an empty steer",
+         %{conn: conn, dir: dir, bypass: bypass} do
+      script!(bypass, [
+        held(ResponsesFixture.assistant_message("first")),
+        ResponsesFixture.assistant_message("looked")
+      ])
+
+      project = create!(conn, dir)
+      {thread_id, kernel_id} = start!(conn, project)
+      :ok = ThreadState.subscribe(kernel_id)
+
+      assert %{"success" => true} =
+               rpc(conn, "send_message", %{
+                 "fields" => ["id"],
+                 "input" => %{"threadId" => thread_id, "text" => "first"}
+               })
+
+      assert_receive {:held, handler}, 5_000
+      on_exit(fn -> send(handler, :go) end)
+
+      assert %{"success" => false, "errors" => [%{"fields" => ["text"]} | _]} =
+               rpc(conn, "steer_turn", %{
+                 "fields" => ["kernelTurnId"],
+                 "input" => %{"threadId" => thread_id, "text" => ""}
+               })
+
+      assert %{"success" => true} =
+               rpc(conn, "steer_turn", %{
+                 "fields" => ["kernelTurnId"],
+                 "input" => %{
+                   "threadId" => thread_id,
+                   "text" => "",
+                   "images" => ["data:image/png;base64,iVBORw0KGgo="]
+                 }
+               })
+
+      send(handler, :go)
+      assert_receive {:thread, _, "turn/completed", _}, 5_000
+      assert_receive {:request, _first}
+      assert_receive {:request, next}
+
+      assert Enum.any?(next["input"], fn item ->
+               Enum.any?(item["content"] || [], &(&1["type"] == "input_image"))
+             end)
+    end
+
     test "start_thread → send_message → list_threads / list_turns; stop, images, effort, /compact",
          %{conn: conn, dir: dir, bypass: bypass} do
       script!(bypass, [

@@ -30,6 +30,29 @@ async function openFiles(width = 1280) {
 }
 
 describe("FilesTool", () => {
+  test("a folder's more menu copies relative and absolute paths without opening it", async () => {
+    const { user, panel } = await openFiles();
+    const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    await user.click(within(panel).getByRole("button", { name: "lib 的操作" }));
+    await user.click(await screen.findByRole("menuitem", { name: "复制相对路径" }));
+    expect(write).toHaveBeenLastCalledWith("lib");
+    expect(within(panel).getByRole("treeitem", { name: "lib" })).toHaveAttribute("aria-expanded", "false");
+    await user.click(within(panel).getByRole("button", { name: "lib 的操作" }));
+    await user.click(await screen.findByRole("menuitem", { name: "复制绝对路径" }));
+    expect(write).toHaveBeenLastCalledWith("/srv/app-1/lib");
+  });
+
+  test("the context menu copies a nested file path", async () => {
+    const { user, panel } = await openFiles();
+    const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    await user.click(within(panel).getByRole("treeitem", { name: "lib" }));
+    const file = await within(panel).findByRole("treeitem", { name: "a.ex" });
+    fireEvent.contextMenu(file);
+    await user.click(await screen.findByRole("menuitem", { name: "复制绝对路径" }));
+    expect(write).toHaveBeenLastCalledWith("/srv/app-1/lib/a.ex");
+    expect(screen.queryByTestId("editor-tab")).toBeNull();
+  });
+
   afterEach(() => vi.unstubAllGlobals());
 
   beforeEach(() => {

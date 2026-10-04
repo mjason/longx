@@ -50,7 +50,7 @@ defmodule Longx.Projects.Thread do
     action :send_message, :struct do
       constraints instance_of: Longx.Projects.Turn
       argument :thread_id, :uuid, allow_nil?: false
-      argument :text, :string, allow_nil?: false
+      argument :text, :string, allow_nil?: false, constraints: [allow_empty?: true]
       # the composer's image attachments, as data: urls
       argument :images, {:array, :string}
       argument :model, :string
@@ -63,7 +63,8 @@ defmodule Longx.Projects.Thread do
           |> Map.take([:images, :model, :effort])
           |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
-        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
+        with :ok <- message_content(input.arguments),
+             {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
           case Longx.Projects.send_message(thread, input.arguments.text, opts) do
             {:error, :turn_in_progress} ->
               argument_error(:thread_id, "a turn is running")
@@ -109,11 +110,12 @@ defmodule Longx.Projects.Thread do
     # on thread_id — send it as a turn then
     action :steer_turn, Types.SteerTurn do
       argument :thread_id, :uuid, allow_nil?: false
-      argument :text, :string, allow_nil?: false
+      argument :text, :string, allow_nil?: false, constraints: [allow_empty?: true]
       argument :images, {:array, :string}
 
       run fn input, _ ->
-        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+        with :ok <- message_content(input.arguments),
+             {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
              {:ok, result} <-
                Longx.Projects.steer_message(thread, input.arguments.text,
                  images: input.arguments[:images] || []
@@ -459,6 +461,14 @@ defmodule Longx.Projects.Thread do
              do: Longx.Projects.set_handle(thread, input.arguments[:handle])
       end
     end
+  end
+
+  # Uploaded/inline file attachments are encoded into text by the adapter.
+  # Images are separate inputs, so text may be empty only when images exist.
+  defp message_content(%{text: text} = arguments) do
+    if String.trim(text) == "" and (arguments[:images] || []) == [],
+      do: argument_error(:text, "a message needs text or an image"),
+      else: :ok
   end
 
   # what the model-choosing actions answer when the choice is bad: an error

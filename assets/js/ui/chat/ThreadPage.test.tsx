@@ -85,6 +85,21 @@ async function open(path = "/p/app-1/t/t1") {
 }
 
 describe("ThreadPage", () => {
+  test("the browser tab names the conversation, truncates long names, and resets on leaving", async () => {
+    vi.mocked(listThreads).mockResolvedValue(ok([{ ...thread(1), title: "  修复\n标签页 " + "😀".repeat(30) }]) as never);
+    const { router } = await open();
+    await waitFor(() => expect(document.title).toBe("修复 标签页 " + "😀".repeat(17) + "… · Longx"));
+    await act(async () => { await router.navigate("/p/app-1", { state: { newChat: true } }); });
+    await waitFor(() => expect(document.title).toBe("Longx"));
+  });
+
+  test("the browser tab falls back to the conversation preview and resets on unmount", async () => {
+    const { unmount } = await open();
+    await waitFor(() => expect(document.title).toBe("thread 1 · Longx"));
+    unmount();
+    expect(document.title).toBe("Longx");
+  });
+
   beforeEach(() => {
     localStorage.clear();
     _resetFrameStoreForTests();

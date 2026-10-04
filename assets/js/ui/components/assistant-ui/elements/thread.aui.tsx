@@ -405,7 +405,7 @@ const SendButton: FC = () => {
   );
 };
 
-const ComposerAction: FC = () => {
+export const ComposerAction: FC = () => {
     useTranslation();
   const { ComposerLeading, ComposerTrailing } = useContext(ThreadComponentsContext);
   return (
@@ -451,11 +451,11 @@ const ComposerAction: FC = () => {
           </AuiIf>
         </AuiIf>
         {/* Longx: one button — send (a turn, or into the queue while one runs)
-            when there is text, stop while a turn runs and the draft is empty */}
-        <AuiIf condition={(s) => !s.thread.isRunning || s.composer.text.trim().length > 0}>
+            when there is text or an attachment, stop only for an empty draft */}
+        <AuiIf condition={(s) => !s.thread.isRunning || !s.composer.isEmpty}>
           <SendButton />
         </AuiIf>
-        <AuiIf condition={(s) => s.thread.isRunning && s.composer.text.trim().length === 0}>
+        <AuiIf condition={(s) => s.thread.isRunning && s.composer.isEmpty}>
           <ComposerPrimitive.Cancel asChild>
             <Button
               type="button"

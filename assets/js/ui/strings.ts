@@ -316,6 +316,10 @@ const zh = {
   // files tool
   newFile: "新建文件",
   newFolder: "新建文件夹",
+  copyRelativePath: "复制相对路径",
+  copyAbsolutePath: "复制绝对路径",
+  pathCopied: "路径已复制",
+  copyPathFailed: "无法复制路径",
   uploadFiles: "上传文件",
   downloadFile: "下载",
   uploadedFiles: (count: number) => `已上传 ${count} 个文件`,

@@ -24,6 +24,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } 
 import { Input } from "@/ui/components/ui/input";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { t } from "@/ui/strings";
+import { copyText } from "@/ui/lib/clipboard";
 import type { ProjectContext } from "../ProjectWindow";
 
 type GitStatus = Map<string, string>;
@@ -166,7 +167,7 @@ export function FilesTool({ ctx }: { ctx: ProjectContext }) {
       ) : (
         <div role="tree" aria-label={t.tools["files"]} className="text-sm">
           {editing && editing.kind !== "rename" && editing.parent === "" ? <NameRow depth={0} projectId={projectId} editing={editing} onDone={() => setEditing(null)} /> : null}
-          <Level key={version} projectId={projectId} path="" depth={0} git={git} ignored={ignored} expanded={expanded} onToggle={toggle} editing={editing} setEditing={setEditing} onDelete={setDeleting} onUpload={chooseFiles} />
+          <Level key={version} projectId={projectId} rootPath={ctx.rootPath} path="" depth={0} git={git} ignored={ignored} expanded={expanded} onToggle={toggle} editing={editing} setEditing={setEditing} onDelete={setDeleting} onUpload={chooseFiles} />
         </div>
       )}
       <DeleteDialog projectId={projectId} entry={deleting} onClose={() => setDeleting(null)} />
@@ -214,6 +215,7 @@ function FilterResults({ projectId, query, git }: { projectId: string; query: st
 
 function Level(props: {
   projectId: string;
+  rootPath: string;
   path: string;
   depth: number;
   git: GitStatus;
@@ -241,7 +243,7 @@ function Level(props: {
             {editing?.kind === "rename" && editing.entry.path === entry.path ? (
               <NameRow depth={depth} projectId={projectId} editing={editing} onDone={() => setEditing(null)} />
             ) : (
-              <Row entry={entry} depth={depth} open={open} status={statusOf(git, entry)} ignored={ignoredEntry(ignored, entry)} projectId={projectId} onToggle={onToggle} setEditing={setEditing} onDelete={onDelete} onUpload={onUpload} />
+              <Row entry={entry} rootPath={props.rootPath} depth={depth} open={open} status={statusOf(git, entry)} ignored={ignoredEntry(ignored, entry)} projectId={projectId} onToggle={onToggle} setEditing={setEditing} onDelete={onDelete} onUpload={onUpload} />
             )}
             {open ? (
               <>
@@ -256,11 +258,23 @@ function Level(props: {
   );
 }
 
-function Row({ entry, depth, open, status, ignored, projectId, onToggle, setEditing, onDelete, onUpload }: { entry: FileEntry; depth: number; open: boolean; status: string | undefined; ignored: boolean; projectId: string; onToggle: (p: string) => void; setEditing: (e: Editing) => void; onDelete: (e: FileEntry) => void; onUpload: (directory: string) => void }) {
+function Row({ entry, rootPath, depth, open, status, ignored, projectId, onToggle, setEditing, onDelete, onUpload }: { entry: FileEntry; rootPath: string; depth: number; open: boolean; status: string | undefined; ignored: boolean; projectId: string; onToggle: (p: string) => void; setEditing: (e: Editing) => void; onDelete: (e: FileEntry) => void; onUpload: (directory: string) => void }) {
     useTranslation();
   const workbench = useWorkbench(projectId);
   const frame = useFrame();
   const viewport = useViewport();
+  const copyPath = async (absolute: boolean) => {
+    const separator = rootPath.includes("\\") ? "\\" : "/";
+    const path = absolute
+      ? rootPath.replace(/[\\/]+$/u, "") + separator + entry.path.replace(/\//gu, separator)
+      : entry.path;
+    try {
+      await copyText(path);
+      toast.success(t.pathCopied);
+    } catch {
+      toast.error(t.copyPathFailed);
+    }
+  };
   const activate = () => {
     if (entry.kind === "dir") return onToggle(entry.path);
     workbench.open({ kind: "file", path: entry.path });
@@ -298,6 +312,8 @@ function Row({ entry, depth, open, status, ignored, projectId, onToggle, setEdit
                   </a>
                 </DropdownMenuItem>
               ) : null}
+              <DropdownMenuItem onSelect={() => void copyPath(false)}>{t.copyRelativePath}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void copyPath(true)}>{t.copyAbsolutePath}</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setEditing({ kind: "rename", entry })}>{t.renameEntry}</DropdownMenuItem>
               <DropdownMenuItem className="text-destructive" onSelect={() => onDelete(entry)}>{t.deleteEntry}</DropdownMenuItem>
             </DropdownMenuContent>
@@ -319,6 +335,8 @@ function Row({ entry, depth, open, status, ignored, projectId, onToggle, setEdit
             </a>
           </ContextMenuItem>
         )}
+        <ContextMenuItem onSelect={() => void copyPath(false)}>{t.copyRelativePath}</ContextMenuItem>
+        <ContextMenuItem onSelect={() => void copyPath(true)}>{t.copyAbsolutePath}</ContextMenuItem>
         <ContextMenuItem onSelect={() => setEditing({ kind: "rename", entry })}>{t.renameEntry}</ContextMenuItem>
         <ContextMenuItem variant="destructive" onSelect={() => onDelete(entry)}>{t.deleteEntry}</ContextMenuItem>
       </ContextMenuContent>

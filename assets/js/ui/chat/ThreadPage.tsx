@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useEffect } from "react";
 import { Thread, type ThreadComponents } from "@/ui/components/assistant-ui/elements/thread.aui";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { Link, useOutletContext, useParams } from "react-router";
@@ -67,6 +68,17 @@ export function ThreadPage() {
   const viewport = useViewport();
   const ctx = useOutletContext<ProjectContext>();
   const { threadId } = useParams();
+
+  const title = threadId && !chat.missing
+    ? chat.thread?.title?.trim() || chat.thread?.preview
+    : null;
+  useEffect(() => {
+    const name = Array.from((title ?? "").replace(/\s+/gu, " ").trim());
+    document.title = name.length
+      ? `${name.slice(0, 24).join("")}${name.length > 24 ? "…" : ""} · Longx`
+      : "Longx";
+    return () => { document.title = "Longx"; };
+  }, [title]);
 
   if (chat.missing) {
     return (
