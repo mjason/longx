@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
-import { FolderGit2, FolderPlus, Search, Settings } from "lucide-react";
+import { FolderGit2, FolderPlus, Pin, Search, Settings } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { relativeTime } from "@/core/format";
-import { useProjects, useRunningThreads, type RunningThread } from "@/core/projects";
+import { usePinProject, useProjects, useRunningThreads, type RunningThread } from "@/core/projects";
+import { orderedProjects } from "@/core/projectNavigation";
+import { toast } from "sonner";
 import { Button } from "@/ui/components/ui/button";
 import { Input } from "@/ui/components/ui/input";
 import { Skeleton } from "@/ui/components/ui/skeleton";
@@ -17,11 +19,12 @@ export function WelcomePage() {
     useTranslation();
   const projects = useProjects();
   const running = useRunningThreads();
+  const pin = usePinProject();
   const [query, setQuery] = useState("");
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const all = projects.data ?? [];
+    const all = orderedProjects(projects.data ?? []).sort((a, b) => Number(b.pinned) - Number(a.pinned));
     return q ? all.filter((p) => p.name.toLowerCase().includes(q) || p.rootPath.toLowerCase().includes(q)) : all;
   }, [projects.data, query]);
 
@@ -69,8 +72,8 @@ export function WelcomePage() {
         ) : (
           <ul className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[repeat(2,minmax(0,1fr))]" data-testid="project-list">
             {shown.map((p) => (
-              <li key={p.id}>
-                <Link to={`/p/${p.slug}`} className="bg-card hover:bg-accent/40 active:bg-accent/60 flex items-center gap-3 rounded-lg border p-4 transition-colors">
+              <li key={p.id} className="bg-card flex items-center rounded-lg border">
+                <Link to={`/p/${p.slug}`} className="hover:bg-accent/40 active:bg-accent/60 flex min-w-0 flex-1 items-center gap-3 rounded-lg p-4 transition-colors">
                   <span className="bg-primary/15 text-primary flex size-10 shrink-0 items-center justify-center rounded-md font-semibold">
                     {initials(p.name)}
                   </span>
@@ -82,6 +85,16 @@ export function WelcomePage() {
                     <span className="text-muted-foreground mt-1 block truncate font-mono text-xs">{p.rootPath}</span>
                   </span>
                 </Link>
+                <button
+                  type="button"
+                  aria-label={p.pinned ? t.unpinProject(p.name) : t.pinProject(p.name)}
+                  aria-pressed={p.pinned}
+                  disabled={pin.isPending}
+                  onClick={() => pin.mutate({ id: p.id, pinned: !p.pinned }, { onError: error => toast.error(error.message) })}
+                  className={`touch-target mr-2 flex shrink-0 items-center justify-center rounded-md ${p.pinned ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  <Pin className={`size-4 ${p.pinned ? "fill-current" : ""}`} />
+                </button>
               </li>
             ))}
           </ul>

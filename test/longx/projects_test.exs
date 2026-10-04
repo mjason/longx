@@ -19,6 +19,20 @@ defmodule Longx.ProjectsTest do
   end
 
   describe "projects" do
+    test "pinning persists without archiving or changing the workspace", %{dir: dir} do
+      project = create!(dir)
+      refute Map.get(project, :pinned)
+      pinned = Projects.update_project!(project, %{pinned: true})
+      assert Map.get(pinned, :pinned) == true
+      assert [%{id: id} = listed] = Projects.list_projects!()
+      assert id == project.id
+      assert Map.get(listed, :pinned) == true
+      unpinned = Projects.update_project!(pinned, %{pinned: false})
+      assert Map.get(unpinned, :pinned) == false
+      assert unpinned.archived_at == nil
+      assert unpinned.root_path == project.root_path
+    end
+
     test "create normalises the path, derives a slug, and applies defaults", %{dir: dir} do
       project = create!(Path.join(dir, "."), %{name: "My Cool App"})
 

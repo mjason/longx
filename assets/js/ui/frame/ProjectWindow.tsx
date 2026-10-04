@@ -25,6 +25,7 @@ import { AgentsTool } from "./tools/AgentsTool";
 import { FilesTool } from "./tools/FilesTool";
 import { GitTool } from "./tools/GitTool";
 import { ThreadsTool } from "./tools/ThreadsTool";
+import { ProjectSwitcher } from "./ProjectSwitcher";
 
 const ProjectCommands = lazy(async () => ({ default: (await import("@/ui/keys/ProjectCommands")).ProjectCommands }));
 
@@ -108,6 +109,7 @@ export function ProjectWindow() {
   return (
     // fixed height: the chat scrolls inside its own viewport, not the page
     <ChatProvider
+      key={project.data.id}
       projectId={project.data.id}
       slug={slug}
       webSearch={project.data.webSearch}
@@ -118,6 +120,7 @@ export function ProjectWindow() {
       <ProjectCommands ctx={ctx} />
     </Suspense>
     <div className="flex h-dvh flex-col">
+      <ProjectSwitcher current={ctx} />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {docked ? <ToolRail active={frame.tool} onToggle={frame.toggle} settings={settings} onSettings={() => navigate(`/p/${slug}/settings`)} /> : null}
         {docked && frame.tool ? (

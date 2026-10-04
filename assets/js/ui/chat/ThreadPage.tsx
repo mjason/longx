@@ -112,7 +112,7 @@ export function ThreadPage() {
       <div className="relative min-h-0 flex-1">
         {viewport === "phone" ? <AgentsPill /> : <AgentsPanel />}
         <HistoryContext.Provider value={chat.history}>
-          <Thread key={threadId ?? "new"} components={THREAD_COMPONENTS} autoFocus={false} />
+          <Thread key={threadId ?? "new"} components={THREAD_COMPONENTS} autoFocus={false} memoryKey={`${ctx.id}:${threadId ?? "new"}`} />
         </HistoryContext.Provider>
       </div>
     </div>

@@ -1406,6 +1406,7 @@ input UpdateProjectInput {
   trustLocalAgent: Boolean
   agentSettings: Json
   fileRules: Json
+  pinned: Boolean
   modelId: ID
 }
 
@@ -1439,6 +1440,7 @@ enum ProjectSortField {
   TRUST_LOCAL_AGENT
   AGENT_SETTINGS
   FILE_RULES
+  PINNED
   ARCHIVED_AT
   INSERTED_AT
   UPDATED_AT
@@ -1507,6 +1509,22 @@ input ProjectFilterArchivedAt {
   rangeAdjacent: DateTime
   rangeContains: String
   rangeOverlaps: DateTime
+}
+
+input ProjectFilterPinned {
+  isNil: Boolean
+  eq: Boolean
+  notEq: Boolean
+  in: [Boolean!]
+  lessThan: Boolean
+  greaterThan: Boolean
+  lessThanOrEqual: Boolean
+  greaterThanOrEqual: Boolean
+  isDistinctFrom: Boolean
+  isNotDistinctFrom: Boolean
+  rangeAdjacent: Boolean
+  rangeContains: String
+  rangeOverlaps: Boolean
 }
 
 input ProjectFilterFileRules {
@@ -1678,6 +1696,7 @@ input ProjectFilterInput {
   trustLocalAgent: ProjectFilterTrustLocalAgent
   agentSettings: ProjectFilterAgentSettings
   fileRules: ProjectFilterFileRules
+  pinned: ProjectFilterPinned
   archivedAt: ProjectFilterArchivedAt
   insertedAt: ProjectFilterInsertedAt
   updatedAt: ProjectFilterUpdatedAt
@@ -1700,6 +1719,7 @@ type Project {
   trustLocalAgent: Boolean!
   agentSettings: Json
   fileRules: Json!
+  pinned: Boolean!
   archivedAt: DateTime
   insertedAt: DateTime!
   updatedAt: DateTime!

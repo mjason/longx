@@ -1207,6 +1207,7 @@ export type ProjectFilterInput = {
   name?: ProjectFilterName | null | undefined;
   not?: Array<ProjectFilterInput> | null | undefined;
   or?: Array<ProjectFilterInput> | null | undefined;
+  pinned?: ProjectFilterPinned | null | undefined;
   rootPath?: ProjectFilterRootPath | null | undefined;
   slug?: ProjectFilterSlug | null | undefined;
   trustLocalAgent?: ProjectFilterTrustLocalAgent | null | undefined;
@@ -1263,6 +1264,22 @@ export type ProjectFilterName = {
   rangeOverlaps?: string | null | undefined;
   stringEndsWith?: string | null | undefined;
   stringStartsWith?: string | null | undefined;
+};
+
+export type ProjectFilterPinned = {
+  eq?: boolean | null | undefined;
+  greaterThan?: boolean | null | undefined;
+  greaterThanOrEqual?: boolean | null | undefined;
+  in?: Array<boolean> | null | undefined;
+  isDistinctFrom?: boolean | null | undefined;
+  isNil?: boolean | null | undefined;
+  isNotDistinctFrom?: boolean | null | undefined;
+  lessThan?: boolean | null | undefined;
+  lessThanOrEqual?: boolean | null | undefined;
+  notEq?: boolean | null | undefined;
+  rangeAdjacent?: boolean | null | undefined;
+  rangeContains?: string | null | undefined;
+  rangeOverlaps?: boolean | null | undefined;
 };
 
 export type ProjectFilterRootPath = {
@@ -1360,6 +1377,7 @@ export type ProjectSortField =
   | 'INSERTED_AT'
   | 'MODEL_ID'
   | 'NAME'
+  | 'PINNED'
   | 'ROOT_PATH'
   | 'SLUG'
   | 'TRUST_LOCAL_AGENT'
@@ -2668,6 +2686,7 @@ export type UpdateProjectInput = {
   fileRules?: unknown;
   modelId?: string | number | null | undefined;
   name?: string | null | undefined;
+  pinned?: boolean | null | undefined;
   slug?: string | null | undefined;
   trustLocalAgent?: boolean | null | undefined;
   webSearch?: boolean | null | undefined;
@@ -3483,7 +3502,7 @@ export type ListProjectsQueryVariables = Exact<{
 }>;
 
 
-export type ListProjectsQuery = { listProjects: Array<{ id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null }> };
+export type ListProjectsQuery = { listProjects: Array<{ id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, pinned: boolean, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null }> };
 
 export type ListAllProjectsQueryVariables = Exact<{
   sort?: Array<ProjectSortInput | null | undefined> | ProjectSortInput | null | undefined;
@@ -3491,7 +3510,7 @@ export type ListAllProjectsQueryVariables = Exact<{
 }>;
 
 
-export type ListAllProjectsQuery = { listAllProjects: Array<{ id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null }> };
+export type ListAllProjectsQuery = { listAllProjects: Array<{ id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, pinned: boolean, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null }> };
 
 export type GetProjectQueryVariables = Exact<{
   filter?: ProjectFilterInput | null | undefined;
@@ -3499,7 +3518,7 @@ export type GetProjectQueryVariables = Exact<{
 }>;
 
 
-export type GetProjectQuery = { getProject: { id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null } | null };
+export type GetProjectQuery = { getProject: { id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, pinned: boolean, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null } | null };
 
 export type GitInfoQueryVariables = Exact<{
   id: string | number;
@@ -4081,7 +4100,7 @@ export type CreateProjectMutationVariables = Exact<{
 }>;
 
 
-export type CreateProjectMutation = { createProject: { result: { id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null } | null } | null };
+export type CreateProjectMutation = { createProject: { result: { id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, pinned: boolean, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null } | null } | null };
 
 export type UpdateProjectMutationVariables = Exact<{
   id: string | number;
@@ -4089,14 +4108,14 @@ export type UpdateProjectMutationVariables = Exact<{
 }>;
 
 
-export type UpdateProjectMutation = { updateProject: { result: { id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null } | null } | null };
+export type UpdateProjectMutation = { updateProject: { result: { id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, pinned: boolean, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null } | null } | null };
 
 export type ArchiveProjectMutationVariables = Exact<{
   id: string | number;
 }>;
 
 
-export type ArchiveProjectMutation = { archiveProject: { result: { id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null } | null } | null };
+export type ArchiveProjectMutation = { archiveProject: { result: { id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, pinned: boolean, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null } | null } | null };
 
 export type DeleteProjectMutationVariables = Exact<{
   id: string | number;
@@ -4104,7 +4123,7 @@ export type DeleteProjectMutationVariables = Exact<{
 }>;
 
 
-export type DeleteProjectMutation = { deleteProject: { result: { id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null } | null } | null };
+export type DeleteProjectMutation = { deleteProject: { result: { id: string, name: string, slug: string, description: string | null, rootPath: string, webSearch: boolean, trustLocalAgent: boolean, agentSettings: unknown, fileRules: unknown, pinned: boolean, archivedAt: string | null, insertedAt: string, updatedAt: string, modelId: string | null } | null } | null };
 
 export type PromoteLocalMutationVariables = Exact<{
   input: PromoteLocalInput;
@@ -4887,6 +4906,7 @@ export const ListProjectsDocument = new TypedDocumentString(`
     trustLocalAgent
     agentSettings
     fileRules
+    pinned
     archivedAt
     insertedAt
     updatedAt
@@ -4906,6 +4926,7 @@ export const ListAllProjectsDocument = new TypedDocumentString(`
     trustLocalAgent
     agentSettings
     fileRules
+    pinned
     archivedAt
     insertedAt
     updatedAt
@@ -4925,6 +4946,7 @@ export const GetProjectDocument = new TypedDocumentString(`
     trustLocalAgent
     agentSettings
     fileRules
+    pinned
     archivedAt
     insertedAt
     updatedAt
@@ -6192,6 +6214,7 @@ export const CreateProjectDocument = new TypedDocumentString(`
       trustLocalAgent
       agentSettings
       fileRules
+      pinned
       archivedAt
       insertedAt
       updatedAt
@@ -6213,6 +6236,7 @@ export const UpdateProjectDocument = new TypedDocumentString(`
       trustLocalAgent
       agentSettings
       fileRules
+      pinned
       archivedAt
       insertedAt
       updatedAt
@@ -6234,6 +6258,7 @@ export const ArchiveProjectDocument = new TypedDocumentString(`
       trustLocalAgent
       agentSettings
       fileRules
+      pinned
       archivedAt
       insertedAt
       updatedAt
@@ -6255,6 +6280,7 @@ export const DeleteProjectDocument = new TypedDocumentString(`
       trustLocalAgent
       agentSettings
       fileRules
+      pinned
       archivedAt
       insertedAt
       updatedAt

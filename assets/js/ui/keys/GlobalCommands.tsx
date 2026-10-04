@@ -5,7 +5,6 @@
 import { useMatch, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { listRunningThreads } from "@/core/api";
-import { openPicker } from "@/core/keys/picker";
 import { getPreference, setPreference } from "@/core/keys/preference";
 import { useCommand } from "@/core/keys/useCommand";
 import { previousVisit } from "@/core/keys/visits";
@@ -14,6 +13,7 @@ import { setTheme } from "@/core/theme";
 import { t } from "@/ui/strings";
 import { openRunningPicker } from "./runningPicker";
 import { updateKeysUi } from "./state";
+import { setProjectPicker } from "@/core/projectNavigation";
 
 export function GlobalCommands() {
   const navigate = useNavigate();
@@ -25,12 +25,7 @@ export function GlobalCommands() {
   useCommand("project.new", () => navigate("/new"));
   useCommand(
     "project.switch",
-    () =>
-      openPicker({
-        title: t.keys.switchProject,
-        items: (projects.data ?? []).map((p) => ({ id: p.slug, label: p.name, detail: p.rootPath, keywords: p.slug })),
-        onPick: (item) => navigate(`/p/${item.id}`),
-      }),
+    () => setProjectPicker(true),
     () => (projects.data?.length ?? 0) > 0,
   );
   useCommand(

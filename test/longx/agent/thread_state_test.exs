@@ -12,7 +12,95 @@ defmodule Longx.Agent.ThreadStateTest do
   defp item_completed(t, item, turn \\ "turn-1"),
     do: Store.fold(t, "item/completed", %{"threadId" => t, "turnId" => turn, "item" => item})
 
+  defp paused_event(thread_id, write) do
+    parent = self()
+
+    writer =
+      Task.async(fn ->
+        Store.event(thread_id, fn ->
+          send(parent, :writer_paused)
+          receive do: (:finish_write -> write.())
+        end)
+      end)
+
+    on_exit(fn ->
+      Process.exit(writer.pid, :kill)
+      Store.delete(thread_id)
+    end)
+
+    assert_receive :writer_paused, 2_000
+    writer
+  end
+
+  defp reader(fun) do
+    parent = self()
+
+    task =
+      Task.async(fn ->
+        send(parent, :reader_started)
+        fun.()
+      end)
+
+    on_exit(fn -> Process.exit(task.pid, :kill) end)
+    assert_receive :reader_started, 2_000
+    task
+  end
+
   describe "Store (ETS-backed view)" do
+    @tag :consistent_snapshot
+    test "snapshot cannot return a new seq without its first item while the writer is paused" do
+      t = new_thread()
+
+      writer =
+        paused_event(t, fn ->
+          Store.fold(t, "item/agentMessage/delta", %{"itemId" => "m", "delta" => "1,"})
+        end)
+
+      snapshot = reader(fn -> Store.snapshot(t) end)
+      read_ref = snapshot.ref
+      refute_receive {^read_ref, _}, 200
+      send(writer.pid, :finish_write)
+      assert Task.await(writer) == 1
+      assert %{seq: 1, items: [%{"id" => "m", "text" => "1,"}]} = Task.await(snapshot)
+    end
+
+    @tag :consistent_snapshot
+    test "earlier pages also wait for an in-progress item update instead of returning stale contents" do
+      t = new_thread()
+      item_completed(t, %{"id" => "m1", "type" => "agentMessage", "text" => "old"})
+      item_completed(t, %{"id" => "m2", "type" => "agentMessage", "text" => "tail"})
+
+      writer =
+        paused_event(t, fn ->
+          Store.fold(t, "item/agentMessage/delta", %{"itemId" => "m1", "delta" => "-new"})
+        end)
+
+      page = reader(fn -> Store.earlier(t, "m2", :all) end)
+      read_ref = page.ref
+      refute_receive {^read_ref, _}, 200
+      send(writer.pid, :finish_write)
+      assert Task.await(writer) == 1
+      assert {:ok, %{items: [%{"id" => "m1", "text" => "old-new"}]}} = Task.await(page)
+    end
+
+    @tag :consistent_snapshot
+    test "a writer that never completes causes an explicit read failure, never an inconsistent snapshot" do
+      t = new_thread()
+      paused_event(t, fn -> :ok end)
+
+      snapshot =
+        reader(fn ->
+          try do
+            Store.snapshot(t)
+          rescue
+            e in RuntimeError -> e
+          end
+        end)
+
+      assert %RuntimeError{message: message} = Task.await(snapshot, 7_000)
+      assert message =~ "consistent thread state"
+    end
+
     test "thread and turn lifecycle" do
       t = new_thread()
       Store.fold(t, "thread/started", %{"thread" => %{"id" => t, "preview" => ""}})

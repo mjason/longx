@@ -133,6 +133,7 @@ export const project = (n: number) => ({
   trustLocalAgent: false,
   agentSettings: null,
   fileRules: {},
+  pinned: false,
   archivedAt: null,
   updatedAt: "2026-09-12T00:00:00Z",
 });

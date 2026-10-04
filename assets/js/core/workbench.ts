@@ -5,6 +5,7 @@
 // (remembered per project on this device); DOM-free so the phone app can
 // share it.
 import { useSyncExternalStore } from "react";
+import { _resetWorkspaceMemoryForTests, rememberFileDraft, renameFileDraft } from "./workspaceMemory";
 
 // Tab kinds are plain data: a native client may open a kind in a window of
 // its own (an artifact in a WebView, a file in its editor) instead of a tab.
@@ -182,6 +183,7 @@ export function createWorkbenchStore(storage: Storage | null, key: string): Work
       const tab = state.tabs.find((t) => tabKey(t) === k);
       const next = closeTab(state, k);
       if (tab && next !== state) closed.push(tab);
+      if (tab?.kind === "file" && next !== state) rememberFileDraft(key.replace("longx:workbench:", ""), tab.path, null);
       set(next);
     },
     back: () => {
@@ -211,7 +213,10 @@ export function createWorkbenchStore(storage: Storage | null, key: string): Work
     },
     canReopen: () => closed.length > 0,
     markDirty: (k, dirty) => set(markDirty(state, k, dirty)),
-    renamePath: (from, to) => set(renamePath(state, from, to)),
+    renamePath: (from, to) => {
+      renameFileDraft(key.replace("longx:workbench:", ""), from, to);
+      set(renamePath(state, from, to));
+    },
   };
 }
 
@@ -248,4 +253,5 @@ export function useWorkbench(projectId: string): WorkbenchState & Omit<Workbench
 
 export function _resetWorkbenchForTests() {
   stores.clear();
+  _resetWorkspaceMemoryForTests();
 }

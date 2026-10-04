@@ -41,6 +41,7 @@ defmodule Longx.Application do
        name: Longx.AI.Finch,
        pools: %{
          default: [
+           start_pool_metrics?: true,
            conn_max_idle_time:
              :longx
              |> Application.get_env(Longx.AI.Finch, [])

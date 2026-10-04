@@ -23,6 +23,7 @@ defmodule Longx.Projects.Project do
   sqlite do
     table "projects"
     repo Longx.Repo
+    migration_defaults pinned: "false"
   end
 
   graphql do
@@ -80,7 +81,8 @@ defmodule Longx.Projects.Project do
         :model_id,
         :trust_local_agent,
         :agent_settings,
-        :file_rules
+        :file_rules,
+        :pinned
       ]
 
       validate Validations.AgentSettings
@@ -197,6 +199,9 @@ defmodule Longx.Projects.Project do
     # global setting: %{"ignore" => text, "watch" => text}, gitignore syntax
     # (`Longx.Projects.FileRules`)
     attribute :file_rules, :map, public?: true, allow_nil?: false, default: %{}
+
+    # Only controls the quick-switch entrance, never the workspace's lifetime.
+    attribute :pinned, :boolean, public?: true, allow_nil?: false, default: false
 
     attribute :archived_at, :utc_datetime_usec, public?: true
 

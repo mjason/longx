@@ -424,16 +424,31 @@ defmodule Longx.Agent.ThreadState.Store do
     }
   end
 
-  # a seqlock read: the meta before and after the reads must agree and no
-  # event may be mid-write; the writer is one process, so a retry is rare
-  defp consistent(thread_id, read, tries \\ 100) do
+  # A seqlock read: never return a partial event when a retry budget runs
+  # out. Yield to the writer on contention; if it cannot finish, fail the
+  # read explicitly instead of pairing a new seq with old/missing items.
+  defp consistent(thread_id, read, deadline \\ System.monotonic_time(:millisecond) + 5_000) do
     before = meta(thread_id)
-    result = read.(before)
-    meta = meta(thread_id)
 
-    if (before.folding or meta.folding or before.seq != meta.seq) and tries > 0,
-      do: consistent(thread_id, read, tries - 1),
-      else: result
+    if before.folding do
+      retry_consistent(thread_id, read, deadline)
+    else
+      result = read.(before)
+      meta = meta(thread_id)
+
+      if meta.folding or before.seq != meta.seq,
+        do: retry_consistent(thread_id, read, deadline),
+        else: result
+    end
+  end
+
+  defp retry_consistent(thread_id, read, deadline) do
+    if System.monotonic_time(:millisecond) >= deadline do
+      raise "could not read consistent thread state #{thread_id}: the view is still being updated"
+    end
+
+    Process.sleep(1)
+    consistent(thread_id, read, deadline)
   end
 
   @spec delete(String.t()) :: :ok

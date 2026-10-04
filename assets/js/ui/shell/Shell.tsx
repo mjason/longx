@@ -1,6 +1,7 @@
 import { ChevronLeft } from "lucide-react";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { ProjectPicker } from "@/ui/frame/ProjectSwitcher";
 import { Link, Outlet } from "react-router";
 import { applyTheme } from "@/core/theme";
 import { useViewport } from "@/core/viewport";
@@ -41,6 +42,7 @@ export function Shell() {
         <Outlet />
       </div>
       <Toaster />
+      <ProjectPicker />
       {viewport !== "phone" ? <CommandPalette /> : null}
       {/* the space menu (Spacemacs' leader) and the commands every page has */}
       <Suspense fallback={null}>

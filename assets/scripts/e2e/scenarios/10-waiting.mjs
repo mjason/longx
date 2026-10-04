@@ -49,17 +49,24 @@ export async function run(h) {
 
   // a reply stopped mid-way and thrown away: 丢弃 takes the turn out, the composer stays empty
   // (the stop waits for the poem's first words: before them it would take the turn back)
-  const said = await page.locator(".aui-md").count();
-  await h.send(t.id, "写一首 40 行的中文长诗，慢慢写。");
+  // A present card is a tool side effect, not a discardable text reply; its
+  // final acknowledgement may already be complete before a delayed stop.
+  const poem = "写一首 40 行的中文长诗，慢慢写。只用普通回复逐行输出诗的正文，不要调用工具或展示卡片。";
+  const answers = page.locator('[data-role="assistant"] .aui-md');
+  const said = await answers.count();
+  await h.send(t.id, poem);
   await page.getByRole("button", { name: /停止/ }).first().waitFor({ timeout: 30_000 });
-  await page.locator(".aui-md").nth(said).waitFor({ timeout: 60_000 });
-  await sleep(500);
+  await page.waitForFunction(
+    (index) => (document.querySelectorAll('[data-role="assistant"] .aui-md')[index]?.textContent?.trim().length ?? 0) > 0,
+    said,
+    { timeout: 60_000 },
+  );
   await page.getByRole("button", { name: /停止/ }).first().click();
   const card2 = page.getByTestId("stopped-turn");
   await card2.waitFor({ timeout: 30_000 });
   await h.idle(t.id, 30_000, 3);
   await card2.getByRole("button", { name: "丢弃" }).click();
-  await page.getByText("写一首 40 行的中文长诗，慢慢写。").waitFor({ state: "detached", timeout: 15_000 });
+  await page.getByText(poem, { exact: true }).waitFor({ state: "detached", timeout: 15_000 });
   expect((await composer.inputValue()) === "", "丢弃 never writes the composer");
   await h.shot(page, "discarded");
 

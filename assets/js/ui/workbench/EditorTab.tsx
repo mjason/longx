@@ -14,6 +14,7 @@ import { Skeleton } from "@/ui/components/ui/skeleton";
 import { CodeEditor } from "@/ui/editor/CodeEditor";
 import { isMarkdownPath, MarkdownPreview } from "@/ui/editor/MarkdownPreview";
 import { t } from "@/ui/strings";
+import { readFileDraft, rememberFileDraft } from "@/core/workspaceMemory";
 
 export function EditorTab({ projectId, path, line }: { projectId: string; path: string; line?: number }) {
     useTranslation();
@@ -23,7 +24,11 @@ export function EditorTab({ projectId, path, line }: { projectId: string; path: 
   const viewport = useViewport();
   const key = `file:${path}`;
   // null = showing what is on disk; a string = the draft being edited
-  const [draft, setDraft] = useState<string | null>(null);
+  const [draft, setDraftState] = useState<string | null>(() => readFileDraft(projectId, path));
+  const setDraft = (text: string | null) => {
+    rememberFileDraft(projectId, path, text);
+    setDraftState(text);
+  };
   const dirty = draft !== null && draft !== file.data?.content;
   // a markdown file opens rendered (a README, a report) — the editor on
   // request, or straight away when a line was asked for (show_file)

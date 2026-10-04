@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
 import { _resetFrameStoreForTests } from "@/core/frame";
 import { _resetWorkbenchForTests } from "@/core/workbench";
+import { rememberScroll } from "@/core/workspaceMemory";
 import { commands } from "@/core/keys/registry";
 import { agentDefinitionData, channel, failed, model, ok, thread, session } from "@/ui/test-mocks";
 
@@ -174,6 +175,24 @@ describe("ThreadPage", () => {
     act(() => channel.reply("ok", { ...snapshot, items: turnItems(1, 45) }));
     await screen.findByText("回答 45");
     await waitFor(() => expect(viewport.scrollTop).toBe(900));
+  });
+
+  test("reopening a previously read conversation restores its reading position instead of jumping to the tail", async () => {
+    const previous = document.createElement("div");
+    Object.defineProperties(previous, { scrollHeight: { value: 2000 }, clientHeight: { value: 300 } });
+    previous.scrollTop = 400;
+    rememberScroll("id-1:t1", previous);
+    renderAt("/p/app-1/t/t1", { strict: true });
+    await waitFor(() => expect(document.querySelector('[data-slot="aui_thread-viewport"]')).not.toBeNull());
+    const viewport = document.querySelector<HTMLElement>('[data-slot="aui_thread-viewport"]')!;
+    Object.defineProperties(viewport, {
+      scrollHeight: { configurable: true, value: 2000 },
+      clientHeight: { configurable: true, value: 300 },
+    });
+    await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
+    act(() => channel.reply("ok", { ...snapshot, items: turnItems(1, 45) }));
+    await screen.findByText("回答 45");
+    await waitFor(() => expect(viewport.scrollTop).toBe(400));
   });
 
   test("the chat viewport leaves scroll anchoring to auto-follow during streamed layout changes", async () => {

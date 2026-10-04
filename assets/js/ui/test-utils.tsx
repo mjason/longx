@@ -11,7 +11,7 @@ export function renderAt(path: string, options: { strict?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const tree = <I18nextProvider i18n={i18n}><QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider></I18nextProvider>;
-  return { router, ...render(options.strict ? <StrictMode>{tree}</StrictMode> : tree) };
+  return { router, client, ...render(options.strict ? <StrictMode>{tree}</StrictMode> : tree) };
 }
 
 /** Phone or desktop viewport for a test. */

@@ -73,6 +73,268 @@ defmodule Longx.Agent.ModelTest do
     "reasoning" => %{"effort" => "low", "summary" => "auto"}
   }
 
+  defp checkout_config do
+    previous = Application.get_env(:longx, Model, [])
+
+    Application.put_env(
+      :longx,
+      Model,
+      Keyword.merge(previous,
+        pool_timeout_ms: 50,
+        error_body_timeout_ms: 50,
+        retry_ms: [100]
+      )
+    )
+
+    on_exit(fn -> Application.put_env(:longx, Model, previous) end)
+  end
+
+  defp single_connection_pool(bypass) do
+    url = "http://localhost:#{bypass.port}"
+    pool = Finch.Pool.new(url)
+    :ok = Finch.start_pool(Longx.AI.Finch, pool, size: 1, start_pool_metrics?: true)
+    on_exit(fn -> Finch.stop_pool(Longx.AI.Finch, pool) end)
+    url
+  end
+
+  defp hold_connection(bypass) do
+    url = single_connection_pool(bypass)
+    me = self()
+
+    Bypass.stub(bypass, "GET", "/hold", fn conn ->
+      conn = sse(conn, ["held"])
+      send(me, {:holding_connection, self()})
+      receive do: (:release -> conn)
+    end)
+
+    pid =
+      spawn(fn ->
+        {:ok, resp} =
+          Req.get(url <> "/hold", finch: [name: Longx.AI.Finch], into: :self)
+
+        receive do: (:release -> Req.cancel_async_response(resp))
+      end)
+
+    assert_receive {:holding_connection, handler}, 2_000
+
+    on_exit(fn ->
+      monitor = Process.monitor(handler)
+      Process.exit(pid, :kill)
+
+      receive do
+        {:DOWN, ^monitor, :process, ^handler, _} -> :ok
+      after
+        2_000 -> flunk("the held HTTP connection was not closed")
+      end
+
+      Bypass.pass(bypass)
+    end)
+
+    pid
+  end
+
+  defp run_prepared(prepared, owner, ref) do
+    {pid, monitor} = spawn_monitor(fn -> Model.run(prepared, owner, ref) end)
+    on_exit(fn -> Process.exit(pid, :kill) end)
+    {pid, monitor}
+  end
+
+  @tag :pool_checkout
+  test "HTTP/1 checkout timeout is a structured failure, not a crashed model task, and finishes the request log",
+       %{bypass: bypass} do
+    checkout_config()
+    hold_connection(bypass)
+    prepared = Model.prepare(@request, retries: 0)
+    ref = make_ref()
+    {pid, monitor} = run_prepared(prepared, self(), ref)
+
+    assert_receive {:model, ^ref, {:failed, {:model_failed, _, message}}}, 7_000
+    assert message =~ "connection pool"
+    assert message =~ "50 ms"
+    assert_receive {:DOWN, ^monitor, :process, ^pid, :normal}, 1_000
+    assert [%{duration_ms: duration, error: error}] = Longx.AI.Gateway.Log.recent(1)
+    assert is_integer(duration)
+    assert error =~ "connection pool"
+  end
+
+  @tag :pool_checkout
+  test "HTTP/1 checkout timeout retries once the held connection is released",
+       %{bypass: bypass} do
+    checkout_config()
+    holder = hold_connection(bypass)
+    me = self()
+    telemetry_id = make_ref()
+
+    :ok =
+      :telemetry.attach(
+        telemetry_id,
+        [:finch, :queue, :exception],
+        fn _, _, %{name: name}, _ ->
+          if name == Longx.AI.Finch, do: send(me, :checkout_timed_out)
+        end,
+        nil
+      )
+
+    on_exit(fn -> :telemetry.detach(telemetry_id) end)
+
+    Bypass.expect_once(bypass, "POST", "/v1/responses", fn conn ->
+      sse(conn, ResponsesFixture.assistant_message("recovered"))
+    end)
+
+    ref = make_ref()
+    {pid, monitor} = run_prepared(Model.prepare(@request, retries: 1), self(), ref)
+    assert_receive :checkout_timed_out, 7_000
+    send(holder, :release)
+    assert_receive {:model, ^ref, {:completed, _, _}}, 2_000
+    assert_receive {:DOWN, ^monitor, :process, ^pid, :normal}, 1_000
+
+    assert [%{status: 200, error: nil, duration_ms: duration}] =
+             Longx.AI.Gateway.Log.recent(1)
+
+    assert is_integer(duration)
+  end
+
+  @tag :pool_checkout
+  test "HTTP/1 checkout timeout exhausts retries then uses the next prepared model",
+       %{bypass: bypass, model: model} do
+    checkout_config()
+    hold_connection(bypass)
+    second = Bypass.open()
+
+    Bypass.expect_once(second, "POST", "/v1/responses", fn conn ->
+      sse(conn, ResponsesFixture.assistant_message("fallback"))
+    end)
+
+    {:ok, [entry]} = Model.prepare(@request, retries: 1)
+
+    next = %{
+      entry
+      | up: %{entry.up | url: "http://localhost:#{second.port}/v1/responses"},
+        target: %{entry.target | slug: "fallback", model: "fallback"}
+    }
+
+    ref = make_ref()
+    {pid, monitor} = run_prepared({:ok, [entry, next]}, self(), ref)
+    assert_receive {:model, ^ref, {:fallback, from, "fallback", message}}, 12_000
+    assert from == model.slug
+    assert message =~ "connection pool"
+    assert_receive {:model, ^ref, {:completed, _, _}}, 2_000
+    assert_receive {:DOWN, ^monitor, :process, ^pid, :normal}, 1_000
+
+    assert [%{status: 200}, %{error: error, duration_ms: duration}] =
+             Longx.AI.Gateway.Log.recent(2)
+
+    assert error =~ "connection pool"
+    assert is_integer(duration)
+  end
+
+  @tag :pool_checkout
+  test "an unfinished error body is cancelled before retry, returning the only pool connection",
+       %{bypass: bypass} do
+    checkout_config()
+    single_connection_pool(bypass)
+    me = self()
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      if Agent.get_and_update(counter, &{&1 + 1, &1 + 1}) == 1 do
+        conn = Plug.Conn.send_chunked(conn, 503)
+        {:ok, conn} = Plug.Conn.chunk(conn, ~s({"error":{"message":"overloaded"}}))
+        send(me, {:unfinished_error, self()})
+        receive do: (:release -> conn)
+      else
+        sse(conn, ResponsesFixture.assistant_message("recovered"))
+      end
+    end)
+
+    ref = make_ref()
+    {pid, monitor} = run_prepared(Model.prepare(@request, retries: 1), self(), ref)
+    assert_receive {:unfinished_error, handler}, 2_000
+    handler_monitor = Process.monitor(handler)
+    assert_receive {:DOWN, ^handler_monitor, :process, ^handler, _}, 500
+    assert_receive {:model, ^ref, {:completed, _, _}}, 2_000
+    assert_receive {:DOWN, ^monitor, :process, ^pid, :normal}, 1_000
+    assert Agent.get(counter, & &1) == 2
+    Bypass.pass(bypass)
+  end
+
+  @tag :pool_checkout
+  test "killing the model before response headers also kills its request worker and releases the connection",
+       %{bypass: bypass} do
+    checkout_config()
+    url = single_connection_pool(bypass)
+    me = self()
+
+    Bypass.expect_once(bypass, "POST", "/v1/responses", fn conn ->
+      send(me, {:waiting_for_headers, self()})
+      receive do: (:release -> conn)
+    end)
+
+    {pid, monitor} = run_prepared(Model.prepare(@request), self(), make_ref())
+    assert_receive {:waiting_for_headers, handler}, 2_000
+    handler_monitor = Process.monitor(handler)
+    {:links, [worker]} = Process.info(pid, :links)
+    worker_monitor = Process.monitor(worker)
+    Process.exit(pid, :kill)
+    assert_receive {:DOWN, ^monitor, :process, ^pid, :killed}, 1_000
+    assert_receive {:DOWN, ^worker_monitor, :process, ^worker, :killed}, 1_000
+    assert_receive {:DOWN, ^handler_monitor, :process, ^handler, _}, 1_000
+    assert_pool_idle(url)
+    Bypass.pass(bypass)
+  end
+
+  @tag :pool_checkout
+  test "the owner's death cancels an active stream without leaving a request worker or connection",
+       %{bypass: bypass} do
+    checkout_config()
+    url = single_connection_pool(bypass)
+    me = self()
+    owner = spawn(fn -> receive do: (:stop -> :ok) end)
+    on_exit(fn -> Process.exit(owner, :kill) end)
+
+    Bypass.expect_once(bypass, "POST", "/v1/responses", fn conn ->
+      conn = sse(conn, Enum.take(ResponsesFixture.assistant_message("hello"), 3))
+      send(me, {:streaming, self()})
+      receive do: (:release -> conn)
+    end)
+
+    {pid, monitor} = run_prepared(Model.prepare(@request), owner, make_ref())
+    assert_receive {:streaming, handler}, 2_000
+    handler_monitor = Process.monitor(handler)
+    {:links, [worker]} = Process.info(pid, :links)
+    worker_monitor = Process.monitor(worker)
+    send(owner, :stop)
+    assert_receive {:DOWN, ^monitor, :process, ^pid, :normal}, 1_000
+    assert_receive {:DOWN, ^worker_monitor, :process, ^worker, :killed}, 1_000
+    assert_receive {:DOWN, ^handler_monitor, :process, ^handler, _}, 1_000
+    assert_pool_idle(url)
+    Bypass.pass(bypass)
+  end
+
+  @tag :pool_checkout
+  test "an unrelated request programming error is not disguised as a retryable pool timeout" do
+    checkout_config()
+    {:ok, [entry]} = Model.prepare(@request, retries: 2)
+    invalid = %{entry | up: %{entry.up | body: {:not_json}}}
+    ref = make_ref()
+    {pid, monitor} = run_prepared({:ok, [invalid]}, self(), ref)
+
+    assert_receive {:DOWN, ^monitor, :process, ^pid, {%Protocol.UndefinedError{}, _}}, 2_000
+    refute_received {:model, ^ref, {:failed, _}}
+    assert [_] = Longx.AI.Gateway.Log.recent(10)
+  end
+
+  defp assert_pool_idle(url, attempts \\ 50) do
+    {:ok, [metrics]} = Finch.get_pool_status(Longx.AI.Finch, Finch.Pool.new(url))
+
+    if metrics.in_use_connections == 0 or attempts == 0 do
+      assert metrics.in_use_connections == 0
+    else
+      Process.sleep(10)
+      assert_pool_idle(url, attempts - 1)
+    end
+  end
+
   test "relays a stream as messages: item added, deltas, item done, completed", %{bypass: bypass} do
     Bypass.expect_once(bypass, "POST", "/v1/responses", fn conn ->
       body = body!(conn)
@@ -90,6 +352,8 @@ defmodule Longx.Agent.ModelTest do
 
     assert_receive {:model, ^ref,
                     {:completed, %{"usage" => %{"input_tokens" => _}}, %{context_window: 64_000}}}
+
+    assert Process.info(self(), :trap_exit) == {:trap_exit, false}
 
     assert [%{effort: "low", status: 200, model: "longx", upstream_id: "real-model"}] =
              Longx.AI.Gateway.Log.recent(5)

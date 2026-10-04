@@ -186,6 +186,74 @@ defmodule Longx.Agent.Model do
   defp policy?(message), do: Regex.match?(@policy, message)
 
   defp post(up, target, owner, ref) do
+    # Req's into: :self starts a linked Finch process. A checkout timeout
+    # raises there, not in Req.post/1: rescuing the call cannot catch it.
+    # Keep that link inside a request worker; its caller handles just this
+    # known transport failure, while a stop still kills the whole link tree.
+    trapping? = Process.flag(:trap_exit, true)
+    caller = self()
+    reply = make_ref()
+
+    pid =
+      spawn_link(fn ->
+        send(caller, {reply, post_request(up, target, owner, ref)})
+      end)
+
+    try do
+      await_request(pid, reply, up, owner, trapping?)
+    after
+      Process.unlink(pid)
+      Process.exit(pid, :kill)
+
+      receive do
+        {:EXIT, ^pid, _} -> :ok
+      after
+        0 -> :ok
+      end
+
+      Process.flag(:trap_exit, trapping?)
+    end
+  end
+
+  defp await_request(pid, reply, up, owner, trapping?) do
+    receive do
+      {^reply, outcome} ->
+        outcome
+
+      {:EXIT, ^pid, reason} ->
+        request_exit(reason, up)
+
+      {:DOWN, _monitor, :process, ^owner, _reason} ->
+        exit(:normal)
+
+      {:EXIT, _other, reason} when not trapping? and reason != :normal ->
+        exit(reason)
+    end
+  end
+
+  defp request_exit({%RuntimeError{message: message}, stack} = reason, up) do
+    checkout? =
+      String.contains?(message, "excess queuing for connections") and
+        Enum.any?(stack, &match?({Finch.HTTP1.Pool, :request, 6, _}, &1))
+
+    if checkout? do
+      message = "HTTP connection pool checkout timed out after #{pool_timeout()} ms"
+      pool = Finch.Pool.new(up.url)
+      metrics = Finch.get_pool_status(Longx.AI.Finch, pool)
+      Logger.warning("agent model: #{message}; pool=#{inspect(pool)} metrics=#{inspect(metrics)}")
+      {:retry, nil, message}
+    else
+      exit(reason)
+    end
+  end
+
+  # Do not turn programming errors or unrelated process failures into retries.
+  defp request_exit(reason, _up), do: exit(reason)
+
+  defp pool_timeout,
+    do: :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:pool_timeout_ms, 5_000)
+
+  defp post_request(up, target, owner, ref) do
     request =
       Req.new(
         url: up.url,
@@ -193,7 +261,7 @@ defmodule Longx.Agent.Model do
         json: up.body,
         retry: false,
         receive_timeout: up.receive_timeout,
-        finch: [name: Longx.AI.Finch],
+        finch: [name: Longx.AI.Finch, pool_timeout: pool_timeout()],
         into: :self
       )
 
@@ -201,16 +269,25 @@ defmodule Longx.Agent.Model do
       {:ok, %Req.Response{status: 200} = resp} ->
         now = now_ms()
 
-        relay(resp, target, owner, ref, %{
-          buffer: "",
-          completed?: false,
-          idle: up.idle_timeout,
-          last: now,
-          told: nil
-        })
+        try do
+          relay(resp, target, owner, ref, %{
+            buffer: "",
+            completed?: false,
+            idle: up.idle_timeout,
+            last: now,
+            told: nil
+          })
+        after
+          cancel(resp)
+        end
 
       {:ok, %Req.Response{status: status} = resp} ->
-        message = "upstream answered #{status}: #{resp |> collect() |> error_message()}"
+        message =
+          try do
+            "upstream answered #{status}: #{resp |> collect() |> error_message()}"
+          after
+            cancel(resp)
+          end
 
         cond do
           status == 429 and quota?(message) -> {:failed, status, message}
@@ -395,19 +472,26 @@ defmodule Longx.Agent.Model do
   end
 
   # the body of a non-200 answer (also streamed by `into: :self`)
-  defp collect(%Req.Response{body: %Req.Response.Async{ref: req_ref}} = resp, acc \\ "") do
+  defp collect(resp) do
+    timeout =
+      :longx |> Application.get_env(__MODULE__, []) |> Keyword.get(:error_body_timeout_ms, 5_000)
+
+    collect(resp, "", now_ms() + timeout)
+  end
+
+  defp collect(%Req.Response{body: %Req.Response.Async{ref: req_ref}} = resp, acc, deadline) do
     receive do
       {^req_ref, _} = message ->
         case Req.parse_message(resp, message) do
           {:ok, chunks} ->
             data = for {:data, d} <- chunks, into: "", do: d
-            if :done in chunks, do: acc <> data, else: collect(resp, acc <> data)
+            if :done in chunks, do: acc <> data, else: collect(resp, acc <> data, deadline)
 
           _other ->
             acc
         end
     after
-      5_000 -> acc
+      max(0, deadline - now_ms()) -> acc
     end
   end
 

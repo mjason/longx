@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { t } from "@/ui/strings";
 import { GoalProvider } from "./GoalBar";
 import { useWorkbench, type Tab } from "@/core/workbench";
+import { useProjectDraft } from "./useProjectDraft";
 import { ActionAnswerContext, chatConfig, CompactionUI, GoalContinuationUI, JobNoticeUI, SubagentContext, SurfaceContext } from "./toolkit";
 
 const ChatContext = createContext<LongxRuntime | null>(null);
@@ -101,6 +102,7 @@ export function ChatProvider({
     onSignal,
     onAttachmentError: (message) => toast.error(message),
   });
+  useProjectDraft(projectId, slug, threadId, chat.runtime);
 
   // a tool's ask (Context.ask) is answered on the thread on screen — the
   // sub-agents' asks too, since their conversations nest under it

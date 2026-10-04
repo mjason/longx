@@ -255,7 +255,7 @@ describe("ProjectWindow", () => {
     const user = userEvent.setup();
     const { router } = renderAt("/p/app-1/t/t1");
     await screen.findByTestId("tool-rail");
-    expect(screen.queryByText("App 1")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("project-switcher")).getByText("App 1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "项目设置" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "项目设置" }));

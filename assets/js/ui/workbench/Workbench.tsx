@@ -137,7 +137,7 @@ export function Workbench({
         {children}
       </div>
       <Suspense fallback={<Skeleton className="m-4 h-32" />}>
-        {active.kind === "file" ? <EditorTab key={active.path} projectId={projectId} path={active.path} line={active.line} /> : null}
+        {active.kind === "file" ? <EditorTab key={`${projectId}:${active.path}`} projectId={projectId} path={active.path} line={active.line} /> : null}
         {active.kind === "diff" ? <DiffTab key={tabKey(active)} projectId={projectId} path={active.path} sha={active.sha} /> : null}
       </Suspense>
       {active.kind === "artifact" && !phoneArtifact ? <ArtifactTab key={tabKey(active)} tab={active} /> : null}

@@ -6,9 +6,25 @@ import { ok, project, rpcMock, socketMock } from "@/ui/test-mocks";
 
 vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { listProjects, listRunningThreads } from "@/core/api";
+import { listProjects, listRunningThreads, updateProject } from "@/core/api";
 
 describe("WelcomePage", () => {
+  test("pins from home without navigating, and unpins without removing the project", async () => {
+    const user = userEvent.setup();
+    vi.mocked(updateProject).mockImplementation(async (args) => {
+      const updated = { ...project(1), pinned: args?.input?.pinned ?? false };
+      vi.mocked(listProjects).mockResolvedValue(ok([updated, project(2)]) as never);
+      return ok(updated) as never;
+    });
+    const { router } = renderAt("/");
+    await user.click(await screen.findByRole("button", { name: "固定项目 App 1" }));
+    expect(updateProject).toHaveBeenCalledWith({ identity: "id-1", input: { pinned: true } });
+    await user.click(await screen.findByRole("button", { name: "取消固定 App 1" }));
+    expect(updateProject).toHaveBeenLastCalledWith({ identity: "id-1", input: { pinned: false } });
+    expect(router.state.location.pathname).toBe("/");
+    expect(screen.getByText("App 1").closest("a")).toHaveAttribute("href", "/p/app-1");
+  });
+
   beforeEach(() => setViewport(390));
 
   test("recent projects with search, one door to open/create", async () => {

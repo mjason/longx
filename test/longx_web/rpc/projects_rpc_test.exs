@@ -72,6 +72,25 @@ defmodule LongxWeb.ProjectsRpcTest do
     {thread_id, kernel_id}
   end
 
+  test "project pinning round trips through the API without removing the project", %{
+    conn: conn,
+    dir: dir
+  } do
+    project = create!(conn, dir)
+
+    for pinned <- [true, false] do
+      assert %{"success" => true, "data" => %{"pinned" => ^pinned}} =
+               rpc(conn, "update_project", %{
+                 "identity" => project["id"],
+                 "fields" => ["id", "pinned"],
+                 "input" => %{"pinned" => pinned}
+               })
+
+      assert %{"success" => true, "data" => [%{"pinned" => ^pinned}]} =
+               rpc(conn, "list_projects", %{"fields" => ["id", "pinned"]})
+    end
+  end
+
   test "project_jobs lists background jobs with their conversation, limited to the project", %{
     conn: conn,
     dir: dir

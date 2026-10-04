@@ -68,11 +68,11 @@ query ListSearchProviders($sort: [SearchProviderSortInput], $filter: SearchProvi
 
 query ListPresets { listPresets { supportsHostedWebSearch slug providerId name models kind keyUrl keyEnv installed docsUrl credential baseUrl } }
 
-query ListProjects($sort: [ProjectSortInput], $filter: ProjectFilterInput) { listProjects(sort: $sort, filter: $filter) { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules archivedAt insertedAt updatedAt modelId } }
+query ListProjects($sort: [ProjectSortInput], $filter: ProjectFilterInput) { listProjects(sort: $sort, filter: $filter) { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules pinned archivedAt insertedAt updatedAt modelId } }
 
-query ListAllProjects($sort: [ProjectSortInput], $filter: ProjectFilterInput) { listAllProjects(sort: $sort, filter: $filter) { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules archivedAt insertedAt updatedAt modelId } }
+query ListAllProjects($sort: [ProjectSortInput], $filter: ProjectFilterInput) { listAllProjects(sort: $sort, filter: $filter) { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules pinned archivedAt insertedAt updatedAt modelId } }
 
-query GetProject($filter: ProjectFilterInput, $slug: String!) { getProject(filter: $filter, slug: $slug) { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules archivedAt insertedAt updatedAt modelId } }
+query GetProject($filter: ProjectFilterInput, $slug: String!) { getProject(filter: $filter, slug: $slug) { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules pinned archivedAt insertedAt updatedAt modelId } }
 
 query GitInfo($id: ID!) { gitInfo(id: $id) { repository lfs head clean changes } }
 
@@ -236,13 +236,13 @@ mutation UpdateSearchProvider($id: ID!, $input: UpdateSearchProviderInput) { upd
 
 mutation ApplyPreset($input: ApplyPresetInput!) { applyPreset(input: $input) { providerId modelIds credentialId } }
 
-mutation CreateProject($input: CreateProjectInput!) { createProject(input: $input) { result { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules archivedAt insertedAt updatedAt modelId } } }
+mutation CreateProject($input: CreateProjectInput!) { createProject(input: $input) { result { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules pinned archivedAt insertedAt updatedAt modelId } } }
 
-mutation UpdateProject($id: ID!, $input: UpdateProjectInput) { updateProject(id: $id, input: $input) { result { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules archivedAt insertedAt updatedAt modelId } } }
+mutation UpdateProject($id: ID!, $input: UpdateProjectInput) { updateProject(id: $id, input: $input) { result { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules pinned archivedAt insertedAt updatedAt modelId } } }
 
-mutation ArchiveProject($id: ID!) { archiveProject(id: $id) { result { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules archivedAt insertedAt updatedAt modelId } } }
+mutation ArchiveProject($id: ID!) { archiveProject(id: $id) { result { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules pinned archivedAt insertedAt updatedAt modelId } } }
 
-mutation DeleteProject($id: ID!, $input: DeleteProjectInput) { deleteProject(id: $id, input: $input) { result { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules archivedAt insertedAt updatedAt modelId } } }
+mutation DeleteProject($id: ID!, $input: DeleteProjectInput) { deleteProject(id: $id, input: $input) { result { id name slug description rootPath webSearch trustLocalAgent agentSettings fileRules pinned archivedAt insertedAt updatedAt modelId } } }
 
 mutation PromoteLocal($input: PromoteLocalInput!) { promoteLocal(input: $input) { path } }
 

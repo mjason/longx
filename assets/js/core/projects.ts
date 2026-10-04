@@ -17,6 +17,7 @@ import {
   setGoal,
   clearGoal,
   listProjects,
+  updateProject,
   listSubagents,
   getThread,
   listThreads,
@@ -37,6 +38,7 @@ export const projectFields = [
   "trustLocalAgent",
   "agentSettings",
   "fileRules",
+  "pinned",
   "archivedAt",
   "updatedAt",
 ] as const;
@@ -315,6 +317,20 @@ export function useProjects() {
   });
 }
 
+export function usePinProject() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) =>
+      unwrapOne(await updateProject({ identity: id, input: { pinned } })),
+    onSuccess: (project) => {
+      client.setQueryData(queryKeys.project(project.slug), project);
+      client.setQueryData<(typeof project)[]>(
+        queryKeys.projects, (rows) => rows?.map(p => p.id === project.id ? project : p),
+      );
+      void client.invalidateQueries({ queryKey: queryKeys.projects });
+    },
+  });
+}
 export function useProject(slug: string) {
   return useQuery({
     queryKey: queryKeys.project(slug),

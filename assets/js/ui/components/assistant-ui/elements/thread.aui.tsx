@@ -31,6 +31,7 @@ import { observeThreadContentSize, scrollToBottom } from "@/ui/chat/scroll";
 import { cn } from "@/lib/utils";
 import { t } from "@/ui/strings";
 import { keysTitle } from "@/ui/keys/hint";
+import { readScroll, rememberScroll } from "@/core/workspaceMemory";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import {
   ActionBarMorePrimitive,
@@ -66,6 +67,7 @@ import {
   useContext,
   useEffect,
   useRef,
+  useState,
   type ComponentType,
   type FC,
   type PropsWithChildren,
@@ -112,6 +114,7 @@ export type ThreadComponents = {
 export type ThreadProps = {
   components?: ThreadComponents | undefined;
   autoFocus?: boolean | undefined;
+  memoryKey?: string | undefined;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
@@ -156,12 +159,13 @@ const ThreadHistorySkeleton: FC = () => (
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   autoFocus = true,
+  memoryKey,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
 
   return (
     <ThreadComponentsContext.Provider value={components}>
-      <ThreadRoot isEmpty={isEmpty} autoFocus={autoFocus} />
+      <ThreadRoot isEmpty={isEmpty} autoFocus={autoFocus} memoryKey={memoryKey} />
     </ThreadComponentsContext.Provider>
   );
 };
@@ -208,13 +212,16 @@ export const ReadOnlyThread: FC<{ components?: ThreadComponents | undefined }> =
   </ThreadComponentsContext.Provider>
 );
 
-const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
+const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean; memoryKey?: string | undefined }> = ({
   isEmpty,
   autoFocus,
+  memoryKey,
 }) => {
   const { Welcome = ThreadWelcome, HistoryEdge, PendingEchoes } = useContext(ThreadComponentsContext);
   const viewportRef = useRef<HTMLDivElement>(null);
   const didInitialScroll = useRef(false);
+  const restored = useRef(readScroll(memoryKey));
+  const [followingEnabled, setFollowingEnabled] = useState(restored.current?.following !== false);
   const messageCount = useAuiState((s) => s.thread.messages.length);
   const loading = useAuiState((s) => s.thread.isLoading);
 
@@ -224,12 +231,18 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
     let frames = 0;
     let frame = 0;
     const settleAtBottom = () => {
-      scrollToBottom(viewportRef.current);
+      const viewport = viewportRef.current;
+      if (viewport && restored.current?.following === false) {
+        viewport.scrollTop = Math.min(restored.current.top, Math.max(0, viewport.scrollHeight - viewport.clientHeight));
+      } else {
+        scrollToBottom(viewport);
+      }
       if (++frames < 12) {
         frame = requestAnimationFrame(settleAtBottom);
       } else {
         settled = true;
         didInitialScroll.current = true;
+        if (viewport) rememberScroll(memoryKey, viewport);
       }
     };
     frame = requestAnimationFrame(settleAtBottom);
@@ -239,7 +252,15 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
       // A cancelled first pass must not make the second pass think we scrolled.
       if (!settled) didInitialScroll.current = false;
     };
-  }, [loading, messageCount]);
+  }, [loading, messageCount, memoryKey]);
+
+  useEffect(() => {
+    if (followingEnabled && restored.current?.following === false) {
+      // The user reached the tail or pressed the bottom button: let the
+      // viewport's own follow state machine take over again.
+      viewportRef.current?.dispatchEvent(new Event("scroll"));
+    }
+  }, [followingEnabled]);
 
   return (
     <ThreadPrimitive.Root
@@ -259,7 +280,15 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
           shiki and KaTeX, content-visibility sizing), so the reader watched it slide
           for seconds */}
       <ThreadPrimitive.Viewport
-        autoScroll
+        autoScroll={followingEnabled}
+        scrollToBottomOnInitialize={restored.current?.following !== false}
+        scrollToBottomOnThreadSwitch={restored.current?.following !== false}
+        onScroll={event => {
+          if (!didInitialScroll.current) return;
+          const viewport = event.currentTarget;
+          rememberScroll(memoryKey, viewport);
+          if (viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 24) setFollowingEnabled(true);
+        }}
         ref={viewportRef}
         data-slot="aui_thread-viewport"
         // The auto-scroll hook owns following the tail. Native scroll anchoring
