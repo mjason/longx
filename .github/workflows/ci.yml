@@ -78,5 +78,6 @@ jobs:
           npx playwright install --with-deps chromium webkit
           npm run test:scroll
           npm run test:scroll -- --webkit
+          npm run test:clipboard
       # the bwrap probe passes on a dev box, not inside a GitHub runner
       - run: mix test --exclude host_sandbox

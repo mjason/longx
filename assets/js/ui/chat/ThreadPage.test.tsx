@@ -100,6 +100,27 @@ describe("ThreadPage", () => {
     expect(document.title).toBe("Longx");
   });
 
+  test("message copying uses the shared selection fallback when the Clipboard API refuses", async () => {
+    const user = userEvent.setup();
+    await open();
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+      configurable: true,
+    });
+    const exec = vi.fn(() => {
+      expect((document.activeElement as HTMLTextAreaElement).value).toBe("All **green**.");
+      return true;
+    });
+    const previous = document.execCommand;
+    document.execCommand = exec;
+    try {
+      await user.click(screen.getByRole("button", { name: "复制" }));
+      await waitFor(() => expect(exec).toHaveBeenCalledWith("copy"));
+    } finally {
+      document.execCommand = previous;
+    }
+  });
+
   beforeEach(() => {
     localStorage.clear();
     _resetFrameStoreForTests();

@@ -27,8 +27,14 @@ function copyBySelection(text: string): boolean {
   area.style.top = "0";
   area.style.left = "0";
   area.style.opacity = "0";
-  document.body.appendChild(area);
   const active = document.activeElement as HTMLElement | null;
+  // Modal menus/dialogs trap focus. A textarea under body loses focus at
+  // once, and execCommand may even return true without copying our text.
+  // Keep the temporary selection inside the active focus scope instead.
+  const scope = active?.closest('[role="menu"], [role="dialog"], [role="alertdialog"]')
+    ?? active?.parentElement
+    ?? document.body;
+  scope.appendChild(area);
   try {
     area.focus();
     area.select();

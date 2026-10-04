@@ -31,6 +31,7 @@ import { observeThreadContentSize, scrollToBottom } from "@/ui/chat/scroll";
 import { cn } from "@/lib/utils";
 import { t } from "@/ui/strings";
 import { keysTitle } from "@/ui/keys/hint";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
@@ -47,6 +48,7 @@ import {
   type TextMessagePartComponent,
   type ToolCallMessagePartComponent,
   unstable_useMessageStallDetection,
+  useAui,
   useAuiState,
 } from "@assistant-ui/react";
 import {
@@ -624,22 +626,21 @@ const StalledHint: FC = () => {
 
 const AssistantActionBar: FC = () => {
     useTranslation();
+  const aui = useAui();
+  const { isCopied, copyToClipboard } = useCopyToClipboard();
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
       className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
     >
-      <ActionBarPrimitive.Copy asChild>
-        <TooltipIconButton tooltip={t.copy}>
-          <AuiIf condition={(s) => s.message.isCopied}>
+        <TooltipIconButton tooltip={t.copy} onClick={() => copyToClipboard(aui.message.getCopyText())}>
+          {isCopied ? (
             <CheckIcon className="animate-in zoom-in-50 fade-in duration-200 ease-out" />
-          </AuiIf>
-          <AuiIf condition={(s) => !s.message.isCopied}>
+          ) : (
             <CopyIcon className="animate-in zoom-in-75 fade-in duration-150" />
-          </AuiIf>
+          )}
         </TooltipIconButton>
-      </ActionBarPrimitive.Copy>
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger asChild>
           <TooltipIconButton
