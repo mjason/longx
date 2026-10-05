@@ -72,8 +72,8 @@ export function WelcomePage() {
         ) : (
           <ul className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[repeat(2,minmax(0,1fr))]" data-testid="project-list">
             {shown.map((p) => (
-              <li key={p.id} className="bg-card flex items-center rounded-lg border">
-                <Link to={`/p/${p.slug}`} className="hover:bg-accent/40 active:bg-accent/60 flex min-w-0 flex-1 items-center gap-3 rounded-lg p-4 transition-colors">
+              <li key={p.id} className="bg-card hover:bg-accent/40 active:bg-accent/60 relative overflow-hidden rounded-lg border transition-colors">
+                <Link to={`/p/${p.slug}`} className="focus-visible:ring-ring flex w-full min-w-0 items-center gap-3 p-4 pr-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset">
                   <span className="bg-primary/15 text-primary flex size-10 shrink-0 items-center justify-center rounded-md font-semibold">
                     {initials(p.name)}
                   </span>
@@ -91,7 +91,7 @@ export function WelcomePage() {
                   aria-pressed={p.pinned}
                   disabled={pin.isPending}
                   onClick={() => pin.mutate({ id: p.id, pinned: !p.pinned }, { onError: error => toast.error(error.message) })}
-                  className={`touch-target mr-2 flex shrink-0 items-center justify-center rounded-md ${p.pinned ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`touch-target focus-visible:ring-ring absolute right-2 top-1/2 flex -translate-y-1/2 items-center justify-center border-0 bg-transparent p-0 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50 ${p.pinned ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   <Pin className={`size-4 ${p.pinned ? "fill-current" : ""}`} />
                 </button>

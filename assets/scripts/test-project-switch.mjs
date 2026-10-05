@@ -110,6 +110,34 @@ try {
     await picker.getByRole("option").click();
     await page.waitForFunction(() => window.router.state.location.pathname === "/p/app-4");
     await page.evaluate(() => window.router.navigate("/"));
+    const pin = page.getByRole("button", { name: "固定项目 项目 1" });
+    await pin.waitFor();
+    const card = pin.locator("..");
+    const bounds = await card.evaluate(el => {
+      const card = el.getBoundingClientRect();
+      const link = el.querySelector("a").getBoundingClientRect();
+      return { cardRight: card.right, linkRight: link.right };
+    });
+    assert.ok(Math.abs(bounds.cardRight - bounds.linkRight) <= 2, "link covers the full card, including beneath the pin");
+    if (width === 1280) {
+      await card.getByRole("link").hover();
+      await card.evaluate(async el => {
+        await Promise.all(el.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {})));
+      });
+      const background = await card.evaluate(el => getComputedStyle(el).backgroundColor);
+      await pin.hover();
+      await card.evaluate(async el => {
+        await Promise.all(el.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {})));
+      });
+      const styles = await card.evaluate(el => ({
+        card: getComputedStyle(el).backgroundColor,
+        link: getComputedStyle(el.querySelector("a")).backgroundColor,
+        pin: getComputedStyle(el.querySelector("button")).backgroundColor,
+      }));
+      assert.equal(styles.card, background, "same card hover background over link and pin");
+      assert.equal(styles.link, "rgba(0, 0, 0, 0)", "link has no separate background");
+      assert.equal(styles.pin, "rgba(0, 0, 0, 0)", "pin is an icon without a button surface");
+    }
     await page.getByRole("button", { name: "固定项目 项目 1" }).click();
     await page.getByRole("button", { name: "取消固定 项目 1" }).waitFor();
     assert.equal(await page.evaluate(() => window.router.state.location.pathname), "/");

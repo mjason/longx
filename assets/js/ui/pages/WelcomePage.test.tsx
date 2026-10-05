@@ -27,6 +27,20 @@ describe("WelcomePage", () => {
 
   beforeEach(() => setViewport(390));
 
+  test("project link spans the card with an icon-only pin overlay", async () => {
+    renderAt("/");
+    const pin = await screen.findByRole("button", { name: "固定项目 App 1" });
+    const card = pin.closest("li")!;
+    const link = within(card).getByRole("link");
+    expect(card).toHaveClass("hover:bg-accent/40", "overflow-hidden");
+    expect(link).toHaveClass("w-full", "pr-16");
+    expect(link).not.toHaveClass("hover:bg-accent/40");
+    expect(pin).toHaveClass("absolute", "bg-transparent", "border-0");
+    expect(pin).not.toHaveClass("rounded-md");
+    expect(pin.children).toHaveLength(1);
+    expect(pin.firstElementChild?.tagName).toBe("svg");
+  });
+
   test("recent projects with search, one door to open/create", async () => {
     const user = userEvent.setup();
     renderAt("/");
