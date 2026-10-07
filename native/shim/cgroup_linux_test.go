@@ -51,6 +51,19 @@ func TestCgroupDelegationNeedsExactManagerConfirmation(t *testing.T) {
 	}
 }
 
+func TestCgroupPreflightDoesNotRequireParentKillPermission(t *testing.T) {
+	// A system manager delegates child creation and subtree_control, not the
+	// right to kill every process in the service's parent cgroup.
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "cgroup.subtree_control"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// cgroup.kill is intentionally absent: preflight must never open it here.
+	if err := inspectDelegationControls(root); err != nil {
+		t.Fatalf("parent kill permission is not a task containment prerequisite: %v", err)
+	}
+}
+
 func TestCgroupLimitsValidateBeforeLaunching(t *testing.T) {
 	for _, cfg := range []config{
 		{Cgroup: "invalid"},

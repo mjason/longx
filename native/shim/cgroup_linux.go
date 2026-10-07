@@ -95,14 +95,18 @@ func inspectDelegation(root string) error {
 	if err := unix.Access(root, unix.W_OK|unix.X_OK); err != nil {
 		return fmt.Errorf("delegated root is not writable: %w", err)
 	}
-	for _, name := range []string{"cgroup.subtree_control", "cgroup.kill"} {
-		file, err := os.OpenFile(filepath.Join(root, name), os.O_WRONLY, 0)
-		if err != nil {
-			return fmt.Errorf("%s is not accessible: %w", name, err)
-		}
-		file.Close()
+	return inspectDelegationControls(root)
+}
+
+func inspectDelegationControls(root string) error {
+	// Parent attributes remain the manager's property. Only the delegation
+	// control is a preflight prerequisite; task cgroup.kill is checked on the
+	// newly created leaf before starting its payload, never on the parent.
+	file, err := os.OpenFile(filepath.Join(root, "cgroup.subtree_control"), os.O_WRONLY, 0)
+	if err != nil {
+		return fmt.Errorf("cgroup.subtree_control is not accessible: %w", err)
 	}
-	return nil
+	return file.Close()
 }
 
 // Some user managers do not publish user.delegate even when delegation is
