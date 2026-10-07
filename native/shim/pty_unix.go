@@ -39,5 +39,11 @@ func attachPty(proc *exec.Cmd, slave *os.File) {
 	proc.Stdin = slave
 	proc.Stdout = slave
 	proc.Stderr = slave
-	proc.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
+	if proc.SysProcAttr == nil {
+		proc.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	proc.SysProcAttr.Setpgid = false
+	proc.SysProcAttr.Setsid = true
+	proc.SysProcAttr.Setctty = true
+	proc.SysProcAttr.Ctty = 0
 }

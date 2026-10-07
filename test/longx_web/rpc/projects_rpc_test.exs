@@ -91,6 +91,106 @@ defmodule LongxWeb.ProjectsRpcTest do
     end
   end
 
+  @tag :cgroup
+  test "project command budgets retain zero swap and inherit cleared limits on the wire", %{
+    conn: conn,
+    dir: dir
+  } do
+    project = create!(conn, dir)
+
+    assert %{
+             "success" => true,
+             "data" => %{
+               "agentSettings" => %{
+                 "command_memory_limit_percent" => 30,
+                 "command_swap_limit_mb" => 0
+               }
+             }
+           } =
+             rpc(conn, "update_project", %{
+               "identity" => project["id"],
+               "fields" => ["agentSettings"],
+               "input" => %{
+                 "agentSettings" => %{
+                   "command_memory_limit_percent" => 30,
+                   "command_swap_limit_mb" => 0,
+                   "command_cgroup_mode" => "off",
+                   "max_depth" => 1
+                 }
+               }
+             })
+
+    fields = [
+      %{
+        "settings" => [
+          "commandMemoryLimitPercent",
+          "commandSwapLimitMb",
+          "maxDepth",
+          "commandCgroupMode"
+        ]
+      },
+      %{
+        "overrides" => [
+          "commandMemoryLimitPercent",
+          "commandSwapLimitMb",
+          "maxDepth",
+          "commandCgroupMode"
+        ]
+      }
+    ]
+
+    assert %{
+             "success" => true,
+             "data" => %{
+               "settings" => %{"commandMemoryLimitPercent" => 30, "commandSwapLimitMb" => 0},
+               "overrides" => %{
+                 "commandMemoryLimitPercent" => 30,
+                 "commandSwapLimitMb" => 0,
+                 "commandCgroupMode" => "off",
+                 "maxDepth" => 1
+               }
+             }
+           } =
+             rpc(conn, "agent_definition", %{
+               "input" => %{"id" => project["id"]},
+               "fields" => fields
+             })
+
+    assert %{"success" => true, "data" => %{"mode" => "off", "capability" => "off"}} =
+             rpc(conn, "command_guard_status", %{
+               "input" => %{"projectId" => project["id"]},
+               "fields" => ["mode", "capability"]
+             })
+
+    assert %{"success" => true} =
+             rpc(conn, "update_project", %{
+               "identity" => project["id"],
+               "fields" => ["id"],
+               "input" => %{
+                 "agentSettings" => %{
+                   "command_memory_limit_percent" => nil,
+                   "command_swap_limit_mb" => nil,
+                   "command_cgroup_mode" => nil
+                 }
+               }
+             })
+
+    assert %{
+             "success" => true,
+             "data" => %{
+               "settings" => %{
+                 "commandMemoryLimitPercent" => 75,
+                 "commandSwapLimitMb" => 1024,
+                 "commandCgroupMode" => "auto"
+               }
+             }
+           } =
+             rpc(conn, "agent_definition", %{
+               "input" => %{"id" => project["id"]},
+               "fields" => fields
+             })
+  end
+
   test "project_jobs lists background jobs with their conversation, limited to the project", %{
     conn: conn,
     dir: dir

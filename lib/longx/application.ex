@@ -51,6 +51,8 @@ defmodule Longx.Application do
       Longx.AI.Gateway.Log,
       # the server's recent faults, for the settings page and the status strip
       Longx.System.Faults,
+      # Resource/cleanup reports remain queryable after a command's shim exits.
+      Longx.Shim.Resources,
       # the memory watchdog over the agents' commands (Longx.System.Pressure)
       {Registry, keys: :duplicate, name: Longx.System.Pressure.Registry},
       {Longx.System.Pressure, Application.get_env(:longx, Longx.System.Pressure, [])},

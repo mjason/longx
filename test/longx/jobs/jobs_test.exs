@@ -26,6 +26,82 @@ defmodule Longx.JobsTest do
     }
   end
 
+  @tag :cgroup
+  test "job resource exit diagnostics survive in the saved reason and log",
+       %{thread: thread, opts: opts} do
+    # Feed a protocol frame, not a real OOM or leaked process.
+    assert {:ok, _} = Jobs.start(thread, "resource-exit", "echo ready; sleep 30", opts)
+    [{pid, _}] = Registry.lookup(Longx.Jobs.Registry, {thread, "resource-exit"})
+    %{shim: shim} = :sys.get_state(pid)
+    %{port: port} = :sys.get_state(shim)
+    report = %{"oom_kill" => 1, "populated" => true, "cleanup_error" => "cleanup denied"}
+    send(shim, {port, {:data, <<26, Jason.encode!(report)::binary>>}})
+    :sys.get_state(shim)
+    Longx.Shim.kill(shim, 0)
+    assert {:ok, %{status: "failed", reason: reason}} = Jobs.wait(thread, "resource-exit", 5_000)
+    assert reason =~ "memory limit" and reason =~ "still populated" and reason =~ "cleanup denied"
+    assert {:ok, %{text: text, info: %{reason: ^reason}}} = Jobs.output(thread, "resource-exit")
+    assert text =~ "cleanup denied"
+    assert [%{reason: ^reason}] = Jobs.list(thread)
+  end
+
+  @tag :cgroup
+  test "synthetic exit preserves an unknown code and a failed cleanup", %{
+    thread: thread,
+    opts: opts
+  } do
+    # Protocol fixture only: do not create a real kernel-stuck task.
+    assert {:ok, _} = Jobs.start(thread, "unknown-exit", "sleep 30", opts)
+    [{pid, _}] = Registry.lookup(Longx.Jobs.Registry, {thread, "unknown-exit"})
+    %{shim: shim} = :sys.get_state(pid)
+    %{port: port} = :sys.get_state(shim)
+    ref = Process.monitor(shim)
+    report = %{"oom_kill" => 0, "populated" => true, "cleanup_error" => "root still alive"}
+    send(shim, {port, {:data, <<26, Jason.encode!(report)::binary>>}})
+    send(shim, {port, {:data, <<21, -1::signed-big-32>>}})
+    send(shim, {port, {:data, <<18>>}})
+
+    assert {:ok, %{status: "failed", exit_code: -1, reason: reason}} =
+             Jobs.wait(thread, "unknown-exit", 5_000)
+
+    assert reason =~ "root still alive" and reason =~ "do not restart"
+    refute reason =~ "memory limit"
+    assert {:ok, %{text: text, info: %{exit_code: -1}}} = Jobs.output(thread, "unknown-exit")
+    assert text =~ "root still alive"
+    assert_receive {:DOWN, ^ref, :process, ^shim, _}, 5_000
+  end
+
+  @tag :cgroup
+  test "jobs forward guard options and retain visible fallback in output and reason",
+       %{thread: thread, opts: opts} do
+    guards = [cgroup: :auto, memory_max: 1024 * 1024 * 1024, swap_max: 0]
+
+    assert {:ok, _} =
+             Jobs.start(
+               thread,
+               "guarded",
+               "sleep 0.2; echo done",
+               Keyword.put(opts, :guards, guards)
+             )
+
+    [{pid, _}] = Registry.lookup(Longx.Jobs.Registry, {thread, "guarded"})
+    state = :sys.get_state(pid)
+    guard = Longx.Shim.resource_guard(state.shim)
+    assert guard["status"] in ["active", "unavailable"]
+    assert {:ok, info} = Jobs.wait(thread, "guarded", 5_000)
+    assert {:ok, %{text: text}} = Jobs.output(thread, "guarded")
+    assert text =~ "done"
+
+    if guard["status"] == "unavailable" do
+      assert info.reason =~ "WARNING"
+      assert info.reason =~ guard["reason"]
+      assert text =~ guard["reason"]
+    end
+
+    assert [%{reason: reason}] = Jobs.list(thread)
+    assert reason == info.reason
+  end
+
   test "a job runs in the background under its name: listed, read, waited for; its end is told",
        %{thread: thread, opts: opts} do
     assert {:ok, %{name: "count", status: "running"}} =

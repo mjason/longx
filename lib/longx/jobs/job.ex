@@ -19,6 +19,7 @@ defmodule Longx.Jobs.Job do
   alias Longx.Jobs
   alias Longx.Jobs.Log
   alias Longx.Shim
+  alias Longx.Shim.ResourceReport
 
   @registry Longx.Jobs.Registry
 
@@ -29,6 +30,15 @@ defmodule Longx.Jobs.Job do
 
   @impl true
   def init(spec) do
+    mode = spec.guards[:cgroup] || spec.guards[:command_cgroup_mode] || :off
+
+    case Longx.System.CommandGuard.start_check(mode) do
+      :ok -> start(spec, mode)
+      {:error, reason} -> {:stop, {:could_not_start, reason}}
+    end
+  end
+
+  defp start(spec, mode) do
     Process.flag(:trap_exit, true)
     log = Log.open(Path.join(spec.dir, "log"), spec.log_opts)
 
@@ -48,10 +58,19 @@ defmodule Longx.Jobs.Job do
 
     shim_opts =
       [cd: spec.cwd, env: spec.env, env_clear: true, stderr: :redirect_to_stdout, stdin: :null] ++
-        Enum.filter(spec.guards, fn {k, v} -> k == :oom_score_adj and v end)
+        Enum.filter(spec.guards, fn {k, v} ->
+          k in [:oom_score_adj, :cgroup, :memory_max, :swap_max, :cgroup_root] and v != nil
+        end)
 
     case Shim.start_link([spec.shell, spec.flag, spec.cmd], shim_opts) do
       {:ok, shim} ->
+        warning =
+          ResourceReport.warning(Shim.resource_guard(shim)) ||
+            Longx.System.CommandGuard.unsupported_warning(mode)
+
+        log = if warning, do: Log.write(log, warning <> "\n"), else: log
+        info = %{info | reason: warning}
+
         :ok =
           Longx.System.Pressure.register(%{
             id: "job_" <> spec.run,
@@ -67,7 +86,8 @@ defmodule Longx.Jobs.Job do
         spawn_link(fn -> pump(shim, me) end)
 
         spawn_link(fn ->
-          send(me, {:exited, Shim.await_exit(shim, :infinity, close_streams: false)})
+          result = Shim.await_exit(shim, :infinity, close_streams: false)
+          send(me, {:exited, result, Shim.resource_exit(shim)})
         end)
 
         Jobs.save_info(spec.dir, info)
@@ -81,6 +101,8 @@ defmodule Longx.Jobs.Job do
            eof?: false,
            exit: nil,
            ending: nil,
+           resource_exit: nil,
+           guard_warning: warning,
            waiters: [],
            began: System.monotonic_time(:millisecond)
          }}
@@ -133,6 +155,11 @@ defmodule Longx.Jobs.Job do
   def handle_info({:exited, result}, state) do
     code = with {:ok, code} <- result, do: code, else: (_ -> -1)
     maybe_finish(%{state | exit: code})
+  end
+
+  def handle_info({:exited, result, resource}, state) do
+    code = with {:ok, code} <- result, do: code, else: (_ -> -1)
+    maybe_finish(%{state | exit: code, resource_exit: resource})
   end
 
   def handle_info({:kill_command, _by}, state) do
@@ -189,14 +216,15 @@ defmodule Longx.Jobs.Job do
   defp ending(state, _status, _reason, _opts), do: state
 
   defp maybe_finish(%{eof?: true, exit: code} = state) when is_integer(code) do
+    resource_reason = ResourceReport.exit_reason(state.resource_exit)
+
     {status, reason, observed} =
-      case state.ending do
-        {status, reason, observed} -> {status, reason, observed}
-        nil -> {"exited", nil, false}
-      end
+      ResourceReport.job_end(state.ending, state.guard_warning, state.resource_exit)
+
+    log = if resource_reason, do: Log.write(state.log, resource_reason <> "\n"), else: state.log
 
     duration = System.monotonic_time(:millisecond) - state.began
-    Log.close(state.log)
+    Log.close(log)
 
     info = %{
       state.info

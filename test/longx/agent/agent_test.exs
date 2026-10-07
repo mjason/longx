@@ -355,6 +355,15 @@ defmodule Longx.AgentTest do
              await_item_started("commandExecution")
 
     assert %{"itemId" => ^cmd, "delta" => delta} = await("item/commandExecution/outputDelta")
+
+    delta =
+      if String.starts_with?(delta, "WARNING: Linux task cgroup unavailable:") do
+        assert %{"itemId" => ^cmd, "delta" => output} = await("item/commandExecution/outputDelta")
+        output
+      else
+        delta
+      end
+
     assert delta =~ "hi"
 
     # the completed item keeps what the started one said (the row's command text)
@@ -1611,7 +1620,7 @@ defmodule Longx.AgentTest do
         Enum.any?(
           step.transcript,
           &(&1["type"] == "function_call_output" and is_binary(&1["output"]) and
-              String.ends_with?(&1["output"], "Output:\nchecked\n"))
+              String.ends_with?(&1["output"], "\nchecked\n"))
         )
 
       if checked?,

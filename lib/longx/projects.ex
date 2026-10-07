@@ -532,7 +532,7 @@ defmodule Longx.Projects do
           &%{name: &1.name, summary: &1.summary, layer: Atom.to_string(&1.layer)}
         ),
       settings: Longx.Agent.Definition.Settings.for_project(project),
-      overrides: project.agent_settings || %{},
+      overrides: Longx.Agent.Definition.Settings.project_overrides(project),
       errors: Enum.map(loaded.errors, & &1.message),
       browser: browser_resolution(loaded.plugs)
     }

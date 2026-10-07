@@ -437,7 +437,10 @@ defmodule Longx.Agent.ThreadStateTest do
       assert ThreadState.whereis("nope") == nil
     end
 
-    test "ingested events are folded, numbered and broadcast in order", %{thread_id: thread_id} do
+    test "ingested events are folded, numbered and broadcast in order", %{
+      thread_id: thread_id,
+      pid: pid
+    } do
       ThreadState.subscribe(thread_id)
 
       ThreadState.ingest(thread_id, "turn/started", %{
@@ -453,6 +456,10 @@ defmodule Longx.Agent.ThreadStateTest do
         "itemId" => "m1",
         "delta" => "hi"
       })
+
+      # A mailbox barrier, not a 100 ms scheduler deadline: all three casts
+      # must be folded before checking their exact broadcast sequence.
+      :sys.get_state(pid)
 
       assert_receive {:thread, 1, "turn/started", _}
       assert_receive {:thread, 2, "item/started", _}

@@ -106,7 +106,8 @@ for (const o of ops) {
   const V = `${Q}Variables`;
   const shape = JSON.stringify({ kind: o.kind, field: o.field, args: o.args.map((a) => a.name), wrapped: o.wrapped, jsonArgs: o.args.filter((a) => a.json).map((a) => a.name), jsonInputs: o.jsonInputs });
   const data = o.wrapped ? `NonNullable<${Q}["${o.field}"]>["result"]` : `${Q}["${o.field}"]`;
-  lines.push(`export const ${o.field}: Call<${Q}, ${V}, ${data}> = call(G.${o.opName}Document, ${shape});`);
+  // call only creates a function; unused APIs need not load their documents.
+  lines.push(`export const ${o.field}: Call<${Q}, ${V}, ${data}> = /* @__PURE__ */ call(G.${o.opName}Document, ${shape});`);
 }
 fs.writeFileSync(API, lines.join("\n") + "\n");
 console.log(`${ops.length} operations → ${path.relative(process.cwd(), OPERATIONS)}, ${path.relative(process.cwd(), API)}`);

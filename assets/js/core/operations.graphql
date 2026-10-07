@@ -20,7 +20,9 @@ query KnowledgeDocs { knowledgeDocs { writable title tags summary root path alwa
 
 query KnowledgeRead($path: String!) { knowledgeRead(path: $path) { text } }
 
-query AgentSettings { agentSettings { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes extraPath defaultExtraPath commandShell commandOomPriority childModel childEffort } }
+query AgentSettings { agentSettings { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes extraPath defaultExtraPath commandSwapLimitMb commandShell commandOomPriority commandMemoryLimitPercent commandCgroupMode childModel childEffort } }
+
+query CommandGuardStatus($projectId: ID) { commandGuardStatus(projectId: $projectId) { reason platform path mode lastTaskStatus lastTaskReason lastTaskPath lastPopulated lastOomKill lastObservedAt lastCleanupError cleanupPendingTasks checkedAt capability activeTasks } }
 
 query PublicUrl { publicUrl { url setting } }
 
@@ -78,7 +80,7 @@ query GitInfo($id: ID!) { gitInfo(id: $id) { repository lfs head clean changes }
 
 query SearchFiles($id: ID!, $query: String!) { searchFiles(id: $id, query: $query) { score root path matchType indices fileName } }
 
-query AgentDefinition($id: ID!) { agentDefinition(id: $id) { trusted settings { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes commandOomPriority childModel childEffort } present plugs overrides { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes commandOomPriority childModel childEffort } model localFiles files errors effort dir browser { state maxTabs browser alias } agents } }
+query AgentDefinition($id: ID!) { agentDefinition(id: $id) { trusted settings { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes commandSwapLimitMb commandOomPriority commandMemoryLimitPercent commandCgroupMode childModel childEffort } present plugs overrides { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes commandSwapLimitMb commandOomPriority commandMemoryLimitPercent commandCgroupMode childModel childEffort } model localFiles files errors effort dir browser { state maxTabs browser alias } agents } }
 
 query ListThreads($sort: [ThreadSortInput], $filter: ThreadFilterInput, $projectId: ID!) { listThreads(sort: $sort, filter: $filter, projectId: $projectId) { id kernelThreadId title preview handle onDuty cwd modelSlug reasoningEffort webSearch agentPath status lastActivityAt insertedAt updatedAt projectId parentThreadId } }
 
@@ -164,7 +166,7 @@ mutation KnowledgeWrite($input: KnowledgeWriteInput!) { knowledgeWrite(input: $i
 
 mutation KnowledgeDelete($input: KnowledgeDeleteInput!) { knowledgeDelete(input: $input)  }
 
-mutation SetAgentSettings($input: SetAgentSettingsInput) { setAgentSettings(input: $input) { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes extraPath defaultExtraPath commandShell commandOomPriority childModel childEffort } }
+mutation SetAgentSettings($input: SetAgentSettingsInput) { setAgentSettings(input: $input) { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes extraPath defaultExtraPath commandSwapLimitMb commandShell commandOomPriority commandMemoryLimitPercent commandCgroupMode childModel childEffort } }
 
 mutation CheckDependencies { checkDependencies { tools os missing installCommand checkedAt } }
 

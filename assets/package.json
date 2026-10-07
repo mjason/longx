@@ -12,6 +12,7 @@
     "test:projects": "node scripts/test-project-switch.mjs",
     "test:chat-projects": "node scripts/test-chat-projects.mjs",
     "test:queued-attachments": "node scripts/test-queued-attachments.mjs",
+    "test:command-guards": "node scripts/test-command-guards.mjs",
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run test",
     "present-schema": "node scripts/present-schema.mjs",

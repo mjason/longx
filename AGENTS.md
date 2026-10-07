@@ -28,7 +28,7 @@ on first use.
   so `await_exit` closes what nobody read — except with `close_streams: false`, which
   `run/2` uses (its drain tasks may not have asked yet when a fast child is already gone).
   Protocol defined twice — `native/shim/proto.go` and `lib/longx/shim/proto.ex` — keep them
-  in sync and bump the version in both when it changes (now 4). Built by
+  in sync and bump the version in both when it changes (now 5). Built by
   `Mix.Tasks.Compile.Shim` into `priv/bin/` (gitignored) on `mix compile`; **Go must be on
   PATH**. `mix precommit` runs `gofmt`, `go vet`, `go test` in `native/shim`; Windows/macOS
   code is `GOOS=windows|darwin go vet`-checked (no machine here to run it). Windows: process

@@ -110,6 +110,27 @@ defmodule Longx.System.Status do
       run fn _input, _ -> {:ok, Longx.Agent.Definition.Settings.for_settings_page()} end
     end
 
+    action :command_guard_status, Types.CommandGuardStatus do
+      argument :project_id, :uuid
+
+      run fn input, _ ->
+        settings =
+          case input.arguments[:project_id] do
+            nil ->
+              {:ok, Longx.Agent.Definition.Settings.global()}
+
+            id ->
+              case Ash.get(Longx.Projects.Project, id) do
+                {:ok, project} -> {:ok, Longx.Agent.Definition.Settings.for_project(project)}
+                {:error, _} -> argument_error(:project_id, "project not found")
+              end
+          end
+
+        with {:ok, settings} <- settings,
+             do: {:ok, Longx.System.CommandGuard.report(settings)}
+      end
+    end
+
     action :set_agent_settings, Types.AgentSettings do
       argument :max_depth, :integer
       argument :max_children, :integer
@@ -117,6 +138,9 @@ defmodule Longx.System.Status do
       argument :model_retries, :integer
       argument :command_oom_priority, :integer
       argument :memory_floor_percent, :integer
+      argument :command_cgroup_mode, :string
+      argument :command_memory_limit_percent, :integer
+      argument :command_swap_limit_mb, :integer
       argument :command_shell, :string
       argument :extra_path, :string, constraints: [allow_empty?: true, trim?: false]
       argument :child_model, :string

@@ -270,6 +270,24 @@ type Dependency {
   checkedAt: String!
 }
 
+type CommandGuardStatus {
+  reason: String
+  platform: String!
+  path: String
+  mode: String!
+  lastTaskStatus: String
+  lastTaskReason: String
+  lastTaskPath: String
+  lastPopulated: Boolean
+  lastOomKill: Int
+  lastObservedAt: String
+  lastCleanupError: String
+  cleanupPendingTasks: Int!
+  checkedAt: String!
+  capability: String!
+  activeTasks: Int!
+}
+
 type AgentSettings {
   modelRetries: Int!
   memoryFloorPercent: Int!
@@ -278,8 +296,11 @@ type AgentSettings {
   idleMinutes: Int!
   extraPath: String!
   defaultExtraPath: String!
+  commandSwapLimitMb: Int!
   commandShell: String!
   commandOomPriority: Int!
+  commandMemoryLimitPercent: Int!
+  commandCgroupMode: String!
   childModel: String
   childEffort: String
 }
@@ -491,7 +512,10 @@ type AgentDefinitionOverrides {
   maxDepth: Int
   maxChildren: Int
   idleMinutes: Int
+  commandSwapLimitMb: Int
   commandOomPriority: Int
+  commandMemoryLimitPercent: Int
+  commandCgroupMode: String
   childModel: String
   childEffort: String
 }
@@ -502,7 +526,10 @@ type AgentDefinitionSettings {
   maxDepth: Int
   maxChildren: Int
   idleMinutes: Int
+  commandSwapLimitMb: Int
   commandOomPriority: Int
+  commandMemoryLimitPercent: Int
+  commandCgroupMode: String
   childModel: String
   childEffort: String
 }
@@ -2846,6 +2873,9 @@ input SetAgentSettingsInput {
   modelRetries: Int
   commandOomPriority: Int
   memoryFloorPercent: Int
+  commandCgroupMode: String
+  commandMemoryLimitPercent: Int
+  commandSwapLimitMb: Int
   commandShell: String
   extraPath: String
   childModel: String
@@ -4228,6 +4258,7 @@ type RootQueryType {
   knowledgeDocs: [KnowledgeDoc!]!
   knowledgeRead(path: String!): KnowledgeRead!
   agentSettings: AgentSettings!
+  commandGuardStatus(projectId: ID): CommandGuardStatus!
   publicUrl: PublicUrl!
   dependencies: Dependency!
   fileRules: FileRules!

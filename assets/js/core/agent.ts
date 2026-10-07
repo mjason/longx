@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   agentSettings,
+  commandGuardStatus,
   promoteLocal,
   publicUrl,
   setAgentSettings,
@@ -18,6 +19,9 @@ export type AgentSettings = {
   modelRetries: number;
   commandOomPriority: number;
   memoryFloorPercent: number;
+  commandCgroupMode: "auto" | "off" | "required";
+  commandMemoryLimitPercent: number;
+  commandSwapLimitMb: number;
   commandShell: "auto" | "bash" | "zsh";
   extraPath: string;
   defaultExtraPath: string;
@@ -28,7 +32,7 @@ export type AgentSettings = {
 /** A project's overrides: every field optional, null = inherit the global value. */
 export type AgentOverrides = Partial<{ [K in keyof AgentSettings]: AgentSettings[K] | null }>;
 
-export const agentSettingsFields = ["maxDepth", "maxChildren", "idleMinutes", "modelRetries", "commandOomPriority", "memoryFloorPercent", "childModel", "childEffort"] as const;
+export const agentSettingsFields = ["maxDepth", "maxChildren", "idleMinutes", "modelRetries", "commandOomPriority", "memoryFloorPercent", "commandCgroupMode", "commandMemoryLimitPercent", "commandSwapLimitMb", "childModel", "childEffort"] as const;
 
 export const agentKeys = {
   all: ["agent-kernel"] as const,
@@ -41,6 +45,32 @@ export function useAgentSettings() {
   return useQuery({
     queryKey: agentKeys.settings,
     queryFn: async () => unwrap(await agentSettings()) as AgentSettings,
+  });
+}
+
+export type CommandGuardStatus = {
+  mode: "auto" | "off" | "required";
+  platform: string;
+  capability: "off" | "unsupported" | "eligible" | "unavailable";
+  reason: string | null;
+  path: string | null;
+  activeTasks: number;
+  cleanupPendingTasks: number;
+  lastTaskStatus: string | null;
+  lastTaskReason: string | null;
+  lastTaskPath: string | null;
+  lastOomKill: number | null;
+  lastPopulated: boolean | null;
+  lastCleanupError: string | null;
+  lastObservedAt: string | null;
+  checkedAt: string;
+};
+
+export function useCommandGuardStatus(projectId?: string) {
+  return useQuery({
+    queryKey: [...agentKeys.all, "command-guard", projectId ?? null],
+    queryFn: async () => unwrap(await commandGuardStatus({ input: projectId ? { projectId } : {} })) as CommandGuardStatus,
+    refetchInterval: 5_000,
   });
 }
 

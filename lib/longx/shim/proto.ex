@@ -8,7 +8,7 @@ defmodule Longx.Shim.Proto do
   `version/0` when the format changes.
   """
 
-  @version "4"
+  @version "5"
 
   # host -> shim
   @input 1
@@ -32,6 +32,8 @@ defmodule Longx.Shim.Proto do
   @start_error 22
   @send_input 23
   @stats 24
+  @resource_guard 25
+  @resource_exit 26
 
   # 4 byte length prefix + 1 byte tag leaves this much payload in a 64 KiB packet
   @max_chunk 64 * 1024 - 5
@@ -59,6 +61,8 @@ defmodule Longx.Shim.Proto do
           | {:start_error, String.t()}
           | :send_input
           | {:stats, stats}
+          | {:resource_guard, map}
+          | {:resource_exit, map}
           | {:unknown, byte, binary}
 
   @typedoc "The child's whole process tree at one instant."
@@ -131,6 +135,36 @@ defmodule Longx.Shim.Proto do
 
       _ ->
         {:unknown, @stats, json}
+    end
+  end
+
+  def decode(<<@resource_guard, json::binary>>) do
+    case Jason.decode(json) do
+      {:ok,
+       %{
+         "status" => status,
+         "memory_max" => memory,
+         "swap_max" => swap
+       } = guard}
+      when status in ["active", "unavailable", "off"] and is_integer(memory) and memory >= 0 and
+             is_integer(swap) and swap >= 0 ->
+        if is_binary(Map.get(guard, "reason", "")) and is_binary(Map.get(guard, "path", "")),
+          do: {:resource_guard, guard},
+          else: {:unknown, @resource_guard, json}
+
+      _ ->
+        {:unknown, @resource_guard, json}
+    end
+  end
+
+  def decode(<<@resource_exit, json::binary>>) do
+    case Jason.decode(json) do
+      {:ok, %{"oom_kill" => count, "populated" => populated, "cleanup_error" => error} = exit}
+      when is_integer(count) and count >= 0 and is_boolean(populated) and is_binary(error) ->
+        {:resource_exit, exit}
+
+      _ ->
+        {:unknown, @resource_exit, json}
     end
   end
 

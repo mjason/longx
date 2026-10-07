@@ -16,7 +16,7 @@ import (
 )
 
 // ProtocolVersion must match Longx.Shim.Proto on the Elixir side.
-const ProtocolVersion = "4"
+const ProtocolVersion = "5"
 
 // Packets sent by the host to the shim.
 const (
@@ -34,15 +34,17 @@ const (
 
 // Packets sent by the shim to the host.
 const (
-	TagPid        uint8 = 16 // payload: pid::32
-	TagOutput     uint8 = 17 // payload: stdout bytes (answer to SendOutput)
-	TagOutputEOF  uint8 = 18 // stdout reached EOF or was closed
-	TagStderr     uint8 = 19 // payload: stderr bytes (answer to SendStderr)
-	TagStderrEOF  uint8 = 20
-	TagExitStatus uint8 = 21 // payload: status::32-signed
-	TagStartError uint8 = 22 // payload: reason string; the child never started
-	TagSendInput  uint8 = 23 // the child is ready for one more Input packet
-	TagStats      uint8 = 24 // payload: JSON {"processes","rss_bytes","cpu_ms"} (answer to SendStats)
+	TagPid           uint8 = 16 // payload: pid::32
+	TagOutput        uint8 = 17 // payload: stdout bytes (answer to SendOutput)
+	TagOutputEOF     uint8 = 18 // stdout reached EOF or was closed
+	TagStderr        uint8 = 19 // payload: stderr bytes (answer to SendStderr)
+	TagStderrEOF     uint8 = 20
+	TagExitStatus    uint8 = 21 // payload: status::32-signed
+	TagStartError    uint8 = 22 // payload: reason string; the child never started
+	TagSendInput     uint8 = 23 // the child is ready for one more Input packet
+	TagStats         uint8 = 24 // payload: JSON {"processes","rss_bytes","cpu_ms"} (answer to SendStats)
+	TagResourceGuard uint8 = 25 // JSON: Linux task cgroup status, before Pid
+	TagResourceExit  uint8 = 26 // JSON: OOM counter and verified cleanup, before ExitStatus
 )
 
 // MaxPayload is the largest payload that fits in a single packet. Kept at

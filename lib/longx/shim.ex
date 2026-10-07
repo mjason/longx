@@ -44,6 +44,10 @@ defmodule Longx.Shim do
           | {:grace, non_neg_integer}
           | {:log, :stderr | Path.t()}
           | {:oom_score_adj, -1000..1000}
+          | {:cgroup, :auto | :required | :off}
+          | {:memory_max, non_neg_integer}
+          | {:swap_max, non_neg_integer}
+          | {:cgroup_root, Path.t()}
           | {:env_clear, boolean}
           | {:pty, boolean}
           | {:stdin, :pipe | :null}
@@ -95,6 +99,10 @@ defmodule Longx.Shim do
          {:ok, stderr} <- normalize_stderr(opts[:stderr]),
          {:ok, env} <- normalize_env(opts[:env]),
          {:ok, log} <- normalize_log(opts[:log]),
+         {:ok, cgroup} <- normalize_cgroup(opts[:cgroup]),
+         {:ok, memory_max} <- normalize_limit(:memory_max, opts[:memory_max]),
+         {:ok, swap_max} <- normalize_limit(:swap_max, opts[:swap_max]),
+         {:ok, cgroup_root} <- normalize_cgroup_root(opts[:cgroup_root]),
          {:ok, oom_score_adj} <- normalize_oom_score_adj(opts[:oom_score_adj]) do
       spec = %{
         cmd: [path | args],
@@ -104,6 +112,10 @@ defmodule Longx.Shim do
         log: log,
         grace: Keyword.get(opts, :grace, @default_grace_ms),
         oom_score_adj: oom_score_adj,
+        cgroup: cgroup,
+        memory_max: memory_max,
+        swap_max: swap_max,
+        cgroup_root: cgroup_root,
         # `env_clear: true` — the child's environment is exactly `env:`, nothing
         # of the BEAM's (the exec-server builds a command's environment itself)
         env_clear: Keyword.get(opts, :env_clear, false) == true,
@@ -193,6 +205,12 @@ defmodule Longx.Shim do
   @spec os_pid(GenServer.server()) :: pos_integer
   def os_pid(shim), do: GenServer.call(shim, :os_pid)
 
+  @doc "Resource guard reported at startup; available briefly after the shim exits."
+  def resource_guard(shim), do: Longx.Shim.Resources.get(shim, :resource_guard)
+
+  @doc "Resource exit reported before the exit status; nil until reported, retained after exit."
+  def resource_exit(shim), do: Longx.Shim.Resources.get(shim, :resource_exit)
+
   @doc """
   Process count, resident memory and CPU time of the child's whole process
   tree (Linux: /proc walk by parent pid; Windows: the Job object; macOS:
@@ -267,10 +285,17 @@ defmodule Longx.Shim do
     Process.flag(:trap_exit, true)
     port = open_port(spec)
     Port.command(port, Proto.encode(:env, spec.env))
+    await_start(port, spec, System.monotonic_time(:millisecond) + @start_timeout)
+  end
 
+  defp await_start(port, spec, deadline) do
     receive do
       {^port, {:data, data}} ->
         case Proto.decode(data) do
+          {:resource_guard, guard} ->
+            Longx.Shim.Resources.put(self(), :resource_guard, guard)
+            await_start(port, spec, deadline)
+
           {:pid, os_pid} ->
             stdin = if spec.null_stdin and not spec.pty, do: :closed, else: :open
             {:ok, %State{port: port, os_pid: os_pid, owner: spec.caller, stdin: stdin}}
@@ -292,7 +317,7 @@ defmodule Longx.Shim do
         send(spec.caller, {__MODULE__, :start_error, "shim exited with status #{code}"})
         :ignore
     after
-      @start_timeout ->
+      max(deadline - System.monotonic_time(:millisecond), 0) ->
         Port.close(port)
         send(spec.caller, {__MODULE__, :start_error, "timed out waiting for the shim"})
         :ignore
@@ -461,6 +486,16 @@ defmodule Longx.Shim do
     %State{state | stats_waiters: []}
   end
 
+  defp handle_event({:resource_guard, guard}, state) do
+    Longx.Shim.Resources.put(self(), :resource_guard, guard)
+    state
+  end
+
+  defp handle_event({:resource_exit, exit}, state) do
+    Longx.Shim.Resources.put(self(), :resource_exit, exit)
+    state
+  end
+
   defp handle_event(:send_input, %State{} = state),
     do: maybe_send_input(%State{state | credit: true})
 
@@ -606,6 +641,10 @@ defmodule Longx.Shim do
         if(spec.cd, do: ["-cd", spec.cd], else: []) ++
         if(spec.log, do: ["-log", spec.log], else: []) ++
         if(spec.oom_score_adj, do: ["-oom_score_adj", "#{spec.oom_score_adj}"], else: []) ++
+        ["-cgroup", Atom.to_string(spec.cgroup)] ++
+        if(spec.memory_max != nil, do: ["-memory_max", "#{spec.memory_max}"], else: []) ++
+        if(spec.swap_max != nil, do: ["-swap_max", "#{spec.swap_max}"], else: []) ++
+        if(spec.cgroup_root, do: ["-cgroup_root", spec.cgroup_root], else: []) ++
         if(spec.env_clear, do: ["-clean_env"], else: []) ++
         if(spec.pty, do: ["-pty"], else: []) ++
         if(spec.null_stdin, do: ["-no_stdin"], else: []) ++
@@ -622,6 +661,24 @@ defmodule Longx.Shim do
   end
 
   ## Option normalisation
+
+  defp normalize_cgroup(nil), do: {:ok, :off}
+  defp normalize_cgroup(mode) when mode in [:auto, :required, :off], do: {:ok, mode}
+  defp normalize_cgroup(mode), do: {:error, {:invalid_option, {:cgroup, mode}}}
+
+  defp normalize_limit(_key, nil), do: {:ok, nil}
+  defp normalize_limit(_key, n) when is_integer(n) and n >= 0, do: {:ok, n}
+  defp normalize_limit(key, value), do: {:error, {:invalid_option, {key, value}}}
+
+  defp normalize_cgroup_root(nil), do: {:ok, nil}
+
+  defp normalize_cgroup_root(path) when is_binary(path) do
+    if Path.type(path) == :absolute and not String.contains?(path, <<0>>),
+      do: {:ok, path},
+      else: {:error, {:invalid_option, {:cgroup_root, path}}}
+  end
+
+  defp normalize_cgroup_root(path), do: {:error, {:invalid_option, {:cgroup_root, path}}}
 
   defp find_executable(cmd) do
     case System.find_executable(cmd) do

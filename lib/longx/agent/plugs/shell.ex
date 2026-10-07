@@ -33,6 +33,7 @@ defmodule Longx.Agent.Plugs.Shell do
 
   alias Longx.Agent.Tools.ShellEnv
   alias Longx.Shim
+  alias Longx.Shim.ResourceReport
 
   @default_timeout 120_000
   @max_timeout 30 * 60_000
@@ -43,7 +44,7 @@ defmodule Longx.Agent.Plugs.Shell do
   tool :exec_command,
        "Runs a shell command in the working directory and returns its output (stdout and stderr interleaved) and exit code. The command runs to completion; it is killed after timeout_ms (default 120000, max 1800000). A server, or a batch that runs for minutes or hours: start it with start_job instead — it keeps running after this turn and wakes you when it ends. Never background a command here (nohup, &, setsid): what it leaves running is ended with it.",
        show: :command,
-       timeout: @max_timeout + 5_000,
+       timeout: @max_timeout + 15_000,
        prepare: &__MODULE__.normalize/1 do
     param :cmd, :string, "Shell command to execute.", required: true
     param :workdir, :string, "Working directory for the command. Defaults to the turn cwd."
@@ -105,10 +106,27 @@ defmodule Longx.Agent.Plugs.Shell do
     total = Longx.System.Memory.total()
     oom = Keyword.get(opts, :oom_score_adj)
     floor = Keyword.get(opts, :memory_floor_percent, 0)
+    mode = Keyword.get(opts, :cgroup, Keyword.get(opts, :command_cgroup_mode, "auto"))
 
     %{
+      cgroup_mode: mode,
       oom_score_adj: if(is_integer(oom) and oom > 0, do: oom),
       floor: if(is_integer(floor) and floor > 0 and is_integer(total), do: floor, else: 0),
+      cgroup_opts:
+        if(:os.type() == {:unix, :linux},
+          do:
+            opts
+            |> Keyword.take([:cgroup, :memory_max, :swap_max, :cgroup_root])
+            |> Keyword.put_new(
+              :cgroup,
+              case mode do
+                "off" -> :off
+                "required" -> :required
+                _ -> :auto
+              end
+            ),
+          else: []
+        ),
       # `options Shell, timeout_ms:` — a description's default for every command (capped)
       timeout: timeout(Keyword.get(opts, :timeout_ms), @default_timeout)
     }
@@ -144,6 +162,13 @@ defmodule Longx.Agent.Plugs.Shell do
 
   @doc false
   def exec_command(%{"cmd" => command} = args, ctx, guards) do
+    case Longx.System.CommandGuard.start_check(guards.cgroup_mode) do
+      :ok -> run_command(command, args, ctx, guards)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp run_command(command, args, ctx, guards) do
     timeout = timeout(args["timeout_ms"], guards.timeout)
     cwd = workdir(args["workdir"], ctx)
 
@@ -166,6 +191,7 @@ defmodule Longx.Agent.Plugs.Shell do
     opts =
       [cd: cwd, env: ShellEnv.env_list(), env_clear: true] ++
         if(tty?, do: [pty: true], else: [stderr: :stream, stdin: :null]) ++
+        Map.get(guards, :cgroup_opts, []) ++
         if(guards.oom_score_adj, do: [oom_score_adj: guards.oom_score_adj], else: [])
 
     # the watchdog and the settings page know this command before it starts
@@ -182,6 +208,17 @@ defmodule Longx.Agent.Plugs.Shell do
 
     case Shim.start_link([shell, flag, command], opts) do
       {:ok, shim} ->
+        warning =
+          ResourceReport.warning(Shim.resource_guard(shim)) ||
+            Longx.System.CommandGuard.unsupported_warning(guards.cgroup_mode)
+
+        initial = %{output: [], size: 0, emitted: 0, eofs: 0, exit: nil, resource_exit: nil}
+
+        initial =
+          if warning,
+            do: initial |> keep(warning <> "\n") |> show(ctx, warning <> "\n"),
+            else: initial
+
         # the ledger gets the shim and the OS pid: what the settings page shows and kills
         Longx.System.Pressure.update(%{shim: shim, os_pid: Shim.os_pid(shim)})
 
@@ -191,41 +228,61 @@ defmodule Longx.Agent.Plugs.Shell do
         spawn_link(fn -> pump(shim, &Shim.read_stderr/3, me) end)
 
         spawn_link(fn ->
-          send(me, {:exited, Shim.await_exit(shim, :infinity, close_streams: false)})
+          result = Shim.await_exit(shim, :infinity, close_streams: false)
+          send(me, {:exited, result, Shim.resource_exit(shim)})
         end)
 
         deadline = started + timeout
 
-        case collect(%{output: [], size: 0, emitted: 0, eofs: 0, exit: nil}, ctx, deadline) do
+        case collect(initial, ctx, deadline) do
           {:ok, %{exit: code} = acc} ->
-            {:ok, report(acc, code, started, max_bytes, nil),
-             %{"exitCode" => code, "durationMs" => elapsed(started)}}
+            reason = ResourceReport.exit_reason(acc.resource_exit)
+
+            extra = %{
+              "exitCode" => code,
+              "durationMs" => elapsed(started),
+              "resourceExit" => acc.resource_exit
+            }
+
+            if reason,
+              do:
+                {:error, report(acc, code, started, max_bytes, reason),
+                 Map.put(extra, "reason", reason)},
+              else: {:ok, report(acc, code, started, max_bytes, nil), extra}
 
           # codex's words and its conventional exit code for a timeout
           {:timeout, acc} ->
-            Shim.kill(shim)
-            reason = "command timed out after #{timeout} milliseconds"
+            resource = stop_resource(shim)
+
+            reason =
+              ResourceReport.combine("command timed out after #{timeout} milliseconds", resource)
 
             {:error, report(acc, 124, started, max_bytes, reason),
              %{"exitCode" => 124, "durationMs" => elapsed(started), "reason" => reason}}
 
           {:killed, acc} ->
-            Shim.kill(shim)
+            resource = stop_resource(shim)
 
             reason =
-              "killed from the settings page by the person (it was taking too long or hanging). " <>
-                "Do not run it again as it was; ask what to do next or take a smaller step."
+              ResourceReport.combine(
+                "killed from the settings page by the person (it was taking too long or hanging). " <>
+                  "Do not run it again as it was; ask what to do next or take a smaller step.",
+                resource
+              )
 
             {:error, report(acc, 137, started, max_bytes, reason),
              %{"exitCode" => 137, "durationMs" => elapsed(started), "reason" => reason}}
 
           {:pressure, %{percent: percent, available: available, total: total}, acc} ->
-            Shim.kill(shim)
+            resource = stop_resource(shim)
 
             reason =
-              "killed by Longx: the machine was down to #{percent}% free memory " <>
-                "(#{Longx.System.Pressure.human(available)} of #{Longx.System.Pressure.human(total)}). " <>
-                "Run a smaller job (fewer rows, a smaller batch, one run at a time) and check its memory before going bigger."
+              ResourceReport.combine(
+                "killed by Longx: the machine was down to #{percent}% free memory " <>
+                  "(#{Longx.System.Pressure.human(available)} of #{Longx.System.Pressure.human(total)}). " <>
+                  "Run a smaller job (fewer rows, a smaller batch, one run at a time) and check its memory before going bigger.",
+                resource
+              )
 
             {:error, report(acc, 137, started, max_bytes, reason),
              %{"exitCode" => 137, "durationMs" => elapsed(started), "reason" => reason}}
@@ -234,6 +291,17 @@ defmodule Longx.Agent.Plugs.Shell do
       {:error, reason} ->
         {:error, "could not start the command: #{inspect(reason)}"}
     end
+  end
+
+  defp stop_resource(shim) do
+    Shim.kill(shim)
+
+    case Shim.await_exit(shim, 10_000) do
+      {:ok, _} -> ResourceReport.exit_reason(Shim.resource_exit(shim))
+      {:error, _} -> "task cleanup could not be verified before returning"
+    end
+  catch
+    :exit, _ -> ResourceReport.exit_reason(Shim.resource_exit(shim))
   end
 
   defp workdir(dir, ctx) when is_binary(dir) and dir != "", do: Context.path(ctx, dir)
@@ -274,6 +342,12 @@ defmodule Longx.Agent.Plugs.Shell do
 
       {:exited, {:ok, code}} ->
         collect(%{acc | exit: code}, ctx, deadline)
+
+      {:exited, {:ok, code}, resource} ->
+        collect(%{acc | exit: code, resource_exit: resource}, ctx, deadline)
+
+      {:exited, {:error, _}, resource} ->
+        collect(%{acc | exit: -1, resource_exit: resource}, ctx, deadline)
 
       {:exited, {:error, _}} ->
         collect(%{acc | exit: -1}, ctx, deadline)

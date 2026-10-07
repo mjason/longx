@@ -25,6 +25,7 @@ import { Skeleton } from "@/ui/components/ui/skeleton";
 import { Switch } from "@/ui/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { AgentSettingsFields, agentSettingsForm, agentSettingsInput, type AgentSettingsForm } from "@/ui/components/AgentSettingsFields";
+import { CommandGuardStatus } from "@/ui/components/CommandGuardStatus";
 import { t } from "@/ui/strings";
 import { ComputerCard } from "./ComputerCard";
 
@@ -138,6 +139,7 @@ function SettingsForm({ initial, commandShell: initialShell, extraPath: initialE
   return (
     <section className="space-y-4 rounded-lg border p-4" data-testid="agent-settings">
       <AgentSettingsFields idPrefix="ak" value={form} onChange={setForm} models={models} />
+      <CommandGuardStatus />
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="ak-command-shell">{s.commandShell}</Label>
         <Select value={commandShell} onValueChange={(value) => setCommandShell(value as typeof commandShell)}>

@@ -10,11 +10,15 @@ import (
 	"strings"
 )
 
-// guard has nothing to hold on Linux: the OOM score is inherited by the child tree.
-type guard struct{}
+// The supervisor stays outside the task's memory/OOM domain.
+type guard struct{ cgroup *taskCgroup }
 
-// kill: nothing beyond the process-group signal on this platform.
-func (g guard) kill() {}
+// kill reaches every task member, including descendants that called setsid.
+func (g guard) kill() {
+	if g.cgroup != nil {
+		g.cgroup.kill()
+	}
+}
 
 // beforeStart raises our own oom_score_adj so the child tree inherits it.
 // Raising never needs privileges; lowering would (CAP_SYS_RESOURCE), which

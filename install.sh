@@ -34,6 +34,24 @@ have_systemd() {
   command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1
 }
 
+cgroup_service_properties() {
+  # DelegateSubgroup appeared in systemd 254. Keep the supervisor out of the
+  # task memory domain; do not apply MemoryMax to the Longx service itself.
+  cgroup_systemd_version="$(systemctl --version 2>/dev/null | sed -n '1s/^systemd \([0-9][0-9]*\).*/\1/p')"
+  case "$cgroup_systemd_version" in
+    '' | *[!0-9]*)
+      printf '%s\n' '警告：无法确认 systemd 版本，任务 cgroup 保护未自动启用。' >&2
+      ;;
+    *)
+      if [ "$cgroup_systemd_version" -ge 254 ]; then
+        printf '%s\n' 'Delegate=memory' 'DelegateSubgroup=supervisor'
+      else
+        printf '%s\n' '警告：systemd < 254，任务 cgroup 保护未自动启用；全机内存保护仍保留。' >&2
+      fi
+      ;;
+  esac
+}
+
 service_active() {
   have_systemd && systemctl --user is-active --quiet longx
 }
@@ -148,6 +166,7 @@ Environment=LONGX_DATA_DIR=$DATA
 Environment=PORT=$PORT
 ExecStart=$APP/bin/longx start
 Restart=on-failure
+$(cgroup_service_properties)
 
 [Install]
 WantedBy=default.target

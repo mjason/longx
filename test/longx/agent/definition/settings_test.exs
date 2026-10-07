@@ -87,6 +87,87 @@ defmodule Longx.Agent.Definition.SettingsTest do
     assert {:ok, %{max_depth: 2}} = Settings.put_global(%{max_depth: nil})
   end
 
+  @tag :cgroup
+  test "command cgroup mode validates auto, off and required with project inheritance" do
+    assert Settings.defaults().command_cgroup_mode == "auto"
+
+    assert {:ok, %{command_cgroup_mode: "off"}} =
+             Settings.put_global(%{command_cgroup_mode: "off"})
+
+    assert Settings.for_project(%{agent_settings: %{}}).command_cgroup_mode == "off"
+
+    assert Settings.for_project(%{agent_settings: %{"command_cgroup_mode" => "required"}}).command_cgroup_mode ==
+             "required"
+
+    assert {:error, %{field: :command_cgroup_mode}} =
+             Settings.put_global(%{command_cgroup_mode: "always"})
+
+    assert {:ok, %{command_cgroup_mode: "auto"}} =
+             Settings.put_global(%{command_cgroup_mode: nil})
+
+    assert Loader.command_guard_options(
+             %{Settings.defaults() | command_cgroup_mode: "off"},
+             {:linux, :x86_64},
+             100_000
+           )[:cgroup] == :off
+
+    assert Loader.command_guard_options(
+             %{Settings.defaults() | command_cgroup_mode: "required"},
+             {:linux, :x86_64},
+             100_000
+           )[:cgroup] == :required
+  end
+
+  @tag :cgroup
+  test "task cgroup budgets have validated defaults, zero swap and project overrides" do
+    assert %{command_memory_limit_percent: 75, command_swap_limit_mb: 1024} =
+             Settings.defaults()
+
+    assert {:ok, %{command_memory_limit_percent: 80, command_swap_limit_mb: 0}} =
+             Settings.put_global(%{command_memory_limit_percent: 80, command_swap_limit_mb: 0})
+
+    for value <- [0, 81, 1.5] do
+      assert {:error, %{field: :command_memory_limit_percent}} =
+               Settings.put_global(%{command_memory_limit_percent: value})
+    end
+
+    for value <- [-1, 65537, 1.5] do
+      assert {:error, %{field: :command_swap_limit_mb}} =
+               Settings.put_global(%{command_swap_limit_mb: value})
+    end
+
+    assert %{command_memory_limit_percent: 30, command_swap_limit_mb: 0} =
+             Settings.for_project(%{agent_settings: %{"command_memory_limit_percent" => 30}})
+
+    assert {:ok, %{command_memory_limit_percent: 75, command_swap_limit_mb: 1024}} =
+             Settings.put_global(%{command_memory_limit_percent: nil, command_swap_limit_mb: nil})
+  end
+
+  @tag :cgroup
+  test "loader converts Linux limits to bytes and leaves other operating systems unchanged" do
+    settings = Settings.defaults()
+    linux = Loader.command_guard_options(settings, {:linux, :x86_64}, 100_000)
+    assert linux[:cgroup] == :auto
+    assert linux[:memory_max] == 75_000
+    assert linux[:swap_max] == 1024 * 1024 * 1024
+
+    zero =
+      Loader.command_guard_options(
+        Map.put(settings, :command_swap_limit_mb, 0),
+        {:linux, :aarch64},
+        100_000
+      )
+
+    assert zero[:swap_max] == 0
+
+    for platform <- [{:darwin, :aarch64}, {:windows, :x86_64}] do
+      other = Loader.command_guard_options(settings, platform, nil)
+      refute Keyword.has_key?(other, :cgroup)
+      refute Keyword.has_key?(other, :memory_max)
+      refute Keyword.has_key?(other, :swap_max)
+    end
+  end
+
   defp default_obscura_path do
     case Longx.Browser.Runtime.executable() do
       {:ok, executable} ->

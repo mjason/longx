@@ -27,6 +27,8 @@ func main() {
 		case "js":
 			// the browser sessions' JavaScript runtime (js.go)
 			os.Exit(jsMain())
+		case "cgroup-status":
+			os.Exit(cgroupStatusMain())
 		}
 	}
 
@@ -35,6 +37,10 @@ func main() {
 	logTarget := flag.String("log", "", "shim diagnostics: stderr or a file path")
 	grace := flag.Duration("grace", 5*time.Second, "soft-kill grace period used when the host disappears")
 	oomScoreAdj := flag.Int("oom_score_adj", 0, "Linux: oom_score_adj for the shim and its child tree (-1000..1000)")
+	cgroupMode := flag.String("cgroup", "off", "Linux task cgroup: off|auto|required")
+	cgroupRoot := flag.String("cgroup_root", "", "Linux: explicitly delegated cgroup v2 root (fails closed)")
+	memoryMax := flag.Int64("memory_max", 0, "Linux: task memory.max in bytes")
+	swapMax := flag.Int64("swap_max", 0, "Linux: task memory.swap.max in bytes")
 	cleanEnv := flag.Bool("clean_env", false, "give the child only the environment sent by the host, nothing of the shim's own")
 	pty := flag.Bool("pty", false, "run the child on a pseudo-terminal: one output stream, stdin stays open (unix only)")
 	noStdin := flag.Bool("no_stdin", false, "give the child the null device as stdin instead of a pipe (not with -pty)")
@@ -66,7 +72,19 @@ func main() {
 		CleanEnv:    *cleanEnv,
 		PTY:         *pty,
 		NoStdin:     *noStdin,
+		Cgroup:      *cgroupMode,
+		CgroupRoot:  *cgroupRoot,
+		MemoryMax:   *memoryMax,
+		SwapMax:     *swapMax,
 	}
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "memory_max" {
+			cfg.MemoryMaxSet = true
+		}
+		if f.Name == "swap_max" {
+			cfg.SwapMaxSet = true
+		}
+	})
 	os.Exit(run(os.Stdin, os.Stdout, cfg))
 }
 

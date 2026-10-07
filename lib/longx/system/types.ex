@@ -88,6 +88,9 @@ defmodule Longx.System.Types do
           model_retries: [type: :integer, allow_nil?: false],
           command_oom_priority: [type: :integer, allow_nil?: false],
           memory_floor_percent: [type: :integer, allow_nil?: false],
+          command_cgroup_mode: [type: :string, allow_nil?: false],
+          command_memory_limit_percent: [type: :integer, allow_nil?: false],
+          command_swap_limit_mb: [type: :integer, allow_nil?: false],
           command_shell: [type: :string, allow_nil?: false],
           extra_path: [type: :string, allow_nil?: false],
           default_extra_path: [type: :string, allow_nil?: false],
@@ -97,6 +100,33 @@ defmodule Longx.System.Types do
       ]
 
     def graphql_type(_), do: :agent_settings
+  end
+
+  defmodule CommandGuardStatus do
+    @moduledoc "Configured mode, read-only eligibility and recent actual task reports."
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          mode: [type: :string, allow_nil?: false],
+          platform: [type: :string, allow_nil?: false],
+          capability: [type: :string, allow_nil?: false],
+          reason: [type: :string],
+          path: [type: :string],
+          active_tasks: [type: :integer, allow_nil?: false],
+          cleanup_pending_tasks: [type: :integer, allow_nil?: false],
+          last_task_status: [type: :string],
+          last_task_reason: [type: :string],
+          last_task_path: [type: :string],
+          last_oom_kill: [type: :integer],
+          last_populated: [type: :boolean],
+          last_cleanup_error: [type: :string],
+          last_observed_at: [type: :string],
+          checked_at: [type: :string, allow_nil?: false]
+        ]
+      ]
+
+    def graphql_type(_), do: :command_guard_status
   end
 
   defmodule Dependency do

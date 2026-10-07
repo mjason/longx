@@ -203,10 +203,7 @@ defmodule Longx.Agent.Definition.Loader do
        [max_depth: settings.max_depth, max_children: settings.max_children]}
 
     # the machine's guards on every command the agent runs, and on its jobs
-    guard_opts = [
-      oom_score_adj: settings.command_oom_priority,
-      memory_floor_percent: settings.memory_floor_percent
-    ]
+    guard_opts = command_guard_options(settings)
 
     guards = {:options, Longx.Agent.Plugs.Shell, guard_opts}
     job_guards = {:options, Longx.Agent.Plugs.Jobs, guard_opts}
@@ -217,6 +214,39 @@ defmodule Longx.Agent.Definition.Loader do
         else: {nil, nil}
 
     [%Config{ops: [limits, guards, job_guards], model: model, effort: effort}]
+  end
+
+  @doc false
+  def command_guard_options(
+        settings,
+        platform \\ Longx.Platform.current(),
+        total \\ Longx.System.Memory.total()
+      ) do
+    existing = [
+      oom_score_adj: settings.command_oom_priority,
+      memory_floor_percent: settings.memory_floor_percent,
+      command_cgroup_mode: Map.get(settings, :command_cgroup_mode, "auto")
+    ]
+
+    if match?({:linux, _}, platform) do
+      memory =
+        if is_integer(total) and total > 0,
+          do: div(total * Map.get(settings, :command_memory_limit_percent, 75), 100)
+
+      existing ++
+        [
+          cgroup:
+            case Map.get(settings, :command_cgroup_mode, "auto") do
+              "off" -> :off
+              "required" -> :required
+              _ -> :auto
+            end,
+          memory_max: memory,
+          swap_max: Map.get(settings, :command_swap_limit_mb, 1024) * 1024 * 1024
+        ]
+    else
+      existing
+    end
   end
 
   defp last(configs, fun), do: configs |> Enum.map(fun) |> Enum.reject(&is_nil/1) |> List.last()

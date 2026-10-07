@@ -27,6 +27,9 @@ defmodule Longx.Agent.Definition.Settings do
     :model_retries,
     :command_oom_priority,
     :memory_floor_percent,
+    :command_cgroup_mode,
+    :command_memory_limit_percent,
+    :command_swap_limit_mb,
     :command_shell,
     :extra_path,
     :child_model,
@@ -43,6 +46,9 @@ defmodule Longx.Agent.Definition.Settings do
     # process's, so the OOM killer went for Firefox and the box was rebooted
     command_oom_priority: 800,
     memory_floor_percent: 8,
+    command_cgroup_mode: "auto",
+    command_memory_limit_percent: 75,
+    command_swap_limit_mb: 1024,
     command_shell: "auto",
     extra_path: "",
     child_model: nil,
@@ -56,6 +62,9 @@ defmodule Longx.Agent.Definition.Settings do
           model_retries: non_neg_integer,
           command_oom_priority: non_neg_integer,
           memory_floor_percent: non_neg_integer,
+          command_cgroup_mode: String.t(),
+          command_memory_limit_percent: pos_integer,
+          command_swap_limit_mb: non_neg_integer,
           command_shell: String.t(),
           extra_path: String.t(),
           child_model: String.t() | nil,
@@ -129,6 +138,10 @@ defmodule Longx.Agent.Definition.Settings do
     Map.merge(settings, normalise(overrides || %{}))
     |> Map.put(:command_shell, settings.command_shell)
   end
+
+  @doc "A project's explicit settings as typed keys; nil values inherit."
+  @spec project_overrides(map) :: map
+  def project_overrides(%{agent_settings: overrides}), do: normalise(overrides || %{})
 
   @spec for_project_id(String.t() | nil) :: t
   def for_project_id(nil), do: global()
@@ -214,6 +227,24 @@ defmodule Longx.Agent.Definition.Settings do
     if is_integer(value) and value >= 0 and value <= 50,
       do: :ok,
       else: {:error, "must be a whole number from 0 to 50"}
+  end
+
+  defp check(:command_memory_limit_percent, value, _attrs) do
+    if is_integer(value) and value in 1..80,
+      do: :ok,
+      else: {:error, "must be a whole number from 1 to 80"}
+  end
+
+  defp check(:command_cgroup_mode, value, _attrs) when value in ["auto", "off", "required"],
+    do: :ok
+
+  defp check(:command_cgroup_mode, _value, _attrs),
+    do: {:error, "must be auto, off or required"}
+
+  defp check(:command_swap_limit_mb, value, _attrs) do
+    if is_integer(value) and value in 0..65536,
+      do: :ok,
+      else: {:error, "must be a whole number from 0 to 65536"}
   end
 
   defp check(:command_shell, value, _attrs) when value in ["auto", "bash", "zsh"] do

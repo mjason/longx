@@ -791,6 +791,93 @@ defmodule Longx.Agent.PlugsTest do
   end
 
   describe "Shell.exec_command" do
+    @tag :cgroup
+    test "off is silent and required cannot execute a payload without a valid root", %{
+      ctx: ctx,
+      dir: dir
+    } do
+      off = Shell.call(Step.new(phase: :request), Shell.init(command_cgroup_mode: "off"))
+
+      assert {:ok, output, _} =
+               Tool.call(off.tools["exec_command"], %{"cmd" => "echo off", "login" => false}, ctx)
+
+      refute output =~ "WARNING"
+
+      missing = Path.join(dir, "no-delegation")
+      marker = Path.join(dir, "must-not-run")
+
+      required =
+        Shell.call(Step.new(phase: :request), Shell.init(cgroup: :required, cgroup_root: missing))
+
+      assert {:error, _} =
+               Tool.call(
+                 required.tools["exec_command"],
+                 %{"cmd" => "touch #{marker}", "login" => false},
+                 ctx
+               )
+
+      refute File.exists?(marker)
+    end
+
+    @tag :cgroup
+    test "resource exit frames reach command output even when the shim exits", %{ctx: ctx} do
+      me = self()
+      thread_id = "native_resource_#{System.unique_integer([:positive])}"
+      ctx = %{ctx | thread_id: thread_id, emit: &send(me, {:emitted, &1})}
+      # Protocol fixture: no real cgroup/OOM is induced on the test machine.
+      step = Shell.call(Step.new(phase: :request), Shell.init(cgroup: :off))
+
+      task =
+        Task.async(fn ->
+          Tool.call(
+            step.tools["exec_command"],
+            %{"cmd" => "echo ready; sleep 30", "login" => false},
+            ctx
+          )
+        end)
+
+      assert_receive {:emitted, "ready\n"}, 5_000
+
+      {_pid, %{shim: shim}} =
+        Enum.find(Longx.System.Pressure.running(), fn {_, entry} ->
+          entry.thread_id == thread_id
+        end)
+
+      %{port: port} = :sys.get_state(shim)
+      exit = %{"oom_kill" => 1, "populated" => true, "cleanup_error" => "cleanup denied"}
+      ref = Process.monitor(shim)
+      send(shim, {port, {:data, <<26, Jason.encode!(exit)::binary>>}})
+      # Native synthetic-exit path: cleanup report, unknown status, closed pipes.
+      # The real sleep is stopped by the shim owner's normal exit, not a hang.
+      send(shim, {port, {:data, <<21, -1::signed-big-32>>}})
+      send(shim, {port, {:data, <<18>>}})
+      send(shim, {port, {:data, <<20>>}})
+      assert {:error, output, extra} = Task.await(task, 10_000)
+      assert extra["exitCode"] == -1
+      assert output =~ "Exit code: -1"
+      assert output =~ "memory limit exceeded"
+      assert output =~ "cleanup denied"
+      assert output =~ "still populated"
+      assert extra["resourceExit"] == exit
+      assert_receive {:DOWN, ^ref, :process, ^shim, _}, 5_000
+    end
+
+    @tag :cgroup
+    test "a signal exit is not mislabeled as a cgroup OOM", %{ctx: ctx} do
+      step = Shell.call(Step.new(phase: :request), Shell.init([]))
+
+      assert {:ok, output, extra} =
+               Tool.call(
+                 step.tools["exec_command"],
+                 %{"cmd" => "kill -KILL $$", "login" => false},
+                 ctx
+               )
+
+      assert extra["exitCode"] == 137
+      refute output =~ "memory limit exceeded"
+      refute extra["reason"]
+    end
+
     test "output that is not UTF-8 is scrubbed, streamed and stored: the view stays JSON-encodable; a clip never cuts a character",
          %{dir: dir} do
       me = self()
@@ -857,9 +944,13 @@ defmodule Longx.Agent.PlugsTest do
     end
 
     test "commands see the person's shell environment, not the BEAM's", %{ctx: ctx} do
+      # Environment parsing is independent of host cgroup delegation; guard
+      # warnings are covered separately and must remain visible in auto mode.
+      step = Shell.call(Step.new(phase: :request), Shell.init(cgroup: :off))
+
       assert {:ok, output, %{"exitCode" => 0}} =
                Tool.call(
-                 tool!(Shell, "exec_command"),
+                 step.tools["exec_command"],
                  %{"cmd" => "echo \"$PATH\"; echo \"$HOME\"", "login" => false},
                  ctx
                )
@@ -895,7 +986,9 @@ defmodule Longx.Agent.PlugsTest do
 
     test "the result reads like codex's format_exec_output_for_model: Exit code, Wall time, Output; a clip is …N tokens truncated…; a timeout says so with exit code 124",
          %{ctx: ctx} do
-      tool = tool!(Shell, "exec_command")
+      # Keep format assertions deterministic on both delegated and plain hosts.
+      step = Shell.call(Step.new(phase: :request), Shell.init(cgroup: :off))
+      tool = step.tools["exec_command"]
 
       assert {:ok, text, %{"exitCode" => 3}} =
                Tool.call(tool, %{"cmd" => "echo hi; echo err >&2; exit 3", "login" => false}, ctx)
@@ -923,7 +1016,8 @@ defmodule Longx.Agent.PlugsTest do
       assert clipped =~ "\n20000\n"
 
       # a timeout: codex's words, the conventional exit code
-      step = Shell.call(Step.new(phase: :request), Shell.init(timeout_ms: 300))
+      step =
+        Shell.call(Step.new(phase: :request), Shell.init(timeout_ms: 300, cgroup: :off))
 
       assert {:error, message, %{"exitCode" => 124, "reason" => "command timed out" <> _}} =
                Tool.call(

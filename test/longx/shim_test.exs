@@ -36,6 +36,58 @@ defmodule Longx.ShimTest do
   end
 
   describe "resource guards (Linux)" do
+    @tag :cgroup
+    test "invalid cgroup options are rejected before starting a child" do
+      for {key, value} <- [
+            cgroup: :unknown,
+            memory_max: -1,
+            swap_max: 1.5,
+            cgroup_root: "relative"
+          ] do
+        assert {:error, {:invalid_option, {^key, ^value}}} =
+                 Shim.start_link(["true"], [{key, value}])
+      end
+    end
+
+    @tag :cgroup
+    test "auto reports fallback before pid and keeps metadata after awaiting exit" do
+      assert {:ok, shim} =
+               Shim.start_link(sh("sleep 0.1; echo done"),
+                 cgroup: :auto,
+                 memory_max: 1024 * 1024 * 1024,
+                 swap_max: 0
+               )
+
+      report = Shim.resource_guard(shim)
+      assert report["status"] in ["active", "unavailable"]
+
+      if report["status"] == "unavailable" do
+        assert is_binary(report["reason"]) and report["reason"] != ""
+      end
+
+      assert read_all(shim) == "done\n"
+      assert {:ok, 0} = Shim.await_exit(shim)
+      assert Shim.resource_guard(shim) == report
+
+      if report["status"] == "active" do
+        assert %{"oom_kill" => 0, "populated" => false, "cleanup_error" => ""} =
+                 Shim.resource_exit(shim)
+
+        assert report["swap_max"] == 0
+      else
+        assert Shim.resource_exit(shim) == nil
+      end
+    end
+
+    @tag :cgroup
+    test "explicit invalid root never silently executes a command" do
+      root =
+        Path.join(System.tmp_dir!(), "longx-absent-cgroup-#{System.unique_integer([:positive])}")
+
+      assert {:error, {:start_error, _}} =
+               Shim.start_link(["true"], cgroup: :auto, cgroup_root: root)
+    end
+
     test "stats/1 sums the child's process tree; empty after exit" do
       {:ok, shim} =
         Shim.start_link(

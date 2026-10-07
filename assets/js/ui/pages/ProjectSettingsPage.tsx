@@ -5,10 +5,11 @@ import { Link, useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
 import { archiveProject, deleteProject, updateProject } from "@/core/api";
 import type { UpdateProjectInput } from "@/gql/graphql";
-import { usePromoteLocal } from "@/core/agent";
+import { agentKeys, usePromoteLocal } from "@/core/agent";
 import { useModelRows } from "@/core/ai";
 import { queryKeys, unwrap, useAgentDefinition, useModels, useProject } from "@/core/projects";
 import { AgentSettingsFields, agentSettingsForm, agentSettingsInput, type AgentSettingsForm } from "@/ui/components/AgentSettingsFields";
+import { CommandGuardStatus } from "@/ui/components/CommandGuardStatus";
 import { Button } from "@/ui/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
 import { Input } from "@/ui/components/ui/input";
@@ -88,6 +89,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
       client.invalidateQueries({ queryKey: queryKeys.project(slug) });
       client.invalidateQueries({ queryKey: queryKeys.projects });
       client.invalidateQueries({ queryKey: ["project", project.id, "agent-definition"] });
+      client.invalidateQueries({ queryKey: agentKeys.all });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -321,6 +323,7 @@ function AgentSection({
             <p className="text-sm font-medium">{t.agentDefinition.overrides}</p>
             <p className="text-muted-foreground text-xs">{t.agentDefinition.overridesHint}</p>
             <AgentSettingsFields idPrefix="ps-ak" value={overrides} onChange={onOverrides} models={models.data ?? []} inherited={d.settings} />
+            <CommandGuardStatus projectId={projectId} />
           </div>
         </div>
       )}

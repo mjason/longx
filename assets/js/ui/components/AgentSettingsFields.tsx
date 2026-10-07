@@ -1,6 +1,7 @@
 // The native kernel's team parameters as form fields — the global page and
 // a project's overrides share them (a project leaves a field empty to inherit).
 import type { ModelRow } from "@/core/ai";
+import { useAgentSettings } from "@/core/agent";
 import { Input } from "@/ui/components/ui/input";
 import { Label } from "@/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
@@ -16,6 +17,9 @@ export type AgentSettingsForm = {
   modelRetries: string;
   commandOomPriority: string;
   memoryFloorPercent: string;
+  commandCgroupMode: string;
+  commandMemoryLimitPercent: string;
+  commandSwapLimitMb: string;
   childModel: string;
   childEffort: string;
 };
@@ -27,6 +31,9 @@ export const emptyAgentSettingsForm: AgentSettingsForm = {
   modelRetries: "",
   commandOomPriority: "",
   memoryFloorPercent: "",
+  commandCgroupMode: "",
+  commandMemoryLimitPercent: "",
+  commandSwapLimitMb: "",
   childModel: "",
   childEffort: "",
 };
@@ -42,6 +49,9 @@ export function agentSettingsInput(form: AgentSettingsForm) {
     modelRetries: num(form.modelRetries),
     commandOomPriority: num(form.commandOomPriority),
     memoryFloorPercent: num(form.memoryFloorPercent),
+    commandCgroupMode: str(form.commandCgroupMode),
+    commandMemoryLimitPercent: num(form.commandMemoryLimitPercent),
+    commandSwapLimitMb: num(form.commandSwapLimitMb),
     childModel: str(form.childModel),
     childEffort: str(form.childEffort),
   };
@@ -56,6 +66,9 @@ export function agentSettingsForm(values: Partial<Record<keyof AgentSettingsForm
     modelRetries: one(values.modelRetries),
     commandOomPriority: one(values.commandOomPriority),
     memoryFloorPercent: one(values.memoryFloorPercent),
+    commandCgroupMode: one(values.commandCgroupMode),
+    commandMemoryLimitPercent: one(values.commandMemoryLimitPercent),
+    commandSwapLimitMb: one(values.commandSwapLimitMb),
     childModel: one(values.childModel),
     childEffort: one(values.childEffort),
   };
@@ -77,15 +90,17 @@ export function AgentSettingsFields({
   /** the values in force when a field is left empty (a project's page) */
   inherited?: Partial<Record<keyof AgentSettingsForm, number | string | null>>;
 }) {
+  const global = useAgentSettings();
+  const inheritedMode = inherited ? global.data?.commandCgroupMode : "auto";
   const set = <K extends keyof AgentSettingsForm>(key: K, v: string) => onChange({ ...value, [key]: v });
   const placeholder = (key: keyof AgentSettingsForm) => {
     const v = inherited?.[key];
     return v === null || v === undefined ? undefined : `${s.inherit} ${v}`;
   };
-  const number = (key: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries" | "commandOomPriority" | "memoryFloorPercent", label: string, hint?: string, min = 1) => (
+  const number = (key: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries" | "commandOomPriority" | "memoryFloorPercent" | "commandMemoryLimitPercent" | "commandSwapLimitMb", label: string, hint?: string, min = 1, max?: number) => (
     <div className="flex flex-col gap-1.5">
       <Label htmlFor={`${idPrefix}-${key}`}>{label}</Label>
-      <Input id={`${idPrefix}-${key}`} type="number" min={min} inputMode="numeric" value={value[key]} placeholder={placeholder(key)} onChange={(e) => set(key, e.target.value)} className="w-40" />
+      <Input id={`${idPrefix}-${key}`} type="number" min={min} max={max} inputMode="numeric" value={value[key]} placeholder={placeholder(key)} onChange={(e) => set(key, e.target.value)} className="w-40" />
       {hint ? <span className="text-muted-foreground text-xs">{hint}</span> : null}
     </div>
   );
@@ -134,6 +149,23 @@ export function AgentSettingsFields({
       {number("modelRetries", s.modelRetries, s.modelRetriesHint)}
       {modelPick("childModel", "childEffort", s.childModel, s.childModelHint)}
       {number("memoryFloorPercent", s.memoryFloorPercent, s.memoryFloorPercentHint, 0)}
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${idPrefix}-commandCgroupMode`}>{s.commandCgroupMode}</Label>
+        <Select value={value.commandCgroupMode || NONE} onValueChange={(v) => set("commandCgroupMode", v === NONE ? "" : v)}>
+          <SelectTrigger id={`${idPrefix}-commandCgroupMode`} className="w-56" aria-label={s.commandCgroupMode}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>{inheritedMode ? `${s.inherit} ${inheritedMode}` : s.inherit}</SelectItem>
+            <SelectItem value="auto">{s.cgroupAuto}</SelectItem>
+            <SelectItem value="off">{s.cgroupOff}</SelectItem>
+            <SelectItem value="required">{s.cgroupRequired}</SelectItem>
+          </SelectContent>
+        </Select>
+        <span className="text-muted-foreground text-xs">{s.commandCgroupModeHint}</span>
+      </div>
+      {number("commandMemoryLimitPercent", s.commandMemoryLimitPercent, s.commandMemoryLimitPercentHint, 1, 80)}
+      {number("commandSwapLimitMb", s.commandSwapLimitMb, s.commandSwapLimitMbHint, 0, 65536)}
       {number("commandOomPriority", s.commandOomPriority, s.commandOomPriorityHint, 0)}
     </div>
   );

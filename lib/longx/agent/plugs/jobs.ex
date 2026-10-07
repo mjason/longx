@@ -69,7 +69,11 @@ defmodule Longx.Agent.Plugs.Jobs do
   @impl true
   def call(%Step{phase: :request} = step, opts) do
     g = Shell.guards(opts)
-    guards = [oom_score_adj: g.oom_score_adj, floor: g.floor]
+
+    guards =
+      [oom_score_adj: g.oom_score_adj, floor: g.floor, command_cgroup_mode: g.cgroup_mode] ++
+        g.cgroup_opts
+
     start = Enum.find(__agent_tools__(), &(&1.name == "start_job"))
 
     step
@@ -91,7 +95,7 @@ defmodule Longx.Agent.Plugs.Jobs do
     notify = args["notify"] != false
 
     case Longx.Jobs.start(ctx.thread_id, name, cmd, cwd: cwd, notify: notify, guards: guards) do
-      {:ok, _info} ->
+      {:ok, info} ->
         after_ =
           if notify,
             do:
@@ -100,7 +104,9 @@ defmodule Longx.Agent.Plugs.Jobs do
 
         {:ok,
          ~s|Job "#{name}" started in the background in #{cwd}. | <>
-           after_ <> ~s| job_output(name: "#{name}") shows its output, stop_job stops it.|}
+           after_ <>
+           ~s| job_output(name: "#{name}") shows its output, stop_job stops it.| <>
+           if(info.reason, do: "\n" <> info.reason, else: "")}
 
       {:error, {:running, info}} ->
         {:error,
@@ -187,18 +193,24 @@ defmodule Longx.Agent.Plugs.Jobs do
   defp state(info) do
     case info.status do
       "running" ->
-        ~s|Job "#{info.name}" is running (since #{short(info.started_at)}).|
+        ~s|Job "#{info.name}" is running (since #{short(info.started_at)}).| <> reason_note(info)
 
       "exited" ->
-        ~s|Job "#{info.name}" exited with code #{info.exit_code} (#{short(info.finished_at)}).|
+        ~s|Job "#{info.name}" exited with code #{info.exit_code} (#{short(info.finished_at)}).| <>
+          reason_note(info)
 
       _ ->
         ~s|Job "#{info.name}" #{status(info)}.|
     end
   end
 
-  defp status(%{status: "exited", exit_code: code}), do: "exited (code #{code})"
-  defp status(%{status: "running"}), do: "running"
+  defp reason_note(%{reason: reason}) when is_binary(reason), do: "\n" <> reason
+  defp reason_note(_), do: ""
+
+  defp status(%{status: "exited", exit_code: code} = info),
+    do: "exited (code #{code})" <> reason_note(info)
+
+  defp status(%{status: "running"} = info), do: "running" <> reason_note(info)
   defp status(%{status: status, reason: nil}), do: status
   defp status(%{status: status, reason: reason}), do: "#{status}: #{reason}"
 

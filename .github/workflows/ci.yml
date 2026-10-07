@@ -68,6 +68,16 @@ jobs:
         working-directory: native/shim
       - run: go test ./...
         working-directory: native/shim
+      - name: Linux cgroup containment (bounded real kernel tests)
+        working-directory: native/shim
+        run: |
+          sudo systemd-run --wait --pipe --collect --unit=longx-cgroup-regression \
+            --uid="$(id -u)" \
+            --property=Delegate=memory --property=DelegateSubgroup=supervisor \
+            --property=MemoryMax=1G --property=MemorySwapMax=0 \
+            --working-directory="$PWD" \
+            --setenv=LONGX_CGROUP_TEST=1 \
+            "$(command -v go)" test -count=1 -v -run TestCgroupIntegration ./...
       # the committed GraphQL schema and the client generated from it are current
       - run: mix schema.check
       - run: npm run present-schema --prefix assets -- --check
@@ -83,5 +93,6 @@ jobs:
           npm run test:projects
           npm run test:chat-projects
           npm run test:queued-attachments
+          npm run test:command-guards
       # the bwrap probe passes on a dev box, not inside a GitHub runner
       - run: mix test --exclude host_sandbox

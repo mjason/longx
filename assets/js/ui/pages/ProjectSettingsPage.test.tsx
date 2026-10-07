@@ -7,7 +7,7 @@ import { agentDefinitionData, agentSettingsData, channel, ok } from "@/ui/test-m
 
 vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { agentDefinition, archiveProject, deleteProject, deleteWatch, dryRunWatch, promoteLocal, switchWatch, updateProject } from "@/core/api";
+import { agentDefinition, agentSettings, archiveProject, deleteProject, deleteWatch, dryRunWatch, promoteLocal, switchWatch, updateProject } from "@/core/api";
 
 // the page opens through a lazy route (routes.tsx): its module in the cache
 // first, so the route resolves at once however slow the machine — CI's runner
@@ -115,13 +115,52 @@ describe("ProjectSettingsPage", () => {
       const depth = within(section).getByLabelText("派出深度上限") as HTMLInputElement;
       expect(depth.placeholder).toBe("沿用 3");
       await user.type(depth, "1");
+      const mode = within(section).getByLabelText("任务 cgroup 保护");
+      expect(mode).toHaveTextContent("沿用 auto");
+      await user.click(mode);
+      await user.click(await screen.findByRole("option", { name: "必须启用" }));
+      const memory = within(section).getByLabelText("单任务内存上限（%）") as HTMLInputElement;
+      const swap = within(section).getByLabelText("单任务 Swap 上限（MiB）") as HTMLInputElement;
+      expect(memory.placeholder).toBe("沿用 75");
+      expect(swap.placeholder).toBe("沿用 1024");
+      expect(memory).toHaveAttribute("min", "1");
+      expect(memory).toHaveAttribute("max", "80");
+      expect(swap).toHaveAttribute("min", "0");
+      expect(swap).toHaveAttribute("max", "65536");
+      await user.type(memory, "30");
+      await user.type(swap, "0");
       await user.click(screen.getByRole("button", { name: "保存" }));
       await waitFor(() =>
         expect(updateProject).toHaveBeenCalledWith(
-          expect.objectContaining({ input: expect.objectContaining({ agentSettings: expect.objectContaining({ maxDepth: 1, maxChildren: null, childModel: null }) }) }),
+          expect.objectContaining({ input: expect.objectContaining({ agentSettings: expect.objectContaining({ maxDepth: 1, maxChildren: null, childModel: null, commandMemoryLimitPercent: 30, commandSwapLimitMb: 0, commandCgroupMode: "required" }) }) }),
+        ),
+      );
+      await user.clear(memory);
+      await user.clear(swap);
+      await user.click(mode);
+      await user.click(await screen.findByRole("option", { name: "沿用 auto" }));
+      await user.click(screen.getByRole("button", { name: "保存" }));
+      await waitFor(() =>
+        expect(updateProject).toHaveBeenLastCalledWith(
+          expect.objectContaining({ input: expect.objectContaining({ agentSettings: expect.objectContaining({ commandMemoryLimitPercent: null, commandSwapLimitMb: null, commandCgroupMode: null }) }) }),
         ),
       );
     } finally {
+      vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData()) as never);
+    }
+  });
+
+  test("cgroup inheritance names the global mode, not the project's effective override", async () => {
+    vi.mocked(agentSettings).mockResolvedValue(ok({ ...agentSettingsData(), commandCgroupMode: "off" }) as never);
+    vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData({
+      settings: { ...agentSettingsData(), commandCgroupMode: "required" },
+    })) as never);
+    try {
+      renderAt("/p/app-1/settings");
+      const section = await screen.findByTestId("project-agent");
+      await waitFor(() => expect(within(section).getByLabelText("任务 cgroup 保护")).toHaveTextContent("沿用 off"));
+    } finally {
+      vi.mocked(agentSettings).mockResolvedValue(ok(agentSettingsData()) as never);
       vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData()) as never);
     }
   });

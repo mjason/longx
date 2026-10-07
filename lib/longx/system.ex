@@ -12,6 +12,7 @@ defmodule Longx.System do
       action Longx.System.Status, :knowledge_docs, :knowledge_docs
       action Longx.System.Status, :knowledge_read, :knowledge_read
       action Longx.System.Status, :agent_settings, :agent_settings
+      action Longx.System.Status, :command_guard_status, :command_guard_status
       action Longx.System.Status, :public_url, :public_url
       action Longx.System.Status, :dependencies, :dependencies
       action Longx.System.Status, :file_rules, :file_rules
@@ -64,6 +65,7 @@ defmodule Longx.System do
     resource Longx.System.Status do
       define :list_directory, action: :list_directory
       define :create_directory, action: :create_directory
+      define :command_guard_status, action: :command_guard_status
     end
 
     resource Longx.System.Setting do

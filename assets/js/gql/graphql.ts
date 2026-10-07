@@ -1932,8 +1932,11 @@ export type SendMessageInput = {
 export type SetAgentSettingsInput = {
   childEffort?: string | null | undefined;
   childModel?: string | null | undefined;
+  commandCgroupMode?: string | null | undefined;
+  commandMemoryLimitPercent?: number | null | undefined;
   commandOomPriority?: number | null | undefined;
   commandShell?: string | null | undefined;
+  commandSwapLimitMb?: number | null | undefined;
   extraPath?: string | null | undefined;
   idleMinutes?: number | null | undefined;
   maxChildren?: number | null | undefined;
@@ -3378,7 +3381,14 @@ export type KnowledgeReadQuery = { knowledgeRead: { text: string } };
 export type AgentSettingsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type AgentSettingsQuery = { agentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, extraPath: string, defaultExtraPath: string, commandShell: string, commandOomPriority: number, childModel: string | null, childEffort: string | null } };
+export type AgentSettingsQuery = { agentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, extraPath: string, defaultExtraPath: string, commandSwapLimitMb: number, commandShell: string, commandOomPriority: number, commandMemoryLimitPercent: number, commandCgroupMode: string, childModel: string | null, childEffort: string | null } };
+
+export type CommandGuardStatusQueryVariables = Exact<{
+  projectId?: string | number | null | undefined;
+}>;
+
+
+export type CommandGuardStatusQuery = { commandGuardStatus: { reason: string | null, platform: string, path: string | null, mode: string, lastTaskStatus: string | null, lastTaskReason: string | null, lastTaskPath: string | null, lastPopulated: boolean | null, lastOomKill: number | null, lastObservedAt: string | null, lastCleanupError: string | null, cleanupPendingTasks: number, checkedAt: string, capability: string, activeTasks: number } };
 
 export type PublicUrlQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -3556,7 +3566,7 @@ export type AgentDefinitionQueryVariables = Exact<{
 }>;
 
 
-export type AgentDefinitionQuery = { agentDefinition: { trusted: boolean, present: boolean, plugs: Array<string>, model: string | null, localFiles: Array<string>, files: Array<string>, errors: Array<string>, effort: string | null, dir: string, agents: Array<unknown>, settings: { modelRetries: number | null, memoryFloorPercent: number | null, maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, commandOomPriority: number | null, childModel: string | null, childEffort: string | null }, overrides: { modelRetries: number | null, memoryFloorPercent: number | null, maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, commandOomPriority: number | null, childModel: string | null, childEffort: string | null }, browser: { state: string, maxTabs: number, browser: string | null, alias: string | null } | null } };
+export type AgentDefinitionQuery = { agentDefinition: { trusted: boolean, present: boolean, plugs: Array<string>, model: string | null, localFiles: Array<string>, files: Array<string>, errors: Array<string>, effort: string | null, dir: string, agents: Array<unknown>, settings: { modelRetries: number | null, memoryFloorPercent: number | null, maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, commandSwapLimitMb: number | null, commandOomPriority: number | null, commandMemoryLimitPercent: number | null, commandCgroupMode: string | null, childModel: string | null, childEffort: string | null }, overrides: { modelRetries: number | null, memoryFloorPercent: number | null, maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, commandSwapLimitMb: number | null, commandOomPriority: number | null, commandMemoryLimitPercent: number | null, commandCgroupMode: string | null, childModel: string | null, childEffort: string | null }, browser: { state: string, maxTabs: number, browser: string | null, alias: string | null } | null } };
 
 export type ListThreadsQueryVariables = Exact<{
   sort?: Array<ThreadSortInput | null | undefined> | ThreadSortInput | null | undefined;
@@ -3875,7 +3885,7 @@ export type SetAgentSettingsMutationVariables = Exact<{
 }>;
 
 
-export type SetAgentSettingsMutation = { setAgentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, extraPath: string, defaultExtraPath: string, commandShell: string, commandOomPriority: number, childModel: string | null, childEffort: string | null } };
+export type SetAgentSettingsMutation = { setAgentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, extraPath: string, defaultExtraPath: string, commandSwapLimitMb: number, commandShell: string, commandOomPriority: number, commandMemoryLimitPercent: number, commandCgroupMode: string, childModel: string | null, childEffort: string | null } };
 
 export type CheckDependenciesMutationVariables = Exact<{ [key: string]: never; }>;
 
@@ -4406,7 +4416,7 @@ export class TypedDocumentString<TResult, TVariables>
   }
 }
 
-export const ListWatchesDocument = new TypedDocumentString(`
+export const ListWatchesDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListWatches($sort: [WatchSortInput], $filter: WatchFilterInput, $projectId: ID!) {
   listWatches(sort: $sort, filter: $filter, projectId: $projectId) {
     id
@@ -4442,14 +4452,14 @@ export const ListWatchesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListWatchesQuery, ListWatchesQueryVariables>;
-export const ListAllWatchesDocument = new TypedDocumentString(`
+export const ListAllWatchesDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListAllWatches {
   listAllWatches {
     watches
   }
 }
     `) as unknown as TypedDocumentString<ListAllWatchesQuery, ListAllWatchesQueryVariables>;
-export const ListCredentialsDocument = new TypedDocumentString(`
+export const ListCredentialsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListCredentials($sort: [CredentialSortInput], $filter: CredentialFilterInput) {
   listCredentials(sort: $sort, filter: $filter) {
     id
@@ -4484,14 +4494,14 @@ export const ListCredentialsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListCredentialsQuery, ListCredentialsQueryVariables>;
-export const CredentialRedirectUriDocument = new TypedDocumentString(`
+export const CredentialRedirectUriDocument = /*#__PURE__*/ new TypedDocumentString(`
     query CredentialRedirectUri($origin: String) {
   credentialRedirectUri(origin: $origin) {
     uri
   }
 }
     `) as unknown as TypedDocumentString<CredentialRedirectUriQuery, CredentialRedirectUriQueryVariables>;
-export const ListChromeBrowsersDocument = new TypedDocumentString(`
+export const ListChromeBrowsersDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListChromeBrowsers {
   listChromeBrowsers {
     browsers {
@@ -4513,7 +4523,7 @@ export const ListChromeBrowsersDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListChromeBrowsersQuery, ListChromeBrowsersQueryVariables>;
-export const ChromeAliasesDocument = new TypedDocumentString(`
+export const ChromeAliasesDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ChromeAliases {
   chromeAliases {
     default
@@ -4524,7 +4534,7 @@ export const ChromeAliasesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ChromeAliasesQuery, ChromeAliasesQueryVariables>;
-export const ChromeExtensionDocument = new TypedDocumentString(`
+export const ChromeExtensionDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ChromeExtension {
   chromeExtension {
     version
@@ -4534,7 +4544,7 @@ export const ChromeExtensionDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ChromeExtensionQuery, ChromeExtensionQueryVariables>;
-export const ListDirectoryDocument = new TypedDocumentString(`
+export const ListDirectoryDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListDirectory($path: String, $showHidden: Boolean) {
   listDirectory(path: $path, showHidden: $showHidden) {
     roots
@@ -4545,7 +4555,7 @@ export const ListDirectoryDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListDirectoryQuery, ListDirectoryQueryVariables>;
-export const KnowledgeDocsDocument = new TypedDocumentString(`
+export const KnowledgeDocsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query KnowledgeDocs {
   knowledgeDocs {
     writable
@@ -4558,14 +4568,14 @@ export const KnowledgeDocsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<KnowledgeDocsQuery, KnowledgeDocsQueryVariables>;
-export const KnowledgeReadDocument = new TypedDocumentString(`
+export const KnowledgeReadDocument = /*#__PURE__*/ new TypedDocumentString(`
     query KnowledgeRead($path: String!) {
   knowledgeRead(path: $path) {
     text
   }
 }
     `) as unknown as TypedDocumentString<KnowledgeReadQuery, KnowledgeReadQueryVariables>;
-export const AgentSettingsDocument = new TypedDocumentString(`
+export const AgentSettingsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query AgentSettings {
   agentSettings {
     modelRetries
@@ -4575,14 +4585,38 @@ export const AgentSettingsDocument = new TypedDocumentString(`
     idleMinutes
     extraPath
     defaultExtraPath
+    commandSwapLimitMb
     commandShell
     commandOomPriority
+    commandMemoryLimitPercent
+    commandCgroupMode
     childModel
     childEffort
   }
 }
     `) as unknown as TypedDocumentString<AgentSettingsQuery, AgentSettingsQueryVariables>;
-export const PublicUrlDocument = new TypedDocumentString(`
+export const CommandGuardStatusDocument = /*#__PURE__*/ new TypedDocumentString(`
+    query CommandGuardStatus($projectId: ID) {
+  commandGuardStatus(projectId: $projectId) {
+    reason
+    platform
+    path
+    mode
+    lastTaskStatus
+    lastTaskReason
+    lastTaskPath
+    lastPopulated
+    lastOomKill
+    lastObservedAt
+    lastCleanupError
+    cleanupPendingTasks
+    checkedAt
+    capability
+    activeTasks
+  }
+}
+    `) as unknown as TypedDocumentString<CommandGuardStatusQuery, CommandGuardStatusQueryVariables>;
+export const PublicUrlDocument = /*#__PURE__*/ new TypedDocumentString(`
     query PublicUrl {
   publicUrl {
     url
@@ -4590,7 +4624,7 @@ export const PublicUrlDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<PublicUrlQuery, PublicUrlQueryVariables>;
-export const DependenciesDocument = new TypedDocumentString(`
+export const DependenciesDocument = /*#__PURE__*/ new TypedDocumentString(`
     query Dependencies {
   dependencies {
     tools
@@ -4601,7 +4635,7 @@ export const DependenciesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<DependenciesQuery, DependenciesQueryVariables>;
-export const FileRulesDocument = new TypedDocumentString(`
+export const FileRulesDocument = /*#__PURE__*/ new TypedDocumentString(`
     query FileRules {
   fileRules {
     watch
@@ -4611,7 +4645,7 @@ export const FileRulesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<FileRulesQuery, FileRulesQueryVariables>;
-export const SentryStatusDocument = new TypedDocumentString(`
+export const SentryStatusDocument = /*#__PURE__*/ new TypedDocumentString(`
     query SentryStatus {
   sentryStatus {
     release
@@ -4621,7 +4655,7 @@ export const SentryStatusDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SentryStatusQuery, SentryStatusQueryVariables>;
-export const UpgradeStatusDocument = new TypedDocumentString(`
+export const UpgradeStatusDocument = /*#__PURE__*/ new TypedDocumentString(`
     query UpgradeStatus {
   upgradeStatus {
     target
@@ -4640,7 +4674,7 @@ export const UpgradeStatusDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UpgradeStatusQuery, UpgradeStatusQueryVariables>;
-export const GatewayRequestsDocument = new TypedDocumentString(`
+export const GatewayRequestsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query GatewayRequests($limit: Int) {
   gatewayRequests(limit: $limit) {
     requests
@@ -4648,7 +4682,7 @@ export const GatewayRequestsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<GatewayRequestsQuery, GatewayRequestsQueryVariables>;
-export const RecentFaultsDocument = new TypedDocumentString(`
+export const RecentFaultsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query RecentFaults {
   recentFaults {
     recent
@@ -4656,14 +4690,14 @@ export const RecentFaultsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<RecentFaultsQuery, RecentFaultsQueryVariables>;
-export const RunningCommandsDocument = new TypedDocumentString(`
+export const RunningCommandsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query RunningCommands {
   runningCommands {
     commands
   }
 }
     `) as unknown as TypedDocumentString<RunningCommandsQuery, RunningCommandsQueryVariables>;
-export const BrowserSettingsDocument = new TypedDocumentString(`
+export const BrowserSettingsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query BrowserSettings {
   browserSettings {
     available
@@ -4671,7 +4705,7 @@ export const BrowserSettingsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<BrowserSettingsQuery, BrowserSettingsQueryVariables>;
-export const BrowserStatusDocument = new TypedDocumentString(`
+export const BrowserStatusDocument = /*#__PURE__*/ new TypedDocumentString(`
     query BrowserStatus {
   browserStatus {
     version
@@ -4688,7 +4722,7 @@ export const BrowserStatusDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<BrowserStatusQuery, BrowserStatusQueryVariables>;
-export const ComputerSettingsDocument = new TypedDocumentString(`
+export const ComputerSettingsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ComputerSettings($id: String) {
   computerSettings(id: $id) {
     url
@@ -4696,7 +4730,7 @@ export const ComputerSettingsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComputerSettingsQuery, ComputerSettingsQueryVariables>;
-export const ComputerConnectionDocument = new TypedDocumentString(`
+export const ComputerConnectionDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ComputerConnection($id: String) {
   computerConnection(id: $id) {
     toolCount
@@ -4708,7 +4742,7 @@ export const ComputerConnectionDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComputerConnectionQuery, ComputerConnectionQueryVariables>;
-export const ComputerDevicesDocument = new TypedDocumentString(`
+export const ComputerDevicesDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ComputerDevices {
   computerDevices {
     url
@@ -4726,7 +4760,7 @@ export const ComputerDevicesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComputerDevicesQuery, ComputerDevicesQueryVariables>;
-export const ComputerAliasesDocument = new TypedDocumentString(`
+export const ComputerAliasesDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ComputerAliases {
   computerAliases {
     default
@@ -4737,7 +4771,7 @@ export const ComputerAliasesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComputerAliasesQuery, ComputerAliasesQueryVariables>;
-export const TlsStatusDocument = new TypedDocumentString(`
+export const TlsStatusDocument = /*#__PURE__*/ new TypedDocumentString(`
     query TlsStatus {
   tlsStatus {
     url
@@ -4773,7 +4807,7 @@ export const TlsStatusDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<TlsStatusQuery, TlsStatusQueryVariables>;
-export const TlsProvidersDocument = new TypedDocumentString(`
+export const TlsProvidersDocument = /*#__PURE__*/ new TypedDocumentString(`
     query TlsProviders {
   tlsProviders {
     providers {
@@ -4793,7 +4827,7 @@ export const TlsProvidersDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<TlsProvidersQuery, TlsProvidersQueryVariables>;
-export const TlsResolutionDocument = new TypedDocumentString(`
+export const TlsResolutionDocument = /*#__PURE__*/ new TypedDocumentString(`
     query TlsResolution($domains: [String!]!) {
   tlsResolution(domains: $domains) {
     resolution {
@@ -4809,7 +4843,7 @@ export const TlsResolutionDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<TlsResolutionQuery, TlsResolutionQueryVariables>;
-export const ListProvidersDocument = new TypedDocumentString(`
+export const ListProvidersDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListProviders($sort: [ProviderSortInput], $filter: ProviderFilterInput) {
   listProviders(sort: $sort, filter: $filter) {
     id
@@ -4832,7 +4866,7 @@ export const ListProvidersDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListProvidersQuery, ListProvidersQueryVariables>;
-export const ListModelsDocument = new TypedDocumentString(`
+export const ListModelsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListModels($sort: [ModelSortInput], $filter: ModelFilterInput) {
   listModels(sort: $sort, filter: $filter) {
     id
@@ -4873,7 +4907,7 @@ export const ListModelsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListModelsQuery, ListModelsQueryVariables>;
-export const DefaultModelSettingDocument = new TypedDocumentString(`
+export const DefaultModelSettingDocument = /*#__PURE__*/ new TypedDocumentString(`
     query DefaultModelSetting {
   defaultModelSetting {
     slug
@@ -4882,7 +4916,7 @@ export const DefaultModelSettingDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<DefaultModelSettingQuery, DefaultModelSettingQueryVariables>;
-export const ModelAliasesDocument = new TypedDocumentString(`
+export const ModelAliasesDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ModelAliases {
   modelAliases {
     name
@@ -4893,7 +4927,7 @@ export const ModelAliasesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ModelAliasesQuery, ModelAliasesQueryVariables>;
-export const ListSearchProvidersDocument = new TypedDocumentString(`
+export const ListSearchProvidersDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListSearchProviders($sort: [SearchProviderSortInput], $filter: SearchProviderFilterInput) {
   listSearchProviders(sort: $sort, filter: $filter) {
     id
@@ -4906,7 +4940,7 @@ export const ListSearchProvidersDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListSearchProvidersQuery, ListSearchProvidersQueryVariables>;
-export const ListPresetsDocument = new TypedDocumentString(`
+export const ListPresetsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListPresets {
   listPresets {
     supportsHostedWebSearch
@@ -4924,7 +4958,7 @@ export const ListPresetsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListPresetsQuery, ListPresetsQueryVariables>;
-export const ListProjectsDocument = new TypedDocumentString(`
+export const ListProjectsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListProjects($sort: [ProjectSortInput], $filter: ProjectFilterInput) {
   listProjects(sort: $sort, filter: $filter) {
     id
@@ -4944,7 +4978,7 @@ export const ListProjectsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListProjectsQuery, ListProjectsQueryVariables>;
-export const ListAllProjectsDocument = new TypedDocumentString(`
+export const ListAllProjectsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListAllProjects($sort: [ProjectSortInput], $filter: ProjectFilterInput) {
   listAllProjects(sort: $sort, filter: $filter) {
     id
@@ -4964,7 +4998,7 @@ export const ListAllProjectsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListAllProjectsQuery, ListAllProjectsQueryVariables>;
-export const GetProjectDocument = new TypedDocumentString(`
+export const GetProjectDocument = /*#__PURE__*/ new TypedDocumentString(`
     query GetProject($filter: ProjectFilterInput, $slug: String!) {
   getProject(filter: $filter, slug: $slug) {
     id
@@ -4984,7 +5018,7 @@ export const GetProjectDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<GetProjectQuery, GetProjectQueryVariables>;
-export const GitInfoDocument = new TypedDocumentString(`
+export const GitInfoDocument = /*#__PURE__*/ new TypedDocumentString(`
     query GitInfo($id: ID!) {
   gitInfo(id: $id) {
     repository
@@ -4995,7 +5029,7 @@ export const GitInfoDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<GitInfoQuery, GitInfoQueryVariables>;
-export const SearchFilesDocument = new TypedDocumentString(`
+export const SearchFilesDocument = /*#__PURE__*/ new TypedDocumentString(`
     query SearchFiles($id: ID!, $query: String!) {
   searchFiles(id: $id, query: $query) {
     score
@@ -5007,7 +5041,7 @@ export const SearchFilesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SearchFilesQuery, SearchFilesQueryVariables>;
-export const AgentDefinitionDocument = new TypedDocumentString(`
+export const AgentDefinitionDocument = /*#__PURE__*/ new TypedDocumentString(`
     query AgentDefinition($id: ID!) {
   agentDefinition(id: $id) {
     trusted
@@ -5017,7 +5051,10 @@ export const AgentDefinitionDocument = new TypedDocumentString(`
       maxDepth
       maxChildren
       idleMinutes
+      commandSwapLimitMb
       commandOomPriority
+      commandMemoryLimitPercent
+      commandCgroupMode
       childModel
       childEffort
     }
@@ -5029,7 +5066,10 @@ export const AgentDefinitionDocument = new TypedDocumentString(`
       maxDepth
       maxChildren
       idleMinutes
+      commandSwapLimitMb
       commandOomPriority
+      commandMemoryLimitPercent
+      commandCgroupMode
       childModel
       childEffort
     }
@@ -5049,7 +5089,7 @@ export const AgentDefinitionDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<AgentDefinitionQuery, AgentDefinitionQueryVariables>;
-export const ListThreadsDocument = new TypedDocumentString(`
+export const ListThreadsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListThreads($sort: [ThreadSortInput], $filter: ThreadFilterInput, $projectId: ID!) {
   listThreads(sort: $sort, filter: $filter, projectId: $projectId) {
     id
@@ -5072,7 +5112,7 @@ export const ListThreadsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListThreadsQuery, ListThreadsQueryVariables>;
-export const GetThreadDocument = new TypedDocumentString(`
+export const GetThreadDocument = /*#__PURE__*/ new TypedDocumentString(`
     query GetThread($filter: ThreadFilterInput, $id: ID!) {
   getThread(filter: $filter, id: $id) {
     id
@@ -5095,7 +5135,7 @@ export const GetThreadDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<GetThreadQuery, GetThreadQueryVariables>;
-export const ListSubagentsDocument = new TypedDocumentString(`
+export const ListSubagentsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListSubagents($sort: [ThreadSortInput], $filter: ThreadFilterInput, $parentThreadId: ID!) {
   listSubagents(sort: $sort, filter: $filter, parentThreadId: $parentThreadId) {
     id
@@ -5118,7 +5158,7 @@ export const ListSubagentsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListSubagentsQuery, ListSubagentsQueryVariables>;
-export const ListRunningThreadsDocument = new TypedDocumentString(`
+export const ListRunningThreadsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListRunningThreads {
   listRunningThreads {
     threads
@@ -5126,28 +5166,28 @@ export const ListRunningThreadsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListRunningThreadsQuery, ListRunningThreadsQueryVariables>;
-export const ListRecentThreadsDocument = new TypedDocumentString(`
+export const ListRecentThreadsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListRecentThreads($limit: Int) {
   listRecentThreads(limit: $limit) {
     threads
   }
 }
     `) as unknown as TypedDocumentString<ListRecentThreadsQuery, ListRecentThreadsQueryVariables>;
-export const ProjectJobsDocument = new TypedDocumentString(`
+export const ProjectJobsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ProjectJobs($projectId: ID!) {
   projectJobs(projectId: $projectId) {
     jobs
   }
 }
     `) as unknown as TypedDocumentString<ProjectJobsQuery, ProjectJobsQueryVariables>;
-export const DirectoryDocument = new TypedDocumentString(`
+export const DirectoryDocument = /*#__PURE__*/ new TypedDocumentString(`
     query Directory($projectId: ID!, $scope: String) {
   directory(projectId: $projectId, scope: $scope) {
     sessions
   }
 }
     `) as unknown as TypedDocumentString<DirectoryQuery, DirectoryQueryVariables>;
-export const ListFilesDocument = new TypedDocumentString(`
+export const ListFilesDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListFiles($projectId: ID!, $path: String!) {
   listFiles(projectId: $projectId, path: $path) {
     size
@@ -5157,7 +5197,7 @@ export const ListFilesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListFilesQuery, ListFilesQueryVariables>;
-export const ReadFileDocument = new TypedDocumentString(`
+export const ReadFileDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ReadFile($projectId: ID!, $path: String!) {
   readFile(projectId: $projectId, path: $path) {
     truncated
@@ -5168,12 +5208,12 @@ export const ReadFileDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ReadFileQuery, ReadFileQueryVariables>;
-export const IgnoredPathsDocument = new TypedDocumentString(`
+export const IgnoredPathsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query IgnoredPaths($projectId: ID!) {
   ignoredPaths(projectId: $projectId)
 }
     `) as unknown as TypedDocumentString<IgnoredPathsQuery, IgnoredPathsQueryVariables>;
-export const GitChangesDocument = new TypedDocumentString(`
+export const GitChangesDocument = /*#__PURE__*/ new TypedDocumentString(`
     query GitChanges($projectId: ID!) {
   gitChanges(projectId: $projectId) {
     repository
@@ -5189,7 +5229,7 @@ export const GitChangesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<GitChangesQuery, GitChangesQueryVariables>;
-export const GitFileDiffDocument = new TypedDocumentString(`
+export const GitFileDiffDocument = /*#__PURE__*/ new TypedDocumentString(`
     query GitFileDiff($projectId: ID!, $path: String!) {
   gitFileDiff(projectId: $projectId, path: $path) {
     diff
@@ -5197,7 +5237,7 @@ export const GitFileDiffDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<GitFileDiffQuery, GitFileDiffQueryVariables>;
-export const GitLogDocument = new TypedDocumentString(`
+export const GitLogDocument = /*#__PURE__*/ new TypedDocumentString(`
     query GitLog($projectId: ID!, $limit: Int, $skip: Int) {
   gitLog(projectId: $projectId, limit: $limit, skip: $skip) {
     subject
@@ -5208,7 +5248,7 @@ export const GitLogDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<GitLogQuery, GitLogQueryVariables>;
-export const GitShowDocument = new TypedDocumentString(`
+export const GitShowDocument = /*#__PURE__*/ new TypedDocumentString(`
     query GitShow($projectId: ID!, $sha: String!) {
   gitShow(projectId: $projectId, sha: $sha) {
     subject
@@ -5222,7 +5262,7 @@ export const GitShowDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<GitShowQuery, GitShowQueryVariables>;
-export const GitCommitFileDiffDocument = new TypedDocumentString(`
+export const GitCommitFileDiffDocument = /*#__PURE__*/ new TypedDocumentString(`
     query GitCommitFileDiff($projectId: ID!, $sha: String!, $path: String!) {
   gitCommitFileDiff(projectId: $projectId, sha: $sha, path: $path) {
     diff
@@ -5230,7 +5270,7 @@ export const GitCommitFileDiffDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<GitCommitFileDiffQuery, GitCommitFileDiffQueryVariables>;
-export const GitFileVersionsDocument = new TypedDocumentString(`
+export const GitFileVersionsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query GitFileVersions($projectId: ID!, $sha: String, $path: String!) {
   gitFileVersions(projectId: $projectId, sha: $sha, path: $path) {
     binary
@@ -5239,7 +5279,7 @@ export const GitFileVersionsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<GitFileVersionsQuery, GitFileVersionsQueryVariables>;
-export const GitBranchesDocument = new TypedDocumentString(`
+export const GitBranchesDocument = /*#__PURE__*/ new TypedDocumentString(`
     query GitBranches($projectId: ID!) {
   gitBranches(projectId: $projectId) {
     stashes
@@ -5248,7 +5288,7 @@ export const GitBranchesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<GitBranchesQuery, GitBranchesQueryVariables>;
-export const ListTurnsDocument = new TypedDocumentString(`
+export const ListTurnsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListTurns($sort: [TurnSortInput], $filter: TurnFilterInput, $threadId: ID!, $includeReverted: Boolean) {
   listTurns(
     sort: $sort
@@ -5272,7 +5312,7 @@ export const ListTurnsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ListTurnsQuery, ListTurnsQueryVariables>;
-export const SwitchWatchDocument = new TypedDocumentString(`
+export const SwitchWatchDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SwitchWatch($input: SwitchWatchInput!) {
   switchWatch(input: $input) {
     id
@@ -5308,7 +5348,7 @@ export const SwitchWatchDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SwitchWatchMutation, SwitchWatchMutationVariables>;
-export const DryRunWatchDocument = new TypedDocumentString(`
+export const DryRunWatchDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation DryRunWatch($input: DryRunWatchInput!) {
   dryRunWatch(input: $input) {
     sends
@@ -5318,12 +5358,12 @@ export const DryRunWatchDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<DryRunWatchMutation, DryRunWatchMutationVariables>;
-export const DeleteWatchDocument = new TypedDocumentString(`
+export const DeleteWatchDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation DeleteWatch($input: DeleteWatchInput!) {
   deleteWatch(input: $input)
 }
     `) as unknown as TypedDocumentString<DeleteWatchMutation, DeleteWatchMutationVariables>;
-export const CreateCredentialApiKeyDocument = new TypedDocumentString(`
+export const CreateCredentialApiKeyDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CreateCredentialApiKey($input: CreateCredentialApiKeyInput!) {
   createCredentialApiKey(input: $input) {
     result {
@@ -5360,7 +5400,7 @@ export const CreateCredentialApiKeyDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CreateCredentialApiKeyMutation, CreateCredentialApiKeyMutationVariables>;
-export const CreateCredentialOauth2Document = new TypedDocumentString(`
+export const CreateCredentialOauth2Document = /*#__PURE__*/ new TypedDocumentString(`
     mutation CreateCredentialOauth2($input: CreateCredentialOauth2Input!) {
   createCredentialOauth2(input: $input) {
     result {
@@ -5397,7 +5437,7 @@ export const CreateCredentialOauth2Document = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CreateCredentialOauth2Mutation, CreateCredentialOauth2MutationVariables>;
-export const UpdateCredentialDocument = new TypedDocumentString(`
+export const UpdateCredentialDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation UpdateCredential($id: ID!, $input: UpdateCredentialInput) {
   updateCredential(id: $id, input: $input) {
     result {
@@ -5434,7 +5474,7 @@ export const UpdateCredentialDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UpdateCredentialMutation, UpdateCredentialMutationVariables>;
-export const DeleteCredentialDocument = new TypedDocumentString(`
+export const DeleteCredentialDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation DeleteCredential($id: ID!) {
   deleteCredential(id: $id) {
     result {
@@ -5471,7 +5511,7 @@ export const DeleteCredentialDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<DeleteCredentialMutation, DeleteCredentialMutationVariables>;
-export const CredentialLoginUrlDocument = new TypedDocumentString(`
+export const CredentialLoginUrlDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CredentialLoginUrl($input: CredentialLoginUrlInput!) {
   credentialLoginUrl(input: $input) {
     url
@@ -5480,7 +5520,7 @@ export const CredentialLoginUrlDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CredentialLoginUrlMutation, CredentialLoginUrlMutationVariables>;
-export const RefreshCredentialDocument = new TypedDocumentString(`
+export const RefreshCredentialDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation RefreshCredential($input: RefreshCredentialInput!) {
   refreshCredential(input: $input) {
     id
@@ -5515,7 +5555,7 @@ export const RefreshCredentialDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<RefreshCredentialMutation, RefreshCredentialMutationVariables>;
-export const CredentialCompleteUrlDocument = new TypedDocumentString(`
+export const CredentialCompleteUrlDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CredentialCompleteUrl($input: CredentialCompleteUrlInput!) {
   credentialCompleteUrl(input: $input) {
     id
@@ -5550,7 +5590,7 @@ export const CredentialCompleteUrlDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CredentialCompleteUrlMutation, CredentialCompleteUrlMutationVariables>;
-export const CredentialDeviceBeginDocument = new TypedDocumentString(`
+export const CredentialDeviceBeginDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CredentialDeviceBegin($input: CredentialDeviceBeginInput!) {
   credentialDeviceBegin(input: $input) {
     verificationUrl
@@ -5560,7 +5600,7 @@ export const CredentialDeviceBeginDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CredentialDeviceBeginMutation, CredentialDeviceBeginMutationVariables>;
-export const CredentialDevicePollDocument = new TypedDocumentString(`
+export const CredentialDevicePollDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CredentialDevicePoll($input: CredentialDevicePollInput!) {
   credentialDevicePoll(input: $input) {
     status
@@ -5568,49 +5608,49 @@ export const CredentialDevicePollDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CredentialDevicePollMutation, CredentialDevicePollMutationVariables>;
-export const ApproveChromeBrowserDocument = new TypedDocumentString(`
+export const ApproveChromeBrowserDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ApproveChromeBrowser($input: ApproveChromeBrowserInput!) {
   approveChromeBrowser(input: $input) {
     ok
   }
 }
     `) as unknown as TypedDocumentString<ApproveChromeBrowserMutation, ApproveChromeBrowserMutationVariables>;
-export const RejectChromeBrowserDocument = new TypedDocumentString(`
+export const RejectChromeBrowserDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation RejectChromeBrowser($input: RejectChromeBrowserInput!) {
   rejectChromeBrowser(input: $input) {
     ok
   }
 }
     `) as unknown as TypedDocumentString<RejectChromeBrowserMutation, RejectChromeBrowserMutationVariables>;
-export const RevokeChromeBrowserDocument = new TypedDocumentString(`
+export const RevokeChromeBrowserDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation RevokeChromeBrowser($input: RevokeChromeBrowserInput!) {
   revokeChromeBrowser(input: $input) {
     ok
   }
 }
     `) as unknown as TypedDocumentString<RevokeChromeBrowserMutation, RevokeChromeBrowserMutationVariables>;
-export const DeleteChromeBrowserDocument = new TypedDocumentString(`
+export const DeleteChromeBrowserDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation DeleteChromeBrowser($input: DeleteChromeBrowserInput!) {
   deleteChromeBrowser(input: $input) {
     ok
   }
 }
     `) as unknown as TypedDocumentString<DeleteChromeBrowserMutation, DeleteChromeBrowserMutationVariables>;
-export const RenameChromeBrowserDocument = new TypedDocumentString(`
+export const RenameChromeBrowserDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation RenameChromeBrowser($input: RenameChromeBrowserInput!) {
   renameChromeBrowser(input: $input) {
     ok
   }
 }
     `) as unknown as TypedDocumentString<RenameChromeBrowserMutation, RenameChromeBrowserMutationVariables>;
-export const SetChromeBrowserMaxTabsDocument = new TypedDocumentString(`
+export const SetChromeBrowserMaxTabsDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetChromeBrowserMaxTabs($input: SetChromeBrowserMaxTabsInput!) {
   setChromeBrowserMaxTabs(input: $input) {
     ok
   }
 }
     `) as unknown as TypedDocumentString<SetChromeBrowserMaxTabsMutation, SetChromeBrowserMaxTabsMutationVariables>;
-export const SetChromeAliasDocument = new TypedDocumentString(`
+export const SetChromeAliasDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetChromeAlias($input: SetChromeAliasInput!) {
   setChromeAlias(input: $input) {
     default
@@ -5621,7 +5661,7 @@ export const SetChromeAliasDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetChromeAliasMutation, SetChromeAliasMutationVariables>;
-export const DeleteChromeAliasDocument = new TypedDocumentString(`
+export const DeleteChromeAliasDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation DeleteChromeAlias($input: DeleteChromeAliasInput!) {
   deleteChromeAlias(input: $input) {
     default
@@ -5632,7 +5672,7 @@ export const DeleteChromeAliasDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<DeleteChromeAliasMutation, DeleteChromeAliasMutationVariables>;
-export const SetChromeDefaultAliasDocument = new TypedDocumentString(`
+export const SetChromeDefaultAliasDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetChromeDefaultAlias($input: SetChromeDefaultAliasInput) {
   setChromeDefaultAlias(input: $input) {
     default
@@ -5643,7 +5683,7 @@ export const SetChromeDefaultAliasDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetChromeDefaultAliasMutation, SetChromeDefaultAliasMutationVariables>;
-export const CreateDirectoryDocument = new TypedDocumentString(`
+export const CreateDirectoryDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CreateDirectory($input: CreateDirectoryInput!) {
   createDirectory(input: $input) {
     path
@@ -5652,17 +5692,17 @@ export const CreateDirectoryDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CreateDirectoryMutation, CreateDirectoryMutationVariables>;
-export const KnowledgeWriteDocument = new TypedDocumentString(`
+export const KnowledgeWriteDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation KnowledgeWrite($input: KnowledgeWriteInput!) {
   knowledgeWrite(input: $input)
 }
     `) as unknown as TypedDocumentString<KnowledgeWriteMutation, KnowledgeWriteMutationVariables>;
-export const KnowledgeDeleteDocument = new TypedDocumentString(`
+export const KnowledgeDeleteDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation KnowledgeDelete($input: KnowledgeDeleteInput!) {
   knowledgeDelete(input: $input)
 }
     `) as unknown as TypedDocumentString<KnowledgeDeleteMutation, KnowledgeDeleteMutationVariables>;
-export const SetAgentSettingsDocument = new TypedDocumentString(`
+export const SetAgentSettingsDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetAgentSettings($input: SetAgentSettingsInput) {
   setAgentSettings(input: $input) {
     modelRetries
@@ -5672,14 +5712,17 @@ export const SetAgentSettingsDocument = new TypedDocumentString(`
     idleMinutes
     extraPath
     defaultExtraPath
+    commandSwapLimitMb
     commandShell
     commandOomPriority
+    commandMemoryLimitPercent
+    commandCgroupMode
     childModel
     childEffort
   }
 }
     `) as unknown as TypedDocumentString<SetAgentSettingsMutation, SetAgentSettingsMutationVariables>;
-export const CheckDependenciesDocument = new TypedDocumentString(`
+export const CheckDependenciesDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CheckDependencies {
   checkDependencies {
     tools
@@ -5690,7 +5733,7 @@ export const CheckDependenciesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CheckDependenciesMutation, CheckDependenciesMutationVariables>;
-export const SetPublicUrlDocument = new TypedDocumentString(`
+export const SetPublicUrlDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetPublicUrl($input: SetPublicUrlInput!) {
   setPublicUrl(input: $input) {
     url
@@ -5698,7 +5741,7 @@ export const SetPublicUrlDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetPublicUrlMutation, SetPublicUrlMutationVariables>;
-export const SetFileRulesDocument = new TypedDocumentString(`
+export const SetFileRulesDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetFileRules($input: SetFileRulesInput) {
   setFileRules(input: $input) {
     watch
@@ -5708,7 +5751,7 @@ export const SetFileRulesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetFileRulesMutation, SetFileRulesMutationVariables>;
-export const SetSentryDsnDocument = new TypedDocumentString(`
+export const SetSentryDsnDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetSentryDsn($input: SetSentryDsnInput!) {
   setSentryDsn(input: $input) {
     release
@@ -5718,7 +5761,7 @@ export const SetSentryDsnDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetSentryDsnMutation, SetSentryDsnMutationVariables>;
-export const SentryTestDocument = new TypedDocumentString(`
+export const SentryTestDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SentryTest {
   sentryTest {
     ok
@@ -5726,7 +5769,7 @@ export const SentryTestDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SentryTestMutation, SentryTestMutationVariables>;
-export const UpgradeCheckDocument = new TypedDocumentString(`
+export const UpgradeCheckDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation UpgradeCheck {
   upgradeCheck {
     target
@@ -5745,7 +5788,7 @@ export const UpgradeCheckDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UpgradeCheckMutation, UpgradeCheckMutationVariables>;
-export const UpgradeApplyDocument = new TypedDocumentString(`
+export const UpgradeApplyDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation UpgradeApply {
   upgradeApply {
     target
@@ -5764,7 +5807,7 @@ export const UpgradeApplyDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UpgradeApplyMutation, UpgradeApplyMutationVariables>;
-export const SetGithubTokenDocument = new TypedDocumentString(`
+export const SetGithubTokenDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetGithubToken($input: SetGithubTokenInput) {
   setGithubToken(input: $input) {
     target
@@ -5783,14 +5826,14 @@ export const SetGithubTokenDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetGithubTokenMutation, SetGithubTokenMutationVariables>;
-export const KillCommandDocument = new TypedDocumentString(`
+export const KillCommandDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation KillCommand($input: KillCommandInput!) {
   killCommand(input: $input) {
     ok
   }
 }
     `) as unknown as TypedDocumentString<KillCommandMutation, KillCommandMutationVariables>;
-export const BrowserInstallDocument = new TypedDocumentString(`
+export const BrowserInstallDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation BrowserInstall {
   browserInstall {
     version
@@ -5807,7 +5850,7 @@ export const BrowserInstallDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<BrowserInstallMutation, BrowserInstallMutationVariables>;
-export const ComputerConfigureDocument = new TypedDocumentString(`
+export const ComputerConfigureDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ComputerConfigure($input: ComputerConfigureInput!) {
   computerConfigure(input: $input) {
     url
@@ -5815,7 +5858,7 @@ export const ComputerConfigureDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComputerConfigureMutation, ComputerConfigureMutationVariables>;
-export const ComputerConnectDocument = new TypedDocumentString(`
+export const ComputerConnectDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ComputerConnect($input: ComputerConnectInput) {
   computerConnect(input: $input) {
     toolCount
@@ -5827,7 +5870,7 @@ export const ComputerConnectDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComputerConnectMutation, ComputerConnectMutationVariables>;
-export const ComputerDisconnectDocument = new TypedDocumentString(`
+export const ComputerDisconnectDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ComputerDisconnect($input: ComputerDisconnectInput) {
   computerDisconnect(input: $input) {
     toolCount
@@ -5839,12 +5882,12 @@ export const ComputerDisconnectDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComputerDisconnectMutation, ComputerDisconnectMutationVariables>;
-export const ComputerDeleteDocument = new TypedDocumentString(`
+export const ComputerDeleteDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ComputerDelete($input: ComputerDeleteInput!) {
   computerDelete(input: $input)
 }
     `) as unknown as TypedDocumentString<ComputerDeleteMutation, ComputerDeleteMutationVariables>;
-export const ComputerSetAliasDocument = new TypedDocumentString(`
+export const ComputerSetAliasDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ComputerSetAlias($input: ComputerSetAliasInput!) {
   computerSetAlias(input: $input) {
     default
@@ -5855,7 +5898,7 @@ export const ComputerSetAliasDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComputerSetAliasMutation, ComputerSetAliasMutationVariables>;
-export const ComputerDeleteAliasDocument = new TypedDocumentString(`
+export const ComputerDeleteAliasDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ComputerDeleteAlias($input: ComputerDeleteAliasInput!) {
   computerDeleteAlias(input: $input) {
     default
@@ -5866,7 +5909,7 @@ export const ComputerDeleteAliasDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComputerDeleteAliasMutation, ComputerDeleteAliasMutationVariables>;
-export const ComputerSetDefaultDocument = new TypedDocumentString(`
+export const ComputerSetDefaultDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ComputerSetDefault($input: ComputerSetDefaultInput) {
   computerSetDefault(input: $input) {
     default
@@ -5877,7 +5920,7 @@ export const ComputerSetDefaultDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComputerSetDefaultMutation, ComputerSetDefaultMutationVariables>;
-export const SetBrowserPrivateNetworkDocument = new TypedDocumentString(`
+export const SetBrowserPrivateNetworkDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetBrowserPrivateNetwork($input: SetBrowserPrivateNetworkInput!) {
   setBrowserPrivateNetwork(input: $input) {
     available
@@ -5885,7 +5928,7 @@ export const SetBrowserPrivateNetworkDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetBrowserPrivateNetworkMutation, SetBrowserPrivateNetworkMutationVariables>;
-export const SetTlsDocument = new TypedDocumentString(`
+export const SetTlsDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetTls($input: SetTlsInput) {
   setTls(input: $input) {
     url
@@ -5921,7 +5964,7 @@ export const SetTlsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetTlsMutation, SetTlsMutationVariables>;
-export const TlsIssueDocument = new TypedDocumentString(`
+export const TlsIssueDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation TlsIssue {
   tlsIssue {
     url
@@ -5957,7 +6000,7 @@ export const TlsIssueDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<TlsIssueMutation, TlsIssueMutationVariables>;
-export const TlsDisableDocument = new TypedDocumentString(`
+export const TlsDisableDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation TlsDisable {
   tlsDisable {
     url
@@ -5993,7 +6036,7 @@ export const TlsDisableDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<TlsDisableMutation, TlsDisableMutationVariables>;
-export const CreateProviderDocument = new TypedDocumentString(`
+export const CreateProviderDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CreateProvider($input: CreateProviderInput!) {
   createProvider(input: $input) {
     result {
@@ -6018,7 +6061,7 @@ export const CreateProviderDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CreateProviderMutation, CreateProviderMutationVariables>;
-export const UpdateProviderDocument = new TypedDocumentString(`
+export const UpdateProviderDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation UpdateProvider($id: ID!, $input: UpdateProviderInput) {
   updateProvider(id: $id, input: $input) {
     result {
@@ -6043,7 +6086,7 @@ export const UpdateProviderDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UpdateProviderMutation, UpdateProviderMutationVariables>;
-export const DeleteProviderDocument = new TypedDocumentString(`
+export const DeleteProviderDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation DeleteProvider($id: ID!) {
   deleteProvider(id: $id) {
     result {
@@ -6068,7 +6111,7 @@ export const DeleteProviderDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<DeleteProviderMutation, DeleteProviderMutationVariables>;
-export const DiscoverModelsDocument = new TypedDocumentString(`
+export const DiscoverModelsDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation DiscoverModels($input: DiscoverModelsInput!) {
   discoverModels(input: $input) {
     ok
@@ -6077,7 +6120,7 @@ export const DiscoverModelsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<DiscoverModelsMutation, DiscoverModelsMutationVariables>;
-export const CreateModelDocument = new TypedDocumentString(`
+export const CreateModelDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CreateModel($input: CreateModelInput!) {
   createModel(input: $input) {
     result {
@@ -6101,7 +6144,7 @@ export const CreateModelDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CreateModelMutation, CreateModelMutationVariables>;
-export const UpdateModelDocument = new TypedDocumentString(`
+export const UpdateModelDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation UpdateModel($id: ID!, $input: UpdateModelInput) {
   updateModel(id: $id, input: $input) {
     result {
@@ -6125,7 +6168,7 @@ export const UpdateModelDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UpdateModelMutation, UpdateModelMutationVariables>;
-export const MakeDefaultModelDocument = new TypedDocumentString(`
+export const MakeDefaultModelDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation MakeDefaultModel($id: ID!) {
   makeDefaultModel(id: $id) {
     result {
@@ -6149,7 +6192,7 @@ export const MakeDefaultModelDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<MakeDefaultModelMutation, MakeDefaultModelMutationVariables>;
-export const SetDefaultModelDocument = new TypedDocumentString(`
+export const SetDefaultModelDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetDefaultModel($input: SetDefaultModelInput!) {
   setDefaultModel(input: $input) {
     slug
@@ -6158,7 +6201,7 @@ export const SetDefaultModelDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetDefaultModelMutation, SetDefaultModelMutationVariables>;
-export const CheckModelDocument = new TypedDocumentString(`
+export const CheckModelDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CheckModel($input: CheckModelInput!) {
   checkModel(input: $input) {
     ok
@@ -6167,7 +6210,7 @@ export const CheckModelDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CheckModelMutation, CheckModelMutationVariables>;
-export const SetModelAliasDocument = new TypedDocumentString(`
+export const SetModelAliasDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetModelAlias($input: SetModelAliasInput!) {
   setModelAlias(input: $input) {
     name
@@ -6178,12 +6221,12 @@ export const SetModelAliasDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetModelAliasMutation, SetModelAliasMutationVariables>;
-export const DeleteModelAliasDocument = new TypedDocumentString(`
+export const DeleteModelAliasDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation DeleteModelAlias($input: DeleteModelAliasInput!) {
   deleteModelAlias(input: $input)
 }
     `) as unknown as TypedDocumentString<DeleteModelAliasMutation, DeleteModelAliasMutationVariables>;
-export const DeleteModelDocument = new TypedDocumentString(`
+export const DeleteModelDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation DeleteModel($id: ID!) {
   deleteModel(id: $id) {
     result {
@@ -6207,7 +6250,7 @@ export const DeleteModelDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<DeleteModelMutation, DeleteModelMutationVariables>;
-export const UpdateSearchProviderDocument = new TypedDocumentString(`
+export const UpdateSearchProviderDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation UpdateSearchProvider($id: ID!, $input: UpdateSearchProviderInput) {
   updateSearchProvider(id: $id, input: $input) {
     result {
@@ -6222,7 +6265,7 @@ export const UpdateSearchProviderDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UpdateSearchProviderMutation, UpdateSearchProviderMutationVariables>;
-export const ApplyPresetDocument = new TypedDocumentString(`
+export const ApplyPresetDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ApplyPreset($input: ApplyPresetInput!) {
   applyPreset(input: $input) {
     providerId
@@ -6231,7 +6274,7 @@ export const ApplyPresetDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ApplyPresetMutation, ApplyPresetMutationVariables>;
-export const CreateProjectDocument = new TypedDocumentString(`
+export const CreateProjectDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CreateProject($input: CreateProjectInput!) {
   createProject(input: $input) {
     result {
@@ -6253,7 +6296,7 @@ export const CreateProjectDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CreateProjectMutation, CreateProjectMutationVariables>;
-export const UpdateProjectDocument = new TypedDocumentString(`
+export const UpdateProjectDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation UpdateProject($id: ID!, $input: UpdateProjectInput) {
   updateProject(id: $id, input: $input) {
     result {
@@ -6275,7 +6318,7 @@ export const UpdateProjectDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UpdateProjectMutation, UpdateProjectMutationVariables>;
-export const ArchiveProjectDocument = new TypedDocumentString(`
+export const ArchiveProjectDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ArchiveProject($id: ID!) {
   archiveProject(id: $id) {
     result {
@@ -6297,7 +6340,7 @@ export const ArchiveProjectDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ArchiveProjectMutation, ArchiveProjectMutationVariables>;
-export const DeleteProjectDocument = new TypedDocumentString(`
+export const DeleteProjectDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation DeleteProject($id: ID!, $input: DeleteProjectInput) {
   deleteProject(id: $id, input: $input) {
     result {
@@ -6319,14 +6362,14 @@ export const DeleteProjectDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<DeleteProjectMutation, DeleteProjectMutationVariables>;
-export const PromoteLocalDocument = new TypedDocumentString(`
+export const PromoteLocalDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation PromoteLocal($input: PromoteLocalInput!) {
   promoteLocal(input: $input) {
     path
   }
 }
     `) as unknown as TypedDocumentString<PromoteLocalMutation, PromoteLocalMutationVariables>;
-export const InitGitDocument = new TypedDocumentString(`
+export const InitGitDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation InitGit($input: InitGitInput!) {
   initGit(input: $input) {
     repository
@@ -6337,7 +6380,7 @@ export const InitGitDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<InitGitMutation, InitGitMutationVariables>;
-export const StartThreadDocument = new TypedDocumentString(`
+export const StartThreadDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation StartThread($input: StartThreadInput!) {
   startThread(input: $input) {
     id
@@ -6360,7 +6403,7 @@ export const StartThreadDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<StartThreadMutation, StartThreadMutationVariables>;
-export const SendMessageDocument = new TypedDocumentString(`
+export const SendMessageDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SendMessage($input: SendMessageInput!) {
   sendMessage(input: $input) {
     id
@@ -6379,7 +6422,7 @@ export const SendMessageDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SendMessageMutation, SendMessageMutationVariables>;
-export const SendMessageBatchDocument = new TypedDocumentString(`
+export const SendMessageBatchDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SendMessageBatch($input: SendMessageBatchInput!) {
   sendMessageBatch(input: $input) {
     id
@@ -6398,46 +6441,46 @@ export const SendMessageBatchDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SendMessageBatchMutation, SendMessageBatchMutationVariables>;
-export const InterruptTurnDocument = new TypedDocumentString(`
+export const InterruptTurnDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation InterruptTurn($input: InterruptTurnInput!) {
   interruptTurn(input: $input)
 }
     `) as unknown as TypedDocumentString<InterruptTurnMutation, InterruptTurnMutationVariables>;
-export const SteerTurnDocument = new TypedDocumentString(`
+export const SteerTurnDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SteerTurn($input: SteerTurnInput!) {
   steerTurn(input: $input) {
     kernelTurnId
   }
 }
     `) as unknown as TypedDocumentString<SteerTurnMutation, SteerTurnMutationVariables>;
-export const RetractTurnDocument = new TypedDocumentString(`
+export const RetractTurnDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation RetractTurn($input: RetractTurnInput!) {
   retractTurn(input: $input) {
     text
   }
 }
     `) as unknown as TypedDocumentString<RetractTurnMutation, RetractTurnMutationVariables>;
-export const ReleaseWaitingDocument = new TypedDocumentString(`
+export const ReleaseWaitingDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ReleaseWaiting($input: ReleaseWaitingInput!) {
   releaseWaiting(input: $input)
 }
     `) as unknown as TypedDocumentString<ReleaseWaitingMutation, ReleaseWaitingMutationVariables>;
-export const ReleaseWaitingBatchDocument = new TypedDocumentString(`
+export const ReleaseWaitingBatchDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ReleaseWaitingBatch($input: ReleaseWaitingBatchInput!) {
   releaseWaitingBatch(input: $input)
 }
     `) as unknown as TypedDocumentString<ReleaseWaitingBatchMutation, ReleaseWaitingBatchMutationVariables>;
-export const CompactThreadDocument = new TypedDocumentString(`
+export const CompactThreadDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CompactThread($input: CompactThreadInput!) {
   compactThread(input: $input)
 }
     `) as unknown as TypedDocumentString<CompactThreadMutation, CompactThreadMutationVariables>;
-export const AnswerRequestDocument = new TypedDocumentString(`
+export const AnswerRequestDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation AnswerRequest($input: AnswerRequestInput!) {
   answerRequest(input: $input)
 }
     `) as unknown as TypedDocumentString<AnswerRequestMutation, AnswerRequestMutationVariables>;
-export const SetGoalDocument = new TypedDocumentString(`
+export const SetGoalDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetGoal($input: SetGoalInput!) {
   setGoal(input: $input) {
     tokensUsed
@@ -6448,14 +6491,14 @@ export const SetGoalDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetGoalMutation, SetGoalMutationVariables>;
-export const ClearGoalDocument = new TypedDocumentString(`
+export const ClearGoalDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ClearGoal($input: ClearGoalInput!) {
   clearGoal(input: $input) {
     cleared
   }
 }
     `) as unknown as TypedDocumentString<ClearGoalMutation, ClearGoalMutationVariables>;
-export const RenameThreadDocument = new TypedDocumentString(`
+export const RenameThreadDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation RenameThread($id: ID!, $input: RenameThreadInput) {
   renameThread(id: $id, input: $input) {
     result {
@@ -6480,7 +6523,7 @@ export const RenameThreadDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<RenameThreadMutation, RenameThreadMutationVariables>;
-export const SetThreadHandleDocument = new TypedDocumentString(`
+export const SetThreadHandleDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetThreadHandle($input: SetThreadHandleInput!) {
   setThreadHandle(input: $input) {
     id
@@ -6503,7 +6546,7 @@ export const SetThreadHandleDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetThreadHandleMutation, SetThreadHandleMutationVariables>;
-export const SetThreadOnDutyDocument = new TypedDocumentString(`
+export const SetThreadOnDutyDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetThreadOnDuty($input: SetThreadOnDutyInput!) {
   setThreadOnDuty(input: $input) {
     id
@@ -6526,7 +6569,7 @@ export const SetThreadOnDutyDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetThreadOnDutyMutation, SetThreadOnDutyMutationVariables>;
-export const ArchiveThreadDocument = new TypedDocumentString(`
+export const ArchiveThreadDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation ArchiveThread($id: ID!) {
   archiveThread(id: $id) {
     result {
@@ -6551,17 +6594,17 @@ export const ArchiveThreadDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ArchiveThreadMutation, ArchiveThreadMutationVariables>;
-export const DeleteThreadDocument = new TypedDocumentString(`
+export const DeleteThreadDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation DeleteThread($input: DeleteThreadInput!) {
   deleteThread(input: $input)
 }
     `) as unknown as TypedDocumentString<DeleteThreadMutation, DeleteThreadMutationVariables>;
-export const WriteFileDocument = new TypedDocumentString(`
+export const WriteFileDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation WriteFile($input: WriteFileInput!) {
   writeFile(input: $input)
 }
     `) as unknown as TypedDocumentString<WriteFileMutation, WriteFileMutationVariables>;
-export const CreateEntryDocument = new TypedDocumentString(`
+export const CreateEntryDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CreateEntry($input: CreateEntryInput!) {
   createEntry(input: $input) {
     size
@@ -6571,7 +6614,7 @@ export const CreateEntryDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CreateEntryMutation, CreateEntryMutationVariables>;
-export const RenameEntryDocument = new TypedDocumentString(`
+export const RenameEntryDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation RenameEntry($input: RenameEntryInput!) {
   renameEntry(input: $input) {
     size
@@ -6581,71 +6624,71 @@ export const RenameEntryDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<RenameEntryMutation, RenameEntryMutationVariables>;
-export const DeleteEntryDocument = new TypedDocumentString(`
+export const DeleteEntryDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation DeleteEntry($input: DeleteEntryInput!) {
   deleteEntry(input: $input)
 }
     `) as unknown as TypedDocumentString<DeleteEntryMutation, DeleteEntryMutationVariables>;
-export const GitCommitDocument = new TypedDocumentString(`
+export const GitCommitDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation GitCommit($input: GitCommitInput!) {
   gitCommit(input: $input) {
     sha
   }
 }
     `) as unknown as TypedDocumentString<GitCommitMutation, GitCommitMutationVariables>;
-export const GitDiscardDocument = new TypedDocumentString(`
+export const GitDiscardDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation GitDiscard($input: GitDiscardInput!) {
   gitDiscard(input: $input)
 }
     `) as unknown as TypedDocumentString<GitDiscardMutation, GitDiscardMutationVariables>;
-export const GitUndoCommitDocument = new TypedDocumentString(`
+export const GitUndoCommitDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation GitUndoCommit($input: GitUndoCommitInput!) {
   gitUndoCommit(input: $input) {
     sha
   }
 }
     `) as unknown as TypedDocumentString<GitUndoCommitMutation, GitUndoCommitMutationVariables>;
-export const GitAbortMergeDocument = new TypedDocumentString(`
+export const GitAbortMergeDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation GitAbortMerge($input: GitAbortMergeInput!) {
   gitAbortMerge(input: $input)
 }
     `) as unknown as TypedDocumentString<GitAbortMergeMutation, GitAbortMergeMutationVariables>;
-export const GitCreateBranchDocument = new TypedDocumentString(`
+export const GitCreateBranchDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation GitCreateBranch($input: GitCreateBranchInput!) {
   gitCreateBranch(input: $input)
 }
     `) as unknown as TypedDocumentString<GitCreateBranchMutation, GitCreateBranchMutationVariables>;
-export const GitSwitchDocument = new TypedDocumentString(`
+export const GitSwitchDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation GitSwitch($input: GitSwitchInput!) {
   gitSwitch(input: $input)
 }
     `) as unknown as TypedDocumentString<GitSwitchMutation, GitSwitchMutationVariables>;
-export const GitDeleteBranchDocument = new TypedDocumentString(`
+export const GitDeleteBranchDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation GitDeleteBranch($input: GitDeleteBranchInput!) {
   gitDeleteBranch(input: $input)
 }
     `) as unknown as TypedDocumentString<GitDeleteBranchMutation, GitDeleteBranchMutationVariables>;
-export const GitStashPopDocument = new TypedDocumentString(`
+export const GitStashPopDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation GitStashPop($input: GitStashPopInput!) {
   gitStashPop(input: $input)
 }
     `) as unknown as TypedDocumentString<GitStashPopMutation, GitStashPopMutationVariables>;
-export const GitSetRemoteDocument = new TypedDocumentString(`
+export const GitSetRemoteDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation GitSetRemote($input: GitSetRemoteInput!) {
   gitSetRemote(input: $input)
 }
     `) as unknown as TypedDocumentString<GitSetRemoteMutation, GitSetRemoteMutationVariables>;
-export const GitFetchDocument = new TypedDocumentString(`
+export const GitFetchDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation GitFetch($input: GitFetchInput!) {
   gitFetch(input: $input)
 }
     `) as unknown as TypedDocumentString<GitFetchMutation, GitFetchMutationVariables>;
-export const GitPullDocument = new TypedDocumentString(`
+export const GitPullDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation GitPull($input: GitPullInput!) {
   gitPull(input: $input)
 }
     `) as unknown as TypedDocumentString<GitPullMutation, GitPullMutationVariables>;
-export const GitPushDocument = new TypedDocumentString(`
+export const GitPushDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation GitPush($input: GitPushInput!) {
   gitPush(input: $input)
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -33,7 +35,27 @@ type config struct {
 	// with no path searches a piped stdin, not the directory (codex's shell
 	// tool spawns with Stdio::null for the same reason). No input credit is
 	// offered; Input and CloseInput from the host are ignored. Not with PTY.
-	NoStdin bool
+	NoStdin      bool
+	Cgroup       string
+	CgroupRoot   string
+	MemoryMax    int64
+	SwapMax      int64
+	MemoryMaxSet bool
+	SwapMaxSet   bool
+}
+
+type resourceGuard struct {
+	Status    string `json:"status"`
+	Reason    string `json:"reason,omitempty"`
+	Path      string `json:"path,omitempty"`
+	MemoryMax int64  `json:"memory_max"`
+	SwapMax   int64  `json:"swap_max"`
+}
+
+type resourceExit struct {
+	OOMKill      uint64 `json:"oom_kill"`
+	Populated    bool   `json:"populated"`
+	CleanupError string `json:"cleanup_error"`
 }
 
 // frameWriter serialises packets to the host. Any write error means the host
@@ -130,6 +152,11 @@ func run(hostIn io.Reader, hostOut io.Writer, cfg config) int {
 		out.write(TagStartError, []byte(err.Error()))
 		return 3
 	}
+	defer cleanupGuard(child)
+	if child.resourceGuard != nil {
+		data, _ := json.Marshal(child.resourceGuard)
+		out.write(TagResourceGuard, data)
+	}
 	out.write(TagPid, encodeUint32(uint32(child.proc.Process.Pid)))
 
 	osSigs := make(chan os.Signal, 1)
@@ -143,6 +170,7 @@ func run(hostIn io.Reader, hostOut io.Writer, cfg config) int {
 	sigCh := make(chan int, 4)
 	hostGone := make(chan struct{})
 	waitDone := make(chan struct{})
+	failedCleanup := make(chan *resourceExit, 1)
 
 	// no stdin to feed (NoStdin): no credit is ever offered, Input is dropped
 	if child.stdin != nil {
@@ -159,6 +187,7 @@ func run(hostIn io.Reader, hostOut io.Writer, cfg config) int {
 
 	go func() {
 		child.waitErr = child.proc.Wait()
+		child.waited.Store(true)
 		close(waitDone)
 	}()
 
@@ -172,14 +201,27 @@ func run(hostIn io.Reader, hostOut io.Writer, cfg config) int {
 			return
 		}
 		terminating = true
-		go child.terminate(grace, waitDone)
+		go func() {
+			child.terminate(grace, waitDone)
+			if child.resourceGuard != nil && child.resourceGuard.Status == "active" {
+				// SIGKILL cannot force a task out of a stuck kernel driver.
+				// Verify the entire group, even if Wait on the root never returns.
+				if result := cleanupGuard(child); result != nil && result.Populated {
+					failedCleanup <- result
+				}
+			}
+		}()
 	}
 	// Once the child is gone the host has lost interest; stop the child tree
 	// (a no-op if it already exited) and leave.
 	shutdown := func(why string) int {
 		logf("%s; terminating child", why)
 		terminate(cfg.Grace)
-		<-waitDone
+		select {
+		case <-waitDone:
+		case <-failedCleanup:
+			logf("host gone with live task descendants; cgroup retained")
+		}
 		return 0
 	}
 
@@ -205,10 +247,36 @@ func run(hostIn io.Reader, hostOut io.Writer, cfg config) int {
 		case <-out.gone:
 			return shutdown("host unwritable")
 
+		case result := <-failedCleanup:
+			if exited {
+				continue // the root's real exit already reported this cleanup result
+			}
+			data, _ := json.Marshal(result)
+			out.write(TagResourceExit, data)
+			// Unknown actual exit status: root may still be in the kernel.
+			// Never report SIGKILL as proof of its death.
+			out.write(TagExitStatus, encodeUint32(^uint32(0)))
+			for _, s := range child.streams {
+				s.r.Close()
+			}
+			return 0
+
 		case <-waitCase:
 			waitCase = nil
 			exited = true
 			child.reapLeftovers()
+			result := cleanupGuard(child)
+			if result != nil {
+				data, _ := json.Marshal(result)
+				out.write(TagResourceExit, data)
+				if result.Populated {
+					// A kernel-stuck descendant can keep our pipes open forever.
+					// Report failed cleanup, retain its cgroup, and unblock the host.
+					for _, s := range child.streams {
+						s.r.Close()
+					}
+				}
+			}
 			out.write(TagExitStatus, encodeUint32(uint32(exitStatus(child.waitErr))))
 			if finished {
 				return 0
@@ -320,14 +388,18 @@ func readHost(hostIn io.Reader, child *child, inputCh chan<- []byte, termCh chan
 
 // child is a started process plus the pipes we own.
 type child struct {
-	proc    *exec.Cmd
-	stdin   *os.File
-	stdout  *stream
-	stderr  *stream // nil unless Stderr == "stream" (never with a pty)
-	streams []*stream
-	waitErr error
-	pty     bool  // stdin is the pty master: no EOF to give, stdout is the same file
-	guard   guard // platform resource guard (Job object on Windows)
+	proc          *exec.Cmd
+	stdin         *os.File
+	stdout        *stream
+	stderr        *stream // nil unless Stderr == "stream" (never with a pty)
+	streams       []*stream
+	waitErr       error
+	waited        atomic.Bool
+	pty           bool  // stdin is the pty master: no EOF to give, stdout is the same file
+	guard         guard // platform resource guard (Job object on Windows)
+	resourceGuard *resourceGuard
+	resourceExit  *resourceExit
+	cleanupOnce   sync.Once
 }
 
 // startChild launches cfg.Args with our own os.Pipe()s rather than
@@ -352,6 +424,17 @@ func startChild(cfg config, env []string) (*child, error) {
 		proc.Env = append(os.Environ(), env...)
 	}
 	setProcessGroup(proc)
+	c := &child{proc: proc}
+	if err := setupGuard(c, cfg); err != nil {
+		return nil, err
+	}
+	started := false
+	defer func() {
+		closeGuardFD(c)
+		if !started {
+			cleanupGuard(c)
+		}
+	}()
 
 	// a nil Stdin is the null device to os/exec (/dev/null, NUL on Windows)
 	var stdinR, stdinW *os.File
@@ -368,7 +451,7 @@ func startChild(cfg config, env []string) (*child, error) {
 	}
 	proc.Stdout = stdoutW
 
-	c := &child{proc: proc, stdin: stdinW}
+	c.stdin = stdinW
 	c.stdout = newStream("stdout", TagOutput, TagOutputEOF, stdoutR)
 	c.streams = []*stream{c.stdout}
 
@@ -377,7 +460,9 @@ func startChild(cfg config, env []string) (*child, error) {
 		stdinW.Close()
 		stdoutR.Close()
 		stdoutW.Close()
-		return startOnPty(proc, cfg, c)
+		result, err := startOnPty(proc, cfg, c)
+		started = err == nil
+		return result, err
 	}
 
 	var stderrW *os.File
@@ -425,6 +510,7 @@ func startChild(cfg config, env []string) (*child, error) {
 	if err := afterStart(c, cfg); err != nil {
 		logf("resource guard: %v", err)
 	}
+	started = true
 	return c, nil
 }
 

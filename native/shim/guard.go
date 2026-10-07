@@ -19,7 +19,7 @@ func encodeStats(s treeStats) []byte {
 
 // stats answers the host's SendStats; an exited child has an empty tree.
 func (c *child) stats() treeStats {
-	if c.proc.ProcessState != nil {
+	if c.waited.Load() {
 		return treeStats{}
 	}
 	return collectStats(c)

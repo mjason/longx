@@ -87,6 +87,9 @@ defmodule Longx.Projects.Types do
                 model_retries: [type: :integer],
                 command_oom_priority: [type: :integer],
                 memory_floor_percent: [type: :integer],
+                command_cgroup_mode: [type: :string],
+                command_memory_limit_percent: [type: :integer],
+                command_swap_limit_mb: [type: :integer],
                 child_model: [type: :string],
                 child_effort: [type: :string]
               ]
@@ -103,6 +106,9 @@ defmodule Longx.Projects.Types do
                 model_retries: [type: :integer],
                 command_oom_priority: [type: :integer],
                 memory_floor_percent: [type: :integer],
+                command_cgroup_mode: [type: :string],
+                command_memory_limit_percent: [type: :integer],
+                command_swap_limit_mb: [type: :integer],
                 child_model: [type: :string],
                 child_effort: [type: :string]
               ]

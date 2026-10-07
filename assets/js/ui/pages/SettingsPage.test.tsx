@@ -997,6 +997,18 @@ describe("SettingsPage", () => {
     const floor = within(settings).getByLabelText("内存下限（%）") as HTMLInputElement;
     expect(floor.value).toBe("8");
     expect((within(settings).getByLabelText("命令被 OOM 先杀的优先级") as HTMLInputElement).value).toBe("800");
+    const limit = within(settings).getByLabelText("单任务内存上限（%）") as HTMLInputElement;
+    const swap = within(settings).getByLabelText("单任务 Swap 上限（MiB）") as HTMLInputElement;
+    expect(limit.value).toBe("75");
+    expect(limit.min).toBe("1");
+    expect(limit.max).toBe("80");
+    expect(swap.value).toBe("1024");
+    expect(swap.min).toBe("0");
+    expect(swap.max).toBe("65536");
+    await user.clear(limit);
+    await user.type(limit, "60");
+    await user.clear(swap);
+    await user.type(swap, "0");
     await user.clear(floor);
     await user.type(floor, "12");
     await user.click(within(settings).getByLabelText("命令使用的 Shell"));
@@ -1008,9 +1020,23 @@ describe("SettingsPage", () => {
     await user.click(within(settings).getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(setAgentSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ input: expect.objectContaining({ maxDepth: 3, maxChildren: 4, idleMinutes: 30, childModel: null, memoryFloorPercent: 12, commandOomPriority: 800, commandShell: "bash", extraPath: "/data/obscura/0.2.2/x86_64-linux" }) }),
+        expect.objectContaining({ input: expect.objectContaining({ maxDepth: 3, maxChildren: 4, idleMinutes: 30, childModel: null, memoryFloorPercent: 12, commandOomPriority: 800, commandMemoryLimitPercent: 60, commandSwapLimitMb: 0, commandShell: "bash", extraPath: "/data/obscura/0.2.2/x86_64-linux" }) }),
       ),
     );
+  });
+
+  test("agent kernel: command cgroup mode is optional and its saved off mode is sent", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings/agent");
+    const settings = await screen.findByTestId("agent-settings");
+    const mode = within(settings).getByLabelText("任务 cgroup 保护");
+    expect(mode).toHaveTextContent("自动");
+    await user.click(mode);
+    await user.click(await screen.findByRole("option", { name: "关闭" }));
+    await user.click(within(settings).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(setAgentSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ input: expect.objectContaining({ commandCgroupMode: "off" }) }),
+    ));
   });
 
   test("desktop: categories beside the content, models first", async () => {

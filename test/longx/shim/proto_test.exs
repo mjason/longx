@@ -79,8 +79,40 @@ defmodule Longx.Shim.ProtoTest do
                {:stats, %{processes: 3, rss_bytes: 1_048_576, cpu_ms: 250}}
     end
 
-    test "the protocol version is 4 (stats, resource guards, a null stdin)" do
-      assert Proto.version() == "4"
+    @tag :cgroup
+    test "protocol 5 decodes resource guard and exit frames without treating signal 137 as OOM" do
+      assert Proto.version() == "5"
+
+      guard = %{
+        "status" => "active",
+        "reason" => "",
+        "path" => "/tasks/task-1",
+        "memory_max" => 1024,
+        "swap_max" => 0
+      }
+
+      exit = %{"oom_kill" => 0, "populated" => false, "cleanup_error" => ""}
+
+      assert Proto.decode(<<25, Jason.encode!(guard)::binary>>) ==
+               {:resource_guard, guard}
+
+      assert Proto.decode(<<26, Jason.encode!(exit)::binary>>) ==
+               {:resource_exit, exit}
+
+      fallback = %{
+        "status" => "unavailable",
+        "reason" => "no delegation",
+        "memory_max" => 0,
+        "swap_max" => 0
+      }
+
+      assert Proto.decode(<<25, Jason.encode!(fallback)::binary>>) ==
+               {:resource_guard, fallback}
+
+      assert Proto.decode(<<26, "broken">>) == {:unknown, 26, "broken"}
+
+      assert Proto.decode(<<25, ~s({"status":"wat"})>>) ==
+               {:unknown, 25, ~s({"status":"wat"})}
     end
 
     test "unknown tags are reported, not crashed on" do
