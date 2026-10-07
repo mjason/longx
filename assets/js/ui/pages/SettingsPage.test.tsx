@@ -830,7 +830,7 @@ describe("SettingsPage", () => {
   test("agent kernel: the built-in browser's private-network switch (a fake-ip network needs it)", async () => {
     setViewport(1280);
     const user = userEvent.setup();
-    renderAt("/settings/agent");
+    renderAt("/settings/connections");
     const card = await screen.findByTestId("browser-settings");
     const sw = within(card).getByRole("switch", { name: /私网|局域网/ });
     expect(sw).not.toBeChecked();
@@ -845,7 +845,7 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     vi.mocked(browserStatus).mockResolvedValue(ok({ ...browserIdle }) as never);
     try {
-      renderAt("/settings/agent");
+      renderAt("/settings/connections");
       const card = await screen.findByTestId("browser-settings");
       expect(await within(card).findByText(/尚未下载/)).toBeInTheDocument();
       // the download runs: the status answers with bytes, the card draws the bar
@@ -879,7 +879,7 @@ describe("SettingsPage", () => {
       ok({ ...browserIdle, stage: "installed", source: "downloaded", path: "/data/obscura/0.2.1/x86_64-linux/obscura", installedVersion: "0.2.1", latest: "0.2.2", upgradable: true }) as never,
     );
     try {
-      renderAt("/settings/agent");
+      renderAt("/settings/connections");
       const card2 = await screen.findByTestId("browser-settings");
       expect(await within(card2).findByText(/可升级到 0\.2\.2/)).toBeInTheDocument();
       await user.click(within(card2).getByRole("button", { name: /升级/ }));
@@ -967,7 +967,7 @@ describe("SettingsPage", () => {
   test("agent kernel: the outside address a login returns to is shown with what is in force, and saved", async () => {
     setViewport(1280);
     const user = userEvent.setup();
-    renderAt("/settings/agent");
+    renderAt("/settings/connections");
     const card = await screen.findByTestId("public-url");
     expect(card).toHaveTextContent("http://192.168.2.129:7788");
     // a container sets it once in its environment instead
@@ -984,21 +984,26 @@ describe("SettingsPage", () => {
   test("agent kernel: the team parameters are saved as one call", async () => {
     setViewport(1280);
     const user = userEvent.setup();
-    renderAt("/settings/agent");
+    const { router } = renderAt("/settings/agent");
     const section = await screen.findByTestId("section-agent");
     const settings = await within(section).findByTestId("agent-settings");
-    expect(within(settings).getByLabelText("命令使用的 Shell")).toHaveTextContent("自动");
-    expect(within(settings).queryByTestId("command-shell-manual-warning")).not.toBeInTheDocument();
     const depth = within(settings).getByLabelText("派出深度上限") as HTMLInputElement;
     expect(depth.value).toBe("2");
     await user.clear(depth);
     await user.type(depth, "3");
-    // the machine's pressure guards on commands sit with the team parameters
-    const floor = within(settings).getByLabelText("内存下限（%）") as HTMLInputElement;
+    await user.click(within(settings).getByRole("button", { name: "保存全局默认" }));
+    await waitFor(() => expect(setAgentSettings).toHaveBeenCalledWith(expect.objectContaining({
+      input: { maxDepth: 3, maxChildren: 4, idleMinutes: 30, modelRetries: 3, childModel: null, childEffort: null },
+    })));
+    await user.click(screen.getByRole("link", { name: "任务与资源保护" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/resources"));
+    const resources = await screen.findByTestId("agent-settings");
+    expect(within(resources).queryByLabelText("派出深度上限")).not.toBeInTheDocument();
+    const floor = within(resources).getByLabelText("内存下限（%）") as HTMLInputElement;
     expect(floor.value).toBe("8");
-    expect((within(settings).getByLabelText("命令被 OOM 先杀的优先级") as HTMLInputElement).value).toBe("800");
-    const limit = within(settings).getByLabelText("单任务内存上限（%）") as HTMLInputElement;
-    const swap = within(settings).getByLabelText("单任务 Swap 上限（MiB）") as HTMLInputElement;
+    expect((within(resources).getByLabelText("命令被 OOM 先杀的优先级") as HTMLInputElement).value).toBe("800");
+    const limit = within(resources).getByLabelText("单任务内存上限（%）") as HTMLInputElement;
+    const swap = within(resources).getByLabelText("单任务 Swap 上限（MiB）") as HTMLInputElement;
     expect(limit.value).toBe("75");
     expect(limit.min).toBe("1");
     expect(limit.max).toBe("80");
@@ -1011,29 +1016,35 @@ describe("SettingsPage", () => {
     await user.type(swap, "0");
     await user.clear(floor);
     await user.type(floor, "12");
-    await user.click(within(settings).getByLabelText("命令使用的 Shell"));
+    await user.click(within(resources).getByRole("button", { name: "保存全局默认" }));
+    await waitFor(() => expect(setAgentSettings).toHaveBeenLastCalledWith(expect.objectContaining({
+      input: { memoryFloorPercent: 12, commandOomPriority: 800, commandMemoryLimitPercent: 60, commandSwapLimitMb: 0, commandCgroupMode: "auto" },
+    })));
+    await user.click(screen.getByRole("link", { name: "电脑与命令环境" }));
+    const environment = await screen.findByTestId("agent-settings");
+    await user.click(within(environment).getByLabelText("命令使用的 Shell"));
     await user.click(await screen.findByRole("option", { name: "bash" }));
-    expect(within(settings).getByTestId("command-shell-manual-warning")).toHaveTextContent("不会自动继承另一种 Shell 的 PATH 或环境变量");
-    const extraPath = within(settings).getByLabelText("额外 PATH 目录") as HTMLTextAreaElement;
+    expect(within(environment).getByTestId("command-shell-manual-warning")).toHaveTextContent("不会自动继承另一种 Shell 的 PATH 或环境变量");
+    const extraPath = within(environment).getByLabelText("额外 PATH 目录") as HTMLTextAreaElement;
     await user.type(extraPath, "/opt/tools");
-    await user.click(within(settings).getByRole("button", { name: "恢复默认" }));
-    await user.click(within(settings).getByRole("button", { name: "保存" }));
+    await user.click(within(environment).getByRole("button", { name: "恢复默认" }));
+    await user.click(within(environment).getByRole("button", { name: "保存全局默认" }));
     await waitFor(() =>
       expect(setAgentSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ input: expect.objectContaining({ maxDepth: 3, maxChildren: 4, idleMinutes: 30, childModel: null, memoryFloorPercent: 12, commandOomPriority: 800, commandMemoryLimitPercent: 60, commandSwapLimitMb: 0, commandShell: "bash", extraPath: "/data/obscura/0.2.2/x86_64-linux" }) }),
+        expect.objectContaining({ input: { commandShell: "bash", extraPath: "/data/obscura/0.2.2/x86_64-linux" } }),
       ),
     );
   });
 
   test("agent kernel: command cgroup mode is optional and its saved off mode is sent", async () => {
     const user = userEvent.setup();
-    renderAt("/settings/agent");
+    renderAt("/settings/resources");
     const settings = await screen.findByTestId("agent-settings");
     const mode = within(settings).getByLabelText("任务 cgroup 保护");
     expect(mode).toHaveTextContent("自动");
     await user.click(mode);
     await user.click(await screen.findByRole("option", { name: "关闭" }));
-    await user.click(within(settings).getByRole("button", { name: "保存" }));
+    await user.click(within(settings).getByRole("button", { name: "保存全局默认" }));
     await waitFor(() => expect(setAgentSettings).toHaveBeenCalledWith(
       expect.objectContaining({ input: expect.objectContaining({ commandCgroupMode: "off" }) }),
     ));

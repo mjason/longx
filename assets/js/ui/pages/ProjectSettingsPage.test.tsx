@@ -7,13 +7,13 @@ import { agentDefinitionData, agentSettingsData, channel, ok } from "@/ui/test-m
 
 vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { agentDefinition, agentSettings, archiveProject, deleteProject, deleteWatch, dryRunWatch, promoteLocal, switchWatch, updateProject } from "@/core/api";
+import { agentDefinition, agentSettings, archiveProject, deleteProject, deleteWatch, dryRunWatch, extensionInventory, promoteLocal, switchWatch, updateProject } from "@/core/api";
 
 // the page opens through a lazy route (routes.tsx): its module in the cache
 // first, so the route resolves at once however slow the machine — CI's runner
 // once took past the tests' one-second waits
 beforeAll(async () => {
-  await import("./ProjectSettingsPage");
+  await import("./ProjectSettingsCenter");
 });
 
 describe("ProjectSettingsPage", () => {
@@ -36,7 +36,7 @@ describe("ProjectSettingsPage", () => {
     await user.click(within(form).getByRole("switch", { name: /网页搜索/ }));
     // no dirty-tree policy any more: Longx never commits on the person's behalf
     expect(within(form).queryByRole("radio", { name: "先问我" })).not.toBeInTheDocument();
-    await user.click(within(form).getByRole("button", { name: "保存" }));
+    await user.click(within(form).getByRole("button", { name: "保存本项目" }));
     await waitFor(() =>
       expect(updateProject).toHaveBeenCalledWith(
         expect.objectContaining({ identity: "id-1", input: expect.objectContaining({ webSearch: false, modelId: null }) }),
@@ -50,12 +50,12 @@ describe("ProjectSettingsPage", () => {
       ok(agentDefinitionData({ present: true, plugs: ["Longx.Agent.Plugs.Browser"], browser: { alias: "qa", maxTabs: 2, state: "offline", browser: "MacBook Chrome" } })) as never,
     );
     try {
-      renderAt("/p/app-1/settings");
+      renderAt("/p/app-1/settings?section=extensions");
       const line = await screen.findByTestId("project-browser");
       expect(line).toHaveTextContent("qa");
       expect(line).toHaveTextContent("MacBook Chrome（离线）");
       expect(line).toHaveTextContent("2");
-      expect(within(line).getByRole("link", { name: "浏览器设置" })).toHaveAttribute("href", "/settings/browsers");
+      expect(within(line).getByRole("link", { name: "浏览器设置" })).toHaveAttribute("href", "/p/app-1/settings?scope=global&section=browsers");
     } finally {
       vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData()) as never);
     }
@@ -67,13 +67,12 @@ describe("ProjectSettingsPage", () => {
     );
     try {
       const user = userEvent.setup();
-      renderAt("/p/app-1/settings");
+      renderAt("/p/app-1/settings?section=extensions");
       const section = await screen.findByTestId("project-agent");
-      expect(await within(section).findByText(".longx/plugs/deploy.exs")).toBeInTheDocument();
-      expect(within(section).getByText(/syntax error/)).toBeInTheDocument();
-      expect(within(section).getByText("Longx.Agent.Local.P1.Deploy")).toBeInTheDocument();
+      expect(within(section).queryByTestId("project-local-files")).not.toBeInTheDocument();
+      expect(await within(section).findByText(/syntax error/)).toBeInTheDocument();
       await user.click(within(section).getByRole("switch", { name: /信任并加载/ }));
-      await user.click(screen.getByRole("button", { name: "保存" }));
+      await user.click(screen.getByRole("button", { name: "保存本项目" }));
       await waitFor(() =>
         expect(updateProject).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ trustLocalAgent: true }) })),
       );
@@ -83,6 +82,10 @@ describe("ProjectSettingsPage", () => {
   });
 
   test("the project lists the agents it may spawn, promotes a local file to shared, and saves kernel overrides with the form", async () => {
+    vi.mocked(extensionInventory).mockResolvedValue(ok([
+      { name: "helper", kind: "agents", path: ".longx/local/agents/helper", layer: "local", complete: true, shareable: true },
+      { name: "x.exs", kind: "plugs", path: ".longx/local/plugs/x.exs", layer: "local", complete: true, shareable: true },
+    ]) as never);
     vi.mocked(agentDefinition).mockResolvedValue(
       ok(agentDefinitionData({
         present: true,
@@ -96,8 +99,8 @@ describe("ProjectSettingsPage", () => {
     );
     try {
       const user = userEvent.setup();
-      renderAt("/p/app-1/settings");
-      const section = await screen.findByTestId("project-agent");
+      renderAt("/p/app-1/settings?section=extensions");
+      let section = await screen.findByTestId("project-agent");
       const agents = await within(section).findByTestId("project-agents");
       expect(agents).toHaveTextContent("researcher");
       expect(agents).toHaveTextContent("shared");
@@ -105,16 +108,28 @@ describe("ProjectSettingsPage", () => {
       expect(agents).toHaveTextContent("local");
 
       // a local file has a promote button; the RPC gets its relative path
-      const local = within(section).getByTestId("project-local-files");
-      const rows = within(local).getAllByRole("listitem");
-      expect(rows[1]).toHaveTextContent("plugs/x.exs");
-      await user.click(within(rows[1]!).getByRole("button", { name: "提升到 shared" }));
-      await waitFor(() => expect(promoteLocal).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "id-1", path: "plugs/x.exs" } })));
+      const extensions = await screen.findByTestId("project-extensions");
+      await user.click(within(extensions).getByRole("tab", { name: /插件/ }));
+      const row = await within(extensions).findByTestId("extension-row");
+      expect(row).toHaveTextContent("plugs/x.exs");
+      await user.click(within(row).getByRole("button", { name: "准备共享" }));
+      const preview = await screen.findByRole("dialog");
+      await user.click(await within(preview).findByRole("button", { name: "确认移动到 shared" }));
+      await waitFor(() => expect(promoteLocal).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "id-1", path: "plugs/x.exs", digest: "reviewed-digest" } })));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      await user.click(screen.getByRole("link", { name: "Agent 内核" }));
+      section = await screen.findByTestId("project-agent");
 
       // the inherited value shows as the placeholder; a typed override is saved with the form, empties as null
       const depth = within(section).getByLabelText("派出深度上限") as HTMLInputElement;
-      expect(depth.placeholder).toBe("沿用 3");
+      expect(depth.placeholder).toBe("沿用 2");
       await user.type(depth, "1");
+      await user.click(screen.getByRole("button", { name: "保存本项目" }));
+      await waitFor(() => expect(updateProject).toHaveBeenCalledWith(expect.objectContaining({
+        input: { agentSettings: expect.objectContaining({ maxDepth: 1 }) },
+      })));
+      await user.click(screen.getByRole("link", { name: "任务与资源保护" }));
+      section = await screen.findByTestId("project-agent");
       const mode = within(section).getByLabelText("任务 cgroup 保护");
       expect(mode).toHaveTextContent("沿用 auto");
       await user.click(mode);
@@ -129,17 +144,17 @@ describe("ProjectSettingsPage", () => {
       expect(swap).toHaveAttribute("max", "65536");
       await user.type(memory, "30");
       await user.type(swap, "0");
-      await user.click(screen.getByRole("button", { name: "保存" }));
+      await user.click(screen.getByRole("button", { name: "保存本项目" }));
       await waitFor(() =>
         expect(updateProject).toHaveBeenCalledWith(
-          expect.objectContaining({ input: expect.objectContaining({ agentSettings: expect.objectContaining({ maxDepth: 1, maxChildren: null, childModel: null, commandMemoryLimitPercent: 30, commandSwapLimitMb: 0, commandCgroupMode: "required" }) }) }),
+          expect.objectContaining({ input: expect.objectContaining({ agentSettings: expect.objectContaining({ maxChildren: null, childModel: null, commandMemoryLimitPercent: 30, commandSwapLimitMb: 0, commandCgroupMode: "required" }) }) }),
         ),
       );
       await user.clear(memory);
       await user.clear(swap);
       await user.click(mode);
       await user.click(await screen.findByRole("option", { name: "沿用 auto" }));
-      await user.click(screen.getByRole("button", { name: "保存" }));
+      await user.click(screen.getByRole("button", { name: "保存本项目" }));
       await waitFor(() =>
         expect(updateProject).toHaveBeenLastCalledWith(
           expect.objectContaining({ input: expect.objectContaining({ agentSettings: expect.objectContaining({ commandMemoryLimitPercent: null, commandSwapLimitMb: null, commandCgroupMode: null }) }) }),
@@ -147,6 +162,7 @@ describe("ProjectSettingsPage", () => {
       );
     } finally {
       vi.mocked(agentDefinition).mockResolvedValue(ok(agentDefinitionData()) as never);
+      vi.mocked(extensionInventory).mockResolvedValue(ok([]) as never);
     }
   });
 
@@ -156,7 +172,7 @@ describe("ProjectSettingsPage", () => {
       settings: { ...agentSettingsData(), commandCgroupMode: "required" },
     })) as never);
     try {
-      renderAt("/p/app-1/settings");
+      renderAt("/p/app-1/settings?section=resources");
       const section = await screen.findByTestId("project-agent");
       await waitFor(() => expect(within(section).getByLabelText("任务 cgroup 保护")).toHaveTextContent("沿用 off"));
     } finally {
@@ -167,7 +183,7 @@ describe("ProjectSettingsPage", () => {
 
   test("the project's watches: listed with state and last run; a dry run shows what it would send; switch and delete", async () => {
     const user = userEvent.setup();
-    renderAt("/p/app-1/settings");
+    renderAt("/p/app-1/settings?section=watches");
     const card = await screen.findByTestId("project-watches");
     const rows = await within(card).findAllByTestId("watch-row");
     expect(rows).toHaveLength(2);
@@ -199,11 +215,13 @@ describe("ProjectSettingsPage", () => {
     );
     try {
       const user = userEvent.setup();
-      renderAt("/p/app-1/settings");
+      renderAt("/p/app-1/settings?section=watches");
       const card = await screen.findByTestId("project-watches");
       const rows = await within(card).findAllByTestId("watch-row");
-      await user.click(within(rows[0]!).getByRole("button", { name: "提升到 shared" }));
-      await waitFor(() => expect(promoteLocal).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "id-1", path: "watches/health.exs" } })));
+      await user.click(within(rows[0]!).getByRole("button", { name: "准备共享" }));
+      const preview = await screen.findByRole("dialog");
+      await user.click(await within(preview).findByRole("button", { name: "确认移动到 shared" }));
+      await waitFor(() => expect(promoteLocal).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "id-1", path: "watches/health.exs", digest: "reviewed-digest" } })));
       // shared/watches/ has a file the trust switch keeps from running
       expect(within(card).getByTestId("shared-watches-untrusted")).toHaveTextContent("nightly_backup.exs");
     } finally {
@@ -213,7 +231,7 @@ describe("ProjectSettingsPage", () => {
 
   test("the project's file rules: what to ignore and what to watch anyway, saved on their own; .longxignore is named", async () => {
     const user = userEvent.setup();
-    renderAt("/p/app-1/settings");
+    renderAt("/p/app-1/settings?section=files");
     const card = await screen.findByTestId("project-file-rules");
     expect(card).toHaveTextContent(".longxignore");
     await user.type(within(card).getByLabelText("忽略"), "data/");

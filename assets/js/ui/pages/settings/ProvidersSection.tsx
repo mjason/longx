@@ -17,6 +17,7 @@ import {
 import { ChatGptLoginDialog } from "./ChatGptLoginDialog";
 import { useCredentials } from "@/core/credentials";
 import { useEffect, useState, type FormEvent } from "react";
+import { useSettingsDraft } from "./SettingsDraft";
 import { toast } from "sonner";
 import { relativeTime } from "@/core/format";
 import {
@@ -268,6 +269,8 @@ function PresetDialog({
     candidates.filter((m) => m.recommended).map((m) => m.upstreamId),
   );
   const [makeDefault, setMakeDefault] = useState("__keep");
+  const [initialChosen] = useState(() => JSON.stringify(chosen));
+  useSettingsDraft(apiKey !== "" || makeDefault !== "__keep" || JSON.stringify(chosen) !== initialChosen);
   const rows: PickableModel[] = candidates.map((m) => ({
     id: m.upstreamId,
     name: m.upstreamId,
@@ -699,6 +702,8 @@ function ProviderDialog({
       ? String(provider.maxConcurrentRequests)
       : "",
   });
+  const [initial] = useState(() => JSON.stringify(form));
+  useSettingsDraft(JSON.stringify(form) !== initial);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
   const busy =
@@ -907,6 +912,8 @@ function ModelDialog({
           : "provider",
     imageGeneration: model?.imageGeneration === true,
   });
+  const [initial] = useState(() => JSON.stringify(form));
+  useSettingsDraft(JSON.stringify(form) !== initial);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
   const busy = actions.createModel.isPending || actions.updateModel.isPending;

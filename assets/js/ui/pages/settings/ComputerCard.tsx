@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSettingsDraft } from "./SettingsDraft";
 import { toast } from "sonner";
 import { type ComputerDevice, useComputerDevices, useComputerAliases, useComputerDeviceActions } from "@/core/computer";
 import { Button } from "@/ui/components/ui/button";
@@ -36,6 +37,7 @@ function ComputerEditor({ id, device, onSaved, onCancel }: { id: string; device?
   const [name, setName] = useState(device?.name ?? "");
   const [url, setUrl] = useState(device?.url ?? "http://127.0.0.1:7797/mcp");
   const [token, setToken] = useState("");
+  useSettingsDraft(name !== (device?.name ?? "") || url !== (device?.url ?? "http://127.0.0.1:7797/mcp") || token !== "");
   const s = t.computer;
   return (
     <form className="space-y-2" onSubmit={(event) => {

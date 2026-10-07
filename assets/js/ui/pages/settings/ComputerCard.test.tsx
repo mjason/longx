@@ -17,7 +17,7 @@ beforeEach(() => {
 });
 test("service replaces installation; key is masked and cleared after save", async () => {
   const user = userEvent.setup();
-  renderAt("/settings/agent");
+  renderAt("/settings/connections");
   const card = await screen.findByTestId("computer-settings");
   const url = await within(card).findByLabelText("服务地址");
   expect(url).toHaveValue("http://127.0.0.1:7797/mcp");
@@ -37,7 +37,7 @@ test("service replaces installation; key is masked and cleared after save", asyn
 test("saved credentials enable background-only connection", async () => {
   vi.mocked(computerDevices).mockResolvedValue(ok([{ ...device, hasToken: true }]));
   const user = userEvent.setup();
-  renderAt("/settings/agent");
+  renderAt("/settings/connections");
   const card = await screen.findByTestId("computer-settings");
   await user.click(await within(card).findByRole("button", { name: "连接电脑服务" }));
   await waitFor(() => expect(computerConnect).toHaveBeenCalledWith({ input: { id: "local", foreground: false } }));
@@ -45,7 +45,7 @@ test("saved credentials enable background-only connection", async () => {
 test("missing host permissions are shown and a connection can disconnect", async () => {
   vi.mocked(computerDevices).mockResolvedValue(ok([{ ...device, hasToken: true, connection: { phase: "ready", foreground: true, busy: false, toolCount: 20, permissions: '{"screen_recording":false}', error: null } }]));
   const user = userEvent.setup();
-  renderAt("/settings/agent");
+  renderAt("/settings/connections");
   const card = await screen.findByTestId("computer-settings");
   expect(await within(card).findByRole("alert")).toHaveTextContent("Longx Computer");
   expect(card).toHaveTextContent("20 个工具");
@@ -56,7 +56,7 @@ test("missing host permissions are shown and a connection can disconnect", async
 test("connected foreground can be edited but only applies on explicit reconnect", async () => {
   vi.mocked(computerDevices).mockResolvedValue(ok([{ ...device, hasToken: true, connection: { ...connection, phase: "ready" } }]));
   const user = userEvent.setup();
-  renderAt("/settings/agent");
+  renderAt("/settings/connections");
   const row = await screen.findByTestId("computer-device");
   await user.click(within(row).getByRole("checkbox", { name: /允许前台控制/ }));
   expect(computerConnect).not.toHaveBeenCalled();
@@ -69,7 +69,7 @@ test("connected foreground can be edited but only applies on explicit reconnect"
 test("two computers render independently; alias stores selected order", async () => {
   vi.mocked(computerDevices).mockResolvedValue(ok([device, { ...device, id: "win", name: "Windows", url: "https://win.example/mcp", hasToken: true }]));
   const user = userEvent.setup();
-  renderAt("/settings/agent");
+  renderAt("/settings/connections");
   await waitFor(() => expect(screen.getAllByTestId("computer-device")).toHaveLength(2));
   const aliases = screen.getByTestId("computer-aliases");
   await user.type(within(aliases).getByLabelText("别名名称"), "qa");
@@ -82,7 +82,7 @@ test("two computers render independently; alias stores selected order", async ()
 test("adding a computer creates a separate endpoint with masked key", async () => {
   vi.mocked(computerDevices).mockResolvedValue(ok([{ ...device, hasToken: true }]));
   const user = userEvent.setup();
-  renderAt("/settings/agent");
+  renderAt("/settings/connections");
   const card = await screen.findByTestId("computer-settings");
   await user.click(within(card).getByRole("button", { name: "添加电脑" }));
   await user.type(within(card).getByLabelText("电脑名称"), "Linux");

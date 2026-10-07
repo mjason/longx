@@ -94,6 +94,14 @@ useful, review it and promote it to `shared/`. Shared definitions travel with th
 repository; credentials, provider configuration, and private machine state do not.
 Configure the same model aliases on another machine to reuse the definition there.
 
+The project's Settings center switches between global defaults and project settings
+without leaving the workspace. Project extensions are grouped as definitions, roles,
+plugs, watches, and knowledge; local outputs are listed separately by run directory.
+Sharing previews the complete object (including a role's prompt and files), requires
+confirmation, and refuses existing shared targets. It does not commit Git, enable trust,
+or delete outputs. Review and merge `.longx/local/agent.exs` into `.longx/agent.exs`
+separately: the local file is an override, not a `shared/agent.exs` candidate.
+
 ### Project skills
 
 Skills are discovered automatically from `.agents/skills/` between the project root

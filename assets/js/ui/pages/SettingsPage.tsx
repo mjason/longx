@@ -8,7 +8,11 @@ import { t } from "@/ui/strings";
 import { ModelsSection } from "./settings/ModelsSection";
 import { ProvidersSection } from "./settings/ProvidersSection";
 import { KnowledgeSection } from "./settings/KnowledgeSection";
-import { AgentKernelSection } from "./settings/AgentKernelSection";
+import { AgentKernelSection, AgentConnectionsSection } from "./settings/AgentKernelSection";
+import { SettingsNavigation, GLOBAL_GROUPS, useSettingsLabel } from "./settings/SettingsNavigation";
+import { SettingsDraftProvider } from "./settings/SettingsDraft";
+import { useSettingsCopy } from "./settings/copy";
+import { CommandGuardStatus } from "@/ui/components/CommandGuardStatus";
 import { DependenciesSection } from "./settings/DependenciesSection";
 import { CredentialsSection } from "./settings/CredentialsSection";
 import { RequestsSection } from "./settings/RequestsSection";
@@ -21,7 +25,7 @@ import { FileRulesSection } from "./settings/FileRulesSection";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { KeysSection } from "./settings/KeysSection";
 
-const SECTIONS = ["models", "providers", "dependencies", "knowledge", "agent", "browsers", "https", "files", "credentials", "watches", "processes", "update", "requests", "keys", "appearance"] as const;
+const SECTIONS = GLOBAL_GROUPS.flatMap((group) => [...group.sections]);
 type Section = (typeof SECTIONS)[number];
 
 /**
@@ -29,10 +33,15 @@ type Section = (typeof SECTIONS)[number];
  * phone it is the iOS pattern — a list, then a sub page.
  */
 export function SettingsPage() {
+  return <SettingsDraftProvider><SettingsPageBody /></SettingsDraftProvider>;
+}
+
+function SettingsPageBody() {
     useTranslation();
   const { section } = useParams<{ section?: Section }>();
   const viewport = useViewport();
   const navigate = useNavigate();
+  const label = useSettingsLabel();
   const current: Section | undefined = section && SECTIONS.includes(section) ? section : undefined;
 
   // a desktop without a section opens the first one — from an effect: React
@@ -47,7 +56,7 @@ export function SettingsPage() {
     if (!current) return <SectionList />;
     return (
       <>
-        <TopBar title={t.settingsSections[current]!} back="/settings" />
+        <TopBar title={label(current)} back="/settings" />
         <Page><SectionBody section={current} /></Page>
       </>
     );
@@ -59,13 +68,7 @@ export function SettingsPage() {
     <>
       <TopBar title={t.settings} back="/" />
       <Page className="grid grid-cols-[220px_minmax(0,1fr)] gap-6">
-        <nav aria-label={t.settings} className="flex flex-col gap-1">
-          {SECTIONS.map((s) => (
-            <Link key={s} to={`/settings/${s}`} aria-current={s === active ? "page" : undefined} className={`rounded-md px-3 py-2 text-sm ${s === active ? "bg-accent" : "hover:bg-accent/40"}`}>
-              {t.settingsSections[s]}
-            </Link>
-          ))}
-        </nav>
+        <SettingsNavigation active={active} href={(section) => `/settings/${section}`} />
         <section className="min-w-0"><SectionBody section={active} /></section>
       </Page>
     </>
@@ -74,6 +77,7 @@ export function SettingsPage() {
 
 function SectionList() {
     useTranslation();
+  const label = useSettingsLabel();
   return (
     <>
       <TopBar title={t.settings} back="/" />
@@ -82,7 +86,7 @@ function SectionList() {
           {SECTIONS.map((s) => (
             <li key={s}>
               <Link to={`/settings/${s}`} className="hover:bg-accent/40 flex items-center justify-between px-4 py-3">
-                {t.settingsSections[s]} <ChevronRight className="text-muted-foreground size-4" />
+                {label(s)} <ChevronRight className="text-muted-foreground size-4" />
               </Link>
             </li>
           ))}
@@ -92,7 +96,7 @@ function SectionList() {
   );
 }
 
-function SectionBody({ section }: { section: Section }) {
+export function SectionBody({ section }: { section: string }) {
   switch (section) {
     case "models":
       return <ModelsSection />;
@@ -103,7 +107,13 @@ function SectionBody({ section }: { section: Section }) {
     case "knowledge":
       return <KnowledgeSection />;
     case "agent":
-      return <AgentKernelSection />;
+      return <AgentKernelSection group="collaboration" />;
+    case "resources":
+      return <AgentKernelSection group="resources" />;
+    case "connections":
+      return <AgentConnectionsSection />;
+    case "diagnostics":
+      return <DiagnosticsSection />;
     case "files":
       return <FileRulesSection />;
     case "credentials":
@@ -125,5 +135,10 @@ function SectionBody({ section }: { section: Section }) {
     case "appearance":
       return <AppearanceSection />;
   }
+}
+
+export function DiagnosticsSection({ projectId }: { projectId?: string }) {
+  const s = useSettingsCopy();
+  return <div className="space-y-4" data-testid="section-diagnostics"><p className="text-muted-foreground text-xs">{s.machineScope}</p><CommandGuardStatus projectId={projectId} /></div>;
 }
 

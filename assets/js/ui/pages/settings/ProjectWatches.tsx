@@ -1,10 +1,10 @@
 // A project's watches on its settings page (Longx.Watches): each with its
 // schedule, state, last run and output; a switch, a dry run (what the
 // script would log and send, in a dialog) and delete (the file goes).
-import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { usePromoteLocal } from "@/core/agent";
+import { PromotionDialog } from "./PromotionDialog";
+import { useSettingsCopy } from "./copy";
 import { useWatchActions, useWatches, type DryRun, type Watch } from "@/core/watches";
 import { Button } from "@/ui/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
@@ -36,18 +36,10 @@ export function ProjectWatches({
 }) {
   const watches = useWatches(projectId);
   const actions = useWatchActions(projectId);
-  const promote = usePromoteLocal(projectId);
-  const client = useQueryClient();
+  const copy = useSettingsCopy();
+  const [sharing, setSharing] = useState<string | null>(null);
   const sharedWatches = sharedFiles.filter((f) => /(^|\/)shared\/watches\/[^/]+\.exs$/.test(f)).map((f) => f.split("/").pop()!);
 
-  const promoteWatch = (watch: Watch) =>
-    promote.mutate(`watches/${watch.name}.exs`, {
-      onSuccess: (r) => {
-        toast.success(s.promoted(r.path));
-        void client.invalidateQueries({ queryKey: ["watches"] });
-      },
-      onError: (e: Error) => toast.error(e.message),
-    });
   const [trying, setTrying] = useState<{ watch: Watch; result: DryRun | null } | null>(null);
 
   const tryRun = async (watch: Watch) => {
@@ -92,8 +84,8 @@ export function ProjectWatches({
                 <span className="text-muted-foreground text-xs">{s.layer[w.layer]}</span>
                 <div className="ml-auto flex items-center gap-2">
                   {w.layer === "local" ? (
-                    <Button variant="outline" size="sm" onClick={() => promoteWatch(w)} disabled={promote.isPending}>
-                      {s.promote}
+                    <Button variant="outline" size="sm" onClick={() => setSharing(`watches/${w.name}.exs`)}>
+                      {copy.prepareShare}
                     </Button>
                   ) : null}
                   <Button variant="outline" size="sm" onClick={() => tryRun(w)} disabled={!!w.runningSince}>
@@ -126,6 +118,7 @@ export function ProjectWatches({
         </ul>
       ) : null}
 
+      <PromotionDialog projectId={projectId} path={sharing} onClose={() => setSharing(null)} />
       <Dialog open={trying !== null} onOpenChange={(open) => !open && setTrying(null)}>
         <DialogContent>
           <DialogHeader>

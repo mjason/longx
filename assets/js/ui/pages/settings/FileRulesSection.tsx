@@ -8,6 +8,7 @@ import { FileRulesFields } from "@/ui/components/FileRulesFields";
 import { Button } from "@/ui/components/ui/button";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { t } from "@/ui/strings";
+import { useSettingsDraft } from "./SettingsDraft";
 
 const s = t.fileRules;
 
@@ -16,6 +17,7 @@ export function FileRulesSection() {
   const rules = useFileRules();
   const save = useSaveFileRules();
   const [draft, setDraft] = useState<FileRules | null>(null);
+  useSettingsDraft(draft !== null);
   if (rules.isPending) return <Skeleton className="h-40 w-full" />;
   if (rules.isError) return <p className="text-destructive text-sm">{rules.error.message}</p>;
   const value = draft ?? { ignore: rules.data.ignore, watch: rules.data.watch };

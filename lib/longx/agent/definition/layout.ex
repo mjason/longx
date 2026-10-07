@@ -39,29 +39,14 @@ defmodule Longx.Agent.Definition.Layout do
   @doc """
   Moves a file of the local tree (`"knowledge/deploy/steps.md"`,
   `"plugs/deploy.exs"`, `"agents/helper/agent.exs"`) into the shared tree,
-  replacing what is there. `{:ok, shared_path}`.
+  without replacing an existing shared object. Roles move as a whole; arbitrary
+  artifacts and the top-level local override are not eligible. `{:ok, shared_path}`.
   """
   @spec promote(Path.t(), String.t()) :: {:ok, Path.t()} | {:error, String.t()}
   def promote(root, rel) do
-    local = Path.join(root, ".longx/local")
-    shared = Path.join(root, ".longx/shared")
-    from = Path.expand(rel, local)
-    to = Path.expand(rel, shared)
-
-    cond do
-      not String.starts_with?(from, local <> "/") ->
-        {:error, "#{rel} is not inside the local tree"}
-
-      not File.regular?(from) ->
-        {:error, "no local file #{rel}"}
-
-      true ->
-        with :ok <- File.mkdir_p(Path.dirname(to)),
-             :ok <- File.rename(from, to) do
-          {:ok, to}
-        else
-          {:error, reason} -> {:error, "cannot promote #{rel}: #{:file.format_error(reason)}"}
-        end
+    with {:ok, preview} <- Longx.Projects.Extensions.preview(root, rel),
+         {:ok, shared} <- Longx.Projects.Extensions.promote(root, rel, preview.digest) do
+      {:ok, Path.join(root, ".longx/#{shared}")}
     end
   end
 end

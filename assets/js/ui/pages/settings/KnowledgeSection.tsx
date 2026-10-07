@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 // docs (edited here, each save a commit) and Longx's shipped ones (read).
 import { Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useSettingsDraft } from "./SettingsDraft";
 import { toast } from "sonner";
 import { useKnowledgeActions, useKnowledgeDoc, useKnowledgeDocs, type KnowledgeDoc } from "@/core/ai";
 import {
@@ -82,6 +83,7 @@ function Editor({ path, writable, onClose }: { path: string; writable: boolean; 
   const actions = useKnowledgeActions();
   const [draft, setDraft] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
+  useSettingsDraft(writable && draft !== null && draft !== doc.data);
   useEffect(() => setDraft(null), [path]);
   if (doc.isPending) return <Skeleton className="h-40 w-full" />;
   if (doc.isError) return <p className="text-destructive text-sm">{doc.error.message}</p>;
@@ -128,6 +130,7 @@ function NewDoc({ onClose, onCreated }: { onClose: () => void; onCreated: (path:
     useTranslation();
   const actions = useKnowledgeActions();
   const [name, setName] = useState("");
+  useSettingsDraft(name !== "");
   const clean = name.trim().replace(/\.md$/, "");
   const inTopic = clean.split("/").filter(Boolean).length >= 2;
   const create = () => {

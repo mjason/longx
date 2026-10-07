@@ -137,14 +137,50 @@ defmodule Longx.Projects.Project do
       end
     end
 
-    # a file of .longx/local/ moved into .longx/shared/ (reviewed, for the team)
-    action :promote_local, Types.PromoteLocal do
+    action :extension_inventory, {:array, Types.ExtensionItem} do
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input),
+             do: {:ok, Longx.Projects.Extensions.inventory(project.root_path)}
+      end
+    end
+
+    action :preview_local, Types.PromotionPreview do
       argument :id, :uuid, allow_nil?: false
       argument :path, :string, allow_nil?: false
 
       run fn input, _ ->
         with {:ok, project} <- fetch(input),
-             {:ok, path} <- promote(project, input.arguments.path) do
+             do:
+               extension_result(
+                 Longx.Projects.Extensions.preview(project.root_path, input.arguments.path)
+               )
+      end
+    end
+
+    action :extension_files, {:array, Types.FilesEntry} do
+      argument :id, :uuid, allow_nil?: false
+      argument :path, :string, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input),
+             do:
+               extension_result(
+                 Longx.Projects.Extensions.list_files(project.root_path, input.arguments.path)
+               )
+      end
+    end
+
+    # A reviewed object moved to shared; stale previews and conflicts fail closed.
+    action :promote_local, Types.PromoteLocal do
+      argument :id, :uuid, allow_nil?: false
+      argument :path, :string, allow_nil?: false
+      argument :digest, :string, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, project} <- fetch(input),
+             {:ok, path} <- promote(project, input.arguments.path, input.arguments.digest) do
           {:ok, %{path: path}}
         end
       end
@@ -216,8 +252,8 @@ defmodule Longx.Projects.Project do
   # generic actions above resolve the project themselves (no record context)
   defp fetch(input), do: Ash.get(__MODULE__, input.arguments.id)
 
-  defp promote(project, path) do
-    case Longx.Projects.promote_local(project, path) do
+  defp promote(project, path, digest) do
+    case Longx.Projects.promote_local(project, path, digest) do
       {:ok, shared} ->
         {:ok, shared}
 
@@ -227,6 +263,15 @@ defmodule Longx.Projects.Project do
            errors: [%Ash.Error.Changes.InvalidArgument{field: :path, message: message}]
          )}
     end
+  end
+
+  defp extension_result({:ok, value}), do: {:ok, value}
+
+  defp extension_result({:error, message}) do
+    {:error,
+     Ash.Error.Invalid.exception(
+       errors: [%Ash.Error.Changes.InvalidArgument{field: :path, message: message}]
+     )}
   end
 
   # no git on the machine is an error the page can show, not a crash

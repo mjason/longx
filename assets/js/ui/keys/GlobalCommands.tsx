@@ -19,9 +19,10 @@ export function GlobalCommands() {
   const navigate = useNavigate();
   const projects = useProjects();
   const threadId = useMatch("/p/:slug/t/:threadId")?.params.threadId ?? null;
+  const projectSlug = useMatch("/p/:slug/*")?.params.slug;
 
   useCommand("help.keys", () => updateKeysUi({ help: true }));
-  useCommand("settings.open", () => navigate("/settings"));
+  useCommand("settings.open", () => navigate(projectSlug ? `/p/${projectSlug}/settings?scope=global` : "/settings"));
   useCommand("project.new", () => navigate("/new"));
   useCommand(
     "project.switch",

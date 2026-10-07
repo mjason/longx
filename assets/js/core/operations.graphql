@@ -82,6 +82,12 @@ query SearchFiles($id: ID!, $query: String!) { searchFiles(id: $id, query: $quer
 
 query AgentDefinition($id: ID!) { agentDefinition(id: $id) { trusted settings { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes commandSwapLimitMb commandOomPriority commandMemoryLimitPercent commandCgroupMode childModel childEffort } present plugs overrides { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes commandSwapLimitMb commandOomPriority commandMemoryLimitPercent commandCgroupMode childModel childEffort } model localFiles files errors effort dir browser { state maxTabs browser alias } agents } }
 
+query ExtensionInventory($id: ID!) { extensionInventory(id: $id) { shareable path name layer kind complete } }
+
+query PreviewLocal($id: ID!, $path: String!) { previewLocal(id: $id, path: $path) { target path files { truncated target source size hash content binary } digest conflicts canShare } }
+
+query ExtensionFiles($id: ID!, $path: String!) { extensionFiles(id: $id, path: $path) { size path name kind } }
+
 query ListThreads($sort: [ThreadSortInput], $filter: ThreadFilterInput, $projectId: ID!) { listThreads(sort: $sort, filter: $filter, projectId: $projectId) { id kernelThreadId title preview handle onDuty cwd modelSlug reasoningEffort webSearch agentPath status lastActivityAt insertedAt updatedAt projectId parentThreadId } }
 
 query GetThread($filter: ThreadFilterInput, $id: ID!) { getThread(filter: $filter, id: $id) { id kernelThreadId title preview handle onDuty cwd modelSlug reasoningEffort webSearch agentPath status lastActivityAt insertedAt updatedAt projectId parentThreadId } }

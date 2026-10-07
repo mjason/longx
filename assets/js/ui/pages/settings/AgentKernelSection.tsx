@@ -25,23 +25,32 @@ import { Skeleton } from "@/ui/components/ui/skeleton";
 import { Switch } from "@/ui/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/components/ui/select";
 import { AgentSettingsFields, agentSettingsForm, agentSettingsInput, type AgentSettingsForm } from "@/ui/components/AgentSettingsFields";
-import { CommandGuardStatus } from "@/ui/components/CommandGuardStatus";
 import { t } from "@/ui/strings";
 import { ComputerCard } from "./ComputerCard";
+import { useSettingsCopy } from "./copy";
+import { useSettingsDraft } from "./SettingsDraft";
+import { Link, useLocation } from "react-router";
 
 const s = t.agentKernel;
 const fail = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e));
 
-export function AgentKernelSection() {
+export function AgentKernelSection({ group = "all" }: { group?: "all" | "collaboration" | "resources" }) {
+  const copy = useSettingsCopy();
   return (
     <div className="flex flex-col gap-8" data-testid="section-agent">
-      <p className="text-muted-foreground text-sm">{s.hint}</p>
-      <SettingsCard />
+      <p className="text-muted-foreground text-sm">{group === "resources" ? copy.resourcesHint : s.hint}</p>
+      <SettingsCard group={group} />
+      {group === "all" ? <>
       <PublicUrlCard />
       <BrowserCard />
       <ComputerCard />
+      </> : null}
     </div>
   );
+}
+
+export function AgentConnectionsSection() {
+  return <div className="flex flex-col gap-8" data-testid="section-connections"><SettingsCard group="environment" /><PublicUrlCard /><BrowserCard /><ComputerCard /></div>;
 }
 
 const browserKey = ["browser-settings"] as const;
@@ -122,27 +131,43 @@ function BrowserCard() {
   );
 }
 
-function SettingsCard() {
+function SettingsCard({ group }: { group: "all" | "collaboration" | "resources" | "environment" }) {
   const settings = useAgentSettings();
   const models = useModelRows();
   if (settings.isPending || models.isPending) return <Skeleton className="h-24 w-full" />;
   if (settings.isError) return <p className="text-destructive text-sm">{settings.error.message}</p>;
-  return <SettingsForm key={JSON.stringify(settings.data)} initial={agentSettingsForm(settings.data)} commandShell={settings.data.commandShell} extraPath={settings.data.extraPath} defaultExtraPath={settings.data.defaultExtraPath} models={models.data ?? []} />;
+  return <SettingsForm key={`${group}-${JSON.stringify(settings.data)}`} group={group} initial={agentSettingsForm(settings.data)} commandShell={settings.data.commandShell} extraPath={settings.data.extraPath} defaultExtraPath={settings.data.defaultExtraPath} models={models.data ?? []} />;
 }
 
-function SettingsForm({ initial, commandShell: initialShell, extraPath: initialExtraPath, defaultExtraPath, models }: { initial: AgentSettingsForm; commandShell: "auto" | "bash" | "zsh"; extraPath: string; defaultExtraPath: string; models: ReturnType<typeof useModelRows>["data"] & object }) {
+function SettingsForm({ group, initial, commandShell: initialShell, extraPath: initialExtraPath, defaultExtraPath, models }: { group: "all" | "collaboration" | "resources" | "environment"; initial: AgentSettingsForm; commandShell: "auto" | "bash" | "zsh"; extraPath: string; defaultExtraPath: string; models: ReturnType<typeof useModelRows>["data"] & object }) {
   const actions = useAgentSettingsActions();
   const [form, setForm] = useState(initial);
   const [commandShell, setCommandShell] = useState(initialShell);
   const [extraPath, setExtraPath] = useState(initialExtraPath);
-  const save = () => actions.save.mutateAsync({ ...agentSettingsInput(form), commandShell, extraPath }).then(() => toast.success(s.saved), fail);
+  const copy = useSettingsCopy();
+  const location = useLocation();
+  const [saved, setSaved] = useState(false);
+  useSettingsDraft(!saved && (JSON.stringify(initial) !== JSON.stringify(form) || commandShell !== initialShell || extraPath !== initialExtraPath));
+  const changeForm = (next: AgentSettingsForm) => { setSaved(false); setForm(next); };
+  const save = () => {
+    const values = agentSettingsInput(form);
+    const input = group === "collaboration" ? {
+      maxDepth: values.maxDepth, maxChildren: values.maxChildren, idleMinutes: values.idleMinutes,
+      modelRetries: values.modelRetries, childModel: values.childModel, childEffort: values.childEffort,
+    } : group === "resources" ? {
+      commandCgroupMode: values.commandCgroupMode, commandMemoryLimitPercent: values.commandMemoryLimitPercent,
+      commandSwapLimitMb: values.commandSwapLimitMb, commandOomPriority: values.commandOomPriority, memoryFloorPercent: values.memoryFloorPercent,
+    } : group === "environment" ? { commandShell, extraPath } : { ...values, commandShell, extraPath };
+    return actions.save.mutateAsync(input).then(() => { setSaved(true); toast.success(s.saved); }, fail);
+  };
   return (
     <section className="space-y-4 rounded-lg border p-4" data-testid="agent-settings">
-      <AgentSettingsFields idPrefix="ak" value={form} onChange={setForm} models={models} />
-      <CommandGuardStatus />
+      {group !== "environment" ? <AgentSettingsFields idPrefix="ak" value={form} onChange={changeForm} models={models} group={group} /> : null}
+      {group === "resources" ? <div><Link className="text-primary text-xs underline" to={location.pathname.startsWith("/p/") ? "?scope=global&section=diagnostics" : "/settings/diagnostics"}>{copy.diagnostics}</Link></div> : null}
+      {group === "all" || group === "environment" ? <>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="ak-command-shell">{s.commandShell}</Label>
-        <Select value={commandShell} onValueChange={(value) => setCommandShell(value as typeof commandShell)}>
+        <Select value={commandShell} onValueChange={(value) => { setSaved(false); setCommandShell(value as typeof commandShell); }}>
           <SelectTrigger id="ak-command-shell" className="w-40" aria-label={s.commandShell}>
             <SelectValue />
           </SelectTrigger>
@@ -162,7 +187,7 @@ function SettingsForm({ initial, commandShell: initialShell, extraPath: initialE
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor="ak-extra-path">{s.extraPath}</Label>
-          <Button size="sm" variant="outline" onClick={() => setExtraPath(defaultExtraPath)}>
+          <Button size="sm" variant="outline" onClick={() => { setSaved(false); setExtraPath(defaultExtraPath); }}>
             {s.extraPathReset}
           </Button>
         </div>
@@ -170,13 +195,14 @@ function SettingsForm({ initial, commandShell: initialShell, extraPath: initialE
           id="ak-extra-path"
           aria-label={s.extraPath}
           value={extraPath}
-          onChange={(e) => setExtraPath(e.target.value)}
+          onChange={(e) => { setSaved(false); setExtraPath(e.target.value); }}
           rows={3}
           className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border px-3 py-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         />
         <span className="text-muted-foreground text-xs">{s.extraPathHint}</span>
       </div>
-      <Button size="sm" onClick={save} disabled={actions.save.isPending}>{s.save}</Button>
+      </> : null}
+      <Button size="sm" onClick={save} disabled={actions.save.isPending}>{copy.saveGlobal}</Button>
     </section>
   );
 }
@@ -185,6 +211,7 @@ function PublicUrlCard() {
   const current = usePublicUrl();
   const actions = usePublicUrlActions();
   const [draft, setDraft] = useState<string | null>(null);
+  useSettingsDraft(draft !== null && draft !== (current.data?.setting ?? ""));
   if (current.isPending) return <Skeleton className="h-16 w-full" />;
   if (current.isError) return <p className="text-destructive text-sm">{current.error.message}</p>;
   const value = draft ?? current.data.setting ?? "";

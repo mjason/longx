@@ -446,13 +446,6 @@ type ReadFile {
   binary: Boolean!
 }
 
-type FilesEntry {
-  size: Int!
-  path: String!
-  name: String!
-  kind: String!
-}
-
 type Directory {
   sessions: [Json!]!
 }
@@ -497,6 +490,41 @@ input UserMessageInput {
 
 type PromoteLocal {
   path: String!
+}
+
+type FilesEntry {
+  size: Int!
+  path: String!
+  name: String!
+  kind: String!
+}
+
+type PromotionFile {
+  truncated: Boolean!
+  target: String!
+  source: String!
+  size: Int!
+  hash: String!
+  content: String
+  binary: Boolean!
+}
+
+type PromotionPreview {
+  target: String!
+  path: String!
+  files: [PromotionFile]!
+  digest: String!
+  conflicts: [String!]!
+  canShare: Boolean!
+}
+
+type ProjectExtensionItem {
+  shareable: Boolean!
+  path: String!
+  name: String!
+  layer: String!
+  kind: String!
+  complete: Boolean!
 }
 
 type AgentDefinitionBrowser {
@@ -1408,6 +1436,7 @@ input InitGitInput {
 input PromoteLocalInput {
   id: ID!
   path: String!
+  digest: String!
 }
 
 "The result of the :delete_project mutation"
@@ -4323,6 +4352,9 @@ type RootQueryType {
   gitInfo(id: ID!): GitInfo!
   searchFiles(id: ID!, query: String!): [SearchFiles!]!
   agentDefinition(id: ID!): AgentDefinition!
+  extensionInventory(id: ID!): [ProjectExtensionItem!]!
+  previewLocal(id: ID!, path: String!): PromotionPreview!
+  extensionFiles(id: ID!, path: String!): [FilesEntry!]!
   listThreads(
     "How to sort the records in the response"
     sort: [ThreadSortInput]

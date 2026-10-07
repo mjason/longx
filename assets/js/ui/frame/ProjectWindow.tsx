@@ -70,7 +70,10 @@ export function ProjectWindow() {
       onWatches: () => client.invalidateQueries({ queryKey: ["watches"] }),
       // the description the composer shows and a new chat starts from: reread
       // when its files change (a new chat once ran with the one the page loaded)
-      onDefinition: () => client.invalidateQueries({ queryKey: ["project", id, "agent-definition"] }),
+      onDefinition: () => {
+        void client.invalidateQueries({ queryKey: ["project", id, "agent-definition"] });
+        void client.invalidateQueries({ queryKey: ["project", id, "extensions"] });
+      },
       onGit: () => invalidateGit(client, id),
       onWatch: (status) => client.setQueryData(wsKeys.watch(id), status),
     });

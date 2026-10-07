@@ -4,6 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   agentSettings,
   commandGuardStatus,
+  extensionInventory,
+  extensionFiles,
+  previewLocal,
   promoteLocal,
   publicUrl,
   setAgentSettings,
@@ -89,8 +92,48 @@ export function useAgentSettingsActions() {
 export function usePromoteLocal(projectId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (path: string) => unwrap(await promoteLocal({ input: { id: projectId, path } })) as { path: string },
-    onSuccess: () => void client.invalidateQueries({ queryKey: ["project", projectId, "agent-definition"] }),
+    mutationFn: async ({ path, digest }: { path: string; digest: string }) =>
+      unwrap(await promoteLocal({ input: { id: projectId, path, digest } })) as { path: string },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["project", projectId] });
+      void client.invalidateQueries({ queryKey: ["files", projectId] });
+      void client.invalidateQueries({ queryKey: ["git", projectId] });
+      void client.invalidateQueries({ queryKey: ["watches"] });
+    },
+  });
+}
+
+export type ExtensionItem = {
+  name: string; kind: "definition" | "agents" | "plugs" | "watches" | "knowledge" | "artifacts";
+  path: string; layer: "local" | "shared" | "project"; shareable: boolean; complete: boolean;
+};
+export type PromotionPreview = {
+  path: string; target: string; digest: string; conflicts: string[]; canShare: boolean;
+  files: { source: string; target: string; size: number; hash: string; content: string | null; truncated: boolean; binary: boolean }[];
+};
+export function useExtensions(projectId: string) {
+  return useQuery({
+    queryKey: ["project", projectId, "extensions"],
+    queryFn: async () => unwrap(await extensionInventory({ input: { id: projectId } })) as ExtensionItem[],
+  });
+}
+export function usePromotionPreview(projectId: string, path: string | null) {
+  return useQuery({
+    queryKey: ["project", projectId, "promotion-preview", path],
+    enabled: path !== null,
+    staleTime: 0,
+    gcTime: 0,
+    queryFn: async () => unwrap(await previewLocal({ input: { id: projectId, path: path! } })) as PromotionPreview,
+  });
+}
+
+export function useExtensionFiles(projectId: string, path: string | null) {
+  return useQuery({
+    queryKey: ["project", projectId, "extension-files", path],
+    enabled: path !== null,
+    queryFn: async () => unwrap(await extensionFiles({ input: { id: projectId, path: path! } })) as {
+      name: string; path: string; kind: "file" | "dir"; size: number;
+    }[],
   });
 }
 

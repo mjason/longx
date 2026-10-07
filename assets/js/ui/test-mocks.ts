@@ -125,6 +125,12 @@ export const agentDefinitionData = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
+export const promotionPreviewData = (path = "plugs/x.exs", extra: Record<string, unknown> = {}) => ({
+  path, target: `.longx/shared/${path}`, digest: "reviewed-digest", conflicts: [], canShare: true,
+  files: [{ source: `.longx/local/${path}`, target: `.longx/shared/${path}`, size: 7, hash: "content-hash", content: "# draft", truncated: false, binary: false }],
+  ...extra,
+});
+
 export const project = (n: number) => ({
   id: `id-${n}`,
   slug: `app-${n}`,
@@ -316,6 +322,9 @@ export function rpcMock() {
     ),
     clearGoal: vi.fn(async () => ok({ cleared: true })),
     agentDefinition: vi.fn(async () => ok(agentDefinitionData())),
+    extensionInventory: vi.fn(async () => ok([])),
+    extensionFiles: vi.fn(async () => ok([])),
+    previewLocal: vi.fn(async ({ input }: { input: { path: string } }) => ok(promotionPreviewData(input.path))),
     promoteLocal: vi.fn(async ({ input }: { input: { path: string } }) => ok({ path: `shared/${input.path}` })),
     agentSettings: vi.fn(async () => ok(agentSettingsData())),
     commandGuardStatus: vi.fn(async () => ok({

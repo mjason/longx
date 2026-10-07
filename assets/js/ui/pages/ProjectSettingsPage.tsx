@@ -5,11 +5,10 @@ import { Link, useNavigate, useOutletContext } from "react-router";
 import { toast } from "sonner";
 import { archiveProject, deleteProject, updateProject } from "@/core/api";
 import type { UpdateProjectInput } from "@/gql/graphql";
-import { agentKeys, usePromoteLocal } from "@/core/agent";
+import { agentKeys } from "@/core/agent";
 import { useModelRows } from "@/core/ai";
 import { queryKeys, unwrap, useAgentDefinition, useModels, useProject } from "@/core/projects";
 import { AgentSettingsFields, agentSettingsForm, agentSettingsInput, type AgentSettingsForm } from "@/ui/components/AgentSettingsFields";
-import { CommandGuardStatus } from "@/ui/components/CommandGuardStatus";
 import { Button } from "@/ui/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
 import { Input } from "@/ui/components/ui/input";
@@ -25,6 +24,9 @@ import { t } from "@/ui/strings";
 import { ProjectWatches } from "./settings/ProjectWatches";
 import { projectFileRules, useSaveProjectFileRules, type FileRules } from "@/core/fileRules";
 import { FileRulesFields } from "@/ui/components/FileRulesFields";
+import { ProjectExtensions } from "./settings/ProjectExtensions";
+import { useSettingsCopy } from "./settings/copy";
+import { useSettingsDraft } from "./settings/SettingsDraft";
 
 type Form = {
   name: string;
@@ -41,50 +43,57 @@ type Form = {
  * model), the agent definition, and the danger zone.
  * Thread-level overrides live in the composer rail.
  */
-export function ProjectSettingsPage() {
+export function ProjectSettingsPage({ section = "project" }: { section?: string }) {
   const ctx = useOutletContext<ProjectContext>();
   const project = useProject(ctx.slug);
   if (project.isPending) return <Skeleton className="m-4 h-40" data-testid="chat-area" />;
   if (project.isError) return <p className="text-destructive p-4">{project.error.message}</p>;
-  return <SettingsForm key={project.data.updatedAt} project={project.data} slug={ctx.slug} />;
+  return <SettingsForm key={`${project.data.updatedAt}-${section}`} section={section} project={project.data} slug={ctx.slug} />;
 }
 
 type Project = NonNullable<ReturnType<typeof useProject>["data"]>;
 
-function SettingsForm({ project, slug }: { project: Project; slug: string }) {
+function SettingsForm({ project, slug, section }: { project: Project; slug: string; section: string }) {
     useTranslation();
   // the .longx files, for the watches card to point at shared ones the trust switch keeps off
   const definitionFiles = useAgentDefinition(project.id);
   const client = useQueryClient();
   const navigate = useNavigate();
   const models = useModels();
-  const [form, setForm] = useState<Form>({
+  const initial: Form = {
     name: project.name,
     description: project.description ?? "",
     webSearch: project.webSearch,
     trustLocalAgent: project.trustLocalAgent,
     modelId: project.modelId ?? "__default",
     agentOverrides: agentSettingsForm((project.agentSettings ?? {}) as Parameters<typeof agentSettingsForm>[0]),
-  });
+  };
+  const [form, setForm] = useState<Form>(initial);
+  const copy = useSettingsCopy();
+  const [saved, setSaved] = useState(false);
+  useSettingsDraft(!saved && JSON.stringify(form) !== JSON.stringify(initial));
   const [confirming, setConfirming] = useState<"archive" | "delete" | null>(null);
-  const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const set = <K extends keyof Form>(key: K, value: Form[K]) => { setSaved(false); setForm((f) => ({ ...f, [key]: value })); };
 
   const save = useMutation({
     mutationFn: async () =>
       unwrap(
         await updateProject({
           identity: project.id,
-          input: {
+          input: section === "agent" || section === "resources" ? {
+            agentSettings: agentSettingsInput(form.agentOverrides),
+          } : section === "extensions" ? {
+            trustLocalAgent: form.trustLocalAgent,
+          } : {
             name: form.name,
             description: form.description || null,
             webSearch: form.webSearch,
-            trustLocalAgent: form.trustLocalAgent,
             modelId: form.modelId === "__default" ? null : form.modelId,
-            agentSettings: agentSettingsInput(form.agentOverrides),
           },
         }),
       ),
     onSuccess: () => {
+      setSaved(true);
       toast.success(t.saved);
       client.invalidateQueries({ queryKey: queryKeys.project(slug) });
       client.invalidateQueries({ queryKey: queryKeys.projects });
@@ -123,6 +132,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 overflow-y-auto p-4" data-testid="project-settings">
+      {section === "project" ? <>
       <section className="space-y-4">
         <h2 className="text-lg font-medium">{t.projectSettings}</h2>
         <div className="space-y-2">
@@ -163,17 +173,18 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={() => save.mutate()} disabled={save.isPending}>
-          {t.save}
-        </Button>
       </section>
+      </> : null}
 
-      <AgentSection projectId={project.id} trusted={form.trustLocalAgent} onTrust={(v) => set("trustLocalAgent", v)} overrides={form.agentOverrides} onOverrides={(v) => set("agentOverrides", v)} />
+      {["agent", "resources", "extensions"].includes(section) ? <AgentSection section={section} projectId={project.id} trusted={form.trustLocalAgent} onTrust={(v) => set("trustLocalAgent", v)} overrides={form.agentOverrides} onOverrides={(v) => set("agentOverrides", v)} /> : null}
 
-      <ProjectFileRules projectId={project.id} slug={slug} initial={projectFileRules(project.fileRules)} />
+      {["project", "agent", "resources", "extensions"].includes(section) ? <Button className="self-start" onClick={() => save.mutate()} disabled={save.isPending}>{copy.saveProject}</Button> : null}
+      {section === "extensions" ? <ProjectExtensions projectId={project.id} /> : null}
 
-      <ProjectWatches projectId={project.id} rootPath={project.rootPath} trusted={form.trustLocalAgent} sharedFiles={definitionFiles.data?.files ?? []} />
+      {section === "files" ? <ProjectFileRules projectId={project.id} slug={slug} initial={projectFileRules(project.fileRules)} /> : null}
+      {section === "watches" ? <ProjectWatches projectId={project.id} rootPath={project.rootPath} trusted={project.trustLocalAgent} sharedFiles={definitionFiles.data?.files ?? []} /> : null}
 
+      {section === "project" ? (
       <section className="space-y-3">
         <h2 className="text-destructive text-lg font-medium">{t.dangerZone}</h2>
         <p className="text-muted-foreground text-xs">{t.dangerHint}</p>
@@ -186,6 +197,7 @@ function SettingsForm({ project, slug }: { project: Project; slug: string }) {
           </Button>
         </div>
       </section>
+      ) : null}
 
       <Dialog
         open={danger !== null}
@@ -231,12 +243,14 @@ function browserStateLabel(b: { state: string; browser: string | null }): string
  * the local files to promote, the pipeline, load errors.
  */
 function AgentSection({
+  section,
   projectId,
   trusted,
   onTrust,
   overrides,
   onOverrides,
 }: {
+  section: string;
   projectId: string;
   trusted: boolean;
   onTrust: (v: boolean) => void;
@@ -246,25 +260,33 @@ function AgentSection({
     useTranslation();
   const definition = useAgentDefinition(projectId);
   const models = useModelRows();
-  const promote = usePromoteLocal(projectId);
+  const copy = useSettingsCopy();
   const d = definition.data;
-  const promoteFile = (path: string) =>
-    promote.mutate(path, { onSuccess: (r) => toast.success(t.agentDefinition.promoted(r.path)), onError: (e: Error) => toast.error(e.message) });
   return (
     <section className="space-y-3" data-testid="project-agent">
+      {section === "extensions" ? <>
       <h2 className="text-lg font-medium">{t.agentDefinition.title}</h2>
-      <p className="text-muted-foreground text-xs">{t.agentDefinition.hint}</p>
       <div className="flex items-center justify-between gap-4">
         <div>
           <Label htmlFor="ps-trust-agent">{t.agentDefinition.trust}</Label>
-          <p className="text-muted-foreground text-xs">{t.agentDefinition.trustHint}</p>
+          <p className="text-muted-foreground text-xs">{copy.trustScope}</p>
+          <details className="text-muted-foreground text-xs">
+            <summary className="cursor-pointer">{t.agentDefinition.title}</summary>
+            <p className="mt-2">{t.agentDefinition.trustHint}</p>
+            <p className="mt-2">{t.agentDefinition.hint}</p>
+          </details>
         </div>
         <Switch id="ps-trust-agent" checked={trusted} onCheckedChange={onTrust} />
       </div>
+      </> : null}
       {definition.isPending || !d ? (
         <Skeleton className="h-10 w-full" />
       ) : (
         <div className="space-y-3 text-sm">
+          {section === "extensions" ? <>
+          <details className="rounded-lg border p-3">
+          <summary className="cursor-pointer text-sm">{copy.realStatus}{d.errors.length ? ` (${d.errors.length})` : ""}</summary>
+          <div className="mt-3 space-y-3">
           {!d.present ? <p className="text-muted-foreground">{t.agentDefinition.none}</p> : null}
           <div>
             <p className="text-muted-foreground text-xs">{t.agentDefinition.agents}</p>
@@ -278,25 +300,6 @@ function AgentSection({
               ))}
             </ul>
           </div>
-          {d.localFiles.length ? (
-            <div>
-              <p className="text-muted-foreground text-xs">{t.agentDefinition.localFiles}</p>
-              <ul className="font-mono text-xs" data-testid="project-local-files">
-                {d.localFiles.map((f) => (
-                  <li key={f} className="flex items-center justify-between gap-2 py-0.5">
-                    <span>{f}</span>
-                    <Button size="sm" variant="outline" onClick={() => promoteFile(f)} disabled={promote.isPending}>{t.agentDefinition.promote}</Button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {d.files.length ? (
-            <div>
-              <p className="text-muted-foreground text-xs">{t.agentDefinition.files}</p>
-              <ul className="font-mono text-xs">{d.files.map((f) => <li key={f}>{f}</li>)}</ul>
-            </div>
-          ) : null}
           {d.errors.length ? (
             <div>
               <p className="text-destructive text-xs">{t.agentDefinition.errors}</p>
@@ -306,25 +309,29 @@ function AgentSection({
           {d.model ? (
             <p className="text-muted-foreground text-xs">{t.agentDefinition.model}: <span className="font-mono">{d.model}{d.effort ? ` · ${d.effort}` : ""}</span></p>
           ) : null}
+          <div className="text-muted-foreground text-xs">
+            <p>{t.agentDefinition.plugs}</p>
+            <ol className="break-all font-mono">{d.plugs.map((plug, i) => <li key={`${i}-${plug}`}>{plug}</li>)}</ol>
+          </div>
           {d.browser ? (
             <p className="text-muted-foreground text-xs" data-testid="project-browser">
               {t.agentDefinition.browser}: <span className="font-mono">{d.browser.alias ?? t.agentDefinition.browserDefault}</span>
               {" · "}
               <span className={d.browser.state === "online" ? "text-foreground" : "text-amber-600 dark:text-amber-400"}>{browserStateLabel(d.browser)}</span>
               {" · "}{t.agentDefinition.browserTabs(d.browser.maxTabs)}
-              {" · "}<Link to="/settings/browsers" className="underline underline-offset-2">{t.agentDefinition.browserSettings}</Link>
+              {" · "}<Link to="?scope=global&section=browsers" className="underline underline-offset-2">{t.agentDefinition.browserSettings}</Link>
             </p>
           ) : null}
-          <div>
-            <p className="text-muted-foreground text-xs">{t.agentDefinition.plugs}</p>
-            <ol className="font-mono text-xs">{d.plugs.map((p, i) => <li key={`${p}-${i}`}>{p}</li>)}</ol>
           </div>
+          </details>
+          </> : null}
+          {section !== "extensions" ? (
           <div className="space-y-2 rounded-lg border p-3" data-testid="project-agent-overrides">
             <p className="text-sm font-medium">{t.agentDefinition.overrides}</p>
             <p className="text-muted-foreground text-xs">{t.agentDefinition.overridesHint}</p>
-            <AgentSettingsFields idPrefix="ps-ak" value={overrides} onChange={onOverrides} models={models.data ?? []} inherited={d.settings} />
-            <CommandGuardStatus projectId={projectId} />
+            <AgentSettingsFields idPrefix="ps-ak" value={overrides} onChange={onOverrides} models={models.data ?? []} inherited={d.settings} group={section === "resources" ? "resources" : "collaboration"} />
           </div>
+          ) : null}
         </div>
       )}
     </section>
@@ -335,6 +342,7 @@ function AgentSection({
 function ProjectFileRules({ projectId, slug, initial }: { projectId: string; slug: string; initial: FileRules }) {
     useTranslation();
   const [value, setValue] = useState(initial);
+  useSettingsDraft(JSON.stringify(value) !== JSON.stringify(initial));
   const save = useSaveProjectFileRules(projectId, slug);
   const dirty = value.ignore !== initial.ignore || value.watch !== initial.watch;
   return (

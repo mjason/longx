@@ -24,6 +24,9 @@ defmodule Longx.Projects do
       action Longx.Projects.Project, :git_info, :git_info
       action Longx.Projects.Project, :search_files, :search_files
       action Longx.Projects.Project, :agent_definition, :agent_definition
+      action Longx.Projects.Project, :extension_inventory, :extension_inventory
+      action Longx.Projects.Project, :preview_local, :preview_local
+      action Longx.Projects.Project, :extension_files, :extension_files
       list Longx.Projects.Thread, :list_threads, :for_project, paginate_with: nil
       read_one Longx.Projects.Thread, :get_thread, :by_id
       list Longx.Projects.Thread, :list_subagents, :subagents_of, paginate_with: nil
@@ -95,6 +98,8 @@ defmodule Longx.Projects do
       define :get_project_by_slug, action: :by_slug, args: [:slug]
       define :list_active_projects, action: :active
       define :list_all_projects, action: :read
+      define :list_project_extensions, action: :extension_inventory, args: [:id]
+      define :preview_project_extension, action: :preview_local, args: [:id, :path]
     end
 
     resource Longx.Projects.Thread do
@@ -569,18 +574,7 @@ defmodule Longx.Projects do
 
   # what the local tree holds, relative to it (the candidates for promotion)
   defp local_files(root) do
-    local = Path.join(root, ".longx/local")
-
-    if File.dir?(local) do
-      local
-      |> Path.join("**")
-      |> Path.wildcard(match_dot: false)
-      |> Enum.filter(&File.regular?/1)
-      |> Enum.map(&Path.relative_to(&1, local))
-      |> Enum.sort()
-    else
-      []
-    end
+    Longx.Projects.Extensions.local_files(root)
   end
 
   # a layer's own module reads as its name in the file, not the namespaced atom
@@ -696,10 +690,8 @@ defmodule Longx.Projects do
   `.longx/shared/` — reviewed, for the team. `{:ok, "shared/…"}`.
   """
   @spec promote_local(Project.t(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
-  def promote_local(%Project{root_path: root}, rel) do
-    with {:ok, _to} <- Longx.Agent.Definition.Layout.promote(root, rel) do
-      {:ok, Path.join("shared", rel)}
-    end
+  def promote_local(%Project{root_path: root}, rel, digest \\ nil) do
+    Longx.Projects.Extensions.promote(root, rel, digest)
   end
 
   defp team_opts(%Thread{parent_thread_id: nil}), do: []

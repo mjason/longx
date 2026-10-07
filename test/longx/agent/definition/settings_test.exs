@@ -280,7 +280,11 @@ defmodule Longx.Agent.Definition.SettingsTest do
     assert "agents/helper/agent.exs" in definition.local_files
     assert definition.settings.max_depth == 2
 
-    assert {:ok, "shared/plugs/x.exs"} = Projects.promote_local(project, "plugs/x.exs")
+    assert {:ok, preview} = Projects.preview_project_extension(project.id, "plugs/x.exs")
+
+    assert {:ok, "shared/plugs/x.exs"} =
+             Projects.promote_local(project, "plugs/x.exs", preview.digest)
+
     assert File.exists?(Path.join(dir, ".longx/shared/plugs/x.exs"))
     assert {:error, _} = Projects.promote_local(project, "../escape")
     assert {:error, _} = Projects.promote_local(project, "plugs/x.exs")

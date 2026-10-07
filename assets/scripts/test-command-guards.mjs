@@ -16,11 +16,12 @@ const bundle = await build({
     contents: `
       import React from "react";
       import { createRoot } from "react-dom/client";
-      import { createMemoryRouter, RouterProvider } from "react-router";
+      import { createMemoryRouter, RouterProvider, useLocation } from "react-router";
       import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
       import { I18nextProvider } from "react-i18next";
       import i18n from "./js/core/i18n";
       import { routes } from "./js/ui/routes";
+      import { CommandGuardStatus } from "./js/ui/components/CommandGuardStatus";
       import { rpcMock, socketMock, ok, project, agentSettingsData, agentDefinitionData } from "./js/ui/test-mocks";
       void i18n.changeLanguage("zh-CN");
       window.fixtureSocket=socketMock();
@@ -47,7 +48,14 @@ const bundle = await build({
         return ok({...window.guard,mode,...(mode==="off"?{capability:"off",reason:null,path:null}:{})});
       };
       window.client=new QueryClient({defaultOptions:{queries:{retry:false}}});
-      window.router=createMemoryRouter(routes,{initialEntries:["/settings/agent"]});
+      // Diagnostics now has its own category. Keep the same real status card
+      // beside the forms in this fixture so mode/status integration stays covered.
+      function FixtureStatus(){
+        const location=useLocation();
+        return <CommandGuardStatus projectId={location.pathname.startsWith("/p/")?row.id:undefined}/>;
+      }
+      const fixtureRoutes=routes.map((route,index)=>index===0?{...route,element:<>{route.element}<FixtureStatus/></>}:route);
+      window.router=createMemoryRouter(fixtureRoutes,{initialEntries:["/settings/resources"]});
       createRoot(document.getElementById("root")).render(
         <I18nextProvider i18n={i18n}><QueryClientProvider client={window.client}>
           <RouterProvider router={window.router}/>
@@ -101,14 +109,14 @@ try {
     const form = page.getByTestId("agent-settings");
     await form.getByLabel("任务 cgroup 保护").click();
     await page.getByRole("option", { name: "关闭", exact: true }).click();
-    await form.getByRole("button", { name: "保存", exact: true }).click();
+    await form.getByRole("button", { name: "保存全局默认", exact: true }).click();
     await status.getByText("已关闭；未执行检测").waitFor();
     assert.equal(await page.evaluate(() => window.saves.at(-1).commandCgroupMode), "off");
 
     await form.getByLabel("任务 cgroup 保护").click();
     await page.getByRole("option", { name: "必须启用", exact: true }).click();
     await page.evaluate(() => Object.assign(window.guard, {capability:"unavailable",reason:"no delegated supervisor"}));
-    await form.getByRole("button", { name: "保存", exact: true }).click();
+    await form.getByRole("button", { name: "保存全局默认", exact: true }).click();
     await status.getByText("当前不可用").waitFor();
     await status.getByText("no delegated supervisor").waitFor();
     assert.equal(await page.evaluate(() => window.saves.at(-1).commandCgroupMode), "required");
@@ -140,7 +148,7 @@ try {
     await page.evaluate(() => Object.assign(window.guard, {
       capability:"eligible",platform:"linux",reason:"startup still verifies",
     }));
-    await form.getByRole("button", { name: "保存", exact: true }).click();
+    await form.getByRole("button", { name: "保存全局默认", exact: true }).click();
     await status.getByText("前置检测满足条件；待真实任务启动确认").waitFor();
     assert.equal(await page.evaluate(() => window.saves.at(-1).commandCgroupMode), "auto");
 
@@ -148,29 +156,29 @@ try {
       await window.fixtureApi.setAgentSettings({input:{commandCgroupMode:"off"}});
       Object.assign(window.guard, {cleanupPendingTasks:0,lastPopulated:null,lastCleanupError:null,lastTaskStatus:null});
       await window.client.invalidateQueries({queryKey:["agent-kernel"]});
-      await window.router.navigate("/p/app-1/settings");
+      await window.router.navigate("/p/app-1/settings?section=resources");
     });
     const projectForm = page.getByTestId("project-agent-overrides");
     await projectForm.getByLabel("任务 cgroup 保护").waitFor();
     assert.match(await projectForm.getByLabel("任务 cgroup 保护").textContent(), /沿用 off/);
     await projectForm.getByLabel("任务 cgroup 保护").click();
     await page.getByRole("option", { name: "自动", exact: true }).click();
-    await page.getByRole("button", { name: "保存", exact: true }).click();
+    await page.getByRole("button", { name: "保存本项目", exact: true }).click();
     await status.getByText("前置检测满足条件；待真实任务启动确认").waitFor();
     assert.equal(await page.evaluate(() => window.saves.at(-1).agentSettings.commandCgroupMode), "auto");
     await projectForm.getByLabel("任务 cgroup 保护").click();
     await page.getByRole("option", { name: "必须启用", exact: true }).click();
-    await page.getByRole("button", { name: "保存", exact: true }).click();
+    await page.getByRole("button", { name: "保存本项目", exact: true }).click();
     await status.getByText("已保存模式: 必须启用 · linux").waitFor();
     assert.equal(await page.evaluate(() => window.saves.at(-1).agentSettings.commandCgroupMode), "required");
     await projectForm.getByLabel("任务 cgroup 保护").click();
     await page.getByRole("option", { name: "关闭", exact: true }).click();
-    await page.getByRole("button", { name: "保存", exact: true }).click();
+    await page.getByRole("button", { name: "保存本项目", exact: true }).click();
     await status.getByText("已关闭；未执行检测").waitFor();
     assert.equal(await page.evaluate(() => window.saves.at(-1).agentSettings.commandCgroupMode), "off");
     await projectForm.getByLabel("任务 cgroup 保护").click();
     await page.getByRole("option", { name: "沿用 off", exact: true }).click();
-    await page.getByRole("button", { name: "保存", exact: true }).click();
+    await page.getByRole("button", { name: "保存本项目", exact: true }).click();
     await status.getByText("已关闭；未执行检测").waitFor();
     assert.equal(await page.evaluate(() => window.saves.at(-1).agentSettings.commandCgroupMode), null);
     await page.screenshot({ path: path.join(artifacts, `project-${width}.png`), fullPage: true });

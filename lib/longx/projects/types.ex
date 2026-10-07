@@ -133,6 +133,58 @@ defmodule Longx.Projects.Types do
     def graphql_type(_), do: :agent_definition
   end
 
+  defmodule ExtensionItem do
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          kind: [type: :string, allow_nil?: false],
+          layer: [type: :string, allow_nil?: false],
+          name: [type: :string, allow_nil?: false],
+          path: [type: :string, allow_nil?: false],
+          shareable: [type: :boolean, allow_nil?: false],
+          complete: [type: :boolean, allow_nil?: false]
+        ]
+      ]
+
+    def graphql_type(_), do: :project_extension_item
+  end
+
+  defmodule PromotionFile do
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          source: [type: :string, allow_nil?: false],
+          target: [type: :string, allow_nil?: false],
+          size: [type: :integer, allow_nil?: false],
+          hash: [type: :string, allow_nil?: false],
+          content: [type: :string],
+          truncated: [type: :boolean, allow_nil?: false],
+          binary: [type: :boolean, allow_nil?: false]
+        ]
+      ]
+
+    def graphql_type(_), do: :promotion_file
+  end
+
+  defmodule PromotionPreview do
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          path: [type: :string, allow_nil?: false],
+          target: [type: :string, allow_nil?: false],
+          digest: [type: :string, allow_nil?: false],
+          files: [type: {:array, PromotionFile}, allow_nil?: false],
+          conflicts: [type: {:array, :string}, allow_nil?: false],
+          can_share: [type: :boolean, allow_nil?: false]
+        ]
+      ]
+
+    def graphql_type(_), do: :promotion_preview
+  end
+
   defmodule PromoteLocal do
     @moduledoc "the result of `Longx.Projects.Project.promote_local`"
     use Ash.Type.NewType,

@@ -26,7 +26,7 @@ export const routes: RouteObject[] = [
         element: <ProjectWindow />,
         children: [
           { index: true, element: <ThreadPage /> },
-          { path: "settings", lazy: async () => ({ Component: (await import("./pages/ProjectSettingsPage")).ProjectSettingsPage }) },
+          { path: "settings", lazy: async () => ({ Component: (await import("./pages/ProjectSettingsCenter")).ProjectSettingsCenter }) },
           { path: "t/:threadId", element: <ThreadPage /> },
         ],
       },

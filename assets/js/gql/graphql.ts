@@ -1390,6 +1390,7 @@ export type ProjectSortInput = {
 };
 
 export type PromoteLocalInput = {
+  digest: string;
   id: string | number;
   path: string;
 };
@@ -3568,6 +3569,29 @@ export type AgentDefinitionQueryVariables = Exact<{
 
 export type AgentDefinitionQuery = { agentDefinition: { trusted: boolean, present: boolean, plugs: Array<string>, model: string | null, localFiles: Array<string>, files: Array<string>, errors: Array<string>, effort: string | null, dir: string, agents: Array<unknown>, settings: { modelRetries: number | null, memoryFloorPercent: number | null, maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, commandSwapLimitMb: number | null, commandOomPriority: number | null, commandMemoryLimitPercent: number | null, commandCgroupMode: string | null, childModel: string | null, childEffort: string | null }, overrides: { modelRetries: number | null, memoryFloorPercent: number | null, maxDepth: number | null, maxChildren: number | null, idleMinutes: number | null, commandSwapLimitMb: number | null, commandOomPriority: number | null, commandMemoryLimitPercent: number | null, commandCgroupMode: string | null, childModel: string | null, childEffort: string | null }, browser: { state: string, maxTabs: number, browser: string | null, alias: string | null } | null } };
 
+export type ExtensionInventoryQueryVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type ExtensionInventoryQuery = { extensionInventory: Array<{ shareable: boolean, path: string, name: string, layer: string, kind: string, complete: boolean }> };
+
+export type PreviewLocalQueryVariables = Exact<{
+  id: string | number;
+  path: string;
+}>;
+
+
+export type PreviewLocalQuery = { previewLocal: { target: string, path: string, digest: string, conflicts: Array<string>, canShare: boolean, files: Array<{ truncated: boolean, target: string, source: string, size: number, hash: string, content: string | null, binary: boolean } | null> } };
+
+export type ExtensionFilesQueryVariables = Exact<{
+  id: string | number;
+  path: string;
+}>;
+
+
+export type ExtensionFilesQuery = { extensionFiles: Array<{ size: number, path: string, name: string, kind: string }> };
+
 export type ListThreadsQueryVariables = Exact<{
   sort?: Array<ThreadSortInput | null | undefined> | ThreadSortInput | null | undefined;
   filter?: ThreadFilterInput | null | undefined;
@@ -5089,6 +5113,48 @@ export const AgentDefinitionDocument = /*#__PURE__*/ new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<AgentDefinitionQuery, AgentDefinitionQueryVariables>;
+export const ExtensionInventoryDocument = /*#__PURE__*/ new TypedDocumentString(`
+    query ExtensionInventory($id: ID!) {
+  extensionInventory(id: $id) {
+    shareable
+    path
+    name
+    layer
+    kind
+    complete
+  }
+}
+    `) as unknown as TypedDocumentString<ExtensionInventoryQuery, ExtensionInventoryQueryVariables>;
+export const PreviewLocalDocument = /*#__PURE__*/ new TypedDocumentString(`
+    query PreviewLocal($id: ID!, $path: String!) {
+  previewLocal(id: $id, path: $path) {
+    target
+    path
+    files {
+      truncated
+      target
+      source
+      size
+      hash
+      content
+      binary
+    }
+    digest
+    conflicts
+    canShare
+  }
+}
+    `) as unknown as TypedDocumentString<PreviewLocalQuery, PreviewLocalQueryVariables>;
+export const ExtensionFilesDocument = /*#__PURE__*/ new TypedDocumentString(`
+    query ExtensionFiles($id: ID!, $path: String!) {
+  extensionFiles(id: $id, path: $path) {
+    size
+    path
+    name
+    kind
+  }
+}
+    `) as unknown as TypedDocumentString<ExtensionFilesQuery, ExtensionFilesQueryVariables>;
 export const ListThreadsDocument = /*#__PURE__*/ new TypedDocumentString(`
     query ListThreads($sort: [ThreadSortInput], $filter: ThreadFilterInput, $projectId: ID!) {
   listThreads(sort: $sort, filter: $filter, projectId: $projectId) {
