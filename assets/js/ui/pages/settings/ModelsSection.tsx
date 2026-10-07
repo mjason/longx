@@ -354,7 +354,7 @@ function SearchKey({ needed }: { needed: boolean }) {
   if (!row) return null;
   return (
     <form
-      className="flex flex-col gap-1.5"
+      className="relative flex flex-col gap-1.5"
       data-testid="search-provider"
       onSubmit={(e) => {
         e.preventDefault();

@@ -52,9 +52,9 @@ export function SettingsNavigation({ project = false, compact = false, active, h
         return sections.length ? <div key={group.key}>
           <p className="text-muted-foreground px-3 pb-1 text-xs">{s.groups[group.key]}</p>
           {sections.map((section) => <Link key={section} to={href(section)} aria-current={section === active ? "page" : undefined}
-            className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm ${section === active ? "bg-accent" : "hover:bg-accent/40"}`}>
-            <span>{label(section)}</span>
-            {project && !PROJECT_SECTIONS.includes(section) ? <span className="text-muted-foreground text-[10px]">{s.global}</span> : null}
+            className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm ${section === active ? "bg-accent font-medium" : "hover:bg-accent/40"}`}>
+            <span className="min-w-0">{label(section)}</span>
+            {project && !PROJECT_SECTIONS.includes(section) ? <span className="text-muted-foreground shrink-0 text-[10px]">{s.global}</span> : null}
           </Link>)}
         </div> : null;
       })}

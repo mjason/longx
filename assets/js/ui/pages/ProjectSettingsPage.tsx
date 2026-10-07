@@ -43,17 +43,17 @@ type Form = {
  * model), the agent definition, and the danger zone.
  * Thread-level overrides live in the composer rail.
  */
-export function ProjectSettingsPage({ section = "project" }: { section?: string }) {
+export function ProjectSettingsPage({ section = "project", embedded = false }: { section?: string; embedded?: boolean }) {
   const ctx = useOutletContext<ProjectContext>();
   const project = useProject(ctx.slug);
   if (project.isPending) return <Skeleton className="m-4 h-40" data-testid="chat-area" />;
   if (project.isError) return <p className="text-destructive p-4">{project.error.message}</p>;
-  return <SettingsForm key={`${project.data.updatedAt}-${section}`} section={section} project={project.data} slug={ctx.slug} />;
+  return <SettingsForm key={`${project.data.updatedAt}-${section}`} section={section} embedded={embedded} project={project.data} slug={ctx.slug} />;
 }
 
 type Project = NonNullable<ReturnType<typeof useProject>["data"]>;
 
-function SettingsForm({ project, slug, section }: { project: Project; slug: string; section: string }) {
+function SettingsForm({ project, slug, section, embedded }: { project: Project; slug: string; section: string; embedded: boolean }) {
     useTranslation();
   // the .longx files, for the watches card to point at shared ones the trust switch keeps off
   const definitionFiles = useAgentDefinition(project.id);
@@ -131,7 +131,7 @@ function SettingsForm({ project, slug, section }: { project: Project; slug: stri
   const danger = confirming ? dangers[confirming] : null;
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 overflow-y-auto p-4" data-testid="project-settings">
+    <div className={embedded ? "flex min-w-0 w-full flex-col gap-5" : "mx-auto flex w-full max-w-2xl flex-col gap-8 overflow-y-auto p-4"} data-testid="project-settings">
       {section === "project" ? <>
       <section className="space-y-4">
         <h2 className="text-lg font-medium">{t.projectSettings}</h2>
@@ -263,9 +263,9 @@ function AgentSection({
   const copy = useSettingsCopy();
   const d = definition.data;
   return (
-    <section className="space-y-3" data-testid="project-agent">
+    <section className={section === "extensions" ? "space-y-4 rounded-lg border bg-muted/20 p-4" : "space-y-3"} data-testid="project-agent">
       {section === "extensions" ? <>
-      <h2 className="text-lg font-medium">{t.agentDefinition.title}</h2>
+      <h3 className="text-sm font-semibold">{t.agentDefinition.title}</h3>
       <div className="flex items-center justify-between gap-4">
         <div>
           <Label htmlFor="ps-trust-agent">{t.agentDefinition.trust}</Label>

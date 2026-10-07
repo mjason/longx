@@ -36,7 +36,7 @@ export function ProjectExtensions({ projectId }: { projectId: string }) {
   return (
     <section className="space-y-4" data-testid="project-extensions">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="text-lg font-medium">{s.extensions}</h2><p className="text-muted-foreground text-xs">{s.extensionHint}</p></div>
+        <div className="min-w-0"><h3 className="text-sm font-semibold">{s.extensionObjects}</h3><p className="text-muted-foreground mt-1 text-xs">{s.extensionHint}</p></div>
         <Button size="sm" variant="outline" onClick={() => reveal(".longx")}>{s.openDirectory}</Button>
       </div>
       <div role="tablist" aria-label={s.extensions} className="flex overflow-x-auto border-b">
@@ -47,9 +47,9 @@ export function ProjectExtensions({ projectId }: { projectId: string }) {
       {inventory.isPending ? <p>{s.loading}</p> : null}
       {inventory.isError ? <p role="alert" className="text-destructive">{inventory.error.message}</p> : null}
       {tab === "overview" ? <>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {tabs.filter((key) => key !== "overview").map((key) => <button type="button" key={key} onClick={() => changeTab(key)} className="rounded-lg border p-4 text-left hover:bg-accent/30">
-            <span className="font-medium">{s.tabs[key]}</span><span className="text-muted-foreground ml-2 text-sm">{data.filter((item) => item.kind === key).length}</span>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {tabs.filter((key) => key !== "overview").map((key) => <button type="button" key={key} onClick={() => changeTab(key)} className="flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-colors hover:bg-accent/30 focus-visible:outline-2 focus-visible:outline-ring">
+            <span className="font-medium">{s.tabs[key]}</span><span className="text-muted-foreground rounded-md bg-muted px-2 py-0.5 text-xs tabular-nums">{data.filter((item) => item.kind === key).length}</span>
           </button>)}
         </div>
       </> : <>

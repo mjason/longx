@@ -57,7 +57,7 @@ const artifacts=path.join(root,"../.longx/local/artifacts/settings-center/run-br
 await mkdir(artifacts,{recursive:true});
 const browser=await chromium.launch();
 try {
-  for (const width of [1280,390]) {
+  for (const width of [1920,1280,390]) {
     const page=await browser.newPage({viewport:{width,height:900}});
     const errors=[];
     page.on("pageerror",e=>errors.push(e.message));
@@ -82,6 +82,28 @@ try {
     await page.screenshot({path:path.join(artifacts,`resources-${width}.png`),fullPage:true});
     await page.evaluate(()=>window.router.navigate("/p/app-1/settings?section=extensions"));
     const manager=page.getByTestId("project-extensions");
+    await manager.getByRole("tab",{name:"概览",exact:true}).waitFor();
+    await page.waitForFunction(()=>document.querySelector('[data-testid="settings-center"] [role="group"] [aria-pressed="true"]')?.textContent.includes("当前项目"));
+    await page.mouse.move(0,0);
+    await page.evaluate(async()=>{
+      const group=document.querySelector('[data-testid="settings-center"] [role="group"]');
+      await Promise.all(group.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>{})));
+    });
+    await page.screenshot({path:path.join(artifacts,`extensions-${width}.png`),fullPage:true});
+    const layout=await page.evaluate(()=>{
+      const rect=selector=>document.querySelector(selector).getBoundingClientRect();
+      const detail=rect('[data-testid="settings-detail"]');
+      const form=rect('[data-testid="project-settings"]');
+      const agent=rect('[data-testid="project-agent"]');
+      const objects=rect('[data-testid="project-extensions"]');
+      const heading=rect('[data-testid="settings-detail"] > h2');
+      return {detail:detail.x,form:form.x,agent:agent.x,objects:objects.x,heading:heading.x,
+        width:detail.width,height:document.documentElement.scrollHeight,viewport:innerHeight};
+    });
+    assert.ok(Math.abs(layout.heading-layout.form)<=1,"form aligns with category heading");
+    assert.ok(Math.abs(layout.agent-layout.objects)<=1,"trust and extension objects align");
+    assert.ok(layout.width<=900,"settings content has a readable maximum width");
+    assert.ok(layout.height<=layout.viewport+1,"settings stay inside workbench scroll container");
     await manager.getByRole("tab",{name:/角色/}).click();
     await manager.getByRole("button",{name:"准备共享",exact:true}).click();
     await dialog.getByText(/目标已有共享对象/).waitFor();
@@ -91,6 +113,10 @@ try {
     assert.equal(await manager.getByRole("button",{name:"准备共享",exact:true}).count(),0);
     await manager.getByText("run-one",{exact:true}).waitFor();
     await page.screenshot({path:path.join(artifacts,`artifacts-${width}.png`),fullPage:true});
+    await center.getByRole("button",{name:"全局默认",exact:true}).click();
+    await page.evaluate(()=>window.router.navigate("/p/app-1/settings?scope=global&section=models"));
+    await page.getByTestId("search-provider").waitFor();
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight+1),"global models do not overflow the document");
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),"no horizontal overflow");
     assert.deepEqual(errors,[]);
     console.log(`settings center ${width}px: scope, drafts, scoped save, conflicts, outputs, layout passed`);
