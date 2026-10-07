@@ -67,6 +67,14 @@ try {
     await page.addScriptTag({content:bundle.outputFiles[0].text});
     const center=page.getByTestId("settings-center");
     const memory=center.getByLabel("单任务内存上限（%）");
+    await memory.waitFor();
+    const projectNavigation=width===390
+      ? center.getByRole("combobox",{name:"设置中心",exact:true})
+      : center.getByRole("navigation",{name:"设置中心",exact:true});
+    const categories=await projectNavigation.textContent();
+    for(const global of ["Provider","浏览器","电脑与命令环境","凭证","外观","快捷键","HTTPS","版本与更新","运行状态与诊断"]) {
+      assert.ok(!categories.includes(global),`${global} belongs only in global settings`);
+    }
     await memory.fill("40");
     await center.getByRole("button",{name:"全局默认",exact:true}).click();
     const dialog=page.getByRole("dialog");

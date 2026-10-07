@@ -2,7 +2,7 @@ import { useOutletContext, useSearchParams } from "react-router";
 import { useLayoutEffect, useRef } from "react";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { SettingsDraftProvider } from "./settings/SettingsDraft";
-import { SettingsNavigation, useSettingsLabel, PROJECT_SECTIONS, GLOBAL_GROUPS, PROJECT_GROUPS } from "./settings/SettingsNavigation";
+import { SettingsNavigation, useSettingsLabel, PROJECT_SECTIONS, GLOBAL_SECTIONS } from "./settings/SettingsNavigation";
 import { useSettingsCopy } from "./settings/copy";
 import { ProjectSettingsPage } from "./ProjectSettingsPage";
 import { DiagnosticsSection, SectionBody } from "./SettingsPage";
@@ -19,7 +19,7 @@ function Center() {
   const label = useSettingsLabel();
   const scope = params.get("scope") === "global" ? "global" : "project";
   const requested = params.get("section");
-  const knownSections: readonly string[] = [...GLOBAL_GROUPS, ...PROJECT_GROUPS].flatMap((group) => [...group.sections]);
+  const knownSections = scope === "global" ? GLOBAL_SECTIONS : PROJECT_SECTIONS;
   const section = requested && knownSections.includes(requested) ? requested : (scope === "global" ? "models" : "project");
   const root = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -27,10 +27,13 @@ function Center() {
     if (scroller) scroller.scrollTop = 0;
   }, [scope, section]);
   const href = (next: string) => `?scope=${scope}&section=${encodeURIComponent(next)}`;
-  const changeScope = (next: string) => setParams({
-    scope: next,
-    section: next === "project" && section === "models" ? "project" : next === "global" && section === "project" ? "models" : section,
-  });
+  const changeScope = (next: string) => {
+    const sections = next === "global" ? GLOBAL_SECTIONS : PROJECT_SECTIONS;
+    setParams({
+      scope: next,
+      section: sections.includes(section) ? section : next === "global" ? "models" : "project",
+    });
+  };
   return (
     <div ref={root} className="relative flex min-h-0 flex-col" data-testid="settings-center">
       <header className="bg-background sticky top-0 z-10 border-b">
@@ -52,14 +55,8 @@ function Center() {
         <div className="min-w-0"><SettingsNavigation compact project={scope === "project"} active={section} href={href} /></div>
         <section className="min-w-0 space-y-5" data-testid="settings-detail" key={`${scope}-${section}`}>
           <h2 className="border-b pb-3 text-lg font-semibold">{label(section)}</h2>
-          {section === "diagnostics" ? <DiagnosticsSection projectId={scope === "project" ? ctx.id : undefined} /> :
-            scope === "project" && PROJECT_SECTIONS.includes(section) ? <ProjectSettingsPage section={section} embedded /> :
-            scope === "project" || ["project", "extensions"].includes(section) ? (
-              <div className="space-y-3 rounded-lg border p-4">
-                <p className="text-muted-foreground text-sm">{scope === "project" ? s.globalOnly : s.projectOnly}</p>
-                <Button onClick={() => changeScope(scope === "project" ? "global" : "project")}>{scope === "project" ? s.editGlobal : s.project}</Button>
-              </div>
-            ) : <SectionBody section={section} />}
+          {scope === "project" ? <ProjectSettingsPage section={section} embedded /> :
+            section === "diagnostics" ? <DiagnosticsSection /> : <SectionBody section={section} />}
         </section>
       </div>
     </div>

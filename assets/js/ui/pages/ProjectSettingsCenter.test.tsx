@@ -73,12 +73,42 @@ test("each project option can independently restore inheritance", async () => {
   })));
 });
 
-test("global-only configuration is offered in place, not duplicated per project", async () => {
+test.each([1280, 390])("project scope contains only project categories at %ipx", async (width) => {
+  setViewport(width);
+  renderAt("/p/app-1/settings?section=project");
+  const center = await screen.findByTestId("settings-center");
+  const navigation = width === 390
+    ? within(center).getByRole("combobox", { name: "设置中心" })
+    : within(center).getByRole("navigation", { name: "设置中心" });
+  expect(navigation).toHaveTextContent("项目与会话默认");
+  expect(navigation).toHaveTextContent("项目扩展");
+  for (const global of ["Provider", "浏览器", "电脑与命令环境", "凭证", "外观", "快捷键", "HTTPS", "版本与更新", "运行状态与诊断"]) {
+    expect(navigation).not.toHaveTextContent(global);
+  }
+});
+
+test("global-only bookmarks fall back to project settings; global scope remains available", async () => {
   const user = userEvent.setup();
   renderAt("/p/app-1/settings?section=providers");
-  await user.click(await screen.findByRole("button", { name: "在这里编辑全局" }));
+  expect(await screen.findByTestId("project-settings")).toBeInTheDocument();
+  expect(screen.queryByTestId("section-providers")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "全局默认" }));
+  await user.click(await screen.findByRole("link", { name: "Provider" }));
   expect(await screen.findByTestId("section-providers")).toBeInTheDocument();
   expect(screen.getByTestId("workbench")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /当前项目 ·/ }));
+  expect(await screen.findByTestId("project-settings")).toBeInTheDocument();
+});
+
+test("project-only categories switch to a valid global category", async () => {
+  const user = userEvent.setup();
+  const { router } = renderAt("/p/app-1/settings?section=extensions");
+  await screen.findByTestId("project-extensions");
+  await user.click(screen.getByRole("button", { name: "全局默认" }));
+  await waitFor(() => expect(router.state.location.search).toBe("?scope=global&section=models"));
+  const nav = screen.getByRole("navigation", { name: "设置中心" });
+  expect(nav).not.toHaveTextContent("项目扩展");
+  expect(nav).not.toHaveTextContent("项目与会话默认");
 });
 
 test("phone uses a category selector and keeps scope visible", async () => {

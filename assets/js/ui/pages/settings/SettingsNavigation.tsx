@@ -12,13 +12,12 @@ export const GLOBAL_GROUPS = [
   { key: "diagnostics", sections: ["diagnostics", "dependencies", "processes", "requests"] },
 ] as const;
 export const PROJECT_GROUPS = [
-  { key: "models", sections: ["project", "providers", "browsers", "connections", "credentials"] },
+  { key: "project", sections: ["project"] },
   { key: "agent", sections: ["agent", "resources", "watches"] },
   { key: "workspace", sections: ["extensions", "files"] },
-  { key: "application", sections: ["appearance", "keys", "https", "update"] },
-  { key: "diagnostics", sections: ["diagnostics"] },
 ] as const;
-export const PROJECT_SECTIONS = ["project", "agent", "resources", "watches", "extensions", "files", "diagnostics"];
+export const PROJECT_SECTIONS: readonly string[] = PROJECT_GROUPS.flatMap((group) => [...group.sections]);
+export const GLOBAL_SECTIONS: readonly string[] = GLOBAL_GROUPS.flatMap((group) => [...group.sections]);
 
 export function useSettingsLabel() {
   const s = useSettingsCopy();
@@ -39,7 +38,7 @@ export function SettingsNavigation({ project = false, compact = false, active, h
     return <select aria-label={s.center} className="border-input bg-background w-full rounded-md border p-2 text-sm"
       value={active} onChange={(event) => navigate(href(event.target.value))}>
       {groups.map((group) => <optgroup key={group.key} label={s.groups[group.key]}>
-        {group.sections.map((section) => <option key={section} value={section}>{label(section)}{project && !PROJECT_SECTIONS.includes(section) ? ` · ${s.global}` : ""}</option>)}
+        {group.sections.map((section) => <option key={section} value={section}>{label(section)}</option>)}
       </optgroup>)}
     </select>;
   }
@@ -54,7 +53,6 @@ export function SettingsNavigation({ project = false, compact = false, active, h
           {sections.map((section) => <Link key={section} to={href(section)} aria-current={section === active ? "page" : undefined}
             className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm ${section === active ? "bg-accent font-medium" : "hover:bg-accent/40"}`}>
             <span className="min-w-0">{label(section)}</span>
-            {project && !PROJECT_SECTIONS.includes(section) ? <span className="text-muted-foreground shrink-0 text-[10px]">{s.global}</span> : null}
           </Link>)}
         </div> : null;
       })}
