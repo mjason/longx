@@ -203,16 +203,27 @@ defmodule Longx.Projects.Extensions do
       # Exclusive creation prevents rename's silent replacement of shared files.
       with {:ok, content} <- File.read(from),
            {:ok, io} <- File.open(to, [:write, :binary, :exclusive]) do
-        result = IO.binwrite(io, content)
-        File.close(io)
-
-        if result == :ok do
-          case File.read(from) do
-            {:ok, ^content} -> File.rm(from)
-            _ -> {:error, :source_changed}
+        result =
+          try do
+            IO.binwrite(io, content)
+          rescue
+            error -> {:error, Exception.message(error)}
           end
-        else
-          result
+
+        closed = File.close(io)
+
+        case {result, closed} do
+          {:ok, :ok} ->
+            case File.read(from) do
+              {:ok, ^content} -> File.rm(from)
+              _ -> {:error, :source_changed}
+            end
+
+          {{:error, _} = error, _} ->
+            error
+
+          {_, {:error, _} = error} ->
+            error
         end
         |> case do
           :ok ->
