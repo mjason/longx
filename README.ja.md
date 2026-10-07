@@ -24,6 +24,8 @@ Linux x86_64 / arm64：
 curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install.sh | sh
 ```
 
+インストーラーは systemd ユーザーサービス、cgroup v2 と memory controller を確認し、対応している場合にタスク保護を有効にするか質問します（Enter で有効）。サービスの設定と起動・再起動も行います。非対応の場合は通知してインストールを続けます。同じコマンドを再実行すると既存のサービス設定も更新されるため、残しておきたいタスクは先に終了してください。非対話環境では既定で有効になり、`LONGX_CGROUP=off sh install.sh` で無効を選べます。実際の保護状態は設定画面の検出結果とタスクレポートで確認してください。
+
 `http://<host>:7788` を開き、「Settings → Providers」でモデルを設定して、
 プロジェクトの作業ディレクトリを追加してください。
 リリースには Erlang ランタイムと UI が含まれ、開発ツールチェーンは不要です。

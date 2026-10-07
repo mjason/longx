@@ -40,6 +40,8 @@ Linux x86_64 / arm64：
 curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install.sh | sh
 ```
 
+安装器会检测 systemd 用户服务、cgroup v2 和 memory controller；满足条件时询问是否启用任务保护，直接回车默认启用，然后自动配置并启动/重启服务。不支持时会提示并继续安装。再次运行同一命令也会刷新旧服务配置；重装前请结束需要保留的任务。无人值守时默认启用，可用 `LONGX_CGROUP=off sh install.sh` 明确跳过。服务配置成功不等于每个任务已受保护，请在设置页查看检测与真实任务报告。
+
 打开 `http://<主机>:7788`，在「设置 → Provider」配置模型，然后添加项目的工作目录。
 发行包自带 Erlang 运行时和前端，不需要安装开发工具链；要求 glibc ≥ 2.39
 （Ubuntu 24.04、Debian 13 或更新版本）。Git 工作区功能需要机器上有 `git`。

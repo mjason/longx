@@ -19,6 +19,14 @@ On Linux x86_64 / arm64:
 curl -fsSL https://raw.githubusercontent.com/mjason/longx/main/install.sh | sh
 ```
 
+The installer checks systemd user-service, cgroup v2 and memory-controller support,
+then asks whether to enable task protection (Enter defaults to yes). It configures
+and starts/restarts the service; unsupported systems continue with a notice.
+Re-running the command also refreshes an old service unit—finish any tasks you
+need to preserve first. Unattended installs default to enabled; use
+`LONGX_CGROUP=off sh install.sh` to opt out. Check Settings for detection and
+actual task reports; service configuration alone does not prove protection.
+
 Open `http://<host>:7788`, configure a model in **Settings → Providers**, and add your
 project's working directory. The release includes the Erlang runtime and built UI;
 you do not need a development toolchain. It requires glibc ≥ 2.39 (Ubuntu 24.04,

@@ -12,6 +12,7 @@
 #
 #   LONGX_HOME=~/.longx   LONGX_PORT=7788   LONGX_NO_SERVICE=1 (just install, don't run)
 #   LONGX_TARBALL=/path/to/longx-x.y.z-linux-<arch>.tar.gz (install a local build)
+#   LONGX_CGROUP=auto|on|off (auto asks, default yes; on/off skip the question)
 set -eu
 
 REPO="mjason/longx"
@@ -34,22 +35,97 @@ have_systemd() {
   command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1
 }
 
-cgroup_service_properties() {
-  # DelegateSubgroup appeared in systemd 254. Keep the supervisor out of the
-  # task memory domain; do not apply MemoryMax to the Longx service itself.
-  cgroup_systemd_version="$(systemctl --version 2>/dev/null | sed -n '1s/^systemd \([0-9][0-9]*\).*/\1/p')"
+cgroup_memory_available() {
+  grep -qw memory /sys/fs/cgroup/cgroup.controllers 2>/dev/null
+}
+
+cgroup_prerequisites() {
+  # Read the running user manager's version, not just the systemctl binary's.
+  cgroup_systemd_version="$(systemctl --user show --property=Version --value 2>/dev/null | sed -n '1s/^\([0-9][0-9]*\).*/\1/p')"
   case "$cgroup_systemd_version" in
     '' | *[!0-9]*)
-      printf '%s\n' '警告：无法确认 systemd 版本，任务 cgroup 保护未自动启用。' >&2
+      say "警告：无法确认 systemd 用户服务管理器版本，跳过 cgroup 保护。"
+      return 1
       ;;
     *)
-      if [ "$cgroup_systemd_version" -ge 254 ]; then
-        printf '%s\n' 'Delegate=memory' 'DelegateSubgroup=supervisor'
-      else
-        printf '%s\n' '警告：systemd < 254，任务 cgroup 保护未自动启用；全机内存保护仍保留。' >&2
+      if [ "$cgroup_systemd_version" -lt 254 ]; then
+        say "警告：systemd < 254，不支持 DelegateSubgroup，跳过 cgroup 保护。"
+        return 1
       fi
       ;;
   esac
+  if [ "$(stat -f -c %T /sys/fs/cgroup 2>/dev/null || true)" != cgroup2fs ]; then
+    say "警告：没有检测到 cgroup v2，跳过 cgroup 保护。"
+    return 1
+  fi
+  if ! cgroup_memory_available; then
+    say "警告：cgroup v2 未提供 memory controller，跳过 cgroup 保护。"
+    return 1
+  fi
+}
+
+cgroup_confirm() {
+  # stdin contains the installer itself for curl | sh: ask via the terminal.
+  if ! ( : </dev/tty ) 2>/dev/null; then
+    say "没有交互终端，按默认值启用 cgroup 保护（LONGX_CGROUP=off 可关闭）。"
+    return 0
+  fi
+  while :; do
+    printf '%s' '启用任务 cgroup 保护？[Y/n] ' >/dev/tty
+    cgroup_answer=
+    IFS= read -r cgroup_answer </dev/tty || cgroup_answer=
+    case "$cgroup_answer" in
+      '' | y | Y | yes | YES) return 0 ;;
+      n | N | no | NO) return 1 ;;
+      *) printf '%s\n' '请输入 y 或 n；直接回车默认启用。' >/dev/tty ;;
+    esac
+  done
+}
+
+configure_cgroup() {
+  CGROUP_ENABLED=0
+  case "${LONGX_CGROUP:-auto}" in
+    auto | on | off) ;;
+    *) die "LONGX_CGROUP 只能为 auto、on 或 off" ;;
+  esac
+  if [ -n "${LONGX_NO_SERVICE:-}" ] || ! have_systemd; then
+    say "未使用 systemd 用户服务，不自动配置 cgroup 保护；原有内存保护仍保留。"
+    return
+  fi
+  if [ "${LONGX_CGROUP:-auto}" = off ]; then
+    say "已选择不启用服务的 cgroup 委派；原有内存保护仍保留。"
+    return
+  fi
+  if ! cgroup_prerequisites; then
+    say "Longx 将继续安装，任务保护以运行时检测为准；原有内存保护仍保留。"
+    return
+  fi
+  say "检测到 systemd >= 254、cgroup v2 和 memory controller。"
+  if [ "${LONGX_CGROUP:-auto}" = on ] || cgroup_confirm; then
+    CGROUP_ENABLED=1
+    say "将启用 cgroup 委派并重启 Longx；实际任务保护由启动报告确认。"
+  else
+    say "已选择不启用服务的 cgroup 委派；原有内存保护仍保留。"
+  fi
+}
+
+cgroup_service_properties() {
+  # Delegate=memory is sufficient; systemctl exposes Delegate as a boolean.
+  # Keep Longx outside the task memory domain; do not cap the whole service.
+  if [ "${CGROUP_ENABLED:-0}" = 1 ]; then
+    printf '%s\n' 'Delegate=memory' 'DelegateSubgroup=supervisor'
+  fi
+}
+
+verify_cgroup_service() {
+  [ "${CGROUP_ENABLED:-0}" = 1 ] || return 0
+  cgroup_properties="$(systemctl --user show longx --property=Delegate --property=DelegateSubgroup 2>/dev/null || true)"
+  if printf '%s\n' "$cgroup_properties" | grep -qx 'Delegate=yes' &&
+     printf '%s\n' "$cgroup_properties" | grep -qx 'DelegateSubgroup=supervisor'; then
+    say "已确认服务的 cgroup 委派和 supervisor 子组配置；请在设置页查看检测与真实任务报告。"
+  else
+    say "警告：无法确认 cgroup 委派生效（可能有服务覆盖配置）。请检查 systemctl --user cat longx 和设置页状态。"
+  fi
 }
 
 service_active() {
@@ -97,6 +173,9 @@ esac
 
 [ "$(uname -s)" = Linux ] || die "只支持 Linux"
 need curl; need tar; need sha256sum
+
+# Ask before downloads, stopping a service or changing any installed files.
+configure_cgroup
 
 mkdir -p "$HOME_DIR" "$DATA" "$HOME_DIR/downloads" "$HOME_DIR/backups"
 
@@ -187,6 +266,8 @@ done
 if command -v loginctl >/dev/null 2>&1 && ! loginctl show-user "$USER" 2>/dev/null | grep -q '^Linger=yes'; then
   say "提示：不登录也要常驻的话运行 loginctl enable-linger $USER"
 fi
+
+verify_cgroup_service
 
 say ""
 say "Longx 在跑：http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 127.0.0.1):$PORT"

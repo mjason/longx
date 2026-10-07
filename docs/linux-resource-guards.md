@@ -4,8 +4,18 @@ Agent commands and background jobs can run in their own cgroup v2. Longx's
 supervisor stays outside the task memory domain. This is resource protection,
 not a sandbox: commands still run as the person.
 
-The installer enables `Delegate=memory` and `DelegateSubgroup=supervisor` on
-systemd 254 or newer. A supported Linux service automatically creates:
+The Linux installer checks the running systemd user manager (254 or newer),
+cgroup v2 and the memory controller, then asks whether to enable task protection
+(default **yes**). The question uses `/dev/tty`, so `curl … | sh` works too.
+Without an interactive terminal it uses the default. Set `LONGX_CGROUP=on` or
+`LONGX_CGROUP=off` to skip the question; `on` still requires these prerequisites.
+Unsupported systems continue installation with an explicit fallback notice.
+
+When enabled, the installer writes `Delegate=memory` and
+`DelegateSubgroup=supervisor`, reloads systemd and restarts Longx. It then checks
+the unit's delegation properties; only real task reports confirm protection.
+This service-level choice does not change saved agent settings. A supported
+Linux service automatically creates:
 
 ```text
 longx.service/                 delegated root

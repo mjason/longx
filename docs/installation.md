@@ -108,7 +108,19 @@ To choose installation options, download [install.sh](../install.sh), review it,
 ```sh
 LONGX_HOME=~/apps/longx LONGX_PORT=8080 sh install.sh
 LONGX_NO_SERVICE=1 sh install.sh
+LONGX_CGROUP=on sh install.sh       # enable delegation without asking, if supported
+LONGX_CGROUP=off sh install.sh      # skip service cgroup delegation
 ```
+
+`LONGX_CGROUP=auto` (the default) checks systemd user manager version ≥ 254,
+cgroup v2 and the memory controller, then asks via the terminal whether to enable
+task protection (default yes). This works with `curl … | sh`; without a terminal
+the default is used. Unsupported or manual/no-service installs are not configured
+for delegation. The installer refreshes the unit, reloads systemd and restarts
+Longx, including existing installations; finish tasks you need to preserve first.
+It verifies service properties after restart, but actual protection must still be
+confirmed in Settings by runtime detection and task reports. This option does
+not change saved agent settings. See [Linux resource protection](linux-resource-guards.md).
 
 Without systemd, the installer prints a manual start command. With the default paths:
 
