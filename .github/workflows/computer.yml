@@ -34,7 +34,10 @@ jobs:
             bundles: app,dmg
           - runner: macos-15-intel
             target: darwin-x86_64
-            bundles: app,dmg
+            # Tauri's mounted-volume DMG script fails intermittently on the
+            # Intel runner after the app was already signed and notarized.
+            # Package that app with headless hdiutil below instead.
+            bundles: app
           - runner: ubuntu-24.04
             target: linux-x86_64
             bundles: appimage,deb
@@ -136,6 +139,31 @@ jobs:
           codesign --verify --deep --strict "src-tauri/target/release/bundle/macos/Longx Computer.app"
           codesign -dv --verbose=4 "src-tauri/target/release/bundle/macos/Longx Computer.app" 2>&1 | grep -F "TeamIdentifier=$TEAM_ID"
           xcrun stapler validate "src-tauri/target/release/bundle/macos/Longx Computer.app"
+      - name: Package and notarize headless Intel DMG
+        if: matrix.target == 'darwin-x86_64'
+        timeout-minutes: 15
+        env:
+          SIGNING_IDENTITY: ${{ secrets.DEVELOPER_ID_IDENTITY }}
+          APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+          TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          stage="$(mktemp -d "$RUNNER_TEMP/computer-dmg.XXXXXX")"
+          ditto "src-tauri/target/release/bundle/macos/Longx Computer.app" "$stage/Longx Computer.app"
+          ln -s /Applications "$stage/Applications"
+          mkdir -p src-tauri/target/release/bundle/dmg
+          image="src-tauri/target/release/bundle/dmg/Longx Computer_${version}_x64.dmg"
+          hdiutil create -volname "Longx Computer" -srcfolder "$stage" -format UDZO -ov "$image"
+          hdiutil verify "$image"
+          codesign --force --sign "$SIGNING_IDENTITY" --timestamp "$image"
+          codesign --verify --strict "$image"
+          codesign -dv --verbose=4 "$image" 2>&1 | grep -F "TeamIdentifier=$TEAM_ID"
+          xcrun notarytool submit "$image" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$TEAM_ID" --wait --output-format json > "$RUNNER_TEMP/computer-dmg-notarization.json"
+          python3 ../../scripts/check-notarization.py "$RUNNER_TEMP/computer-dmg-notarization.json"
+          xcrun stapler staple "$image"
+          xcrun stapler validate "$image"
       - name: Package named release assets
         env:
           COMPUTER_TARGET: ${{ matrix.target }}

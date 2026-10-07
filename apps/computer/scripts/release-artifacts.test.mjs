@@ -24,7 +24,14 @@ test("unsigned and insecure update records are refused", () => {
 });
 test("macOS packaging keeps app alongside dmg and repair dispatch preserves tag", () => {
   const workflow = readFileSync(new URL("../../../.github/workflows/computer.yml", import.meta.url), "utf8");
-  assert.equal((workflow.match(/bundles: app,dmg/g) || []).length, 2);
+  assert.match(workflow, /target: darwin-aarch64\s+bundles: app,dmg/);
+  assert.match(workflow, /target: darwin-x86_64[\s\S]*?bundles: app\n/);
+  assert(workflow.includes('hdiutil create -volname "Longx Computer" -srcfolder "$stage" -format UDZO -ov "$image"'));
+  assert(workflow.includes('codesign --force --sign "$SIGNING_IDENTITY" --timestamp "$image"'));
+  assert(workflow.includes('codesign --verify --strict "$image"'));
+  assert(workflow.includes('xcrun notarytool submit "$image"'));
+  assert(workflow.includes('python3 ../../scripts/check-notarization.py "$RUNNER_TEMP/computer-dmg-notarization.json"'));
+  assert(workflow.includes('xcrun stapler validate "$image"'));
   assert.equal((workflow.match(/ref: \$\{\{ inputs\.release_tag \|\| github\.ref \}\}/g) || []).length, 2);
   assert(workflow.includes("tag_name: ${{ inputs.release_tag || github.ref_name }}"));
 });
