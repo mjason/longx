@@ -17,6 +17,19 @@ notary = module('check-notarization')
 
 
 class SigningTest(unittest.TestCase):
+    def test_release_repair_keeps_tag_and_native_runtime_checks(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / '.github/workflows/release.yml').read_text()
+        ci = (root / '.github/workflows/ci.yml').read_text()
+        self.assertIn("ref: ${{ inputs.release_tag || github.ref }}", workflow)
+        self.assertIn('[[ "$RELEASE_TAG" == "v$version" ]]', workflow)
+        self.assertEqual(workflow.count("tag_name: ${{ env.RELEASE_TAG }}"), 2)
+        self.assertIn("unittest discover -v -s test -p '*macos*_test.py'", workflow)
+        self.assertIn("unittest discover -s test -p '*_test.py'", ci)
+        self.assertIn("install-macos.py --no-service --tarball", workflow)
+        self.assertIn("Application.ensure_all_started(:longx)", workflow)
+        self.assertIn("timeout-minutes: 10", workflow)
+
     def test_inventory_includes_extensionless_code_and_nifs_not_symlinks_or_scripts(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
