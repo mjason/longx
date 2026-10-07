@@ -6,6 +6,25 @@ defmodule Longx.Projects.Types do
   scalar); nested `fields` are typed with it, named `<type>_<field>`.
   """
 
+  defmodule UserMessageInput do
+    @moduledoc "One original person message in a typed batch, not a JSON scalar."
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          text: [
+            type: :string,
+            allow_nil?: false,
+            constraints: [allow_empty?: true, trim?: false]
+          ],
+          images: [type: {:array, :string}]
+        ]
+      ]
+
+    def graphql_type(_), do: :user_message
+    def graphql_input_type(_), do: :user_message_input
+  end
+
   defmodule GitInfo do
     @moduledoc "`Longx.Projects.Project.git_info` and other actions returning `@git_info`"
     use Ash.Type.NewType,

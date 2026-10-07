@@ -166,6 +166,8 @@ const zh = {
   waitingHint: "别处来的消息 · 本轮结束后处理",
   waitingPaused: "你停止了这一轮，这些消息等你继续再处理",
   waitingInsert: "立即插入",
+  waitingInsertAll: "全部插入",
+  waitingCount: (n: number) => `待处理消息 · ${n} 条`,
   waitingJob: (name: string) => `后台任务 ${name}`,
   waitingFrom: "消息",
   // the person's own words, handed to the list by a turn they stopped before the model saw them
@@ -324,7 +326,6 @@ const zh = {
   activeProjects: "有活动",
   recentProjects: "最近访问",
   projectActivity: (running: number, waiting: number) => waiting ? `${running} 个在跑 · ${waiting} 个等你` : `${running} 个在跑`,
-  switchingProjectBlocked: "当前有未发送的附件，或消息仍在排队。请发送或移除它们后再切换项目。",
   copyRelativePath: "复制相对路径",
   copyAbsolutePath: "复制绝对路径",
   pathCopied: "路径已复制",

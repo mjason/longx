@@ -42,6 +42,10 @@ defmodule Longx.Agent.Kernel.State do
             # agent is idle; `paused` from the person's stop until they speak
             waiting: [],
             paused: false,
+            # First idle callback opens a fixed window, not a sliding debounce.
+            # The token makes a cancelled timer already in the mailbox harmless.
+            callback_timer: nil,
+            callback_window_ms: 150,
             usage_total: %{},
             usage_last: nil,
             # when the turn began (epoch ms) — the turn's stamps for the UI's badge

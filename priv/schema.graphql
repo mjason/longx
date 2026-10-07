@@ -469,6 +469,11 @@ type SteerTurn {
   kernelTurnId: String!
 }
 
+input UserMessageInput {
+  text: String!
+  images: [String!]
+}
+
 type PromoteLocal {
   path: String!
 }
@@ -954,6 +959,10 @@ input CompactThreadInput {
   threadId: ID!
 }
 
+input ReleaseWaitingBatchInput {
+  threadId: ID!
+}
+
 input ReleaseWaitingInput {
   threadId: ID!
   waitingId: String!
@@ -973,6 +982,13 @@ input SteerTurnInput {
 input InterruptTurnInput {
   threadId: ID!
   kernelTurnId: String!
+}
+
+input SendMessageBatchInput {
+  threadId: ID!
+  messages: [UserMessageInput!]!
+  model: String
+  effort: String
 }
 
 input SendMessageInput {
@@ -4396,10 +4412,12 @@ type RootMutationType {
   initGit(input: InitGitInput!): GitInfo!
   startThread(input: StartThreadInput!): Thread!
   sendMessage(input: SendMessageInput!): Turn!
+  sendMessageBatch(input: SendMessageBatchInput!): Turn!
   interruptTurn(input: InterruptTurnInput!): Boolean!
   steerTurn(input: SteerTurnInput!): SteerTurn!
   retractTurn(input: RetractTurnInput!): RetractTurn!
   releaseWaiting(input: ReleaseWaitingInput!): Boolean!
+  releaseWaitingBatch(input: ReleaseWaitingBatchInput!): Boolean!
   compactThread(input: CompactThreadInput!): Boolean!
   answerRequest(input: AnswerRequestInput!): Boolean!
   setGoal(input: SetGoalInput!): Goal!

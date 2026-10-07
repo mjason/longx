@@ -14,12 +14,13 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate, useParams } from "react-router";
-import { useLongxRuntime, type LongxRuntime } from "@/core/chat/runtime";
+import type { LongxRuntime } from "@/core/chat/runtime";
 import { toast } from "sonner";
 import { t } from "@/ui/strings";
 import { GoalProvider } from "./GoalBar";
 import { useWorkbench, type Tab } from "@/core/workbench";
-import { useProjectDraft } from "./useProjectDraft";
+import { useChatSession } from "./ChatSessions";
+import { Skeleton } from "@/ui/components/ui/skeleton";
 import { ActionAnswerContext, chatConfig, CompactionUI, GoalContinuationUI, JobNoticeUI, SubagentContext, SurfaceContext } from "./toolkit";
 
 const ChatContext = createContext<LongxRuntime | null>(null);
@@ -93,17 +94,29 @@ export function ChatProvider({
     [openSurface],
   );
 
-  const chat = useLongxRuntime({
+  const onBackgroundThread = useCallback((threadId: string) => openSurface({ kind: "chat", threadId }), [openSurface]);
+  const onAttachmentError = useCallback((message: string) => toast.error(message), []);
+  const options = useMemo(() => ({
     projectId,
     ...(webSearch !== undefined ? { webSearch } : {}),
     defaultModelId,
     threadId,
     onOpenThread,
+    onBackgroundThread,
     onSignal,
-    onAttachmentError: (message) => toast.error(message),
-  });
-  useProjectDraft(projectId, slug, threadId, chat.runtime);
+    onAttachmentError,
+  }), [projectId, webSearch, defaultModelId, threadId, onOpenThread, onBackgroundThread, onSignal, onAttachmentError]);
+  const chat = useChatSession(options);
+  if (!chat) return <Skeleton className="m-4 h-32" />;
+  return <ChatView chat={chat} surface={surface}>{children}</ChatView>;
+}
 
+function ChatView({ chat, surface, children }: {
+  chat: LongxRuntime;
+  surface: { projectId: string; open: (tab: Tab) => void };
+  children: ReactNode;
+}) {
+  const { projectId, open: openSurface } = surface;
   // a tool's ask (Context.ask) is answered on the thread on screen — the
   // sub-agents' asks too, since their conversations nest under it
   const rowId = chat.thread?.id;

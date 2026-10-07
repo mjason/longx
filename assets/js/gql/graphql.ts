@@ -1733,6 +1733,10 @@ export type RejectChromeBrowserInput = {
   id: string;
 };
 
+export type ReleaseWaitingBatchInput = {
+  threadId: string | number;
+};
+
 export type ReleaseWaitingInput = {
   threadId: string | number;
   waitingId: string;
@@ -1908,6 +1912,13 @@ export type SearchProviderSortField =
 export type SearchProviderSortInput = {
   field: SearchProviderSortField;
   order?: SortOrder | null | undefined;
+};
+
+export type SendMessageBatchInput = {
+  effort?: string | null | undefined;
+  messages: Array<UserMessageInput>;
+  model?: string | null | undefined;
+  threadId: string | number;
 };
 
 export type SendMessageInput = {
@@ -2709,6 +2720,11 @@ export type UpdateSearchProviderInput = {
   apiKey?: string | null | undefined;
   baseUrl?: string | null | undefined;
   name?: string | null | undefined;
+};
+
+export type UserMessageInput = {
+  images?: Array<string> | null | undefined;
+  text: string;
 };
 
 export type WatchFilterAt = {
@@ -4153,6 +4169,13 @@ export type SendMessageMutationVariables = Exact<{
 
 export type SendMessageMutation = { sendMessage: { id: string, kernelTurnId: string, userText: string | null, modelSlug: string | null, reasoningEffort: string | null, status: string, startedAt: string, completedAt: string | null, error: string | null, usage: unknown, insertedAt: string, updatedAt: string, threadId: string } };
 
+export type SendMessageBatchMutationVariables = Exact<{
+  input: SendMessageBatchInput;
+}>;
+
+
+export type SendMessageBatchMutation = { sendMessageBatch: { id: string, kernelTurnId: string, userText: string | null, modelSlug: string | null, reasoningEffort: string | null, status: string, startedAt: string, completedAt: string | null, error: string | null, usage: unknown, insertedAt: string, updatedAt: string, threadId: string } };
+
 export type InterruptTurnMutationVariables = Exact<{
   input: InterruptTurnInput;
 }>;
@@ -4180,6 +4203,13 @@ export type ReleaseWaitingMutationVariables = Exact<{
 
 
 export type ReleaseWaitingMutation = { releaseWaiting: boolean };
+
+export type ReleaseWaitingBatchMutationVariables = Exact<{
+  input: ReleaseWaitingBatchInput;
+}>;
+
+
+export type ReleaseWaitingBatchMutation = { releaseWaitingBatch: boolean };
 
 export type CompactThreadMutationVariables = Exact<{
   input: CompactThreadInput;
@@ -6349,6 +6379,25 @@ export const SendMessageDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SendMessageMutation, SendMessageMutationVariables>;
+export const SendMessageBatchDocument = new TypedDocumentString(`
+    mutation SendMessageBatch($input: SendMessageBatchInput!) {
+  sendMessageBatch(input: $input) {
+    id
+    kernelTurnId
+    userText
+    modelSlug
+    reasoningEffort
+    status
+    startedAt
+    completedAt
+    error
+    usage
+    insertedAt
+    updatedAt
+    threadId
+  }
+}
+    `) as unknown as TypedDocumentString<SendMessageBatchMutation, SendMessageBatchMutationVariables>;
 export const InterruptTurnDocument = new TypedDocumentString(`
     mutation InterruptTurn($input: InterruptTurnInput!) {
   interruptTurn(input: $input)
@@ -6373,6 +6422,11 @@ export const ReleaseWaitingDocument = new TypedDocumentString(`
   releaseWaiting(input: $input)
 }
     `) as unknown as TypedDocumentString<ReleaseWaitingMutation, ReleaseWaitingMutationVariables>;
+export const ReleaseWaitingBatchDocument = new TypedDocumentString(`
+    mutation ReleaseWaitingBatch($input: ReleaseWaitingBatchInput!) {
+  releaseWaitingBatch(input: $input)
+}
+    `) as unknown as TypedDocumentString<ReleaseWaitingBatchMutation, ReleaseWaitingBatchMutationVariables>;
 export const CompactThreadDocument = new TypedDocumentString(`
     mutation CompactThread($input: CompactThreadInput!) {
   compactThread(input: $input)

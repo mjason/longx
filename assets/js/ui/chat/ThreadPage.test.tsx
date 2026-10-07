@@ -33,6 +33,7 @@ import {
   listThreads,
   interruptTurn,
   releaseWaiting,
+  releaseWaitingBatch,
   retractTurn,
   steerTurn,
   searchFiles,
@@ -539,6 +540,33 @@ describe("ThreadPage", () => {
     expect(screen.getByTestId("turn-bar")).toHaveTextContent("进行中");
   });
 
+  test("all waiting callbacks insert with one RPC, block double clicks, and survive an RPC failure", async () => {
+    const user = userEvent.setup();
+    await open();
+    act(() => channel.deliver("event", {
+      seq: 4, method: "thread/waiting/updated", params: {
+        waiting: [
+          { id: "w1", text: "first", from: "coder", at: "2026-10-05T00:00:00Z" },
+          { id: "w2", text: "final", from: "coder", at: "2026-10-05T00:00:01Z" },
+        ], paused: false,
+      },
+    }));
+    let finish!: (value: never) => void;
+    vi.mocked(releaseWaitingBatch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const button = await screen.findByRole("button", { name: "全部插入" });
+    await user.click(button);
+    await user.click(button);
+    expect(button).toBeDisabled();
+    expect(releaseWaitingBatch).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ input: { threadId: "t1" } }));
+    expect(releaseWaiting).not.toHaveBeenCalled();
+    await act(async () => finish(failed("offline") as never));
+    expect(await screen.findByRole("button", { name: /待处理消息 · 2 条/ })).toHaveAttribute("aria-expanded", "false");
+    expect(button).not.toBeDisabled();
+    expect(toast.error).toHaveBeenCalled();
+    await user.click(button);
+    expect(releaseWaitingBatch).toHaveBeenCalledTimes(2);
+  });
+
   test("a stop before the model answers takes the message back into the composer, before what was being typed; what arrives from elsewhere waits above the composer with 立即插入", async () => {
     const user = userEvent.setup();
     await open();
@@ -563,6 +591,7 @@ describe("ThreadPage", () => {
     });
 
     // a report while the turn runs: its own row, not the composer
+    await user.click(await screen.findByRole("button", { name: /待处理消息/ }));
     const row = await screen.findByTestId("waiting-message");
     expect(row).toHaveTextContent("coder · 汇报");
     const composer = screen.getByRole("textbox", { name: "随心输入" });

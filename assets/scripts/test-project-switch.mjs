@@ -66,7 +66,7 @@ const bundle = await build({
   bundle: true,
   write: false,
   format: "iife",
-  define: { "process.env.NODE_ENV": '"production"', "import.meta.env.PROD": "false", "import.meta.env.DEV": "false" },
+  define: { "process.env.NODE_ENV": '"production"', "import.meta.env.PROD": "false", "import.meta.env.DEV": "false", "import.meta.env.MODE": '"browser-test"' },
   plugins: [{
     name: "in-memory-api",
     setup(builder) {

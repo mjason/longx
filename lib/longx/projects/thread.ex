@@ -76,6 +76,38 @@ defmodule Longx.Projects.Thread do
       end
     end
 
+    action :send_message_batch, :struct do
+      constraints instance_of: Longx.Projects.Turn
+      argument :thread_id, :uuid, allow_nil?: false
+
+      argument :messages, {:array, Types.UserMessageInput},
+        allow_nil?: false,
+        constraints: [min_length: 1]
+
+      argument :model, :string
+      argument :effort, :string
+
+      run fn input, _ ->
+        opts =
+          input.arguments
+          |> Map.take([:model, :effort])
+          |> Enum.reject(fn {_, v} -> is_nil(v) end)
+
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id) do
+          case Longx.Projects.send_message_batch(thread, input.arguments.messages, opts) do
+            {:error, :turn_in_progress} ->
+              argument_error(:thread_id, "a turn is running")
+
+            {:error, :invalid_messages} ->
+              argument_error(:messages, "each message needs text or an image")
+
+            other ->
+              model_errors(other)
+          end
+        end
+      end
+    end
+
     # /compact: the context is folded (before the next step while a turn runs)
     action :compact_thread do
       argument :thread_id, :uuid, allow_nil?: false
@@ -156,6 +188,15 @@ defmodule Longx.Projects.Thread do
             {:error, reason} -> {:error, reason}
           end
         end
+      end
+    end
+
+    action :release_waiting_batch do
+      argument :thread_id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, thread} <- Ash.get(__MODULE__, input.arguments.thread_id),
+             do: Longx.Projects.release_waiting_batch(thread)
       end
     end
 

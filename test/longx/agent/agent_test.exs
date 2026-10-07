@@ -535,6 +535,428 @@ defmodule Longx.AgentTest do
     assert [%{"type" => "text", "text" => "one"}] = last_agent_text(id) |> Enum.take(1)
   end
 
+  @tag :person_batch
+  test "a person's batch reaches the first request as separate original messages and transcript items",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [ResponsesFixture.assistant_message("all seen")])
+    image = "data:image/png;base64,iVBORw0KGgo="
+
+    messages = [
+      %{text: "", images: [image]},
+      %{text: "  next instruction\n", images: []},
+      %{text: ~s(<attachment name="data.zip" path="/server/data.zip" size="4 B" />)}
+    ]
+
+    assert {:ok, %{turn_id: turn, steered: false}} = Agent.send_batch(id, messages)
+    assert %{"id" => ^turn, "status" => "completed"} = await_turn_end()
+    assert_receive {:request, body}
+    users = Enum.filter(body["input"], &(&1["role"] == "user"))
+    assert length(users) == 3
+
+    assert Enum.map(users, &get_in(&1, ["content", Access.at(0), "text"])) ==
+             Enum.map(messages, & &1.text)
+
+    assert Enum.any?(
+             hd(users)["content"],
+             &(&1["type"] == "input_image" && &1["image_url"] == image)
+           )
+
+    items = Enum.filter(Transcript.items!(id), &(&1.ui && &1.ui["type"] == "userMessage"))
+    assert length(items) == 3
+    assert Enum.all?(items, &(&1.turn_id == turn && !Map.has_key?(&1.ui, "from")))
+    assert length(Enum.uniq(Enum.map(items, & &1.ui["id"]))) == 3
+    refute_receive {:request, _}, 30
+  end
+
+  @tag :person_batch
+  test "invalid person batches are rejected atomically without starting a turn", %{thread_id: id} do
+    for messages <- [
+          [],
+          [%{text: "first"}, %{text: " \n", images: []}],
+          [%{text: "first"}, %{text: nil}],
+          [%{text: "first"}, %{text: "second", images: false}],
+          [%{text: "", images: [nil]}]
+        ] do
+      assert {:error, :invalid_messages} = Agent.send_batch(id, messages)
+      assert :idle = Agent.status(id)
+    end
+
+    assert Transcript.items!(id) == []
+    refute_receive {:thread, _, "turn/started", _}, 30
+  end
+
+  @tag :person_batch
+  test "a busy agent rejects the entire person's batch rather than steering part of it",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [held(ResponsesFixture.assistant_message("work"))])
+    assert {:ok, %{turn_id: turn}} = Agent.send(id, "working")
+    assert_receive {:held, handler}, 5_000
+    on_exit(fn -> send(handler, :go) end)
+
+    assert {:error, :turn_in_progress} =
+             Agent.send_batch(id, [%{text: "one"}, %{text: "two"}])
+
+    assert {:running, ^turn} = Agent.status(id)
+    assert {:running, %{steers: []}} = :sys.get_state(Agent.whereis(id))
+    send(handler, :go)
+    assert %{"id" => ^turn, "status" => "completed"} = await_turn_end()
+    assert_receive {:request, body}
+    assert last_text(body) == "working"
+    refute_receive {:request, _}, 30
+  end
+
+  @tag :person_batch
+  test "an explicit person's batch unpauses immediately and goes before waiting callbacks",
+       %{bypass: bypass, dir: dir} do
+    id =
+      agent!("person-batch-#{System.unique_integer([:positive])}", dir,
+        callback_window_ms: 10_000
+      )
+
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("person seen")),
+      ResponsesFixture.assistant_message("callback seen")
+    ])
+
+    assert {:ok, %{pending: true}} = Agent.send(id, "callback", from: "watch")
+    assert :ok = Agent.interrupt(id, by: :person)
+    assert {:ok, %{turn_id: turn}} = Agent.send_batch(id, [%{text: "one"}, %{text: "two"}])
+    assert_receive {:held, handler}, 5_000
+    assert {:running, %{paused: false, waiting: [_]}} = :sys.get_state(Agent.whereis(id))
+    assert_receive {:request, first}
+    texts = for %{"role" => "user", "content" => [%{"text" => text}]} <- first["input"], do: text
+    assert texts == ["one", "two"]
+    send(handler, :go)
+    assert %{"id" => ^turn} = await_on(id, "turn/completed")["turn"]
+    assert %{"status" => "completed"} = await_on(id, "turn/completed")["turn"]
+    assert_receive {:request, second}
+    assert last_text(second) == "[agent watch] callback"
+  end
+
+  @tag :callback_batch
+  test "idle external messages wait for one fixed callback window and all sources wake in one request",
+       %{bypass: bypass, dir: dir} do
+    id =
+      agent!("callback-batch-#{System.unique_integer([:positive])}", dir,
+        callback_window_ms: 10_000
+      )
+
+    on_exit(fn -> Longx.Jobs.delete(id) end)
+    script!(bypass, [ResponsesFixture.assistant_message("all seen")])
+
+    assert :ok = Agent.send(id, "watch news", deliver: :idle, source: "watch:progress")
+    assert :idle = Agent.status(id)
+
+    assert %{"waiting" => [%{"source" => "watch:progress"}]} =
+             await_on(id, "thread/waiting/updated")
+
+    {:idle, %{callback_timer: {token, timer}}} = :sys.get_state(Agent.whereis(id))
+
+    send(Agent.whereis(id), {:agent_message, "child", "child report", "report"})
+
+    assert {:ok, %{pending: true, steered: false}} =
+             Agent.send(id, "session news", from: "other:main")
+
+    assert %{"waiting" => [_, _]} = await_on(id, "thread/waiting/updated")
+    assert %{"waiting" => [_, _, _]} = await_on(id, "thread/waiting/updated")
+    {:ok, _} = Longx.Jobs.start(id, "callback-job", "exit 0", cwd: dir)
+
+    assert %{"waiting" => [_, _, _, %{"source" => "job:callback-job"}]} =
+             await_on(id, "thread/waiting/updated")
+
+    # Later arrivals must not replace or extend the first arrival's timer.
+    assert {:idle, %{callback_timer: {^token, ^timer}}} = :sys.get_state(Agent.whereis(id))
+    refute_receive {:request, _}, 20
+    send(Agent.whereis(id), {:callback_wake, token})
+    assert %{"status" => "completed"} = await_on(id, "turn/completed")["turn"]
+    assert_receive {:request, body}
+    texts = for %{"role" => "user", "content" => [%{"text" => text}]} <- body["input"], do: text
+
+    assert Enum.take(texts, 3) == [
+             "watch news",
+             "[agent child] child report",
+             "[agent other:main] session news"
+           ]
+
+    assert List.last(texts) =~ "[job callback-job] finished"
+    refute_receive {:request, _}, 30
+  end
+
+  @tag :callback_batch
+  test "the default idle callback window is short and eventually wakes without another message",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [ResponsesFixture.assistant_message("seen")])
+    assert {:ok, %{pending: true}} = Agent.send(id, "callback", from: "watch")
+    assert :idle = Agent.status(id)
+
+    {:idle, %{callback_window_ms: 150, callback_timer: {_token, timer}}} =
+      :sys.get_state(Agent.whereis(id))
+
+    assert is_integer(Process.read_timer(timer))
+    assert %{"status" => "completed"} = await_turn_end()
+    assert_receive {:request, body}
+    assert last_text(body) == "[agent watch] callback"
+  end
+
+  @tag :callback_batch
+  test "the person bypasses a callback window, keeps steer order, and stale wakeups cannot start a turn",
+       %{bypass: bypass, dir: dir} do
+    id =
+      agent!("callback-person-#{System.unique_integer([:positive])}", dir,
+        callback_window_ms: 10_000
+      )
+
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("first")),
+      ResponsesFixture.assistant_message("steer seen"),
+      ResponsesFixture.assistant_message("callback seen")
+    ])
+
+    assert {:ok, %{pending: true}} = Agent.send(id, "callback", from: "watch")
+    {:idle, %{callback_timer: {token, _}}} = :sys.get_state(Agent.whereis(id))
+    assert {:ok, %{turn_id: turn, steered: false}} = Agent.send(id, "person now")
+    assert_receive {:held, handler}, 5_000
+    send(Agent.whereis(id), {:callback_wake, token})
+    assert {:running, ^turn} = Agent.status(id)
+    assert {:ok, %{turn_id: ^turn, steered: true}} = Agent.send(id, "person steer")
+    send(handler, :go)
+    assert %{"id" => ^turn} = await_on(id, "turn/completed")["turn"]
+    assert %{"status" => "completed"} = await_on(id, "turn/completed")["turn"]
+    assert_receive {:request, first}
+    assert_receive {:request, second}
+    assert_receive {:request, third}
+    assert last_text(first) == "person now"
+    assert last_text(second) == "person steer"
+    assert last_text(third) == "[agent watch] callback"
+  end
+
+  @tag :callback_batch
+  test "a person's stop during the idle callback window pauses it and ignores its stale timer",
+       %{dir: dir} do
+    id =
+      agent!("callback-stop-#{System.unique_integer([:positive])}", dir,
+        callback_window_ms: 10_000
+      )
+
+    assert {:ok, %{pending: true}} = Agent.send(id, "callback", from: "watch")
+    {:idle, %{callback_timer: {token, _}}} = :sys.get_state(Agent.whereis(id))
+    assert :ok = Agent.interrupt(id, by: :person)
+    send(Agent.whereis(id), {:callback_wake, token})
+    assert {:ok, %{pending: true}} = Agent.send(id, "more", from: "other")
+
+    assert {:idle, %{paused: true, callback_timer: nil, waiting: [_, _]}} =
+             :sys.get_state(Agent.whereis(id))
+
+    refute_receive {:request, _}, 30
+    refute_receive {:thread, _, "turn/started", _}, 30
+  end
+
+  @tag :callback_batch
+  test "one release bypasses the idle callback window without losing the rest",
+       %{bypass: bypass, dir: dir} do
+    id =
+      agent!("callback-release-#{System.unique_integer([:positive])}", dir,
+        callback_window_ms: 10_000
+      )
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("one"),
+      ResponsesFixture.assistant_message("two")
+    ])
+
+    assert {:ok, %{pending: true}} = Agent.send(id, "first", from: "watch")
+    assert {:ok, %{pending: true}} = Agent.send(id, "second", from: "watch")
+
+    {:idle, %{waiting: [_, %{id: wid}], callback_timer: {token, _}}} =
+      :sys.get_state(Agent.whereis(id))
+
+    assert :ok = Agent.release(id, wid)
+    send(Agent.whereis(id), {:callback_wake, token})
+    assert %{"status" => "completed"} = await_on(id, "turn/completed")["turn"]
+    assert %{"status" => "completed"} = await_on(id, "turn/completed")["turn"]
+    assert_receive {:request, first}
+    assert_receive {:request, second}
+    assert last_text(first) == "[agent watch] second"
+    assert last_text(second) == "[agent watch] first"
+    refute_receive {:request, _}, 30
+  end
+
+  @tag :callback_batch
+  test "batch release on a paused idle agent makes one turn and is idempotent when empty",
+       %{bypass: bypass, dir: dir} do
+    id =
+      agent!("callback-release-all-#{System.unique_integer([:positive])}", dir,
+        callback_window_ms: 10_000
+      )
+
+    script!(bypass, [ResponsesFixture.assistant_message("both seen")])
+    assert {:ok, %{pending: true}} = Agent.send(id, "one", from: "watch")
+    assert {:ok, %{pending: true}} = Agent.send(id, "two", from: "child")
+    assert :ok = Agent.interrupt(id, by: :person)
+    assert :ok = Agent.release_batch(id)
+    assert %{"status" => "completed"} = await_on(id, "turn/completed")["turn"]
+    assert_receive {:request, body}
+    texts = for %{"role" => "user", "content" => [%{"text" => text}]} <- body["input"], do: text
+    assert texts == ["[agent watch] one", "[agent child] two"]
+    assert :ok = Agent.release_batch(id)
+    refute_receive {:request, _}, 30
+  end
+
+  @tag :callback_batch
+  test "running batch release folds ordinary messages in order but replies to each question in its own turn",
+       %{bypass: bypass, dir: dir, thread_id: id} do
+    asker1 = agent!("asker-one-#{System.unique_integer([:positive])}", dir, [])
+    asker2 = agent!("asker-two-#{System.unique_integer([:positive])}", dir, [])
+
+    for asker <- [asker1, asker2] do
+      :sys.replace_state(Agent.whereis(asker), fn {phase, state} ->
+        {phase, %{state | paused: true}}
+      end)
+    end
+
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("work")),
+      held(ResponsesFixture.assistant_message("ordinary reports")),
+      held(ResponsesFixture.assistant_message("answer one")),
+      held(ResponsesFixture.assistant_message("answer two"))
+    ])
+
+    assert {:ok, %{turn_id: turn}} = Agent.send(id, "person")
+    assert_receive {:held, first_handler}, 5_000
+    assert {:ok, %{steered: true}} = Agent.send(id, "before")
+    assert {:ok, %{pending: true}} = Agent.send(id, "report one", from: "child")
+
+    assert {:ok, %{pending: true}} =
+             Agent.send(id, "question one", from: "one", reply_to: asker1, reply_as: "worker")
+
+    assert {:ok, %{pending: true}} = Agent.send(id, "report two", source: "watch:progress")
+
+    assert {:ok, %{pending: true}} =
+             Agent.send(id, "question two", from: "two", reply_to: asker2, reply_as: "worker")
+
+    assert :ok = Agent.release_batch(id)
+    assert {:ok, %{steered: true}} = Agent.send(id, "after")
+    assert {:running, ^turn} = Agent.status(id)
+    assert {:running, %{reply_to: nil, waiting: [_, _]}} = :sys.get_state(Agent.whereis(id))
+    send(first_handler, :go)
+    assert_receive {:held, reports_handler}, 5_000
+    assert_receive {:request, _first}
+    assert_receive {:request, reports}
+
+    texts =
+      for %{"role" => "user", "content" => [%{"text" => text}]} <- reports["input"], do: text
+
+    assert texts == ["person", "before", "[agent child] report one", "report two", "after"]
+    send(reports_handler, :go)
+    assert_receive {:held, q1_handler}, 5_000
+    assert {:running, %{reply_to: ^asker1}} = :sys.get_state(Agent.whereis(id))
+    assert_receive {:request, q1}
+    assert last_text(q1) == "[agent one] question one"
+    send(q1_handler, :go)
+    assert_receive {:held, q2_handler}, 5_000
+    assert {:running, %{reply_to: ^asker2}} = :sys.get_state(Agent.whereis(id))
+    assert_receive {:request, q2}
+    assert last_text(q2) == "[agent two] question two"
+
+    assert %{"waiting" => [%{"text" => "answer one", "kind" => "answer"}]} =
+             await_on(asker1, "thread/waiting/updated")
+
+    send(q2_handler, :go)
+
+    assert %{"waiting" => [%{"text" => "answer two", "kind" => "answer"}]} =
+             await_on(asker2, "thread/waiting/updated")
+  end
+
+  @tag :callback_batch
+  test "idle callback questions remain separate from the coalesced ordinary reports",
+       %{bypass: bypass, dir: dir} do
+    id =
+      agent!("idle-questions-#{System.unique_integer([:positive])}", dir,
+        callback_window_ms: 10_000
+      )
+
+    asker1 = agent!("idle-asker-one-#{System.unique_integer([:positive])}", dir, [])
+    asker2 = agent!("idle-asker-two-#{System.unique_integer([:positive])}", dir, [])
+
+    for asker <- [asker1, asker2] do
+      :sys.replace_state(Agent.whereis(asker), fn {phase, state} ->
+        {phase, %{state | paused: true}}
+      end)
+    end
+
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("answer one")),
+      held(ResponsesFixture.assistant_message("reports seen")),
+      held(ResponsesFixture.assistant_message("answer two"))
+    ])
+
+    assert {:ok, %{pending: true}} =
+             Agent.send(id, "question one", from: "one", reply_to: asker1, reply_as: "worker")
+
+    assert {:ok, %{pending: true}} = Agent.send(id, "report one", from: "child")
+
+    assert {:ok, %{pending: true}} =
+             Agent.send(id, "question two", from: "two", reply_to: asker2, reply_as: "worker")
+
+    assert {:ok, %{pending: true}} = Agent.send(id, "report two", source: "watch:progress")
+    {:idle, %{callback_timer: {token, _}}} = :sys.get_state(Agent.whereis(id))
+    send(Agent.whereis(id), {:callback_wake, token})
+
+    assert_receive {:held, q1_handler}, 5_000
+    assert {:running, %{reply_to: ^asker1}} = :sys.get_state(Agent.whereis(id))
+    assert_receive {:request, q1}
+    assert last_text(q1) == "[agent one] question one"
+    send(q1_handler, :go)
+    assert_receive {:held, reports_handler}, 5_000
+    assert {:running, %{reply_to: nil}} = :sys.get_state(Agent.whereis(id))
+    assert_receive {:request, reports}
+
+    texts =
+      for %{"role" => "user", "content" => [%{"text" => text}]} <- reports["input"], do: text
+
+    assert Enum.take(texts, -2) == ["[agent child] report one", "report two"]
+
+    assert %{"waiting" => [%{"text" => "answer one", "kind" => "answer"}]} =
+             await_on(asker1, "thread/waiting/updated")
+
+    send(reports_handler, :go)
+    assert_receive {:held, q2_handler}, 5_000
+    assert {:running, %{reply_to: ^asker2}} = :sys.get_state(Agent.whereis(id))
+    assert_receive {:request, q2}
+    assert last_text(q2) == "[agent two] question two"
+    send(q2_handler, :go)
+
+    assert %{"waiting" => [%{"text" => "answer two", "kind" => "answer"}]} =
+             await_on(asker2, "thread/waiting/updated")
+
+    refute_receive {:request, _}, 30
+  end
+
+  @tag :callback_batch
+  test "a single running release cannot steer a reply_to question into the current turn",
+       %{bypass: bypass, thread_id: id} do
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("work")),
+      held(ResponsesFixture.assistant_message("answer"))
+    ])
+
+    assert {:ok, %{turn_id: turn}} = Agent.send(id, "person")
+    assert_receive {:held, handler}, 5_000
+    assert {:ok, %{pending: true}} = Agent.send(id, "question", from: "one", reply_to: "asker")
+    assert %{"waiting" => [%{"id" => wid}]} = await_on(id, "thread/waiting/updated")
+    assert :ok = Agent.release(id, wid)
+
+    assert {:running, %{reply_to: nil, steers: [], waiting: [_]}} =
+             :sys.get_state(Agent.whereis(id))
+
+    send(handler, :go)
+    assert %{"id" => ^turn} = await_on(id, "turn/completed")["turn"]
+    assert_receive {:held, q_handler}, 5_000
+    assert {:running, %{reply_to: "asker"}} = :sys.get_state(Agent.whereis(id))
+    send(q_handler, :go)
+    assert %{"status" => "completed"} = await_on(id, "turn/completed")["turn"]
+  end
+
   test "a message to be delivered when idle waits in the mailbox while a turn runs and starts a turn of its own after it",
        %{bypass: bypass, thread_id: id} do
     script!(bypass, [

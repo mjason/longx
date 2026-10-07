@@ -6,6 +6,30 @@ import { WaitingMessagesView } from "./WaitingMessages";
 const at = "2026-09-25T01:00:00Z";
 
 describe("what arrives from elsewhere while a turn runs", () => {
+  test("callbacks start folded, group by sender, and new arrivals do not expand them", () => {
+    const onRelease = vi.fn();
+    const onReleaseAll = vi.fn();
+    const waiting = { items: [
+      { id: "w1", text: "first report\nfull details", from: "coder", at },
+      { id: "w2", text: "second report", from: "coder", at },
+      { id: "w3", text: "review", from: "reviewer", at },
+    ], paused: false };
+    const { rerender } = render(<WaitingMessagesView waiting={waiting} onRelease={onRelease} onReleaseAll={onReleaseAll} />);
+    expect(screen.queryByTestId("waiting-message")).toBeNull();
+    const toggle = screen.getByRole("button", { name: /待处理消息 · 3 条/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(screen.getByRole("button", { name: "全部插入" }));
+    expect(onReleaseAll).toHaveBeenCalledTimes(1);
+    expect(onRelease).not.toHaveBeenCalled();
+    fireEvent.click(toggle);
+    expect(screen.getAllByTestId("waiting-group")).toHaveLength(2);
+    expect(screen.getAllByTestId("waiting-message")).toHaveLength(3);
+    fireEvent.click(toggle);
+    rerender(<WaitingMessagesView waiting={{ ...waiting, items: [...waiting.items, { id: "w4", text: "final", from: "coder", at }] }} onRelease={onRelease} onReleaseAll={onReleaseAll} />);
+    expect(screen.getByRole("button", { name: /待处理消息 · 4 条/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("waiting-message")).toBeNull();
+  });
+
   test("it is listed above the composer, never put in it: who sent it, what it is, and 立即插入", () => {
     const onRelease = vi.fn();
     render(
@@ -23,6 +47,7 @@ describe("what arrives from elsewhere while a turn runs", () => {
         onRelease={onRelease}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: /待处理消息/ }));
     expect(screen.getByTestId("waiting-messages")).toHaveTextContent("本轮结束后处理");
     const rows = screen.getAllByTestId("waiting-message");
     expect(rows).toHaveLength(4);
@@ -33,7 +58,8 @@ describe("what arrives from elsewhere while a turn runs", () => {
     expect(rows[0]).toHaveTextContent("tests pass");
     expect(rows[1]).toHaveTextContent("后台任务 quick");
     expect(rows[1]).toHaveTextContent("[job quick] finished with exit code 2 after 3 s.");
-    expect(rows[1]).not.toHaveTextContent("Command:");
+    expect(rows[1]!.querySelector("summary")).not.toHaveTextContent("Command:");
+    expect(rows[1]!.querySelector("details")).not.toHaveAttribute("open");
     expect(rows[2]).toHaveTextContent("提问");
     fireEvent.click(rows[0]!.querySelector("button")!);
     expect(onRelease).toHaveBeenCalledWith("w1");

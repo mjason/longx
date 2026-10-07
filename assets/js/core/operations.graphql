@@ -252,6 +252,8 @@ mutation StartThread($input: StartThreadInput!) { startThread(input: $input) { i
 
 mutation SendMessage($input: SendMessageInput!) { sendMessage(input: $input) { id kernelTurnId userText modelSlug reasoningEffort status startedAt completedAt error usage insertedAt updatedAt threadId } }
 
+mutation SendMessageBatch($input: SendMessageBatchInput!) { sendMessageBatch(input: $input) { id kernelTurnId userText modelSlug reasoningEffort status startedAt completedAt error usage insertedAt updatedAt threadId } }
+
 mutation InterruptTurn($input: InterruptTurnInput!) { interruptTurn(input: $input)  }
 
 mutation SteerTurn($input: SteerTurnInput!) { steerTurn(input: $input) { kernelTurnId } }
@@ -259,6 +261,8 @@ mutation SteerTurn($input: SteerTurnInput!) { steerTurn(input: $input) { kernelT
 mutation RetractTurn($input: RetractTurnInput!) { retractTurn(input: $input) { text } }
 
 mutation ReleaseWaiting($input: ReleaseWaitingInput!) { releaseWaiting(input: $input)  }
+
+mutation ReleaseWaitingBatch($input: ReleaseWaitingBatchInput!) { releaseWaitingBatch(input: $input)  }
 
 mutation CompactThread($input: CompactThreadInput!) { compactThread(input: $input)  }
 

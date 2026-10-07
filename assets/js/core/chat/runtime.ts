@@ -11,15 +11,17 @@ import {
 } from "@assistant-ui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { archiveThread, deleteThread, getThread, releaseWaiting as releaseWaitingRpc, renameThread, retractTurn, sendMessage, steerTurn } from "@/core/api";
+import { archiveThread, deleteThread, getThread, releaseWaiting as releaseWaitingRpc, releaseWaitingBatch as releaseWaitingBatchRpc, renameThread, retractTurn, sendMessage } from "@/core/api";
 import { queryKeys, unwrap, unwrapOne, useAgentDefinition, useRunningThreads, useStartThread, useThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
   SimpleTextAttachmentAdapter,
   WebSpeechDictationAdapter,
-  createMessageQueue,
 } from "@assistant-ui/react";
+// Keep the controller API while retaining full messages for manual insertion.
+import { createQueuedMessages as createMessageQueue } from "./queuedMessages";
+import { insertQueuedMessage } from "./insertQueued";
 import {
   buildAdapter,
   type ThreadTarget,
@@ -29,6 +31,7 @@ import { forThread, settled, type PendingApi, type PendingSend } from "./pending
 import { runningTurnId, type ThreadView } from "./thread";
 import { csrfToken } from "@/core/gql";
 import { reportingAdapter } from "./attachments";
+import { trackAttachmentActivity } from "./attachmentActivity";
 import { FileUploadAttachmentAdapter } from "./fileAttachments";
 import { TextAttachmentAdapter } from "./textAttachments";
 import { buildThreadListAdapter, type ThreadRow } from "./threadList";
@@ -49,6 +52,8 @@ export type LongxRuntimeOptions = {
   onSignal?: (method: string, params: Record<string, unknown>) => void;
   /** a file the composer could not add or send, in words (assistant-ui only bounces the message) */
   onAttachmentError?: (message: string) => void;
+  /** Pending local work: files before a chip exists, or batch loading/sending. */
+  onAttachmentActivity?: (count: number) => void;
 };
 
 /** idle, a turn running, or a tool waiting on the person (an ask) */
@@ -123,6 +128,8 @@ export type LongxRuntime = {
   insertQueued: (queueItemId: string) => Promise<void>;
   /** a message from elsewhere that waits for the turn to end, in now (立即插入) */
   releaseWaiting: (waitingId: string) => Promise<void>;
+  /** Release the waiting snapshot in one operation, keeping routed questions separate. */
+  releaseWaitingBatch: () => Promise<void>;
   /** words as the person's message (the stopped turn's 继续) */
   sendText: (text: string) => Promise<void>;
   /** the stopped last turn taken out of the thread (丢弃) — never into the composer */
@@ -152,6 +159,13 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
   } = opts;
   const attachmentErrorRef = useRef(onAttachmentError);
   attachmentErrorRef.current = onAttachmentError;
+  const attachmentActivityRef = useRef(opts.onAttachmentActivity);
+  attachmentActivityRef.current = opts.onAttachmentActivity;
+  const localWork = useRef({ attachments: 0, batches: 0 });
+  const reportWork = useCallback((kind: "attachments" | "batches", count: number) => {
+    localWork.current[kind] = count;
+    attachmentActivityRef.current?.(localWork.current.attachments + localWork.current.batches);
+  }, []);
   const client = useQueryClient();
   const threads = useThreads(projectId);
   const rows = useMemo(
@@ -287,7 +301,11 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
   // turn ends; `insertQueued` is its "insert now" (a steer). The queue runs
   // the latest adapter through a ref.
   const onNewRef = useRef<(message: AppendMessage) => Promise<void>>(async () => {});
-  const [queue] = useState(() => createMessageQueue({ run: (message) => void onNewRef.current(message) }));
+  const onBatchRef = useRef<(messages: AppendMessage[]) => Promise<void>>(async () => {});
+  const [queue] = useState(() => createMessageQueue({
+    run: (message) => void onNewRef.current(message),
+    runBatch: (messages) => onBatchRef.current(messages),
+  }));
   // the store reads the queue's lanes when this component renders: a change
   // in the queue (a message added, taken back, dispatched) must render it
   // (the runtime only re-applies a *new* adapter object, so the version is a dependency of the memo below)
@@ -307,34 +325,12 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
   }, [running, queue]);
   const insertQueued = useCallback(
     async (queueItemId: string) => {
-      // a send while running lands in the steer lane, a later move in the other
-      const item = [...queue.adapter.steerItems, ...queue.adapter.items].find((i) => i.id === queueItemId);
-      if (!item || !thread) return;
-      const text = item.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
-      const echo = pendingApi.add({ threadId: thread.id, kernelThreadId: thread.kernelThreadId, text, images: [], kind: "steer", after: viewRef.current.items.length });
-      try {
-        const steered = await steerTurn({ input: { threadId: thread.id, text } });
-        if (steered.success) {
-          queue.adapter.remove(queueItemId);
-          void invalidate();
-        } else if (steered.errors.some((e) => e.message === "not_running")) {
-          // the turn is over (a stop pauses assistant-ui's queue, so nothing would go out
-          // by itself): the message goes out as a new turn now, off the queue
-          queue.adapter.remove(queueItemId);
-          pendingApi.update(echo, { kind: "message" });
-          unwrap(
-            await sendMessage({
-              input: { threadId: thread.id, text, ...(model ? { model } : {}), ...(effort ? { effort } : {}) },
-            }),
-          );
-          void invalidate();
-        } else {
-          unwrap(steered);
-        }
-      } catch (e) {
-        pendingApi.update(echo, { error: e instanceof Error ? e.message : String(e) });
-        throw e;
-      }
+      if (!thread) return;
+      await insertQueuedMessage(queue, queueItemId, {
+        target: { threadId: thread.id, kernelThreadId: thread.kernelThreadId },
+        after: viewRef.current.items.length,
+        model, effort, pending: pendingApi, invalidate,
+      });
     },
     [queue, thread, invalidate, model, effort, pendingApi],
   );
@@ -348,6 +344,10 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     },
     [thread],
   );
+  const releaseWaitingBatch = useCallback(async () => {
+    if (!thread) return;
+    unwrap(await releaseWaitingBatchRpc({ input: { threadId: thread.id } }));
+  }, [thread]);
   const sendText = useCallback(
     async (text: string) => {
       if (!thread) return;
@@ -380,7 +380,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
   // built once, like everything the adapter is made of
   const [attachments] = useState(() => {
     const upload = new FileUploadAttachmentAdapter({ projectId, csrf: csrfToken });
-    return reportingAdapter(
+    return trackAttachmentActivity(reportingAdapter(
       new CompositeAttachmentAdapter([
         new SimpleImageAttachmentAdapter(),
         // a text file is inlined up to INLINE_TEXT_LIMIT, uploaded past it
@@ -388,7 +388,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
         upload,
       ]),
       (message) => attachmentErrorRef.current?.(message),
-    );
+    ), count => reportWork("attachments", count));
   });
   const [dictation] = useState(() =>
     DICTATION && WebSpeechDictationAdapter.isSupported()
@@ -479,6 +479,19 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     ],
   );
   onNewRef.current = adapter.onNew;
+  onBatchRef.current = async (messages) => {
+    reportWork("batches", localWork.current.batches + 1);
+    try {
+      const { sendQueuedBatch } = await import("./sendQueuedBatch");
+      const destination = target ?? await targetFor();
+      await sendQueuedBatch(messages, {
+        target: destination, model, effort, pending: pendingApi, after: viewRef.current.items.length,
+      });
+      onSent(destination);
+    } finally {
+      reportWork("batches", localWork.current.batches - 1);
+    }
+  };
   const runtime = useExternalStoreRuntime(adapter);
   runtimeRef.current = runtime;
 
@@ -518,6 +531,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     setEffort,
     insertQueued,
     releaseWaiting,
+    releaseWaitingBatch,
     sendText,
     discardTurn,
   };

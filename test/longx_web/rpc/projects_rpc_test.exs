@@ -288,6 +288,276 @@ defmodule LongxWeb.ProjectsRpcTest do
   end
 
   describe "threads and turns" do
+    @tag :person_batch
+    test "send_message_batch keeps every original item and image in one request and one person's Turn",
+         %{conn: conn, dir: dir, bypass: bypass, model: model} do
+      script!(bypass, [ResponsesFixture.assistant_message("all seen")])
+      project = create!(conn, dir)
+      {thread_id, kernel_id} = start!(conn, project)
+      :ok = ThreadState.subscribe(kernel_id)
+      image = "data:image/png;base64,iVBORw0KGgo="
+
+      messages = [
+        %{"text" => "first"},
+        %{"text" => "  second\n", "images" => [image]},
+        %{"text" => "", "images" => [image]}
+      ]
+
+      assert %{"success" => true, "data" => %{"kernelTurnId" => turn, "userText" => "first"}} =
+               rpc(conn, "send_message_batch", %{
+                 "fields" => ["id", "kernelTurnId", "userText", "modelSlug", "reasoningEffort"],
+                 "input" => %{
+                   "threadId" => thread_id,
+                   "messages" => messages,
+                   "model" => model.slug,
+                   "effort" => "low"
+                 }
+               })
+
+      assert_receive {:thread, _, "turn/completed", %{"turn" => %{"id" => ^turn}}}, 5_000
+      assert_receive {:request, body}
+      users = Enum.filter(body["input"], &(&1["role"] == "user"))
+      assert length(users) == 3
+
+      assert Enum.map(users, &get_in(&1, ["content", Access.at(0), "text"])) ==
+               Enum.map(messages, & &1["text"])
+
+      assert body["reasoning"]["effort"] == "low"
+
+      assert Enum.all?(Enum.drop(users, 1), fn item ->
+               Enum.any?(
+                 item["content"],
+                 &(&1["type"] == "input_image" && &1["image_url"] == image)
+               )
+             end)
+
+      assert %{"success" => true, "data" => [%{"kernelTurnId" => ^turn, "userText" => "first"}]} =
+               rpc(conn, "list_turns", %{
+                 "fields" => ["kernelTurnId", "userText"],
+                 "input" => %{"threadId" => thread_id}
+               })
+
+      items =
+        Enum.filter(
+          Longx.Agent.Transcript.items!(kernel_id),
+          &(&1.ui && &1.ui["type"] == "userMessage")
+        )
+
+      assert length(items) == 3
+      assert Enum.all?(items, &(&1.turn_id == turn && !Map.has_key?(&1.ui, "from")))
+      refute_receive {:request, _}, 30
+    end
+
+    @tag :person_batch
+    test "send_message_batch validates every entry before creating any Turn",
+         %{conn: conn, dir: dir} do
+      project = create!(conn, dir)
+      {thread_id, _kernel_id} = start!(conn, project)
+
+      for messages <- [
+            [],
+            [%{"text" => "valid"}, %{"text" => "  \n"}],
+            [%{"text" => "valid"}, %{"images" => []}]
+          ] do
+        assert %{"success" => false} =
+                 rpc(conn, "send_message_batch", %{
+                   "fields" => ["id"],
+                   "input" => %{"threadId" => thread_id, "messages" => messages}
+                 })
+
+        assert %{"success" => true, "data" => []} =
+                 rpc(conn, "list_turns", %{
+                   "fields" => ["id"],
+                   "input" => %{"threadId" => thread_id}
+                 })
+      end
+    end
+
+    @tag :person_batch
+    test "send_message_batch rejects a busy thread with no additional Turn or partial steer",
+         %{conn: conn, dir: dir, bypass: bypass} do
+      script!(bypass, [held(ResponsesFixture.assistant_message("work"))])
+      project = create!(conn, dir)
+      {thread_id, kernel_id} = start!(conn, project)
+      :ok = ThreadState.subscribe(kernel_id)
+
+      assert %{"success" => true} =
+               rpc(conn, "send_message", %{
+                 "fields" => ["kernelTurnId"],
+                 "input" => %{"threadId" => thread_id, "text" => "working"}
+               })
+
+      assert_receive {:held, handler}, 5_000
+      on_exit(fn -> send(handler, :go) end)
+
+      assert %{
+               "success" => false,
+               "errors" => [%{"fields" => ["threadId"], "message" => "a turn is running"}]
+             } =
+               rpc(conn, "send_message_batch", %{
+                 "fields" => ["id"],
+                 "input" => %{
+                   "threadId" => thread_id,
+                   "messages" => [%{"text" => "one"}, %{"text" => "two"}]
+                 }
+               })
+
+      assert %{"success" => true, "data" => [_]} =
+               rpc(conn, "list_turns", %{
+                 "fields" => ["id"],
+                 "input" => %{"threadId" => thread_id}
+               })
+
+      assert {:running, %{steers: []}} = :sys.get_state(Longx.Agent.whereis(kernel_id))
+      send(handler, :go)
+      assert_receive {:thread, _, "turn/completed", _}, 5_000
+    end
+
+    @tag :person_batch
+    test "send_message_batch cleans its provisional row when the live kernel became busy despite an idle row",
+         %{conn: conn, dir: dir, bypass: bypass} do
+      script!(bypass, [held(ResponsesFixture.assistant_message("work"))])
+      project = create!(conn, dir)
+      {thread_id, kernel_id} = start!(conn, project)
+      :ok = ThreadState.subscribe(kernel_id)
+
+      assert %{"success" => true} =
+               rpc(conn, "send_message", %{
+                 "fields" => ["kernelTurnId"],
+                 "input" => %{"threadId" => thread_id, "text" => "working"}
+               })
+
+      assert_receive {:held, handler}, 5_000
+      on_exit(fn -> send(handler, :go) end)
+      # The row can lag a live callback or another page's send. Force that
+      # deterministic mismatch; the kernel must still reject before steering.
+      # Flush the writer, then the Tracker, so a late turn/started cannot
+      # overwrite our forced idle row and hide the kernel rejection path.
+      :sys.get_state(ThreadState.whereis(kernel_id))
+      assert kernel_id in Projects.Tracker.in_flight()
+      thread = Ash.get!(Projects.Thread, thread_id)
+      Projects.touch_thread!(thread, %{status: :idle})
+      assert Ash.get!(Projects.Thread, thread_id).status == :idle
+
+      assert %{
+               "success" => false,
+               "errors" => [%{"fields" => ["threadId"], "message" => "a turn is running"}]
+             } =
+               rpc(conn, "send_message_batch", %{
+                 "fields" => ["id"],
+                 "input" => %{
+                   "threadId" => thread_id,
+                   "messages" => [%{"text" => "one"}, %{"text" => "two"}]
+                 }
+               })
+
+      assert %{"success" => true, "data" => [_]} =
+               rpc(conn, "list_turns", %{
+                 "fields" => ["id"],
+                 "input" => %{"threadId" => thread_id}
+               })
+
+      assert {:running, %{steers: []}} = :sys.get_state(Longx.Agent.whereis(kernel_id))
+      send(handler, :go)
+      assert_receive {:thread, _, "turn/completed", _}, 5_000
+    end
+
+    @tag :person_batch
+    test "GraphQL wire accepts a typed messages array with original text and image inputs",
+         %{conn: conn, dir: dir, bypass: bypass} do
+      script!(bypass, [ResponsesFixture.assistant_message("all seen")])
+      project = create!(conn, dir)
+      {thread_id, kernel_id} = start!(conn, project)
+      :ok = ThreadState.subscribe(kernel_id)
+      image = "data:image/png;base64,iVBORw0KGgo="
+
+      messages = [
+        %{"text" => "  first\n", "images" => []},
+        %{"text" => "", "images" => [image]}
+      ]
+
+      query = """
+      mutation Batch($input: SendMessageBatchInput!) {
+        sendMessageBatch(input: $input) { id kernelTurnId userText }
+      }
+      """
+
+      result =
+        conn
+        |> post("/gql", %{
+          "query" => query,
+          "variables" => %{"input" => %{"threadId" => thread_id, "messages" => messages}}
+        })
+        |> json_response(200)
+
+      refute Map.has_key?(result, "errors")
+      assert %{"data" => %{"sendMessageBatch" => %{"kernelTurnId" => turn}}} = result
+      assert_receive {:thread, _, "turn/completed", %{"turn" => %{"id" => ^turn}}}, 5_000
+      assert_receive {:request, body}
+      users = Enum.filter(body["input"], &(&1["role"] == "user"))
+
+      assert Enum.map(users, &get_in(&1, ["content", Access.at(0), "text"])) ==
+               Enum.map(messages, & &1["text"])
+
+      assert Enum.any?(List.last(users)["content"], &(&1["image_url"] == image))
+      assert {:ok, [_]} = Projects.list_turns_for_thread(thread_id)
+    end
+
+    @tag :person_batch
+    test "GraphQL batch input is an object list, and invalid batches leave no Turn",
+         %{conn: conn, dir: dir} do
+      project = create!(conn, dir)
+      {thread_id, _kernel_id} = start!(conn, project)
+
+      introspection = """
+      { __type(name: "SendMessageBatchInput") {
+        inputFields { name type { kind name ofType { kind name ofType {
+          kind name ofType { kind name }
+        } } } }
+      } }
+      """
+
+      %{"data" => %{"__type" => %{"inputFields" => fields}}} =
+        conn |> post("/gql", %{"query" => introspection}) |> json_response(200)
+
+      assert %{
+               "type" => %{
+                 "kind" => "NON_NULL",
+                 "ofType" => %{
+                   "kind" => "LIST",
+                   "ofType" => %{
+                     "kind" => "NON_NULL",
+                     "ofType" => %{"kind" => "INPUT_OBJECT", "name" => "UserMessageInput"}
+                   }
+                 }
+               }
+             } = Enum.find(fields, &(&1["name"] == "messages"))
+
+      query = """
+      mutation Batch($input: SendMessageBatchInput!) {
+        sendMessageBatch(input: $input) { id }
+      }
+      """
+
+      for messages <- [
+            [],
+            [%{"text" => "valid"}, %{"text" => " \n", "images" => []}],
+            [%{"text" => "valid"}, %{"images" => []}],
+            [%{"text" => "valid"}, %{"text" => "", "images" => [nil]}]
+          ] do
+        result =
+          conn
+          |> post("/gql", %{
+            "query" => query,
+            "variables" => %{"input" => %{"threadId" => thread_id, "messages" => messages}}
+          })
+          |> json_response(200)
+
+        assert [_ | _] = result["errors"]
+        assert {:ok, []} = Projects.list_turns_for_thread(thread_id)
+      end
+    end
+
     test "send_message accepts an image without typed text but rejects a completely empty message",
          %{conn: conn, dir: dir, bypass: bypass} do
       script!(bypass, [ResponsesFixture.assistant_message("looked")])
@@ -626,6 +896,115 @@ defmodule LongxWeb.ProjectsRpcTest do
                })
 
       send(handler, :go)
+    end
+
+    @tag :callback_batch
+    test "release_waiting_batch is one atomic RPC that inserts all waiting reports in order",
+         %{conn: conn, dir: dir, bypass: bypass} do
+      script!(bypass, [
+        held(ResponsesFixture.assistant_message("one")),
+        ResponsesFixture.assistant_message("all seen")
+      ])
+
+      project = create!(conn, dir)
+      {thread_id, kernel_id} = start!(conn, project)
+
+      %{"success" => true} =
+        rpc(conn, "send_message", %{
+          "fields" => ["kernelTurnId"],
+          "input" => %{"threadId" => thread_id, "text" => "work"}
+        })
+
+      assert_receive {:held, handler}, 5_000
+      on_exit(fn -> send(handler, :go) end)
+      :ok = ThreadState.subscribe(kernel_id)
+      assert {:ok, %{pending: true}} = Longx.Agent.send(kernel_id, "first", from: "one")
+      assert {:ok, %{pending: true}} = Longx.Agent.send(kernel_id, "second", from: "two")
+      assert_receive {:thread, _, "thread/waiting/updated", %{"waiting" => [_, _]}}, 5_000
+
+      assert %{"success" => true, "data" => true} =
+               rpc(conn, "release_waiting_batch", %{"input" => %{"threadId" => thread_id}})
+
+      assert_receive {:thread, _, "thread/waiting/updated", %{"waiting" => []}}, 5_000
+      # Another page releasing the now-empty list is a no-op, not a stale-id error.
+      assert %{"success" => true, "data" => true} =
+               rpc(conn, "release_waiting_batch", %{"input" => %{"threadId" => thread_id}})
+
+      send(handler, :go)
+      assert_receive {:request, _first}, 5_000
+      assert_receive {:request, second}, 5_000
+
+      texts =
+        for %{"role" => "user", "content" => [%{"text" => text}]} <- second["input"], do: text
+
+      assert texts == ["work", "[agent one] first", "[agent two] second"]
+
+      assert_receive {:thread, _, "turn/completed", %{"turn" => %{"status" => "completed"}}},
+                     5_000
+    end
+
+    @tag :callback_batch
+    test "release_waiting_batch unpauses an idle thread and makes only one turn for all reports",
+         %{conn: conn, dir: dir, bypass: bypass} do
+      script!(bypass, [
+        held(ResponsesFixture.assistant_message("work")),
+        ResponsesFixture.assistant_message("both seen")
+      ])
+
+      project = create!(conn, dir)
+      {thread_id, kernel_id} = start!(conn, project)
+      :ok = ThreadState.subscribe(kernel_id)
+
+      %{"success" => true, "data" => %{"kernelTurnId" => turn_id}} =
+        rpc(conn, "send_message", %{
+          "fields" => ["kernelTurnId"],
+          "input" => %{"threadId" => thread_id, "text" => "work"}
+        })
+
+      assert_receive {:held, _handler}, 5_000
+      # The interrupted request cannot finish its held SSE stream. As in the
+      # stop/retract wire tests, release Bypass's expectation for that request;
+      # the next actual request and its payload remain asserted below.
+      Bypass.pass(bypass)
+      assert {:ok, %{pending: true}} = Longx.Agent.send(kernel_id, "one", from: "watch")
+      assert {:ok, %{pending: true}} = Longx.Agent.send(kernel_id, "two", from: "child")
+
+      assert %{"success" => true} =
+               rpc(conn, "interrupt_turn", %{
+                 "input" => %{"threadId" => thread_id, "kernelTurnId" => turn_id}
+               })
+
+      assert_receive {:thread, _, "thread/waiting/updated", %{"paused" => true}}, 5_000
+
+      assert %{"success" => true, "data" => true} =
+               rpc(conn, "release_waiting_batch", %{"input" => %{"threadId" => thread_id}})
+
+      assert_receive {:thread, _, "turn/completed", %{"turn" => %{"status" => "completed"}}},
+                     5_000
+
+      assert_receive {:request, _first}, 5_000
+      assert_receive {:request, second}, 5_000
+
+      texts =
+        for %{"role" => "user", "content" => [%{"text" => text}]} <- second["input"], do: text
+
+      assert Enum.take(texts, -2) == ["[agent watch] one", "[agent child] two"]
+      refute_receive {:request, _}, 30
+    end
+
+    @tag :callback_batch
+    test "release_waiting_batch validates its thread and succeeds with an empty idle list",
+         %{conn: conn, dir: dir} do
+      project = create!(conn, dir)
+      {thread_id, _kernel_id} = start!(conn, project)
+
+      assert %{"success" => true, "data" => true} =
+               rpc(conn, "release_waiting_batch", %{"input" => %{"threadId" => thread_id}})
+
+      assert %{"success" => false} =
+               rpc(conn, "release_waiting_batch", %{
+                 "input" => %{"threadId" => Ash.UUID.generate()}
+               })
     end
 
     test "list_recent_threads: every project's conversations, newest activity first, for ⌘K",

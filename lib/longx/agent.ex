@@ -176,6 +176,16 @@ defmodule Longx.Agent do
     with {:ok, _pid} <- ensure_alive(thread_id), do: call(thread_id, {:release, waiting_id})
   end
 
+  @doc """
+  Release the current waiting batch in one call. Ordinary messages share a
+  turn (or steer into the current one); questions with `reply_to` keep their
+  own turns. An empty list is a successful no-op.
+  """
+  @spec release_batch(String.t()) :: :ok | {:error, :unknown}
+  def release_batch(thread_id) do
+    with {:ok, _pid} <- ensure_alive(thread_id), do: call(thread_id, :release_batch)
+  end
+
   @doc "A card for the person from a tool (`Context.present/2`): shown on the thread, never model input."
   @spec present(String.t(), map) :: :ok
   def present(thread_id, tree) when is_map(tree),
@@ -281,6 +291,51 @@ defmodule Longx.Agent do
       end
     end
   end
+
+  @doc """
+  Starts one person's turn with separate messages, all present before its
+  first request. A busy agent rejects the whole batch, never steers it.
+  """
+  @spec send_batch(String.t(), [map], keyword) :: {:ok, map} | {:error, term}
+  def send_batch(thread_id, messages, opts \\ []) do
+    with {:ok, messages} <- normalize_user_messages(messages),
+         {:ok, _pid} <- ensure_alive(thread_id) do
+      # This is a person's batch, not an external callback or a question.
+      opts = Keyword.take(opts, [:turn_id, :model, :effort, :skills])
+      call(thread_id, {:send_batch, messages, opts})
+    end
+  end
+
+  @doc false
+  def normalize_user_messages([_ | _] = messages) do
+    Enum.reduce_while(messages, {:ok, []}, fn
+      message, {:ok, acc} when is_map(message) ->
+        text = Map.get(message, :text, Map.get(message, "text"))
+
+        images =
+          case Map.get(message, :images, Map.get(message, "images")) do
+            nil -> []
+            images -> images
+          end
+
+        if is_binary(text) and is_list(images) and
+             Enum.all?(images, &(is_binary(&1) and &1 != "")) and
+             (String.trim(text) != "" or images != []) do
+          {:cont, {:ok, [%{text: text, images: images} | acc]}}
+        else
+          {:halt, {:error, :invalid_messages}}
+        end
+
+      _, _ ->
+        {:halt, {:error, :invalid_messages}}
+    end)
+    |> case do
+      {:ok, messages} -> {:ok, Enum.reverse(messages)}
+      error -> error
+    end
+  end
+
+  def normalize_user_messages(_), do: {:error, :invalid_messages}
 
   @doc "Stops the running turn (its items end as they are)."
   @spec interrupt(String.t()) :: :ok | {:error, :not_running}
@@ -393,6 +448,7 @@ defmodule Longx.Agent do
       settings: Keyword.get(opts, :settings, fn -> nil end),
       models: Keyword.get(opts, :models, fn -> nil end),
       idle_ms: Keyword.get(opts, :idle_ms, configured_idle_ms()),
+      callback_window_ms: Keyword.get(opts, :callback_window_ms, 150),
       last_active: System.monotonic_time(:millisecond),
       trust: Keyword.get(opts, :trust, fn -> false end),
       web_search: Keyword.get(opts, :web_search, true),
@@ -479,10 +535,11 @@ defmodule Longx.Agent do
     cond do
       # what waited while the turn ran is taken up now (not from an enter
       # callback, which may not start a turn: a zero timeout right after)
-      data.waiting != [] and not data.paused ->
+      data.waiting != [] and not data.paused and data.callback_timer == nil ->
         {:keep_state_and_data, [{{:timeout, :drain}, 0, :drain}]}
 
-      # paused by the person's stop: it waits for them, and the agent stays for it
+      # paused, or the first idle callback's fixed window is still open:
+      # the agent stays, and only the person or that timer may release it
       data.waiting != [] ->
         {:keep_state_and_data, [{:state_timeout, :infinity, :leave}]}
 
@@ -508,7 +565,7 @@ defmodule Longx.Agent do
   def handle_event(:state_timeout, :leave, :idle, data), do: {:stop, :normal, data}
 
   # what waited is taken up: one turn for all of it, as a steer is folded in
-  def handle_event({:timeout, :drain}, :drain, :idle, data),
+  def handle_event({:timeout, :drain}, :drain, :idle, %State{paused: false} = data),
     do: data |> drain() |> transition(:idle, data, nil)
 
   def handle_event({:timeout, :drain}, :drain, _state, _data), do: :keep_state_and_data
@@ -580,18 +637,13 @@ defmodule Longx.Agent do
     :ok
   end
 
-  # from elsewhere (another agent or session): a turn when nothing runs, else
-  # it waits — `pending: true` — and never jumps into the running turn
+  # From elsewhere: always listed as waiting. Idle callbacks share the first
+  # arrival's short fixed window; none jumps into the running turn.
   defp on_call(state, {:send, text, opts}, _from) do
     cond do
       external?(opts) ->
-        case arrive(state, waiting_item(text, opts)) do
-          {:started, turn_id, state} ->
-            {:reply, {:ok, %{turn_id: turn_id, steered: false}}, state, {:continue, :step}}
-
-          {:waiting, state} ->
-            {:reply, {:ok, %{turn_id: state.turn_id, steered: false, pending: true}}, state}
-        end
+        {:waiting, state} = arrive(state, waiting_item(text, opts))
+        {:reply, {:ok, %{turn_id: state.turn_id, steered: false, pending: true}}, state}
 
       # the person: a turn when idle (and whatever their stop paused is theirs
       # to follow with), a steer into the running turn otherwise
@@ -604,6 +656,21 @@ defmodule Longx.Agent do
     end
   end
 
+  defp on_call(%State{phase: :idle} = state, {:send_batch, [first | rest], opts}, _from) do
+    {turn_id, state} =
+      state |> unpause() |> start_turn(first.text, Keyword.put(opts, :images, first.images))
+
+    state =
+      Enum.reduce(rest, state, fn message, acc ->
+        queue_steer(acc, message.text, images: message.images)
+      end)
+
+    {:reply, {:ok, %{turn_id: turn_id, steered: false}}, state, {:continue, :step}}
+  end
+
+  defp on_call(state, {:send_batch, _messages, _opts}, _from),
+    do: {:reply, {:error, :turn_in_progress}, state}
+
   # a waiting message in now, at the person's word: into the running turn,
   # or a turn of its own when nothing runs (their stop is over then)
   defp on_call(state, {:release, waiting_id}, _from) do
@@ -612,15 +679,42 @@ defmodule Longx.Agent do
         {:reply, {:error, :not_found}, state}
 
       {[item], rest} when state.phase == :idle ->
-        case take_up(%{state | waiting: rest, paused: false}, [item]) do
+        case take_up(cancel_callback(%{state | waiting: rest, paused: false}), [item]) do
           {:started, _turn_id, state} -> {:reply, :ok, emit_waiting(state), {:continue, :step}}
           # a job's end the agent saw meanwhile: nothing to say, the item goes
           {:nothing, state} -> {:reply, :ok, emit_waiting(state)}
         end
 
       {[item], rest} ->
-        {:reply, :ok, %{state | waiting: rest} |> steer_item(item) |> emit_waiting()}
+        if Keyword.get(item.opts, :reply_to) do
+          # It cannot borrow this turn's reply routing. It remains waiting for
+          # an independent turn, even when the person asks to release it now.
+          {:reply, :ok, state}
+        else
+          {:reply, :ok, %{state | waiting: rest} |> steer_item(item) |> emit_waiting()}
+        end
     end
+  end
+
+  defp on_call(%State{waiting: []} = state, :release_batch, _from),
+    do: {:reply, :ok, state}
+
+  defp on_call(%State{phase: :idle} = state, :release_batch, _from) do
+    state = cancel_callback(%{state | paused: false})
+
+    case drain(state) do
+      {:noreply, state, {:continue, :step}} -> {:reply, :ok, state, {:continue, :step}}
+      {:noreply, state} -> {:reply, :ok, state}
+    end
+  end
+
+  defp on_call(state, :release_batch, _from) do
+    {ordinary, questions} =
+      Enum.split_with(state.waiting, &(Keyword.get(&1.opts, :reply_to) == nil))
+
+    state = %{state | waiting: questions}
+    state = Enum.reduce(Enum.reject(ordinary, &seen_job?(state, &1)), state, &steer_item(&2, &1))
+    {:reply, :ok, emit_waiting(state)}
   end
 
   defp on_call(state, {:spawn, name, task, opts}, _from) do
@@ -735,6 +829,16 @@ defmodule Longx.Agent do
     {:reply, {:ok, goal != nil}, %{state | goal: nil}}
   end
 
+  # The person may stop before an idle callback's window has elapsed: there
+  # is no turn yet, but its pending wakeup must not start one behind that stop.
+  defp on_call(%State{phase: :idle, waiting: [_ | _]} = state, {:interrupt, opts}, _from) do
+    if opts[:by] == :person do
+      {:reply, :ok, state |> cancel_callback() |> Map.put(:paused, true) |> emit_waiting()}
+    else
+      {:reply, {:error, :not_running}, state}
+    end
+  end
+
   defp on_call(%State{phase: :idle} = state, {:interrupt, _opts}, _from),
     do: {:reply, {:error, :not_running}, state}
 
@@ -826,7 +930,9 @@ defmodule Longx.Agent do
 
     state =
       %{
-        touch(state)
+        (state
+         |> cancel_callback()
+         |> touch())
         | turn_id: turn_id,
           phase: :step,
           model: Keyword.get(opts, :model, state.model),
@@ -970,21 +1076,32 @@ defmodule Longx.Agent do
     )
   end
 
-  defp arrive(%State{phase: :idle, paused: false, waiting: []} = state, item) do
-    case take_up(state, [item]) do
-      {:started, _, _} = started -> started
-      {:nothing, state} -> {:waiting, state}
-    end
+  defp arrive(state, item) do
+    state = schedule_callback(state)
+    state = %{state | waiting: state.waiting ++ [item]}
+    {:waiting, state |> touch() |> emit_waiting()}
   end
 
-  defp arrive(state, item),
-    do: {:waiting, %{state | waiting: state.waiting ++ [item]} |> touch() |> emit_waiting()}
+  defp schedule_callback(
+         %State{phase: :idle, paused: false, waiting: [], callback_timer: nil} = state
+       ) do
+    token = make_ref()
+    timer = Process.send_after(self(), {:callback_wake, token}, state.callback_window_ms)
+    %{state | callback_timer: {token, timer}}
+  end
+
+  defp schedule_callback(state), do: state
+
+  defp cancel_callback(%State{callback_timer: {_token, timer}} = state) do
+    Process.cancel_timer(timer)
+    %{state | callback_timer: nil}
+  end
+
+  defp cancel_callback(state), do: state
 
   defp arrive_noreply(state, item) do
-    case arrive(state, item) do
-      {:started, _turn_id, state} -> {:noreply, state, {:continue, :step}}
-      {:waiting, state} -> {:noreply, state}
-    end
+    {:waiting, state} = arrive(state, item)
+    {:noreply, state}
   end
 
   # a turn for these: the first starts it, the rest are folded in with it at
@@ -1478,6 +1595,17 @@ defmodule Longx.Agent do
   # another agent (a child reporting back, a teammate answering) speaks:
   # into the mailbox, like the person; `kind` is what the message is, `status`
   # how the child's turn ended (a stopped child is not a finished one)
+  defp on_info(
+         %State{phase: :idle, paused: false, callback_timer: {token, _}} = state,
+         {:callback_wake, token}
+       ),
+       do: state |> cancel_callback() |> drain()
+
+  defp on_info(%State{callback_timer: {token, _}} = state, {:callback_wake, token}),
+    do: {:noreply, cancel_callback(state)}
+
+  defp on_info(state, {:callback_wake, _token}), do: {:noreply, state}
+
   defp on_info(state, {:agent_message, from, text, kind}),
     do: on_info(state, {:agent_message, from, text, kind, "completed"})
 

@@ -7,7 +7,7 @@ import { useLongxRuntime } from "./runtime";
 
 vi.mock("@/core/api", async () => (await import("@/ui/test-mocks")).rpcMock());
 vi.mock("@/core/socket", async () => (await import("@/ui/test-mocks")).socketMock());
-import { archiveThread, deleteThread, getThread, listThreads, sendMessage, startThread } from "@/core/api";
+import { archiveThread, deleteThread, getThread, listThreads, sendMessage, sendMessageBatch, startThread } from "@/core/api";
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 function wrapper({ children }: { children: ReactNode }) {
@@ -18,6 +18,40 @@ describe("useLongxRuntime", () => {
   beforeEach(() => {
     channel.reset();
     vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
+  });
+
+  test("background batch loading and sending keeps its owner alive until the entire RPC settles", async () => {
+    const activity = vi.fn();
+    let finish!: (value: never) => void;
+    vi.mocked(sendMessageBatch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const { result } = renderHook(() => useLongxRuntime({
+      projectId: "id-1", threadId: "t1", onOpenThread: () => {}, onAttachmentActivity: activity,
+    }), { wrapper });
+    await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
+    act(() => channel.reply("ok", {
+      thread_id: "thr_1", seq: 1, thread: null, turn: { id: "turn_1", status: "inProgress" },
+      status: null, token_usage: null, items: [], pending_requests: [],
+    }));
+    await act(async () => {
+      const composer = result.current.runtime.thread.composer;
+      composer.setText("first");
+      composer.send();
+    });
+    await act(async () => {
+      const composer = result.current.runtime.thread.composer;
+      composer.setText("second");
+      composer.send();
+    });
+    expect(result.current.runtime.thread.composer.getState().queue).toHaveLength(2);
+    act(() => channel.deliver("event", {
+      seq: 2, method: "turn/completed", params: { turn: { id: "turn_1", status: "completed" } },
+    }));
+    // Reported synchronously, before lazy import or pending echoes can appear.
+    expect(activity).toHaveBeenLastCalledWith(1);
+    await waitFor(() => expect(finish).toBeDefined());
+    expect(activity).toHaveBeenLastCalledWith(1);
+    await act(async () => finish(ok({ id: "batch-turn" }) as never));
+    expect(activity).toHaveBeenLastCalledWith(0);
   });
 
   test("what the runtime is fed stays referentially stable across renders that change nothing", async () => {

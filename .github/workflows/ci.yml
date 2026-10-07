@@ -81,5 +81,7 @@ jobs:
           npm run test:clipboard
           npm run build
           npm run test:projects
+          npm run test:chat-projects
+          npm run test:queued-attachments
       # the bwrap probe passes on a dev box, not inside a GitHub runner
       - run: mix test --exclude host_sandbox

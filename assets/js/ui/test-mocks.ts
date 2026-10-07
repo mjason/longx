@@ -465,6 +465,8 @@ export function rpcMock() {
     interruptTurn: vi.fn(async () => ok(null)),
     retractTurn: vi.fn(async () => ok({ text: "look at pandas" })),
     releaseWaiting: vi.fn(async () => ok(null)),
+    releaseWaitingBatch: vi.fn(async () => ok(true)),
+    sendMessageBatch: vi.fn(async () => ok({ id: "turn-row" })),
     steerTurn: vi.fn(async () => ok({ kernelTurnId: "turn_2" })),
     answerRequest: vi.fn(async () => ok(null)),
     deleteThread: vi.fn(async () => ok(null)),

@@ -53,10 +53,12 @@ defmodule Longx.Projects do
       action Longx.Projects.Project, :init_git, :init_git
       action Longx.Projects.Thread, :start_thread, :start_thread
       action Longx.Projects.Thread, :send_message, :send_message
+      action Longx.Projects.Thread, :send_message_batch, :send_message_batch
       action Longx.Projects.Thread, :interrupt_turn, :interrupt_turn
       action Longx.Projects.Thread, :steer_turn, :steer_turn
       action Longx.Projects.Thread, :retract_turn, :retract_turn
       action Longx.Projects.Thread, :release_waiting, :release_waiting
+      action Longx.Projects.Thread, :release_waiting_batch, :release_waiting_batch
       action Longx.Projects.Thread, :compact_thread, :compact_thread
       action Longx.Projects.Thread, :answer_request, :answer_request
       action Longx.Projects.Thread, :set_goal, :set_goal
@@ -831,6 +833,55 @@ defmodule Longx.Projects do
     end
   end
 
+  @doc "Sends a person's queued messages in one turn, with separate original items."
+  @spec send_message_batch(Thread.t(), [map], keyword) :: {:ok, Turn.t()} | {:error, term}
+  def send_message_batch(%Thread{id: id}, messages, opts \\ []) do
+    thread = Ash.get!(Thread, id, load: :project)
+    model_slug = Keyword.get(opts, :model, thread.model_slug)
+    effort = opts[:effort] || thread.reasoning_effort
+
+    with {:ok, [first | _] = messages} <- Longx.Agent.normalize_user_messages(messages),
+         :ok <- ensure_usable(thread),
+         :ok <- refuse_while_running(thread),
+         {:ok, _} <- Longx.AI.thread_options(model_slug),
+         :ok <- Longx.AI.check_effort(model_slug, opts[:effort]),
+         {:ok, _pid} <- ensure_agent(thread),
+         :ok <- Tracker.track(thread.kernel_thread_id),
+         turn_id = "turn_" <> Ash.UUID.generate(),
+         {:ok, turn} <-
+           create_turn(%{
+             kernel_turn_id: turn_id,
+             thread_id: thread.id,
+             user_text: first.text,
+             model_slug: model_slug,
+             reasoning_effort: effort,
+             started_at: DateTime.utc_now()
+           }) do
+      # The row precedes the events so Tracker can find it, but the live
+      # kernel is the atomic authority: the row can lag a callback's start.
+      case Longx.Agent.send_batch(
+             thread.kernel_thread_id,
+             messages,
+             [turn_id: turn_id] |> put_if(:model, model_slug) |> put_if(:effort, effort)
+           ) do
+        {:ok, %{steered: false}} ->
+          touch_thread!(thread, %{
+            status: :active,
+            model_slug: model_slug,
+            reasoning_effort: effort,
+            last_activity_at: DateTime.utc_now()
+          })
+
+          broadcast_changed(thread.project_id)
+          {:ok, turn}
+
+        {:error, _} = error ->
+          Ash.destroy!(turn)
+          error
+      end
+    end
+  end
+
   @doc """
   Folds the thread's context (the `/compact` command): at once when the
   agent is idle, before its next step while a turn runs.
@@ -1230,6 +1281,25 @@ defmodule Longx.Projects do
 
       {:error, :unknown} ->
         {:error, :not_found}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Release all messages currently waiting in one kernel call. Ordinary
+  messages are taken up together; questions keep their independent reply
+  routing. Releasing an empty list succeeds.
+  """
+  @spec release_waiting_batch(Thread.t()) :: :ok | {:error, term}
+  def release_waiting_batch(%Thread{} = thread) do
+    Tracker.track(thread.kernel_thread_id)
+
+    case Longx.Agent.release_batch(thread.kernel_thread_id) do
+      :ok ->
+        touch_thread!(thread, %{last_activity_at: DateTime.utc_now()})
+        :ok
 
       {:error, reason} ->
         {:error, reason}
