@@ -102,9 +102,11 @@ try {
     await page.addStyleTag({ content: css });
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
     const status = page.getByTestId("command-guard-status");
-    await status.getByText("前置检测满足条件；待真实任务启动确认").waitFor();
+    await status.getByText("具备启动保护的条件").waitFor();
     assert.equal(await status.getByText("启动时已启用", { exact: true }).count(), 0);
     await status.getByText("当前已确认启用保护的任务：0").waitFor();
+    await status.screenshot({ path: path.join(artifacts, `diagnostic-idle-${width}.png`) });
+    await status.getByText("技术详情", { exact: true }).click();
 
     const form = page.getByTestId("agent-settings");
     await form.getByLabel("任务 cgroup 保护").click();
@@ -126,6 +128,9 @@ try {
       await window.client.invalidateQueries({queryKey:["agent-kernel"]});
     });
     await status.getByText("当前已确认启用保护的任务：1").waitFor();
+    await status.getByText("技术详情", { exact: true }).click();
+    await status.screenshot({ path: path.join(artifacts, `diagnostic-active-${width}.png`) });
+    await status.getByText("技术详情", { exact: true }).click();
     await page.evaluate(async () => {
       Object.assign(window.guard, {activeTasks:0,cleanupPendingTasks:1,lastPopulated:true,lastCleanupError:"blocked task"});
       await window.client.invalidateQueries({queryKey:["agent-kernel"]});
@@ -149,7 +154,7 @@ try {
       capability:"eligible",platform:"linux",reason:"startup still verifies",
     }));
     await form.getByRole("button", { name: "保存全局默认", exact: true }).click();
-    await status.getByText("前置检测满足条件；待真实任务启动确认").waitFor();
+    await status.getByText("具备启动保护的条件").waitFor();
     assert.equal(await page.evaluate(() => window.saves.at(-1).commandCgroupMode), "auto");
 
     await page.evaluate(async () => {
@@ -164,7 +169,7 @@ try {
     await projectForm.getByLabel("任务 cgroup 保护").click();
     await page.getByRole("option", { name: "自动", exact: true }).click();
     await page.getByRole("button", { name: "保存本项目", exact: true }).click();
-    await status.getByText("前置检测满足条件；待真实任务启动确认").waitFor();
+    await status.getByText("具备启动保护的条件").waitFor();
     assert.equal(await page.evaluate(() => window.saves.at(-1).agentSettings.commandCgroupMode), "auto");
     await projectForm.getByLabel("任务 cgroup 保护").click();
     await page.getByRole("option", { name: "必须启用", exact: true }).click();
