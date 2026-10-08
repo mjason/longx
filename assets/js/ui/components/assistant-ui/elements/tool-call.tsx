@@ -32,6 +32,8 @@ export interface ToolCallProps {
   // Longx: how long the call took (or has been running), at the end of the
   // row before the mark — the registry's Tool timeline element's convention
   duration?: ReactNode;
+  /** A compact result, kept visible even when the body is collapsed. */
+  statusLabel?: string;
   running: boolean;
   failed?: boolean;
   open: boolean;
@@ -48,6 +50,7 @@ export function ToolCall({
   request = "",
   result = "",
   duration,
+  statusLabel,
   running,
   failed = false,
   open,
@@ -99,6 +102,12 @@ export function ToolCall({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+        {statusLabel ? (
+          <span className={cn(mono, "shrink-0 rounded px-1.5 py-0.5",
+            failed ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground")}>
+            {statusLabel}
+          </span>
+        ) : null}
         {duration ? (
           <span className={cn(mono, "text-foreground/35 ms-auto shrink-0 tabular-nums")} data-testid="tool-call-duration">
             {duration}

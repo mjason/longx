@@ -41,13 +41,14 @@ export function TerminalBlock({
       data-slot="terminal-block"
       className={cn(
         ink ? "bg-foreground dark:bg-popover" : paper,
-        "w-full overflow-hidden rounded-2xl font-mono text-xs",
+        "w-full min-w-0 overflow-hidden rounded-lg font-mono text-xs",
         className,
       )}
 
       {...props}
     >
-      <div className="flex items-center justify-between px-4 pt-3 pb-1.5">
+      <div className={cn("flex items-center justify-between gap-3 border-b px-3 py-2",
+        ink ? "border-background/10 dark:border-border/60" : "border-border/60 bg-muted/30")}>
         <span
           className={cn(
             "min-w-0 truncate",
@@ -60,9 +61,9 @@ export function TerminalBlock({
           {command}
         </span>
         {done ? (
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1.5">
             {failed ? (
-              <XIcon className="size-3 text-red-500" />
+              <XIcon className="size-3 text-destructive" />
             ) : (
               <CheckIcon className="size-3 text-emerald-500" />
             )}
@@ -70,7 +71,7 @@ export function TerminalBlock({
               className={cn(
                 mono,
                 failed
-                  ? "text-red-600 dark:text-red-400"
+                  ? "text-destructive"
                   : ink
                     ? "text-background/40 dark:text-foreground/40"
                     : "text-foreground/40",
@@ -92,29 +93,15 @@ export function TerminalBlock({
       </div>
       <div
         className={cn(
-          "flex max-h-80 flex-col gap-1 overflow-auto px-4 pt-1 pb-3.5 whitespace-pre",
+          "flex max-h-80 flex-col overflow-auto px-3 py-3 leading-5 whitespace-pre [tab-size:2]",
           ink
-            ? "text-background/55 dark:text-foreground/50"
-            : "text-foreground/50",
+            ? "text-background/80 dark:text-foreground/80"
+            : "text-foreground/80",
         )}
       >
-        {take(lines, visibleCount).map((line, i) => {
-          const isLast = i === lines.length - 1;
-          return (
-            <div
-              key={`${i}-${line}`}
-              className={cn(
-                "fade-in animate-in fill-mode-both duration-300",
-                isLast &&
-                  (ink
-                    ? "text-background/90 dark:text-foreground/90"
-                    : "text-foreground/90"),
-              )}
-            >
-              {linkify(line)}
-            </div>
-          );
-        })}
+        {take(lines, visibleCount).map((line, i) => (
+          <div key={`${i}-${line}`} className="min-h-5">{linkify(line)}</div>
+        ))}
         {!done && (
           <span
             aria-hidden

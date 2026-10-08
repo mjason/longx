@@ -87,9 +87,11 @@ describe("CommandExecutionTool", () => {
         })}
       />,
     );
-    // a failed command stays open
+    // Failure collapses too, but its exit code and failure marker stay visible.
+    expect(screen.getByRole("button", { name: /运行了/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("tool-command")).toHaveAttribute("data-failed", "true");
     expect(screen.getByText("exit 3")).toBeInTheDocument();
-    expect(screen.getByText("boom")).toBeInTheDocument();
+    expect(screen.queryByText("boom")).not.toBeInTheDocument();
 
     rerender(
       <CommandExecutionTool
@@ -100,7 +102,32 @@ describe("CommandExecutionTool", () => {
     expect(screen.queryByText("ok")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /运行了/ }));
     expect(screen.getByText("ok")).toBeInTheDocument();
-    expect(screen.getByText("exit 0")).toBeInTheDocument();
+    expect(screen.getAllByText("exit 0")).toHaveLength(2);
+  });
+
+  test("a failed snapshot is collapsed without losing its output or exit code", () => {
+    render(<CommandExecutionTool {...part({ args: { command: "mix test" }, status: { type: "complete" },
+      result: { status: "completed", exitCode: 2, output: "assertion failed" } })} />);
+    const trigger = screen.getByRole("button", { name: /运行了/ });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("tool-command")).toHaveAttribute("data-failed", "true");
+    expect(screen.getByText("exit 2")).toBeInTheDocument();
+    expect(screen.queryByText("assertion failed")).not.toBeInTheDocument();
+    fireEvent.click(trigger);
+    expect(screen.getByText("assertion failed")).toBeInTheDocument();
+  });
+
+  test("launch errors and interruptions are collapsed and can be opened manually", () => {
+    const { rerender } = render(<CommandExecutionTool {...part({ args: { command: "missing" }, status: { type: "complete" }, isError: true,
+      result: { status: "failed", exitCode: null, output: "executable not found" } })} />);
+    expect(screen.getByRole("button", { name: /运行了/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("executable not found")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /运行了/ }));
+    expect(screen.getByText("executable not found")).toBeInTheDocument();
+    // An explicit manual disclosure stays open across updates.
+    rerender(<CommandExecutionTool {...part({ args: { command: "missing" }, status: { type: "incomplete", reason: "cancelled" },
+      result: { status: "failed", exitCode: null, output: "stopped" } })} />);
+    expect(screen.getByRole("button", { name: /运行了/ })).toHaveAttribute("aria-expanded", "true");
   });
 
   test("hovering the (truncated) command chip shows the whole command and its directory in a floating card", async () => {

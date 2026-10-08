@@ -182,6 +182,8 @@ function ToolRow({
   children,
   testId,
   openWhileRunning = true,
+  openOnFailure = true,
+  statusLabel,
 }: {
   label: string;
   activeLabel: string;
@@ -195,6 +197,9 @@ function ToolRow({
   testId: string;
   /** false: closed even while it runs (a sub-agent's whole conversation is too long to unfold by itself) */
   openWhileRunning?: boolean;
+  /** Shell failures finish as a compact row, like successful commands. */
+  openOnFailure?: boolean;
+  statusLabel?: string;
 }) {
   const [open, setOpen] = useState<boolean | null>(null);
   const duration = useDuration(part, running);
@@ -206,9 +211,10 @@ function ToolRow({
         query={query}
         queryDetail={queryDetail}
         duration={duration}
+        statusLabel={statusLabel}
         running={running}
         failed={failed}
-        open={open ?? ((running && openWhileRunning) || failed)}
+        open={open ?? ((running && openWhileRunning) || (failed && openOnFailure))}
         onOpenChange={setOpen}
         className="max-w-none"
       >
@@ -228,7 +234,9 @@ export const CommandExecutionTool: ToolCallMessagePartComponent<
     p.result?.output ?? (typeof p.artifact === "string" ? p.artifact : "");
   const lines = output ? output.replace(/\n$/, "").split("\n") : [];
   const running = p.result === undefined && p.status.type === "running";
-  const failed = p.isError === true || p.status.type === "incomplete";
+  const failed = p.isError === true || p.status.type === "incomplete" ||
+    (typeof p.result?.exitCode === "number" && p.result.exitCode !== 0) ||
+    p.result?.status === "failed" || p.result?.status === "declined";
   const couldNotRun =
     p.result?.status === "failed" && typeof p.result.exitCode !== "number";
 
@@ -251,6 +259,8 @@ export const CommandExecutionTool: ToolCallMessagePartComponent<
       }
       running={running}
       failed={failed}
+      openOnFailure={false}
+      statusLabel={running ? undefined : exitLabel(p) ?? (failed ? t.commandFailed : undefined)}
       testId="tool-command"
     >
       {couldNotRun ? (

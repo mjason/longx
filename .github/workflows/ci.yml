@@ -94,5 +94,6 @@ jobs:
           npm run test:chat-projects
           npm run test:queued-attachments
           npm run test:command-guards
+          node scripts/test-shell-cards.mjs
       # the bwrap probe passes on a dev box, not inside a GitHub runner
       - run: mix test --exclude host_sandbox
