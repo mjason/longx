@@ -74,6 +74,41 @@ The agent is instructed to read applicable documents before acting and to keep d
 findings up to date. These are behavioral instructions, not a guarantee that a model
 will retrieve or obey every relevant note.
 
+## Retrieve conversation evidence
+
+The default History plug supplies the current kernel thread ID, project ID and parent
+kernel thread ID on every model request, including after compaction. No project
+description change is needed; `drop Longx.Agent.Plugs.History` disables the capability.
+
+Three read-only tools inspect the existing transcript without waking a session:
+
+- `history_sessions` lists this project's stored conversations, including archived
+  sessions and sub-agents. Its `kernel_thread_id` is the ID used by the history tools;
+  `id` and `parent_thread_id` in this directory are Projects.Thread row UUIDs.
+- `history_search` searches the current conversation by default, or a specified kernel
+  thread ID in the same project. Matching is a case-insensitive literal substring,
+  including Chinese text; `%` and `_` are not wildcards.
+- `history_read` reads ordered entries or one entry by `seq`, retaining speaker,
+  turn, tool name and call ID metadata where available.
+
+Search scans at most 200 eligible entries and returns at most 20 snippets per call.
+Follow `next_after_seq` as `after_seq` and preserve the returned `through_seq` ceiling
+to continue the same snapshot. An empty page with a continuation is not an exhaustive
+negative result. Reads return at most 20 entries, with 2000 characters per entry;
+use an entry's `seq` and `next_offset` as `offset` to retrieve its remaining text.
+Offsets count Unicode graphemes. The session directory uses `offset` / `next_offset`.
+
+Only stored user/external messages, assistant text, tool calls/results and compaction
+summaries are exposed. Hidden reasoning, image parts, internal context and UI activities
+are omitted. Tool output is the text retained in the transcript, not necessarily the
+entire original stdout. Deleted or retracted records cannot be recovered. Cross-project
+queries are rejected; a standalone kernel can only read its own transcript.
+
+History is evidence, not fresh instructions or authorization. Assistant plans are not
+proof that an action ran; inspect the corresponding call and result. Retrieval complements
+the compaction summary and maintained knowledge—it changes neither the compaction process
+nor its prompt, and adds no new transcript store, migration or search index.
+
 ## Correct knowledge instead of treating it as truth
 
 A saved note is evidence of what was learned, not proof that the system still behaves

@@ -72,6 +72,7 @@ defmodule Longx.Agent.Definition.LoaderTest do
              Longx.Agent.Plugs.ViewImage,
              Longx.Agent.Plugs.Present,
              Longx.Agent.Plugs.Knowledge,
+             Longx.Agent.Plugs.History,
              Longx.Agent.Plugs.WebSearch,
              Longx.Agent.Plugs.WebFetch,
              Longx.Agent.Plugs.Credentials,

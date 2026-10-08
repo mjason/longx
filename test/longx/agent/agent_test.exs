@@ -318,9 +318,10 @@ defmodule Longx.AgentTest do
 
     assert_receive {:request, body}
     assert body["instructions"] =~ "You are"
+    assert body["instructions"] =~ ~s("thread_id":"#{id}")
 
     assert Enum.map(body["tools"], & &1["name"]) |> Enum.sort() ==
-             ~w(apply_patch create_goal credential_create credential_login credential_rotate credentials_list exec_command get_context_remaining get_goal http_request job_output jobs knowledge_read knowledge_search knowledge_write new_context_window notify present prompt_user send_file show_diff show_file show_html start_job stop_job update_goal view_image wait_job wait_until watch_enable watch_list watch_run web_fetch web_search)
+             ~w(apply_patch create_goal credential_create credential_login credential_rotate credentials_list exec_command get_context_remaining get_goal history_read history_search history_sessions http_request job_output jobs knowledge_read knowledge_search knowledge_write new_context_window notify present prompt_user send_file show_diff show_file show_html start_job stop_job update_goal view_image wait_job wait_until watch_enable watch_list watch_run web_fetch web_search)
 
     refute Map.has_key?(body, "x-longx-custom-tools")
 

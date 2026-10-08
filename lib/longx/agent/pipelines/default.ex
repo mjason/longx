@@ -30,6 +30,7 @@ defmodule Longx.Agent.Pipelines.Default do
         plug Longx.Agent.Plugs.ViewImage
         plug Longx.Agent.Plugs.Present
         plug Longx.Agent.Plugs.Knowledge
+        plug Longx.Agent.Plugs.History
         plug Longx.Agent.Plugs.WebSearch
         plug Longx.Agent.Plugs.WebFetch
         plug Longx.Agent.Plugs.Credentials
