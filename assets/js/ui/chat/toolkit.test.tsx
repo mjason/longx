@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, ImageGenerationTool, JavascriptTool, PresentTool, SendFileTool, ShowDiffTool, ShowFileTool, ShowHtmlTool, SubagentContext, SubagentTool, SurfaceContext, WebSearchTool, parseDiff, treeOf } from "./toolkit";
@@ -168,9 +168,10 @@ describe("FileChangeTool", () => {
     expect(parsed).toMatchObject({ additions: 1, deletions: 1 });
   });
 
-  test("a row per change set: the file tree and one diff per file behind the disclosure", () => {
+  test("a row per change set: the file tree and one diff per file behind the disclosure", async () => {
     render(<FileChangeTool {...part({ toolName: "fileChange", args: { changes }, status: { type: "complete" }, result: { status: "completed", output: "" } })} />);
     fireEvent.click(screen.getByRole("button", { name: /修改了/ }));
+    await screen.findByText("new");
     expect(screen.getAllByText("2 个文件改动").length).toBeGreaterThan(0);
     expect(screen.getByText("lib/a.ex")).toBeInTheDocument();
     expect(screen.getByText("+ lib/b.ex")).toBeInTheDocument();
@@ -186,6 +187,45 @@ describe("FileChangeTool", () => {
       { path: "README.md", additions: 2, deletions: 0 },
     ]);
     expect(nodes.map((n) => `${n.kind}:${n.path}@${n.depth}`)).toEqual(["folder:lib@0", "file:lib/a.ex@1", "file:lib/b.ex@1", "file:README.md@0"]);
+  });
+
+  test("only file changes get a sticky disclosure and a footer exit; both collapse the whole change set", async () => {
+    render(<FileChangeTool {...part({ toolName: "fileChange", args: { changes }, status: { type: "complete" }, result: { status: "completed", output: "" } })} />);
+    const header = screen.getByRole("button", { name: /修改了/ });
+    expect(header).not.toHaveClass("sticky");
+    expect(screen.queryByRole("button", { name: "收起修改" })).not.toBeInTheDocument();
+    fireEvent.click(header);
+    expect(header).toHaveClass("sticky", "top-0");
+    expect(header).toHaveTextContent("收起修改");
+    fireEvent.click(screen.getByRole("button", { name: "收起修改" }));
+    await waitFor(() => expect(header).toHaveAttribute("aria-expanded", "false"));
+    expect(screen.queryByText("new")).not.toBeInTheDocument();
+    fireEvent.click(header);
+    fireEvent.click(header);
+    await waitFor(() => expect(header).not.toHaveClass("sticky"));
+    expect(screen.queryByRole("button", { name: "收起修改" })).not.toBeInTheDocument();
+  });
+
+  test("closing a long diff preserves its header position in the nearest thread viewport and returns focus", async () => {
+    const { container } = render(
+      <div data-slot="aui_thread-viewport">
+        <FileChangeTool {...part({ toolName: "fileChange", args: { changes }, status: { type: "complete" }, result: { status: "completed", output: "" } })} />
+      </div>,
+    );
+    const viewport = container.firstElementChild as HTMLElement;
+    const header = screen.getByRole("button", { name: /修改了/ });
+    viewport.scrollTop = 800;
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({ top: 100 } as DOMRect);
+    vi.spyOn(header, "getBoundingClientRect")
+      .mockReturnValueOnce({ top: 100 } as DOMRect)
+      .mockReturnValueOnce({ top: -400 } as DOMRect);
+    fireEvent.click(header);
+    const footer = screen.getByRole("button", { name: "收起修改" });
+    footer.focus();
+    fireEvent.click(footer);
+    await waitFor(() => expect(viewport.scrollTop).toBe(300));
+    expect(header).toHaveFocus();
+    expect(header).toHaveAttribute("aria-expanded", "false");
   });
 });
 

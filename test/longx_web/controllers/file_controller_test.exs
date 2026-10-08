@@ -91,4 +91,42 @@ defmodule LongxWeb.FileControllerTest do
 
     assert get(conn, "/files/#{Ash.UUID.generate()}/logo.png").status == 404
   end
+
+  test "view_image exposes the exact viewed bytes through an attachment snapshot, not a local path",
+       %{conn: conn, project: project, root: root} do
+    alias Longx.Agent.{Context, Tool}
+    alias Longx.Agent.Plugs.ViewImage
+    alias Longx.Agent.Kernel.UI
+
+    tool = Enum.find(ViewImage.__agent_tools__(), &(&1.name == "view_image"))
+    ctx = %Context{cwd: root, project_id: project.id}
+    source = root <> "-view.png"
+    File.write!(source, <<137, 80, 78, 71>>)
+    on_exit(fn -> File.rm(source) end)
+
+    assert {:ok, text, %{"image" => image, "details" => details} = extra} =
+             Tool.call(tool, %{"path" => source}, ctx)
+
+    assert image == "data:image/png;base64," <> Base.encode64(<<137, 80, 78, 71>>)
+    assert details["name"] == Path.basename(source)
+    assert details["mime"] == "image/png"
+    assert details["bytes"] == 4
+    assert details["attachment"] == true
+    refute Path.type(details["path"]) == :absolute
+    refute Map.has_key?(details, "image")
+
+    ui = UI.completed_ui(tool, "image-call", "turn", true, text, "", 10, extra)
+    assert ui["namespace"] == "view_image"
+    assert ui["details"] == details
+    refute Jason.encode!(ui) =~ "base64"
+
+    File.write!(source, "changed after viewing")
+
+    result =
+      get(conn, "/files/#{project.id}/_attachments/#{URI.encode(details["path"])}?inline=1")
+
+    assert result.status == 200
+    assert result.resp_body == <<137, 80, 78, 71>>
+    assert get_resp_header(result, "content-type") == ["image/png"]
+  end
 end

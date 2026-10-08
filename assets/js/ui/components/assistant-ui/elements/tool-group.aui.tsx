@@ -160,6 +160,9 @@ function ToolGroupContent({
       data-slot="tool-group-content"
       className={cn(
         "aui-tool-group-content relative overflow-hidden text-sm outline-none",
+        // An expanded file-change header must stick to the thread viewport,
+        // not to this otherwise non-scrolling overflow clip.
+        "[&:has([data-file-change-open])]:overflow-visible",
         "group/collapsible-content ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none",
         "data-closed:animate-collapsible-up",
         "data-open:animate-collapsible-down",

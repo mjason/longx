@@ -5,6 +5,7 @@ defmodule Longx.Agent.Plugs.ViewImage do
   """
 
   use Longx.Agent.Plug
+  alias Longx.Projects.Attachments
 
   @max_bytes 20 * 1024 * 1024
   @mime %{
@@ -28,17 +29,46 @@ defmodule Longx.Agent.Plugs.ViewImage do
 
     cond do
       mime == nil ->
-        {:error, "#{path}: not a supported image type (png, jpeg, gif, webp, bmp)"}
+        error(path, "unsupported_image", "not a supported image type (png, jpeg, gif, webp, bmp)")
 
       not File.regular?(full) ->
-        {:error, "#{path}: no such file"}
+        error(path, "not_found", "no such file")
 
       File.stat!(full).size > @max_bytes ->
-        {:error, "#{path}: larger than #{div(@max_bytes, 1024 * 1024)} MB"}
+        error(path, "too_large", "larger than #{div(@max_bytes, 1024 * 1024)} MB")
 
       true ->
         data = File.read!(full)
-        {:ok, "attached #{path}", %{"image" => "data:#{mime};base64," <> Base.encode64(data)}}
+
+        {:ok, "attached #{path}",
+         %{
+           "image" => "data:#{mime};base64," <> Base.encode64(data),
+           "details" => preview(ctx.project_id, full, mime, data)
+         }}
     end
+  end
+
+  # Serve a snapshot of exactly the bytes the model saw, not an arbitrary local
+  # path or a file that might have changed since the call. Reuse the project's
+  # attachment boundary; never put another base64 copy in the UI transcript.
+  defp preview(project_id, full, mime, data) do
+    details = %{"name" => Path.basename(full), "mime" => mime, "bytes" => byte_size(data)}
+
+    with {:ok, project_id} <- Ecto.UUID.cast(project_id),
+         {:ok, stored} <-
+           Attachments.store_bytes(
+             project_id,
+             "view-#{Ash.UUID.generate()}-#{Path.basename(full)}",
+             data
+           ) do
+      Map.merge(details, %{"path" => stored.name, "attachment" => true})
+    else
+      _ -> Map.put(details, "preview_unavailable", true)
+    end
+  end
+
+  defp error(path, code, message) do
+    {:error, "#{path}: #{message}",
+     %{"details" => %{"name" => Path.basename(path), "error" => code}}}
   end
 end

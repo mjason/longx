@@ -13,6 +13,8 @@
     "test:chat-projects": "node scripts/test-chat-projects.mjs",
     "test:queued-attachments": "node scripts/test-queued-attachments.mjs",
     "test:command-guards": "node scripts/test-command-guards.mjs",
+    "test:file-changes": "node scripts/test-file-change-cards.mjs",
+    "test:view-image": "node scripts/test-view-image-cards.mjs",
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run test",
     "present-schema": "node scripts/present-schema.mjs",

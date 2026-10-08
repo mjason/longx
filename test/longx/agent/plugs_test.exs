@@ -1213,9 +1213,15 @@ defmodule Longx.Agent.PlugsTest do
                Tool.call(tool, %{"path" => "shot.png"}, ctx)
 
       assert Elixir.Base.decode64!(b64) == png
-      assert {:error, msg} = Tool.call(tool, %{"path" => "a.txt"}, ctx)
+
+      assert {:error, msg, %{"details" => %{"error" => "unsupported_image"}}} =
+               Tool.call(tool, %{"path" => "a.txt"}, ctx)
+
       assert msg =~ "image type"
-      assert {:error, msg} = Tool.call(tool, %{"path" => "missing.png"}, ctx)
+
+      assert {:error, msg, %{"details" => %{"error" => "not_found"}}} =
+               Tool.call(tool, %{"path" => "missing.png"}, ctx)
+
       assert msg =~ "no such file"
     end
   end

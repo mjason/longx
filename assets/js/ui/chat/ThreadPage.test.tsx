@@ -1132,6 +1132,30 @@ describe("ThreadPage", () => {
     }
   });
 
+  test("view_image is routed to a localized preview card instead of the generic JSON fallback", async () => {
+    await open();
+    act(() => channel.deliver("event", {
+      seq: 4, method: "item/completed", params: {
+        turnId: "turn_2",
+        item: {
+          id: "view-image-1", type: "dynamicToolCall", turnId: "turn_2",
+          namespace: "view_image", tool: "view_image",
+          arguments: { path: "/tmp/截图.png" }, status: "completed", success: true,
+          contentItems: [{ type: "inputText", text: "attached /tmp/截图.png" }],
+          details: { name: "截图.png", path: "snapshot.png", mime: "image/png", bytes: 1024, attachment: true },
+        },
+      },
+    }));
+    const row = await screen.findByTestId("tool-view-image");
+    expect(row).toHaveTextContent("查看了图片");
+    expect(within(row).getByRole("img", { name: "截图.png" })).toHaveAttribute("src", "/files/id-1/_attachments/snapshot.png?inline=1");
+    expect(within(row).queryByText(/Used tool|contentItems/)).not.toBeInTheDocument();
+    fireEvent.click(within(row).getByRole("button", { name: "点击查看大图" }));
+    expect(screen.getByRole("dialog", { name: "图片大图" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭大图" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   test("an attachment the person sent is a chip in their bubble, not the tag and the note the model reads", async () => {
     await open();
     act(() =>

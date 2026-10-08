@@ -40,6 +40,8 @@ export interface ToolCallProps {
   onOpenChange: (open: boolean) => void;
   className?: string;
   children?: ReactNode;
+  /** Long file changes retain a visible disclosure and an end-of-content exit. */
+  collapseLabel?: string;
 }
 
 export function ToolCall({
@@ -57,15 +59,20 @@ export function ToolCall({
   onOpenChange,
   className,
   children,
+  collapseLabel,
 }: ToolCallProps) {
   return (
     <Collapsible
       data-slot="tool-call"
+      data-file-change-open={collapseLabel && open ? "" : undefined}
       open={open}
       onOpenChange={onOpenChange}
       className={cn("w-full max-w-sm", className)}
     >
-      <CollapsibleTrigger className="group/trigger text-foreground/55 hover:text-foreground/90 flex w-full max-w-full items-center gap-2 rounded-md py-1 text-[13.5px] transition-colors outline-none">
+      <CollapsibleTrigger className={cn(
+        "group/trigger text-foreground/55 hover:text-foreground/90 flex w-full max-w-full items-center gap-2 rounded-md py-1 text-[13.5px] transition-colors outline-none",
+        collapseLabel && open && "sticky top-0 z-20 bg-background py-2 shadow-sm",
+      )}>
         <ChevronRightIcon className="size-3.5 shrink-0 opacity-60 transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-open/trigger:rotate-90 group-data-panel-open/trigger:rotate-90 motion-reduce:transition-none" />
         <SwapLabel active={running ? 0 : 1} className="text-start">
           <ShimmerLabel
@@ -121,8 +128,13 @@ export function ToolCall({
             <XIcon className="fade-in zoom-in-90 animate-in size-3.5 text-red-500 duration-200" />
           )}
         </span>
+        {collapseLabel && open ? (
+          <span className="text-muted-foreground shrink-0 text-xs">{collapseLabel}</span>
+        ) : null}
       </CollapsibleTrigger>
-      <CollapsibleContent className={cn(collapsePanel, "outline-none")}>
+      {/* File changes close immediately so their scroll anchor is restored against
+          final geometry, not an intermediate height animation. Other tools keep it. */}
+      <CollapsibleContent className={cn(!collapseLabel && collapsePanel, "outline-none")}>
         {children ? (
           <div className="mt-2">{children}</div>
         ) : (
@@ -138,6 +150,14 @@ export function ToolCall({
           </div>
         </div>
         )}
+        {collapseLabel ? (
+          <div className="mt-2 flex justify-end border-t border-border/50 pt-2">
+            <CollapsibleTrigger className="text-muted-foreground hover:text-foreground inline-flex min-h-9 items-center gap-1 rounded-md px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <ChevronRightIcon className="size-3.5 -rotate-90" />
+              {collapseLabel}
+            </CollapsibleTrigger>
+          </div>
+        ) : null}
       </CollapsibleContent>
     </Collapsible>
   );

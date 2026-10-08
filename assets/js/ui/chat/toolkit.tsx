@@ -24,7 +24,7 @@ import {
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
 import { AppWindow, Bot, ChevronDown, Download, FileCode2, GitCompareArrows, Image as ImageIcon, Loader2 } from "lucide-react";
-import { createContext, lazy, Suspense, useContext, useEffect, useState, type ComponentProps, type ReactNode } from "react";
+import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { formatBytes, formatDuration } from "@/core/format";
 import { progressLabel } from "./progressLabel";
 import type { Tab } from "@/core/workbench";
@@ -39,18 +39,28 @@ import {
 } from "@/ui/components/assistant-ui/elements/agent-status";
 import { MarkdownText } from "@/ui/components/assistant-ui/elements/markdown-text";
 import { AssistantParts } from "@/ui/components/assistant-ui/elements/thread.aui";
-import {
-  CodeDiff,
-  type DiffLine,
-} from "@/ui/components/assistant-ui/elements/code-diff";
+import type { DiffLine } from "@/ui/components/assistant-ui/elements/code-diff";
 import {
   ElicitationForm,
   type ElicitationField,
 } from "@/ui/components/assistant-ui/elements/elicitation-form";
-import {
-  FileTree,
-  type FileTreeNode,
-} from "@/ui/components/assistant-ui/elements/file-tree";
+import type { FileTreeNode } from "@/ui/components/assistant-ui/elements/file-tree";
+import type { ViewImageResult } from "./view-image-tool";
+const LazyViewImageTool = lazy(() => import("./view-image-tool"));
+export const ViewImageTool: ToolCallMessagePartComponent<{ path?: string }, ViewImageResult> = (p) => {
+  useTranslation();
+  return (
+  <Suspense fallback={<span className="text-muted-foreground text-xs">{t.viewingImage}</span>}>
+    <LazyViewImageTool {...p} />
+  </Suspense>
+  );
+};
+const CodeDiff = lazy(async () => ({
+  default: (await import("@/ui/components/assistant-ui/elements/code-diff")).CodeDiff,
+}));
+const FileTree = lazy(async () => ({
+  default: (await import("@/ui/components/assistant-ui/elements/file-tree")).FileTree,
+}));
 // the cards' renderer (assistant-ui's generative UI and its zod vocabulary,
 // ~300 KB of source) loads with the first card, not with every page
 const LazyGenerativeTree = lazy(async () => ({
@@ -184,6 +194,7 @@ function ToolRow({
   openWhileRunning = true,
   openOnFailure = true,
   statusLabel,
+  collapseLabel,
 }: {
   label: string;
   activeLabel: string;
@@ -200,11 +211,30 @@ function ToolRow({
   /** Shell failures finish as a compact row, like successful commands. */
   openOnFailure?: boolean;
   statusLabel?: string;
+  collapseLabel?: string;
 }) {
   const [open, setOpen] = useState<boolean | null>(null);
   const duration = useDuration(part, running);
+  const root = useRef<HTMLDivElement>(null);
+  const isOpen = open ?? ((running && openWhileRunning) || (failed && openOnFailure));
+
+  const onOpenChange = async (next: boolean) => {
+    if (collapseLabel && isOpen && !next) {
+      try {
+        const { collapseFileChange } = await import("./file-change-scroll");
+        if (root.current) collapseFileChange(root.current, () => setOpen(false));
+      } catch {
+        setOpen(false);
+      }
+      return;
+    }
+    // Warm the tiny positioning helper while the reader opens a long change.
+    if (collapseLabel && next) void import("./file-change-scroll").catch(() => {});
+    setOpen(next);
+  };
+
   return (
-    <div className="py-1" data-testid={testId} data-failed={failed || undefined}>
+    <div ref={root} className="py-1" data-testid={testId} data-failed={failed || undefined}>
       <ToolCall
         label={label}
         activeLabel={activeLabel}
@@ -214,8 +244,9 @@ function ToolRow({
         statusLabel={statusLabel}
         running={running}
         failed={failed}
-        open={open ?? ((running && openWhileRunning) || (failed && openOnFailure))}
-        onOpenChange={setOpen}
+        open={isOpen}
+        onOpenChange={onOpenChange}
+        collapseLabel={collapseLabel}
         className="max-w-none"
       >
         {children}
@@ -327,7 +358,9 @@ export const FileChangeTool: ToolCallMessagePartComponent<
       running={running}
       failed={failed}
       testId="tool-file-change"
+      collapseLabel={t.collapseFileChanges}
     >
+      <Suspense fallback={<ShimmerLabel className="text-xs">{t.changedFiles}</ShimmerLabel>}>
       <div className="flex flex-col gap-2">
         {changes.length > 1 ? (
           <FileTree
@@ -353,6 +386,7 @@ export const FileChangeTool: ToolCallMessagePartComponent<
           <p className="text-muted-foreground text-xs">{t.declined}</p>
         ) : null}
       </div>
+      </Suspense>
     </ToolRow>
   );
 };
@@ -1105,6 +1139,7 @@ export const longxToolkit = defineToolkit({
   "longx.show_diff": { type: "backend", render: ShowDiffTool, display: "standalone" },
   "longx.send_file": { type: "backend", render: SendFileTool, display: "standalone" },
   "longx.image_generation": { type: "backend", render: ImageGenerationTool, display: "standalone" },
+  "view_image.view_image": { type: "backend", render: ViewImageTool, display: "standalone" },
   "longx.show_html": { type: "backend", render: ShowHtmlTool, display: "standalone" },
   "agents.send_message": { type: "backend", render: SendMessageTool, display: "standalone" },
   // the person's browser (Longx.Agent.Plugs.Browser): a cell with its output and screenshots

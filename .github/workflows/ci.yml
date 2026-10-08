@@ -95,5 +95,8 @@ jobs:
           npm run test:queued-attachments
           npm run test:command-guards
           node scripts/test-shell-cards.mjs
+          npm run test:file-changes
+          npm run test:file-changes -- --webkit
+          npm run test:view-image
       # the bwrap probe passes on a dev box, not inside a GitHub runner
       - run: mix test --exclude host_sandbox

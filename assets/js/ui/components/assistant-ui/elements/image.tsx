@@ -25,6 +25,8 @@ import type {
   ImageMessagePartComponent,
 } from "@assistant-ui/react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
+import { t } from "@/ui/strings";
 
 const extensionForMimeType = (mimeType?: string): string => {
   switch (mimeType) {
@@ -252,7 +254,8 @@ type ImageZoomProps = PropsWithChildren<{
   alt?: string;
 }>;
 
-function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
+function ImageZoom({ src, alt = t.previewFile, children }: ImageZoomProps) {
+  useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -322,7 +325,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
         role="button"
         tabIndex={0}
         className="aui-image-zoom-trigger cursor-zoom-in"
-        aria-label="Click to zoom image"
+        aria-label={t.imageZoom}
       >
         {children}
       </div>
@@ -335,7 +338,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
             aria-modal="true"
             className="aui-image-zoom-overlay fade-in animate-in fixed inset-0 z-50 flex items-center justify-center bg-black/80 duration-200"
             onClick={handleClose}
-            aria-label="Zoomed image"
+            aria-label={t.imageZoomed}
           >
             <img
               data-slot="image-zoom-content"
@@ -350,7 +353,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
             <button
               ref={closeRef}
               type="button"
-              aria-label="Close zoomed image"
+              aria-label={t.closeImageZoom}
               onClick={(e) => {
                 e.stopPropagation();
                 handleClose();
