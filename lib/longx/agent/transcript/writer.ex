@@ -13,7 +13,10 @@ defmodule Longx.Agent.Transcript.Writer do
   (`flush/0`, a call answered after everything queued before it), so
   nothing ever reads around a pending item.
 
-  A batch the lock refuses is tried again after a wait (`waits:`); an error
+  A batch the database temporarily refuses is tried again after a wait (`waits:`).
+  Exhausting the short retry window keeps the batch queued and reports the
+  outage; a synchronous flush fails rather than pretending that data was saved.
+  An error
   that is no lock is a bug — the batch is dropped, recorded as a
   `Longx.System.Faults` entry and logged, and the writer lives on.
   """
@@ -53,6 +56,7 @@ defmodule Longx.Agent.Transcript.Writer do
        scheduled: false,
        waits: Keyword.get(opts, :waits, @lock_waits),
        left: nil,
+       stalled: false,
        write: Keyword.get(opts, :write, &write_batch/1),
        batches: 0,
        written: 0,
@@ -62,6 +66,9 @@ defmodule Longx.Agent.Transcript.Writer do
 
   @impl true
   def handle_cast({:append, attrs}, state) do
+    # A disconnect can hide a successful commit. Keep the same key through
+    # retries, so replaying that batch never duplicates transcript items.
+    attrs = Map.put_new_lazy(attrs, :id, &Ash.UUID.generate/0)
     {:noreply, schedule(%{state | pending: [attrs | state.pending]})}
   end
 
@@ -96,20 +103,30 @@ defmodule Longx.Agent.Transcript.Writer do
 
     case attempt(write, batch, state.left || state.waits) do
       {:ok, n} ->
-        %{state | pending: [], left: nil, batches: state.batches + 1, written: state.written + n}
+        %{
+          state
+          | pending: [],
+            left: nil,
+            stalled: false,
+            batches: state.batches + 1,
+            written: state.written + n
+        }
 
       {:locked, e, []} ->
-        Logger.error(
-          "transcript writer: #{length(batch)} items still locked out: #{Exception.message(e)}"
-        )
+        unless state.stalled do
+          Logger.error(
+            "transcript writer: keeping #{length(batch)} queued items after transient database failure: #{Exception.message(e)}"
+          )
 
-        Longx.System.Faults.record(
-          :db,
-          "transcript",
-          "#{length(batch)} transcript items could not be written: database is locked"
-        )
+          Longx.System.Faults.record(
+            :db,
+            "transcript",
+            "#{length(batch)} transcript items are queued for retry: database temporarily unavailable"
+          )
+        end
 
-        %{state | pending: [], left: nil, dropped: state.dropped + length(batch)}
+        Process.send_after(self(), :flush, 2_000)
+        %{state | left: [], scheduled: true, stalled: true}
 
       {:locked, _e, [wait | rest]} when mode == :sync ->
         Process.sleep(wait)
@@ -146,6 +163,8 @@ defmodule Longx.Agent.Transcript.Writer do
   defp write_batch(batch) do
     %Ash.BulkResult{status: :success} =
       Ash.bulk_create!(batch, Item, :append,
+        upsert?: true,
+        upsert_fields: [],
         transaction: :all,
         return_records?: false,
         notify?: false,
@@ -161,6 +180,8 @@ defmodule Longx.Agent.Transcript.Writer do
     text = Exception.message(e) <> inspect(e)
 
     text =~ "database is locked" or text =~ "timed out because it queued" or
-      text =~ "Database busy"
+      text =~ "Database busy" or text =~ "request was dropped from queue" or
+      text =~ "connection is closed because of an error, disconnect or timeout" or
+      match?(%Exqlite.Error{message: "interrupted"}, e)
   end
 end

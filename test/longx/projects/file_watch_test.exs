@@ -60,7 +60,7 @@ defmodule Longx.Projects.FileWatchTest do
       assert "node_modules/" in config.ignore
       # built in, then global, then the project's
       assert Enum.take(config.ignore, -2) == ["logs/", "data/"]
-      assert ".longx/" in config.watch
+      assert ".longx/" in config.default_watch
       assert Enum.take(config.watch, -2) == ["keep-me/", "data/keep/"]
       refute config.git
 
@@ -80,6 +80,23 @@ defmodule Longx.Projects.FileWatchTest do
 
       assert {:ok, ignored} = FileRules.ignored(project)
       assert Enum.sort(ignored) == ["node_modules/", "target", "target/other.bin"]
+    end
+
+    test "watching .longx definitions keeps nested dependencies ignored, with explicit opt-in",
+         %{project: project, dir: dir} do
+      :ok = Longx.Git.init(dir)
+      write!(dir, ".gitignore", ".longx/\n")
+      write!(dir, ".longx/local/agent.exs")
+      write!(dir, ".longx/local/coin-web/.venv/lib/dependency.py")
+      write!(dir, ".longx/local/coin-web/node_modules/pkg/index.js")
+      assert {:ok, files} = FileRules.files(project, 100)
+      assert ".longx/local/agent.exs" in files
+      refute ".longx/local/coin-web/.venv/lib/dependency.py" in files
+      refute ".longx/local/coin-web/node_modules/pkg/index.js" in files
+
+      write!(dir, ".longxignore", "!.longx/local/coin-web/.venv/lib/dependency.py\n")
+      assert {:ok, files} = FileRules.files(project, 100)
+      assert ".longx/local/coin-web/.venv/lib/dependency.py" in files
     end
   end
 

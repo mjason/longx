@@ -10,8 +10,9 @@ package main
 //  2. .gitignore — when the project is a git repository: the global
 //     excludesfile (sent by the host), .git/info/exclude, the root's and every
 //     deeper .gitignore
-//  3. Watch — always watched, even when .gitignore hides it (`.longx/`):
-//     built in, global, the project's (sent by the host), each line a `!` rule
+//  3. Default watch — definitions even when .gitignore hides them (`.longx/`),
+//     then exclusions for dependencies/cache trees beneath them, then the
+//     user's explicit watch rules (global, project), each line a `!` rule
 //  4. .longxignore at the root — above everything: `!target/reports/` brings
 //     back what .gitignore hides, a plain line ignores more
 //
@@ -29,21 +30,25 @@ import (
 )
 
 type ruleConfig struct {
-	Root      string   `json:"root"`
-	Git       bool     `json:"git"`
-	Ignore    []string `json:"ignore"`
-	Watch     []string `json:"watch"`
-	GitGlobal []string `json:"git_global"`
+	Root         string   `json:"root"`
+	Git          bool     `json:"git"`
+	Ignore       []string `json:"ignore"`
+	DefaultWatch []string `json:"default_watch"`
+	WatchIgnore  []string `json:"watch_ignore"`
+	Watch        []string `json:"watch"`
+	GitGlobal    []string `json:"git_global"`
 }
 
 type rules struct {
 	cfg    ruleConfig
 	ignore []gitignore.Pattern
 	// the root's patterns first, deeper .gitignore files after (their domain says where they apply)
-	git   []gitignore.Pattern
-	gitAt map[string]bool // directories whose .gitignore is read
-	watch []gitignore.Pattern
-	longx []gitignore.Pattern
+	git          []gitignore.Pattern
+	gitAt        map[string]bool // directories whose .gitignore is read
+	watch        []gitignore.Pattern
+	defaultWatch []gitignore.Pattern
+	watchIgnore  []gitignore.Pattern
+	longx        []gitignore.Pattern
 	// the `!` rules naming a path below a directory (`target/reports`): an ignored
 	// directory on their way is still walked, so they can take effect
 	reach   [][]string
@@ -57,6 +62,12 @@ func newRules(cfg ruleConfig) *rules {
 		r.git = append(parseLines(cfg.GitGlobal, nil), readPatterns(filepath.Join(cfg.Root, ".git", "info", "exclude"), nil)...)
 		r.readGitignore("")
 	}
+	for _, line := range cleanLines(cfg.DefaultWatch) {
+		line = strings.TrimPrefix(line, "!")
+		r.defaultWatch = append(r.defaultWatch, gitignore.ParsePattern("!"+line, nil))
+		r.addReach(line)
+	}
+	r.watchIgnore = parseLines(cfg.WatchIgnore, nil)
 	for _, line := range cleanLines(cfg.Watch) {
 		line = strings.TrimPrefix(line, "!")
 		r.watch = append(r.watch, gitignore.ParsePattern("!"+line, nil))
@@ -73,7 +84,7 @@ func newRules(cfg ruleConfig) *rules {
 }
 
 func (r *rules) rebuild() {
-	all := slices.Concat(r.ignore, r.git, r.watch, r.longx)
+	all := slices.Concat(r.ignore, r.git, r.defaultWatch, r.watchIgnore, r.watch, r.longx)
 	r.matcher = gitignore.NewMatcher(all)
 }
 

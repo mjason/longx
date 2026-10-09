@@ -57,7 +57,7 @@ defmodule Longx.AgentTest do
     end)
 
     {:ok, _pid} = Agent.ensure(thread_id: thread_id, cwd: dir, project_id: "p1")
-    %{bypass: bypass, dir: dir, thread_id: thread_id, model: model}
+    %{bypass: bypass, dir: dir, thread_id: thread_id, model: model, provider: provider}
   end
 
   ## helpers
@@ -2174,7 +2174,8 @@ defmodule Longx.AgentTest do
     # the summary call: the whole context so far under the compaction instructions
     assert summary_request["instructions"] =~ "CONTEXT CHECKPOINT COMPACTION"
     assert Enum.any?(summary_request["input"], &(&1["type"] == "function_call"))
-    assert summary_request["tools"] == []
+    assert summary_request["tools"] == first["tools"]
+    assert summary_request["tool_choice"] == "none"
     # the step after: the user's words verbatim, then the summary, nothing else
     assert [
              %{"role" => "user", "content" => [%{"text" => "run echo one, then say done"}]},
@@ -2200,6 +2201,71 @@ defmodule Longx.AgentTest do
     plug Longx.Agent.Plugs.Shell
     plug Longx.Agent.Plugs.Compaction
     plug Longx.Agent.Plugs.Request
+  end
+
+  defmodule GrammarCompaction do
+    use Longx.Agent.Pipeline
+    plug Longx.Agent.Plugs.Shell
+    plug Longx.Agent.Plugs.Patch
+    plug Longx.Agent.Plugs.Compaction, at: 0.0
+    plug Longx.Agent.Plugs.Request
+  end
+
+  test "automatic compaction keeps OpenAI grammar definitions alongside custom call history",
+       %{bypass: bypass, dir: dir, provider: provider} do
+    AI.update_provider!(provider, %{kind: :openai})
+    id = compacting_agent(dir, GrammarCompaction)
+    patch = "*** Begin Patch\n*** Add File: compact.txt\n+original\n*** End Patch\n"
+
+    script!(bypass, [
+      custom_call("apply_patch", patch),
+      ResponsesFixture.assistant_message("HANDOFF: created compact.txt"),
+      ResponsesFixture.assistant_message("done")
+    ])
+
+    {:ok, _} = Agent.send(id, "create compact.txt")
+    assert %{"status" => "completed"} = await_turn_end()
+    [first, summary, _] = collect_requests([])
+    assert summary["tools"] == first["tools"]
+    assert summary["tool_choice"] == "none"
+    assert Enum.any?(summary["tools"], &(&1["type"] == "custom" and &1["name"] == "apply_patch"))
+    assert Enum.any?(summary["input"], &(&1["type"] == "custom_tool_call"))
+    assert Enum.any?(summary["input"], &(&1["type"] == "custom_tool_call_output"))
+    refute Map.has_key?(summary, "x-longx-custom-tools")
+  end
+
+  test "manual compaction after restart rebuilds definitions without executing returned calls",
+       %{bypass: bypass, dir: dir, thread_id: id, provider: provider} do
+    AI.update_provider!(provider, %{kind: :openai})
+    patch = "*** Begin Patch\n*** Add File: compact.txt\n+original\n*** End Patch\n"
+
+    unwanted =
+      "*** Begin Patch\n*** Update File: compact.txt\n@@\n-original\n+changed\n*** End Patch\n"
+
+    script!(bypass, [
+      custom_call("apply_patch", patch),
+      ResponsesFixture.assistant_message("created"),
+      custom_call("apply_patch", unwanted)
+    ])
+
+    {:ok, _} = Agent.send(id, "create compact.txt")
+    assert %{"status" => "completed"} = await_turn_end()
+    :ok = Agent.stop(id)
+    {:ok, _} = Agent.ensure(thread_id: id, cwd: dir, project_id: "p1")
+    assert :ok = Agent.compact(id)
+
+    assert %{"item" => %{"error" => error}} =
+             await_item_completed_of_type("contextCompactionFailed")
+
+    assert error =~ "without a compaction summary"
+    assert Agent.status(id) == :idle
+    [first, _, summary] = collect_requests([])
+    assert summary["tool_choice"] == "none"
+    assert Enum.any?(summary["tools"], &(&1["type"] == "custom" and &1["name"] == "apply_patch"))
+    assert Enum.map(summary["tools"], & &1["name"]) == Enum.map(first["tools"], & &1["name"])
+    assert Enum.any?(summary["input"], &(&1["type"] == "custom_tool_call"))
+    assert File.read!(Path.join(dir, "compact.txt")) == "original\n"
+    refute Enum.any?(Transcript.items!(id), &(&1.kind == :compaction))
   end
 
   test "failed automatic compaction stops the turn without sending the old context again",
@@ -2419,7 +2485,9 @@ defmodule Longx.AgentTest do
 
     {:ok, _} = Agent.send(id, "two")
     await_turn_end()
-    [_, _, third] = collect_requests([])
+    [first, summary, third] = collect_requests([])
+    assert summary["tools"] == first["tools"]
+    assert summary["tool_choice"] == "none"
 
     assert [
              %{"role" => "user", "content" => [%{"text" => "one"}]},

@@ -54,7 +54,7 @@ defmodule Longx.Agent.Transcript.Item do
 
     create :append do
       primary? true
-      accept [:thread_id, :turn_id, :seq, :kind, :input, :ui, :model]
+      accept [:id, :thread_id, :turn_id, :seq, :kind, :input, :ui, :model]
     end
 
     read :for_thread do
@@ -71,7 +71,9 @@ defmodule Longx.Agent.Transcript.Item do
   end
 
   attributes do
-    uuid_primary_key :id
+    uuid_primary_key :id do
+      writable? true
+    end
 
     attribute :thread_id, :string, allow_nil?: false, public?: true
     attribute :turn_id, :string, public?: true

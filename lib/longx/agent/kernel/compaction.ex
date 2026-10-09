@@ -20,7 +20,7 @@ defmodule Longx.Agent.Kernel.Compaction do
                   )
 
   # a summary of the context so far, streamed from a task like any model call
-  def start_compaction(%State{} = state, model) do
+  def start_compaction(%State{} = state, model, source_request) when is_map(source_request) do
     ref = make_ref()
 
     request =
@@ -38,7 +38,12 @@ defmodule Longx.Agent.Kernel.Compaction do
                 ]
               }
             ],
-        "tools" => [],
+        # Keep the schemas that accompany this history (including grammar tools).
+        # Empty tools with historical calls can fail upstream response protection.
+        # They describe the history only: compaction must never invoke a tool.
+        "tools" => Map.get(source_request, "tools", []),
+        "x-longx-custom-tools" => Map.get(source_request, "x-longx-custom-tools", []),
+        "tool_choice" => "none",
         "stream" => true,
         "store" => false,
         "client_metadata" => %{

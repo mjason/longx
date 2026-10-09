@@ -10,6 +10,11 @@ defmodule Longx.RepoTest do
 
   @name :longx_repo_busy_test
 
+  test "the query deadline leaves room for SQLite's complete busy wait" do
+    config = Longx.Repo.config()
+    assert config[:timeout] > config[:busy_timeout] + 1_000
+  end
+
   setup do
     db = Path.join(System.tmp_dir!(), "longx-repo-busy-#{System.unique_integer([:positive])}.db")
 
@@ -31,7 +36,38 @@ defmodule Longx.RepoTest do
     )
 
     Longx.Repo.put_dynamic_repo(@name)
-    :ok
+    {:ok, db: db}
+  end
+
+  test "an exhausted lock wait returns a SQLite error without breaking the connection", %{db: db} do
+    name = :longx_repo_deadline_test
+
+    start_supervised!(
+      {Longx.Repo,
+       name: name,
+       database: db,
+       pool: DBConnection.ConnectionPool,
+       pool_size: 1,
+       busy_timeout: 100},
+      id: name
+    )
+
+    Longx.Repo.put_dynamic_repo(name)
+    {:ok, lock} = Exqlite.Sqlite3.open(db)
+
+    try do
+      :ok = Exqlite.Sqlite3.execute(lock, "BEGIN IMMEDIATE")
+
+      assert {:error, %Exqlite.Error{message: message}} =
+               Longx.Repo.query("INSERT INTO t (v) VALUES ('blocked')")
+
+      assert message =~ "locked" or message == "Database busy"
+      :ok = Exqlite.Sqlite3.execute(lock, "ROLLBACK")
+      assert {:ok, _} = Longx.Repo.query("INSERT INTO t (v) VALUES ('recovered')")
+      assert %{rows: [[1]]} = Longx.Repo.query!("SELECT count(*) FROM t")
+    after
+      Exqlite.Sqlite3.close(lock)
+    end
   end
 
   test "a transaction that reads before it writes is not refused when another write commits in between" do

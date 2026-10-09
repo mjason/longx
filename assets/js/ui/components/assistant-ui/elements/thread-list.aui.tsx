@@ -318,13 +318,14 @@ export const ThreadListItem: FC = () => {
             <ThreadListItemPrimitive.Trigger
               ref={triggerRef}
               data-slot="aui_thread-list-item-trigger"
+              title={work ?? (isRunning ? t.keys.running : undefined)}
               className="focus-visible:ring-ring/50 flex h-full min-w-0 flex-1 items-center rounded-md px-2.5 text-start text-sm outline-none group-hover:pe-9 group-has-focus-visible:pe-9 group-has-data-[state=open]:pe-9 group-data-active:pe-9 focus-visible:ring-1"
             >
               {isRunning && (
                 <Loader2Icon
                   aria-hidden
                   data-slot="aui_thread-list-item-running"
-                  className={`me-1.5 size-3.5 shrink-0 ${work ? "text-warning" : "text-muted-foreground animate-spin"}`}
+                  className={`me-1.5 size-3.5 shrink-0 animate-spin ${work ? "text-warning" : "text-primary"}`}
                 />
               )}
               <span
@@ -332,7 +333,6 @@ export const ThreadListItem: FC = () => {
                 className="min-w-0 flex-1 truncate"
               >
                 <ThreadListItemPrimitive.Title fallback={t.untitledThread} />
-                {work ? <span className="text-warning mt-0.5 block truncate text-[10px]" title={work}>{work}</span> : null}
               </span>
               {isRunning && <span className="sr-only">{work ?? t.keys.running}</span>}
             </ThreadListItemPrimitive.Trigger>

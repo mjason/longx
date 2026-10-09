@@ -9,8 +9,10 @@ defmodule Longx.Projects.FileRules do
        (Settings → 文件监控), the project's (`Project.file_rules["ignore"]`)
     2. `.gitignore` — in a git repository: the global excludesfile, `.git/info/exclude`,
        the root's and every deeper one
-    3. watch — always watched even when `.gitignore` hides it: built in
-       (`.longx/`, `.gitignore`, `.longxignore`), global, the project's
+    3. default watch — definitions even when `.gitignore` hides them
+       (`.longx/`, `.gitignore`, `.longxignore`), without resurrecting built-in
+       dependency/cache directories beneath `.longx/`; then explicit watch
+       rules from the global and project settings
     4. `.longxignore` at the root — above everything: `!target/reports/` brings
        back what `.gitignore` hides
 
@@ -79,7 +81,11 @@ defmodule Longx.Projects.FileRules do
       root: root,
       git: git?,
       ignore: @builtin_ignore ++ lines(global.ignore) ++ lines(own_rule(own, :ignore)),
-      watch: @builtin_watch ++ lines(global.watch) ++ lines(own_rule(own, :watch)),
+      default_watch: @builtin_watch,
+      # Watching definitions must not resurrect dependency/cache trees beneath .longx.
+      # Explicit user watch rules and .longxignore can still opt them back in.
+      watch_ignore: Enum.map(@builtin_ignore, &(".longx/**/" <> &1)),
+      watch: lines(global.watch) ++ lines(own_rule(own, :watch)),
       git_global: if(git?, do: Longx.Git.global_excludes(), else: [])
     }
   end

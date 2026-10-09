@@ -892,8 +892,25 @@ defmodule Longx.Agent do
   defp on_call(%State{phase: :idle, transcript: []} = state, :compact, _from),
     do: {:reply, :ok, state}
 
-  defp on_call(%State{phase: :idle} = state, :compact, _from),
-    do: {:reply, :ok, Compaction.start_compaction(state, state.model)}
+  defp on_call(%State{phase: :idle} = state, :compact, _from) do
+    # Rebuild the schemas even after an idle exit/restart, without interpreting
+    # request-phase effects or replacing the history being summarized.
+    case run_pipeline(state.pipeline, build_step(state, :request)) do
+      {:ok, %Step{halted: false, request: request, model: model}} when is_map(request) ->
+        {:reply, :ok, Compaction.start_compaction(state, model, request)}
+
+      {:ok, %Step{halted: true, reason: reason}} ->
+        message = "pipeline halted: #{describe(reason)}"
+        {:reply, {:error, message}, Compaction.fail(state, message)}
+
+      {:ok, %Step{request: nil}} ->
+        message = "the pipeline built no request"
+        {:reply, {:error, message}, Compaction.fail(state, message)}
+
+      {:error, message} ->
+        {:reply, {:error, message}, Compaction.fail(state, message)}
+    end
+  end
 
   defp on_call(state, :compact, _from), do: {:reply, :ok, %{state | compact_requested: true}}
 
@@ -1207,12 +1224,15 @@ defmodule Longx.Agent do
       {:ok, %Step{halted: true, reason: reason}} ->
         {:noreply, end_turn(state, "failed", "pipeline halted: #{describe(reason)}")}
 
+      {:ok, %Step{request: nil}} ->
+        {:noreply, end_turn(state, "failed", "the pipeline built no request")}
+
       {:ok, %Step{effects: effects, model: model} = step} ->
         # a compact effect folds the context first (unless this is the retry after a failed fold)
         wanted? = Enum.any?(effects, &match?({:compact, _}, &1))
 
         if wanted? and not Keyword.get(opts, :skip_compact, false) and state.transcript != [],
-          do: {:noreply, Compaction.start_compaction(state, model)},
+          do: {:noreply, Compaction.start_compaction(state, model, step.request)},
           else: start_model(state, step)
 
       {:error, message} ->

@@ -96,6 +96,41 @@ func TestIgnoredWithoutGitReadsNoGitignore(t *testing.T) {
 	}
 }
 
+func TestDefinitionWatchDoesNotResurrectDependencies(t *testing.T) {
+	root := tree(t, map[string]string{
+		".gitignore":                             ".longx/\n",
+		".git/HEAD":                              "ref: refs/heads/main\n",
+		".longx/local/agent.exs":                 "",
+		".longx/local/app/.venv/lib/pkg.py":      "",
+		".longx/local/app/node_modules/pkg/a.js": "",
+	})
+	cfg := ruleConfig{Root: root, Git: true,
+		Ignore:       []string{".venv/", "node_modules/"},
+		DefaultWatch: []string{".longx/"},
+		WatchIgnore:  []string{".longx/**/.venv/", ".longx/**/node_modules/"}}
+	got := listFiles(cfg, 100)
+	if !slices.Contains(got, ".longx/local/agent.exs") {
+		t.Fatal("definitions were not watched")
+	}
+	for _, dep := range []string{".longx/local/app/.venv/lib/pkg.py", ".longx/local/app/node_modules/pkg/a.js"} {
+		if slices.Contains(got, dep) {
+			t.Fatalf("dependency resurrected: %s", dep)
+		}
+	}
+	ch, stop := startWatch(t, cfg)
+	write(t, root, ".longx/local/agent.exs", "updated")
+	write(t, root, ".longx/local/app/.venv/lib/pkg.py", "updated")
+	paths, _ := collect(ch, 300*time.Millisecond)
+	stop()
+	if !slices.Contains(paths, ".longx/local/agent.exs") || slices.Contains(paths, ".longx/local/app/.venv/lib/pkg.py") {
+		t.Fatalf("wrong watched paths: %v", paths)
+	}
+	cfg.Watch = []string{".longx/local/app/.venv/"}
+	if !slices.Contains(listFiles(cfg, 100), ".longx/local/app/.venv/lib/pkg.py") {
+		t.Fatal("explicit watch did not override default dependency exclusion")
+	}
+}
+
 type batch struct {
 	Ready    bool     `json:"ready"`
 	Watches  int      `json:"watches"`

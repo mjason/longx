@@ -223,6 +223,71 @@ defmodule Longx.Agent.TranscriptTest do
     assert Process.alive?(pid)
   end
 
+  test "a transient disconnect is retried with the same item identity" do
+    alias Longx.Agent.Transcript.Writer
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+    me = self()
+
+    writer = fn [item] ->
+      send(me, {:attempt, item.id})
+      n = Agent.get_and_update(counter, &{&1, &1 + 1})
+
+      if n == 0,
+        do:
+          raise(
+            DBConnection.ConnectionError,
+            "connection is closed because of an error, disconnect or timeout"
+          ),
+        else: {:ok, 1}
+    end
+
+    {:ok, pid} = Writer.start_link(name: nil, write: writer, waits: [1])
+    GenServer.cast(pid, {:append, %{seq: 1}})
+    assert :ok = GenServer.call(pid, :flush)
+    assert_receive {:attempt, id}
+    assert_receive {:attempt, ^id}
+    assert GenServer.call(pid, :stats).dropped == 0
+  end
+
+  test "exhausted transient retries keep the batch and a later flush recovers it" do
+    alias Longx.Agent.Transcript.Writer
+    {:ok, available} = Agent.start_link(fn -> false end)
+
+    writer = fn batch ->
+      if Agent.get(available, & &1), do: {:ok, length(batch)}, else: raise(locked())
+    end
+
+    {:ok, pid} = Writer.start_link(name: nil, write: writer, waits: [])
+    GenServer.cast(pid, {:append, %{seq: 1}})
+    assert {:error, :locked} = GenServer.call(pid, :flush)
+    assert GenServer.call(pid, :stats).dropped == 0
+    Agent.update(available, fn _ -> true end)
+    assert :ok = GenServer.call(pid, :flush)
+    assert GenServer.call(pid, :stats).written == 1
+    GenServer.stop(pid)
+  end
+
+  test "replaying an append after an ambiguous commit does not duplicate or rewrite the item" do
+    id = Ash.UUID.generate()
+
+    attrs = %{
+      id: id,
+      thread_id: @thread,
+      turn_id: "replay",
+      seq: 1,
+      kind: :user_message,
+      input: %{"role" => "user", "content" => "original"}
+    }
+
+    Transcript.append!(attrs)
+    assert :ok = Transcript.flush()
+    Transcript.append!(%{attrs | input: %{"role" => "user", "content" => "changed"}})
+    assert :ok = Transcript.flush()
+    assert [item] = Transcript.items!(@thread)
+    assert item.id == id
+    assert item.input["content"] == "original"
+  end
+
   test "items are appended in sequence, listed in order, truncated per turn and deleted per thread" do
     user = %{"type" => "message", "role" => "user", "content" => "hi"}
     call = %{"type" => "function_call", "call_id" => "c1", "name" => "exec", "arguments" => "{}"}

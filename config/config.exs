@@ -21,7 +21,9 @@ config :ash_graphql, :json_type, :json
 # was refused at once, "Database busy", no wait: Oban's cron and pruner in
 # production (Sentry LONX-D / LONX-E, 2026-09-26; test/longx/repo_test.exs).
 config :longx, Longx.Repo,
-  timeout: 15_000,
+  # Let SQLite finish its busy wait and return a lock error before DBConnection
+  # disconnects the query. A shorter query timeout interrupts the connection.
+  timeout: 30_000,
   busy_timeout: 16_000,
   default_transaction_mode: :immediate
 

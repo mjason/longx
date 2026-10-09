@@ -77,7 +77,7 @@ describe("ProjectWindow", () => {
     const { listThreads, listRunningThreads } = await import("@/core/api");
     vi.mocked(listThreads).mockResolvedValue(ok([{ ...thread(1), status: "active" }, { ...thread(2), status: "active" }, thread(3), thread(4)]) as never);
     vi.mocked(listRunningThreads).mockResolvedValue(
-      ok({ threads: [{ id: "t4", kernelThreadId: "thr_4", title: null, preview: "thread 4", lastActivityAt: null, projectId: "id-1", projectSlug: "app-1", projectName: "App", waiting: false, working: ["coder"], progress: null, turnStartedAt: null }] }) as never,
+      ok({ threads: [{ id: "t4", kernelThreadId: "thr_4", title: null, preview: "thread 4", lastActivityAt: null, projectId: "id-1", projectSlug: "app-1", projectName: "App", waiting: false, working: ["coder"], progress: null, turnStartedAt: null, jobActivity: { total: 1, state: "processing" } }] }) as never,
     );
     try {
       renderAt("/p/app-1/t/t1");
@@ -88,6 +88,12 @@ describe("ProjectWindow", () => {
           .filter((item) => item.querySelector('[data-slot="aui_thread-list-item-running"]'))
           .map((item) => item.querySelector('[data-slot="aui_thread-list-item-title"]')?.textContent?.trim());
       await waitFor(() => expect(marked()).toEqual(["thread 1", "thread 2", "thread 4"]));
+      const row = within(panel).getByRole("button", { name: /thread 4/ });
+      await waitFor(() => expect(row).toHaveAttribute("title", "正在处理结果"));
+      expect(row.querySelector('[data-slot="aui_thread-list-item-title"]')).toHaveTextContent(/^thread 4$/);
+      expect(row.querySelector('[data-slot="aui_thread-list-item-running"]')).toHaveClass("text-warning", "animate-spin");
+      const ordinary = within(panel).getByRole("button", { name: /thread 1/ });
+      expect(ordinary.querySelector('[data-slot="aui_thread-list-item-running"]')).toHaveClass("text-primary", "animate-spin");
     } finally {
       vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
       vi.mocked(listRunningThreads).mockResolvedValue(ok({ threads: [] }) as never);
