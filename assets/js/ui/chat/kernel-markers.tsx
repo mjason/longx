@@ -44,7 +44,6 @@ export default function CompactionView({ error }: { error?: string }) {
   if (error) return (
     <div role="alert" className="my-2 text-xs text-destructive" data-testid="compaction-failed">
       <div>{t.compactionFailed}</div>
-      <div className="mt-1 break-words">{error}</div>
     </div>
   );
   return (

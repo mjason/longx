@@ -12,7 +12,6 @@ import { AgentLabel } from "./AgentLabel";
 import { HistoryContext, HistoryEdge } from "./HistoryEdge";
 import { PendingEchoes } from "./PendingEchoes";
 import { GoalBar } from "./GoalBar";
-import { ModelFailedBanner } from "./ModelFailedBanner";
 import { ReasoningSteps } from "./ReasoningSteps";
 import { SlashCommands } from "./SlashCommands";
 import { ComposerLeading, ComposerTrailing } from "./TurnBar";
@@ -21,7 +20,6 @@ import { StoppedNotice } from "./StoppedTurn";
 import { WaitingMessages } from "./WaitingMessages";
 
 const ThreadResources = lazy(() => import("./ThreadJobs").then(module => ({ default: module.ThreadResources })));
-const JobWorkStatus = lazy(() => import("./ThreadJobs").then(module => ({ default: module.JobWorkStatus })));
 
 const Welcome = () => {
     useTranslation();
@@ -50,7 +48,6 @@ const ComposerQueue = () => {
   const { insertQueued } = useChat();
   return (
     <>
-      <Suspense fallback={null}><JobWorkStatus /></Suspense>
       <WaitingMessages />
       <MessageQueue onInsert={(id) => void insertQueued(id)} insertLabel={t.queueInsert} removeLabel={t.queueRemove} hint={t.queueHint} />
     </>
@@ -109,7 +106,6 @@ export function ThreadPage() {
         </Alert>
       ) : null}
       <GoalBar />
-      <ModelFailedBanner />
       <Suspense fallback={null}><ThreadResources /></Suspense>
       <div className="relative min-h-0 flex-1">
         <HistoryContext.Provider value={chat.history}>

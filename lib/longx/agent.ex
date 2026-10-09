@@ -1258,6 +1258,7 @@ defmodule Longx.Agent do
      %{
        state
        | phase: :streaming,
+         request_error: nil,
          step_model: model || "longx",
          tools: tools,
          model_task: %{task: task, ref: ref},
@@ -1758,23 +1759,30 @@ defmodule Longx.Agent do
     end
   end
 
+  defp model_event({:request_error, details}, state),
+    do: {:noreply, %{state | request_error: details}}
+
   defp model_event({:retrying, why, attempt, limit}, state) do
     emit(state, "turn/progress", %{
       "turnId" => state.turn_id,
-      "progress" => %{
-        "kind" => "retry",
-        "name" => why,
-        "bytes" => 0,
-        "attempt" => attempt,
-        "limit" => limit
-      }
+      "progress" =>
+        Map.merge(state.request_error || %{}, %{
+          "kind" => "retry",
+          "name" => why,
+          "bytes" => 0,
+          "attempt" => attempt,
+          "limit" => limit
+        })
     })
 
     {:noreply, %{state | quiet: nil}}
   end
 
   defp model_event({:completed, response, %{context_window: window}}, state) do
-    state = state |> Stream.close_open_items() |> Stream.record_usage(response["usage"], window)
+    state =
+      %{state | request_error: nil}
+      |> Stream.close_open_items()
+      |> Stream.record_usage(response["usage"], window)
 
     case response_phase(state, state.calls) do
       {:halt, message} ->
@@ -1801,11 +1809,14 @@ defmodule Longx.Agent do
       {:noreply,
        state
        |> Stream.close_open_items()
-       |> end_turn("failed", %{
-         "message" => "model #{slug} failed: #{message}",
-         "code" => "model_failed",
-         "model" => slug
-       })}
+       |> end_turn(
+         "failed",
+         Map.merge(state.request_error || %{}, %{
+           "message" => "model #{slug} failed: #{message}",
+           "code" => "model_failed",
+           "model" => slug
+         })
+       )}
     end
   end
 
@@ -1831,16 +1842,20 @@ defmodule Longx.Agent do
   defp compaction_event({:restart, _why}, %State{compacting: c} = state),
     do: {:noreply, %{state | compacting: %{c | text: ""}, quiet: nil}}
 
+  defp compaction_event({:request_error, details}, state),
+    do: {:noreply, %{state | request_error: details}}
+
   defp compaction_event({:retrying, why, attempt, limit}, state) do
     emit(state, "turn/progress", %{
       "turnId" => state.turn_id,
-      "progress" => %{
-        "kind" => "compactionRetry",
-        "name" => why,
-        "bytes" => 0,
-        "attempt" => attempt,
-        "limit" => limit
-      }
+      "progress" =>
+        Map.merge(state.request_error || %{}, %{
+          "kind" => "compactionRetry",
+          "name" => why,
+          "bytes" => 0,
+          "attempt" => attempt,
+          "limit" => limit
+        })
     })
 
     {:noreply, state}
@@ -1874,15 +1889,19 @@ defmodule Longx.Agent do
        ) do
     message = describe_failure(message)
     Logger.warning("agent #{state.thread_id}: compaction failed: #{message}")
-    state = Compaction.fail(state, message)
+    state = Compaction.fail(state, message, state.request_error)
 
     if c.was_running,
       do:
         {:noreply,
-         end_turn(state, "failed", %{
-           "code" => "compaction_failed",
-           "message" => "context compaction failed: #{message}"
-         })},
+         end_turn(
+           state,
+           "failed",
+           Map.merge(state.request_error || %{}, %{
+             "code" => "compaction_failed",
+             "message" => "context compaction failed: #{message}"
+           })
+         )},
       else: {:noreply, %{state | phase: :idle}}
   end
 

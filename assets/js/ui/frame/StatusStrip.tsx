@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { lazy, Suspense } from "react";
 import { useViewport } from "@/core/viewport";
 import { KeysHint } from "@/ui/keys/KeysHint";
 import { AlertTriangle, ArrowUpCircle, Download, GitBranch } from "lucide-react";
@@ -17,6 +18,7 @@ import { ScheduledWatchesChip } from "./ScheduledWatchesChip";
 import { CopyApiButton } from "./CopyApiButton";
 
 const item = (extra = "") => `flex shrink-0 items-center gap-1 whitespace-nowrap ${extra}`;
+const RequestErrorStatus = lazy(() => import("@/ui/chat/ModelFailedBanner").then(module => ({ default: module.ModelFailedBanner })));
 
 /** IDEA's status bar: HEAD, an update waiting. One thin line. */
 export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
@@ -31,6 +33,7 @@ export function StatusStrip({ ctx }: { ctx: ProjectContext }) {
   return (
     // every item stays on one line: a narrow phone scrolls the strip sideways
     <div className="bg-sidebar border-sidebar-border text-muted-foreground flex h-7 items-center gap-4 overflow-x-auto border-t px-3 text-xs" data-testid="status-strip">
+      <Suspense fallback={null}><RequestErrorStatus /></Suspense>
       <span className={item("font-mono")} title="HEAD">
         <GitBranch className="size-3" /> {git.data ? (git.data.repository ? shortSha(git.data.head) : "no git") : "…"}
         {git.data?.repository && !git.data.clean ? <span className="text-warning">·{git.data.changes}</span> : null}

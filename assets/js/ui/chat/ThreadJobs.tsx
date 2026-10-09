@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useAuiState } from "@assistant-ui/react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOutletContext, useParams } from "react-router";
@@ -146,25 +147,51 @@ export function JobWorkStatus() {
   const hints = useJobHints();
   const jobs = useJobs();
   const { view, sendText, disabledReason } = useChat();
+  const { threadId } = useParams();
+  const text = useAuiState(s => s.composer.text);
   const [checking, setChecking] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const warned = useRef<string | null>(null);
   const pending = jobs.filter(job => job.purpose === "wait" && job.activity !== "complete");
+  const signature = pending.length ? `${threadId}:${pending.map(job => `${job.threadId}:${job.run ?? job.name}`).sort().join(",")}` : "";
+  useEffect(() => {
+    if (!text.trim() || !signature) {
+      warned.current = null;
+      return;
+    }
+    if (warned.current === signature) return;
+    warned.current = signature;
+    toast.warning(t.jobWork.count(pending.length), {
+      id: `job-order:${threadId}`,
+      position: "top-right",
+      description: hints.inputHint,
+      action: { label: t.jobWork.show, onClick: () => setExpanded(true) },
+    });
+  }, [text, signature, pending.length, threadId, hints.inputHint]);
   if (!pending.length) return null;
   const running = pending.filter(job => job.activity === "waiting").length;
   const processing = pending.filter(job => job.activity === "processing").length;
   const incomplete = pending.some(job => job.activity === "incomplete");
-  return <section className="border-warning/30 bg-warning/5 mx-2 mb-2 rounded-lg border text-xs" data-testid="job-work-status" aria-label={t.jobWork.count(pending.length)}>
-    <div className="p-3">
-      <p role="status" className={incomplete ? "text-destructive font-medium" : "text-warning font-medium"}>
-        {incomplete ? t.jobWork.states.incomplete : hints.title(running, pending.length - running - processing, processing)}
-      </p>
+  const label = incomplete ? t.jobWork.states.incomplete : t.jobWork.states[processing ? "processing" : running ? "waiting" : "pending"];
+  return <Popover open={expanded} onOpenChange={setExpanded}>
+    <span className="min-w-0" data-testid="job-work-status" role="status">
+      <PopoverTrigger asChild>
+        <button type="button" className={`flex min-w-0 max-w-[32vw] items-center gap-1 truncate text-xs hover:underline ${incomplete ? "text-destructive" : "text-warning"}`} aria-label={`${t.jobWork.show} · ${t.jobWork.count(pending.length)}`} title={`${label} · ${t.jobWork.count(pending.length)}`}>
+          <Terminal className="size-3 shrink-0" /><span className="truncate">{label} </span><span className="shrink-0">· {pending.length}</span>
+        </button>
+      </PopoverTrigger>
+    </span>
+    <PopoverContent align="start" className="max-h-[70vh] w-96 max-w-[calc(100vw-2rem)] overflow-y-auto p-0 text-xs" data-testid="job-work-popover">
+    <div className="border-b p-3">
+      <p className={incomplete ? "text-destructive font-medium" : "text-warning font-medium"}>{incomplete ? t.jobWork.states.incomplete : hints.title(running, pending.length - running - processing, processing)}</p>
       <p className="text-muted-foreground mt-1 leading-relaxed">{view.waiting.paused ? hints.pausedHint : incomplete ? hints.incompleteHint : !running && !processing ? hints.pendingHint : pending.some(job => job.notify === false) ? hints.manualHint : hints.hint}</p>
-      <button type="button" className="text-primary mt-2 hover:underline" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? t.jobWork.hide : t.jobWork.show}</button>
-      {!running && runningTurnId(view) === null ? <button type="button" className="text-primary ms-4 mt-2 hover:underline disabled:opacity-50" disabled={checking || !!disabledReason} onClick={async () => {
+      <p className="text-muted-foreground mt-1 leading-relaxed">{hints.inputHint}</p>
+      {!running && runningTurnId(view) === null ? <button type="button" className="text-primary mt-2 hover:underline disabled:opacity-50" disabled={checking || !!disabledReason} onClick={async () => {
         setChecking(true);
         try { await sendText(hints.checkMessage); } catch (error) { toast.error(error instanceof Error ? error.message : String(error)); } finally { setChecking(false); }
       }}>{t.jobWork.check}</button> : null}
     </div>
-    {expanded ? <div className="max-h-64 overflow-y-auto border-t">{pending.map(job => <JobRow key={`${job.threadId}:${job.run ?? job.name}`} job={job} />)}</div> : null}
-  </section>;
+    {pending.map(job => <JobRow key={`${job.threadId}:${job.run ?? job.name}`} job={job} />)}
+    </PopoverContent>
+  </Popover>;
 }

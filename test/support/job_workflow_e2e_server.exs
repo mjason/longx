@@ -28,6 +28,22 @@ defmodule Longx.Test.JobWorkflowE2EModel do
 
     chunks =
       cond do
+        text == "FORCE_HTTP_503_E2E" ->
+          {:http_error, 503, "fixture service unavailable; request ID http-error-e2e-503"}
+
+        text == "FORCE_STREAM_ERROR_E2E" ->
+          [
+            "event: response.failed\ndata: " <>
+              Jason.encode!(%{
+                "response" => %{
+                  "error" => %{
+                    "message" =>
+                      "fixture response protection is unavailable; request ID stream-error-e2e-200"
+                  }
+                }
+              }) <> "\n\n"
+          ]
+
         not (String.contains?(text, "CONFIRM_RESULT") or String.contains?(text, "继续检查待处理的任务结果")) ->
           fixture.assistant_message("JOB_WORKFLOW_INCOMPLETE: stopped work remains incomplete.")
 
@@ -52,12 +68,20 @@ defmodule Longx.Test.JobWorkflowE2EModel do
           fixture.function_call("job_output", nil, %{"name" => "ready-result"})
       end
 
-    conn = conn |> put_resp_content_type("text/event-stream") |> send_chunked(200)
+    case chunks do
+      {:http_error, status, message} ->
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(status, Jason.encode!(%{"error" => %{"message" => message}}))
 
-    Enum.reduce(chunks, conn, fn chunk, conn ->
-      {:ok, conn} = Plug.Conn.chunk(conn, chunk)
-      conn
-    end)
+      chunks ->
+        conn = conn |> put_resp_content_type("text/event-stream") |> send_chunked(200)
+
+        Enum.reduce(chunks, conn, fn chunk, conn ->
+          {:ok, conn} = Plug.Conn.chunk(conn, chunk)
+          conn
+        end)
+    end
   end
 
   def call(conn, _), do: send_resp(conn, 404, "local test fixture only")
@@ -121,6 +145,14 @@ for {module, options} <- [
 end
 
 Application.put_env(:sentry, :dsn, nil)
+
+if System.get_env("LONGX_ERROR_E2E") == "1" do
+  Application.put_env(
+    :longx,
+    Longx.Agent.Model,
+    Keyword.put(Application.get_env(:longx, Longx.Agent.Model, []), :retry_ms, [1500])
+  )
+end
 
 Application.put_env(
   :longx,

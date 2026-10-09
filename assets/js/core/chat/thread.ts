@@ -121,6 +121,12 @@ export type TurnProgress = {
   bytes: number;
   attempt?: number;
   limit?: number;
+  /** Actual transport status; null when no HTTP response was received. */
+  httpStatus?: number | null;
+  source?: "http" | "stream" | "transport" | "limiter";
+  message?: string;
+  model?: string;
+  provider?: string;
   /** seconds the upstream has sent nothing (past the kernel's threshold); absent while data comes */
   quiet?: number;
 };

@@ -104,12 +104,16 @@ describe("ThreadPage", () => {
     vi.mocked(projectJobs).mockImplementation(async () => ok({ jobs }) as never);
     const { client } = await open();
     const status = await screen.findByTestId("job-work-status");
-    expect(status).toHaveTextContent("1 项运行中，1 项待处理");
-    expect(status).toHaveTextContent("建议等最终汇总后再验收");
+    expect(screen.getByTestId("turn-bar")).toContainElement(status);
+    expect(status).toHaveTextContent("等待任务结果 · 2");
     expect(screen.getByRole("button", { name: "后台 1" })).toBeInTheDocument();
-    await user.click(within(status).getByRole("button", { name: "查看任务" }));
-    expect(within(status).getAllByTestId("thread-job-row")).toHaveLength(2);
-    expect(status).not.toHaveTextContent("server");
+    await user.click(within(status).getByRole("button", { name: /查看任务/ }));
+    const details = await screen.findByTestId("job-work-popover");
+    expect(details).toHaveTextContent("1 项运行中，1 项待处理");
+    expect(details).toHaveTextContent("建议等最终汇总后再验收");
+    expect(within(details).getAllByTestId("thread-job-row")).toHaveLength(2);
+    expect(details).not.toHaveTextContent("server");
+    await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "后台 1" }));
     const background = await screen.findByTestId("thread-background-popover");
     expect(background).toHaveTextContent("server");
@@ -120,7 +124,7 @@ describe("ThreadPage", () => {
     await user.keyboard("{Escape}");
     jobs = [job("tests", "complete"), job("build", "processing"), job("server", "waiting", "background")];
     await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.projectJobs("id-1") }); });
-    await waitFor(() => expect(status).toHaveTextContent("1 项处理中"));
+    await waitFor(() => expect(status).toHaveTextContent("正在处理结果 · 1"));
     jobs = [job("tests", "complete"), job("build", "complete"), job("server", "waiting", "background")];
     await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.projectJobs("id-1") }); });
     await waitFor(() => expect(screen.queryByTestId("job-work-status")).not.toBeInTheDocument());
@@ -134,8 +138,9 @@ describe("ThreadPage", () => {
       status: "running", purpose: "wait", activity: "waiting", startedAt: null, finishedAt: null,
     }] }) as never);
     await open();
-    const status = await screen.findByTestId("job-work-status");
-    await user.click(within(status).getByRole("button", { name: "查看任务" }));
+    const rail = await screen.findByTestId("job-work-status");
+    await user.click(within(rail).getByRole("button", { name: /查看任务/ }));
+    const status = await screen.findByTestId("job-work-popover");
     await user.click(within(status).getByRole("button", { name: "停止任务" }));
     expect(screen.getByRole("alertdialog")).toHaveTextContent("不会自动重跑");
     await user.click(screen.getByRole("button", { name: "取消" }));
@@ -165,18 +170,64 @@ describe("ThreadPage", () => {
     }] }) as never);
     await open();
     const status = await screen.findByTestId("job-work-status");
-    expect(status).toHaveTextContent("结果已到但尚未确认");
+    expect(status).toHaveTextContent("结果待处理");
     const composer = screen.getByRole("textbox", { name: "随心输入" });
     await user.type(composer, "保留这份草稿");
-    await user.click(within(status).getByRole("button", { name: "查看任务" }));
+    await user.click(within(status).getByRole("button", { name: /查看任务/ }));
+    const details = await screen.findByTestId("job-work-popover");
+    expect(details).toHaveTextContent("结果已到但尚未确认");
     expect(sendMessage).not.toHaveBeenCalled();
     expect(composer).toHaveValue("保留这份草稿");
-    await user.click(within(status).getByRole("button", { name: "继续检查结果" }));
+    await user.click(within(details).getByRole("button", { name: "继续检查结果" }));
     await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       input: expect.objectContaining({ text: "继续检查待处理的任务结果，确认后再汇总；不要重跑我已停止的任务。" }),
     })));
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(composer).toHaveValue("保留这份草稿");
+  });
+
+  test("typing with unfinished work reminds once per draft without blocking or rewriting messages", async () => {
+    const user = userEvent.setup();
+    vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [{
+      name: "verify", run: "r1", cmd: "true", threadId: "t1", rootThreadId: "t1",
+      status: "exited", purpose: "wait", activity: "incomplete",
+      startedAt: null, finishedAt: null,
+    }] }) as never);
+    const { client } = await open();
+    await screen.findByTestId("job-work-status");
+    vi.mocked(toast.warning).mockClear();
+    const composer = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(composer, "继续处理监控消息");
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    expect(toast.warning).toHaveBeenCalledWith("待完成 1 项", expect.objectContaining({
+      description: expect.stringContaining("可能与新消息交错到达"),
+    }));
+    await user.type(composer, "，不要改顺序");
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      input: expect.objectContaining({ text: "继续处理监控消息，不要改顺序" }),
+    })));
+    expect(releaseWaiting).not.toHaveBeenCalled();
+    expect(releaseWaitingBatch).not.toHaveBeenCalled();
+    vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [] }) as never);
+    await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.projectJobs("id-1") }); });
+    await waitFor(() => expect(screen.queryByTestId("job-work-status")).not.toBeInTheDocument());
+  });
+
+  test("independent monitoring services do not warn when typing", async () => {
+    const user = userEvent.setup();
+    vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [{
+      name: "monitor", run: "r1", cmd: "monitor", threadId: "t1", rootThreadId: "t1",
+      status: "running", purpose: "background", activity: "waiting",
+      startedAt: null, finishedAt: null,
+    }] }) as never);
+    await open();
+    await screen.findByRole("button", { name: "后台 1" });
+    vi.mocked(toast.warning).mockClear();
+    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "照常聊天");
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("job-work-status")).not.toBeInTheDocument();
   });
 
   test("manual compaction stays busy during retries and exposes failure without a success marker", async () => {
@@ -195,7 +246,9 @@ describe("ThreadPage", () => {
       });
     });
     expect(await screen.findByTestId("compaction-failed")).toHaveTextContent("上下文压缩失败，历史已保留");
-    expect(screen.getByTestId("compaction-failed")).toHaveTextContent("response protection is unavailable");
+    expect(screen.getByTestId("compaction-failed")).not.toHaveTextContent("response protection is unavailable");
+    await userEvent.click(screen.getByRole("button", { name: "查看错误" }));
+    expect(await screen.findByTestId("request-error-details")).toHaveTextContent("response protection is unavailable");
     expect(screen.queryByTestId("compaction")).not.toBeInTheDocument();
   });
 
@@ -552,7 +605,8 @@ describe("ThreadPage", () => {
     act(() => {
       channel.deliver("event", { seq: 6, method: "turn/progress", params: { turnId: "turn_2", progress: { kind: "retry", name: "the stream broke", bytes: 0 } } });
     });
-    expect(bar).toHaveTextContent("连接中断，正在重试");
+    expect(bar).toHaveTextContent("正在重试");
+    expect(bar).not.toHaveTextContent("the stream broke");
     act(() => {
       channel.deliver("event", { seq: 7, method: "turn/progress", params: { turnId: "turn_2", progress: null } });
     });
@@ -618,10 +672,12 @@ describe("ThreadPage", () => {
       channel.deliver("event", {
         seq: 5,
         method: "turn/completed",
-        params: { turn: { id: "turn_2", status: "failed", error: { message: "model deepseek-flash failed: the stream broke", code: "model_failed", model: "deepseek-flash" } } },
+        params: { turn: { id: "turn_2", status: "failed", error: { message: "model deepseek-flash failed: the stream broke", code: "model_failed", model: "deepseek-flash", httpStatus: 503, source: "http" } } },
       });
     });
-    const banner = await screen.findByTestId("model-failed");
+    await user.click(await screen.findByRole("button", { name: "查看错误" }));
+    const banner = await screen.findByTestId("request-error-details");
+    expect(banner).toHaveTextContent("HTTP 503");
     expect(banner).toHaveTextContent("deepseek-flash");
     expect(banner).toHaveTextContent("the stream broke");
     await user.click(within(banner).getByRole("combobox"));
@@ -630,6 +686,72 @@ describe("ThreadPage", () => {
     await waitFor(() =>
       expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ threadId: "t1", text: "继续", model: "glm-5" }) })),
     );
+  });
+
+  test("retry status stays short while error details show and copy the real HTTP 200 stream failure", async () => {
+    const user = userEvent.setup();
+    await open();
+    const message = "the model failed: An error occurred while processing your request. Request ID 0ca6ca65-fd98-49c6-ac38-7dea5ec484f1";
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", { seq: 5, method: "turn/progress", params: { turnId: "turn_2", progress: {
+        kind: "retry", name: message, bytes: 0, httpStatus: 200, source: "stream", attempt: 1, limit: 3,
+      } } });
+    });
+    const rail = screen.getByTestId("turn-bar");
+    expect(rail).toHaveTextContent("正在重试");
+    expect(rail).not.toHaveTextContent(message);
+    expect(within(rail).queryByRole("button", { name: "查看错误" })).not.toBeInTheDocument();
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
+    await user.click(within(screen.getByTestId("status-strip")).getByRole("button", { name: "查看错误" }));
+    const details = await screen.findByTestId("request-error-details");
+    expect(details).toHaveTextContent("HTTP 200");
+    expect(details).toHaveTextContent("响应流内错误");
+    expect(details).toHaveTextContent(message);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await user.click(within(details).getByRole("button", { name: "复制错误信息" }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("HTTP 200"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining(message));
+    expect(sendMessage).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    act(() => channel.deliver("event", { seq: 6, method: "turn/progress", params: { turnId: "turn_2", progress: null } }));
+    await waitFor(() => expect(screen.queryByTestId("request-error-status")).not.toBeInTheDocument());
+  });
+
+  test("legacy or transport errors never infer a status code from the error text", async () => {
+    const user = userEvent.setup();
+    await open();
+    act(() => channel.deliver("event", { seq: 4, method: "turn/completed", params: { turn: {
+      id: "turn_1", status: "failed", error: { code: "model_failed", message: "connection failed before HTTP response; text mentions 502", httpStatus: null, source: "transport" },
+    } } }));
+    await user.click(await screen.findByRole("button", { name: "查看错误" }));
+    const details = await screen.findByTestId("request-error-details");
+    expect(details).toHaveTextContent("未记录／未获得 HTTP 响应");
+    expect(details).toHaveTextContent("连接／传输错误");
+    expect(details).not.toHaveTextContent("HTTP 502");
+  });
+
+  test("a new turn closes old error details and never reuses a prior compaction failure", async () => {
+    const user = userEvent.setup();
+    await open();
+    act(() => channel.deliver("event", { seq: 4, method: "item/completed", params: { item: {
+      id: "cf-old", type: "contextCompactionFailed", turnId: "turn_1",
+      error: "old compaction error", httpStatus: 200, source: "stream",
+    } } }));
+    await user.click(await screen.findByRole("button", { name: "查看错误" }));
+    expect(await screen.findByTestId("request-error-details")).toHaveTextContent("old compaction error");
+    act(() => channel.deliver("event", { seq: 5, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } }));
+    await waitFor(() => expect(screen.queryByTestId("request-error-details")).not.toBeInTheDocument());
+    act(() => channel.deliver("event", { seq: 6, method: "turn/completed", params: { turn: {
+      id: "turn_2", status: "failed", error: { code: "model_failed", message: "new gateway error", httpStatus: 502, source: "http" },
+    } } }));
+    expect(screen.queryByTestId("request-error-details")).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "查看错误" }));
+    const details = await screen.findByTestId("request-error-details");
+    expect(details).toHaveTextContent("HTTP 502");
+    expect(details).toHaveTextContent("new gateway error");
+    expect(details).not.toHaveTextContent("old compaction error");
   });
 
   test("Escape in the composer never stops the turn: an IME user presses it all the time; stop is the button", async () => {

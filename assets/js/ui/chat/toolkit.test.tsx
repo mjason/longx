@@ -479,13 +479,13 @@ describe("agents", () => {
     const { CompactionView } = await import("./toolkit");
     render(<CompactionView error="response protection is unavailable" />);
     expect(await screen.findByRole("alert")).toHaveTextContent("上下文压缩失败，历史已保留");
-    expect(screen.getByRole("alert")).toHaveTextContent("response protection is unavailable");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("response protection is unavailable");
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
     const { default: i18n } = await import("@/core/i18n");
     try {
       await act(async () => { await i18n.changeLanguage("en"); });
       expect(screen.getByRole("alert")).toHaveTextContent("Compaction failed. History preserved");
-      expect(screen.getByRole("alert")).toHaveTextContent("response protection is unavailable");
+      expect(screen.getByRole("alert")).not.toHaveTextContent("response protection is unavailable");
     } finally {
       await act(async () => { await i18n.changeLanguage("zh-CN"); });
     }

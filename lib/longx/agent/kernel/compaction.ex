@@ -73,6 +73,7 @@ defmodule Longx.Agent.Kernel.Compaction do
     state = %{
       state
       | phase: :compacting,
+        request_error: nil,
         model_task: %{task: task, ref: ref},
         compacting: %{
           text: "",
@@ -133,15 +134,16 @@ defmodule Longx.Agent.Kernel.Compaction do
   end
 
   # A failed summary is UI-only: never replace or pollute the live context.
-  def fail(state, message) do
+  def fail(state, message, details \\ nil) do
     turn_id = state.turn_id || last_turn_id(state)
 
-    ui = %{
-      "id" => new_id("item"),
-      "type" => "contextCompactionFailed",
-      "turnId" => turn_id,
-      "error" => message
-    }
+    ui =
+      Map.merge(details || %{}, %{
+        "id" => new_id("item"),
+        "type" => "contextCompactionFailed",
+        "turnId" => turn_id,
+        "error" => message
+      })
 
     state
     |> show_progress(nil)

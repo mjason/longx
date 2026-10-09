@@ -92,6 +92,9 @@ defmodule Longx.Agent.ModelTest do
   defp single_connection_pool(bypass) do
     url = "http://localhost:#{bypass.port}"
     pool = Finch.Pool.new(url)
+    # Bypass ports can be reused across the suite. start_pool/3 keeps an
+    # existing pool's size, so remove any earlier default-sized pool first.
+    Finch.stop_pool(Longx.AI.Finch, pool)
     :ok = Finch.start_pool(Longx.AI.Finch, pool, size: 1, start_pool_metrics?: true)
     on_exit(fn -> Finch.stop_pool(Longx.AI.Finch, pool) end)
     url
@@ -151,6 +154,10 @@ defmodule Longx.Agent.ModelTest do
     assert_receive {:model, ^ref, {:failed, {:model_failed, _, message}}}, 7_000
     assert message =~ "connection pool"
     assert message =~ "50 ms"
+
+    assert_receive {:model, ^ref,
+                    {:request_error, %{"httpStatus" => nil, "source" => "transport"}}}
+
     assert_receive {:DOWN, ^monitor, :process, ^pid, :normal}, 1_000
     assert [%{duration_ms: duration, error: error}] = Longx.AI.Gateway.Log.recent(1)
     assert is_integer(duration)
@@ -374,6 +381,20 @@ defmodule Longx.Agent.ModelTest do
     assert_receive {:model, ^ref, {:failed, {:model_failed, slug, message}}}, 2_000
     assert slug == model.slug
     assert message =~ "usage policy"
+    assert_receive {:model, ^ref, {:request_error, %{"httpStatus" => 502, "source" => "http"}}}
+  end
+
+  test "local concurrency refusal has no HTTP status and is not presented as an upstream 429" do
+    {:ok, [entry]} = Model.prepare(@request, retries: 0)
+    key = entry.up.provider_slug
+    assert :ok = Longx.AI.Gateway.Limiter.acquire(key, 1)
+    on_exit(fn -> Longx.AI.Gateway.Limiter.release(key) end)
+    entry = %{entry | up: %{entry.up | max_concurrent: 1}}
+    ref = make_ref()
+    assert :ok = Model.run({:ok, [entry]}, self(), ref)
+    assert_receive {:model, ^ref, {:request_error, %{"httpStatus" => nil, "source" => "limiter"}}}
+    assert_receive {:model, ^ref, {:failed, {:model_failed, _, message}}}
+    assert message =~ "concurrency"
   end
 
   test "a quota exhaustion is final at once and names the model; a chain falls back to its next model",
@@ -393,6 +414,7 @@ defmodule Longx.Agent.ModelTest do
     assert message =~ "quota has been exhausted"
     assert message =~ "real-model"
     assert message =~ "upstream-"
+    assert_receive {:model, ^ref, {:request_error, %{"httpStatus" => 429, "source" => "http"}}}
 
     # an alias with two models: the first one's quota is gone, the second serves
     second =
@@ -657,6 +679,7 @@ defmodule Longx.Agent.ModelTest do
     assert_receive {:model, ^ref, {:text_delta, _, _}}, 5_000
     assert_receive {:model, ^ref, {:restart, why}}, 5_000
     assert why =~ "ended"
+    assert_receive {:model, ^ref, {:request_error, %{"httpStatus" => 200, "source" => "stream"}}}
     assert_receive {:model, ^ref, {:restart, _}}, 5_000
     assert_receive {:model, ^ref, {:completed, _, _}}, 5_000
     assert Agent.get(counter, & &1) == 3

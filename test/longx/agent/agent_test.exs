@@ -2278,11 +2278,27 @@ defmodule Longx.AgentTest do
 
     script!(bypass, [exec_call("echo one"), [failure]])
     {:ok, _} = Agent.send(id, "run echo one", effort: "medium")
-    assert %{"status" => "failed", "error" => %{"code" => "compaction_failed"}} = await_turn_end()
+
+    assert %{
+             "status" => "failed",
+             "error" => %{
+               "code" => "compaction_failed",
+               "httpStatus" => 200,
+               "source" => "stream"
+             }
+           } = await_turn_end()
+
     [_, summary] = collect_requests([])
     assert summary["reasoning"]["effort"] == "medium"
 
-    assert %{"item" => %{"type" => "contextCompactionFailed", "error" => error}} =
+    assert %{
+             "item" => %{
+               "type" => "contextCompactionFailed",
+               "error" => error,
+               "httpStatus" => 200,
+               "source" => "stream"
+             }
+           } =
              await_item_completed_of_type("contextCompactionFailed")
 
     assert error =~ "response protection"

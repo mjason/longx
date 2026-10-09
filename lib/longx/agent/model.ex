@@ -14,6 +14,8 @@ defmodule Longx.Agent.Model do
     * `{:item_done, item}` — the whole item
     * `{:completed, response, %{context_window: n}}` — the end, usage inside
     * `{:failed, message}` — nothing more is coming
+    * `{:request_error, details}` — actual HTTP status (nil without a response),
+      source and full error text, before a retry or final failure
 
   A 429 / 5xx / transport error before anything streamed is retried
   (`config :longx, Longx.Agent.Model, retry_ms:`); a 4xx is final. The
@@ -149,6 +151,17 @@ defmodule Longx.Agent.Model do
     outcome =
       Limiter.run(up.provider_slug, up.max_concurrent, fn -> post(up, target, owner, ref) end)
 
+    case outcome do
+      {:ok, {kind, status, message}} when kind in [:retry, :failed] ->
+        request_error(target, owner, ref, status, message)
+
+      :busy ->
+        request_error(target, owner, ref, nil, "provider is busy", "limiter")
+
+      _ ->
+        :ok
+    end
+
     case {outcome, retries} do
       {{:ok, {:done, status}}, _} ->
         Log.finish(log, %{status: status, error: nil})
@@ -177,6 +190,29 @@ defmodule Longx.Agent.Model do
         Log.finish(log, %{status: 429, error: message})
         {:failed, message}
     end
+  end
+
+  defp request_error(target, owner, ref, status, message, source \\ nil) do
+    source =
+      source ||
+        cond do
+          status == 200 -> "stream"
+          is_integer(status) -> "http"
+          true -> "transport"
+        end
+
+    send(
+      owner,
+      {:model, ref,
+       {:request_error,
+        %{
+          "httpStatus" => status,
+          "source" => source,
+          "message" => message,
+          "model" => target.slug || target.model,
+          "provider" => target.provider_slug
+        }}}
+    )
   end
 
   # a 429 that is not a rate limit but a quota gone, an unpaid bill: no retry saves it

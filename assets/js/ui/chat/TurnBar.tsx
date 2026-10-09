@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Loader2, ShieldAlert } from "lucide-react";
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { contextUsage } from "@/core/chat/thread";
 import { progressLabel } from "./progressLabel";
 import { useModels } from "@/core/projects";
@@ -22,6 +22,8 @@ import { Button } from "@/ui/components/ui/button";
 import { nativePickerAvailable, shellPick } from "@/ui/shell/longxShell";
 import { t } from "@/ui/strings";
 import { useChat } from "./ChatProvider";
+
+const JobWorkStatus = lazy(() => import("./ThreadJobs").then(module => ({ default: module.JobWorkStatus })));
 
 /**
  * Left of the composer rail: what the turn is doing right now (running,
@@ -46,6 +48,7 @@ export function ComposerLeading() {
           {t.awaitingAction}
         </span>
       ) : null}
+      <Suspense fallback={null}><JobWorkStatus /></Suspense>
     </div>
   );
 }

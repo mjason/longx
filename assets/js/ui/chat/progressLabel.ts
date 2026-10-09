@@ -11,7 +11,7 @@ export function progressLabel(progress: TurnProgress | null | undefined, fallbac
     progress?.kind === "compactionRetry"
       ? t.turnCompactionRetry(progress.attempt ?? 0, progress.limit ?? 0)
       : progress?.kind === "retry"
-      ? t.turnRetrying(progress.name)
+      ? t.requestError.retrying
       : progress?.kind === "toolCall"
         ? t.turnWriting(progress.name, formatBytes(progress.bytes))
         : progress?.kind === "compaction"

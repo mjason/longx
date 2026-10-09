@@ -27,6 +27,8 @@ defmodule Longx.Agent.Kernel.State do
             # what the step ran with (a plug may pick another model)
             step_model: nil,
             model_task: nil,
+            # Actual response metadata for the current request's latest failure.
+            request_error: nil,
             # the step's tools by name, for the calls the model makes
             tools: %{},
             # model item id → %{ui: our item id, kind, text | summary, ...}
