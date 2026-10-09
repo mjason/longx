@@ -134,8 +134,7 @@ export function ComposerTrailing() {
     const tiers: [string, ModelOption[]][] = aliasCount ? [[t.ai.aliases, options.slice(0, aliasCount)]] : [];
     return [...tiers, ...byProvider.entries()];
   }, [rows, options, aliases.data]);
-  // one object per token-usage update: the ring stores what it is given and
-  // re-syncs (a render-phase setState) whenever the identity changes
+  // One object per token-usage update, including post-compaction invalidation.
   const usage = useMemo(() => contextUsage(view), [view.tokenUsage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // inside a native shell the popover gives way to the shell's own list

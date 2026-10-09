@@ -1455,6 +1455,33 @@ describe("ThreadPage", () => {
       }),
     );
     expect(screen.getByLabelText("上下文用量")).toHaveTextContent("25%");
+    act(() => {
+      channel.deliver("event", {
+        seq: 5, method: "turn/started",
+        params: { turn: { id: "turn_2", status: "inProgress" } },
+      });
+      channel.deliver("event", {
+        seq: 6, method: "thread/tokenUsage/updated",
+        params: { tokenUsage: {
+          modelContextWindow: 128000,
+          last: { totalTokens: 128000 },
+          total: { totalTokens: 128000 },
+          context: { status: "pending" },
+        } },
+      });
+    });
+    expect(screen.getByLabelText("上下文用量")).toHaveTextContent("—");
+    expect(screen.getByTestId("turn-bar")).toHaveTextContent("进行中");
+    act(() => channel.deliver("event", {
+      seq: 7, method: "thread/tokenUsage/updated",
+      params: { tokenUsage: {
+        modelContextWindow: 128000,
+        last: { totalTokens: 16000 },
+        total: { totalTokens: 144000 },
+      } },
+    }));
+    expect(screen.getByLabelText("上下文用量")).toHaveTextContent("13%");
+    expect(screen.getByTestId("turn-bar")).toHaveTextContent("进行中");
   });
 
   test("@ in the composer offers the project's files; the pick is a path in the text, a chip in the message", async () => {

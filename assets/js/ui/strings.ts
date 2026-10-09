@@ -475,6 +475,7 @@ const zh = {
   threadError: (reason: string) => `会话加载失败：${reason}`,
   loadingThread: "正在加载会话…",
   context: {
+    pending: "上下文已压缩，等待更新 token 用量",
     trigger: "上下文用量",
     full: (p: number) => `已用 ${p}%`,
     input: "输入",

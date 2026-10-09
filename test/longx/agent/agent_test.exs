@@ -2195,6 +2195,34 @@ defmodule Longx.AgentTest do
     plug Longx.Agent.Plugs.Request
   end
 
+  test "compaction invalidates occupancy before the running turn ends, preserving billing",
+       %{bypass: bypass, dir: dir} do
+    id = compacting_agent(dir, CompactingPipeline)
+
+    script!(bypass, [
+      exec_call("echo one"),
+      ResponsesFixture.assistant_message("HANDOFF"),
+      held(ResponsesFixture.assistant_message("done"))
+    ])
+
+    {:ok, %{turn_id: turn_id}} = Agent.send(id, "run echo one")
+    before = await("thread/tokenUsage/updated")["tokenUsage"]
+
+    assert %{"tokenUsage" => after_fold} = await("thread/tokenUsage/updated")
+    assert after_fold["context"] == %{"status" => "pending"}
+    assert after_fold["last"] == before["last"]
+    assert after_fold["total"] == before["total"]
+    assert %{"id" => ^turn_id, "status" => "inProgress"} = ThreadState.snapshot(id).turn
+    assert ThreadState.snapshot(id).token_usage == after_fold
+
+    assert_receive {:held, handler}, 5_000
+    send(handler, :go)
+    assert %{"tokenUsage" => measured} = await("thread/tokenUsage/updated")
+    refute Map.has_key?(measured, "context")
+    assert measured["last"]["totalTokens"] > 0
+    await_turn_end()
+  end
+
   test "a context-length error from the provider compacts and retries once", %{
     bypass: bypass,
     dir: dir

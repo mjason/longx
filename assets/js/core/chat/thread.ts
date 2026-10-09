@@ -406,12 +406,20 @@ export function contextUsage(view: ThreadView): {
     cachedInputTokens: number;
     outputTokens: number;
     reasoningTokens: number;
+    pending?: boolean;
   };
 } | null {
   const usage = view.tokenUsage;
   const window = usage?.["modelContextWindow"];
   const last = usage?.["last"] as Record<string, unknown> | undefined;
-  if (typeof window !== "number" || window <= 0 || !last) return null;
+  if (typeof window !== "number" || window <= 0) return null;
+  if ((usage?.["context"] as Record<string, unknown> | undefined)?.["status"] === "pending") {
+    return {
+      modelContextWindow: window,
+      usage: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningTokens: 0, pending: true },
+    };
+  }
+  if (!last) return null;
   const n = (key: string) =>
     typeof last[key] === "number" ? (last[key] as number) : 0;
   return {

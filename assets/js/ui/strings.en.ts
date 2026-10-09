@@ -416,7 +416,7 @@ export const en = {
   },
   threadError: (reason: string) => `Failed to load session: ${reason}`,
   loadingThread: "Loading session…",
-  context: { trigger: "Context usage", full: (p: number) => `${p}% used`, input: "Input", cachedInput: "Cache hit", output: "Output", reasoning: "Reasoning" },
+  context: { pending: "Context compacted; awaiting updated token usage", trigger: "Context usage", full: (p: number) => `${p}% used`, input: "Input", cachedInput: "Cache hit", output: "Output", reasoning: "Reasoning" },
   timing: { title: "Turn duration", model: "Model", level: "Effort", firstToken: "First token", total: "Total", speed: "Speed", items: "Items" },
   stalledFor: (s: number) => `No new output for ${s}s`,
   history: {

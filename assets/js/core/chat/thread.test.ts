@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { applyEvent, fromSnapshot, prependEarlier, runningTurnId, type ThreadSnapshot } from "./thread";
+import { applyEvent, contextUsage, fromSnapshot, prependEarlier, runningTurnId, type ThreadSnapshot } from "./thread";
 
 const snapshot: ThreadSnapshot = {
   seq: 10,
@@ -16,6 +16,20 @@ const snapshot: ThreadSnapshot = {
 };
 
 describe("thread view", () => {
+  test("compaction occupancy updates during a running turn and the next measurement replaces it", () => {
+    const last = { totalTokens: 100000, inputTokens: 99000, outputTokens: 1000 };
+    const tokenUsage = { modelContextWindow: 100000, last, total: last };
+    const running = fromSnapshot({ ...snapshot, turn: { id: "turn_1", status: "inProgress" }, token_usage: tokenUsage });
+    expect(contextUsage(running)?.usage.totalTokens).toBe(100000);
+    const folded = applyEvent(running, { seq: 11, method: "thread/tokenUsage/updated", params: { tokenUsage: { ...tokenUsage, context: { status: "pending" } } } });
+    expect(runningTurnId(folded)).toBe("turn_1");
+    expect(contextUsage(folded)?.usage.pending).toBe(true);
+    expect(folded.tokenUsage?.["total"]).toEqual(last);
+    const measured = applyEvent(folded, { seq: 12, method: "thread/tokenUsage/updated", params: { tokenUsage: { ...tokenUsage, last: { totalTokens: 12000 } } } });
+    expect(contextUsage(measured)?.usage.totalTokens).toBe(12000);
+    expect(contextUsage(measured)?.usage.pending).toBeUndefined();
+  });
+
   test("a snapshot is a window: what lies above it comes as `earlier` (nothing above a whole one); a page fetched up is put in front once, and says what is still above", () => {
     expect(fromSnapshot(snapshot).earlier).toEqual({ items: 0, turns: 0, partial: 0, activities: [] });
     const act = { id: "act", type: "subAgentActivity", turnId: "turn_0", agentThreadId: "child", kind: "started" };

@@ -141,6 +141,17 @@ defmodule Longx.Agent.Kernel.Compaction do
     emit(state, "item/completed", %{"item" => ui, "turnId" => turn_id})
     show_progress(state, nil)
 
+    # The summary request measured the OLD input, not the folded context.
+    # Invalidate its occupancy now, without rewriting billing or turn usage.
+    emit(state, "thread/tokenUsage/updated", %{
+      "tokenUsage" => %{
+        "modelContextWindow" => state.context_window,
+        "last" => state.usage_last,
+        "total" => state.usage_total,
+        "context" => %{"status" => "pending"}
+      }
+    })
+
     %{
       state
       | seq: seq,

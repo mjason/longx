@@ -15,12 +15,12 @@ import {
   createContext,
   useContext,
   useMemo,
-  useState,
   type FC,
   type ReactNode,
 } from "react";
 
 export type TokenUsage = {
+  pending?: boolean | undefined;
   totalTokens?: number | undefined;
   inputTokens?: number | undefined;
   cachedInputTokens?: number | undefined;
@@ -74,6 +74,7 @@ const getPercentColor = (percent: number): string => {
 };
 // Longx: the copy is ours (zh-CN) — `labels` on the root / presets.
 export type ContextDisplayLabels = {
+  pending?: string | undefined;
   trigger: string;
   full: (percent: number) => string;
   input: string;
@@ -83,6 +84,7 @@ export type ContextDisplayLabels = {
 };
 
 const DEFAULT_LABELS: ContextDisplayLabels = {
+  pending: "Context compacted; awaiting updated token usage",
   trigger: "Context usage",
   full: (percent) => `${percent}% full`,
   input: "Input",
@@ -131,56 +133,23 @@ function ContextDisplayRoot({
   modelContextWindow,
   children,
   usage,
-  resetKey,
   labels = DEFAULT_LABELS,
 }: ContextDisplayRootProps) {
-  const rawTokens = usage?.totalTokens ?? 0;
-  const [tokenState, setTokenState] = useState({
-    resetKey,
-    totalTokens: rawTokens > 0 ? rawTokens : 0,
-    usage,
-  });
-
-  if (
-    tokenState.resetKey !== resetKey ||
-    (rawTokens > 0 && rawTokens !== tokenState.totalTokens) ||
-    usage !== tokenState.usage
-  ) {
-    setTokenState((prev) => {
-      if (prev.resetKey !== resetKey) {
-        return {
-          resetKey,
-          totalTokens: rawTokens > 0 ? rawTokens : 0,
-          usage,
-        };
-      }
-      if (rawTokens > 0 && rawTokens !== prev.totalTokens) {
-        return { ...prev, totalTokens: rawTokens, usage };
-      }
-      if (usage !== prev.usage) {
-        return { ...prev, usage };
-      }
-      return prev;
-    });
-  }
-
-  const current =
-    tokenState.resetKey === resetKey
-      ? tokenState
-      : { totalTokens: rawTokens > 0 ? rawTokens : 0, usage };
-  const totalTokens = current.totalTokens;
+  // Usage already lives in the thread view. Mirroring it in local state kept
+  // an obsolete nonzero count when the context was invalidated or reset.
+  const totalTokens = usage?.pending ? 0 : Math.max(0, usage?.totalTokens ?? 0);
   const percent = getUsagePercent(totalTokens, modelContextWindow);
-  const hasUsage = current.usage !== undefined || totalTokens > 0;
+  const hasUsage = usage !== undefined || totalTokens > 0;
 
   const contextValue = useMemo(
     () => ({
-      usage: current.usage,
+      usage,
       totalTokens,
       percent,
       modelContextWindow,
       labels,
     }),
-    [current.usage, totalTokens, percent, modelContextWindow, labels],
+    [usage, totalTokens, percent, modelContextWindow, labels],
   );
 
   if (!hasUsage) return null;
@@ -257,6 +226,10 @@ function ContextDisplayContent({
       className={cn("w-56 p-3 text-left", className)}
     >
       <div className="text-xs">
+        {usage?.pending ? (
+          <span className="text-muted-foreground">{labels.pending ?? DEFAULT_LABELS.pending}</span>
+        ) : (
+          <>
         <div className="flex items-baseline justify-between gap-6 whitespace-nowrap">
           <span className={getPercentColor(percent)}>
             {labels.full(Math.round(percent))}
@@ -290,6 +263,8 @@ function ContextDisplayContent({
               </div>
             ))}
           </div>
+        )}
+          </>
         )}
       </div>
     </PopoverContent>
@@ -341,8 +316,8 @@ function RingVisual() {
 }
 
 function RingPercentLabel() {
-  const { percent } = useContextDisplay();
-  return <span className="font-mono tabular-nums">{Math.round(percent)}%</span>;
+  const { percent, usage } = useContextDisplay();
+  return <span className="font-mono tabular-nums">{usage?.pending ? "—" : `${Math.round(percent)}%`}</span>;
 }
 const ContextDisplayRing: FC<PresetProps> = ({
   modelContextWindow,
