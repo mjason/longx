@@ -252,6 +252,19 @@ defmodule Longx.Projects.Types do
     def graphql_type(_), do: :list_running
   end
 
+  defmodule JobReport do
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          job: [type: :map, allow_nil?: false],
+          text: [type: :string, allow_nil?: false]
+        ]
+      ]
+
+    def graphql_type(_), do: :job_report
+  end
+
   defmodule ProjectJobs do
     @moduledoc "the background jobs for the conversations in one project"
     use Ash.Type.NewType,

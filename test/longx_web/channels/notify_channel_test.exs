@@ -13,6 +13,13 @@ defmodule LongxWeb.NotifyChannelTest do
     |> subscribe_and_join(LongxWeb.NotifyChannel, "notify")
   end
 
+  test "job activity invalidates state without sending a completion notification" do
+    {:ok, _, _} = join!()
+    Phoenix.PubSub.broadcast(Longx.PubSub, Notify.topic(), {:jobs_changed, "native_job"})
+    assert_push "activity", %{thread_id: "native_job"}
+    refute_push "event", _, 100
+  end
+
   test "join answers with what runs now; every event pushed is one `event`" do
     dir = Path.join(System.tmp_dir!(), "longx-nc-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)

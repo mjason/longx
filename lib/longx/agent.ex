@@ -1008,7 +1008,7 @@ defmodule Longx.Agent do
 
     "[job #{name}] #{how}.\nCommand: `#{n.cmd}`\n" <>
       if(tail == "", do: "It printed nothing.", else: "Its last lines:\n```\n#{tail}\n```") <>
-      "\nThe output it kept: job_output(name: \"#{name}\")."
+      "\nRun: #{n.run}. The output it kept: job_output(name: \"#{name}\"). Review wait-purpose results with review_job before claiming completion."
   end
 
   defp format_ms(ms) when ms < 60_000, do: "#{div(ms, 1000)} s"
@@ -1113,6 +1113,11 @@ defmodule Longx.Agent do
         {:nothing, state}
 
       [first | rest] ->
+        for %{opts: opts} <- [first],
+            {name, run} <- [Keyword.get(opts, :job)] do
+          Longx.Jobs.observe_run(state.thread_id, name, run)
+        end
+
         {turn_id, state} = start_turn(state, first.text, first.opts)
         {:started, turn_id, Enum.reduce(rest, state, &steer_item(&2, &1))}
     end
@@ -1492,6 +1497,11 @@ defmodule Longx.Agent do
 
   defp fold_steers(%State{steers: steers} = state) do
     Enum.reduce(steers, %{state | steers: []}, fn {input, ui, {text, opts}}, acc ->
+      case Keyword.get(opts, :job) do
+        {name, run} -> Longx.Jobs.observe_run(acc.thread_id, name, run)
+        nil -> :ok
+      end
+
       emit(acc, "item/started", %{"item" => ui, "turnId" => acc.turn_id})
       acc |> State.record_user_input(text, opts) |> append(:user_message, input, ui)
     end)
@@ -1501,6 +1511,15 @@ defmodule Longx.Agent do
 
   # the chain moved on to its next model (a quota gone, a key refused, an
   # upstream down): the person hears it the way codex's reroute is heard
+  defp on_info(
+         %State{phase: :compacting, model_task: %{ref: ref}, compacting: c} = state,
+         {:model, ref, {:fallback, from, to, reason}}
+       ) do
+    emit(state, "model/rerouted", %{"fromModel" => from, "toModel" => to, "reason" => reason})
+    state = %{state | compacting: %{c | model: to, text: ""}, quiet: nil}
+    {:noreply, Compaction.show_progress(state, 0)}
+  end
+
   defp on_info(
          %State{model_task: %{ref: ref}} = state,
          {:model, ref, {:fallback, from, to, reason}}
@@ -1719,6 +1738,21 @@ defmodule Longx.Agent do
     end
   end
 
+  defp model_event({:retrying, why, attempt, limit}, state) do
+    emit(state, "turn/progress", %{
+      "turnId" => state.turn_id,
+      "progress" => %{
+        "kind" => "retry",
+        "name" => why,
+        "bytes" => 0,
+        "attempt" => attempt,
+        "limit" => limit
+      }
+    })
+
+    {:noreply, %{state | quiet: nil}}
+  end
+
   defp model_event({:completed, response, %{context_window: window}}, state) do
     state = state |> Stream.close_open_items() |> Stream.record_usage(response["usage"], window)
 
@@ -1774,6 +1808,24 @@ defmodule Longx.Agent do
   defp compaction_event({:text_delta, _id, delta}, %State{} = state),
     do: {:noreply, Compaction.note_delta(state, delta)}
 
+  defp compaction_event({:restart, _why}, %State{compacting: c} = state),
+    do: {:noreply, %{state | compacting: %{c | text: ""}, quiet: nil}}
+
+  defp compaction_event({:retrying, why, attempt, limit}, state) do
+    emit(state, "turn/progress", %{
+      "turnId" => state.turn_id,
+      "progress" => %{
+        "kind" => "compactionRetry",
+        "name" => why,
+        "bytes" => 0,
+        "attempt" => attempt,
+        "limit" => limit
+      }
+    })
+
+    {:noreply, state}
+  end
+
   defp compaction_event(
          {:item_done, %{"type" => "message"} = item},
          %State{compacting: c} = state
@@ -1783,35 +1835,35 @@ defmodule Longx.Agent do
   end
 
   defp compaction_event({:completed, _response, _meta}, %State{compacting: c} = state) do
-    state = Compaction.fold_summary(state, c)
+    if String.trim(c.text) == "" do
+      compaction_event({:failed, "the model completed without a compaction summary"}, state)
+    else
+      state = Compaction.fold_summary(state, c)
 
-    if c.was_running,
-      do: run_request_phase(%{state | phase: :step}),
-      else: {:noreply, %{state | phase: :idle}}
+      if c.was_running,
+        do: run_request_phase(%{state | phase: :step}),
+        else: {:noreply, %{state | phase: :idle}}
+    end
   end
 
   # `message` is a provider's words, or `{:model_failed, slug, why}` once the
   # chain is spent — a tuple in a string once crashed the process
   defp compaction_event(
          {:failed, message},
-         %State{compacting: c, context_overflow: overflow?} = state
+         %State{compacting: c} = state
        ) do
     message = describe_failure(message)
     Logger.warning("agent #{state.thread_id}: compaction failed: #{message}")
-    state = Compaction.show_progress(state, nil)
-    state = %{state | compacting: nil, model_task: nil, compact_requested: false}
+    state = Compaction.fail(state, message)
 
-    cond do
-      not c.was_running ->
-        {:noreply, %{state | phase: :idle}}
-
-      overflow? ->
+    if c.was_running,
+      do:
         {:noreply,
-         end_turn(state, "failed", "context too long and the compaction failed: #{message}")}
-
-      true ->
-        run_request_phase(%{state | phase: :step}, skip_compact: true)
-    end
+         end_turn(state, "failed", %{
+           "code" => "compaction_failed",
+           "message" => "context compaction failed: #{message}"
+         })},
+      else: {:noreply, %{state | phase: :idle}}
   end
 
   # the summary's model has sent nothing for a while: said on the fold's progress

@@ -16,6 +16,7 @@ const name = (r: { id: string; title: string | null; preview: string | null }) =
 
 function doing(r: RunningThread, nowMs: number): { hint: string; tone: "waiting" | "running" } {
   if (r.waiting) return { hint: t.keys.waiting, tone: "waiting" };
+  if (r.jobActivity?.total) return { hint: `${t.jobWork.states[r.jobActivity.state]} · ${t.jobWork.count(r.jobActivity.total)}`, tone: "waiting" };
   if (r.working?.length) return { hint: t.agentsWorking(r.working), tone: "running" };
   const what = progressLabel(r.progress, t.keys.running);
   const since = r.turnStartedAt ? Math.max(0, Math.round(nowMs / 1000 - r.turnStartedAt)) : null;

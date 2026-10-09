@@ -24,12 +24,14 @@ export type NotifyEvent = {
 export type NotifyHandlers = {
   onRunning?: (running: { waiting?: boolean }[]) => void;
   onEvent?: (event: NotifyEvent) => void;
+  onActivity?: () => void;
 };
 
 /** Joins `notify`; returns the function that leaves it. A rejoin (a reconnect) answers `running` again. */
 export function joinNotify(socket: Pick<Socket, "channel">, handlers: NotifyHandlers): () => void {
   const channel: Channel = socket.channel("notify", {});
   channel.on("event", (payload: NotifyEvent) => handlers.onEvent?.(payload));
+  channel.on("activity", () => handlers.onActivity?.());
   channel.join().receive("ok", (reply: { running?: { waiting?: boolean }[] }) => handlers.onRunning?.(reply.running ?? []));
   return () => {
     channel.leave();

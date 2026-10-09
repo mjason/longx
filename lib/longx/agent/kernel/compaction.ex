@@ -23,31 +23,44 @@ defmodule Longx.Agent.Kernel.Compaction do
   def start_compaction(%State{} = state, model) do
     ref = make_ref()
 
-    request = %{
-      "model" => model || "longx",
-      "instructions" => @compact_prompt,
-      "input" =>
-        state.transcript ++
-          [
-            %{
-              "type" => "message",
-              "role" => "user",
-              "content" => [%{"type" => "input_text", "text" => "Write the handoff summary now."}]
-            }
-          ],
-      "tools" => [],
-      "stream" => true,
-      "store" => false,
-      "client_metadata" => %{
-        "thread_id" => state.thread_id,
-        "turn_id" => state.turn_id,
-        "x-codex-turn-metadata" => Jason.encode!(%{"request_kind" => "compaction"})
+    request =
+      %{
+        "model" => model || "longx",
+        "instructions" => @compact_prompt,
+        "input" =>
+          state.transcript ++
+            [
+              %{
+                "type" => "message",
+                "role" => "user",
+                "content" => [
+                  %{"type" => "input_text", "text" => "Write the handoff summary now."}
+                ]
+              }
+            ],
+        "tools" => [],
+        "stream" => true,
+        "store" => false,
+        "client_metadata" => %{
+          "thread_id" => state.thread_id,
+          "turn_id" => state.turn_id,
+          "x-codex-turn-metadata" => Jason.encode!(%{"request_kind" => "compaction"})
+        }
       }
-    }
+      |> then(fn request ->
+        if state.effort,
+          do: Map.put(request, "reasoning", %{"effort" => state.effort, "summary" => "auto"}),
+          else: request
+      end)
+
+    settings = if(state.settings, do: state.settings.(), else: %{}) || %{}
+
+    retries =
+      Map.get(settings, :model_retries, Longx.Agent.Definition.Settings.defaults().model_retries)
 
     task =
       Task.Supervisor.async_nolink(@tasks, Longx.Agent.Model, :run, [
-        Longx.Agent.Model.prepare(request),
+        Longx.Agent.Model.prepare(request, retries: retries),
         self(),
         ref
       ])
@@ -112,6 +125,23 @@ defmodule Longx.Agent.Kernel.Compaction do
       %{turn_id: turn_id} when is_binary(turn_id) -> turn_id
       _ -> "compaction"
     end
+  end
+
+  # A failed summary is UI-only: never replace or pollute the live context.
+  def fail(state, message) do
+    turn_id = state.turn_id || last_turn_id(state)
+
+    ui = %{
+      "id" => new_id("item"),
+      "type" => "contextCompactionFailed",
+      "turnId" => turn_id,
+      "error" => message
+    }
+
+    state
+    |> show_progress(nil)
+    |> append(:activity, %{"type" => "longx_compaction_failed"}, ui, context?: false)
+    |> then(&%{&1 | compacting: nil, model_task: nil, compact_requested: false})
   end
 
   @doc "The summary is in: a `:compaction` item appended, the marker emitted, the context reloaded."

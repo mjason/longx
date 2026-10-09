@@ -62,6 +62,30 @@ defmodule Longx.Projects.ThreadsTest do
     %{bypass: bypass, dir: dir, project: project, model: model}
   end
 
+  test "a completed turn with pending verification does not claim completion; a service does not block it",
+       %{project: project, bypass: bypass, dir: dir} do
+    :ok = Phoenix.PubSub.subscribe(Longx.PubSub, Longx.Notify.topic())
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      sse(conn, ResponsesFixture.assistant_message("waiting for verification"))
+    end)
+
+    {:ok, thread} = Projects.start_thread(project)
+    on_exit(fn -> Longx.Jobs.delete(thread.kernel_thread_id) end)
+
+    {:ok, job} =
+      Longx.Jobs.start(thread.kernel_thread_id, "verify", "sleep 30", cwd: dir, notify: false)
+
+    {:ok, turn} = Projects.send_message(thread, "verify")
+    assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
+    refute_receive {:notify, %{kind: "turn_completed"}}, 200
+    assert [%{job_activity: %{state: "waiting", total: 1}}] = Projects.running_threads()
+    {:ok, _} = Longx.Jobs.set_purpose(thread.kernel_thread_id, job.name, job.run, "background")
+    {:ok, turn} = Projects.send_message(thread, "continue unrelated work")
+    assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
+    assert_receive {:notify, %{kind: "turn_completed"}}, 5_000
+  end
+
   defp sse(conn, chunks) do
     conn =
       conn

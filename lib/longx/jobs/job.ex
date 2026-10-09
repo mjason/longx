@@ -51,6 +51,9 @@ defmodule Longx.Jobs.Job do
       reason: nil,
       run: spec.run,
       notify: spec.notify,
+      purpose: spec.purpose,
+      review: nil,
+      review_note: nil,
       observed: false,
       started_at: DateTime.utc_now() |> DateTime.to_iso8601(),
       finished_at: nil
@@ -104,6 +107,7 @@ defmodule Longx.Jobs.Job do
            resource_exit: nil,
            guard_warning: warning,
            waiters: [],
+           person_stop?: false,
            began: System.monotonic_time(:millisecond)
          }}
 
@@ -129,6 +133,21 @@ defmodule Longx.Jobs.Job do
   @impl true
   def handle_call(:info, _from, state), do: {:reply, state.info, state}
 
+  def handle_call({:update_info, run, fun}, _from, state) do
+    if state.info.run == run do
+      case fun.(state.info) do
+        {:error, _} = error ->
+          {:reply, error, state}
+
+        info ->
+          Jobs.save_info(state.spec.dir, info)
+          {:reply, {:ok, info}, %{state | info: info}}
+      end
+    else
+      {:reply, {:error, :stale_run}, state}
+    end
+  end
+
   def handle_call({:output, opts}, _from, state),
     do:
       {:reply,
@@ -141,10 +160,19 @@ defmodule Longx.Jobs.Job do
   end
 
   # the agent stops it: it knows how it ended
-  def handle_call(:stop, from, state) do
-    state = ending(state, "stopped", "stopped by the agent (stop_job)", observed: true)
-    ref = make_ref()
-    {:noreply, %{state | waiters: [{ref, from} | state.waiters]}}
+  def handle_call({:stop, run, by}, from, state) do
+    if run && run != state.info.run do
+      {:reply, {:error, :stale_run}, state}
+    else
+      reason =
+        if by == :person,
+          do: "stopped by the person; the work is incomplete — do not restart it unless asked",
+          else: "stopped by the agent (stop_job)"
+
+      state = ending(state, "stopped", reason, observed: by != :person)
+      ref = make_ref()
+      {:noreply, %{state | waiters: [{ref, from} | state.waiters], person_stop?: by == :person}}
+    end
   end
 
   @impl true
@@ -239,7 +267,11 @@ defmodule Longx.Jobs.Job do
     Jobs.save_info(state.spec.dir, info)
 
     # the waiters see the end: that is the agent seeing it
-    info = if state.waiters != [], do: mark_observed(state.spec.dir, info), else: info
+    info =
+      if state.waiters != [] and not state.person_stop?,
+        do: mark_observed(state.spec.dir, info),
+        else: info
+
     for {_ref, from} <- state.waiters, do: GenServer.reply(from, {:ok, info})
 
     if info.notify and not info.observed do

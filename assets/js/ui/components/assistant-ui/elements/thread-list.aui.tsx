@@ -280,11 +280,13 @@ const ThreadListSkeleton: FC = () => {
  * (`LongxRuntime.runningThreadIds`; `ThreadsTool` provides it).
  */
 export const RunningIdsContext = createContext<ReadonlySet<string>>(new Set());
+export const ThreadWorkContext = createContext<ReadonlyMap<string, string>>(new Map());
 
 export const ThreadListItem: FC = () => {
     useTranslation();
   const id = useAuiState((s) => s.threadListItem.id);
   const running = useContext(RunningIdsContext);
+  const work = useContext(ThreadWorkContext).get(id);
   const isRunning = useAuiState((s) => s.threadListItem.isRunning) || running.has(id);
   const [isRenaming, setIsRenaming] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -322,7 +324,7 @@ export const ThreadListItem: FC = () => {
                 <Loader2Icon
                   aria-hidden
                   data-slot="aui_thread-list-item-running"
-                  className="text-muted-foreground me-1.5 size-3.5 shrink-0 animate-spin"
+                  className={`me-1.5 size-3.5 shrink-0 ${work ? "text-warning" : "text-muted-foreground animate-spin"}`}
                 />
               )}
               <span
@@ -330,8 +332,9 @@ export const ThreadListItem: FC = () => {
                 className="min-w-0 flex-1 truncate"
               >
                 <ThreadListItemPrimitive.Title fallback={t.untitledThread} />
+                {work ? <span className="text-warning mt-0.5 block truncate text-[10px]" title={work}>{work}</span> : null}
               </span>
-              {isRunning && <span className="sr-only">Running</span>}
+              {isRunning && <span className="sr-only">{work ?? t.keys.running}</span>}
             </ThreadListItemPrimitive.Trigger>
           )}
           <ThreadListItemMore onRename={() => setIsRenaming(true)} />

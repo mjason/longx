@@ -36,6 +36,7 @@ import {
   upgradeCheck,
   upgradeStatus,
   recentFaults,
+  clearFaults,
   setSentryDsn,
   sentryTest,
   killCommand,
@@ -745,6 +746,43 @@ describe("SettingsPage", () => {
     expect(rows[0]).toHaveTextContent("socket_encode");
     expect(rows[0]).toHaveTextContent("thread:native_1");
     expect(rows[0]).toHaveTextContent("invalid byte");
+  });
+
+  test("requests: clearing faults requires confirmation and updates the shared cache", async () => {
+    const user = userEvent.setup();
+    const report = { faults: [{ kind: "wire_clean", where: null, detail: "old fault", at: "2026-10-09T10:00:00Z" }], recent: 1 };
+    vi.mocked(recentFaults).mockResolvedValue(ok(report) as never);
+    vi.mocked(clearFaults).mockImplementation(async () => {
+      vi.mocked(recentFaults).mockResolvedValue(ok({ faults: [], recent: 0 }) as never);
+      return ok({ faults: [], recent: 0 }) as never;
+    });
+    renderAt("/settings/requests");
+    await screen.findByTestId("fault-row");
+    await user.click(screen.getByRole("button", { name: "清空故障记录" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("不删除日志或 Sentry");
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(clearFaults).not.toHaveBeenCalled();
+    expect(screen.getByTestId("fault-row")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "清空故障记录" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "清空故障记录" }));
+    await waitFor(() => expect(screen.queryByTestId("fault-row")).not.toBeInTheDocument());
+    expect(clearFaults).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "清空故障记录" })).toBeDisabled();
+  });
+
+  test("requests: a failed clear keeps faults and allows retry", async () => {
+    const user = userEvent.setup();
+    vi.mocked(recentFaults).mockResolvedValue(ok({
+      faults: [{ kind: "wire_clean", where: null, detail: "keep me", at: "2026-10-09T10:00:00Z" }], recent: 1,
+    }) as never);
+    vi.mocked(clearFaults).mockRejectedValue(new Error("offline"));
+    renderAt("/settings/requests");
+    await screen.findByTestId("fault-row");
+    await user.click(screen.getByRole("button", { name: "清空故障记录" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "清空故障记录" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("offline");
+    expect(screen.getByTestId("fault-row")).toHaveTextContent("keep me");
+    expect(screen.getByRole("button", { name: "清空故障记录" })).toBeEnabled();
   });
 
   test("requests: error reporting is off until a DSN is saved; then it shows masked, on, and a test event can be sent", async () => {

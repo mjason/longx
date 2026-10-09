@@ -116,9 +116,11 @@ export type ThreadSnapshot = {
  * between turns too, with no turn behind it: `/compact` on an idle thread).
  */
 export type TurnProgress = {
-  kind: "toolCall" | "retry" | "compaction" | "waiting";
+  kind: "toolCall" | "retry" | "compaction" | "compactionRetry" | "waiting";
   name: string;
   bytes: number;
+  attempt?: number;
+  limit?: number;
   /** seconds the upstream has sent nothing (past the kernel's threshold); absent while data comes */
   quiet?: number;
 };

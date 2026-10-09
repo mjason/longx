@@ -503,7 +503,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       ? "waiting"
       : thread && runningTurnId(view)
         ? "running"
-        : thread && view.progress?.kind === "compaction"
+        : thread && (view.progress?.kind === "compaction" || view.progress?.kind === "compactionRetry")
           ? "compacting"
           : "idle";
 

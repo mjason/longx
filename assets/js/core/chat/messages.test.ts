@@ -151,6 +151,15 @@ describe("toMessages", () => {
     expect(parts(other[0]!)[0]).toMatchObject({ type: "data-item" });
   });
 
+  test("failed compaction retains the upstream error in its visible marker", () => {
+    const msgs = toMessages(view({ items: [
+      { id: "cf1", type: "contextCompactionFailed", turnId: "t7", error: "response protection is unavailable" },
+    ] }));
+    expect(parts(msgs[0]!)[0]).toEqual({
+      type: "data-compaction", data: { id: "cf1", error: "response protection is unavailable" },
+    });
+  });
+
   test("a goal's continuation — a user message the kernel wrote — is a marker in the turn, never the person's bubble", () => {
     const msgs = toMessages(
       view({

@@ -42,7 +42,13 @@ import {
   startThread,
   directory,
   modelAliases,
+  projectJobs,
+  threadJobOutput,
+  stopThreadJob,
+  setThreadJobPurpose,
 } from "@/core/api";
+import { queryKeys } from "@/core/projects";
+import i18n from "@/core/i18n";
 
 const snapshot = {
   thread_id: "thr_1",
@@ -87,6 +93,112 @@ async function open(path = "/p/app-1/t/t1") {
 }
 
 describe("ThreadPage", () => {
+  test("multiple required jobs keep an idle conversation unfinished; independent services stay top-right", async () => {
+    const user = userEvent.setup();
+    const job = (name: string, activity: string, purpose = "wait") => ({
+      name, run: `run-${name}`, cmd: "example", status: activity === "waiting" ? "running" : "exited",
+      threadId: "t1", rootThreadId: "t1", threadTitle: null, purpose, activity,
+      exitCode: 0, reason: null, startedAt: null, finishedAt: null,
+    });
+    let jobs = [job("tests", "waiting"), job("build", "pending"), job("server", "waiting", "background")];
+    vi.mocked(projectJobs).mockImplementation(async () => ok({ jobs }) as never);
+    const { client } = await open();
+    const status = await screen.findByTestId("job-work-status");
+    expect(status).toHaveTextContent("1 项运行中，1 项待处理");
+    expect(status).toHaveTextContent("建议等最终汇总后再验收");
+    expect(screen.getByRole("button", { name: "后台 1" })).toBeInTheDocument();
+    await user.click(within(status).getByRole("button", { name: "查看任务" }));
+    expect(within(status).getAllByTestId("thread-job-row")).toHaveLength(2);
+    expect(status).not.toHaveTextContent("server");
+    await user.click(screen.getByRole("button", { name: "后台 1" }));
+    const background = await screen.findByTestId("thread-background-popover");
+    expect(background).toHaveTextContent("server");
+    expect(background).toHaveTextContent("不计入等待结果");
+    await user.click(within(background).getByRole("button", { name: "查看日志" }));
+    expect(await within(background).findByText("example job log")).toBeInTheDocument();
+    expect(threadJobOutput).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", name: "server", run: "run-server" } }));
+    await user.keyboard("{Escape}");
+    jobs = [job("tests", "complete"), job("build", "processing"), job("server", "waiting", "background")];
+    await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.projectJobs("id-1") }); });
+    await waitFor(() => expect(status).toHaveTextContent("1 项处理中"));
+    jobs = [job("tests", "complete"), job("build", "complete"), job("server", "waiting", "background")];
+    await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.projectJobs("id-1") }); });
+    await waitFor(() => expect(screen.queryByTestId("job-work-status")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "后台 1" })).toBeInTheDocument();
+  });
+
+  test("job stop and purpose changes require confirmation and keep the exact run; copy changes language live", async () => {
+    const user = userEvent.setup();
+    vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [{
+      name: "verify", run: "r1", cmd: "sleep 30", threadId: "t1", rootThreadId: "t1",
+      status: "running", purpose: "wait", activity: "waiting", startedAt: null, finishedAt: null,
+    }] }) as never);
+    await open();
+    const status = await screen.findByTestId("job-work-status");
+    await user.click(within(status).getByRole("button", { name: "查看任务" }));
+    await user.click(within(status).getByRole("button", { name: "停止任务" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("不会自动重跑");
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(stopThreadJob).not.toHaveBeenCalled();
+    await user.click(within(status).getByRole("button", { name: "停止任务" }));
+    await user.click(screen.getByRole("button", { name: "确认停止" }));
+    await waitFor(() => expect(stopThreadJob).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", name: "verify", run: "r1" } })));
+    await user.click(within(status).getByRole("button", { name: "任务用途 verify" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("不再阻止本次工作完成");
+    await user.click(screen.getByRole("button", { name: "确认更改" }));
+    await waitFor(() => expect(setThreadJobPurpose).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t1", name: "verify", run: "r1", purpose: "background" } })));
+    try {
+      await act(async () => { await i18n.changeLanguage("en"); });
+      expect(status).toHaveTextContent("Awaiting results");
+      expect(status).toHaveTextContent("Wait for the final summary");
+    } finally {
+      await act(async () => { await i18n.changeLanguage("zh-CN"); });
+    }
+  });
+
+  test("a pending result can be resumed explicitly without discarding the composer draft", async () => {
+    const user = userEvent.setup();
+    vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [{
+      name: "result", run: "r1", cmd: "true", threadId: "t1", rootThreadId: "t1",
+      status: "exited", purpose: "wait", activity: "pending", notify: true,
+      startedAt: null, finishedAt: null,
+    }] }) as never);
+    await open();
+    const status = await screen.findByTestId("job-work-status");
+    expect(status).toHaveTextContent("结果已到但尚未确认");
+    const composer = screen.getByRole("textbox", { name: "随心输入" });
+    await user.type(composer, "保留这份草稿");
+    await user.click(within(status).getByRole("button", { name: "查看任务" }));
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(composer).toHaveValue("保留这份草稿");
+    await user.click(within(status).getByRole("button", { name: "继续检查结果" }));
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      input: expect.objectContaining({ text: "继续检查待处理的任务结果，确认后再汇总；不要重跑我已停止的任务。" }),
+    })));
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(composer).toHaveValue("保留这份草稿");
+  });
+
+  test("manual compaction stays busy during retries and exposes failure without a success marker", async () => {
+    await open();
+    act(() => channel.deliver("event", {
+      seq: 4, method: "turn/progress",
+      params: { turnId: null, progress: { kind: "compactionRetry", name: "response protection is unavailable", bytes: 0, attempt: 1, limit: 3 } },
+    }));
+    expect(screen.getByTestId("turn-bar")).toHaveTextContent("压缩失败，正在重试（1/3）");
+    act(() => {
+      channel.deliver("event", { seq: 5, method: "turn/progress", params: { turnId: null, progress: null } });
+      channel.deliver("event", {
+        seq: 6, method: "item/completed", params: { item: {
+          id: "cf1", type: "contextCompactionFailed", turnId: "turn_1", error: "response protection is unavailable",
+        } },
+      });
+    });
+    expect(await screen.findByTestId("compaction-failed")).toHaveTextContent("上下文压缩失败，历史已保留");
+    expect(screen.getByTestId("compaction-failed")).toHaveTextContent("response protection is unavailable");
+    expect(screen.queryByTestId("compaction")).not.toBeInTheDocument();
+  });
+
   test("the browser tab names the conversation, truncates long names, and resets on leaving", async () => {
     vi.mocked(listThreads).mockResolvedValue(ok([{ ...thread(1), title: "  修复\n标签页 " + "😀".repeat(30) }]) as never);
     const { router } = await open();
@@ -1252,20 +1364,20 @@ describe("ThreadPage", () => {
           progress: { kind: "toolCall", name: "apply_patch", bytes: 20480 },
         }),
       );
-      // a card floats at the chat's top right naming every child at work, wherever the page is scrolled
-      const panel = screen.getByTestId("agents-panel");
+      // The top-right resource entrance opens the agents' live states.
+      await user.click(await screen.findByRole("button", { name: "Agent 1" }));
+      const panel = await screen.findByTestId("thread-agents-popover");
       expect(panel).toHaveTextContent("beta");
       expect(panel).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");
       expect(screen.queryByTestId("agents-bar")).not.toBeInTheDocument();
-      // it folds to a pill and back, the choice remembered
-      await user.click(within(panel).getByRole("button", { name: "收起" }));
-      expect(screen.getByTestId("agents-panel")).toHaveTextContent("1 个工作中");
-      expect(screen.getByTestId("agents-panel")).not.toHaveTextContent("apply_patch");
-      await user.click(within(screen.getByTestId("agents-panel")).getByRole("button", { name: /工作中/ }));
-      expect(screen.getByTestId("agents-panel")).toHaveTextContent("apply_patch");
+      await user.keyboard("{Escape}");
+      expect(screen.queryByTestId("thread-agents-popover")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Agent 1" }));
+      expect(screen.getByTestId("thread-agents-popover")).toHaveTextContent("apply_patch");
       // stop from the card
-      await user.click(within(screen.getByTestId("agents-panel")).getByRole("button", { name: "停止 beta" }));
+      await user.click(within(screen.getByTestId("thread-agents-popover")).getByRole("button", { name: "停止 beta" }));
       await waitFor(() => expect(interruptTurn).toHaveBeenCalledWith(expect.objectContaining({ input: { threadId: "t9", kernelTurnId: "turn_2-beta" } })));
+      await user.keyboard("{Escape}");
       const sub = screen.getByTestId("tool-subagent");
       // the row is a summary — state, what its model is writing, its last words — never the conversation
       expect(sub).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");
@@ -1289,8 +1401,10 @@ describe("ThreadPage", () => {
       act(() => {
         channel.deliverTo(`thread:${child}`, "event", { seq: 4, method: "turn/completed", params: { turn: { id: "turn_2-beta", status: "completed" } } });
       });
-      await waitFor(() => expect(screen.getByTestId("agents-panel")).toHaveTextContent("最近完成"));
-      expect(screen.getByTestId("agents-panel")).toHaveTextContent("beta");
+      await user.click(within(within(tabs).getAllByRole("tab")[0]!).getAllByRole("button")[0]!);
+      await user.click(screen.getByRole("button", { name: "Agent 1" }));
+      await waitFor(() => expect(screen.getByTestId("thread-agents-popover")).toHaveTextContent("最近完成"));
+      expect(screen.getByTestId("thread-agents-popover")).toHaveTextContent("beta");
     } finally {
       vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
     }
@@ -1943,10 +2057,9 @@ describe("ThreadPage", () => {
         }),
       );
       expect(screen.queryByTestId("agents-panel")).not.toBeInTheDocument();
-      const pill = screen.getByTestId("agents-pill");
-      expect(pill).toHaveTextContent("1");
-      await user.click(within(pill).getByRole("button"));
-      const sheet = await screen.findByTestId("tool-sheet", {}, { timeout: 3000 });
+      const pill = await screen.findByRole("button", { name: "Agent 1" });
+      await user.click(pill);
+      const sheet = await screen.findByTestId("thread-agents-popover", {}, { timeout: 3000 });
       expect(await within(sheet).findByText("beta")).toBeInTheDocument();
       expect(sheet).toHaveTextContent("正在写 apply_patch 的参数（20 KB）");
     } finally {

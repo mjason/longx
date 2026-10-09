@@ -1,9 +1,8 @@
 import { useTranslation } from "react-i18next";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Thread, type ThreadComponents } from "@/ui/components/assistant-ui/elements/thread.aui";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { Link, useOutletContext, useParams } from "react-router";
-import { useViewport } from "@/core/viewport";
 import { Alert, AlertDescription } from "@/ui/components/ui/alert";
 import { Button } from "@/ui/components/ui/button";
 import { t } from "@/ui/strings";
@@ -12,7 +11,6 @@ import { FileMentions, FileMentionText } from "./FileMentions";
 import { AgentLabel } from "./AgentLabel";
 import { HistoryContext, HistoryEdge } from "./HistoryEdge";
 import { PendingEchoes } from "./PendingEchoes";
-import { AgentsPanel, AgentsPill } from "./AgentsPanel";
 import { GoalBar } from "./GoalBar";
 import { ModelFailedBanner } from "./ModelFailedBanner";
 import { ReasoningSteps } from "./ReasoningSteps";
@@ -21,6 +19,9 @@ import { ComposerLeading, ComposerTrailing } from "./TurnBar";
 import { MessageQueue } from "@/ui/components/assistant-ui/elements/message-queue";
 import { StoppedNotice } from "./StoppedTurn";
 import { WaitingMessages } from "./WaitingMessages";
+
+const ThreadResources = lazy(() => import("./ThreadJobs").then(module => ({ default: module.ThreadResources })));
+const JobWorkStatus = lazy(() => import("./ThreadJobs").then(module => ({ default: module.JobWorkStatus })));
 
 const Welcome = () => {
     useTranslation();
@@ -49,6 +50,7 @@ const ComposerQueue = () => {
   const { insertQueued } = useChat();
   return (
     <>
+      <Suspense fallback={null}><JobWorkStatus /></Suspense>
       <WaitingMessages />
       <MessageQueue onInsert={(id) => void insertQueued(id)} insertLabel={t.queueInsert} removeLabel={t.queueRemove} hint={t.queueHint} />
     </>
@@ -65,7 +67,6 @@ const THREAD_COMPONENTS: ThreadComponents = { Welcome, ComposerLeading, Composer
 export function ThreadPage() {
     useTranslation();
   const chat = useChat();
-  const viewport = useViewport();
   const ctx = useOutletContext<ProjectContext>();
   const { threadId } = useParams();
 
@@ -109,8 +110,8 @@ export function ThreadPage() {
       ) : null}
       <GoalBar />
       <ModelFailedBanner />
+      <Suspense fallback={null}><ThreadResources /></Suspense>
       <div className="relative min-h-0 flex-1">
-        {viewport === "phone" ? <AgentsPill /> : <AgentsPanel />}
         <HistoryContext.Provider value={chat.history}>
           <Thread key={threadId ?? "new"} components={THREAD_COMPONENTS} autoFocus={false} memoryKey={`${ctx.id}:${threadId ?? "new"}`} />
         </HistoryContext.Provider>

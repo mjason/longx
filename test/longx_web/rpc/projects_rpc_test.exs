@@ -222,6 +222,48 @@ defmodule LongxWeb.ProjectsRpcTest do
     assert job["thread_title"] == nil
   end
 
+  test "pending work remains visible when its turn is idle and UI log reads do not acknowledge it",
+       %{conn: conn, dir: dir} do
+    project = create!(conn, dir)
+    {thread_id, kernel_id} = start!(conn, project)
+    on_exit(fn -> Longx.Jobs.delete(kernel_id) end)
+    {:ok, job} = Longx.Jobs.start(kernel_id, "verify", "echo checked", cwd: dir, notify: false)
+    assert {:ok, _} = Longx.Jobs.wait(kernel_id, "verify", 5_000)
+
+    assert [%{id: ^thread_id, job_activity: %{total: 1, state: "pending"}}] =
+             Longx.Projects.running_threads()
+
+    assert Longx.Projects.finished_threads() == []
+
+    input = %{"threadId" => thread_id, "name" => job.name, "run" => job.run}
+
+    assert %{"success" => true, "data" => %{"text" => text}} =
+             rpc(conn, "thread_job_output", %{"input" => input, "fields" => ["job", "text"]})
+
+    assert text =~ "checked"
+    assert [_] = Longx.Jobs.pending(kernel_id)
+
+    assert %{"success" => false} =
+             rpc(conn, "set_thread_job_purpose", %{
+               "input" => Map.put(input, "purpose", "bad"),
+               "fields" => ["job", "text"]
+             })
+
+    assert %{"success" => true} =
+             rpc(conn, "set_thread_job_purpose", %{
+               "input" => Map.put(input, "purpose", "background"),
+               "fields" => ["job", "text"]
+             })
+
+    assert Longx.Projects.running_threads() == []
+
+    assert %{"success" => false} =
+             rpc(conn, "stop_thread_job", %{
+               "input" => Map.put(input, "run", "old"),
+               "fields" => ["job", "text"]
+             })
+  end
+
   defp sse(conn, chunks) do
     conn =
       conn

@@ -3,15 +3,19 @@ import { useTranslation } from "react-i18next";
 // what the kernel asked the provider for and what came of it, newest first. The
 // place to look when the level or the model on screen does not match what
 // the provider was asked; refreshed every few seconds while shown.
-import { useQuery } from "@tanstack/react-query";
-import { useFaults } from "@/core/faults";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { faultKeys, type FaultReport, useFaults } from "@/core/faults";
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { gatewayRequests } from "@/core/api";
+import { clearFaults, gatewayRequests } from "@/core/api";
 import { formatDuration } from "@/core/format";
 import { unwrap } from "@/core/projects";
 import { Button } from "@/ui/components/ui/button";
 import { Skeleton } from "@/ui/components/ui/skeleton";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/ui/components/ui/alert-dialog";
 import { t } from "@/ui/strings";
 import { SentryCard } from "./SentryCard";
 
@@ -140,14 +144,48 @@ export function RequestsSection() {
 }
 
 // what went wrong on the server lately: the serializer, the wire cleaner
+function useClearFaults() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      await client.cancelQueries({ queryKey: faultKeys.recent });
+      return unwrap(await clearFaults()) as FaultReport;
+    },
+    onSuccess: (report) => {
+      client.setQueryData(faultKeys.recent, report);
+      void client.invalidateQueries({ queryKey: faultKeys.recent });
+    },
+  });
+}
+
 function FaultsList() {
     useTranslation();
   const faults = useFaults({ refetchInterval: 15_000 });
+  const clear = useClearFaults();
+  const [confirm, setConfirm] = useState(false);
   const f = t.faults;
   return (
     <div className="mt-4 flex flex-col gap-2" data-testid="section-faults">
-      <p className="text-sm font-medium">{f.title}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium">{f.title}</p>
+        <Button size="sm" variant="outline" disabled={!faults.data?.faults.length || clear.isPending} onClick={() => setConfirm(true)}>
+          {clear.isPending ? f.clearing : f.clear}
+        </Button>
+      </div>
       <p className="text-muted-foreground text-xs">{f.hint}</p>
+      {clear.isError ? <p role="alert" className="text-destructive text-sm">{f.clearFailed}: {clear.error.message}</p> : null}
+      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{f.clear}</AlertDialogTitle>
+            <AlertDialogDescription>{f.clearHint}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
+            <AlertDialogAction disabled={clear.isPending} onClick={() => clear.mutate()}>{f.clear}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {!faults.data || faults.data.faults.length === 0 ? (
         <p className="text-muted-foreground text-sm">{f.none}</p>
       ) : (

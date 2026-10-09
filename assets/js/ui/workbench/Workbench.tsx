@@ -16,6 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { t } from "@/ui/strings";
 import { useLocation, useMatch, useNavigate } from "react-router";
 import { useChat } from "@/ui/chat/ChatProvider";
+import { useRunningThreads } from "@/core/projects";
 import { AgentTab } from "./AgentTab";
 import { Skeleton } from "@/ui/components/ui/skeleton";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/ui/components/ui/context-menu";
@@ -43,6 +44,7 @@ export function Workbench({
   const location = useLocation();
   const settingsRoute = useMatch("/p/:slug/settings") !== null;
   const chat = useChat();
+  const running = useRunningThreads();
   const chatTitle = threadId ? chat.thread?.title || chat.thread?.preview || t.chatTab : t.chatTab;
   useEffect(() => {
     if (settingsRoute) wb.open({ kind: "settings" });
@@ -112,6 +114,9 @@ export function Workbench({
                     <button type="button" className="flex h-full items-center gap-1.5" onClick={() => select(tab)}>
                       <TabIcon tab={tab} />
                       <span className="max-w-48 truncate font-mono">{tabLabel(tab)}</span>
+                      {tab.kind === "chat" && running.data?.find(row => row.id === tab.threadId)?.jobActivity?.total ? (
+                        <span className="text-warning text-[10px]" title={t.jobWork.states[running.data.find(row => row.id === tab.threadId)!.jobActivity!.state]} aria-label={t.jobWork.states[running.data.find(row => row.id === tab.threadId)!.jobActivity!.state]}>●</span>
+                      ) : null}
                       {wb.dirty.includes(key) ? <span className="text-warning" title={t.unsavedChanges}>●</span> : null}
                     </button>
                     {tab.kind !== "chat" || !!tab.threadId ? (

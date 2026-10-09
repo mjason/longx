@@ -465,8 +465,10 @@ defmodule Longx.Projects.Tracker do
   defp now, do: System.monotonic_time(:millisecond)
 
   # root threads only: a sub-agent's turn is a step of its parent's
-  defp notify_turn_end(%Thread{parent_thread_id: nil} = thread, :completed, _error),
-    do: Projects.notify(thread, "turn_completed", title: "完成了")
+  defp notify_turn_end(%Thread{parent_thread_id: nil} = thread, :completed, _error) do
+    if not Projects.work_remaining?(thread),
+      do: Projects.notify(thread, "turn_completed", title: "完成了")
+  end
 
   defp notify_turn_end(%Thread{parent_thread_id: nil} = thread, :failed, error),
     do:

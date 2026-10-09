@@ -554,6 +554,8 @@ function toPart(item: ThreadItem): Part | null {
     }
     case "contextCompaction":
       return { type: "data-compaction", data: { id: item.id } } as Part;
+    case "contextCompactionFailed":
+      return { type: "data-compaction", data: { id: item.id, error: item["error"] } } as Part;
     default:
       return { type: "data-item", data: item } as Part;
   }

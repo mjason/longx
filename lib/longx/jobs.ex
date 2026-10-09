@@ -45,7 +45,16 @@ defmodule Longx.Jobs do
   @spec start(String.t(), String.t(), String.t(), keyword) ::
           {:ok, info} | {:error, {:running, info} | :bad_name | term}
   def start(thread_id, name, cmd, opts \\ []) when is_binary(cmd) do
+    :global.trans({{__MODULE__, thread_id, name}, self()}, fn ->
+      start_locked(thread_id, name, cmd, opts)
+    end)
+  end
+
+  defp start_locked(thread_id, name, cmd, opts) do
     cond do
+      Keyword.get(opts, :purpose, "wait") not in ["wait", "background"] ->
+        {:error, :bad_purpose}
+
       not (is_binary(name) and Regex.match?(@name, name)) ->
         {:error, :bad_name}
 
@@ -67,6 +76,7 @@ defmodule Longx.Jobs do
           dir: dir,
           run: Ash.UUID.generate(),
           notify: Keyword.get(opts, :notify, true) != false,
+          purpose: Keyword.get(opts, :purpose, "wait"),
           shell: Keyword.get(opts, :shell) || Longx.Agent.Tools.ShellEnv.shell(),
           flag: if(login?, do: "-lc", else: "-c"),
           env: Longx.Agent.Tools.ShellEnv.env_list(),
@@ -124,7 +134,7 @@ defmodule Longx.Jobs do
             {:error, :unknown}
 
           info ->
-            info = observe(thread_id, info)
+            info = if Keyword.get(opts, :observe, true), do: observe(thread_id, info), else: info
             log = Path.join(job_dir(thread_id, name), "log")
             {:ok, %{info: info, text: Log.read(log, opts), stats: Log.read_stats(log)}}
         end
@@ -152,19 +162,26 @@ defmodule Longx.Jobs do
 
   @doc "Stops a job: its whole process tree ends; the agent knows, it is not told."
   @spec stop(String.t(), String.t()) :: {:ok, info} | {:error, :unknown}
-  def stop(thread_id, name) do
+  def stop(thread_id, name, opts \\ []) do
     case whereis(thread_id, name) do
       pid when is_pid(pid) ->
-        GenServer.call(pid, :stop, 30_000)
+        GenServer.call(
+          pid,
+          {:stop, Keyword.get(opts, :run), Keyword.get(opts, :by, :agent)},
+          30_000
+        )
 
       nil ->
         case info(thread_id, name) do
-          nil -> {:error, :unknown}
-          info -> {:ok, info}
+          nil ->
+            {:error, :unknown}
+
+          info ->
+            if opts[:run] && opts[:run] != info.run, do: {:error, :stale_run}, else: {:ok, info}
         end
     end
   catch
-    :exit, _ -> stop(thread_id, name)
+    :exit, _ -> stop(thread_id, name, opts)
   end
 
   @doc "Whether the agent has seen this run's end."
@@ -175,6 +192,98 @@ defmodule Longx.Jobs do
       # replaced by a later run: this one's end no longer matters
       _ -> true
     end
+  end
+
+  @doc "Unresolved work, distinct from a command running in the background."
+  def pending(thread_id), do: Enum.filter(list(thread_id), &pending?/1)
+
+  def pending?(info),
+    do: info.purpose == "wait" and info.review not in ["complete", "superseded"]
+
+  def pending_threads do
+    dir()
+    |> ls()
+    |> Enum.filter(&(pending(&1) != []))
+  end
+
+  def activity(jobs, running? \\ false) do
+    pending = Enum.filter(jobs, &pending?/1)
+    running = Enum.count(pending, &(&1.status == "running"))
+    incomplete = Enum.count(pending, &failed?/1)
+
+    processing =
+      if running?, do: Enum.count(pending, &(&1.status != "running" and &1.observed)), else: 0
+
+    %{
+      total: length(pending),
+      running: running,
+      processing: processing,
+      pending: length(pending) - running - processing,
+      incomplete: incomplete,
+      state:
+        cond do
+          pending == [] -> "complete"
+          incomplete > 0 -> "incomplete"
+          processing > 0 -> "processing"
+          running > 0 -> "waiting"
+          true -> "pending"
+        end
+    }
+  end
+
+  defp failed?(info),
+    do:
+      info.review == "incomplete" or
+        (info.status != "running" and (info.status != "exited" or info.exit_code != 0))
+
+  @doc "Record that the model saw this exact run, not that it finished reviewing it."
+  def observe_run(thread_id, name, run),
+    do: update_info(thread_id, name, run, &Map.put(&1, :observed, true))
+
+  @doc "A reviewed result; failed/stopped work cannot silently be marked complete."
+  def review(thread_id, name, run, outcome, note)
+      when outcome in ["complete", "incomplete", "superseded"] do
+    update_info(thread_id, name, run, fn info ->
+      cond do
+        info.status == "running" -> {:error, :still_running}
+        outcome == "complete" and failed?(%{info | review: nil}) -> {:error, :not_successful}
+        not is_binary(note) or String.trim(note) == "" -> {:error, :note_required}
+        true -> %{info | review: outcome, review_note: note, observed: true}
+      end
+    end)
+  end
+
+  def set_purpose(thread_id, name, run, purpose) when purpose in ["wait", "background"],
+    do: update_info(thread_id, name, run, &Map.put(&1, :purpose, purpose))
+
+  defp update_info(thread_id, name, run, fun) do
+    case whereis(thread_id, name) do
+      pid when is_pid(pid) ->
+        GenServer.call(pid, {:update_info, run, fun})
+
+      nil ->
+        :global.trans({{__MODULE__, thread_id, name}, self()}, fn ->
+          case info(thread_id, name) do
+            %{run: ^run} = current ->
+              case fun.(current) do
+                {:error, _} = error ->
+                  error
+
+                updated ->
+                  save_info(job_dir(thread_id, name), updated)
+                  {:ok, updated}
+              end
+
+            nil ->
+              {:error, :unknown}
+
+            _ ->
+              {:error, :stale_run}
+          end
+        end)
+    end
+  catch
+    :exit, _ -> update_info(thread_id, name, run, fun)
   end
 
   @doc "Stops every job of a thread (its archive)."
@@ -219,7 +328,7 @@ defmodule Longx.Jobs do
     days = Keyword.get(opts, :keep_days, config()[:keep_days] || 7)
     cutoff = DateTime.utc_now() |> DateTime.add(-days * 86_400) |> DateTime.to_iso8601()
 
-    finished = thread_id |> list() |> Enum.filter(&(&1.status != "running"))
+    finished = thread_id |> list() |> Enum.filter(&(&1.status != "running" and not pending?(&1)))
 
     {kept, old} = Enum.split(finished, keep)
     expired = Enum.filter(kept, &(is_binary(&1.finished_at) and &1.finished_at < cutoff))
@@ -229,7 +338,17 @@ defmodule Longx.Jobs do
   end
 
   @doc false
-  def save_info(dir, info), do: File.write!(Path.join(dir, "job.json"), Jason.encode!(info))
+  def save_info(dir, info) do
+    File.write!(Path.join(dir, "job.json"), Jason.encode!(info))
+
+    Phoenix.PubSub.broadcast(
+      Longx.PubSub,
+      Longx.Notify.topic(),
+      {:jobs_changed, Path.basename(Path.dirname(dir))}
+    )
+
+    :ok
+  end
 
   defp observe(thread_id, %{observed: false, status: status} = info) when status != "running" do
     info = %{info | observed: true}
@@ -251,6 +370,10 @@ defmodule Longx.Jobs do
         reason: map["reason"],
         run: map["run"],
         notify: map["notify"] != false,
+        # Legacy jobs predate explicit work dependencies; do not resurrect them as todo.
+        purpose: map["purpose"] || "background",
+        review: map["review"],
+        review_note: map["review_note"],
         observed: map["observed"] == true,
         started_at: map["started_at"],
         finished_at: map["finished_at"]

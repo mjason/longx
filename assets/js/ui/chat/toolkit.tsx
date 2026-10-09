@@ -944,60 +944,27 @@ function lastWords(view: ThreadView | undefined): string | null {
 
 // ---- the kernel compacted the conversation here (older turns summarised away)
 
-export function CompactionView() {
-    useTranslation();
-  return (
-    <div
-      role="separator"
-      aria-label={t.compacted}
-      className="text-muted-foreground my-2 flex items-center gap-2 text-[11px]"
-      data-testid="compaction"
-    >
-      <span className="bg-border h-px flex-1" />
-      <span>{t.compacted}</span>
-      <span className="bg-border h-px flex-1" />
-    </div>
-  );
+const LazyCompactionView = lazy(() => import("./kernel-markers"));
+export function CompactionView(props: { error?: string }) {
+  return <Suspense fallback={null}><LazyCompactionView {...props} /></Suspense>;
 }
 
 // ---- goal mode handed the model its objective again (the kernel's words, not the person's)
 
-export function GoalContinuationView({ round, objective }: { round: number | null; objective: string | null }) {
-    useTranslation();
-  const label = round === null ? t.goalRoundUnknown : t.goalRound(round);
-  return (
-    <div
-      role="separator"
-      aria-label={label}
-      className="text-muted-foreground my-2 flex min-w-0 items-center gap-2 text-[11px]"
-      data-testid="goal-continuation"
-    >
-      <span className="bg-border h-px w-6 shrink-0" />
-      <span className="shrink-0">{label}</span>
-      {objective ? <span className="min-w-0 truncate opacity-70" title={objective}>{objective}</span> : null}
-      <span className="bg-border h-px flex-1" />
-    </div>
-  );
+const LazyGoalContinuationView = lazy(async () => ({
+  default: (await import("./kernel-markers")).GoalContinuationView,
+}));
+export function GoalContinuationView(props: { round: number | null; objective: string | null }) {
+  return <Suspense fallback={null}><LazyGoalContinuationView {...props} /></Suspense>;
 }
 
 // ---- a background job ended and woke the agent (the kernel's words, not the person's)
 
-export function JobNoticeView({ name, status, exitCode, durationMs, text }: { name: string; status: string; exitCode: number | null; durationMs: number | null; text: string }) {
-    useTranslation();
-  const [open, setOpen] = useState(false);
-  const how = status === "exited" ? t.jobEnded(name) : t.jobStopped(name);
-  const bits = [how, exitCode !== null ? t.jobExitCode(exitCode) : null, durationMs !== null ? formatDuration(durationMs) : null].filter(Boolean).join(" · ");
-  return (
-    <div className="my-2 flex min-w-0 flex-col gap-1" data-testid="job-notice">
-      <button type="button" className="text-muted-foreground flex min-w-0 items-center gap-2 text-left text-[11px]" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <span className="bg-border h-px w-6 shrink-0" />
-        <span className={cn("min-w-0 truncate", status === "exited" && exitCode === 0 ? "" : "text-warning")}>{bits}</span>
-        <ChevronDown className={cn("size-3 shrink-0 transition-transform", open && "rotate-180")} aria-hidden />
-        <span className="bg-border h-px flex-1" />
-      </button>
-      {open ? <pre className="bg-muted/50 text-muted-foreground overflow-x-auto rounded-md p-2 text-[11px] whitespace-pre-wrap">{text}</pre> : null}
-    </div>
-  );
+const LazyJobNoticeView = lazy(async () => ({
+  default: (await import("./kernel-markers")).JobNoticeView,
+}));
+export function JobNoticeView(props: ComponentProps<typeof LazyJobNoticeView>) {
+  return <Suspense fallback={null}><LazyJobNoticeView {...props} /></Suspense>;
 }
 
 export const JobNoticeUI = makeAssistantDataUI<{ id: string; name: string; status: string; exitCode: number | null; durationMs: number | null; text: string }>({
@@ -1010,9 +977,9 @@ export const GoalContinuationUI = makeAssistantDataUI<{ id: string; round: numbe
   render: ({ data }) => <GoalContinuationView round={data.round} objective={data.objective} />,
 });
 
-export const CompactionUI = makeAssistantDataUI<{ id: string }>({
+export const CompactionUI = makeAssistantDataUI<{ id: string; error?: string }>({
   name: "compaction",
-  render: () => <CompactionView />,
+  render: ({ data }) => <CompactionView error={data.error} />,
 });
 
 /**

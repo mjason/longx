@@ -100,6 +100,8 @@ query ListRecentThreads($limit: Int) { listRecentThreads(limit: $limit) { thread
 
 query ProjectJobs($projectId: ID!) { projectJobs(projectId: $projectId) { jobs } }
 
+query ThreadJobOutput($threadId: ID!, $name: String!, $run: String!) { threadJobOutput(threadId: $threadId, name: $name, run: $run) { text job } }
+
 query Directory($projectId: ID!, $scope: String) { directory(projectId: $projectId, scope: $scope) { sessions } }
 
 query ListFiles($projectId: ID!, $path: String!) { listFiles(projectId: $projectId, path: $path) { size path name kind } }
@@ -165,6 +167,8 @@ mutation SetChromeAlias($input: SetChromeAliasInput!) { setChromeAlias(input: $i
 mutation DeleteChromeAlias($input: DeleteChromeAliasInput!) { deleteChromeAlias(input: $input) { default aliases { name browsers } } }
 
 mutation SetChromeDefaultAlias($input: SetChromeDefaultAliasInput) { setChromeDefaultAlias(input: $input) { default aliases { name browsers } } }
+
+mutation ClearFaults { clearFaults { recent faults } }
 
 mutation CreateDirectory($input: CreateDirectoryInput!) { createDirectory(input: $input) { path name git } }
 
@@ -255,6 +259,10 @@ mutation DeleteProject($id: ID!, $input: DeleteProjectInput) { deleteProject(id:
 mutation PromoteLocal($input: PromoteLocalInput!) { promoteLocal(input: $input) { path } }
 
 mutation InitGit($input: InitGitInput!) { initGit(input: $input) { repository lfs head clean changes } }
+
+mutation StopThreadJob($input: StopThreadJobInput!) { stopThreadJob(input: $input) { text job } }
+
+mutation SetThreadJobPurpose($input: SetThreadJobPurposeInput!) { setThreadJobPurpose(input: $input) { text job } }
 
 mutation StartThread($input: StartThreadInput!) { startThread(input: $input) { id kernelThreadId title preview handle onDuty cwd modelSlug reasoningEffort webSearch agentPath status lastActivityAt insertedAt updatedAt projectId parentThreadId } }
 

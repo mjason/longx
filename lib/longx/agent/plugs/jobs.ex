@@ -36,6 +36,26 @@ defmodule Longx.Agent.Plugs.Jobs do
     param :notify,
           :boolean,
           "Wake you when it ends (default true). false for a job you will check yourself."
+
+    param :purpose,
+          {:enum, ["wait", "background"]},
+          "wait (default): this work depends on its result, e.g. tests/builds/exports. background: independent long-lived service or monitor, not a completion dependency. Declare explicitly; notify is independent."
+  end
+
+  tool :review_job,
+       "Record your review of a finished job's exact run, after checking its result. Required for wait-purpose work before claiming completion. complete: successful result verified; incomplete: failed/stopped or unverified work; superseded: replaced by verified follow-up work, with an explanation. Reading logs or receiving the exit notification alone does not finish the work." do
+    param :name, :string, "Job name.", required: true
+
+    param :run,
+          :string,
+          "Exact run id from jobs/job_output; prevents acknowledging a replacement run.",
+          required: true
+
+    param :outcome, {:enum, ["complete", "incomplete", "superseded"]}, "Review outcome.",
+      required: true
+
+    param :note, :string, "What was verified, remains incomplete, or replaces this result.",
+      required: true
   end
 
   tool :jobs,
@@ -81,6 +101,39 @@ defmodule Longx.Agent.Plugs.Jobs do
     |> Step.tool(%{start | fun: fn args, ctx -> start_job(args, ctx, guards) end})
   end
 
+  def call(%Step{phase: :turn_end, thread_id: id} = step, _opts) when is_binary(id) do
+    reminded = Map.get(step.state, :job_reviews_reminded, [])
+
+    unreviewed =
+      Longx.Jobs.pending(id)
+      |> Enum.filter(
+        &(&1.status != "running" and &1.observed and &1.review == nil and &1.run not in reminded)
+      )
+
+    if unreviewed == [] do
+      step
+    else
+      results =
+        Enum.map_join(
+          unreviewed,
+          "\n",
+          &"#{&1.name}: run=#{&1.run}, status=#{&1.status}, exit_code=#{&1.exit_code}"
+        )
+
+      step
+      |> Step.put_state(:job_reviews_reminded, reminded ++ Enum.map(unreviewed, & &1.run))
+      |> Step.continue(
+        "These result-required jobs are not yet reviewed. Check their results and record review_job before claiming completion. Failed or stopped work is incomplete; do not restart a person-stopped job unless asked. Each run is reminded only once:\n" <>
+          results,
+        origin: %{
+          "kind" => "job",
+          "name" => Enum.map_join(unreviewed, ", ", & &1.name),
+          "status" => "review"
+        }
+      )
+    end
+  end
+
   def call(step, _opts), do: step
 
   ## The tools
@@ -94,7 +147,14 @@ defmodule Longx.Agent.Plugs.Jobs do
     cwd = workdir(args["workdir"], ctx)
     notify = args["notify"] != false
 
-    case Longx.Jobs.start(ctx.thread_id, name, cmd, cwd: cwd, notify: notify, guards: guards) do
+    purpose = args["purpose"] || "wait"
+
+    case Longx.Jobs.start(ctx.thread_id, name, cmd,
+           cwd: cwd,
+           notify: notify,
+           guards: guards,
+           purpose: purpose
+         ) do
       {:ok, info} ->
         after_ =
           if notify,
@@ -106,6 +166,11 @@ defmodule Longx.Agent.Plugs.Jobs do
          ~s|Job "#{name}" started in the background in #{cwd}. | <>
            after_ <>
            ~s| job_output(name: "#{name}") shows its output, stop_job stops it.| <>
+           "\nPurpose: #{purpose}. Run: #{info.run}." <>
+           if(purpose == "wait",
+             do: " Review the result with review_job before claiming this work is complete.",
+             else: ""
+           ) <>
            if(info.reason, do: "\n" <> info.reason, else: "")}
 
       {:error, {:running, info}} ->
@@ -119,6 +184,13 @@ defmodule Longx.Agent.Plugs.Jobs do
 
       {:error, reason} ->
         {:error, "could not start the job: #{inspect(reason)}"}
+    end
+  end
+
+  def review_job(%{"name" => name, "run" => run, "outcome" => outcome, "note" => note}, ctx) do
+    case Longx.Jobs.review(ctx.thread_id || "", name, run, outcome, note) do
+      {:ok, _} -> {:ok, "Recorded #{outcome} for job #{name}, run #{run}: #{note}"}
+      {:error, reason} -> {:error, "Could not review job: #{reason}"}
     end
   end
 
@@ -187,21 +259,26 @@ defmodule Longx.Agent.Plugs.Jobs do
 
   defp line(info) do
     ended = if info.finished_at, do: " → #{short(info.finished_at)}", else: ""
-    "#{info.name}  #{status(info)}  #{short(info.started_at)}#{ended}  `#{info.cmd}`"
+
+    "#{info.name}  #{status(info)}  #{short(info.started_at)}#{ended}  `#{info.cmd}`  run=#{info.run} purpose=#{info.purpose} review=#{info.review || "pending"}"
   end
 
   defp state(info) do
-    case info.status do
-      "running" ->
-        ~s|Job "#{info.name}" is running (since #{short(info.started_at)}).| <> reason_note(info)
+    text =
+      case info.status do
+        "running" ->
+          ~s|Job "#{info.name}" is running (since #{short(info.started_at)}).| <>
+            reason_note(info)
 
-      "exited" ->
-        ~s|Job "#{info.name}" exited with code #{info.exit_code} (#{short(info.finished_at)}).| <>
-          reason_note(info)
+        "exited" ->
+          ~s|Job "#{info.name}" exited with code #{info.exit_code} (#{short(info.finished_at)}).| <>
+            reason_note(info)
 
-      _ ->
-        ~s|Job "#{info.name}" #{status(info)}.|
-    end
+        _ ->
+          ~s|Job "#{info.name}" #{status(info)}.|
+      end
+
+    text <> "\nRun: #{info.run}. Purpose: #{info.purpose}. Review: #{info.review || "pending"}."
   end
 
   defp reason_note(%{reason: reason}) when is_binary(reason), do: "\n" <> reason

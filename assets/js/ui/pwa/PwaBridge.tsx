@@ -70,6 +70,10 @@ export function PwaBridge({ prod = import.meta.env.PROD, registerAfterMs = REGIS
         .then((data) => setBadge(waitingCount((data as { threads: { waiting?: boolean }[] }).threads)))
         .catch(() => undefined);
     return joinNotify(getSocket(), {
+      onActivity: () => {
+        changed();
+        void client.invalidateQueries({ predicate: (query) => query.queryKey[0] === "project" && query.queryKey[2] === "jobs" });
+      },
       onRunning: (running) => {
         if (badge) setBadge(waitingCount(running));
         changed();

@@ -443,6 +443,35 @@ defmodule Longx.Projects.Thread do
       end
     end
 
+    action :thread_job_output, Types.JobReport do
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :name, :string, allow_nil?: false
+      argument :run, :string, allow_nil?: false
+
+      run fn input, _ -> job_operation(input.arguments, :output) end
+    end
+
+    action :stop_thread_job, Types.JobReport do
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :name, :string, allow_nil?: false
+      argument :run, :string, allow_nil?: false
+
+      run fn input, _ -> job_operation(input.arguments, :stop) end
+    end
+
+    action :set_thread_job_purpose, Types.JobReport do
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :name, :string, allow_nil?: false
+      argument :run, :string, allow_nil?: false
+      argument :purpose, :string, allow_nil?: false
+
+      run fn input, _ ->
+        if input.arguments.purpose in ["wait", "background"],
+          do: job_operation(input.arguments, :purpose),
+          else: argument_error(:purpose, "expected wait or background")
+      end
+    end
+
     action :project_jobs, Types.ProjectJobs do
       argument :project_id, :uuid, allow_nil?: false
 
@@ -529,6 +558,52 @@ defmodule Longx.Projects.Thread do
   # an error on one argument, the way the client shows it next to the field
   # (a bare `{:error, field: …}` from a generic action's run is "unknown")
   @doc false
+  defp job_operation(args, operation) do
+    with {:ok, thread} <- Longx.Projects.get_thread(args.thread_id),
+         job when not is_nil(job) <-
+           Enum.find(Longx.Jobs.list(thread.kernel_thread_id), &(&1.name == args.name)),
+         true <- job.run == args.run do
+      result =
+        case operation do
+          :output ->
+            case Longx.Jobs.output(thread.kernel_thread_id, args.name, tail: 100, observe: false) do
+              {:ok, %{info: %{run: run} = info, text: text}} when run == args.run ->
+                {:ok, %{job: info, text: text}}
+
+              {:ok, _} ->
+                {:error, :stale_run}
+
+              error ->
+                error
+            end
+
+          :stop ->
+            case Longx.Jobs.stop(thread.kernel_thread_id, args.name, run: args.run, by: :person) do
+              {:ok, info} -> {:ok, %{job: info, text: ""}}
+              error -> error
+            end
+
+          :purpose ->
+            case Longx.Jobs.set_purpose(
+                   thread.kernel_thread_id,
+                   args.name,
+                   args.run,
+                   args.purpose
+                 ) do
+              {:ok, info} -> {:ok, %{job: info, text: ""}}
+              error -> error
+            end
+        end
+
+      case result do
+        {:ok, report} -> {:ok, report}
+        {:error, reason} -> argument_error(:name, "job operation failed: #{inspect(reason)}")
+      end
+    else
+      _ -> argument_error(:run, "job not found or replaced; refresh before acting")
+    end
+  end
+
   def argument_error(field, message) do
     {:error,
      Ash.Error.to_error_class(

@@ -33,6 +33,7 @@ defmodule Longx.Projects do
       action Longx.Projects.Thread, :list_running_threads, :list_running
       action Longx.Projects.Thread, :list_recent_threads, :list_recent
       action Longx.Projects.Thread, :project_jobs, :project_jobs
+      action Longx.Projects.Thread, :thread_job_output, :thread_job_output
       action Longx.Projects.Thread, :directory, :directory
       action Longx.Projects.Files, :list_files, :list_files
       action Longx.Projects.Files, :read_file, :read_file
@@ -48,6 +49,8 @@ defmodule Longx.Projects do
     end
 
     mutations do
+      action Longx.Projects.Thread, :stop_thread_job, :stop_thread_job
+      action Longx.Projects.Thread, :set_thread_job_purpose, :set_thread_job_purpose
       create Longx.Projects.Project, :create_project, :create
       update Longx.Projects.Project, :update_project, :update
       update Longx.Projects.Project, :archive_project, :archive
@@ -104,6 +107,7 @@ defmodule Longx.Projects do
 
     resource Longx.Projects.Thread do
       define :create_thread, action: :create
+      define :get_thread, action: :by_id, args: [:id]
       define :touch_thread, action: :touch
       define :rename_thread, action: :rename
       define :set_thread_handle, action: :set_handle
@@ -117,6 +121,9 @@ defmodule Longx.Projects do
       define :list_all_root_threads, action: :roots
       define :list_all_active_threads, action: :active
       define :list_subagents, action: :subagents_of, args: [:parent_thread_id]
+      define :thread_job_output, action: :thread_job_output
+      define :stop_thread_job, action: :stop_thread_job
+      define :set_thread_job_purpose, action: :set_thread_job_purpose
     end
 
     resource Longx.Projects.Files
@@ -157,18 +164,45 @@ defmodule Longx.Projects do
     |> project_thread_tree()
     |> Enum.flat_map(fn thread ->
       Enum.map(Longx.Jobs.list(thread.kernel_thread_id), fn job ->
+        activity = Longx.Jobs.activity([job], thread.status == :active)
+
         Map.merge(job, %{
           thread_id: thread.id,
-          thread_title: thread.title
+          thread_title: thread.title,
+          root_thread_id: root_thread_id(thread),
+          activity: activity.state
         })
       end)
     end)
-    |> Enum.filter(&(&1.status == "running" or recent_job?(&1, now)))
+    |> Enum.filter(&(&1.status == "running" or Longx.Jobs.pending?(&1) or recent_job?(&1, now)))
     |> Enum.sort_by(
       &{&1.status == "running", &1.started_at || ""},
       :desc
     )
-    |> Enum.take(50)
+  end
+
+  defp root_thread_id(%{parent_thread_id: nil, id: id}), do: id
+
+  defp root_thread_id(thread) do
+    case root_of(thread) do
+      {:ok, root} -> root.id
+      _ -> thread.id
+    end
+  end
+
+  def job_activity(thread) do
+    threads = project_thread_tree([thread])
+    jobs = Enum.flat_map(threads, &Longx.Jobs.list(&1.kernel_thread_id))
+    Longx.Jobs.activity(jobs, Enum.any?(threads, &(&1.status == :active)))
+  end
+
+  def work_remaining?(thread) do
+    job_activity(thread).total > 0 or
+      Enum.any?(list_subagents!(thread.id), &(&1.status == :active or work_remaining?(&1))) or
+      match?(
+        %{"waiting" => [_ | _]},
+        Longx.Agent.ThreadState.Store.meta(thread.kernel_thread_id).waiting
+      )
   end
 
   defp project_thread_tree(threads) do
@@ -926,6 +960,17 @@ defmodule Longx.Projects do
   @spec running_threads() :: [map]
   def running_threads do
     active = list_all_active_threads!(load: :project)
+
+    pending =
+      Longx.Jobs.pending_threads()
+      |> Enum.flat_map(fn id ->
+        case get_thread_by_kernel_id(id, load: :project) do
+          {:ok, %{status: status} = thread} when status != :archived -> [thread]
+          _ -> []
+        end
+      end)
+
+    active = Enum.uniq_by(active ++ pending, & &1.id)
     roots = Map.new(active, &{&1.id, &1})
 
     # a working sub-agent makes its root busy: walk up to it (a row a hop at a time)
@@ -943,7 +988,11 @@ defmodule Longx.Projects do
                   else: Ash.load!(root, :project)
 
               {Map.put_new(roots, root.id, root),
-               Map.update(working, root.id, [agent_name(child)], &(&1 ++ [agent_name(child)]))}
+               if(child.status == :active,
+                 do:
+                   Map.update(working, root.id, [agent_name(child)], &(&1 ++ [agent_name(child)])),
+                 else: working
+               )}
 
             _ ->
               {roots, working}
@@ -985,7 +1034,8 @@ defmodule Longx.Projects do
                 Longx.Agent.ThreadState.Store.requests(a.kernel_thread_id) != [] and
                 match?({:ok, %Thread{id: id}} when id == thread.id, root_of(a))
             end),
-        working: agents
+        working: agents,
+        job_activity: job_activity(thread)
       }
     end)
   end

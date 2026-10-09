@@ -281,6 +281,9 @@ export function rpcMock() {
     listProjects: vi.fn(async () => ok([project(1), project(2)])),
     listRunningThreads: vi.fn(async () => ok({ threads: [] })),
     projectJobs: vi.fn(async () => ok({ jobs: [] })),
+    threadJobOutput: vi.fn(async () => ok({ job: {}, text: "example job log" })),
+    stopThreadJob: vi.fn(async () => ok({ job: {}, text: "" })),
+    setThreadJobPurpose: vi.fn(async () => ok({ job: {}, text: "" })),
     listRecentThreads: vi.fn(async () => ok({ threads: [] })),
     getProject: vi.fn(async () => ok(project(1))),
     createProject: vi.fn(),
@@ -337,6 +340,7 @@ export function rpcMock() {
     publicUrl: vi.fn(async () => ok({ url: "http://192.168.2.129:7788", setting: null })),
     dependencies: vi.fn(async () => ok(dependencyReport())),
     recentFaults: vi.fn(async () => ok({ faults: [], recent: 0 })),
+    clearFaults: vi.fn(async () => ok({ faults: [], recent: 0 })),
     runningCommands: vi.fn(async () =>
       ok({
         commands: [

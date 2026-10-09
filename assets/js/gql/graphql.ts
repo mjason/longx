@@ -2003,6 +2003,13 @@ export type SetThreadHandleInput = {
   threadId: string | number;
 };
 
+export type SetThreadJobPurposeInput = {
+  name: string;
+  purpose: string;
+  run: string;
+  threadId: string | number;
+};
+
 export type SetThreadOnDutyInput = {
   onDuty: boolean;
   threadId: string | number;
@@ -2040,6 +2047,12 @@ export type StartThreadInput = {
 export type SteerTurnInput = {
   images?: Array<string> | null | undefined;
   text: string;
+  threadId: string | number;
+};
+
+export type StopThreadJobInput = {
+  name: string;
+  run: string;
   threadId: string | number;
 };
 
@@ -3637,6 +3650,15 @@ export type ProjectJobsQueryVariables = Exact<{
 
 export type ProjectJobsQuery = { projectJobs: { jobs: Array<unknown> } };
 
+export type ThreadJobOutputQueryVariables = Exact<{
+  threadId: string | number;
+  name: string;
+  run: string;
+}>;
+
+
+export type ThreadJobOutputQuery = { threadJobOutput: { text: string, job: unknown } };
+
 export type DirectoryQueryVariables = Exact<{
   projectId: string | number;
   scope?: string | null | undefined;
@@ -3882,6 +3904,11 @@ export type SetChromeDefaultAliasMutationVariables = Exact<{
 
 
 export type SetChromeDefaultAliasMutation = { setChromeDefaultAlias: { default: string | null, aliases: Array<{ name: string, browsers: Array<string> }> } };
+
+export type ClearFaultsMutationVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ClearFaultsMutation = { clearFaults: { recent: number, faults: Array<unknown> } };
 
 export type CreateDirectoryMutationVariables = Exact<{
   input: CreateDirectoryInput;
@@ -4188,6 +4215,20 @@ export type InitGitMutationVariables = Exact<{
 
 
 export type InitGitMutation = { initGit: { repository: boolean, lfs: boolean, head: string | null, clean: boolean | null, changes: number } };
+
+export type StopThreadJobMutationVariables = Exact<{
+  input: StopThreadJobInput;
+}>;
+
+
+export type StopThreadJobMutation = { stopThreadJob: { text: string, job: unknown } };
+
+export type SetThreadJobPurposeMutationVariables = Exact<{
+  input: SetThreadJobPurposeInput;
+}>;
+
+
+export type SetThreadJobPurposeMutation = { setThreadJobPurpose: { text: string, job: unknown } };
 
 export type StartThreadMutationVariables = Exact<{
   input: StartThreadInput;
@@ -5246,6 +5287,14 @@ export const ProjectJobsDocument = /*#__PURE__*/ new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ProjectJobsQuery, ProjectJobsQueryVariables>;
+export const ThreadJobOutputDocument = /*#__PURE__*/ new TypedDocumentString(`
+    query ThreadJobOutput($threadId: ID!, $name: String!, $run: String!) {
+  threadJobOutput(threadId: $threadId, name: $name, run: $run) {
+    text
+    job
+  }
+}
+    `) as unknown as TypedDocumentString<ThreadJobOutputQuery, ThreadJobOutputQueryVariables>;
 export const DirectoryDocument = /*#__PURE__*/ new TypedDocumentString(`
     query Directory($projectId: ID!, $scope: String) {
   directory(projectId: $projectId, scope: $scope) {
@@ -5749,6 +5798,14 @@ export const SetChromeDefaultAliasDocument = /*#__PURE__*/ new TypedDocumentStri
   }
 }
     `) as unknown as TypedDocumentString<SetChromeDefaultAliasMutation, SetChromeDefaultAliasMutationVariables>;
+export const ClearFaultsDocument = /*#__PURE__*/ new TypedDocumentString(`
+    mutation ClearFaults {
+  clearFaults {
+    recent
+    faults
+  }
+}
+    `) as unknown as TypedDocumentString<ClearFaultsMutation, ClearFaultsMutationVariables>;
 export const CreateDirectoryDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CreateDirectory($input: CreateDirectoryInput!) {
   createDirectory(input: $input) {
@@ -6446,6 +6503,22 @@ export const InitGitDocument = /*#__PURE__*/ new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<InitGitMutation, InitGitMutationVariables>;
+export const StopThreadJobDocument = /*#__PURE__*/ new TypedDocumentString(`
+    mutation StopThreadJob($input: StopThreadJobInput!) {
+  stopThreadJob(input: $input) {
+    text
+    job
+  }
+}
+    `) as unknown as TypedDocumentString<StopThreadJobMutation, StopThreadJobMutationVariables>;
+export const SetThreadJobPurposeDocument = /*#__PURE__*/ new TypedDocumentString(`
+    mutation SetThreadJobPurpose($input: SetThreadJobPurposeInput!) {
+  setThreadJobPurpose(input: $input) {
+    text
+    job
+  }
+}
+    `) as unknown as TypedDocumentString<SetThreadJobPurposeMutation, SetThreadJobPurposeMutationVariables>;
 export const StartThreadDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation StartThread($input: StartThreadInput!) {
   startThread(input: $input) {

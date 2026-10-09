@@ -454,6 +454,11 @@ type ProjectJobs {
   jobs: [Json!]!
 }
 
+type JobReport {
+  text: String!
+  job: Json!
+}
+
 type ListRecent {
   threads: [Json!]!
 }
@@ -1059,6 +1064,19 @@ input StartThreadInput {
   model: String
   effort: String
   webSearch: Boolean
+}
+
+input SetThreadJobPurposeInput {
+  threadId: ID!
+  name: String!
+  run: String!
+  purpose: String!
+}
+
+input StopThreadJobInput {
+  threadId: ID!
+  name: String!
+  run: String!
 }
 
 enum ThreadSortField {
@@ -4382,6 +4400,7 @@ type RootQueryType {
   listRunningThreads: ListRunning!
   listRecentThreads(limit: Int): ListRecent!
   projectJobs(projectId: ID!): ProjectJobs!
+  threadJobOutput(threadId: ID!, name: String!, run: String!): JobReport!
   directory(projectId: ID!, scope: String): Directory!
   listFiles(projectId: ID!, path: String!): [FilesEntry!]!
   readFile(projectId: ID!, path: String!): ReadFile!
@@ -4428,6 +4447,7 @@ type RootMutationType {
   setChromeAlias(input: SetChromeAliasInput!): ChromeAliases!
   deleteChromeAlias(input: DeleteChromeAliasInput!): ChromeAliases!
   setChromeDefaultAlias(input: SetChromeDefaultAliasInput): ChromeAliases!
+  clearFaults: RecentFaults!
   createDirectory(input: CreateDirectoryInput!): CreateDirectory!
   knowledgeWrite(input: KnowledgeWriteInput!): Boolean!
   knowledgeDelete(input: KnowledgeDeleteInput!): Boolean!
@@ -4473,6 +4493,8 @@ type RootMutationType {
   deleteProject(id: ID!, input: DeleteProjectInput): DeleteProjectResult
   promoteLocal(input: PromoteLocalInput!): PromoteLocal!
   initGit(input: InitGitInput!): GitInfo!
+  stopThreadJob(input: StopThreadJobInput!): JobReport!
+  setThreadJobPurpose(input: SetThreadJobPurposeInput!): JobReport!
   startThread(input: StartThreadInput!): Thread!
   sendMessage(input: SendMessageInput!): Turn!
   sendMessageBatch(input: SendMessageBatchInput!): Turn!

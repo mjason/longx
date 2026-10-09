@@ -10,6 +10,23 @@ defmodule LongxWeb.FaultsRpcTest do
     :ok
   end
 
+  test "clear faults is idempotent and does not suppress new faults", %{conn: conn} do
+    Faults.record(:wire_clean, "thread:t", "old fault")
+
+    for _ <- 1..2 do
+      assert %{"success" => true, "data" => %{"faults" => [], "recent" => 0}} =
+               rpc(conn, "clear_faults", %{"fields" => ["faults", "recent"]})
+    end
+
+    Faults.record(:wire_clean, "thread:t", "new fault")
+
+    assert %{
+             "success" => true,
+             "data" => %{"faults" => [%{"detail" => "new fault"}], "recent" => 1}
+           } =
+             rpc(conn, "recent_faults", %{"fields" => ["faults", "recent"]})
+  end
+
   test "recent faults newest first, with the count of the last hour", %{conn: conn} do
     assert %{"success" => true, "data" => %{"faults" => [], "recent" => 0}} =
              rpc(conn, "recent_faults", %{"fields" => ["faults", "recent"]})

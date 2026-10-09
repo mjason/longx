@@ -80,7 +80,9 @@ defmodule Longx.Agent.Model do
   defp run_chain(%{up: up, target: target, request: request} = entry, rest, owner, ref) do
     log = Log.begin(request, %{upstream_id: target.model, provider: target.provider_slug})
 
-    case attempt(up, target, owner, ref, log, waits(entry[:retries])) do
+    retries = waits(entry[:retries])
+
+    case attempt(up, target, owner, ref, log, retries, length(retries)) do
       :ok ->
         :ok
 
@@ -143,7 +145,7 @@ defmodule Longx.Agent.Model do
   # one model: `:ok` when its stream ended (well or with the provider's own
   # failure relayed), `{:failed, message}` when the call never got going —
   # what the chain's next model may pick up
-  defp attempt(up, target, owner, ref, log, retries) do
+  defp attempt(up, target, owner, ref, log, retries, limit) do
     outcome =
       Limiter.run(up.provider_slug, up.max_concurrent, fn -> post(up, target, owner, ref) end)
 
@@ -156,8 +158,9 @@ defmodule Longx.Agent.Model do
         Logger.info("agent model: #{message}; retrying in #{wait} ms")
         # a stream that had begun: whatever the owner got of it is to be dropped
         if status == 200, do: send(owner, {:model, ref, {:restart, message}})
+        send(owner, {:model, ref, {:retrying, message, limit - length(rest), limit}})
         Process.sleep(wait)
-        attempt(up, target, owner, ref, log, rest)
+        attempt(up, target, owner, ref, log, rest, limit)
 
       {{:ok, {_retry_or_failed, status, message}}, _} ->
         message = "#{target.model} (#{target.provider_slug}): #{message}"
@@ -165,8 +168,9 @@ defmodule Longx.Agent.Model do
         {:failed, message}
 
       {:busy, [wait | rest]} ->
+        send(owner, {:model, ref, {:retrying, "provider is busy", limit - length(rest), limit}})
         Process.sleep(wait)
-        attempt(up, target, owner, ref, log, rest)
+        attempt(up, target, owner, ref, log, rest, limit)
 
       {:busy, []} ->
         message = "provider #{up.provider_slug} is at its concurrency limit"

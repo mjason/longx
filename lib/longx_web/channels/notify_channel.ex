@@ -24,5 +24,10 @@ defmodule LongxWeb.NotifyChannel do
     {:noreply, socket}
   end
 
+  def handle_info({:jobs_changed, thread_id}, socket) do
+    push(socket, "activity", %{thread_id: thread_id})
+    {:noreply, socket}
+  end
+
   def handle_info(_other, socket), do: {:noreply, socket}
 end

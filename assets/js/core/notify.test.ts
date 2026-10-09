@@ -37,13 +37,17 @@ describe("the notify feed on a page", () => {
     const { socket, channel, handlers, receives } = fakeSocket();
     const onRunning = vi.fn();
     const onEvent = vi.fn();
-    const leave = joinNotify(socket as never, { onRunning, onEvent });
+    const onActivity = vi.fn();
+    const leave = joinNotify(socket as never, { onRunning, onEvent, onActivity });
 
     expect(socket.channel).toHaveBeenCalledWith("notify", {});
     receives["ok"]!({ running: [{ id: "a", waiting: true }, { id: "b", waiting: false }] });
     expect(onRunning).toHaveBeenCalledWith([{ id: "a", waiting: true }, { id: "b", waiting: false }]);
     handlers["event"]!(event());
     expect(onEvent).toHaveBeenCalledWith(event());
+    handlers["activity"]!({ thread_id: "native_job" });
+    expect(onActivity).toHaveBeenCalledTimes(1);
+    expect(onEvent).toHaveBeenCalledTimes(1);
 
     leave();
     expect(channel.leave).toHaveBeenCalled();

@@ -132,6 +132,22 @@ export type ProjectJob = {
   finishedAt: string | null;
   threadId: string;
   threadTitle: string | null;
+  run?: string;
+  purpose?: "wait" | "background";
+  notify?: boolean;
+  review?: string | null;
+  reviewNote?: string | null;
+  rootThreadId?: string;
+  activity?: JobActivity["state"];
+};
+
+export type JobActivity = {
+  total: number;
+  running: number;
+  processing: number;
+  pending: number;
+  incomplete: number;
+  state: "complete" | "waiting" | "pending" | "processing" | "incomplete";
 };
 
 export function useProjectJobs(projectId: string | undefined) {
@@ -243,6 +259,7 @@ export type RunningThread = {
   waiting: boolean;
   /** the sub-agents at work while the thread itself is idle */
   working?: string[];
+  jobActivity?: JobActivity;
   /** what the model is writing right now (the view's `turn/progress`), null between calls */
   progress: TurnProgress | null;
   /** epoch seconds the turn in flight began; null when only sub-agents work */

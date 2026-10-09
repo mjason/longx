@@ -170,12 +170,124 @@ defmodule Longx.JobsTest do
 
   test "a thread keeps its latest finished jobs within the limits", %{thread: thread, opts: opts} do
     for n <- 1..4 do
-      {:ok, _} = Jobs.start(thread, "j#{n}", "true", Keyword.put(opts, :keep_finished, 2))
+      {:ok, _} =
+        Jobs.start(
+          thread,
+          "j#{n}",
+          "true",
+          Keyword.merge(opts, keep_finished: 2, purpose: "background")
+        )
+
       {:ok, _} = Jobs.wait(thread, "j#{n}", 5_000)
     end
 
     Jobs.prune(thread, keep_finished: 2)
     assert thread |> Jobs.list() |> Enum.map(& &1.name) |> Enum.sort() == ["j3", "j4"]
+  end
+
+  test "required results remain pending after reads until explicitly reviewed", %{
+    thread: thread,
+    opts: opts
+  } do
+    {:ok, job} = Jobs.start(thread, "verify", "echo verified", Keyword.put(opts, :notify, false))
+    assert job.purpose == "wait"
+    assert Jobs.activity(Jobs.list(thread)).state == "waiting"
+    assert {:ok, %{exit_code: 0}} = Jobs.wait(thread, "verify", 5_000)
+    assert Jobs.activity(Jobs.list(thread)).state == "pending"
+    assert Jobs.activity(Jobs.list(thread), true).state == "processing"
+    step = Longx.Agent.Step.new(phase: :turn_end, thread_id: thread)
+    reminded = Longx.Agent.Plugs.Jobs.call(step, [])
+    assert [{:continue, text, %{"kind" => "job", "status" => "review"}}] = reminded.effects
+    assert text =~ "review_job"
+    assert Longx.Agent.Plugs.Jobs.call(%{reminded | effects: []}, []).effects == []
+    assert [thread] == Jobs.pending_threads()
+    Jobs.prune(thread, keep_finished: 0)
+    assert [_] = Jobs.pending(thread)
+
+    assert {:error, :stale_run} =
+             Jobs.review(thread, "verify", "wrong-run", "complete", "verified")
+
+    assert {:ok, _} = Jobs.review(thread, "verify", job.run, "complete", "output checked")
+    assert Jobs.activity(Jobs.list(thread)).state == "complete"
+    Jobs.prune(thread, keep_finished: 0)
+    assert Jobs.list(thread) == []
+  end
+
+  test "a browser log read does not observe the result and a service is not pending work", %{
+    thread: thread,
+    opts: opts
+  } do
+    {:ok, job} =
+      Jobs.start(
+        thread,
+        "service",
+        "echo ready",
+        Keyword.merge(opts, purpose: "background", notify: false)
+      )
+
+    assert Jobs.pending(thread) == []
+    assert eventually(fn -> match?([%{status: "exited"}], Jobs.list(thread)) end)
+    assert {:ok, %{info: %{observed: false}}} = Jobs.output(thread, "service", observe: false)
+    refute Jobs.observed?(thread, "service", job.run)
+  end
+
+  test "failed and stopped work cannot be acknowledged as successful", %{
+    thread: thread,
+    opts: opts
+  } do
+    {:ok, failed} = Jobs.start(thread, "failure", "exit 2", Keyword.put(opts, :notify, false))
+    assert {:ok, %{exit_code: 2}} = Jobs.wait(thread, "failure", 5_000)
+    assert Jobs.activity(Jobs.list(thread)).state == "incomplete"
+
+    assert {:error, :not_successful} =
+             Jobs.review(thread, "failure", failed.run, "complete", "pretend")
+
+    assert {:ok, _} = Jobs.review(thread, "failure", failed.run, "incomplete", "needs repair")
+    assert [_] = Jobs.pending(thread)
+
+    assert {:ok, _} =
+             Jobs.review(thread, "failure", failed.run, "superseded", "verified replacement")
+
+    {:ok, stopped} = Jobs.start(thread, "stopped", "sleep 30", Keyword.put(opts, :notify, false))
+
+    assert {:ok, %{status: "stopped"}} =
+             Jobs.stop(thread, "stopped", run: stopped.run, by: :person)
+
+    assert Jobs.activity(Jobs.list(thread)).state == "incomplete"
+  end
+
+  test "purpose changes and stops target the exact run", %{thread: thread, opts: opts} do
+    {:ok, job} = Jobs.start(thread, "changing", "sleep 30", opts)
+    assert {:error, :stale_run} = Jobs.set_purpose(thread, "changing", "old", "background")
+    assert {:error, :stale_run} = Jobs.stop(thread, "changing", run: "old", by: :person)
+
+    assert {:ok, %{purpose: "background"}} =
+             Jobs.set_purpose(thread, "changing", job.run, "background")
+
+    assert Jobs.pending(thread) == []
+    assert {:ok, %{purpose: "wait"}} = Jobs.set_purpose(thread, "changing", job.run, "wait")
+    assert [_] = Jobs.pending(thread)
+    assert {:ok, _} = Jobs.stop(thread, "changing")
+  end
+
+  test "a required job lost on restart remains incomplete", %{dir: dir, thread: thread} do
+    job_dir = Path.join([dir, thread, "lost-required"])
+    File.mkdir_p!(job_dir)
+
+    File.write!(
+      Path.join(job_dir, "job.json"),
+      Jason.encode!(%{
+        name: "lost-required",
+        cmd: "sleep 30",
+        status: "running",
+        run: "r1",
+        purpose: "wait"
+      })
+    )
+
+    assert Jobs.settle_after_restart() == 1
+    assert Jobs.activity(Jobs.list(thread)).state == "incomplete"
+    assert [thread] == Jobs.pending_threads()
   end
 
   test "after a restart a job that was running is lost, and says so", %{dir: dir, thread: thread} do

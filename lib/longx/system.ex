@@ -33,6 +33,7 @@ defmodule Longx.System do
     end
 
     mutations do
+      action Longx.System.Status, :clear_faults, :clear_faults
       action Longx.System.Status, :create_directory, :create_directory
       action Longx.System.Status, :knowledge_write, :knowledge_write
       action Longx.System.Status, :knowledge_delete, :knowledge_delete
@@ -66,6 +67,8 @@ defmodule Longx.System do
       define :list_directory, action: :list_directory
       define :create_directory, action: :create_directory
       define :command_guard_status, action: :command_guard_status
+      define :recent_faults, action: :recent_faults
+      define :clear_faults, action: :clear_faults
     end
 
     resource Longx.System.Setting do

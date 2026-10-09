@@ -8,7 +8,9 @@ import { t } from "@/ui/strings";
 
 export function progressLabel(progress: TurnProgress | null | undefined, fallback: string): string {
   const doing =
-    progress?.kind === "retry"
+    progress?.kind === "compactionRetry"
+      ? t.turnCompactionRetry(progress.attempt ?? 0, progress.limit ?? 0)
+      : progress?.kind === "retry"
       ? t.turnRetrying(progress.name)
       : progress?.kind === "toolCall"
         ? t.turnWriting(progress.name, formatBytes(progress.bytes))

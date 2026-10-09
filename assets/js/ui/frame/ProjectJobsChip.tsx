@@ -32,7 +32,7 @@ function JobRow({ job, slug }: { job: ProjectJob; slug: string }) {
 export function ProjectJobsChip({ projectId, slug, className = "" }: { projectId: string; slug: string; className?: string }) {
     useTranslation();
   const query = useProjectJobs(projectId);
-  const running = (query.data ?? []).filter((job) => job.status === "running");
+  const running = (query.data ?? []).filter((job) => job.status === "running" && job.purpose !== "background");
   if (running.length === 0) return null;
 
   return (

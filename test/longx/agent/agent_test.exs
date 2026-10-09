@@ -321,7 +321,7 @@ defmodule Longx.AgentTest do
     assert body["instructions"] =~ ~s("thread_id":"#{id}")
 
     assert Enum.map(body["tools"], & &1["name"]) |> Enum.sort() ==
-             ~w(apply_patch create_goal credential_create credential_login credential_rotate credentials_list exec_command get_context_remaining get_goal history_read history_search history_sessions http_request job_output jobs knowledge_read knowledge_search knowledge_write new_context_window notify present prompt_user send_file show_diff show_file show_html start_job stop_job update_goal view_image wait_job wait_until watch_enable watch_list watch_run web_fetch web_search)
+             ~w(apply_patch create_goal credential_create credential_login credential_rotate credentials_list exec_command get_context_remaining get_goal history_read history_search history_sessions http_request job_output jobs knowledge_read knowledge_search knowledge_write new_context_window notify present prompt_user review_job send_file show_diff show_file show_html start_job stop_job update_goal view_image wait_job wait_until watch_enable watch_list watch_run web_fetch web_search)
 
     refute Map.has_key?(body, "x-longx-custom-tools")
 
@@ -669,7 +669,7 @@ defmodule Longx.AgentTest do
 
     assert %{"waiting" => [_, _]} = await_on(id, "thread/waiting/updated")
     assert %{"waiting" => [_, _, _]} = await_on(id, "thread/waiting/updated")
-    {:ok, _} = Longx.Jobs.start(id, "callback-job", "exit 0", cwd: dir)
+    {:ok, _} = Longx.Jobs.start(id, "callback-job", "exit 0", cwd: dir, purpose: "background")
 
     assert %{"waiting" => [_, _, _, %{"source" => "job:callback-job"}]} =
              await_on(id, "thread/waiting/updated")
@@ -1222,7 +1222,8 @@ defmodule Longx.AgentTest do
 
     script!(bypass, [
       held(ResponsesFixture.assistant_message("one")),
-      ResponsesFixture.assistant_message("noted")
+      ResponsesFixture.assistant_message("noted"),
+      ResponsesFixture.assistant_message("not verified")
     ])
 
     {:ok, %{turn_id: t1}} = Agent.send(id, "first")
@@ -1453,7 +1454,11 @@ defmodule Longx.AgentTest do
   test "a background job that ends wakes the idle agent with its end; an end the agent saw does not",
        %{bypass: bypass, thread_id: id, dir: dir} do
     on_exit(fn -> Longx.Jobs.delete(id) end)
-    script!(bypass, [ResponsesFixture.assistant_message("noted")])
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("noted"),
+      ResponsesFixture.assistant_message("still not verified")
+    ])
 
     {:ok, _} = Longx.Jobs.start(id, "quick", "echo made it; exit 2", cwd: dir)
     assert %{"turn" => %{"from" => "job:quick"}} = await("turn/started")
@@ -1462,10 +1467,12 @@ defmodule Longx.AgentTest do
              await_user_message_matching(~r/^\[job quick\] finished with exit code 2/)
 
     assert %{"status" => "completed"} = await_turn_end()
-    [request] = collect_requests([])
+    [request, reminder] = collect_requests([])
     asked = request["input"] |> List.last() |> get_in(["content", Access.at(0), "text"])
     assert asked =~ "made it"
     assert asked =~ ~s|job_output(name: "quick")|
+    assert inspect(reminder["input"]) =~ "not yet reviewed"
+    assert [_] = Longx.Jobs.pending(id)
 
     # waited for (the agent saw it end): nothing more
     {:ok, _} = Longx.Jobs.start(id, "seen", "sleep 0.2", cwd: dir)
@@ -2131,7 +2138,7 @@ defmodule Longx.AgentTest do
     plug Longx.Agent.Plugs.Request
   end
 
-  defp compacting_agent(dir, pipeline) do
+  defp compacting_agent(dir, pipeline, opts \\ []) do
     id = "compact-#{System.unique_integer([:positive])}"
     :ok = ThreadState.subscribe(id)
 
@@ -2141,7 +2148,7 @@ defmodule Longx.AgentTest do
       ThreadState.Store.delete(id)
     end)
 
-    {:ok, _} = Agent.ensure(thread_id: id, cwd: dir, pipeline: pipeline)
+    {:ok, _} = Agent.ensure(Keyword.merge([thread_id: id, cwd: dir, pipeline: pipeline], opts))
     id
   end
 
@@ -2193,6 +2200,81 @@ defmodule Longx.AgentTest do
     plug Longx.Agent.Plugs.Shell
     plug Longx.Agent.Plugs.Compaction
     plug Longx.Agent.Plugs.Request
+  end
+
+  test "failed automatic compaction stops the turn without sending the old context again",
+       %{bypass: bypass, dir: dir} do
+    settings = %{Longx.Agent.Definition.Settings.defaults() | model_retries: 0}
+    id = compacting_agent(dir, CompactingPipeline, settings: fn -> settings end)
+
+    failure =
+      ~s(event: response.failed\ndata: {"response":{"error":{"message":"response protection is unavailable"}}}\n\n)
+
+    script!(bypass, [exec_call("echo one"), [failure]])
+    {:ok, _} = Agent.send(id, "run echo one", effort: "medium")
+    assert %{"status" => "failed", "error" => %{"code" => "compaction_failed"}} = await_turn_end()
+    [_, summary] = collect_requests([])
+    assert summary["reasoning"]["effort"] == "medium"
+
+    assert %{"item" => %{"type" => "contextCompactionFailed", "error" => error}} =
+             await_item_completed_of_type("contextCompactionFailed")
+
+    assert error =~ "response protection"
+    assert Agent.status(id) == :idle
+    assert Enum.all?(Transcript.items!(id), &(&1.kind != :compaction))
+
+    assert Enum.any?(
+             Transcript.input(Transcript.items!(id)),
+             &(&1["type"] == "function_call_output")
+           )
+
+    refute_receive {:request, _}, 100
+
+    # The retained history can be compacted later, without replaying the tool.
+    script!(bypass, [ResponsesFixture.assistant_message("RECOVERED")])
+    assert :ok = Agent.compact(id)
+    await_item_completed_of_type("contextCompaction")
+    assert Agent.status(id) == :idle
+  end
+
+  test "summary retries inherit the budget and discard partial text",
+       %{bypass: bypass, dir: dir} do
+    settings = %{Longx.Agent.Definition.Settings.defaults() | model_retries: 1}
+    id = compacting_agent(dir, CompactingPipeline, settings: fn -> settings end)
+    [created, added, delta | _] = ResponsesFixture.assistant_message("DISCARD ME")
+
+    failure =
+      ~s(event: response.failed\ndata: {"response":{"error":{"message":"response protection is unavailable"}}}\n\n)
+
+    script!(bypass, [
+      exec_call("echo one"),
+      [created, added, delta, failure],
+      ResponsesFixture.assistant_message("HANDOFF"),
+      ResponsesFixture.assistant_message("done")
+    ])
+
+    {:ok, _} = Agent.send(id, "run echo one")
+
+    assert_receive {:thread, _, "turn/progress",
+                    %{
+                      "progress" => %{"kind" => "compactionRetry", "attempt" => 1, "limit" => 1}
+                    }},
+                   5_000
+
+    assert %{"status" => "completed"} = await_turn_end()
+    [_, _, _, next] = collect_requests([])
+    text = next["input"] |> List.last() |> get_in(["content", Access.at(0), "text"])
+    assert text =~ "HANDOFF"
+    refute text =~ "DISCARD ME"
+  end
+
+  test "an empty completed summary does not replace history", %{bypass: bypass, dir: dir} do
+    id = compacting_agent(dir, CompactingPipeline)
+    script!(bypass, [exec_call("echo one"), ResponsesFixture.assistant_message("")])
+    {:ok, _} = Agent.send(id, "run echo one")
+    assert %{"status" => "failed", "error" => %{"code" => "compaction_failed"}} = await_turn_end()
+    assert Enum.all?(Transcript.items!(id), &(&1.kind != :compaction))
+    assert length(collect_requests([])) == 2
   end
 
   test "compaction invalidates occupancy before the running turn ends, preserving billing",
@@ -2360,9 +2442,13 @@ defmodule Longx.AgentTest do
 
     assert :ok = Agent.compact(id)
     assert %{"progress" => %{"kind" => "compaction"}} = await("turn/progress")
-    assert %{"progress" => nil} = await("turn/progress", 15_000)
+    assert_receive {:thread, _, "turn/progress", %{"progress" => nil}}, 15_000
     assert Agent.status(id) == :idle
     assert Enum.all?(ThreadState.snapshot(id).items, &(&1["type"] != "contextCompaction"))
+
+    assert %{"item" => %{"type" => "contextCompactionFailed"}} =
+             await_item_completed_of_type("contextCompactionFailed")
+
     assert is_pid(Agent.whereis(id))
   end
 

@@ -569,6 +569,13 @@ defmodule Longx.System.Status do
       end
     end
 
+    action :clear_faults, Types.RecentFaults do
+      run fn _input, _ ->
+        :ok = Longx.System.Faults.clear()
+        Longx.System.recent_faults()
+      end
+    end
+
     action :recent_faults, Types.RecentFaults do
       run fn _input, _ ->
         {:ok,

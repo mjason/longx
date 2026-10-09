@@ -20,7 +20,8 @@ export function RunningChip({ className = "" }: { className?: string }) {
   const done = finished.data ?? [];
   if (threads.length === 0 && done.length === 0) return null;
   const waiting = threads.filter((r) => r.waiting).length;
-  const tone = waiting > 0 ? "text-warning" : threads.length > 0 ? "text-primary" : "text-muted-foreground";
+  const pendingWork = threads.filter((r) => (r.jobActivity?.total ?? 0) > 0).length;
+  const tone = waiting > 0 || pendingWork > 0 ? "text-warning" : threads.length > 0 ? "text-primary" : "text-muted-foreground";
   return (
     <button
       type="button"
@@ -30,11 +31,11 @@ export function RunningChip({ className = "" }: { className?: string }) {
       onClick={() => openRunningPicker(threads, done, threadId, navigate)}
     >
       {threads.length > 0 ? (
-        <span className={`size-2 shrink-0 rounded-full ${waiting > 0 ? "bg-warning" : "bg-primary animate-pulse"}`} aria-hidden="true" />
+        <span className={`size-2 shrink-0 rounded-full ${waiting > 0 || pendingWork > 0 ? "bg-warning" : "bg-primary animate-pulse"}`} aria-hidden="true" />
       ) : (
         <Check className="size-3" aria-hidden="true" />
       )}
-      {t.runningStrip(threads.length, waiting, done.length)}
+      {[t.runningStrip(threads.length - pendingWork, waiting, done.length), pendingWork > 0 ? t.jobWork.waitingSessions(pendingWork) : ""].filter(Boolean).join(" · ")}
     </button>
   );
 }
