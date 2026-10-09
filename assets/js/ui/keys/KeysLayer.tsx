@@ -7,7 +7,7 @@
 // hold everywhere; the space menu only where it is on (外观 → 空格快捷菜单,
 // never on a phone). Draws the which-key panel, the full list (SPC ?), the
 // picker and the prompt the commands use.
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { leaderTree } from "@/core/keys/bindings";
 import { CLOSED, ESC_WINDOW_MS, press } from "@/core/keys/engine";
 import { isMacPlatform } from "@/core/keys/notation";
@@ -26,6 +26,8 @@ const HelpDialog = lazy(async () => ({ default: (await import("./HelpDialog")).H
 const PickerDialog = lazy(async () => ({ default: (await import("./PickerDialog")).PickerDialog }));
 const PromptDialog = lazy(async () => ({ default: (await import("./PromptDialog")).PromptDialog }));
 
+export const WHICH_KEY_DELAY_MS = 300;
+
 export function KeysLayer() {
   const viewport = useViewport();
   const preference = usePreference("spaceMenu");
@@ -35,6 +37,18 @@ export function KeysLayer() {
   const ui = useKeysUi();
   const picker = usePicker();
   const prompt = usePrompt();
+  const [showMenu, setShowMenu] = useState(false);
+
+  // Leader sequences work immediately; help appears only after a pause.
+  // A quick sequence must never mount the panel, even for a single frame.
+  useEffect(() => {
+    if (!ui.menu.open) {
+      setShowMenu(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowMenu(true), WHICH_KEY_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [ui.menu]);
 
   // the status strip's hint follows focus
   useEffect(() => {
@@ -115,7 +129,7 @@ export function KeysLayer() {
 
   return (
     <>
-      {leader && ui.menu.open ? <WhichKey tree={table.tree} sequence={ui.menu.sequence} flash={ui.flash} /> : null}
+      {leader && ui.menu.open && showMenu ? <WhichKey tree={table.tree} sequence={ui.menu.sequence} flash={ui.flash} /> : null}
       <Suspense fallback={null}>
         {ui.help ? <HelpDialog /> : null}
         {picker ? <PickerDialog /> : null}

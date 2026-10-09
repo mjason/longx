@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderAt, setViewport } from "@/ui/test-utils";
@@ -8,6 +8,7 @@ import { setPreference } from "@/core/keys/preference";
 import { commands } from "@/core/keys/registry";
 import { CLOSED } from "@/core/keys/engine";
 import { updateKeysUi } from "@/ui/keys/state";
+import { WHICH_KEY_DELAY_MS } from "@/ui/keys/KeysLayer";
 import * as api from "@/core/api";
 import { ok, thread } from "@/ui/test-mocks";
 
@@ -50,6 +51,62 @@ describe("the space menu", () => {
     expect(screen.getByTestId("which-key")).toHaveTextContent("显示 / 隐藏侧栏");
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByTestId("which-key")).not.toBeInTheDocument());
+  });
+
+  test("leader help waits for a pause, restarting the delay for a quick group key", async () => {
+    await openProject();
+    (document.activeElement as HTMLElement | null)?.blur();
+    vi.useFakeTimers();
+    try {
+      fireEvent.keyDown(window, { key: " ", code: "Space" });
+      expect(screen.queryByTestId("which-key")).not.toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(WHICH_KEY_DELAY_MS - 1));
+      expect(screen.queryByTestId("which-key")).not.toBeInTheDocument();
+      fireEvent.keyDown(window, { key: "w", code: "KeyW" });
+      act(() => vi.advanceTimersByTime(WHICH_KEY_DELAY_MS - 1));
+      expect(screen.queryByTestId("which-key")).not.toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(1));
+      expect(screen.getByTestId("which-key")).toHaveTextContent("SPC w");
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(screen.queryByTestId("which-key")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("quick SPC SPC runs immediately without ever mounting the help panel or a stale timer", async () => {
+    await openProject();
+    (document.activeElement as HTMLElement | null)?.blur();
+    vi.useFakeTimers();
+    try {
+      fireEvent.keyDown(window, { key: " ", code: "Space" });
+      expect(screen.queryByTestId("which-key")).not.toBeInTheDocument();
+      fireEvent.keyDown(window, { key: " ", code: "Space" });
+      expect(screen.queryByTestId("which-key")).not.toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(0));
+      expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "随心输入" }));
+      act(() => vi.advanceTimersByTime(WHICH_KEY_DELAY_MS * 2));
+      expect(screen.queryByTestId("which-key")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("a quick SPC x does not flash help; escape cancels the pending panel", async () => {
+    await openProject();
+    (document.activeElement as HTMLElement | null)?.blur();
+    vi.useFakeTimers();
+    try {
+      fireEvent.keyDown(window, { key: " ", code: "Space" });
+      expect(screen.queryByTestId("which-key")).not.toBeInTheDocument();
+      fireEvent.keyDown(window, { key: "x", code: "KeyX" });
+      expect(screen.queryByTestId("which-key")).not.toBeInTheDocument();
+      fireEvent.keyDown(window, { key: "Escape" });
+      act(() => vi.advanceTimersByTime(WHICH_KEY_DELAY_MS * 2));
+      expect(screen.queryByTestId("which-key")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("SPC b d closes the file tab on screen, SPC b u brings it back", async () => {

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-// The which-key panel: what the next key can do, right away and in Chinese
+// The which-key panel: what the next key can do after a pause, in Chinese
 // (Spacemacs' which-key). A group ends in "+"; only what can run now is
 // listed; the tabs' 1…9 are one row.
 import { useCommandsVersion } from "@/core/keys/useCommand";
