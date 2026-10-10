@@ -9,8 +9,7 @@ import {
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
 import { preprocessMath } from "@/core/chat/math";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
+import { markdownMathPlugins } from "@/core/markdown";
 import { useMath } from "@/ui/math/useMath";
 import { type FC, memo, useMemo, useRef } from "react";
 import type { TextMessagePartProps } from "@assistant-ui/react";
@@ -55,7 +54,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
 
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm, remarkMath]}
+      remarkPlugins={markdownMathPlugins}
       rehypePlugins={mathPlugins}
       preprocess={preprocessMath}
       className="aui-md"

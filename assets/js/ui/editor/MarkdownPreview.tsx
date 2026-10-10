@@ -3,8 +3,7 @@
 // editor on request. The same look as the chat's markdown: the element's
 // classes, fenced code through shiki (the generative-ui renderer's `code`).
 import ReactMarkdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
+import { markdownMathPlugins } from "@/core/markdown";
 import { useMath } from "@/ui/math/useMath";
 import { preprocessMath } from "@/core/chat/math";
 import { markdownComponents } from "@/ui/components/assistant-ui/elements/generative-ui";
@@ -40,7 +39,7 @@ export function MarkdownPreview({ source, className }: { source: string; classNa
   const mathPlugins = useMath();
   return (
     <div className={`text-foreground mx-auto w-full max-w-3xl px-6 py-5 text-[15px] leading-relaxed wrap-break-word ${className ?? ""}`} data-testid="markdown-preview">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={mathPlugins} components={components}>
+      <ReactMarkdown remarkPlugins={markdownMathPlugins} rehypePlugins={mathPlugins} components={components}>
         {preprocessMath(source)}
       </ReactMarkdown>
     </div>

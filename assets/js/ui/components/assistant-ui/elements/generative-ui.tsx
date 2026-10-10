@@ -7,7 +7,7 @@
 // with shiki like the transcript's own markdown. The stylesheet is
 // `css/generative-ui.css` on our tokens.
 import ReactMarkdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { markdownPlugins } from "@/core/markdown";
 import type { ComponentPropsWithoutRef } from "react";
 import {
   defaultGenerativeUILibrary,
@@ -53,7 +53,7 @@ export const styledGenerativeUILibrary: GenerativeUILibrary = {
     description: "A markdown string, rendered with GitHub-flavored markdown.",
     render: ({ value, children }) => (
       <div data-aui="markdown" className="aui-md">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        <ReactMarkdown remarkPlugins={markdownPlugins} components={markdownComponents}>
           {value ?? ""}
         </ReactMarkdown>
         {children}
