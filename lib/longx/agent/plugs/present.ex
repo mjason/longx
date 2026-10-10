@@ -17,9 +17,10 @@ defmodule Longx.Agent.Plugs.Present do
   the chat: `show_file` / `show_diff` (a tab of the workbench), `send_file`
   (a download — `GET /files/:project_id/*path`, `LongxWeb.FileController`),
   `show_html` (an artifact: html of the model's own in a sandboxed frame,
-  or a URL). Every path is checked to stay inside the project root (the
-  attachment directory for a download); what the client needs — the
-  project-relative path, the size, the kind — rides on the item as
+  or a URL). The editor opens any file accessible to the Longx process;
+  isolation belongs to the person's container or OS permissions. Git diffs
+  stay project-relative, and downloads stay in the project or attachment
+  directory. What the client needs — the path, size, kind — rides on the item as
   `details`, and the client opens the surface only when the item arrives
   live, never on a replay.
   """
@@ -43,7 +44,7 @@ defmodule Longx.Agent.Plugs.Present do
 
   `prompt_user` draws a card the person acts on and waits for the answer: a choice (Buttons with `$action`, a Select, a RadioGroup), a form (a Card with `asForm` and `confirm`, or a Form) — use it when you need a decision or values from the person before going on; the result is what they fired (`type` of the `$action`, `$input` with the value or the form's values). Do not use it for yes / no questions you can simply ask in text.
 
-  Opening things for the person, instead of pasting them into the chat: `show_file(path, line)` opens a file of the project in their editor (they asked to see it, or a result worth reading in full — say which part in words); `show_diff(path, sha)` opens what changed in a file (the working tree against HEAD, or one commit); `send_file(path, title)` hands them a file to download — an output they keep (a csv, a report, an image, a zip you built; write it under the project first); `show_html(title, html | url)` opens an artifact surface — a chart, a report, an interactive page you wrote as one self-contained html (inline css / js, no external requests), or a URL to look at. A file's content still goes into your answer when it is short and the point.
+  Opening things for the person, instead of pasting them into the chat: `show_file(path, line)` opens any file accessible to Longx in their editor (they asked to see it, or a result worth reading in full — say which part in words). Absolute paths, paths outside the project and symlinks are allowed; relative paths resolve against the working directory. Isolation is the person's container or OS permissions, not a project-root sandbox. `show_diff(path, sha)` opens what changed in a project file (the working tree against HEAD, or one commit); `send_file(path, title)` hands them a file to download — an output they keep (a csv, a report, an image, a zip you built; write it under the project first); `show_html(title, html | url)` opens an artifact surface — a chart, a report, an interactive page you wrote as one self-contained html (inline css / js, no external requests), or a URL to look at. A file's content still goes into your answer when it is short and the point.
   """
 
   tool :present, @vocabulary["present"]["description"],
@@ -60,11 +61,11 @@ defmodule Longx.Agent.Plugs.Present do
   end
 
   tool :show_file,
-       "Opens a file of the project in the person's editor (the workbench), optionally at a line. Use it instead of pasting a long file into the chat.",
+       "Opens any file accessible to Longx in the person's editor (the workbench), optionally at a line. Use it instead of pasting a long file into the chat.",
        namespace: "longx" do
     param :path,
           :string,
-          "Path of the file, relative to the working directory or absolute (inside the project)",
+          "Path of the file, relative to the working directory or absolute; may be outside the project",
           required: true
 
     param :line, :integer, "Line to scroll to (1-based)"
@@ -277,10 +278,13 @@ defmodule Longx.Agent.Plugs.Present do
   ## Surfaces
 
   def show_file(%{"path" => path} = args, ctx) do
-    with {:ok, rel, full} <- inside_project(ctx, path),
-         :ok <- regular(full, path) do
-      details = %{"path" => rel, "line" => line_of(args)}
-      {:ok, "opened #{rel} for the person", %{"details" => details}}
+    root = root(ctx)
+    full = Path.expand(path, ctx.cwd || root)
+    display = Path.relative_to(full, root)
+
+    with :ok <- regular(full, path) do
+      details = %{"path" => display, "line" => line_of(args)}
+      {:ok, "opened #{display} for the person", %{"details" => details}}
     end
   end
 
@@ -354,7 +358,7 @@ defmodule Longx.Agent.Plugs.Present do
 
       _ ->
         {:error,
-         "#{path}: outside the project (or inside .git) — only project files can be opened"}
+         "#{path}: outside the project (or inside .git) — git diffs and downloads use project files"}
     end
   end
 

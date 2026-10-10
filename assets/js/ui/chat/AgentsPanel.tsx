@@ -30,10 +30,12 @@ export type AgentSummary = {
   excerpt: string | null;
 };
 
-/** every child the view mentions, with its live state from its own view */
-export function agentSummaries(view: ThreadView, subviews: Record<string, ThreadView>): AgentSummary[] {
+/** Current members only; historical activities stay available in the transcript. */
+export function agentSummaries(view: ThreadView, subviews: Record<string, ThreadView>, currentIds: readonly string[]): AgentSummary[] {
   const out: AgentSummary[] = [];
+  const members = new Set(currentIds);
   for (const agent of subagentsOf(view).values()) {
+    if (!members.has(agent.threadId)) continue;
     const sub = subviews[agent.threadId];
     const pending = sub?.requests.find((r) => r.method === ACTION_REQUEST);
     const running = sub ? runningTurnId(sub) !== null : agent.kind === "started" || agent.kind === "interacted";
@@ -44,7 +46,7 @@ export function agentSummaries(view: ThreadView, subviews: Record<string, Thread
       threadId: agent.threadId,
       name: agent.name,
       state,
-      label: pending ? String(pending.params["title"] ?? t.subagentNeedsAction) : running ? doing : (t.subagentState[agent.kind] ?? agent.kind),
+      label: pending ? String(pending.params["title"] ?? t.subagentNeedsAction) : running ? doing : (t.subagentState[agent.kind === "started" || agent.kind === "interacted" ? "completed" : agent.kind] ?? agent.kind),
       excerpt: sub ? lastWords(sub) : null,
     });
   }
@@ -87,8 +89,8 @@ function useFolded(): [boolean, (v: boolean) => void] {
 }
 
 function useActive() {
-  const { view, subviews } = useChat();
-  const all = agentSummaries(view, subviews);
+  const { view, subviews, currentAgentIds } = useChat();
+  const all = agentSummaries(view, subviews, currentAgentIds);
   const active = all.filter((a) => a.state !== "done");
   const done = all.filter((a) => a.state === "done").slice(-RECENT_DONE).reverse();
   return { active, done };

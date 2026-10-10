@@ -1,6 +1,6 @@
 [package]
 name = "longx-computer"
-version = "0.2.133"
+version = "0.2.134"
 edition = "2021"
 license = "MIT"
 default-run = "longx-computer"

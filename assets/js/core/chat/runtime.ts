@@ -12,7 +12,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { archiveThread, deleteThread, getThread, releaseWaiting as releaseWaitingRpc, releaseWaitingBatch as releaseWaitingBatchRpc, renameThread, retractTurn, sendMessage } from "@/core/api";
-import { queryKeys, unwrap, unwrapOne, useAgentDefinition, useProjectJobs, useRunningThreads, useStartThread, useThread, useThreads } from "@/core/projects";
+import { queryKeys, unwrap, unwrapOne, useAgentDefinition, useProjectJobs, useRunningThreads, useStartThread, useSubagents, useThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
@@ -103,6 +103,8 @@ export type LongxRuntime = {
   view: ThreadView;
   /** the live views of the thread's sub-agents (and theirs), by kernel thread id */
   subviews: SubViews;
+  /** Current team membership, not the children mentioned in historical activities. */
+  currentAgentIds: readonly string[];
   ready: boolean;
   error: string | null;
   state: TurnState;
@@ -193,6 +195,11 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
   // a sub-agent's row is not in the project's list: fetched by id for its own page
   const single = useThread(threadId !== undefined && !threads.isPending && !listed ? threadId : undefined);
   const thread = listed ?? (single.data as ThreadRow | undefined);
+  const currentAgents = useSubagents(thread?.id);
+  const currentAgentIds = useMemo(
+    () => (currentAgents.data ?? []).map(row => row.kernelThreadId),
+    [currentAgents.data],
+  );
   // the project's description may name a model: the turn runs on it unless the person picks one
   const definition = useAgentDefinition(projectId);
   const definitionModel = useMemo(
@@ -526,6 +533,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       threadId !== undefined && !threads.isPending && thread === undefined && !single.isPending,
     view,
     subviews,
+    currentAgentIds,
     ready,
     error,
     state,

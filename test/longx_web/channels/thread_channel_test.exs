@@ -47,6 +47,45 @@ defmodule LongxWeb.ThreadChannelTest do
     assert socket.assigns.thread_id == thread_id
   end
 
+  test "an archived thread restores paged history after the view is lost without reviving its agent",
+       %{thread: thread, thread_id: id} do
+    for {item_id, turn_id, seq} <- [{"a", "turn_a", 1}, {"b", "turn_b", 2}] do
+      :ok =
+        Longx.Agent.Transcript.append!(%{
+          thread_id: id,
+          turn_id: turn_id,
+          seq: seq,
+          kind: :agent_message,
+          input: %{"type" => "message", "role" => "assistant", "content" => []},
+          ui: %{"id" => item_id, "type" => "agentMessage", "text" => "kept #{item_id}"}
+        })
+    end
+
+    Projects.archive_thread!(thread)
+    Agent.stop(id)
+    Longx.Agent.Kernel.Specs.delete(id)
+    ThreadState.stop(id)
+    ThreadState.Store.delete(id)
+
+    assert ThreadState.snapshot(id).items == []
+    {:ok, reply, socket} = join!(id, %{"limit" => 1})
+    assert [%{"id" => "b", "text" => "kept b"}] = reply.items
+    assert reply.earlier.items == 1
+    assert reply.turn["status"] == "completed"
+    assert reply.thread["status"] == "archived"
+    assert Agent.whereis(id) == nil
+    assert Longx.Agent.Kernel.Specs.get(id) == nil
+    assert Projects.get_thread_by_kernel_id!(id).status == :archived
+
+    ref = push(socket, "earlier", %{"before" => "b", "limit" => "all"})
+    assert_reply ref, :ok, %{items: [%{"id" => "a", "text" => "kept a"}]}, 2_000
+    # A second join neither duplicates history nor registers a runnable agent.
+    {:ok, again, _} = join!(id, %{"limit" => "all"})
+    assert length(again.items) == 2
+    assert Agent.whereis(id) == nil
+    assert length(Longx.Agent.Transcript.items!(id)) == 2
+  end
+
   test "a poisoned item (a term JSON cannot take) neither refuses the join nor kills the push: the payloads are cleaned",
        %{thread_id: thread_id} do
     # straight into the store, past the folds' own scrub: the worst the view can hold

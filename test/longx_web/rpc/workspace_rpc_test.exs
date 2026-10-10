@@ -83,6 +83,40 @@ defmodule LongxWeb.WorkspaceRpcTest do
              })
   end
 
+  test "show_file outside the project opens a path the editor can read and save over RPC", %{
+    conn: conn,
+    id: id,
+    dir: dir
+  } do
+    outside = dir <> "-sibling"
+    File.mkdir_p!(outside)
+    on_exit(fn -> File.rm_rf!(outside) end)
+    full = Path.join(outside, "都江堰_2ku.rb")
+    File.write!(full, "puts 'before'\n")
+    ctx = %Longx.Agent.Context{project_id: id, cwd: Path.join(dir, "lib")}
+    relative = "../../#{Path.basename(outside)}/#{Path.basename(full)}"
+
+    assert {:ok, _, %{"details" => %{"path" => opened}}} =
+             Longx.Agent.Plugs.Present.show_file(%{"path" => relative}, ctx)
+
+    assert opened == full
+
+    for path <- [opened, "../#{Path.basename(outside)}/#{Path.basename(full)}"] do
+      assert %{"success" => true, "data" => %{"content" => "puts 'before'\n"}} =
+               rpc(conn, "read_file", %{
+                 "fields" => ["path", "content"],
+                 "input" => %{"projectId" => id, "path" => path}
+               })
+    end
+
+    assert %{"success" => true} =
+             rpc(conn, "write_file", %{
+               "input" => %{"projectId" => id, "path" => opened, "content" => "puts 'after'\n"}
+             })
+
+    assert File.read!(full) == "puts 'after'\n"
+  end
+
   test "git: changes → file diff → commit some → history → show → branches → remote sync", %{
     conn: conn,
     id: id,

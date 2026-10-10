@@ -1469,15 +1469,15 @@ defmodule Longx.Projects do
   Makes sure the thread's agent runs — what a page opening the thread needs
   before it can subscribe: after a restart the agent is started again from
   the row and its transcript. Answers with the kernel id to subscribe to. A
-  thread that can no longer run (`:unrecoverable`, `:archived`) keeps its
-  id: nothing to start, but its last view (if any) may still be shown.
+  thread that can no longer run (`:unrecoverable`, `:archived`) has its
+  read-only view restored from the log, without starting an agent.
   `{:error, :unknown_thread}` when we never heard of it.
   """
   @spec host_thread(String.t()) :: {:ok, String.t()} | {:error, term}
   def host_thread(kernel_thread_id) do
     case get_thread_by_kernel_id(kernel_thread_id, load: [:project]) do
-      {:ok, %Thread{status: status}} when status in [:unrecoverable, :archived] ->
-        {:ok, kernel_thread_id}
+      {:ok, %Thread{status: status} = thread} when status in [:unrecoverable, :archived] ->
+        with :ok <- restore_closed_view(thread), do: {:ok, kernel_thread_id}
 
       {:ok, %Thread{kernel_thread_id: id} = thread} ->
         with {:ok, _pid} <- ensure_agent(thread),
@@ -1490,23 +1490,55 @@ defmodule Longx.Projects do
     end
   end
 
+  # Only the view writer is needed: never register a spec, rebuild a team,
+  # or start the model loop just to read an archived conversation.
+  defp restore_closed_view(%Thread{kernel_thread_id: id, cwd: cwd} = thread) do
+    with {:ok, _} <- Longx.Agent.ThreadState.ensure(id) do
+      recorded = recorded_turns(thread)
+
+      if Longx.Agent.ThreadState.snapshot(id).thread == nil do
+        turns =
+          id
+          |> Longx.Agent.Transcript.items!()
+          |> Enum.filter(&match?(%{ui: %{}}, &1))
+          |> Enum.chunk_by(& &1.turn_id)
+          |> Enum.map(fn [%{turn_id: turn_id} | _] = chunk ->
+            %{"id" => turn_id, "status" => "completed", "items" => Enum.map(chunk, & &1.ui)}
+            |> Map.merge(Map.get(recorded, turn_id, %{}))
+          end)
+
+        :ok =
+          Longx.Agent.ThreadState.backfill(id, %{
+            "thread" => %{"id" => id, "cwd" => cwd, "turns" => turns}
+          })
+      end
+
+      :ok = Longx.Agent.ThreadState.seed_turns(id, recorded)
+
+      Longx.Agent.ThreadState.backfill(id, %{
+        "thread" => %{"id" => id, "cwd" => cwd, "status" => Atom.to_string(thread.status)}
+      })
+    end
+  end
+
   # the view's turns (stamps, status, usage — the per-turn badge) come from the
   # rows: the store's copy lives in ETS and a restart rebuilt only the items
   defp seed_turns(%Thread{kernel_thread_id: id} = thread) do
-    turns =
-      for %Turn{status: status} = turn <- list_turns!(thread), status != :reverted, into: %{} do
-        {turn.kernel_turn_id,
-         %{
-           "id" => turn.kernel_turn_id,
-           "status" => Atom.to_string(status),
-           "startedAt" => epoch(turn.started_at),
-           "completedAt" => epoch(turn.completed_at),
-           "usage" => turn.usage
-         }
-         |> Map.reject(fn {_k, v} -> is_nil(v) end)}
-      end
+    Longx.Agent.ThreadState.seed_turns(id, recorded_turns(thread))
+  end
 
-    Longx.Agent.ThreadState.seed_turns(id, turns)
+  defp recorded_turns(thread) do
+    for %Turn{status: status} = turn <- list_turns!(thread), status != :reverted, into: %{} do
+      {turn.kernel_turn_id,
+       %{
+         "id" => turn.kernel_turn_id,
+         "status" => Atom.to_string(status),
+         "startedAt" => epoch(turn.started_at),
+         "completedAt" => epoch(turn.completed_at),
+         "usage" => turn.usage
+       }
+       |> Map.reject(fn {_k, v} -> is_nil(v) end)}
+    end
   end
 
   defp epoch(nil), do: nil

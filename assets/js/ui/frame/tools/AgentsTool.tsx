@@ -40,7 +40,7 @@ function Subagents({ ctx }: { ctx: ProjectContext }) {
   const subagents = useSubagents(threadId);
   // what each child does right now, from the live views the chat follows
   const chat = useChatMaybe();
-  const live = chat ? agentSummaries(chat.view, chat.subviews) : [];
+  const live = chat ? agentSummaries(chat.view, chat.subviews, chat.currentAgentIds) : [];
 
   if (!threadId) return <p className="text-muted-foreground text-sm">{t.pickThread}</p>;
   if (subagents.isPending) return <Skeleton className="h-16 w-full" />;

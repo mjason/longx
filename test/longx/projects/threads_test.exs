@@ -796,6 +796,22 @@ defmodule Longx.Projects.ThreadsTest do
     assert Projects.list_subagents!(thread.id) == []
     assert Agent.children(thread.kernel_thread_id) == []
 
+    # Losing ETS (a service restart) must not make an archived child's history blank.
+    # Hosting it restores only the view, never a spec or a team member.
+    ThreadState.stop(child_id)
+    ThreadState.Store.delete(child_id)
+    assert {:ok, ^child_id} = Projects.host_thread(child_id)
+    restored = ThreadState.snapshot(child_id)
+    assert Enum.any?(restored.items, &(&1["text"] == "REPORT: done"))
+    child_turn = hd(Projects.list_turns!(child)).kernel_turn_id
+    assert restored.turns[child_turn]["status"] == "completed"
+    assert restored.turns[child_turn]["startedAt"]
+    assert restored.thread["status"] == "archived"
+    assert Agent.whereis(child_id) == nil
+    assert Longx.Agent.Kernel.Specs.get(child_id) == nil
+    assert Projects.list_subagents!(thread.id) == []
+    assert Agent.children(thread.kernel_thread_id) == []
+
     # a second researcher takes the plain name; after the parent is gone and hosted again
     # (a restart rebuilds the team from the rows) the team has one researcher, not two
     assert {:ok, child2} = Agent.spawn(thread.kernel_thread_id, "researcher", "look again")

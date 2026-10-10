@@ -2,8 +2,8 @@ defmodule Longx.Agent.PresentSurfacesTest do
   @moduledoc """
   The surfaces `Plugs.Present` opens for the person besides cards:
   `show_file` / `show_diff` (a workbench tab), `send_file` (a download),
-  `show_html` (an artifact). Every path stays inside the project root —
-  or the project's attachment directory for a download — and the item
+  `show_html` (an artifact). The editor accepts any accessible file; git
+  diffs and downloads retain their project-relative addressing. The item
   carries what the client needs under `details`.
   """
   use Longx.DataCase, async: false
@@ -56,11 +56,32 @@ defmodule Longx.Agent.PresentSurfacesTest do
                Tool.call(tool!("show_file"), %{"path" => Path.join(root, "lib/a.ex")}, ctx)
     end
 
-    test "outside the root, inside .git, a directory or a missing file are errors", %{ctx: ctx} do
-      assert {:error, msg} = Tool.call(tool!("show_file"), %{"path" => "../../etc/passwd"}, ctx)
-      assert msg =~ "outside the project"
-      assert {:error, msg} = Tool.call(tool!("show_file"), %{"path" => "../.git/config"}, ctx)
-      assert msg =~ "outside the project"
+    test "outside files, parent-relative paths, .git and symlinks can all be opened", %{
+      ctx: ctx,
+      root: root
+    } do
+      outside = root <> "-sibling"
+      File.mkdir_p!(outside)
+      on_exit(fn -> File.rm_rf!(outside) end)
+      external = Path.join(outside, "都江堰中性策略精心随机_2ku.rb")
+      File.write!(external, "puts 'portfolio'\n")
+      relative = "../../#{Path.basename(outside)}/#{Path.basename(external)}"
+
+      for path <- [external, relative] do
+        assert {:ok, _, %{"details" => %{"path" => ^external, "line" => 3}}} =
+                 Tool.call(tool!("show_file"), %{"path" => path, "line" => 3}, ctx)
+      end
+
+      assert {:ok, _, %{"details" => %{"path" => ".git/config"}}} =
+               Tool.call(tool!("show_file"), %{"path" => "../.git/config"}, ctx)
+
+      File.ln_s!(external, Path.join(root, "lib/linked.rb"))
+
+      assert {:ok, _, %{"details" => %{"path" => "lib/linked.rb"}}} =
+               Tool.call(tool!("show_file"), %{"path" => "linked.rb"}, ctx)
+    end
+
+    test "directories and missing files remain errors", %{ctx: ctx} do
       assert {:error, msg} = Tool.call(tool!("show_file"), %{"path" => "nope.ex"}, ctx)
       assert msg =~ "no such file"
       assert {:error, msg} = Tool.call(tool!("show_file"), %{"path" => "."}, ctx)

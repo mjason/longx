@@ -444,6 +444,9 @@ export function contextUsage(view: ThreadView): {
 
 /** The turn in flight, if any. */
 export function runningTurnId(view: ThreadView): string | null {
+  // Closed views may retain the last live turn after an agent was stopped.
+  // They are read-only history, never ongoing work.
+  if (view.thread?.["status"] === "archived" || view.thread?.["status"] === "unrecoverable") return null;
   const turn = view.turn;
   return turn && turn["status"] === "inProgress"
     ? (turn["id"] as string)

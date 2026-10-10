@@ -486,4 +486,52 @@ test("a message steered into a running turn splits the turn's assistant message 
   // the command is on the first segment, the answer on the second — nothing lost
   expect((messages[1]!.content as readonly { type: string }[]).map((p) => p.type)).toEqual(["tool-call"]);
   expect((messages[3]!.content as readonly { type: string }[]).map((p) => p.type)).toEqual(["text"]);
+  expect(messages[1]!.status).toEqual({ type: "complete", reason: "stop" });
+  expect(messages[3]!.status).toEqual({ type: "running" });
+});
+
+test("consecutive steers seal old segments before a new reply exists, without finishing the real turn", () => {
+  const state = view({
+    turn: { id: "t1", status: "inProgress" },
+    items: [
+      { id: "u1", type: "userMessage", turnId: "t1", content: [{ type: "text", text: "start" }] },
+      { id: "a1", type: "agentMessage", turnId: "t1", text: "first response" },
+      { id: "u2", type: "userMessage", turnId: "t1", content: [{ type: "text", text: "also this" }] },
+      { id: "u3", type: "userMessage", turnId: "t1", content: [{ type: "text", text: "and this" }] },
+    ],
+  });
+  const messages = toMessages(state);
+  expect(messages.at(-1)!.role).toBe("user");
+  expect(messages.filter(m => m.role === "assistant").map(m => m.status)).toEqual([{ type: "complete", reason: "stop" }]);
+  expect(state.turn).toEqual({ id: "t1", status: "inProgress" });
+  state.items.push({ id: "a2", type: "agentMessage", turnId: "t1", text: "second response" });
+  const replying = toMessages(state);
+  expect(replying.at(-1)).toMatchObject({ id: "turn:t1:1", status: { type: "running" } });
+  expect(replying[1]!.id).toBe("turn:t1");
+  expect(replying[1]!.status).toEqual({ type: "complete", reason: "stop" });
+  state.items.push(
+    { id: "u4", type: "userMessage", turnId: "t1", content: [{ type: "text", text: "one more" }] },
+    { id: "a3", type: "agentMessage", turnId: "t1", text: "third response" },
+  );
+  const again = toMessages(state);
+  expect(again.filter(m => m.role === "assistant").map(m => m.status?.type)).toEqual(["complete", "complete", "running"]);
+  expect(toMessages({ ...state, turn: { id: "t1", status: "completed" } }).filter(m => m.role === "assistant").every(m => m.status?.type === "complete")).toBe(true);
+});
+
+test("the tail retains pending asks after a steer; historical parts are not discarded", () => {
+  const state = view({
+    turn: { id: "t1", status: "inProgress" },
+    items: [
+      { id: "u1", type: "userMessage", turnId: "t1", content: [{ type: "text", text: "start" }] },
+      { id: "c1", type: "commandExecution", turnId: "t1", command: "echo done", status: "completed", exitCode: 0, aggregatedOutput: "done" },
+      { id: "u2", type: "userMessage", turnId: "t1", content: [{ type: "text", text: "also this" }] },
+      { id: "a2", type: "agentMessage", turnId: "t1", text: "needs confirmation" },
+    ],
+    requests: [{ id: 8, method: "longx/action/request", params: { requestId: 8, title: "Confirm", itemId: "a2" } }],
+  });
+  const messages = toMessages(state);
+  expect(messages[1]!.status?.type).toBe("complete");
+  expect(parts(messages[1]!)[0]!["result"]).toMatchObject({ exitCode: 0, output: "done" });
+  expect(messages.at(-1)!.status).toEqual({ type: "requires-action", reason: "interrupt" });
+  expect(parts(messages.at(-1)!)).toHaveLength(2);
 });

@@ -1,9 +1,10 @@
 defmodule Longx.Projects.Workspace do
   @moduledoc """
-  The project's files as the file tree and the editor see them. Every path
-  is relative to the project root and resolved inside it — `..`, absolute
-  paths and anything escaping the root are refused, `.git` is never listed
-  or touched. Files are read up to `@read_limit` bytes; a file with a NUL
+  The file tree stays relative to the project root, with `.git` hidden.
+  The editor can read and save any file accessible to the Longx process:
+  relative paths resolve against the root; absolute paths and symlinks are
+  allowed. Isolation belongs to the person's container or OS permissions.
+  Files are read up to `@read_limit` bytes; a file with a NUL
   byte or invalid UTF-8 in its head is reported binary and not loaded.
   """
 
@@ -64,19 +65,26 @@ defmodule Longx.Projects.Workspace do
   @doc "A file's text (up to 1 MB; `truncated` past that), or `binary: true` with no content."
   @spec read(Path.t(), String.t()) :: {:ok, file} | {:error, error}
   def read(root, rel) do
-    with {:ok, full} <- resolve(root, rel),
-         {:ok, %File.Stat{type: :regular, size: size}} <- stat(full),
+    full = Path.expand(rel, root)
+
+    with {:ok, %File.Stat{type: :regular, size: size}} <- stat(full),
          {:ok, head} <- read_head(full) do
       if binary?(head) do
         {:ok, %{path: rel, content: nil, size: size, binary: true, truncated: false}}
       else
-        content =
-          if size > @read_limit,
-            do: full |> read_bytes(@read_limit) |> trim_partial_utf8(),
-            else: File.read!(full)
+        with {:ok, bytes} <-
+               if(size > @read_limit, do: read_bytes(full, @read_limit), else: File.read(full)) do
+          content = if size > @read_limit, do: trim_partial_utf8(bytes), else: bytes
 
-        {:ok,
-         %{path: rel, content: content, size: size, binary: false, truncated: size > @read_limit}}
+          {:ok,
+           %{
+             path: rel,
+             content: content,
+             size: size,
+             binary: false,
+             truncated: size > @read_limit
+           }}
+        end
       end
     end
   end
@@ -90,15 +98,20 @@ defmodule Longx.Projects.Workspace do
     end
   end
 
-  defp read_head(full), do: {:ok, read_bytes(full, @sniff)}
+  defp read_head(full), do: read_bytes(full, @sniff)
 
   defp read_bytes(full, n) do
-    File.open!(full, [:read, :binary], fn io ->
-      case IO.binread(io, n) do
-        data when is_binary(data) -> data
-        _ -> ""
+    with {:ok, io} <- File.open(full, [:read, :binary]) do
+      try do
+        case IO.binread(io, n) do
+          data when is_binary(data) -> {:ok, data}
+          :eof -> {:ok, ""}
+          {:error, _} = error -> error
+        end
+      after
+        File.close(io)
       end
-    end)
+    end
   end
 
   # a cut of the file (the sniff, the 1 MB cap) may end inside a character —
@@ -120,15 +133,15 @@ defmodule Longx.Projects.Workspace do
     end)
   end
 
-  @doc "Writes the file (created when missing; its directory must exist)."
+  @doc "Saves any accessible file (created when missing; its directory must exist)."
   @spec write(Path.t(), String.t(), String.t()) :: :ok | {:error, error}
   def write(root, rel, content) do
-    with {:ok, full} <- resolve(root, rel) do
-      cond do
-        not File.dir?(Path.dirname(full)) -> {:error, :not_found}
-        File.dir?(full) -> {:error, :not_a_file}
-        true -> File.write(full, content)
-      end
+    full = Path.expand(rel, root)
+
+    cond do
+      not File.dir?(Path.dirname(full)) -> {:error, :not_found}
+      File.dir?(full) -> {:error, :not_a_file}
+      true -> File.write(full, content)
     end
   end
 

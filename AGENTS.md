@@ -154,8 +154,10 @@ on first use.
     operation, wire-tested in `test/longx_web/rpc/workspace_rpc_test.exs`:
     `Longx.Projects.Files` over `Longx.Projects.Workspace` (`list_files` one level,
     directories first, `.git` never; `read_file` 1 MB cap → `truncated`, binaries flagged;
-    `write_file`, `create_entry`, `rename_entry`, `delete_entry`; every path resolved inside
-    the root) and `Longx.Projects.Repo` over `Longx.Git` (`git_changes` — the whole sync
+    `write_file`, `create_entry`, `rename_entry`, `delete_entry`; editor read/save accepts
+    any accessible file, including absolute paths, `..`, `.git` and symlinks — isolation
+    is the person's container or OS permissions, not a project-root sandbox; tree
+    operations stay project-relative) and `Longx.Projects.Repo` over `Longx.Git` (`git_changes` — the whole sync
     state in one call —, `git_file_diff`, `git_commit`, `git_discard`, `git_undo_commit`,
     `git_abort_merge`, `git_log`, `git_show`, `git_commit_file_diff`, `git_file_versions`,
     `git_branches`, `git_create_branch`, `git_switch` (`stash: true`), `git_delete_branch`,
@@ -788,14 +790,17 @@ on first use.
     Context.present end to end), `toolkit.test` (the tree, the spec form's dispatch). **Surfaces** (the same plug): `show_file(path, line)` / `show_diff(path,
     sha)` open a workbench tab, `send_file(path, title)` a download card
     (`GET /files/:project_id/*path` — `LongxWeb.FileController`, the path
-    resolved inside the root like `Workspace`, `_attachments/<name>` for an
+    resolved inside the root by `Workspace.resolve/2`, `_attachments/<name>` for an
     upload, `?inline=1` for an image drawn in the chat; no auth, the single-user
     boundary of the RPC), `show_html(title, html | url)` an artifact — the
     workbench tab kind `artifact` (`core/workbench.ts`, plain data so a native
     client can open it in a window; not remembered on the device — the row
     reopens it) drawn as an iframe with `sandbox="allow-scripts allow-forms"`,
-    never same-origin, a full-screen sheet on a phone. Every tool checks the
-    path stays inside the project and puts what the client needs on the item
+    never same-origin, a full-screen sheet on a phone. `show_file` opens any
+    file accessible to Longx, including project-external absolute paths and
+    symlinks; relative paths resolve against the agent's cwd. The editor reads
+    and saves it under the same OS/container permissions. Git diff and download
+    paths stay project-relative. Each tool puts what the client needs on the item
     as `details` (`UI.completed_ui` merges the result's `"details"`;
     `messages.ts` passes it in the part's result). **A surface opens only when
     its item arrives live**: `useThreadView` signals `item/completed` of a

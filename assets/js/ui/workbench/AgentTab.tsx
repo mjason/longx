@@ -26,7 +26,15 @@ export function AgentTab({ threadId, rowId, name }: { threadId: string; rowId: s
   // the parent's page already follows its children (and theirs): share that
   // view; join the channel only when the thread on screen is another one
   const chat = useChatMaybe();
-  const shared = chat?.subviews[threadId];
+  const followed = chat?.subviews[threadId];
+  // A member removed from the team may still have an old live view here.
+  // Rejoin to restore its authoritative read-only history; only already
+  // closed snapshots are safe to share after membership disappears.
+  const shared = followed && (
+    chat!.currentAgentIds.includes(threadId) ||
+    followed.thread?.["status"] === "archived" ||
+    followed.thread?.["status"] === "unrecoverable"
+  ) ? followed : undefined;
   const own = useThreadView(shared ? undefined : threadId);
   const { views: ownSubviews } = useThreadViews(
     useMemo(() => (shared ? [] : [...subagentsOf(own.view).keys()]), [shared, own.view]),
@@ -60,7 +68,7 @@ export function AgentTab({ threadId, rowId, name }: { threadId: string; rowId: s
     <div className="flex min-h-0 flex-1 flex-col" data-testid="agent-tab">
       <div className="border-border/60 text-muted-foreground flex items-center gap-3 border-b px-4 py-1.5 text-xs">
         <span className="text-foreground font-mono">{name}</span>
-        <span>{running ? t.subagentWorking : t.subagentDone}</span>
+        <span>{ready && !error ? (view.thread?.["status"] === "archived" ? t.subagentClosed : running ? t.subagentWorking : t.subagentDone) : null}</span>
         {rowId && slug ? (
           <Link to={`/p/${slug}/t/${rowId}`} className="text-primary ml-auto underline-offset-2 hover:underline">
             {t.subagentPage}
@@ -69,6 +77,7 @@ export function AgentTab({ threadId, rowId, name }: { threadId: string; rowId: s
       </div>
       {error ? <p className="text-destructive p-4 text-sm">{error}</p> : null}
       {!ready && !error ? <Skeleton className="m-4 h-16" /> : null}
+      {ready && !error && view.items.length === 0 && view.earlier.items === 0 ? <p className="text-muted-foreground p-4 text-sm">{t.subagentHistoryEmpty}</p> : null}
       <div className="min-h-0 flex-1">
         <AssistantRuntimeProvider runtime={runtime} config={chatConfig}>
           {/* the same markers the chat draws (a compaction, a goal's next round) */}

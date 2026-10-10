@@ -2,8 +2,9 @@ defmodule Longx.Projects.Files do
   @moduledoc """
   A resource without data: the file tree and the editor, as generic actions
   over `Longx.Projects.Workspace` for one project (`project_id`). Paths are
-  relative to the project root; anything outside it is refused with an
-  error on `path`.
+  relative to the project root for tree operations. The editor's read/save
+  actions also accept absolute paths and files outside the project; the
+  process's OS permissions or container determine access, not this resource.
   """
 
   use Ash.Resource,

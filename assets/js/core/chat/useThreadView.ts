@@ -82,8 +82,8 @@ export function useThreadView(
   current.current = kernelThreadId;
 
   useEffect(() => {
-    if (state.view.threadId === kernelThreadId) cacheThreadView(state.view);
-  }, [kernelThreadId, state.view]);
+    if (state.ready && !state.error && state.view.threadId === kernelThreadId) cacheThreadView(state.view);
+  }, [kernelThreadId, state.view, state.ready, state.error]);
 
   useEffect(() => {
     const cached = kernelThreadId ? getCachedThreadView(kernelThreadId) : undefined;

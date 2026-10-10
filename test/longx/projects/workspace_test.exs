@@ -1,5 +1,5 @@
 defmodule Longx.Projects.WorkspaceTest do
-  @moduledoc "The project's files as the file tree and the editor see them: inside the root, always."
+  @moduledoc "The project tree and the unrestricted editor: OS permissions determine file access."
   use ExUnit.Case, async: true
 
   alias Longx.Projects.Workspace
@@ -36,10 +36,43 @@ defmodule Longx.Projects.WorkspaceTest do
     assert {:error, :not_found} = Workspace.list(root, "nope")
   end
 
-  test "paths never leave the root", %{root: root} do
+  test "tree paths stay relative to the root", %{root: root} do
     for bad <- ["../etc", "/etc/passwd", "lib/../../x", "lib/../.."] do
       assert {:error, :outside_root} = Workspace.list(root, bad), bad
-      assert {:error, :outside_root} = Workspace.read(root, bad), bad
+    end
+  end
+
+  test "the editor reads and saves absolute, parent-relative, .git and symlink files", %{
+    root: root
+  } do
+    outside = root <> "-sibling"
+    File.mkdir_p!(outside)
+    on_exit(fn -> File.rm_rf!(outside) end)
+    external = Path.join(outside, "外部 文件.rb")
+    File.write!(external, "original\n")
+    relative = "../#{Path.basename(outside)}/#{Path.basename(external)}"
+    File.ln_s!(external, Path.join(root, "linked.rb"))
+    File.write!(Path.join(root, ".git/config"), "[core]\n")
+
+    for path <- [external, relative, "linked.rb"] do
+      assert {:ok, %{content: "original\n", binary: false, truncated: false}} =
+               Workspace.read(root, path)
+
+      assert :ok = Workspace.write(root, path, "saved\n")
+      assert File.read!(external) == "saved\n"
+      File.write!(external, "original\n")
+    end
+
+    assert {:ok, %{content: "[core]\n"}} = Workspace.read(root, ".git/config")
+    assert :ok = Workspace.write(root, ".git/config", "[core]\n# saved\n")
+    assert {:error, :not_a_file} = Workspace.read(root, outside)
+    assert {:error, :not_found} = Workspace.read(root, Path.join(outside, "missing"))
+    # OS access errors are returned, not converted to a project-boundary error or raised.
+    File.chmod!(external, 0o000)
+
+    case File.read(external) do
+      {:error, reason} -> assert {:error, ^reason} = Workspace.read(root, external)
+      {:ok, _} -> assert {:ok, _} = Workspace.read(root, external)
     end
   end
 

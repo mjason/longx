@@ -16,6 +16,17 @@ const snapshot: ThreadSnapshot = {
 };
 
 describe("thread view", () => {
+  test.each(["archived", "unrecoverable"])("a %s history never treats a stale live turn as running", (status) => {
+    const view = fromSnapshot({
+      ...snapshot,
+      thread: { id: "thr_1", status },
+      turn: { id: "turn_1", status: "inProgress" },
+    });
+    expect(runningTurnId(view)).toBeNull();
+    expect(view.turn?.["status"]).toBe("inProgress");
+    expect(view.items).toEqual(snapshot.items);
+  });
+
   test("compaction occupancy updates during a running turn and the next measurement replaces it", () => {
     const last = { totalTokens: 100000, inputTokens: 99000, outputTokens: 1000 };
     const tokenUsage = { modelContextWindow: 100000, last, total: last };

@@ -107,7 +107,7 @@ export function toMessages(
   // assistant-ui would keep only the last (the command before the steer vanished)
   const segments = new Map<string, number>();
 
-  const flush = () => {
+  const flush = (isTail = false) => {
     if (current && current.parts.length) {
       const n = current.turnId ? (segments.get(current.turnId) ?? 0) : 0;
       if (current.turnId) segments.set(current.turnId, n + 1);
@@ -120,7 +120,10 @@ export function toMessages(
           : `turn:${out.length}`,
         role: "assistant",
         content: current.parts,
-        status: statusFor(view, current.turnId, running),
+        // A steer seals the previous display segment, not the kernel turn.
+        // Only the tail may keep streaming; otherwise every old segment keeps
+        // its activity dot and "no output" timer alive until the turn ends.
+        status: statusFor(view, current.turnId, isTail ? running : null),
         ...(timed
           ? { metadata: { timing: timed.timing, custom: { ...(timed.usage ? { usage: timed.usage } : {}), ...(timed.model ? { model: timed.model } : {}) } } }
           : {}),
@@ -184,7 +187,7 @@ export function toMessages(
         : toPart(item);
     if (part) current.parts.push(part);
   }
-  flush();
+  flush(true);
 
   // a turn stopped before the model said anything still ends in an assistant
   // message, empty and cancelled: the stopped-run card (继续 / 丢弃) goes there

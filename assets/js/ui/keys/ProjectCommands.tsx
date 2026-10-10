@@ -268,7 +268,7 @@ export function ProjectCommands({ ctx }: { ctx: ProjectContext }) {
   // ---- tool windows: SPC w ------------------------------------------------------
 
   // tool.threads … tool.files are the project window's own (ProjectWindow): ⌘1–4 from first paint
-  useCommand("agents.panel", () => requestIntent("agents.panel"), () => inChat && agentSummaries(chat.view, chat.subviews).length > 0);
+  useCommand("agents.panel", () => requestIntent("agents.panel"), () => inChat && agentSummaries(chat.view, chat.subviews, chat.currentAgentIds).length > 0);
 
   // ---- the project, jumps: SPC p s, SPC j -----------------------------------------
 

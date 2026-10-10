@@ -43,6 +43,7 @@ import {
   directory,
   modelAliases,
   projectJobs,
+  readFile,
   threadJobOutput,
   stopThreadJob,
   setThreadJobPurpose,
@@ -87,7 +88,7 @@ const snapshot = {
 async function open(path = "/p/app-1/t/t1") {
   const r = renderAt(path);
   await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
-  act(() => channel.reply("ok", snapshot));
+  act(() => channel.replyTo("thread:thr_1", "ok", snapshot));
   await screen.findByText("run the tests");
   return r;
 }
@@ -1505,6 +1506,102 @@ describe("ThreadPage", () => {
     }
   });
 
+  test.each([true, false])("closing a member removes the badge and preserves history (already read-only: %s)", async (readOnlySnapshot) => {
+    const user = userEvent.setup();
+    const child = "thr_1-closed";
+    vi.mocked(listSubagents).mockResolvedValue(ok([{ ...thread(9), id: "t9", kernelThreadId: child, title: "reviewer", status: "idle" }]) as never);
+    try {
+      const { client } = await open();
+      act(() => channel.deliverTo("thread:thr_1", "event", {
+        seq: 4, method: "item/completed", params: {
+          turnId: "turn_1",
+          item: { id: "act_closed", type: "subAgentActivity", agentPath: "/root/reviewer", agentThreadId: child, kind: "interacted" },
+        },
+      }));
+      await waitFor(() => expect(channel.topics).toContain(`thread:${child}`));
+      act(() => channel.replyTo(`thread:${child}`, "ok", {
+        ...snapshot, thread_id: child, thread: { id: child, ...(readOnlySnapshot ? { status: "archived" } : {}) },
+        turn: { id: "turn_1", status: "inProgress" },
+        items: [{ id: "archived_words", type: "agentMessage", turnId: "turn_1", text: "Archived report preserved." }],
+      }));
+      expect(await screen.findByRole("button", { name: "Agent 1" })).toBeInTheDocument();
+      // The close broadcast refreshes current membership. Historical activities and cached
+      // child views must not resurrect the member in the resource count.
+      vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
+      act(() => channel.deliverTo("project:id-1", "changed", {}));
+      await waitFor(() => expect(client.getQueryData(queryKeys.subagents("t1"))).toEqual([]));
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Agent 1" })).not.toBeInTheDocument());
+      const historical = screen.getByTestId("tool-subagent");
+      expect(historical).toHaveTextContent("reviewer");
+      await user.click(within(historical).getByRole("button", { name: "打开" }));
+      const pane = await screen.findByTestId("agent-tab");
+      if (!readOnlySnapshot) {
+        await waitFor(() => expect(channel.topics.filter(topic => topic === `thread:${child}`).length).toBeGreaterThan(1));
+        act(() => channel.replyTo(`thread:${child}`, "ok", {
+          ...snapshot, thread_id: child, thread: { id: child, status: "archived" },
+          turn: { id: "turn_1", status: "inProgress" },
+          items: [{ id: "archived_words", type: "agentMessage", turnId: "turn_1", text: "Archived report preserved." }],
+        }));
+      }
+      expect(await within(pane).findByText("Archived report preserved.")).toBeInTheDocument();
+      expect(pane).toHaveTextContent("子 agent 已关闭");
+      expect(pane.querySelector('[data-slot="aui_assistant-message-indicator"]')).toBeNull();
+    } finally {
+      vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
+    }
+  });
+
+  test.each(["ok", "error"])("an archived child's %s reply shows empty history or an error, never a blank completed page", async (status) => {
+    const user = userEvent.setup();
+    vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
+    const child = "thr_1-missing-history";
+    await open();
+    act(() => channel.deliverTo("thread:thr_1", "event", {
+      seq: 4, method: "item/completed", params: {
+        turnId: "turn_1",
+        item: { id: "act_missing", type: "subAgentActivity", agentPath: "/root/reviewer", agentThreadId: child, kind: "interacted" },
+      },
+    }));
+    await waitFor(() => expect(channel.topics).toContain(`thread:${child}`));
+    await user.click(within(screen.getByTestId("tool-subagent")).getByRole("button", { name: "打开" }));
+    const pane = await screen.findByTestId("agent-tab");
+    expect(pane).not.toHaveTextContent("子 agent 完成");
+    act(() => channel.replyTo(`thread:${child}`, status, status === "ok" ? {
+      ...snapshot, thread_id: child, thread: { id: child, status: "archived" }, items: [],
+    } : { reason: "history unavailable" }));
+    expect(await within(pane).findByText(status === "ok" ? "这个子 agent 没有可显示的历史记录。" : "history unavailable")).toBeInTheDocument();
+    expect(pane).not.toHaveTextContent("子 agent 完成");
+  });
+
+  test("a stale stop refreshes membership and reports a closed child instead of silently doing nothing", async () => {
+    const user = userEvent.setup();
+    const child = "thr_1-stale";
+    vi.mocked(listSubagents).mockResolvedValue(ok([{ ...thread(9), id: "t9", kernelThreadId: child, title: "reviewer", status: "active" }]) as never);
+    try {
+      await open();
+      act(() => channel.deliverTo("thread:thr_1", "event", {
+        seq: 4, method: "item/completed", params: {
+          turnId: "turn_1",
+          item: { id: "act_stale", type: "subAgentActivity", agentPath: "/root/reviewer", agentThreadId: child, kind: "interacted" },
+        },
+      }));
+      await waitFor(() => expect(channel.topics).toContain(`thread:${child}`));
+      act(() => channel.replyTo(`thread:${child}`, "ok", {
+        ...snapshot, thread_id: child, turn: { id: "child_turn", status: "inProgress" }, items: [],
+      }));
+      await user.click(await screen.findByRole("button", { name: "Agent 1" }));
+      vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
+      vi.mocked(interruptTurn).mockClear();
+      vi.mocked(toast.error).mockClear();
+      await user.click(within(screen.getByTestId("thread-agents-popover")).getByRole("button", { name: "停止 reviewer" }));
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith("子 agent 已关闭"));
+      expect(interruptTurn).not.toHaveBeenCalled();
+      expect(screen.queryByRole("button", { name: "Agent 1" })).not.toBeInTheDocument();
+    } finally {
+      vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
+    }
+  });
+
   test("a working sub-agent's row says what its model is writing and can be stopped from the parent's page", async () => {
     const user = userEvent.setup();
     vi.mocked(listSubagents).mockResolvedValue(ok([{ ...thread(9), id: "t9", kernelThreadId: "thr_1-beta", title: "beta", agentPath: "/root/beta", status: "active" }]) as never);
@@ -2149,7 +2246,7 @@ describe("ThreadPage", () => {
     r.unmount();
   });
 
-  test("the synthetic activity dot hides during a stall and the no-output hint clears when the turn completes", async () => {
+  test("a steer stops the old segment's stall timer and activity dot; only the latest segment can stall", async () => {
     const r = renderAt("/p/app-1/t/t1");
     await waitFor(() => expect(channel.topics).toContain("thread:thr_1"));
     act(() =>
@@ -2174,9 +2271,41 @@ describe("ThreadPage", () => {
     const secondElapsed = Number(document.querySelector("[data-slot=aui_assistant-message-stalled]")!.textContent!.match(/\d+/)?.[0]);
     expect(secondElapsed).toBeGreaterThan(firstElapsed);
 
-    act(() =>
+    act(() => {
       channel.deliver("event", {
         seq: 4,
+        method: "item/completed",
+        params: { turnId: "turn_1", item: { id: "c1", type: "commandExecution", command: "long-running command", cwd: "/p", status: "completed", exitCode: 0, aggregatedOutput: "finished" } },
+      });
+      channel.deliver("event", {
+        seq: 5,
+        method: "item/completed",
+        params: { turnId: "turn_1", item: { id: "u2", type: "userMessage", content: [{ type: "text", text: "insert this now" }] } },
+      });
+    });
+    await screen.findByText("insert this now");
+    await waitFor(() => expect(document.querySelector("[data-slot=aui_assistant-message-stalled]")).toBeNull());
+    // Before the next reply exists, assistant-ui owns one upcoming indicator.
+    expect(document.querySelectorAll('[data-slot="aui_assistant-message-indicator"]')).toHaveLength(1);
+    act(() =>
+      channel.deliver("event", {
+        seq: 6,
+        method: "item/completed",
+        params: { turnId: "turn_1", item: { id: "c2", type: "commandExecution", command: "new segment command", cwd: "/p", status: "completed", exitCode: 0, aggregatedOutput: "new output" } },
+      }),
+    );
+    await screen.findByText("new segment command");
+    expect(document.querySelectorAll('[data-slot="aui_assistant-message-indicator"]')).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "停止" })).toBeInTheDocument();
+    await act(async () => new Promise((resolve) => globalThis.setTimeout(resolve, 15_100)));
+    const hints = document.querySelectorAll("[data-slot=aui_assistant-message-stalled]");
+    expect(hints).toHaveLength(1);
+    expect(hints[0]!.closest('[data-role="assistant"]')).toHaveTextContent("new segment command");
+    expect(document.querySelectorAll('[data-slot="aui_assistant-message-indicator"]')).toHaveLength(0);
+
+    act(() =>
+      channel.deliver("event", {
+        seq: 7,
         method: "turn/completed",
         params: { turn: { id: "turn_1", status: "completed" } },
       }),
@@ -2185,7 +2314,7 @@ describe("ThreadPage", () => {
       expect(document.querySelector("[data-slot=aui_assistant-message-stalled]")).toBeNull(),
     );
     r.unmount();
-  }, 25_000);
+  }, 45_000);
 
   test("phone: the chat still shows the command block and the bottom toolbar", async () => {
     setViewport(390);
@@ -2268,6 +2397,34 @@ describe("ThreadPage", () => {
     await waitFor(() => expect(screen.getByTestId("workbench-tabs")).toHaveTextContent("a.ex"));
     expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("a.ex");
     r.unmount();
+  });
+
+  test.each([1280, 390])("show_file opens an outside-project absolute path unchanged in the editor at %ipx", async (width) => {
+    setViewport(width);
+    const full = "/srv/johnnybt_crypto_align/portfolios/都江堰中性策略精心随机_2ku.rb";
+    const original = vi.mocked(readFile).getMockImplementation()!;
+    vi.mocked(readFile).mockResolvedValue(ok({
+      path: full, content: "puts 'portfolio outside'\n", size: 25, binary: false, truncated: false,
+    }) as never);
+    try {
+      await open();
+      act(() => channel.deliverTo("thread:thr_1", "event", {
+        seq: 4, method: "item/completed", params: {
+          turnId: "turn_1",
+          item: surfaceItem("outside_file", "show_file", {
+            path: "../johnnybt_crypto_align/portfolios/都江堰中性策略精心随机_2ku.rb",
+          }, { path: full, line: 1 }),
+        },
+      }));
+      const editor = await screen.findByTestId("editor-tab");
+      await waitFor(() => expect(editor).toHaveTextContent("portfolio outside"));
+      expect(editor).toHaveTextContent(full);
+      expect(readFile).toHaveBeenCalledWith(expect.objectContaining({
+        input: { projectId: "id-1", path: full },
+      }));
+    } finally {
+      vi.mocked(readFile).mockImplementation(original);
+    }
   });
 
   test("show_html opens an artifact tab: the html in a sandboxed frame, no same-origin", async () => {

@@ -138,10 +138,13 @@ function ChatView({ chat, surface, children }: {
     () => ({
       views: subviews,
       stop: async (kernelThreadId: string) => {
-        const row = rows?.find((r) => r.kernelThreadId === kernelThreadId);
+        const fresh = await subagentRows.refetch();
+        if (fresh.error) throw fresh.error;
+        const row = fresh.data?.find((r) => r.kernelThreadId === kernelThreadId);
         const view = subviews[kernelThreadId];
         const turnId = view ? runningTurnId(view) : null;
-        if (!row || !turnId) return;
+        if (!row) throw new Error(t.subagentClosed);
+        if (!turnId) throw new Error(t.subagentNotRunning);
         unwrap(await interruptTurn({ input: { threadId: row.id, kernelTurnId: turnId } }));
       },
       // the child's conversation as a workbench tab (its row id is its page)
@@ -150,7 +153,7 @@ function ChatView({ chat, surface, children }: {
         openSurface({ kind: "agent", threadId: kernelThreadId, rowId: row?.id ?? null, name });
       },
     }),
-    [rows, subviews, openSurface],
+    [rows, subviews, openSurface, subagentRows.refetch],
   );
 
   return (

@@ -608,6 +608,9 @@ const zh = {
   subagent: "子 agent",
   subagentWorking: "子 agent 工作中",
   subagentDone: "子 agent 完成",
+  subagentClosed: "子 agent 已关闭",
+  subagentNotRunning: "子 agent 当前没有运行中的回合",
+  subagentHistoryEmpty: "这个子 agent 没有可显示的历史记录。",
   subagentInterrupted: "子 agent 已中断",
   subagentNeedsAction: "等待你操作",
   subagentState: {

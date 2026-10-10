@@ -109,7 +109,7 @@ export function ThreadResources() {
   const hints = useJobHints();
   const jobs = useJobs();
   const chat = useChat();
-  const agents = agentSummaries(chat.view, chat.subviews);
+  const agents = agentSummaries(chat.view, chat.subviews, chat.currentAgentIds);
   const subagents = useContext(SubagentContext);
   const [stopping, setStopping] = useState<string | null>(null);
   const [agentsOpen, setAgentsOpen] = useState(false);
