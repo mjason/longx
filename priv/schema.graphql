@@ -1073,6 +1073,13 @@ input SetThreadJobPurposeInput {
   purpose: String!
 }
 
+input AbandonThreadJobInput {
+  threadId: ID!
+  name: String!
+  run: String!
+  confirm: Boolean
+}
+
 input StopThreadJobInput {
   threadId: ID!
   name: String!
@@ -4494,6 +4501,7 @@ type RootMutationType {
   promoteLocal(input: PromoteLocalInput!): PromoteLocal!
   initGit(input: InitGitInput!): GitInfo!
   stopThreadJob(input: StopThreadJobInput!): JobReport!
+  abandonThreadJob(input: AbandonThreadJobInput!): JobReport!
   setThreadJobPurpose(input: SetThreadJobPurposeInput!): JobReport!
   startThread(input: StartThreadInput!): Thread!
   sendMessage(input: SendMessageInput!): Turn!

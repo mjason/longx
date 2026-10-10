@@ -262,6 +262,8 @@ mutation InitGit($input: InitGitInput!) { initGit(input: $input) { repository lf
 
 mutation StopThreadJob($input: StopThreadJobInput!) { stopThreadJob(input: $input) { text job } }
 
+mutation AbandonThreadJob($input: AbandonThreadJobInput!) { abandonThreadJob(input: $input) { text job } }
+
 mutation SetThreadJobPurpose($input: SetThreadJobPurposeInput!) { setThreadJobPurpose(input: $input) { text job } }
 
 mutation StartThread($input: StartThreadInput!) { startThread(input: $input) { id kernelThreadId title preview handle onDuty cwd modelSlug reasoningEffort webSearch agentPath status lastActivityAt insertedAt updatedAt projectId parentThreadId } }

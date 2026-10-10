@@ -472,6 +472,19 @@ defmodule Longx.Projects.Thread do
       end
     end
 
+    action :abandon_thread_job, Types.JobReport do
+      argument :thread_id, :uuid, allow_nil?: false
+      argument :name, :string, allow_nil?: false
+      argument :run, :string, allow_nil?: false
+      argument :confirm, :boolean, default: false
+
+      run fn input, _ ->
+        if input.arguments.confirm,
+          do: job_operation(input.arguments, :abandon),
+          else: argument_error(:confirm, "confirm abandoning this unfinished task")
+      end
+    end
+
     action :project_jobs, Types.ProjectJobs do
       argument :project_id, :uuid, allow_nil?: false
 
@@ -579,6 +592,12 @@ defmodule Longx.Projects.Thread do
 
           :stop ->
             case Longx.Jobs.stop(thread.kernel_thread_id, args.name, run: args.run, by: :person) do
+              {:ok, info} -> {:ok, %{job: info, text: ""}}
+              error -> error
+            end
+
+          :abandon ->
+            case Longx.Jobs.abandon(thread.kernel_thread_id, args.name, args.run) do
               {:ok, info} -> {:ok, %{job: info, text: ""}}
               error -> error
             end

@@ -137,6 +137,8 @@ export type ProjectJob = {
   notify?: boolean;
   review?: string | null;
   reviewNote?: string | null;
+  abandonedAt?: string | null;
+  abandonedBy?: string | null;
   rootThreadId?: string;
   activity?: JobActivity["state"];
 };

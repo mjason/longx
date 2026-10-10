@@ -1323,6 +1323,10 @@ const zh = {
     running: "运行中",
     failed: "失败 / 被停止",
     stopConfirm: "确认停止",
+    abandon: "放弃此任务",
+    abandonTitle: "放弃这个未完成任务？",
+    abandonHint: "不再要求跟进此任务，并将它从待完成列表移除。保留原始退出状态、审核记录和日志，记录为用户已放弃，不代表验证成功。不会停止正在进行的 agent 回合。",
+    abandonConfirm: "确认放弃",
   },
   requestsPage: {
     hint: (keep: number) => `网关最近 ${keep} 次发给模型的请求：内核实际要了什么模型、思考档位、工具，结果如何。看这里能确认界面上的选择是否真的发出去了。只在内存里，重启即清。`,

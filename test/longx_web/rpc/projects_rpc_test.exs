@@ -264,6 +264,61 @@ defmodule LongxWeb.ProjectsRpcTest do
              })
   end
 
+  test "abandoning requires confirmation and exact run; keeps logs and removes idle pending work",
+       %{conn: conn, dir: dir} do
+    project = create!(conn, dir)
+    {thread_id, kernel_id} = start!(conn, project)
+    on_exit(fn -> Longx.Jobs.delete(kernel_id) end)
+
+    {:ok, job} =
+      Longx.Jobs.start(kernel_id, "failed", "echo mismatch; exit 1", cwd: dir, notify: false)
+
+    {:ok, _} = Longx.Jobs.wait(kernel_id, job.name, 5_000)
+    input = %{"threadId" => thread_id, "name" => job.name, "run" => job.run}
+
+    assert %{"success" => false} =
+             rpc(conn, "abandon_thread_job", %{"input" => input, "fields" => ["job", "text"]})
+
+    assert %{"success" => false} =
+             rpc(conn, "abandon_thread_job", %{
+               "input" => Map.merge(input, %{"run" => "stale", "confirm" => true}),
+               "fields" => ["job", "text"]
+             })
+
+    assert [_] = Longx.Jobs.pending(kernel_id)
+
+    assert %{"success" => true, "data" => %{"job" => abandoned}} =
+             rpc(conn, "abandon_thread_job", %{
+               "input" => Map.put(input, "confirm", true),
+               "fields" => ["job", "text"]
+             })
+
+    assert abandoned["exit_code"] == 1
+    assert abandoned["abandoned_by"] == "person"
+    assert is_binary(abandoned["abandoned_at"])
+    assert Longx.Projects.running_threads() == []
+
+    assert %{"success" => true, "data" => %{"text" => text}} =
+             rpc(conn, "thread_job_output", %{"input" => input, "fields" => ["job", "text"]})
+
+    assert text =~ "mismatch"
+
+    {:ok, replacement} =
+      Longx.Jobs.start(kernel_id, job.name, "sleep 30", cwd: dir, notify: false)
+
+    assert %{"success" => false} =
+             rpc(conn, "abandon_thread_job", %{
+               "input" => Map.put(input, "confirm", true),
+               "fields" => ["job", "text"]
+             })
+
+    assert %{"success" => false} =
+             rpc(conn, "abandon_thread_job", %{
+               "input" => Map.merge(input, %{"run" => replacement.run, "confirm" => true}),
+               "fields" => ["job", "text"]
+             })
+  end
+
   defp sse(conn, chunks) do
     conn =
       conn

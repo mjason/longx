@@ -46,6 +46,7 @@ import {
   readFile,
   threadJobOutput,
   stopThreadJob,
+  abandonThreadJob,
   setThreadJobPurpose,
 } from "@/core/api";
 import { queryKeys } from "@/core/projects";
@@ -142,6 +143,7 @@ describe("ThreadPage", () => {
     const rail = await screen.findByTestId("job-work-status");
     await user.click(within(rail).getByRole("button", { name: /查看任务/ }));
     const status = await screen.findByTestId("job-work-popover");
+    expect(within(status).queryByRole("button", { name: "放弃此任务" })).not.toBeInTheDocument();
     await user.click(within(status).getByRole("button", { name: "停止任务" }));
     expect(screen.getByRole("alertdialog")).toHaveTextContent("不会自动重跑");
     await user.click(screen.getByRole("button", { name: "取消" }));
@@ -160,6 +162,48 @@ describe("ThreadPage", () => {
     } finally {
       await act(async () => { await i18n.changeLanguage("zh-CN"); });
     }
+  });
+
+  test.each([1280, 390])("finished work can be abandoned with exact-run confirmation at %ipx", async (width) => {
+    setViewport(width);
+    vi.mocked(abandonThreadJob).mockClear();
+    vi.mocked(stopThreadJob).mockClear();
+    vi.mocked(setThreadJobPurpose).mockClear();
+    const user = userEvent.setup();
+    const job = {
+      name: "failed-check", run: "failed-run", cmd: "verify", threadId: "t1", rootThreadId: "t1",
+      status: "exited", purpose: "wait", activity: "incomplete", review: "incomplete",
+      reviewNote: "Actual differences", exitCode: 1, startedAt: null, finishedAt: null,
+    };
+    let jobs = [job];
+    vi.mocked(projectJobs).mockImplementation(async () => ok({ jobs }) as never);
+    await open();
+    await user.click(within(await screen.findByTestId("job-work-status")).getByRole("button", { name: /查看任务/ }));
+    const details = await screen.findByTestId("job-work-popover");
+    expect(within(details).queryByRole("button", { name: "停止任务" })).not.toBeInTheDocument();
+    await user.click(within(details).getByRole("button", { name: "放弃此任务" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("不代表验证成功");
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(abandonThreadJob).not.toHaveBeenCalled();
+    // A stale-run response must not silently hide the task.
+    vi.mocked(abandonThreadJob).mockResolvedValueOnce(failed("job replaced; refresh") as never);
+    await user.click(within(details).getByRole("button", { name: "放弃此任务" }));
+    await user.click(screen.getByRole("button", { name: "确认放弃" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("job replaced; refresh"));
+    expect(screen.getByTestId("job-work-status")).toBeInTheDocument();
+    expect(details).toHaveTextContent("Actual differences");
+    vi.mocked(abandonThreadJob).mockImplementationOnce(async () => {
+      jobs = [{ ...job, activity: "complete", abandonedAt: "2026-10-10T08:00:00Z" } as typeof job];
+      return ok({ job: jobs[0], text: "" }) as never;
+    });
+    await user.click(within(details).getByRole("button", { name: "放弃此任务" }));
+    await user.click(screen.getByRole("button", { name: "确认放弃" }));
+    await waitFor(() => expect(screen.queryByTestId("job-work-status")).not.toBeInTheDocument());
+    expect(abandonThreadJob).toHaveBeenLastCalledWith(expect.objectContaining({
+      input: { threadId: "t1", name: "failed-check", run: "failed-run", confirm: true },
+    }));
+    expect(stopThreadJob).not.toHaveBeenCalled();
+    expect(setThreadJobPurpose).not.toHaveBeenCalled();
   });
 
   test("a pending result can be resumed explicitly without discarding the composer draft", async () => {
@@ -1672,6 +1716,19 @@ describe("ThreadPage", () => {
       await user.click(screen.getByRole("button", { name: "Agent 1" }));
       await waitFor(() => expect(screen.getByTestId("thread-agents-popover")).toHaveTextContent("最近完成"));
       expect(screen.getByTestId("thread-agents-popover")).toHaveTextContent("beta");
+      // Collecting a member closes the portalled menu before hiding its anchor.
+      await user.click(within(screen.getByTestId("thread-agents-popover")).getByRole("button", { name: /beta/ }));
+      await waitFor(() => expect(screen.queryByTestId("thread-agents-popover")).not.toBeInTheDocument());
+      expect(within(tabs).getByRole("tab", { name: /beta/ })).toHaveAttribute("aria-selected", "true");
+      await user.click(within(within(tabs).getAllByRole("tab")[0]!).getAllByRole("button")[0]!);
+      expect(screen.queryByTestId("thread-agents-popover")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Agent 1" }));
+      expect(await screen.findByTestId("thread-agents-popover")).toHaveTextContent("beta");
+      // Switching tabs without collecting a row also closes it.
+      act(() => within(within(tabs).getByRole("tab", { name: /beta/ })).getAllByRole("button")[0]!.click());
+      await waitFor(() => expect(screen.queryByTestId("thread-agents-popover")).not.toBeInTheDocument());
+      await user.click(within(within(tabs).getAllByRole("tab")[0]!).getAllByRole("button")[0]!);
+      expect(screen.queryByTestId("thread-agents-popover")).not.toBeInTheDocument();
     } finally {
       vi.mocked(listSubagents).mockResolvedValue(ok([]) as never);
     }

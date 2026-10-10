@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOutletContext, useParams } from "react-router";
 import { Bot, Terminal, Square } from "lucide-react";
 import { toast } from "sonner";
-import { setThreadJobPurpose, stopThreadJob, threadJobOutput } from "@/core/api";
+import { abandonThreadJob, setThreadJobPurpose, stopThreadJob, threadJobOutput } from "@/core/api";
 import { queryKeys, unwrap, useProjectJobs, type ProjectJob } from "@/core/projects";
 import type { ProjectContext } from "@/ui/frame/ProjectWindow";
 import { relativeTime } from "@/core/format";
@@ -18,6 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { t } from "@/ui/strings";
 import { useIntent } from "@/core/keys/intents";
 import { useJobHints } from "./job-copy";
+import { tabKey, useWorkbench } from "@/core/workbench";
 
 function useJobs() {
   const ctx = useOutletContext<ProjectContext>();
@@ -38,7 +39,7 @@ function JobRow({ job }: { job: ProjectJob }) {
   const ctx = useOutletContext<ProjectContext>();
   const client = useQueryClient();
   const [logs, setLogs] = useState(false);
-  const [confirm, setConfirm] = useState<"stop" | "purpose" | null>(null);
+  const [confirm, setConfirm] = useState<"stop" | "purpose" | "abandon" | null>(null);
   const sending = useRef(false);
   const input = { threadId: job.threadId, name: job.name, run: job.run ?? "" };
   const output = useQuery({
@@ -48,11 +49,13 @@ function JobRow({ job }: { job: ProjectJob }) {
     refetchInterval: logs && job.status === "running" ? 5_000 : false,
   });
   const mutation = useMutation({
-    mutationFn: async (operation: "stop" | "purpose") => {
+    mutationFn: async (operation: "stop" | "purpose" | "abandon") => {
       if (sending.current) return;
       sending.current = true;
       try {
-        return unwrap(await (operation === "stop"
+        return unwrap(await (operation === "abandon"
+          ? abandonThreadJob({ input: { ...input, confirm: true } })
+          : operation === "stop"
           ? stopThreadJob({ input })
           : setThreadJobPurpose({ input: { ...input, purpose: job.purpose === "wait" ? "background" : "wait" } })));
       } finally {
@@ -81,6 +84,7 @@ function JobRow({ job }: { job: ProjectJob }) {
       {job.startedAt ? <span className="text-muted-foreground">{relativeTime(job.startedAt)}</span> : null}
       <button type="button" className="text-primary hover:underline" disabled={!job.run} onClick={() => setLogs(!logs)}>{t.jobWork.logs}</button>
       {job.status === "running" ? <button type="button" className="text-destructive hover:underline" disabled={!job.run || mutation.isPending} onClick={() => setConfirm("stop")}>{t.jobWork.stop}</button> : null}
+      {job.status !== "running" && job.purpose === "wait" && !job.abandonedAt && job.activity !== "complete" ? <button type="button" className="text-destructive hover:underline" disabled={!job.run || mutation.isPending} onClick={() => setConfirm("abandon")}>{t.jobWork.abandon}</button> : null}
     </div>
     {job.reviewNote ? <p className="text-muted-foreground mt-2 break-words text-xs">{job.reviewNote}</p> : null}
     {logs ? <div className="mt-2" role="region" aria-label={`${t.jobWork.logs} ${job.name}`}>
@@ -90,13 +94,13 @@ function JobRow({ job }: { job: ProjectJob }) {
     <AlertDialog open={confirm !== null} onOpenChange={open => { if (!open) setConfirm(null); }}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{confirm === "stop" ? t.jobWork.stopTitle : t.jobWork.purposeTitle}</AlertDialogTitle>
-          <AlertDialogDescription>{confirm === "stop" ? hints.stopHint : job.purpose === "wait" ? hints.purposeHint : hints.waitHint}</AlertDialogDescription>
+          <AlertDialogTitle>{confirm === "abandon" ? t.jobWork.abandonTitle : confirm === "stop" ? t.jobWork.stopTitle : t.jobWork.purposeTitle}</AlertDialogTitle>
+          <AlertDialogDescription>{confirm === "abandon" ? t.jobWork.abandonHint : confirm === "stop" ? hints.stopHint : job.purpose === "wait" ? hints.purposeHint : hints.waitHint}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
           <AlertDialogAction disabled={mutation.isPending} onClick={() => { if (confirm) mutation.mutate(confirm); }}>
-            {confirm === "stop" ? t.jobWork.stopConfirm : t.jobWork.confirm}
+            {confirm === "abandon" ? t.jobWork.abandonConfirm : confirm === "stop" ? t.jobWork.stopConfirm : t.jobWork.confirm}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -106,6 +110,10 @@ function JobRow({ job }: { job: ProjectJob }) {
 
 export function ThreadResources() {
   useTranslation();
+  const ctx = useOutletContext<ProjectContext>();
+  const { threadId } = useParams();
+  const workbench = useWorkbench(ctx.id);
+  const visible = workbench.active === tabKey({ kind: "chat", threadId });
   const hints = useJobHints();
   const jobs = useJobs();
   const chat = useChat();
@@ -113,17 +121,24 @@ export function ThreadResources() {
   const subagents = useContext(SubagentContext);
   const [stopping, setStopping] = useState<string | null>(null);
   const [agentsOpen, setAgentsOpen] = useState(false);
-  useIntent("agents.panel", () => setAgentsOpen(!agentsOpen));
+  // The chat stays mounted behind other tabs; its portalled menu must not.
+  useEffect(() => {
+    setAgentsOpen(false);
+  }, [workbench.active, threadId]);
+  useIntent("agents.panel", () => { if (visible) setAgentsOpen(!agentsOpen); });
   const background = jobs.filter(job => job.purpose !== "wait" && job.status === "running");
   if (!agents.length && !background.length) return null;
   return <div className="flex shrink-0 justify-end gap-2 px-3 py-2" data-testid="thread-resources">
-    {agents.length ? <Popover open={agentsOpen} onOpenChange={setAgentsOpen}><PopoverTrigger asChild>
+    {agents.length ? <Popover open={visible && agentsOpen} onOpenChange={setAgentsOpen}><PopoverTrigger asChild>
       <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs"><Bot className="size-3.5" />{t.jobWork.agentsCount(agents.length)}</Button>
     </PopoverTrigger><PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)] p-3" data-testid="thread-agents-popover">
       <p className="mb-3 text-sm font-medium">{t.agentsPanel.title}</p>
       {agents.every(agent => agent.state === "done") ? <p className="text-muted-foreground mb-2 text-xs">{t.agentsPanel.recentlyDone}</p> : null}
       <ul className="flex flex-col gap-3">{agents.map(agent => <li key={agent.threadId} className="flex items-center gap-2 text-xs">
-        <button type="button" className="flex min-w-0 flex-1 flex-col items-start text-start hover:underline" onClick={() => subagents?.open(agent.threadId, agent.name)}>
+        <button type="button" className="flex min-w-0 flex-1 flex-col items-start text-start hover:underline" onClick={() => {
+          setAgentsOpen(false);
+          subagents?.open(agent.threadId, agent.name);
+        }}>
           <code>{agent.name}</code><span className="text-muted-foreground line-clamp-2">{agent.label}</span>
         </button>
         {agent.state === "working" ? <Button size="icon" variant="ghost" className="size-6" aria-label={`${t.stopSubagent} ${agent.name}`} disabled={stopping !== null} onClick={async () => {
@@ -148,7 +163,7 @@ export function JobWorkStatus() {
   const { view, sendText, disabledReason } = useChat();
   const [checking, setChecking] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const pending = jobs.filter(job => job.purpose === "wait" && job.activity !== "complete");
+  const pending = jobs.filter(job => job.purpose === "wait" && !job.abandonedAt && job.activity !== "complete");
   if (!pending.length) return null;
   const running = pending.filter(job => job.activity === "waiting").length;
   const processing = pending.filter(job => job.activity === "processing").length;

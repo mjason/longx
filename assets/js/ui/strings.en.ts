@@ -1158,6 +1158,10 @@ export const en = {
     running: "Running",
     failed: "Failed / stopped",
     stopConfirm: "Confirm stop",
+    abandon: "Abandon task",
+    abandonTitle: "Abandon this unfinished task?",
+    abandonHint: "Withdraw further follow-up and remove this task from outstanding work. Its exit status, review and logs are preserved as abandoned by you, not successful verification. This does not interrupt an agent turn already in progress.",
+    abandonConfirm: "Confirm abandonment",
   },
   requestsPage: {
     hint: (keep: number) => `The gateway's ${keep} most recent model requests: model, reasoning effort and tools requested by the kernel, and the result. Use this to check whether UI selections were actually sent. Kept in memory and cleared on restart.`,

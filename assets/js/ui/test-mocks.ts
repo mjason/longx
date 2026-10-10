@@ -283,6 +283,7 @@ export function rpcMock() {
     projectJobs: vi.fn(async () => ok({ jobs: [] })),
     threadJobOutput: vi.fn(async () => ok({ job: {}, text: "example job log" })),
     stopThreadJob: vi.fn(async () => ok({ job: {}, text: "" })),
+    abandonThreadJob: vi.fn(async () => ok({ job: {}, text: "" })),
     setThreadJobPurpose: vi.fn(async () => ok({ job: {}, text: "" })),
     listRecentThreads: vi.fn(async () => ok({ threads: [] })),
     getProject: vi.fn(async () => ok(project(1))),

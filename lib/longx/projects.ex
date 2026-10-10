@@ -50,6 +50,7 @@ defmodule Longx.Projects do
 
     mutations do
       action Longx.Projects.Thread, :stop_thread_job, :stop_thread_job
+      action Longx.Projects.Thread, :abandon_thread_job, :abandon_thread_job
       action Longx.Projects.Thread, :set_thread_job_purpose, :set_thread_job_purpose
       create Longx.Projects.Project, :create_project, :create
       update Longx.Projects.Project, :update_project, :update
@@ -123,6 +124,7 @@ defmodule Longx.Projects do
       define :list_subagents, action: :subagents_of, args: [:parent_thread_id]
       define :thread_job_output, action: :thread_job_output
       define :stop_thread_job, action: :stop_thread_job
+      define :abandon_thread_job, action: :abandon_thread_job
       define :set_thread_job_purpose, action: :set_thread_job_purpose
     end
 

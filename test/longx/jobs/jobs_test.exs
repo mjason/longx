@@ -26,6 +26,126 @@ defmodule Longx.JobsTest do
     }
   end
 
+  test "fast failures return their exact run and deliver one end notification", %{
+    thread: thread,
+    opts: opts
+  } do
+    for n <- 1..20 do
+      name = "fast-#{n}"
+      assert {:ok, job} = Jobs.start(thread, name, "exit 1", opts)
+      assert_receive {:job_exited, %{name: ^name, run: run, exit_code: 1}}, 5_000
+      assert run == job.run
+      refute Jobs.observed?(thread, name, run)
+    end
+
+    refute_receive {:job_exited, _}, 100
+  end
+
+  test "the person can abandon finished work without deleting or falsifying it", %{
+    thread: thread,
+    opts: opts
+  } do
+    {:ok, job} = Jobs.start(thread, "abandon", "echo failed-result; exit 1", opts)
+    {:ok, ended} = Jobs.wait(thread, job.name, 5_000)
+    {:ok, _} = Jobs.review(thread, job.name, job.run, "incomplete", "still differs")
+    assert {:error, :stale_run} = Jobs.abandon(thread, job.name, "old-run")
+    assert {:ok, abandoned} = Jobs.abandon(thread, job.name, job.run)
+    assert abandoned.status == "exited" and abandoned.exit_code == 1
+    assert abandoned.finished_at == ended.finished_at
+    assert abandoned.review == "incomplete" and abandoned.review_note == "still differs"
+    assert abandoned.abandoned_by == "person" and is_binary(abandoned.abandoned_at)
+    assert abandoned.observed
+    assert Jobs.pending(thread) == []
+    refute Jobs.awaiting_review?(abandoned)
+    assert Jobs.activity(Jobs.list(thread)).total == 0
+    assert {:ok, ^abandoned} = Jobs.abandon(thread, job.name, job.run)
+    assert {:ok, %{text: log}} = Jobs.output(thread, job.name, observe: false)
+    assert log =~ "failed-result"
+
+    assert {:error, :abandoned_by_person} =
+             Jobs.review(thread, job.name, job.run, "incomplete", "resume")
+
+    {:ok, good} = Jobs.start(thread, "good", "true", opts)
+    {:ok, _} = Jobs.wait(thread, good.name, 5_000)
+    {:ok, _} = Jobs.review(thread, good.name, good.run, "complete", "verified")
+    assert {:error, :not_pending_work} = Jobs.abandon(thread, good.name, good.run)
+    assert Jobs.reconciliation(thread) == []
+
+    assert {:error, :abandoned_by_person} =
+             Jobs.review(thread, good.name, good.run, "complete", "replace",
+               supersedes: [job.run]
+             )
+
+    {:ok, replacement} = Jobs.start(thread, job.name, "sleep 30", opts)
+    assert {:error, :stale_run} = Jobs.abandon(thread, job.name, job.run)
+    assert {:error, :still_running} = Jobs.abandon(thread, job.name, replacement.run)
+    assert [%{run: run, abandoned_at: nil}] = Jobs.pending(thread)
+    assert run == replacement.run
+  end
+
+  test "abandonment rejects independent services but permits finished stopped work", %{
+    thread: thread,
+    opts: opts
+  } do
+    {:ok, service} =
+      Jobs.start(thread, "service", "true", Keyword.put(opts, :purpose, "background"))
+
+    {:ok, _} = Jobs.wait(thread, service.name, 5_000)
+    assert {:error, :not_pending_work} = Jobs.abandon(thread, service.name, service.run)
+    {:ok, stopped} = Jobs.start(thread, "stopped", "sleep 30", opts)
+    {:ok, _} = Jobs.stop(thread, stopped.name, by: :person)
+
+    assert {:ok, %{status: "stopped", abandoned_by: "person"}} =
+             Jobs.abandon(thread, stopped.name, stopped.run)
+
+    assert Jobs.pending(thread) == []
+  end
+
+  test "abandonment during replacement reconciliation cannot be overwritten", %{
+    thread: thread,
+    opts: opts
+  } do
+    {:ok, old} = Jobs.start(thread, "old", "exit 1", opts)
+    {:ok, _} = Jobs.wait(thread, old.name, 5_000)
+    {:ok, _} = Jobs.review(thread, old.name, old.run, "incomplete", "failed")
+    {:ok, good} = Jobs.start(thread, "good", "true", opts)
+    {:ok, _} = Jobs.wait(thread, good.name, 5_000)
+    parent = self()
+
+    holder =
+      spawn_link(fn ->
+        :global.trans({{Jobs, thread, old.name}, self()}, fn ->
+          send(parent, :target_locked)
+
+          receive do
+            :abandon ->
+              result = Jobs.abandon(thread, old.name, old.run)
+              send(parent, {:abandoned, result})
+          end
+        end)
+      end)
+
+    assert_receive :target_locked
+
+    replacement =
+      Task.async(fn ->
+        Jobs.review(thread, good.name, good.run, "complete", "verified", supersedes: [old.run])
+      end)
+
+    # The successful source is saved, but its target write waits behind the lock.
+    assert eventually(fn ->
+             Enum.any?(Jobs.list(thread), &(&1.run == good.run and &1.review == "complete"))
+           end)
+
+    send(holder, :abandon)
+    assert_receive {:abandoned, {:ok, %{abandoned_by: "person"}}}, 5_000
+    assert {:error, :abandoned_by_person} = Task.await(replacement, 5_000)
+    saved = Enum.find(Jobs.list(thread), &(&1.run == old.run))
+    assert saved.review == "incomplete"
+    assert saved.abandoned_by == "person"
+    assert saved.superseded_by == nil
+  end
+
   test "verified follow-up explicitly reconciles older failures without rerunning", %{
     thread: thread,
     opts: opts

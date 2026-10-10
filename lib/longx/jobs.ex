@@ -86,11 +86,23 @@ defmodule Longx.Jobs do
         }
 
         case DynamicSupervisor.start_child(@supervisor, {Job, spec}) do
-          {:ok, pid} -> {:ok, GenServer.call(pid, :info)}
+          {:ok, pid} -> started_info(pid, spec)
           {:error, {:already_started, pid}} -> {:error, {:running, GenServer.call(pid, :info)}}
           {:error, reason} -> {:error, reason}
         end
     end
+  end
+
+  # A short command can finish between start_child and this call. Its saved
+  # exact-run result is still a successful start, not a failed tool call.
+  defp started_info(pid, spec) do
+    {:ok, GenServer.call(pid, :info)}
+  catch
+    :exit, reason ->
+      case info(spec.thread_id, spec.name) do
+        %{run: run} = saved when run == spec.run -> {:ok, saved}
+        _ -> {:error, {:job_exited_before_info, reason}}
+      end
   end
 
   @doc "The thread's jobs: the running ones first, then the finished, latest first."
@@ -198,10 +210,12 @@ defmodule Longx.Jobs do
   def pending(thread_id), do: Enum.filter(list(thread_id), &pending?/1)
 
   def pending?(info),
-    do: info.purpose == "wait" and info.review not in ["complete", "superseded"]
+    do:
+      info.purpose == "wait" and info.review not in ["complete", "superseded"] and
+        is_nil(Map.get(info, :abandoned_at))
 
   @doc "Finished failures already assessed as incomplete are not awaiting review."
-  def awaiting_review?(info), do: info.purpose == "wait" and info.review == nil
+  def awaiting_review?(info), do: pending?(info) and info.review == nil
 
   @doc "Earlier incomplete results to reconcile after a newly verified follow-up."
   def reconciliation(thread_id) do
@@ -214,7 +228,7 @@ defmodule Longx.Jobs do
 
     if latest do
       Enum.filter(jobs, fn job ->
-        job.review == "incomplete" and job.purpose == "wait" and
+        job.review == "incomplete" and pending?(job) and
           (job.reviewed_at || job.finished_at || "") <
             (latest.reviewed_at || latest.finished_at || "")
       end)
@@ -264,6 +278,29 @@ defmodule Longx.Jobs do
   def observe_run(thread_id, name, run),
     do: update_info(thread_id, name, run, &Map.put(&1, :observed, true))
 
+  @doc "The person withdraws finished required work; preserves its result, review and log."
+  def abandon(thread_id, name, run) do
+    update_info(thread_id, name, run, fn info ->
+      cond do
+        info.status == "running" ->
+          {:error, :still_running}
+
+        info.abandoned_at != nil ->
+          info
+
+        not pending?(info) ->
+          {:error, :not_pending_work}
+
+        true ->
+          Map.merge(info, %{
+            abandoned_at: DateTime.utc_now() |> DateTime.to_iso8601(),
+            abandoned_by: "person",
+            observed: true
+          })
+      end
+    end)
+  end
+
   @doc "A reviewed result; failed/stopped work cannot silently be marked complete."
   def review(thread_id, name, run, outcome, note, opts \\ [])
       when outcome in ["complete", "incomplete", "superseded"] do
@@ -273,6 +310,9 @@ defmodule Longx.Jobs do
          {:ok, reviewed} <-
            update_info(thread_id, name, run, fn info ->
              cond do
+               info.abandoned_at != nil ->
+                 {:error, :abandoned_by_person}
+
                info.status == "running" ->
                  {:error, :still_running}
 
@@ -300,13 +340,17 @@ defmodule Longx.Jobs do
            end) do
       Enum.reduce_while(previous, {:ok, reviewed}, fn old, _acc ->
         case update_info(thread_id, old.name, old.run, fn info ->
-               Map.merge(info, %{
-                 review: "superseded",
-                 review_note: "Replaced by verified #{name} (run #{run}): #{note}",
-                 reviewed_at: reviewed.reviewed_at,
-                 superseded_by: run,
-                 observed: true
-               })
+               if info.abandoned_at != nil do
+                 {:error, :abandoned_by_person}
+               else
+                 Map.merge(info, %{
+                   review: "superseded",
+                   review_note: "Replaced by verified #{name} (run #{run}): #{note}",
+                   reviewed_at: reviewed.reviewed_at,
+                   superseded_by: run,
+                   observed: true
+                 })
+               end
              end) do
           {:ok, _} -> {:cont, {:ok, reviewed}}
           {:error, reason} -> {:halt, {:error, reason}}
@@ -323,6 +367,7 @@ defmodule Longx.Jobs do
 
     cond do
       run in runs -> {:error, :cannot_supersede_self}
+      Enum.any?(targets, &(&1.abandoned_at != nil)) -> {:error, :abandoned_by_person}
       length(Enum.uniq(runs)) != length(targets) -> {:error, :stale_replacement}
       Enum.any?(targets, &(&1.status == "running")) -> {:error, :still_running}
       Enum.any?(targets, &(&1.purpose != "wait")) -> {:error, :not_required_work}
@@ -455,6 +500,8 @@ defmodule Longx.Jobs do
         review: map["review"],
         review_note: map["review_note"],
         reviewed_at: map["reviewed_at"],
+        abandoned_at: map["abandoned_at"],
+        abandoned_by: map["abandoned_by"],
         supersedes: map["supersedes"] || [],
         superseded_by: map["superseded_by"],
         observed: map["observed"] == true,

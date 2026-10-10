@@ -101,6 +101,7 @@ defmodule Longx.Agent.Plugs.Jobs do
     start = Enum.find(__agent_tools__(), &(&1.name == "start_job"))
 
     step
+    |> remember_incomplete()
     |> Longx.Agent.Plug.mount(__MODULE__)
     |> Step.tool(%{start | fun: fn args, ctx -> start_job(args, ctx, guards) end})
   end
@@ -121,7 +122,7 @@ defmodule Longx.Agent.Plugs.Jobs do
       end)
 
     if unreviewed == [] and reconcile == [] do
-      step
+      follow_up_incomplete(step)
     else
       results =
         Enum.map_join(
@@ -161,6 +162,63 @@ defmodule Longx.Agent.Plugs.Jobs do
   end
 
   def call(step, _opts), do: step
+
+  # Only results newly assessed in this turn need a hand-off. Old failures
+  # remain in the ledger, but must not restart work on every unrelated message.
+  defp remember_incomplete(%Step{thread_id: id} = step) when is_binary(id) do
+    if Map.has_key?(step.state, :job_incomplete_at_start) do
+      step
+    else
+      Step.put_state(
+        step,
+        :job_incomplete_at_start,
+        id
+        |> Longx.Jobs.pending()
+        |> Enum.filter(&(&1.review == "incomplete"))
+        |> Enum.map(& &1.run)
+      )
+    end
+  end
+
+  defp remember_incomplete(step), do: step
+
+  defp follow_up_incomplete(step) do
+    baseline = Map.get(step.state, :job_incomplete_at_start)
+    reminded = Map.get(step.state, :job_followups_reminded, [])
+
+    results =
+      if is_list(baseline) do
+        Longx.Jobs.pending(step.thread_id)
+        |> Enum.filter(
+          &(&1.status == "exited" and &1.review == "incomplete" and
+              &1.run not in baseline and &1.run not in reminded)
+        )
+      else
+        []
+      end
+
+    if results == [] do
+      step
+    else
+      step
+      |> Step.put_state(:job_followups_reminded, reminded ++ Enum.map(results, & &1.run))
+      |> Step.continue(
+        "These result-required jobs were just reviewed incomplete. Recording the failure is not a hand-off or a completed task. " <>
+          "Within the person's original authorization, continue diagnosis or repair and verify the result when a safe relevant next step remains. " <>
+          "If progress needs a decision, new authority, or an external change, explain the specific blocker and ask for what is needed in your final answer. " <>
+          "Do not merely leave the unresolved job in the status panel. Do not restart person-stopped work or broaden the task's scope. " <>
+          "Keep the failure recorded; only a verified replacement may supersede its exact run. This hand-off reminder is issued once per newly assessed run:\n" <>
+          Enum.map_join(results, "\n", fn job ->
+            "#{job.name}: run=#{job.run}, exit_code=#{job.exit_code}, review=#{job.review_note}"
+          end),
+        origin: %{
+          "kind" => "job",
+          "name" => Enum.map_join(results, ", ", & &1.name),
+          "status" => "followup"
+        }
+      )
+    end
+  end
 
   ## The tools
 
@@ -291,7 +349,8 @@ defmodule Longx.Agent.Plugs.Jobs do
   defp line(info) do
     ended = if info.finished_at, do: " → #{short(info.finished_at)}", else: ""
 
-    "#{info.name}  #{status(info)}  #{short(info.started_at)}#{ended}  `#{info.cmd}`  run=#{info.run} purpose=#{info.purpose} review=#{info.review || "pending"}"
+    "#{info.name}  #{status(info)}  #{short(info.started_at)}#{ended}  `#{info.cmd}`  run=#{info.run} purpose=#{info.purpose} review=#{info.review || "pending"}" <>
+      abandonment(info)
   end
 
   defp state(info) do
@@ -309,8 +368,16 @@ defmodule Longx.Agent.Plugs.Jobs do
           ~s|Job "#{info.name}" #{status(info)}.|
       end
 
-    text <> "\nRun: #{info.run}. Purpose: #{info.purpose}. Review: #{info.review || "pending"}."
+    text <>
+      "\nRun: #{info.run}. Purpose: #{info.purpose}. Review: #{info.review || "pending"}." <>
+      abandonment(info)
   end
+
+  defp abandonment(%{abandoned_at: at}) when is_binary(at),
+    do:
+      "\nAbandoned by the person at #{at}; not successful verification. Do not resume unless asked."
+
+  defp abandonment(_), do: ""
 
   defp reason_note(%{reason: reason}) when is_binary(reason), do: "\n" <> reason
   defp reason_note(_), do: ""

@@ -184,7 +184,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
   const jobs = useProjectJobs(projectId);
   const waitingForWork = threadId !== undefined && (jobs.data ?? []).some(job =>
     (job.threadId === threadId || job.rootThreadId === threadId) &&
-    job.purpose === "wait" && job.review == null && job.activity !== "complete",
+    job.purpose === "wait" && !job.abandonedAt && job.review == null && job.activity !== "complete",
   );
   const runningThreadIds = useMemo(() => {
     const ids = new Set<string>();

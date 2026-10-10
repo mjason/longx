@@ -4,6 +4,13 @@ type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
 /** Internal type. DO NOT USE DIRECTLY. */
 export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
 import type { DocumentTypeDecoration } from '@graphql-typed-document-node/core';
+export type AbandonThreadJobInput = {
+  confirm?: boolean | null | undefined;
+  name: string;
+  run: string;
+  threadId: string | number;
+};
+
 export type AnswerRequestInput = {
   answers: unknown;
   requestId: string;
@@ -4223,6 +4230,13 @@ export type StopThreadJobMutationVariables = Exact<{
 
 export type StopThreadJobMutation = { stopThreadJob: { text: string, job: unknown } };
 
+export type AbandonThreadJobMutationVariables = Exact<{
+  input: AbandonThreadJobInput;
+}>;
+
+
+export type AbandonThreadJobMutation = { abandonThreadJob: { text: string, job: unknown } };
+
 export type SetThreadJobPurposeMutationVariables = Exact<{
   input: SetThreadJobPurposeInput;
 }>;
@@ -6511,6 +6525,14 @@ export const StopThreadJobDocument = /*#__PURE__*/ new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<StopThreadJobMutation, StopThreadJobMutationVariables>;
+export const AbandonThreadJobDocument = /*#__PURE__*/ new TypedDocumentString(`
+    mutation AbandonThreadJob($input: AbandonThreadJobInput!) {
+  abandonThreadJob(input: $input) {
+    text
+    job
+  }
+}
+    `) as unknown as TypedDocumentString<AbandonThreadJobMutation, AbandonThreadJobMutationVariables>;
 export const SetThreadJobPurposeDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation SetThreadJobPurpose($input: SetThreadJobPurposeInput!) {
   setThreadJobPurpose(input: $input) {

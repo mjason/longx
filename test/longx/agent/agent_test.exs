@@ -1480,6 +1480,72 @@ defmodule Longx.AgentTest do
     refute_receive {:thread, _, "turn/started", _}, 500
   end
 
+  test "abandoning a finished job cancels a queued callback without starting a model turn",
+       %{dir: dir} do
+    id =
+      agent!("abandoned-callback-#{System.unique_integer([:positive])}", dir,
+        callback_window_ms: 10_000
+      )
+
+    on_exit(fn -> Longx.Jobs.delete(id) end)
+    {:ok, job} = Longx.Jobs.start(id, "failed", "exit 1", cwd: dir)
+
+    assert %{"waiting" => [%{"source" => "job:failed"}]} =
+             await_on(id, "thread/waiting/updated")
+
+    {:ok, _} = Longx.Jobs.abandon(id, job.name, job.run)
+    assert :ok = Agent.release_batch(id)
+    assert :idle = Agent.status(id)
+    assert %{waiting: %{"waiting" => []}} = ThreadState.snapshot(id)
+    refute_receive {:request, _}, 100
+    assert Longx.Jobs.pending(id) == []
+  end
+
+  test "a failed job callback reviews then hands off unfinished work once, without rerunning it",
+       %{bypass: bypass, thread_id: id, dir: dir} do
+    on_exit(fn -> Longx.Jobs.delete(id) end)
+
+    script!(bypass, [
+      fn _body, conn ->
+        [job] = Longx.Jobs.list(id)
+
+        sse(
+          conn,
+          ResponsesFixture.function_call("review_job", nil, %{
+            "name" => job.name,
+            "run" => job.run,
+            "outcome" => "incomplete",
+            "note" => "comparison failed; repair needs a decision"
+          })
+        )
+      end,
+      ResponsesFixture.assistant_message("Failure recorded."),
+      ResponsesFixture.assistant_message(
+        "The comparison failed. I need your choice before repair."
+      ),
+      ResponsesFixture.assistant_message("Answering the unrelated question.")
+    ])
+
+    {:ok, job} = Longx.Jobs.start(id, "failed-check", "echo mismatch; exit 1", cwd: dir)
+    assert %{"turn" => %{"from" => "job:failed-check"}} = await("turn/started")
+    assert %{"status" => "completed"} = await_turn_end()
+    [callback, reviewed, followup] = collect_requests([])
+    assert inspect(callback["input"]) =~ "[job failed-check] finished with exit code 1"
+    assert inspect(reviewed["input"]) =~ "Recorded incomplete"
+    assert inspect(followup["input"]) =~ "continue diagnosis or repair"
+    assert inspect(followup["input"]) =~ "specific blocker"
+    assert inspect(followup["input"]) =~ job.run
+    assert [%{run: run, review: "incomplete", status: "exited"}] = Longx.Jobs.pending(id)
+    assert run == job.run
+    refute_receive {:thread, _, "turn/started", _}, 300
+
+    # The ledger stays honest without reviving this failure on a later turn.
+    {:ok, _} = Agent.send(id, "An unrelated question.")
+    assert %{"status" => "completed"} = await_turn_end()
+    assert [_] = collect_requests([])
+    assert [%{run: ^run, review: "incomplete"}] = Longx.Jobs.pending(id)
+  end
+
   test "a stream that breaks mid-turn is retried: the person sees the retry as progress and the turn completes; past the retries the turn fails naming the model so another can take over",
        %{bypass: bypass, dir: dir, model: model} do
     settings = Map.put(Longx.Agent.Definition.Settings.defaults(), :model_retries, 1)

@@ -55,6 +55,8 @@ defmodule Longx.Jobs.Job do
       review: nil,
       review_note: nil,
       reviewed_at: nil,
+      abandoned_at: nil,
+      abandoned_by: nil,
       supersedes: [],
       superseded_by: nil,
       observed: false,
