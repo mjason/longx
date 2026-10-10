@@ -19,7 +19,7 @@ try {
   assert.match(await page.getByTestId("turn-bar").innerText(), /等待任务结果\s+· 2/);
   const composer = page.getByRole("textbox", { name: "随心输入" });
   await composer.fill("保留草稿");
-  await page.getByText(/留意任务栏：仍有工作未完成/).waitFor();
+  assert.equal(await page.locator("[data-sonner-toast]").filter({ hasText: "留意任务栏" }).count(), 0, "typing must be quiet");
   await page.getByTestId("job-work-status").getByRole("button").click();
   assert.match(await page.getByTestId("job-work-popover").innerText(), /1 项运行中，1 项待处理/);
   assert.equal(await page.getByTestId("job-work-popover").getByTestId("thread-job-row").count(), 2);
@@ -34,13 +34,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await composer.fill("");
   await composer.fill("手机草稿");
-  await page.getByText(/留意任务栏：仍有工作未完成/).waitFor();
-  await page.waitForFunction(() => {
-    const warning = Array.from(document.querySelectorAll("[data-sonner-toast]")).find(el => el.textContent.includes("留意任务栏"));
-    if (!warning) return false;
-    const box = warning.getBoundingClientRect();
-    return box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight;
-  }, undefined, { timeout: 5000 });
+  assert.equal(await page.locator("[data-sonner-toast]").filter({ hasText: "留意任务栏" }).count(), 0, "phone typing must be quiet");
   await page.getByRole("button", { name: "后台 1", exact: true }).click();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
   assert.equal(overflow, false, "phone must not overflow horizontally");
@@ -66,25 +60,35 @@ try {
   assert.equal(report.jobs.find(job => job.name === "ready-result").review, null);
   // The stopped job's callback has its own turn. Wait for that real turn to
   // finish before starting the explicit review turn.
-  await page.waitForFunction(async ({ id }) => {
-    const response = await fetch("/gql", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-csrf-token": document.querySelector('meta[name="csrf-token"]').content },
-      body: JSON.stringify({ query: "query($id: ID!){getThread(id:$id){status}}", variables: { id } }),
-    });
-    const result = await response.json();
-    return result.data?.getThread?.status === "idle";
-  }, identity.thread, { timeout: 30000 });
+  await h.idle(identity.thread.id, 30_000, 0);
+  await page.keyboard.press("Escape");
+  await composer.fill("AFTER_WORK_E2E");
+  await composer.press("Enter");
+  const queue = page.getByTestId("message-queue");
+  await queue.getByText("AFTER_WORK_E2E", { exact: true }).waitFor();
+  assert.match(await queue.innerText(), /任务收尾后自动发送/);
+  const beforeReview = await h.rpc("list_turns", { threadId: identity.thread.id }, ["userText"]);
+  assert.equal(beforeReview.some(turn => turn.userText === "AFTER_WORK_E2E"), false, "queued work must not send before review");
+  await page.waitForFunction(() => {
+    const box = document.querySelector('[data-testid="message-queue"]')?.getBoundingClientRect();
+    return box && box.left >= 0 && box.right <= innerWidth;
+  });
+  await page.screenshot({ path: `${identity.root}/phone-work-queue.png`, fullPage: true });
+  await page.getByTestId("job-work-status").getByRole("button").click();
   await page.getByTestId("job-work-popover").getByRole("button", { name: "继续检查结果", exact: true }).click();
   await page.getByText("JOB_WORKFLOW_CONFIRMED: the result has been checked.", { exact: true }).waitFor({ timeout: 15000 });
   await page.getByTestId("job-work-status").waitFor({ state: "detached", timeout: 15000 });
+  await queue.waitFor({ state: "detached", timeout: 15000 });
+  await h.idle(identity.thread.id, 30_000);
+  const afterReview = await h.rpc("list_turns", { threadId: identity.thread.id }, ["userText"]);
+  assert.equal(afterReview.filter(turn => turn.userText === "AFTER_WORK_E2E").length, 1, "queued work sends once after result review");
   await page.getByRole("button", { name: "后台 1", exact: true }).waitFor();
   await page.screenshot({ path: `${identity.root}/phone-completed-service-running.png`, fullPage: true });
   report = await h.rpc("project_jobs", { projectId: identity.project.id }, ["jobs"]);
   assert.equal(report.jobs.find(job => job.name === "ready-result").review, "complete");
   assert.equal(report.jobs.find(job => job.name === "dev-service").status, "running");
   if (h.problems.length) throw new Error(h.problems.join("\n"));
-  console.log("live job workflow: desktop/390px, multiple jobs, non-observing logs, cancel/stop, incomplete after reload, purpose correction, actual model review, background remaining — passed");
+  console.log("live job workflow: desktop/390px, quiet typing, queue waits for actual model review then sends once, cancel/stop, incomplete after reload, purpose correction, background remaining — passed");
 } finally {
   await h.stop();
 }

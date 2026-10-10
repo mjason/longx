@@ -45,11 +45,11 @@ const ComposerPopovers = () => (
 // end (its own rows, never the composer), then what the person typed meanwhile
 const ComposerQueue = () => {
     useTranslation();
-  const { insertQueued } = useChat();
+  const { insertQueued, waitingForWork } = useChat();
   return (
     <>
       <WaitingMessages />
-      <MessageQueue onInsert={(id) => void insertQueued(id)} insertLabel={t.queueInsert} removeLabel={t.queueRemove} hint={t.queueHint} />
+      <MessageQueue onInsert={(id) => void insertQueued(id)} insertLabel={t.queueInsert} removeLabel={t.queueRemove} hint={waitingForWork ? t.queueWorkHint : t.queueHint} waiting={waitingForWork} />
     </>
   );
 };

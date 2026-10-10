@@ -144,6 +144,7 @@ export const en = {
   alreadyRepo: "This directory is already a Git repository",
   queueSend: "Queue message",
   queueHint: "Send after this turn finishes",
+  queueWorkHint: "Send after work settles, or insert now",
   copyApi: "Copy API URL",
   apiCopied: "API URL copied",
   apiCopyFailed: "Couldn't copy the API URL; it is shown below",

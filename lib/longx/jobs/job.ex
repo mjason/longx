@@ -54,6 +54,9 @@ defmodule Longx.Jobs.Job do
       purpose: spec.purpose,
       review: nil,
       review_note: nil,
+      reviewed_at: nil,
+      supersedes: [],
+      superseded_by: nil,
       observed: false,
       started_at: DateTime.utc_now() |> DateTime.to_iso8601(),
       finished_at: nil

@@ -98,8 +98,7 @@ export function Workbench({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="workbench">
-      {wb.tabs.length > 1 ? (
-        <div role="tablist" aria-label={t.workbench} className="bg-sidebar border-sidebar-border flex h-9 shrink-0 items-stretch overflow-x-auto border-b" data-testid="workbench-tabs">
+      <div role="tablist" aria-label={t.workbench} className="bg-sidebar border-sidebar-border flex h-9 shrink-0 items-stretch overflow-x-auto border-b" data-testid="workbench-tabs">
           {wb.tabs.map((tab) => {
             const key = tabKey(tab);
             const isActive = key === wb.active;
@@ -133,8 +132,7 @@ export function Workbench({
               </ContextMenu>
             );
           })}
-        </div>
-      ) : null}
+      </div>
       <div
         data-chat-workbench-active={active.kind === "chat" ? "true" : "false"}
         className={`min-h-0 flex-1 flex-col ${active.kind === "chat" || active.kind === "settings" ? "flex" : "hidden"}`}

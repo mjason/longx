@@ -26,6 +26,7 @@ import {
 import { AppWindow, Bot, ChevronDown, Download, FileCode2, GitCompareArrows, Image as ImageIcon, Loader2 } from "lucide-react";
 import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { formatBytes, formatDuration } from "@/core/format";
+import { readDisclosure, rememberDisclosure } from "@/core/workspaceMemory";
 import { progressLabel } from "./progressLabel";
 import type { Tab } from "@/core/workbench";
 import { toast } from "sonner";
@@ -195,6 +196,7 @@ function ToolRow({
   openOnFailure = true,
   statusLabel,
   collapseLabel,
+  memoryKey,
 }: {
   label: string;
   activeLabel: string;
@@ -212,13 +214,15 @@ function ToolRow({
   openOnFailure?: boolean;
   statusLabel?: string;
   collapseLabel?: string;
+  memoryKey?: string;
 }) {
-  const [open, setOpen] = useState<boolean | null>(null);
+  const [open, setOpen] = useState<boolean | null>(() => memoryKey ? readDisclosure(memoryKey) ?? null : null);
   const duration = useDuration(part, running);
   const root = useRef<HTMLDivElement>(null);
   const isOpen = open ?? ((running && openWhileRunning) || (failed && openOnFailure));
 
   const onOpenChange = async (next: boolean) => {
+    if (memoryKey) rememberDisclosure(memoryKey, next);
     if (collapseLabel && isOpen && !next) {
       try {
         const { collapseFileChange } = await import("./file-change-scroll");
@@ -333,6 +337,8 @@ export const FileChangeTool: ToolCallMessagePartComponent<
 > = (p) => {
     useTranslation();
   const changes = p.args.changes ?? [];
+  const surface = useContext(SurfaceContext);
+  const memoryKey = JSON.stringify(["file-change", surface?.projectId, p.toolCallId]);
   const parsed = changes.map((c) => ({
     change: c,
     ...parseDiff(c.diff ?? ""),
@@ -358,13 +364,18 @@ export const FileChangeTool: ToolCallMessagePartComponent<
       running={running}
       failed={failed}
       testId="tool-file-change"
+      key={memoryKey}
       collapseLabel={t.collapseFileChanges}
+      openWhileRunning={false}
+      openOnFailure={false}
+      memoryKey={memoryKey}
     >
       <Suspense fallback={<ShimmerLabel className="text-xs">{t.changedFiles}</ShimmerLabel>}>
       <div className="flex flex-col gap-2">
         {changes.length > 1 ? (
           <FileTree
             nodes={tree}
+            memoryKey={memoryKey}
             visibleCount={tree.length}
             totalAdditions={parsed.reduce((n, d) => n + d.additions, 0)}
             totalDeletions={parsed.reduce((n, d) => n + d.deletions, 0)}
@@ -405,10 +416,14 @@ export function treeOf(
 ): FileTreeNode[] {
   const nodes: FileTreeNode[] = [];
   const seen = new Set<string>();
+  const paths = files.map((file) => file.path.split("/").filter(Boolean));
+  const common = paths[0]?.slice(0, -1) ?? [];
+  while (common.length && !paths.every((parts) => common.every((part, i) => parts[i] === part))) common.pop();
   for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
-    const parts = file.path.split("/");
+    const raw = file.path.split("/").filter(Boolean);
+    const parts = common.length ? [common.join("/"), ...raw.slice(common.length)] : raw;
     for (let depth = 0; depth < parts.length - 1; depth++) {
-      const folder = parts.slice(0, depth + 1).join("/");
+      const folder = (file.path.startsWith("/") ? "/" : "") + parts.slice(0, depth + 1).join("/");
       if (seen.has(folder)) continue;
       seen.add(folder);
       nodes.push({ path: folder, name: parts[depth]!, depth, kind: "folder" });

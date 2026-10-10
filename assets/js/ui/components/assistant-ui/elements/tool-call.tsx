@@ -71,7 +71,7 @@ export function ToolCall({
     >
       <CollapsibleTrigger className={cn(
         "group/trigger text-foreground/55 hover:text-foreground/90 flex w-full max-w-full items-center gap-2 rounded-md py-1 text-[13.5px] transition-colors outline-none",
-        collapseLabel && open && "sticky top-0 z-20 bg-background py-2 shadow-sm",
+        collapseLabel && open && "sticky top-0 z-20 rounded-none bg-background py-2 shadow-sm",
       )}>
         <ChevronRightIcon className="size-3.5 shrink-0 opacity-60 transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-open/trigger:rotate-90 group-data-panel-open/trigger:rotate-90 motion-reduce:transition-none" />
         <SwapLabel active={running ? 0 : 1} className="text-start">

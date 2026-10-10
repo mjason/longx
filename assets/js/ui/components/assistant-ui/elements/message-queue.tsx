@@ -5,7 +5,7 @@
 // turn ends — each row can be taken back, or inserted into the running
 // turn right now (a steer), which the runtime does not offer itself.
 import { ComposerPrimitive, QueueItemPrimitive, useAuiState } from "@assistant-ui/react";
-import { ArrowDownToLineIcon, XIcon } from "lucide-react";
+import { ArrowDownToLineIcon, HourglassIcon, XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { field, ghostButton, mono } from "@/ui/components/assistant-ui/elements/surfaces";
 
@@ -14,12 +14,14 @@ export function MessageQueue({
   insertLabel,
   removeLabel,
   hint,
+  waiting = false,
   className,
 }: {
   onInsert?: (queueItemId: string) => void;
   insertLabel: string;
   removeLabel: string;
   hint: string;
+  waiting?: boolean;
   className?: string;
 }) {
   const queueLength = useAuiState((s) => s.composer.queue.length);
@@ -27,11 +29,13 @@ export function MessageQueue({
 
   return (
     <div className={cn("flex w-full flex-col gap-1.5 pb-2", className)} data-testid="message-queue">
-      <span className={cn(mono, "text-foreground/35 px-1")}>{hint}</span>
+      <span className={cn(mono, "text-foreground/35 flex items-center gap-1.5 px-1")}>
+        {waiting ? <HourglassIcon className="text-primary/60 size-3" aria-hidden="true" /> : null}{hint}
+      </span>
       <ul className="flex flex-col gap-1.5">
         <ComposerPrimitive.Queue>
           {({ queueItem }) => (
-            <li key={queueItem.id} className={cn(field, "flex items-center gap-2 rounded-2xl py-1.5 pr-1.5 pl-3")}>
+            <li key={queueItem.id} className={cn(field, "flex items-center gap-2 rounded-2xl py-1.5 pr-1.5 pl-3", waiting && "border-primary/15 border-l-primary/40 border-l-2")}>
               <span className="text-foreground/70 min-w-0 flex-1 truncate text-[13.5px]">
                 <QueueItemPrimitive.Text />
               </span>

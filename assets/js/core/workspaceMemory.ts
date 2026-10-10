@@ -2,6 +2,13 @@
 // mounted (and subscribing to every project's channels). Never write file
 // contents or attachment bytes into localStorage.
 const drafts = new Map<string, string>();
+const disclosures = new Map<string, boolean>();
+export function readDisclosure(key: string): boolean | undefined { return disclosures.get(key); }
+export function rememberDisclosure(key: string, open: boolean): void {
+  disclosures.delete(key);
+  disclosures.set(key, open);
+  if (disclosures.size > 2000) disclosures.delete(disclosures.keys().next().value!);
+}
 const files = new Map<string, string>();
 const scrolls = new Map<string, { top: number; following: boolean }>();
 const fileKey = (project: string, path: string) => JSON.stringify([project, path]);
@@ -28,4 +35,4 @@ export function readScroll(key: string | undefined) { return key ? scrolls.get(k
 export function rememberScroll(key: string | undefined, viewport: HTMLElement): void {
   if (key) scrolls.set(key, { top: viewport.scrollTop, following: viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 24 });
 }
-export function _resetWorkspaceMemoryForTests(): void { drafts.clear(); files.clear(); scrolls.clear(); }
+export function _resetWorkspaceMemoryForTests(): void { drafts.clear(); files.clear(); scrolls.clear(); disclosures.clear(); }

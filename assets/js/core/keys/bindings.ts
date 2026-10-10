@@ -68,6 +68,7 @@ export const DEFAULT_BINDINGS: Binding[] = [
   spc("b b", "tab.switch"),
   spc("b d", "tab.close"),
   app("mod+w", "tab.close"),
+  { keys: "ctrl+alt+w", command: "tab.close" },
   spc("b u", "tab.reopen"),
   app("mod+shift+t", "tab.reopen"),
   spc("b n", "tab.next"),

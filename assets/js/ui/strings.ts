@@ -158,6 +158,7 @@ const zh = {
   /** the composer's queue while a turn runs */
   queueSend: "加入队列",
   queueHint: "这一轮结束后发送",
+  queueWorkHint: "任务收尾后自动发送，也可立即插入",
   // what arrives from elsewhere while a turn runs (another agent, a session, a job, a watch)
   // a conversation as JSON for another agent (/api/p/<slug>/t/<id>)
   copyApi: "复制 API 地址",

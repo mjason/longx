@@ -144,6 +144,12 @@ describe("which command a key runs", () => {
     expect(chordCommand(DEFAULT_BINDINGS, "mod+PageDown", ctx({ app: true, mac: false }), all)).toBe("tab.next");
   });
 
+  test("Control+Alt+W closes workspace tabs in a browser on both platforms, including from text fields", () => {
+    expect(chordCommand(DEFAULT_BINDINGS, "ctrl+alt+w", ctx({ mac: true, typing: true }), all)).toBe("tab.close");
+    expect(chordCommand(DEFAULT_BINDINGS, "mod+alt+w", ctx({ mac: false, typing: true }), all)).toBe("tab.close");
+    expect(chordCommand(DEFAULT_BINDINGS, "ctrl+alt+w", ctx({ mac: true }), (id) => id !== "tab.close")).toBeNull();
+  });
+
   test("⌘K toggles the palette even while it is open; ⌘S saves only what there is to save", () => {
     expect(chordCommand(DEFAULT_BINDINGS, "mod+k", ctx({ layer: true }), all)).toBe("palette.open");
     expect(chordCommand(DEFAULT_BINDINGS, "mod+s", ctx({ typing: true, editor: true }), all)).toBe("file.save");
@@ -157,9 +163,9 @@ describe("which command a key runs", () => {
   });
 
   test("what a control's tooltip names: the key this window has, the space menu's when it is on", () => {
-    expect(keysFor("tab.close", DEFAULT_BINDINGS, ctx(), true)).toEqual(["SPC b d"]);
-    expect(keysFor("tab.close", DEFAULT_BINDINGS, ctx({ app: true }), true)).toEqual(["⌘W", "SPC b d"]);
-    expect(keysFor("tab.close", DEFAULT_BINDINGS, ctx({ app: true, mac: false }), false)).toEqual(["Ctrl+W"]);
+    expect(keysFor("tab.close", DEFAULT_BINDINGS, ctx(), true)).toEqual(["⌃⌥W", "SPC b d"]);
+    expect(keysFor("tab.close", DEFAULT_BINDINGS, ctx({ app: true }), true)).toEqual(["⌘W", "⌃⌥W", "SPC b d"]);
+    expect(keysFor("tab.close", DEFAULT_BINDINGS, ctx({ app: true, mac: false }), false)).toEqual(["Ctrl+W", "Ctrl+Alt+W"]);
     expect(keysFor("turn.stop", DEFAULT_BINDINGS, ctx(), true)).toEqual(["Esc Esc", "SPC a s"]);
     expect(keysFor("tab.next", DEFAULT_BINDINGS, ctx({ app: true, mac: false }), true)).toEqual(["Ctrl+PgDn", "SPC b n"]);
   });

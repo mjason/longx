@@ -105,6 +105,10 @@ try {
     await scrollTo(600);
     assert.ok(Math.abs((await geometry()).top) <= 2, "only the active file header sticks to the viewport top");
     assert.equal(await header.getAttribute("aria-expanded"), "true");
+    assert.deepEqual(await header.evaluate(element => {
+      const style = getComputedStyle(element);
+      return [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomLeftRadius, style.borderBottomRightRadius];
+    }), ["0px", "0px", "0px", "0px"], "expanded sticky headers have square corners");
     await page.screenshot({ path: path.join(artifacts, `middle-${width}.png`) });
     await header.click();
     await settle(page);

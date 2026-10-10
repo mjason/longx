@@ -114,12 +114,17 @@ describe("the space menu", () => {
     const user = await openProject();
     const tabs = await screen.findByTestId("workbench-tabs");
     expect(tabs).toHaveTextContent("README.md");
+    await user.click(within(tabs).getByRole("button", { name: "README.md" }));
+    expect(within(tabs).getByRole("tab", { selected: true })).toHaveTextContent("README.md");
     (document.activeElement as HTMLElement | null)?.blur();
 
     await user.keyboard(" bd");
-    await waitFor(() => expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument());
+    await waitFor(() => {
+      expect(within(screen.getByTestId("workbench-tabs")).getAllByRole("tab")).toHaveLength(1);
+      expect(screen.getByTestId("workbench-tabs")).not.toHaveTextContent("README.md");
+    });
     await user.keyboard(" bu");
-    expect(await screen.findByTestId("workbench-tabs")).toHaveTextContent("README.md");
+    await waitFor(() => expect(screen.getByTestId("workbench-tabs")).toHaveTextContent("README.md"));
   });
 
   test("SPC SPC puts the cursor in the AI's input; there space is a space and escape leaves it", async () => {
@@ -227,6 +232,18 @@ describe("the space menu", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/other/t/x9"));
   });
 
+  test("Ctrl+Alt+W closes a workspace tab on the web, while Ctrl+W stays the browser's", async () => {
+    localStorage.setItem(WORKBENCH, JSON.stringify({ tabs: [{ kind: "chat" }, { kind: "file", path: "README.md" }], active: "file:README.md" }));
+    const user = await openProject();
+    const tabs = await screen.findByTestId("workbench-tabs");
+    await user.click(within(tabs).getByRole("button", { name: "README.md" }));
+    await user.keyboard("{Control>}w{/Control}");
+    expect(within(tabs).getByRole("tab", { selected: true })).toHaveTextContent("README.md");
+    await user.keyboard("{Control>}{Alt>}w{/Alt}{/Control}");
+    await waitFor(() => expect(tabs).not.toHaveTextContent("README.md"));
+    expect(within(tabs).getAllByRole("tab")).toHaveLength(1);
+  });
+
   test("⌘W closes a tab only in the installed app's window; in a browser tab it is the browser's", async () => {
     localStorage.setItem(WORKBENCH, JSON.stringify({ tabs: [{ kind: "chat" }, { kind: "file", path: "README.md" }], active: "file:README.md" }));
     const user = await openProject();
@@ -240,10 +257,15 @@ describe("the space menu", () => {
       cleanup();
       const again = await openProject();
       expect(await screen.findByTestId("workbench-tabs")).toHaveTextContent("README.md");
+      await again.click(within(screen.getByTestId("workbench-tabs")).getByRole("button", { name: "README.md" }));
+      expect(within(screen.getByTestId("workbench-tabs")).getByRole("tab", { selected: true })).toHaveTextContent("README.md");
       await again.keyboard("{Control>}w{/Control}");
-      await waitFor(() => expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument());
+      await waitFor(() => {
+        expect(within(screen.getByTestId("workbench-tabs")).getAllByRole("tab")).toHaveLength(1);
+        expect(screen.getByTestId("workbench-tabs")).not.toHaveTextContent("README.md");
+      });
       await again.keyboard("{Control>}{Shift>}t{/Shift}{/Control}");
-      expect(await screen.findByTestId("workbench-tabs")).toHaveTextContent("README.md");
+      await waitFor(() => expect(screen.getByTestId("workbench-tabs")).toHaveTextContent("README.md"));
     } finally {
       document.documentElement.removeAttribute("data-app-window");
     }

@@ -12,7 +12,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { archiveThread, deleteThread, getThread, releaseWaiting as releaseWaitingRpc, releaseWaitingBatch as releaseWaitingBatchRpc, renameThread, retractTurn, sendMessage } from "@/core/api";
-import { queryKeys, unwrap, unwrapOne, useAgentDefinition, useRunningThreads, useStartThread, useThread, useThreads } from "@/core/projects";
+import { queryKeys, unwrap, unwrapOne, useAgentDefinition, useProjectJobs, useRunningThreads, useStartThread, useThread, useThreads } from "@/core/projects";
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
@@ -106,6 +106,8 @@ export type LongxRuntime = {
   ready: boolean;
   error: string | null;
   state: TurnState;
+  /** Result-required work keeps buffered messages queued, without faking a running turn. */
+  waitingForWork: boolean;
   history: ThreadHistory;
   /** a page from above a sub-agent's view (its conversation read in a tab) */
   loadEarlierOf: LoadEarlierOf;
@@ -177,6 +179,11 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
   // rows say `active` while a turn runs, the running list adds those whose
   // sub-agents work (both refreshed by the project channel and the notify feed)
   const runningAll = useRunningThreads();
+  const jobs = useProjectJobs(projectId);
+  const waitingForWork = threadId !== undefined && (jobs.data ?? []).some(job =>
+    (job.threadId === threadId || job.rootThreadId === threadId) &&
+    job.purpose === "wait" && job.review == null && job.activity !== "complete",
+  );
   const runningThreadIds = useMemo(() => {
     const ids = new Set<string>();
     for (const r of rows) if (r.status === "active") ids.add(r.id);
@@ -317,12 +324,13 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     return () => unsubscribe?.();
   }, [queue]);
   const running = thread !== undefined && runningTurnId(view) !== null;
-  const wasRunning = useRef(running);
+  const queueBusy = running || waitingForWork;
+  const wasBusy = useRef(false);
   useEffect(() => {
-    if (!wasRunning.current && running) queue.notifyBusy();
-    if (wasRunning.current && !running) queue.notifyIdle();
-    wasRunning.current = running;
-  }, [running, queue]);
+    if (!wasBusy.current && queueBusy) queue.notifyBusy();
+    if (wasBusy.current && !queueBusy) queue.notifyIdle();
+    wasBusy.current = queueBusy;
+  }, [queueBusy, queue]);
   const insertQueued = useCallback(
     async (queueItemId: string) => {
       if (!thread) return;
@@ -452,7 +460,9 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
         pendingApi,
         // assistant-ui's queue counts a dispatched message as a run until the turn
         // ends; a send that failed starts none, and every later message would wait
-        onSendFailed: () => queue.notifyIdle(),
+        onSendFailed: () => {
+          if (!queueBusy) queue.notifyIdle();
+        },
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -475,6 +485,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
       attachments,
       dictation,
       queueVersion,
+      queueBusy,
       pendingApi,
     ],
   );
@@ -518,6 +529,7 @@ export function useLongxRuntime(opts: LongxRuntimeOptions): LongxRuntime {
     ready,
     error,
     state,
+    waitingForWork,
     history,
     loadEarlierOf,
     runningThreadIds,

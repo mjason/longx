@@ -186,7 +186,22 @@ describe("ThreadPage", () => {
     expect(composer).toHaveValue("保留这份草稿");
   });
 
-  test("typing with unfinished work reminds once per draft without blocking or rewriting messages", async () => {
+  test("already reviewed incomplete work stays visible without blocking a new message", async () => {
+    const user = userEvent.setup();
+    vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [{
+      name: "failed", run: "r1", cmd: "false", threadId: "t1", rootThreadId: "t1",
+      status: "exited", purpose: "wait", activity: "incomplete", review: "incomplete",
+      startedAt: null, finishedAt: null,
+    }] }) as never);
+    await open();
+    await screen.findByTestId("job-work-status");
+    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "新消息{Enter}");
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId("message-queue")).not.toBeInTheDocument();
+    expect(screen.getByTestId("job-work-status")).toBeInTheDocument();
+  });
+
+  test("typing with unfinished work is quiet; sending queues and explicit insertion keeps the original message", async () => {
     const user = userEvent.setup();
     vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [{
       name: "verify", run: "r1", cmd: "true", threadId: "t1", rootThreadId: "t1",
@@ -198,13 +213,16 @@ describe("ThreadPage", () => {
     vi.mocked(toast.warning).mockClear();
     const composer = screen.getByRole("textbox", { name: "随心输入" });
     await user.type(composer, "继续处理监控消息");
-    expect(toast.warning).toHaveBeenCalledTimes(1);
-    expect(toast.warning).toHaveBeenCalledWith("待完成 1 项", expect.objectContaining({
-      description: expect.stringContaining("可能与新消息交错到达"),
-    }));
+    expect(toast.warning).not.toHaveBeenCalled();
     await user.type(composer, "，不要改顺序");
-    expect(toast.warning).toHaveBeenCalledTimes(1);
+    expect(toast.warning).not.toHaveBeenCalled();
     await user.keyboard("{Enter}");
+    const queue = await screen.findByTestId("message-queue");
+    expect(queue).toHaveTextContent("任务收尾后自动发送，也可立即插入");
+    expect(queue).toHaveTextContent("继续处理监控消息，不要改顺序");
+    expect(sendMessage).not.toHaveBeenCalled();
+    vi.mocked(steerTurn).mockResolvedValueOnce(failed("not_running") as never);
+    await user.click(within(queue).getByRole("button", { name: "插入" }));
     await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       input: expect.objectContaining({ text: "继续处理监控消息，不要改顺序" }),
     })));
@@ -213,6 +231,35 @@ describe("ThreadPage", () => {
     vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [] }) as never);
     await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.projectJobs("id-1") }); });
     await waitFor(() => expect(screen.queryByTestId("job-work-status")).not.toBeInTheDocument());
+  });
+
+  test("queued messages wait through task exit and result processing, then send once when required work is complete", async () => {
+    const user = userEvent.setup();
+    const job = {
+      name: "verify", run: "r1", cmd: "true", threadId: "t1", rootThreadId: "t1",
+      status: "running", purpose: "wait", activity: "waiting",
+      startedAt: null, finishedAt: null,
+    };
+    vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [job] }) as never);
+    const { client } = await open();
+    await screen.findByTestId("job-work-status");
+    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "结果处理完再做这个{Enter}");
+    expect(await screen.findByTestId("message-queue")).toHaveTextContent("结果处理完再做这个");
+    expect(screen.queryByRole("button", { name: "停止" })).not.toBeInTheDocument();
+    expect(sendMessage).not.toHaveBeenCalled();
+    for (const activity of ["pending", "processing"]) {
+      vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [{ ...job, status: "exited", activity }] }) as never);
+      await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.projectJobs("id-1") }); });
+      expect(sendMessage).not.toHaveBeenCalled();
+      expect(screen.getByTestId("message-queue")).toHaveTextContent("结果处理完再做这个");
+    }
+    vi.mocked(projectJobs).mockResolvedValue(ok({ jobs: [{ ...job, status: "exited", activity: "complete" }] }) as never);
+    await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.projectJobs("id-1") }); });
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      input: expect.objectContaining({ threadId: "t1", text: "结果处理完再做这个" }),
+    }));
+    expect(screen.queryByTestId("message-queue")).not.toBeInTheDocument();
   });
 
   test("independent monitoring services do not warn when typing", async () => {
@@ -294,6 +341,7 @@ describe("ThreadPage", () => {
     _resetWorkbenchForTests();
     channel.reset();
     vi.mocked(sendMessage).mockClear();
+    vi.mocked(steerTurn).mockClear();
     vi.mocked(listThreads).mockResolvedValue(ok([thread(1)]) as never);
     setViewport(1280);
   });
@@ -2210,7 +2258,8 @@ describe("ThreadPage", () => {
     act(() => channel.reply("ok", { ...snapshot, items: [...snapshot.items, surfaceItem("s0", "show_file", { path: "old.ex" }, { path: "old.ex", line: null })] }));
     await screen.findByText("run the tests");
     expect(screen.getByTestId("tool-show-file")).toHaveTextContent("old.ex");
-    expect(screen.queryByTestId("workbench-tabs")).toBeNull();
+    expect(within(screen.getByTestId("workbench-tabs")).getAllByRole("tab")).toHaveLength(1);
+    expect(screen.getByTestId("workbench-tabs")).not.toHaveTextContent("old.ex");
     // live: the editor tab opens at once
     act(() => {
       channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });

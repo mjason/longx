@@ -12,7 +12,6 @@ const zh = {
   pendingHint: "结果已到但尚未确认，本次工作仍未完成。请继续会话让 agent 检查结果，再按最终汇总验收。",
   pausedHint: "自动接续已暂停。后台任务仍可能运行；结果回来后需由你继续会话。",
   incompleteHint: "有失败或被停止的任务，本次验证未完成。处理并确认结果前，请勿按已完成验收。",
-  inputHint: "留意任务栏：仍有工作未完成，任务结果、定时或监控消息可能与新消息交错到达，影响内容顺序。可以照常输入和发送。",
   stopHint: "将停止任务及其子进程，不会停止其他任务或 agent。需要等待的任务将保留“未完成”状态，不会自动重跑。",
 };
 const en: typeof zh = {
@@ -26,7 +25,6 @@ const en: typeof zh = {
   pendingHint: "Results have arrived but are not confirmed. This work is still unfinished. Continue the conversation to have the agent review them before acceptance.",
   pausedHint: "Automatic resumption is paused. Background jobs may still be running; resume the conversation to process their results.",
   incompleteHint: "Some jobs failed or were stopped. Verification is incomplete; do not accept this work as finished until results are handled and confirmed.",
-  inputHint: "Check the task bar: work is still unfinished. Job results, scheduled or monitoring messages may interleave with your new messages. You can still type and send normally.",
   stopHint: "Stops this job and its child processes, not other jobs or agents. Result-required work remains incomplete and will not automatically restart.",
 };
 

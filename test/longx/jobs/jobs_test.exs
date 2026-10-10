@@ -26,6 +26,96 @@ defmodule Longx.JobsTest do
     }
   end
 
+  test "verified follow-up explicitly reconciles older failures without rerunning", %{
+    thread: thread,
+    opts: opts
+  } do
+    assert {:ok, old} = Jobs.start(thread, "old", "exit 1", opts)
+    assert {:ok, _} = Jobs.wait(thread, "old", 5_000)
+    assert {:ok, assessed} = Jobs.review(thread, "old", old.run, "incomplete", "failed")
+    refute Jobs.awaiting_review?(assessed)
+    assert {:ok, good} = Jobs.start(thread, "good", "true", opts)
+    assert {:ok, _} = Jobs.wait(thread, "good", 5_000)
+    assert {:ok, _} = Jobs.review(thread, "good", good.run, "complete", "verified")
+    assert [{%{run: old_run}, %{run: good_run}}] = Jobs.reconciliation(thread)
+    assert old_run == old.run and good_run == good.run
+    step = Longx.Agent.Step.new(phase: :turn_end, thread_id: thread)
+    reminded = Longx.Agent.Plugs.Jobs.call(step, [])
+    assert [{:continue, text, _}] = reminded.effects
+    assert text =~ "Reconcile old"
+    assert text =~ "Do not rerun"
+    assert Longx.Agent.Plugs.Jobs.call(%{reminded | effects: []}, []).effects == []
+    assert {:ok, _} = Jobs.review(thread, "old", old.run, "incomplete", "unrelated success")
+    assert Jobs.reconciliation(thread) == []
+
+    assert {:error, :cannot_supersede_self} =
+             Jobs.review(thread, "good", good.run, "complete", "verified", supersedes: [good.run])
+
+    assert {:error, :stale_replacement} =
+             Jobs.review(thread, "good", good.run, "complete", "verified",
+               supersedes: ["missing"]
+             )
+
+    assert {:error, :not_successful} =
+             Jobs.review(thread, "old", old.run, "complete", "failed", supersedes: [good.run])
+
+    assert {:ok, _} =
+             Jobs.review(thread, "good", good.run, "complete", "same checks now pass",
+               supersedes: [old.run]
+             )
+
+    assert Jobs.pending(thread) == []
+    assert Jobs.reconciliation(thread) == []
+    assert Enum.find(Jobs.list(thread), &(&1.run == old.run)).superseded_by == good.run
+  end
+
+  test "replacement rejects background, running and stale targets without clearing stopped work",
+       %{thread: thread, opts: opts} do
+    {:ok, stopped} = Jobs.start(thread, "stopped", "sleep 30", opts)
+    assert {:ok, _} = Jobs.stop(thread, "stopped")
+    assert {:ok, _} = Jobs.review(thread, "stopped", stopped.run, "incomplete", "person stopped")
+
+    {:ok, service} =
+      Jobs.start(thread, "service", "true", Keyword.put(opts, :purpose, "background"))
+
+    assert {:ok, _} = Jobs.wait(thread, "service", 5_000)
+    {:ok, running} = Jobs.start(thread, "running", "sleep 30", opts)
+    {:ok, good} = Jobs.start(thread, "good", "true", opts)
+    assert {:ok, _} = Jobs.wait(thread, "good", 5_000)
+
+    assert {:error, :not_required_work} =
+             Jobs.review(thread, "good", good.run, "complete", "verified",
+               supersedes: [service.run]
+             )
+
+    assert {:error, :still_running} =
+             Jobs.review(thread, "good", good.run, "complete", "verified",
+               supersedes: [running.run]
+             )
+
+    assert {:error, :stale_run} =
+             Jobs.review(thread, "good", "stale", "complete", "verified",
+               supersedes: [stopped.run]
+             )
+
+    assert Enum.find(Jobs.list(thread), &(&1.run == stopped.run)).review == "incomplete"
+    assert Enum.find(Jobs.list(thread), &(&1.run == good.run)).review == nil
+
+    assert {:error, :not_required_work} =
+             Jobs.review(thread, "service", service.run, "complete", "verified",
+               supersedes: [stopped.run]
+             )
+
+    assert {:ok, _} = Jobs.set_purpose(thread, "service", service.run, "wait")
+
+    assert {:error, :replacement_not_earlier} =
+             Jobs.review(thread, "service", service.run, "complete", "verified",
+               supersedes: [good.run]
+             )
+
+    assert {:ok, _} = Jobs.stop(thread, "running")
+  end
+
   @tag :cgroup
   test "job resource exit diagnostics survive in the saved reason and log",
        %{thread: thread, opts: opts} do

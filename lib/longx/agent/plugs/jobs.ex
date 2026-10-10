@@ -56,6 +56,10 @@ defmodule Longx.Agent.Plugs.Jobs do
 
     param :note, :string, "What was verified, remains incomplete, or replaces this result.",
       required: true
+
+    param :supersedes,
+          {:array, :string},
+          "With outcome complete: exact earlier run IDs this verified result replaces. Records those runs as superseded too. Explicitly link repaired failures; never guess from a different command's success or rerun person-stopped work."
   end
 
   tool :jobs,
@@ -110,7 +114,13 @@ defmodule Longx.Agent.Plugs.Jobs do
         &(&1.status != "running" and &1.observed and &1.review == nil and &1.run not in reminded)
       )
 
-    if unreviewed == [] do
+    reconcile =
+      Longx.Jobs.reconciliation(id)
+      |> Enum.reject(fn {old, verified} ->
+        "reconcile:#{old.run}:#{verified.run}" in reminded
+      end)
+
+    if unreviewed == [] and reconcile == [] do
       step
     else
       results =
@@ -121,13 +131,29 @@ defmodule Longx.Agent.Plugs.Jobs do
         )
 
       step
-      |> Step.put_state(:job_reviews_reminded, reminded ++ Enum.map(unreviewed, & &1.run))
+      |> Step.put_state(
+        :job_reviews_reminded,
+        reminded ++
+          Enum.map(unreviewed, & &1.run) ++
+          Enum.map(reconcile, fn {old, verified} -> "reconcile:#{old.run}:#{verified.run}" end)
+      )
       |> Step.continue(
-        "These result-required jobs are not yet reviewed. Check their results and record review_job before claiming completion. Failed or stopped work is incomplete; do not restart a person-stopped job unless asked. Each run is reminded only once:\n" <>
-          results,
+        if(unreviewed == [],
+          do: "These previously reviewed results need reconciliation. ",
+          else: "These result-required jobs are not yet reviewed. "
+        ) <>
+          "Check their results and record review_job before claiming completion. Failed or stopped work is incomplete; do not restart a person-stopped job unless asked. Each run or reconciliation pair is reminded only once:\n" <>
+          results <>
+          Enum.map_join(reconcile, "", fn {old, verified} ->
+            "\nReconcile #{old.name} (run #{old.run}, already reviewed incomplete) with verified #{verified.name} (run #{verified.run}). If the verified work really replaces it, review the successful run with supersedes: [\"#{old.run}\"]. Otherwise reaffirm incomplete with why it is still unresolved. Do not rerun either job just to reconcile, especially person-stopped work."
+          end),
         origin: %{
           "kind" => "job",
-          "name" => Enum.map_join(unreviewed, ", ", & &1.name),
+          "name" =>
+            Enum.join(
+              Enum.map(unreviewed, & &1.name) ++ Enum.map(reconcile, &elem(&1, 0).name),
+              ", "
+            ),
           "status" => "review"
         }
       )
@@ -187,8 +213,13 @@ defmodule Longx.Agent.Plugs.Jobs do
     end
   end
 
-  def review_job(%{"name" => name, "run" => run, "outcome" => outcome, "note" => note}, ctx) do
-    case Longx.Jobs.review(ctx.thread_id || "", name, run, outcome, note) do
+  def review_job(
+        %{"name" => name, "run" => run, "outcome" => outcome, "note" => note} = args,
+        ctx
+      ) do
+    case Longx.Jobs.review(ctx.thread_id || "", name, run, outcome, note,
+           supersedes: args["supersedes"] || []
+         ) do
       {:ok, _} -> {:ok, "Recorded #{outcome} for job #{name}, run #{run}: #{note}"}
       {:error, reason} -> {:error, "Could not review job: #{reason}"}
     end

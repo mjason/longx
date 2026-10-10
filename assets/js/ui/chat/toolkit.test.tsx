@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { _resetWorkspaceMemoryForTests } from "@/core/workspaceMemory";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { ActionAnswerContext, ActionTool, CommandExecutionTool, FileChangeTool, ImageGenerationTool, JavascriptTool, PresentTool, SendFileTool, ShowDiffTool, ShowFileTool, ShowHtmlTool, SubagentContext, SubagentTool, SurfaceContext, WebSearchTool, parseDiff, treeOf } from "./toolkit";
 
@@ -157,6 +158,7 @@ describe("CommandExecutionTool", () => {
 });
 
 describe("FileChangeTool", () => {
+  beforeEach(() => _resetWorkspaceMemoryForTests());
   const changes = [
     { path: "lib/a.ex", kind: { type: "update" }, diff: "@@ -1,2 +1,2 @@\n-old\n+new\n same\n" },
     { path: "lib/b.ex", kind: { type: "add" }, diff: "@@ -0,0 +1 @@\n+hello\n" },
@@ -166,6 +168,53 @@ describe("FileChangeTool", () => {
     const parsed = parseDiff("--- a\n+++ b\n@@ -1,2 +1,2 @@\n-old\n+new\n same\n");
     expect(parsed.lines.map((l) => l.kind)).toEqual(["context", "removed", "added", "context"]);
     expect(parsed).toMatchObject({ additions: 1, deletions: 1 });
+  });
+
+  test("running and failed changes stay closed, and reader choice survives remount", async () => {
+    const props = part({ toolName: "fileChange", args: { changes }, status: { type: "running" } });
+    const view = render(<FileChangeTool {...props} />);
+    expect(screen.getByRole("button", { name: /修改/ })).toHaveAttribute("aria-expanded", "false");
+    view.rerender(<FileChangeTool {...props} status={{ type: "incomplete", reason: "error" }} />);
+    const header = screen.getByRole("button", { name: /修改/ });
+    expect(header).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(header);
+    await screen.findByText("new");
+    view.unmount();
+    const reopened = render(<FileChangeTool {...props} />);
+    const restored = screen.getAllByRole("button", { name: /修改/ })[0]!;
+    expect(restored).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(restored);
+    await waitFor(() => expect(restored).toHaveAttribute("aria-expanded", "false"));
+    reopened.unmount();
+    render(<FileChangeTool {...props} />);
+    expect(screen.getByRole("button", { name: /修改/ })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("file disclosure memory is scoped to the project and call", async () => {
+    const props = part({ toolName: "fileChange", args: { changes } });
+    const view = render(<SurfaceContext value={{ projectId: "a", open: vi.fn() }}><FileChangeTool {...props} /></SurfaceContext>);
+    fireEvent.click(screen.getByRole("button", { name: /修改/ }));
+    await screen.findByText("new");
+    view.rerender(<SurfaceContext value={{ projectId: "b", open: vi.fn() }}><FileChangeTool {...props} /></SurfaceContext>);
+    expect(screen.getByRole("button", { name: /修改/ })).toHaveAttribute("aria-expanded", "false");
+    view.rerender(<SurfaceContext value={{ projectId: "a", open: vi.fn() }}><FileChangeTool {...props} toolCallId="other" /></SurfaceContext>);
+    expect(screen.getByRole("button", { name: /修改/ })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("common absolute directories compress without empty roots, and folders really collapse", async () => {
+    const absolute = changes.map((c) => ({ ...c, path: `/home/person/project/${c.path}` }));
+    const nodes = treeOf(absolute.map((c) => ({ path: c.path, additions: 1, deletions: 0 })));
+    expect(nodes.map((n) => n.name)).toEqual(["home/person/project/lib", "a.ex", "b.ex"]);
+    expect(nodes[1]!.path).toBe("/home/person/project/lib/a.ex");
+    render(<FileChangeTool {...part({ toolName: "fileChange", args: { changes: absolute } })} />);
+    fireEvent.click(screen.getByRole("button", { name: /修改/ }));
+    const folder = await screen.findByRole("button", { name: "home/person/project/lib" });
+    expect(folder).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("a.ex")).not.toBeInTheDocument();
+    fireEvent.click(folder);
+    expect(screen.getByText("a.ex")).toBeInTheDocument();
+    fireEvent.click(folder);
+    expect(screen.queryByText("a.ex")).not.toBeInTheDocument();
   });
 
   test("a row per change set: the file tree and one diff per file behind the disclosure", async () => {
@@ -193,9 +242,12 @@ describe("FileChangeTool", () => {
     render(<FileChangeTool {...part({ toolName: "fileChange", args: { changes }, status: { type: "complete" }, result: { status: "completed", output: "" } })} />);
     const header = screen.getByRole("button", { name: /修改了/ });
     expect(header).not.toHaveClass("sticky");
+    expect(header).toHaveClass("rounded-md");
     expect(screen.queryByRole("button", { name: "收起修改" })).not.toBeInTheDocument();
     fireEvent.click(header);
     expect(header).toHaveClass("sticky", "top-0");
+    expect(header).toHaveClass("rounded-none");
+    expect(header).not.toHaveClass("rounded-md");
     expect(header).toHaveTextContent("收起修改");
     fireEvent.click(screen.getByRole("button", { name: "收起修改" }));
     await waitFor(() => expect(header).toHaveAttribute("aria-expanded", "false"));

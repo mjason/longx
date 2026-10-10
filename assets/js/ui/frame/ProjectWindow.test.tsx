@@ -303,13 +303,13 @@ describe("ProjectWindow", () => {
     }));
     const { router } = renderAt("/p/app-1");
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t1"));
-    expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("workbench-tabs")).getByRole("tab", { selected: true })).toHaveTextContent("thread 1");
     expect(startThread).not.toHaveBeenCalled();
 
     await act(() => router.navigate("/"));
     await act(() => router.navigate("/p/app-1"));
     await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t1"));
-    expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("workbench-tabs")).getAllByRole("tab")).toHaveLength(1);
   });
 
   test("switching projects restores each workspace, including the settings tab", async () => {
@@ -327,10 +327,10 @@ describe("ProjectWindow", () => {
       await act(() => router.navigate("/p/app-2"));
       await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-2/settings"));
       await screen.findByTestId("project-settings");
-      expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument();
+      expect(within(screen.getByTestId("workbench-tabs")).getAllByRole("tab")).toHaveLength(1);
       await act(() => router.navigate("/p/app-1"));
       await waitFor(() => expect(router.state.location.pathname).toBe("/p/app-1/t/t1"));
-      expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument();
+      expect(within(screen.getByTestId("workbench-tabs")).getByRole("tab", { selected: true })).toHaveTextContent("thread 1");
     } finally {
       vi.mocked(getProject).mockImplementation(original);
     }
@@ -348,7 +348,7 @@ describe("ProjectWindow", () => {
       { kind: "file", path: "README.md" },
     ]));
     expect(router.state.location.pathname).toBe("/p/app-1");
-    expect(screen.queryByTestId("workbench-tabs")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("workbench-tabs")).getByRole("tab", { selected: true })).toHaveTextContent("README.md");
     expect(startThread).not.toHaveBeenCalled();
   });
 

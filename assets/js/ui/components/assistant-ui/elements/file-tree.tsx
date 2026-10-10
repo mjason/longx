@@ -1,6 +1,7 @@
 "use client";
 
-import type { ComponentProps } from "react";
+import { useState, type ComponentProps } from "react";
+import { readDisclosure, rememberDisclosure } from "@/core/workspaceMemory";
 import { ChevronDownIcon, FileIcon, FolderIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { mono, paper } from "./surfaces";
@@ -22,6 +23,7 @@ export function FileTree({
   totalDeletions,
   filesLabel,
   className,
+  memoryKey,
   ...props
 }: Omit<
   ComponentProps<"div">,
@@ -29,12 +31,22 @@ export function FileTree({
 > & {
   nodes: readonly FileTreeNode[];
   visibleCount: number;
+  memoryKey?: string;
   totalAdditions: number;
   totalDeletions: number;
   /** Longx: the header line (zh-CN) */
   filesLabel?: (files: number) => string;
 }) {
   const files = nodes.filter((node) => node.kind === "file").length;
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const isExpanded = (path: string) => expanded[path] ?? (memoryKey ? readDisclosure(`${memoryKey}:folder:${path}`) : undefined) ?? false;
+  const ancestors: FileTreeNode[] = [];
+  const visible = nodes.filter((node) => {
+    while (ancestors.length && ancestors.at(-1)!.depth >= node.depth) ancestors.pop();
+    const show = ancestors.every((folder) => isExpanded(folder.path));
+    if (node.kind === "folder") ancestors.push(node);
+    return show;
+  });
 
   return (
     <div
@@ -60,20 +72,30 @@ export function FileTree({
       </div>
 
       <div className="flex flex-col">
-        {take(nodes, visibleCount).map((node) => (
+        {take(visible, visibleCount).map((node) => (
           <div
             key={node.path}
+            title={node.path}
             className="fade-in slide-in-from-left-1 animate-in fill-mode-both hover:bg-foreground/[0.03] flex items-center gap-2 rounded-lg px-1 py-1 text-[13px] transition-colors duration-300"
             style={{ paddingInlineStart: `${0.25 + node.depth * 0.85}rem` }}
           >
             {node.kind === "folder" ? (
-              <>
-                <ChevronDownIcon className="text-foreground/25 size-3 shrink-0" />
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 text-start"
+                aria-expanded={isExpanded(node.path)}
+                onClick={() => {
+                  const next = !isExpanded(node.path);
+                  if (memoryKey) rememberDisclosure(`${memoryKey}:folder:${node.path}`, next);
+                  setExpanded((previous) => ({ ...previous, [node.path]: next }));
+                }}
+              >
+                <ChevronDownIcon className={cn("text-foreground/25 size-3 shrink-0", !isExpanded(node.path) && "-rotate-90")} />
                 <FolderIcon className="text-foreground/35 size-3.5 shrink-0" />
                 <span className="text-foreground/60 min-w-0 flex-1 truncate">
                   {node.name}
                 </span>
-              </>
+              </button>
             ) : (
               <>
                 <FileIcon className="text-foreground/30 ms-3 size-3.5 shrink-0" />

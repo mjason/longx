@@ -1,5 +1,4 @@
 import { useTranslation } from "react-i18next";
-import { useAuiState } from "@assistant-ui/react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOutletContext, useParams } from "react-router";
@@ -147,27 +146,9 @@ export function JobWorkStatus() {
   const hints = useJobHints();
   const jobs = useJobs();
   const { view, sendText, disabledReason } = useChat();
-  const { threadId } = useParams();
-  const text = useAuiState(s => s.composer.text);
   const [checking, setChecking] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const warned = useRef<string | null>(null);
   const pending = jobs.filter(job => job.purpose === "wait" && job.activity !== "complete");
-  const signature = pending.length ? `${threadId}:${pending.map(job => `${job.threadId}:${job.run ?? job.name}`).sort().join(",")}` : "";
-  useEffect(() => {
-    if (!text.trim() || !signature) {
-      warned.current = null;
-      return;
-    }
-    if (warned.current === signature) return;
-    warned.current = signature;
-    toast.warning(t.jobWork.count(pending.length), {
-      id: `job-order:${threadId}`,
-      position: "top-right",
-      description: hints.inputHint,
-      action: { label: t.jobWork.show, onClick: () => setExpanded(true) },
-    });
-  }, [text, signature, pending.length, threadId, hints.inputHint]);
   if (!pending.length) return null;
   const running = pending.filter(job => job.activity === "waiting").length;
   const processing = pending.filter(job => job.activity === "processing").length;
@@ -185,7 +166,6 @@ export function JobWorkStatus() {
     <div className="border-b p-3">
       <p className={incomplete ? "text-destructive font-medium" : "text-warning font-medium"}>{incomplete ? t.jobWork.states.incomplete : hints.title(running, pending.length - running - processing, processing)}</p>
       <p className="text-muted-foreground mt-1 leading-relaxed">{view.waiting.paused ? hints.pausedHint : incomplete ? hints.incompleteHint : !running && !processing ? hints.pendingHint : pending.some(job => job.notify === false) ? hints.manualHint : hints.hint}</p>
-      <p className="text-muted-foreground mt-1 leading-relaxed">{hints.inputHint}</p>
       {!running && runningTurnId(view) === null ? <button type="button" className="text-primary mt-2 hover:underline disabled:opacity-50" disabled={checking || !!disabledReason} onClick={async () => {
         setChecking(true);
         try { await sendText(hints.checkMessage); } catch (error) { toast.error(error instanceof Error ? error.message : String(error)); } finally { setChecking(false); }

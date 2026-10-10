@@ -200,6 +200,30 @@ defmodule Longx.Jobs do
   def pending?(info),
     do: info.purpose == "wait" and info.review not in ["complete", "superseded"]
 
+  @doc "Finished failures already assessed as incomplete are not awaiting review."
+  def awaiting_review?(info), do: info.purpose == "wait" and info.review == nil
+
+  @doc "Earlier incomplete results to reconcile after a newly verified follow-up."
+  def reconciliation(thread_id) do
+    jobs = list(thread_id)
+
+    latest =
+      jobs
+      |> Enum.filter(&(&1.purpose == "wait" and &1.review == "complete"))
+      |> Enum.max_by(&(&1.reviewed_at || &1.finished_at || ""), fn -> nil end)
+
+    if latest do
+      Enum.filter(jobs, fn job ->
+        job.review == "incomplete" and job.purpose == "wait" and
+          (job.reviewed_at || job.finished_at || "") <
+            (latest.reviewed_at || latest.finished_at || "")
+      end)
+      |> Enum.map(&{&1, latest})
+    else
+      []
+    end
+  end
+
   def pending_threads do
     dir()
     |> ls()
@@ -241,17 +265,73 @@ defmodule Longx.Jobs do
     do: update_info(thread_id, name, run, &Map.put(&1, :observed, true))
 
   @doc "A reviewed result; failed/stopped work cannot silently be marked complete."
-  def review(thread_id, name, run, outcome, note)
+  def review(thread_id, name, run, outcome, note, opts \\ [])
       when outcome in ["complete", "incomplete", "superseded"] do
-    update_info(thread_id, name, run, fn info ->
-      cond do
-        info.status == "running" -> {:error, :still_running}
-        outcome == "complete" and failed?(%{info | review: nil}) -> {:error, :not_successful}
-        not is_binary(note) or String.trim(note) == "" -> {:error, :note_required}
-        true -> %{info | review: outcome, review_note: note, observed: true}
-      end
-    end)
+    supersedes = Keyword.get(opts, :supersedes, [])
+
+    with {:ok, previous} <- replacement_targets(thread_id, run, outcome, supersedes),
+         {:ok, reviewed} <-
+           update_info(thread_id, name, run, fn info ->
+             cond do
+               info.status == "running" ->
+                 {:error, :still_running}
+
+               outcome == "complete" and failed?(%{info | review: nil}) ->
+                 {:error, :not_successful}
+
+               previous != [] and info.purpose != "wait" ->
+                 {:error, :not_required_work}
+
+               Enum.any?(previous, &(&1.started_at >= info.started_at)) ->
+                 {:error, :replacement_not_earlier}
+
+               not is_binary(note) or String.trim(note) == "" ->
+                 {:error, :note_required}
+
+               true ->
+                 Map.merge(info, %{
+                   review: outcome,
+                   review_note: note,
+                   reviewed_at: DateTime.utc_now() |> DateTime.to_iso8601(),
+                   supersedes: supersedes,
+                   observed: true
+                 })
+             end
+           end) do
+      Enum.reduce_while(previous, {:ok, reviewed}, fn old, _acc ->
+        case update_info(thread_id, old.name, old.run, fn info ->
+               Map.merge(info, %{
+                 review: "superseded",
+                 review_note: "Replaced by verified #{name} (run #{run}): #{note}",
+                 reviewed_at: reviewed.reviewed_at,
+                 superseded_by: run,
+                 observed: true
+               })
+             end) do
+          {:ok, _} -> {:cont, {:ok, reviewed}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+    end
   end
+
+  defp replacement_targets(_thread_id, _run, _outcome, []), do: {:ok, []}
+
+  defp replacement_targets(thread_id, run, "complete", runs) when is_list(runs) do
+    jobs = list(thread_id)
+    targets = Enum.filter(jobs, &(&1.run in runs))
+
+    cond do
+      run in runs -> {:error, :cannot_supersede_self}
+      length(Enum.uniq(runs)) != length(targets) -> {:error, :stale_replacement}
+      Enum.any?(targets, &(&1.status == "running")) -> {:error, :still_running}
+      Enum.any?(targets, &(&1.purpose != "wait")) -> {:error, :not_required_work}
+      true -> {:ok, targets}
+    end
+  end
+
+  defp replacement_targets(_thread_id, _run, _outcome, _runs),
+    do: {:error, :replacement_requires_success}
 
   def set_purpose(thread_id, name, run, purpose) when purpose in ["wait", "background"],
     do: update_info(thread_id, name, run, &Map.put(&1, :purpose, purpose))
@@ -374,6 +454,9 @@ defmodule Longx.Jobs do
         purpose: map["purpose"] || "background",
         review: map["review"],
         review_note: map["review_note"],
+        reviewed_at: map["reviewed_at"],
+        supersedes: map["supersedes"] || [],
+        superseded_by: map["superseded_by"],
         observed: map["observed"] == true,
         started_at: map["started_at"],
         finished_at: map["finished_at"]
