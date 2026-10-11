@@ -27,11 +27,26 @@ export async function run(h) {
   // idle turn"), the row named after the goal; the bar goes once the model completes it
   await h.rpc(
     "set_goal",
-    { threadId: t.id, objective: "回复一个字“好”，然后立刻用 update_goal 把这个目标标记为 complete。", status: "active" },
+    { threadId: t.id, objective: "回复一个字“好”，然后立刻用 update_goal 把这个目标标记为 complete。", status: "active", tokenBudget: 20000 },
     ["objective", "status"],
   );
   const turns = await h.idle(t.id, 180_000, 2);
   expect(turns.some((x) => /目标续跑/.test(x.userText || "")), "the goal started a turn of its own");
+  await page.waitForFunction(() => !document.querySelector('[data-testid="goal-bar"]'), null, { timeout: 10_000 });
+
+  // Start a second goal through the actual /goal dialog without clearing the
+  // completed one; the old objective and budget must not be offered as edits.
+  const composer = page.getByRole("textbox", { name: "随心输入" });
+  await composer.fill("/goal");
+  await page.getByRole("option", { name: /goal/ }).click();
+  const dialog = page.getByTestId("goal-dialog");
+  await dialog.waitFor();
+  expect(await dialog.getByLabel("目标", { exact: true }).inputValue() === "", "a completed goal opens a fresh objective");
+  expect(await dialog.getByLabel(/token 预算/).inputValue() === "", "a completed goal does not carry its budget");
+  await dialog.getByLabel("目标", { exact: true }).fill("第二个目标：立刻调用 update_goal，status=complete，然后只回复“第二个完成”。");
+  await dialog.getByRole("button", { name: "保存", exact: true }).click();
+  const second = await h.idle(t.id, 180_000, 3);
+  expect(second.length === 3 && second.at(-1).status === "completed", "the second /goal started and completed in the same thread");
   await page.waitForFunction(() => !document.querySelector('[data-testid="goal-bar"]'), null, { timeout: 10_000 });
   await h.rpc("clear_goal", { threadId: t.id }, ["cleared"]);
 }

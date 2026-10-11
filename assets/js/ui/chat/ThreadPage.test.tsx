@@ -1166,6 +1166,32 @@ describe("ThreadPage", () => {
     expect(within(fresh).getByLabelText("目标")).toHaveValue("");
   });
 
+  test("/goal after completion starts a fresh objective without the previous budget", async () => {
+    const user = userEvent.setup();
+    await open();
+    act(() => channel.deliver("event", {
+      seq: 4,
+      method: "thread/goal/updated",
+      params: { threadId: "thr_1", goal: { objective: "finished goal", status: "complete", tokenBudget: 100, tokensUsed: 100, timeUsedSeconds: 125 } },
+    }));
+    await user.type(screen.getByRole("textbox", { name: "随心输入" }), "/goal");
+    await user.click(await screen.findByRole("option", { name: /goal/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("目标")).toHaveValue("");
+    expect(within(dialog).getByLabelText(/token 预算/)).toHaveValue("");
+    await user.type(within(dialog).getByLabelText("目标"), "second goal");
+    act(() => channel.deliver("event", {
+      seq: 5,
+      method: "thread/goal/updated",
+      params: { threadId: "thr_1", goal: { objective: "finished goal", status: "complete", tokenBudget: 100, tokensUsed: 125, timeUsedSeconds: 126 } },
+    }));
+    expect(within(dialog).getByLabelText("目标")).toHaveValue("second goal");
+    await user.click(within(dialog).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(setGoal).toHaveBeenLastCalledWith(expect.objectContaining({
+      input: { threadId: "t1", objective: "second goal", tokenBudget: null, status: "active" },
+    })));
+  });
+
   test("the kernel falling back to another model of the chain mid-turn is said in a toast", async () => {
     await open();
     act(() => {

@@ -8,6 +8,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -62,21 +63,23 @@ export function GoalProvider({
   children: ReactNode;
 }) {
     useTranslation();
-  const [open, setOpen] = useState(false);
+  const [openFor, setOpenFor] = useState<string | null>(null);
+  const open = !!threadId && openFor === threadId;
+  useEffect(() => setOpenFor(null), [threadId]);
   const actions = useGoalActions(threadId);
   const show = useCallback(() => {
     if (!threadId) {
       toast.info(t.commands.needsThread);
       return;
     }
-    setOpen(true);
+    setOpenFor(threadId);
   }, [threadId]);
   return (
     <GoalDialogContext.Provider value={{ open: show, goal, threadId, actions }}>
       {children}
       <GoalDialog
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(value) => setOpenFor(value && threadId ? threadId : null)}
         goal={goal}
         actions={actions}
       />
@@ -204,11 +207,14 @@ function GoalDialog({
     useTranslation();
   const [objective, setObjective] = useState("");
   const [budget, setBudget] = useState("");
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (open) {
-      setObjective(goal?.objective ?? "");
-      setBudget(goal?.tokenBudget ? String(goal.tokenBudget) : "");
+    if (open && !wasOpen.current) {
+      const editable = goal?.status === "complete" ? null : goal;
+      setObjective(editable?.objective ?? "");
+      setBudget(editable?.tokenBudget ? String(editable.tokenBudget) : "");
     }
+    wasOpen.current = open;
   }, [open, goal]);
   const parsed = budget.trim() === "" ? null : Number(budget);
   const valid =

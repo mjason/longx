@@ -15,7 +15,20 @@ defmodule Longx.Agent.Kernel.Goal do
   }
 
   def update_goal(%State{goal: goal} = state, attrs) do
-    base = goal || Map.put(@goal_defaults, "startedAt", System.system_time(:second))
+    # Starting again after completion is a new goal, not a resume. Edits and
+    # resumes of unfinished goals keep their usage and original clock.
+    fresh? =
+      is_nil(goal) or
+        (goal["status"] == "complete" and
+           (Map.has_key?(attrs, "objective") or attrs["status"] == "active"))
+
+    base =
+      if fresh?,
+        do:
+          @goal_defaults
+          |> Map.put("startedAt", System.system_time(:second))
+          |> Map.put("objective", if(goal, do: goal["objective"] || "", else: "")),
+        else: goal
 
     # a status change drops the old reason unless the new one brings its own
     # (`rounds` / `budget` from the plug, the model's sentence from `update_goal`)

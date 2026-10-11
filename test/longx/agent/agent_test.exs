@@ -3771,6 +3771,74 @@ defmodule Longx.AgentTest do
                ThreadState.snapshot(id).items,
                &(get_in(&1, ["origin", "kind"]) == "goal")
              )
+
+    # /goal does not clear the completed goal before saving another one.
+    assert {:ok, %{"tokensUsed" => used}} = Agent.get_goal(id)
+    assert used > 0
+
+    assert {:ok,
+            %{
+              "objective" => "second goal",
+              "status" => "active",
+              "tokensUsed" => 0,
+              "timeUsedSeconds" => 0,
+              "tokenBudget" => 1
+            }} =
+             Agent.set_goal(id, %{
+               "objective" => "second goal",
+               "status" => "active",
+               "tokenBudget" => 1
+             })
+
+    assert %{"turn" => %{"id" => second_turn}} = await("turn/started")
+    refute second_turn == turn_id
+
+    assert_receive {:thread, _, "thread/goal/updated",
+                    %{"goal" => %{"objective" => "second goal", "status" => "complete"}}},
+                   5_000
+
+    assert %{"id" => ^second_turn, "status" => "completed"} = await_turn_end()
+  end
+
+  test "goal replacement resets the clock and usage but unfinished edits and resumes do not",
+       %{thread_id: thread_id} do
+    alias Longx.Agent.Kernel.{Goal, State}
+
+    old = %{
+      "objective" => "old",
+      "status" => "paused",
+      "tokenBudget" => 100,
+      "tokensUsed" => 100,
+      "startedAt" => System.system_time(:second) - 120,
+      "reason" => "old reason"
+    }
+
+    state = %State{thread_id: thread_id, goal: old}
+    resumed = Goal.update_goal(state, %{"status" => "active"}).goal
+    assert resumed["tokensUsed"] == 100
+    assert resumed["tokenBudget"] == 100
+    assert resumed["startedAt"] == old["startedAt"]
+    edited = Goal.update_goal(state, %{"objective" => "edited"}).goal
+    assert edited["tokensUsed"] == 100
+    assert edited["startedAt"] == old["startedAt"]
+
+    state = %{state | goal: %{old | "status" => "complete"}}
+    fresh = Goal.update_goal(state, %{"objective" => "new", "status" => "active"}).goal
+    assert fresh["tokensUsed"] == 0
+    assert fresh["tokenBudget"] == nil
+    assert fresh["timeUsedSeconds"] == 0
+    assert fresh["startedAt"] > old["startedAt"]
+    refute Map.has_key?(fresh, "reason")
+
+    restarted = Goal.update_goal(state, %{"status" => "active"}).goal
+    assert restarted["objective"] == "old"
+    assert restarted["tokensUsed"] == 0
+    assert restarted["tokenBudget"] == nil
+
+    blocked = %{state | goal: %{old | "status" => "blocked"}}
+    resumed = Goal.update_goal(blocked, %{"status" => "active"}).goal
+    assert resumed["tokensUsed"] == 100
+    assert resumed["startedAt"] == old["startedAt"]
   end
 
   defmodule Budget do
