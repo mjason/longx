@@ -249,8 +249,17 @@ defmodule Longx.Agent.ThreadState.Store do
   def fold(t, "turn/started", %{"turn" => turn}), do: put_turn(t, turn)
 
   def fold(t, "turn/completed", %{"turn" => turn}) do
-    put_meta(t, %{progress: nil})
-    put_turn(t, turn)
+    current = meta(t)
+
+    if current.turn == nil or current.turn["id"] == turn["id"] do
+      put_meta(t, %{progress: nil})
+      put_turn(t, turn)
+    else
+      # A late replay belongs in history, not in the live turn's slot.
+      id = turn["id"]
+      merged = Map.merge(current.turns[id] || %{}, turn)
+      put_meta(t, %{turns: Map.put(current.turns, id, merged)})
+    end
   end
 
   def fold(t, "turn/progress", %{"progress" => progress}), do: put_meta(t, %{progress: progress})

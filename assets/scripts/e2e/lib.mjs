@@ -5,6 +5,7 @@
 // by default) with whatever model it is configured for (LONGX_E2E_MODEL).
 import { chromium, devices } from "playwright";
 import fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { buildSchema, getNamedType, isEnumType, isListType, isNonNullType, isObjectType, isScalarType } from "graphql";
@@ -24,7 +25,7 @@ export class Harness {
     this.browser = process.env.LONGX_E2E_CDP
       ? await chromium.connectOverCDP(process.env.LONGX_E2E_CDP)
       : await chromium.launch();
-    this.context = await this.browser.newContext({ viewport: { width: 1280, height: 900 } });
+    this.context = await this.browser.newContext({ viewport: { width: 1280, height: 900 }, locale: "zh-CN" });
     this.page = await this.watch(await this.context.newPage());
     await this.page.goto(BASE + "/");
     this.csrf = await this.page.getAttribute('meta[name="csrf-token"]', "content");
@@ -45,7 +46,7 @@ export class Harness {
   }
 
   async phone() {
-    const context = await this.browser.newContext({ ...devices["iPhone 13"], colorScheme: "dark" });
+    const context = await this.browser.newContext({ ...devices["iPhone 13"], colorScheme: "dark", locale: "zh-CN" });
     return this.watch(await context.newPage());
   }
 
@@ -79,7 +80,7 @@ export class Harness {
   // a project of its own on the server's disk (the same machine as this script)
   async project() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "longx-e2e-"));
-    const p = await this.rpc("create_project", { name: `e2e ${this.name}`, rootPath: root, initGit: false }, ["id", "slug", "rootPath"]);
+    const p = await this.rpc("create_project", { name: `e2e ${this.name} ${randomUUID()}`, rootPath: root, initGit: false }, ["id", "slug", "rootPath"]);
     this.projectId = p.id;
     this.slug = p.slug;
     this.root = root;

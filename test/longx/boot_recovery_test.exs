@@ -162,9 +162,14 @@ defmodule Longx.BootRecoveryTest do
   end
 
   test "Tracker recovery after a runtime crash still reports an orphaned turn", %{turn: turn} do
-    assert {:noreply, _} = Tracker.handle_continue(:recover, %Tracker.State{})
-    assert Ash.get!(Turn, turn.id).status == :failed
+    tracker = Process.whereis(Tracker)
+    ref = Process.monitor(tracker)
+    Process.exit(tracker, :kill)
+    assert_receive {:DOWN, ^ref, :process, ^tracker, :killed}
+    # Drive the real server, including its asynchronous checks and results.
     assert_reported(turn.kernel_turn_id)
+    assert Ash.get!(Turn, turn.id).status == :failed
+    assert Process.whereis(Tracker) not in [nil, tracker]
     # Let the local envelope request finish before Bypass is stopped.
     refute_reported("a-report-that-must-not-exist")
   end

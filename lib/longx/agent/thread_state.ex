@@ -89,6 +89,13 @@ defmodule Longx.Agent.ThreadState do
   def ingest(thread_id, method, params),
     do: GenServer.cast(via(thread_id), {:ingest, method, params})
 
+  @doc "An ordered read barrier for a turn's result; unavailable views are not evidence of failure."
+  def turn_result(thread_id, turn_id) do
+    GenServer.call(via(thread_id), {:turn_result, turn_id}, 1_000)
+  catch
+    :exit, _ -> {:error, :view_unavailable}
+  end
+
   @spec put_request(String.t(), term, String.t(), map) :: :ok
   def put_request(thread_id, id, method, params),
     do: GenServer.cast(via(thread_id), {:put_request, id, method, params})
@@ -193,6 +200,10 @@ defmodule Longx.Agent.ThreadState do
   @impl true
   # a backfill means the agent was started again from its transcript: nothing
   # it was asked before can be answered any more
+  def handle_call({:turn_result, turn_id}, _from, thread_id) do
+    {:reply, {:ok, Store.meta(thread_id).turns[turn_id]}, thread_id}
+  end
+
   def handle_call({:seed_turns, turns}, _from, thread_id) do
     Store.seed_turns(thread_id, turns)
     {:reply, :ok, thread_id}

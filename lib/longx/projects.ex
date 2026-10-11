@@ -484,12 +484,26 @@ defmodule Longx.Projects do
   """
   @spec delivery_target(String.t(), String.t(), keyword) :: {:ok, Thread.t()} | {:error, term}
   def delivery_target(project_id, address, opts \\ []) do
-    with {:ok, target} <- resolve_address(project_id, address),
+    with {:ok, target} <- resolve_delivery_target(project_id, address, opts[:callback_thread_id]),
          :ok <- not_self(target, opts[:from_thread]),
          :ok <- ensure_usable(target),
          :ok <- ensure_on_duty(target, opts[:callback_thread_id]),
          do: {:ok, target}
   end
+
+  # A persisted callback names one exact row, including a child absent from
+  # the public session directory. Never let that binding redirect elsewhere.
+  defp resolve_delivery_target(project_id, address, id)
+       when is_binary(id) and address == "~" <> id do
+    case Ash.get(Thread, id, not_found_error?: false) do
+      {:ok, %Thread{project_id: ^project_id} = thread} -> {:ok, thread}
+      {:ok, _} -> {:error, :not_found}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp resolve_delivery_target(project_id, address, _id),
+    do: resolve_address(project_id, address)
 
   defp not_self(%Thread{kernel_thread_id: id}, id), do: {:error, :self}
   defp not_self(_target, _from), do: :ok
@@ -1389,10 +1403,9 @@ defmodule Longx.Projects do
   """
   @spec interrupt_turn(Thread.t(), String.t(), keyword) :: :ok | {:error, :not_running}
   def interrupt_turn(%Thread{} = thread, kernel_turn_id, opts \\ [by: :person]) do
-    case agent_status(thread.kernel_thread_id) do
-      {:running, ^kernel_turn_id} -> Longx.Agent.interrupt(thread.kernel_thread_id, opts)
-      _ -> {:error, :not_running}
-    end
+    Longx.Agent.interrupt(thread.kernel_thread_id, Keyword.put(opts, :turn_id, kernel_turn_id))
+  catch
+    :exit, _ -> {:error, :not_running}
   end
 
   # Words are no side effect: thinking and a half-said answer are dropped with

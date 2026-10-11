@@ -229,7 +229,7 @@ function SettingsForm({ status, providers }: { status: TlsStatus; providers: Tls
         ) : null}
       </div>
 
-      <div className="grid gap-1.5">
+      <div className="grid min-w-0 gap-1.5">
         <Label id="tls-provider-label">{s.provider}</Label>
         <ProviderPicker providers={providers} value={providerCode} onChange={setProviderCode} />
       </div>
@@ -426,8 +426,8 @@ function ProviderPicker({ providers, value, onChange }: { providers: TlsProvider
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} aria-label={s.provider} className="h-10 w-full justify-between font-normal">
-          {selected ? providerLabel(selected) : <span className="text-muted-foreground">{s.chooseProvider}</span>}
+        <Button variant="outline" role="combobox" aria-expanded={open} aria-label={s.provider} className="h-auto min-h-10 w-full min-w-0 justify-between text-left font-normal whitespace-normal">
+          <span className="min-w-0 break-words">{selected ? providerLabel(selected) : <span className="text-muted-foreground">{s.chooseProvider}</span>}</span>
           <ChevronsUpDown className="size-4 opacity-50" />
         </Button>
       </PopoverTrigger>

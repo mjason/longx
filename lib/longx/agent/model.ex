@@ -538,7 +538,7 @@ defmodule Longx.Agent.Model do
   # a provider's failure event worth another try: by its type (OpenAI's
   # server_error / overloaded / rate limit) or by what it says
   @transient_types ~w(server_error overloaded_error overloaded rate_limit_error rate_limit_exceeded api_error service_unavailable timeout)
-  @transient_words ~r/retry|try again|temporar|overload|server error|internal error|unavailable|timed? ?out/i
+  @transient_words ~r/retry|try again|temporar|overload|server error|internal error|unavailable|timed? ?out|upstream HTTP\/2 stream failed/i
 
   defp transient?(payload) do
     error = payload["error"] || (payload["response"] && payload["response"]["error"]) || %{}

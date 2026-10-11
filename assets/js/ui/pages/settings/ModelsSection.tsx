@@ -232,7 +232,7 @@ function ChainRow({ alias, slugs, facts, onSave, onRemove }: { alias: ModelAlias
   const setFallback = (i: number, effort: string) => onSave([primary, ...fallbacks.map((f, j) => (j === i ? { ...f, effort } : f))]);
   const unused = slugs.filter((slug) => !links.some((l) => l.slug === slug));
   return (
-    <div className="grid items-center gap-x-4 gap-y-2 py-3 sm:grid-cols-[5.5rem_minmax(0,1fr)_2rem]" data-testid={`alias-${alias.name}`}>
+    <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-x-4 gap-y-2 py-3 sm:grid-cols-[5.5rem_minmax(0,1fr)_2rem]" data-testid={`alias-${alias.name}`}>
       <div className="flex items-baseline gap-2">
         <span className="font-mono text-sm font-medium">{alias.name}</span>
         {alias.label !== alias.name ? <span className="text-muted-foreground text-xs">{alias.label}</span> : null}
@@ -265,7 +265,7 @@ function ChainRow({ alias, slugs, facts, onSave, onRemove }: { alias: ModelAlias
       <div className="flex flex-wrap items-center gap-1 sm:col-start-2">
         <span className="text-muted-foreground mr-1 text-xs">{s.fallbacks}</span>
         {fallbacks.map((f, i) => (
-          <span key={f.slug} className="bg-muted inline-flex items-center gap-1 rounded-full py-0.5 pr-1 pl-2.5 font-mono text-xs whitespace-nowrap" data-testid={`fallback-${f.slug}`}>
+          <span key={f.slug} className="bg-muted inline-flex max-w-full flex-wrap items-center gap-1 rounded-full py-0.5 pr-1 pl-2.5 font-mono text-xs break-all" data-testid={`fallback-${f.slug}`}>
             {f.slug}
             <LevelSelect compact slug={f.slug} value={f.effort} label={s.fallbackLevel(alias.name, f.slug)} facts={facts} onChange={(effort) => setFallback(i, effort)} />
             <SearchBadge own={facts.get(f.slug)?.searches ?? false} />

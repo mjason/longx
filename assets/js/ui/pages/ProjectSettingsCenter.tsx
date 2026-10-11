@@ -40,11 +40,11 @@ function Center() {
         <div className="mx-auto w-full max-w-6xl space-y-2 px-4 py-3 md:px-6">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <h1 className="text-base font-semibold">{s.center}</h1>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <span className="text-muted-foreground text-xs">{s.scope}</span>
-          <div className="flex min-w-0 gap-1 rounded-lg bg-muted p-1" role="group" aria-label={s.scope}>
+          <div className="flex min-w-0 max-w-full gap-1 rounded-lg bg-muted p-1" role="group" aria-label={s.scope}>
             <Button size="sm" variant="ghost" className={scope === "global" ? "bg-background text-primary shadow-sm hover:bg-background hover:text-primary" : "text-muted-foreground"} aria-pressed={scope === "global"} onClick={() => changeScope("global")}>{s.global}</Button>
-            <Button size="sm" variant="ghost" className={`min-w-0 ${scope === "project" ? "bg-background text-primary shadow-sm hover:bg-background hover:text-primary" : "text-muted-foreground"}`} aria-pressed={scope === "project"} onClick={() => changeScope("project")}><span className="truncate">{s.project} · {ctx.name}</span></Button>
+            <Button size="sm" variant="ghost" className={`min-w-0 shrink ${scope === "project" ? "bg-background text-primary shadow-sm hover:bg-background hover:text-primary" : "text-muted-foreground"}`} aria-pressed={scope === "project"} onClick={() => changeScope("project")}><span className="truncate">{s.project} · {ctx.name}</span></Button>
           </div>
         </div>
         </div>

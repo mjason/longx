@@ -564,6 +564,59 @@ defmodule Longx.Agent.ModelTest do
     refute_received {:model, ^ref2, {:restart, _}}
   end
 
+  test "an upstream HTTP/2 failure event is retried, but content inspection rejection is final",
+       %{bypass: bypass} do
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    broken =
+      ~s(event: error\ndata: {"error":{"message":"Upstream HTTP/2 stream failed"}}\n\n)
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      n = Agent.get_and_update(counter, &{&1 + 1, &1 + 1})
+
+      if n == 1,
+        do: sse(conn, [broken]),
+        else: sse(conn, ResponsesFixture.assistant_message("recovered"))
+    end)
+
+    ref = make_ref()
+    assert :ok = Model.stream(@request, self(), ref)
+    assert_receive {:model, ^ref, {:restart, why}}
+    assert why =~ "HTTP/2"
+    assert_receive {:model, ^ref, {:completed, _, _}}
+    assert Agent.get(counter, & &1) == 2
+
+    rejected =
+      ~s(event: error\ndata: {"error":{"type":"invalid_request_error","message":"DataInspectionFailed: Input text data may contain inappropriate content."}}\n\n)
+
+    Bypass.expect_once(bypass, "POST", "/v1/responses", fn conn -> sse(conn, [rejected]) end)
+    ref2 = make_ref()
+    assert :ok = Model.stream(@request, self(), ref2)
+    assert_receive {:model, ^ref2, {:failed, {:model_failed, _, message}}}
+    assert message =~ "DataInspectionFailed"
+    refute_received {:model, ^ref2, {:restart, _}}
+  end
+
+  test "persistent HTTP/2 failure events exhaust the finite retry budget and stay visible",
+       %{bypass: bypass} do
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    broken =
+      ~s(event: response.failed\ndata: {"response":{"error":{"message":"Upstream HTTP/2 stream failed"}}}\n\n)
+
+    Bypass.expect(bypass, "POST", "/v1/responses", fn conn ->
+      Agent.update(counter, &(&1 + 1))
+      sse(conn, [broken])
+    end)
+
+    ref = make_ref()
+    assert :ok = Model.stream(@request, self(), ref)
+    assert_receive {:model, ^ref, {:failed, {:model_failed, _, message}}}
+    assert message =~ "HTTP/2 stream failed"
+    retries = Application.fetch_env!(:longx, Model)[:retry_ms]
+    assert Agent.get(counter, & &1) == length(retries) + 1
+  end
+
   # the ChatGPT backend once stopped mid-call (300 bytes of an apply_patch) and
   # kept the connection open: the silence limit was the request timeout, ten
   # minutes, and the retry then took a pooled connection the server had closed

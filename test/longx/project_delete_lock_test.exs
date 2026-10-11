@@ -115,7 +115,7 @@ defmodule Longx.ProjectDeleteLockTest do
   defp waiting_for_flush?(tries \\ 100) do
     {:messages, messages} = Process.info(Process.whereis(Writer), :messages)
 
-    if Enum.any?(messages, &match?({:"$gen_call", _, :flush}, &1)) do
+    if Enum.any?(messages, &match?({:"$gen_call", _, {:flush, _deadline}}, &1)) do
       true
     else
       if tries > 0 do

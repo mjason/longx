@@ -14,5 +14,13 @@ export async function run(h) {
       expect((await page.title()).length > 0, `${p}: no title`);
     }
     await h.shot(page, `${label}-settings`);
+    // Longer English labels must fit as well; restore the suite's language.
+    await page.evaluate(() => localStorage.setItem("longx:language", "en"));
+    for (const section of ["models", "https"]) {
+      await h.open(page, `/settings/${section}`);
+      await page.getByText(section === "models" ? "Tiers" : "DNS provider", { exact: true }).first().waitFor();
+      await h.noOverflow(page, `${label} en ${section}`);
+    }
+    await page.evaluate(() => localStorage.setItem("longx:language", "zh-CN"));
   }
 }

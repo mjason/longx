@@ -341,6 +341,9 @@ defmodule Longx.Agent do
   @spec interrupt(String.t()) :: :ok | {:error, :not_running}
   def interrupt(thread_id, opts \\ []), do: call(thread_id, {:interrupt, opts}, 15_000)
 
+  @doc "Reads a specific turn after this agent's preceding view events have been folded."
+  def turn_result(thread_id, turn_id), do: call(thread_id, {:turn_result, turn_id})
+
   @doc """
   Takes a turn back: the running one is stopped and dropped from the
   transcript and the view (`thread/reverted`); once the agent is idle, only
@@ -831,30 +834,16 @@ defmodule Longx.Agent do
 
   # The person may stop before an idle callback's window has elapsed: there
   # is no turn yet, but its pending wakeup must not start one behind that stop.
-  defp on_call(%State{phase: :idle, waiting: [_ | _]} = state, {:interrupt, opts}, _from) do
-    if opts[:by] == :person do
-      {:reply, :ok, state |> cancel_callback() |> Map.put(:paused, true) |> emit_waiting()}
-    else
-      {:reply, {:error, :not_running}, state}
-    end
+  defp on_call(state, {:turn_result, turn_id}, _from) do
+    {:reply, ThreadState.turn_result(state.thread_id, turn_id), state}
   end
 
-  defp on_call(%State{phase: :idle} = state, {:interrupt, _opts}, _from),
-    do: {:reply, {:error, :not_running}, state}
-
-  # `by:` says who stopped the turn — the words the row keeps and the parent
-  # reads: a bare "interrupted: no details" once read as an environment failure
-  # and the parent restarted the task the person had just stopped
   defp on_call(state, {:interrupt, opts}, _from) do
-    # the person's stop: what waits stays until they speak (assistant-ui's
-    # queue pauses on a cancel the same way) — a report once started a turn
-    # the moment the person had stopped one; paused before the turn ends, so
-    # a steer the end hands to the list is listed paused from the start
-    person? = opts[:by] == :person
-    state = if person?, do: %{state | paused: true}, else: state
-    state = state |> stop_work() |> end_turn("interrupted", interruption(opts[:by]))
-    state = if person?, do: emit_waiting(state), else: state
-    {:reply, :ok, state}
+    if opts[:turn_id] && (state.phase == :idle || state.turn_id != opts[:turn_id]) do
+      {:reply, {:error, :not_running}, state}
+    else
+      interrupt_call(state, opts)
+    end
   end
 
   defp on_call(%State{phase: phase, turn_id: turn_id} = state, {:retract, turn_id}, _from)
@@ -918,6 +907,25 @@ defmodule Longx.Agent do
 
   defp on_call(%State{turn_id: id} = state, :status, _from),
     do: {:reply, {:running, id}, state}
+
+  defp interrupt_call(%State{phase: :idle, waiting: [_ | _]} = state, opts) do
+    if opts[:by] == :person do
+      {:reply, :ok, state |> cancel_callback() |> Map.put(:paused, true) |> emit_waiting()}
+    else
+      {:reply, {:error, :not_running}, state}
+    end
+  end
+
+  defp interrupt_call(%State{phase: :idle} = state, _opts),
+    do: {:reply, {:error, :not_running}, state}
+
+  defp interrupt_call(state, opts) do
+    person? = opts[:by] == :person
+    state = if person?, do: %{state | paused: true}, else: state
+    state = state |> stop_work() |> end_turn("interrupted", interruption(opts[:by]))
+    state = if person?, do: emit_waiting(state), else: state
+    {:reply, :ok, state}
+  end
 
   defp on_cast(state, {:present, tree}), do: {:noreply, Calls.present(state, tree)}
 

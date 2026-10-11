@@ -267,6 +267,113 @@ defmodule Longx.Agent.TranscriptTest do
     GenServer.stop(pid)
   end
 
+  test "queued transcripts commit bounded FIFO batches, including an oversized item alone" do
+    alias Longx.Agent.Transcript.Writer
+    me = self()
+
+    writer = fn batch ->
+      send(me, {:bounded_batch, Enum.map(batch, & &1.seq)})
+      {:ok, length(batch)}
+    end
+
+    {:ok, pid} =
+      Writer.start_link(name: nil, write: writer, max_batch_items: 2, max_batch_bytes: 1_000)
+
+    :ok = :sys.suspend(pid)
+
+    for seq <- 1..5 do
+      input = if seq == 3, do: String.duplicate("x", 2_000), else: "small"
+      GenServer.cast(pid, {:append, %{seq: seq, input: input}})
+    end
+
+    :ok = :sys.resume(pid)
+    assert :ok = GenServer.call(pid, :flush)
+    assert_receive {:bounded_batch, [1, 2]}
+    assert_receive {:bounded_batch, [3]}
+    assert_receive {:bounded_batch, [4, 5]}
+    assert %{written: 5, dropped: 0, batches: 3} = GenServer.call(pid, :stats)
+    GenServer.stop(pid)
+  end
+
+  test "a synchronous flush respects its total budget and retains stable items for recovery" do
+    alias Longx.Agent.Transcript.Writer
+    {:ok, available} = Agent.start_link(fn -> false end)
+    me = self()
+
+    writer = fn [item] ->
+      send(me, {:budget_attempt, item.id})
+
+      if Agent.get(available, & &1) do
+        {:ok, 1}
+      else
+        Process.sleep(20)
+        raise(locked())
+      end
+    end
+
+    {:ok, pid} =
+      Writer.start_link(
+        name: nil,
+        write: writer,
+        waits: [50, 50, 50, 50],
+        sync_budget_ms: 55,
+        attempt_budget_ms: 25
+      )
+
+    # A queued asynchronous flush must not consume the test's sync budget.
+    :ok = :sys.suspend(pid)
+    GenServer.cast(pid, {:append, %{seq: 1}})
+    task = Task.async(fn -> GenServer.call(pid, :flush, 250) end)
+    :ok = :sys.resume(pid)
+    assert {:error, :locked} = Task.await(task)
+    assert_receive {:budget_attempt, id}
+    assert GenServer.call(pid, :stats).dropped == 0
+    Agent.update(available, fn _ -> true end)
+    assert :ok = GenServer.call(pid, :flush, 250)
+    assert_receive {:budget_attempt, ^id}
+    assert GenServer.call(pid, :stats).written == 1
+    GenServer.stop(pid)
+  end
+
+  test "a deadline-bearing flush that expired in the mailbox refuses work and preserves its queue" do
+    alias Longx.Agent.Transcript.Writer
+    me = self()
+
+    write = fn batch ->
+      send(me, {:deadline_write, self(), length(batch)})
+
+      receive do
+        :commit -> {:ok, length(batch)}
+      end
+    end
+
+    {:ok, pid} = Writer.start_link(name: nil, write: write)
+    :ok = :sys.suspend(pid)
+    GenServer.cast(pid, {:append, %{seq: 1}})
+    # Same message as public flush/0; deadline is already spent while queued.
+    deadline = System.monotonic_time(:millisecond) - 1
+    task = Task.async(fn -> GenServer.call(pid, {:flush, deadline}, 250) end)
+
+    assert Enum.any?(1..100, fn _ ->
+             {:messages, messages} = Process.info(pid, :messages)
+
+             if Enum.any?(messages, &match?({:"$gen_call", _, {:flush, _}}, &1)) do
+               true
+             else
+               Process.sleep(1)
+               false
+             end
+           end)
+
+    :ok = :sys.resume(pid)
+    assert {:error, :locked} = Task.await(task)
+    assert_receive {:deadline_write, ^pid, 1}
+    send(pid, :commit)
+    assert :ok = GenServer.call(pid, :flush)
+    assert %{written: 1, dropped: 0} = GenServer.call(pid, :stats)
+    GenServer.stop(pid)
+  end
+
   test "replaying an append after an ambiguous commit does not duplicate or rewrite the item" do
     id = Ash.UUID.generate()
 

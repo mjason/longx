@@ -42,7 +42,8 @@ defmodule Longx.Agent.Transcript.Writer do
 
   @doc "Everything queued before this call is written (or dropped as a bug) when it answers."
   @spec flush() :: :ok | {:error, term}
-  def flush, do: GenServer.call(__MODULE__, :flush, 60_000)
+  def flush,
+    do: GenServer.call(__MODULE__, {:flush, now() + 45_000}, 60_000)
 
   @doc "Counters (tests, the settings page): batches written, items written, items dropped."
   @spec stats() :: %{batches: non_neg_integer, written: non_neg_integer, dropped: non_neg_integer}
@@ -52,9 +53,14 @@ defmodule Longx.Agent.Transcript.Writer do
   def init(opts) do
     {:ok,
      %{
-       pending: [],
+       pending: :queue.new(),
        scheduled: false,
        waits: Keyword.get(opts, :waits, @lock_waits),
+       sync_budget_ms: Keyword.get(opts, :sync_budget_ms, 45_000),
+       attempt_budget_ms:
+         Keyword.get(opts, :attempt_budget_ms, Longx.Repo.config()[:timeout] || 30_000),
+       max_batch_items: Keyword.get(opts, :max_batch_items, 500),
+       max_batch_bytes: Keyword.get(opts, :max_batch_bytes, 2_000_000),
        left: nil,
        stalled: false,
        write: Keyword.get(opts, :write, &write_batch/1),
@@ -69,7 +75,7 @@ defmodule Longx.Agent.Transcript.Writer do
     # A disconnect can hide a successful commit. Keep the same key through
     # retries, so replaying that batch never duplicates transcript items.
     attrs = Map.put_new_lazy(attrs, :id, &Ash.UUID.generate/0)
-    {:noreply, schedule(%{state | pending: [attrs | state.pending]})}
+    {:noreply, schedule(%{state | pending: :queue.in(attrs, state.pending)})}
   end
 
   # the flush message lands behind every append that was in the mailbox when
@@ -89,28 +95,49 @@ defmodule Longx.Agent.Transcript.Writer do
   # draining between tries
   @impl true
   def handle_call(:flush, _from, state) do
-    state = write(%{state | scheduled: false}, :sync)
-    {:reply, if(state.pending == [], do: :ok, else: {:error, :locked}), state}
+    flush_reply(state, now() + state.sync_budget_ms)
+  end
+
+  def handle_call({:flush, deadline}, _from, state) do
+    flush_reply(state, min(deadline, now() + state.sync_budget_ms))
   end
 
   def handle_call(:stats, _from, state),
     do: {:reply, Map.take(state, [:batches, :written, :dropped]), state}
 
-  defp write(%{pending: []} = state, _mode), do: state
+  defp flush_reply(state, deadline) do
+    state = write(%{state | scheduled: false}, {:sync, deadline})
+    {:reply, if(:queue.is_empty(state.pending), do: :ok, else: {:error, :locked}), state}
+  end
 
-  defp write(%{pending: pending, write: write} = state, mode) do
-    batch = Enum.reverse(pending)
+  defp write(%{pending: {[], []}} = state, _mode), do: state
+
+  defp write(state, {:sync, deadline} = mode) do
+    if now() + state.attempt_budget_ms > deadline do
+      Process.send_after(self(), :flush, 2_000)
+      %{state | scheduled: true}
+    else
+      write_attempt(state, mode)
+    end
+  end
+
+  defp write(state, :async), do: write_attempt(state, :async)
+
+  defp write_attempt(%{pending: pending, write: write} = state, mode) do
+    {batch, remaining} = take_batch(pending, state.max_batch_items, state.max_batch_bytes, [])
 
     case attempt(write, batch, state.left || state.waits) do
       {:ok, n} ->
-        %{
+        next = %{
           state
-          | pending: [],
+          | pending: remaining,
             left: nil,
             stalled: false,
             batches: state.batches + 1,
             written: state.written + n
         }
+
+        continue_batch(next, mode)
 
       {:locked, e, []} ->
         unless state.stalled do
@@ -128,9 +155,16 @@ defmodule Longx.Agent.Transcript.Writer do
         Process.send_after(self(), :flush, 2_000)
         %{state | left: [], scheduled: true, stalled: true}
 
-      {:locked, _e, [wait | rest]} when mode == :sync ->
-        Process.sleep(wait)
-        write(%{state | left: rest}, :sync)
+      {:locked, _e, [wait | rest]} when is_tuple(mode) ->
+        {:sync, deadline} = mode
+
+        if now() + wait + state.attempt_budget_ms <= deadline do
+          Process.sleep(wait)
+          write(%{state | left: rest}, mode)
+        else
+          Process.send_after(self(), :flush, wait)
+          %{state | left: rest, scheduled: true}
+        end
 
       {:locked, _e, [wait | rest]} ->
         Process.send_after(self(), :flush, wait)
@@ -147,7 +181,34 @@ defmodule Longx.Agent.Transcript.Writer do
           "#{length(batch)} transcript items dropped: #{Exception.message(e)}"
         )
 
-        %{state | pending: [], left: nil, dropped: state.dropped + length(batch)}
+        continue_batch(
+          %{state | pending: remaining, left: nil, dropped: state.dropped + length(batch)},
+          mode
+        )
+    end
+  end
+
+  defp continue_batch(%{pending: {[], []}} = state, _mode), do: state
+  defp continue_batch(state, :async), do: schedule(state)
+  defp continue_batch(state, mode), do: write(state, mode)
+
+  # Bound each transaction by both count and payload. A single oversized item
+  # is allowed through alone so the queue can always make progress.
+  defp take_batch(queue, 0, _bytes, acc), do: {Enum.reverse(acc), queue}
+
+  defp take_batch(queue, items, bytes, acc) do
+    case :queue.out(queue) do
+      {:empty, _} ->
+        {Enum.reverse(acc), queue}
+
+      {{:value, item}, rest} ->
+        size = :erlang.external_size(item)
+
+        if acc != [] and size > bytes do
+          {Enum.reverse(acc), queue}
+        else
+          take_batch(rest, items - 1, bytes - size, [item | acc])
+        end
     end
   end
 
@@ -157,6 +218,8 @@ defmodule Longx.Agent.Transcript.Writer do
     e ->
       if locked?(e), do: {:locked, e, waits}, else: {:error, e}
   end
+
+  defp now, do: System.monotonic_time(:millisecond)
 
   # one transaction for the whole batch, managed by Ash (a Repo.transaction of
   # our own around Ash.create! makes Ash warn about every missed notification)

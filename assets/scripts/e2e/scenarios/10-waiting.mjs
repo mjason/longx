@@ -12,13 +12,19 @@ export async function run(h) {
   const t = await h.thread();
   await h.send(
     t.id,
-    "按顺序做两件事：1) 用 start_job 启动名为 tick 的后台任务，命令是 `sleep 5; echo tick-done`；2) 然后立刻用 exec_command 在前台运行 `sleep 60`（不要用 start_job，不要改成别的命令）。两件都做完后只回复 done。",
+    "按顺序做两件事：1) 用 start_job 启动名为 tick 的后台任务，命令是 `for i in $(seq 1 120); do if [ -f waiting-foreground-ready ]; then sleep 5; echo tick-done; exit 0; fi; sleep 1; done; exit 124`；2) 然后立刻用 exec_command 在前台运行 `touch waiting-foreground-ready; sleep 120`（不要用 start_job，不要改成别的命令）。标记文件用于确保后台任务在前台命令运行期间结束；不要先等待后台任务。两件都做完后只回复 done。",
   );
   const page = h.page;
   await h.open(page, `/p/${h.slug}/t/${t.id}`);
   const composer = page.getByRole("textbox", { name: "随心输入" });
 
-  // the job ends while `sleep 60` runs: its own row above the composer
+  // Gate the job on the foreground marker: model latency must not let the
+  // short job end before the model has called exec_command.
+  await page.getByTestId("tool-command").first().waitFor({ timeout: 90_000 });
+  // the job ends while the foreground command runs: its own row above the composer
+  const waiting = page.getByTestId("waiting-messages");
+  await waiting.waitFor({ timeout: 120_000 });
+  await waiting.getByRole("button", { expanded: false }).click();
   const row = page.getByTestId("waiting-message").first();
   await row.waitFor({ timeout: 120_000 });
   expect(/后台任务 tick/.test(await row.textContent()), `the row names the job: ${await row.textContent()}`);

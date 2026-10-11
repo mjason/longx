@@ -545,6 +545,52 @@ defmodule Longx.Projects.ThreadsTest do
     assert [%{handle: "main", state: :asleep}] = Projects.directory(project.id)
   end
 
+  test "callback identity only resolves its own usable creator inside the project", %{
+    project: project,
+    dir: dir
+  } do
+    {:ok, parent} = Projects.start_thread(project)
+
+    child =
+      Projects.create_thread!(%{
+        kernel_thread_id: "native_" <> Ash.UUID.generate(),
+        project_id: project.id,
+        cwd: dir,
+        parent_thread_id: parent.id,
+        agent_path: "/root/child"
+      })
+
+    address = "~" <> child.id
+    opts = [callback_thread_id: child.id]
+    assert {:error, :not_found} = Projects.resolve_address(project.id, address)
+    assert {:error, :not_found} = Projects.delivery_target(project.id, address)
+    assert {:ok, %Thread{id: id}} = Projects.delivery_target(project.id, address, opts)
+    assert id == child.id
+
+    assert {:error, :off_duty} =
+             Projects.delivery_target(project.id, "~" <> parent.id, opts)
+
+    assert {:error, :not_found} =
+             Projects.delivery_target(Ash.UUID.generate(), address, opts)
+
+    assert {:error, :self} =
+             Projects.delivery_target(
+               project.id,
+               address,
+               opts ++ [from_thread: child.kernel_thread_id]
+             )
+
+    Projects.touch_thread!(child, %{status: :unrecoverable})
+
+    assert {:error, :thread_unrecoverable} =
+             Projects.delivery_target(project.id, address, opts)
+
+    Projects.archive_thread!(child)
+    assert {:error, :thread_archived} = Projects.delivery_target(project.id, address, opts)
+    Projects.delete_thread(child)
+    assert {:error, :not_found} = Projects.delivery_target(project.id, address, opts)
+  end
+
   test "the all-project directory addresses resolve and deliver to a session without a handle", %{
     bypass: bypass,
     project: project
@@ -858,7 +904,10 @@ defmodule Longx.Projects.ThreadsTest do
 
     # well within the joiner's three seconds
     assert_eventually_ok(
-      fn -> match?(%Turn{status: :interrupted, error: "no progress" <> _}, turn!(turn.id)) end,
+      fn ->
+        row = turn!(turn.id)
+        row.status == :interrupted and is_binary(row.error) and row.error =~ "no progress"
+      end,
       30
     )
 
@@ -990,6 +1039,231 @@ defmodule Longx.Projects.ThreadsTest do
     # and settled the row with no agent behind it
     assert_eventually_ok(fn -> turn!(orphan.id).status == :failed end)
     assert thread!(ghost.id).status == :idle
+  end
+
+  test "a completion ahead of the watchdog in the Store is not falsely failed while its event is queued",
+       %{project: project, bypass: bypass} do
+    :ok = Phoenix.PubSub.subscribe(Longx.PubSub, Longx.Notify.topic())
+    script!(bypass, [held(ResponsesFixture.assistant_message("done"))])
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, turn} = Projects.send_message(thread, "finish")
+    assert_receive {:held, handler}, 5_000
+    assert_eventually_ok(fn -> thread.kernel_thread_id in Projects.Tracker.in_flight() end)
+    tracker = Process.whereis(Projects.Tracker)
+    :ok = :sys.suspend(tracker)
+
+    try do
+      :sys.replace_state(tracker, fn state ->
+        put_in(
+          state.in_flight[thread.kernel_thread_id].last,
+          System.monotonic_time(:millisecond) - 3_600_000
+        )
+      end)
+
+      send(tracker, :tick)
+      send(handler, :go)
+      assert_eventually_ok(fn -> Agent.status(thread.kernel_thread_id) == :idle end)
+
+      assert_eventually_ok(fn ->
+        ThreadState.Store.meta(thread.kernel_thread_id).turns[turn.kernel_turn_id]["status"] ==
+          "completed"
+      end)
+    after
+      :sys.resume(tracker)
+    end
+
+    assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
+    assert turn!(turn.id).error == nil
+    assert %{"inputTokens" => 12} = turn!(turn.id).usage
+    assert thread!(thread.id).status == :idle
+    assert_receive {:notify, %{kind: "turn_completed"}}
+    refute_receive {:notify, %{kind: "turn_failed"}}
+    refute_receive {:notify, %{kind: "turn_completed"}}
+  end
+
+  test "an unavailable asynchronous view is deferred, not treated as an orphan", %{
+    project: project,
+    bypass: bypass
+  } do
+    script!(bypass, [held(ResponsesFixture.assistant_message("done"))])
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, turn} = Projects.send_message(thread, "finish")
+    assert_receive {:held, handler}, 5_000
+    assert_eventually_ok(fn -> thread.kernel_thread_id in Projects.Tracker.in_flight() end)
+    tracker = Process.whereis(Projects.Tracker)
+    view = ThreadState.whereis(thread.kernel_thread_id)
+    :ok = :sys.suspend(tracker)
+    :ok = :sys.suspend(view)
+
+    try do
+      :sys.replace_state(tracker, fn state ->
+        put_in(
+          state.in_flight[thread.kernel_thread_id].last,
+          System.monotonic_time(:millisecond) - 3_600_000
+        )
+      end)
+
+      send(tracker, :tick)
+      send(handler, :go)
+      assert_eventually_ok(fn -> Agent.status(thread.kernel_thread_id) == :idle end)
+      :ok = :sys.resume(tracker)
+      # The barrier times out and the tick finishes without inventing failure.
+      assert_eventually_ok(fn -> map_size(:sys.get_state(tracker).checks) == 0 end)
+      assert turn!(turn.id).status == :in_progress
+      assert turn!(turn.id).error == nil
+      send(tracker, :tick)
+      assert_eventually_ok(fn -> map_size(:sys.get_state(tracker).checks) == 0 end)
+      assert turn!(turn.id).status == :in_progress
+      assert turn!(turn.id).error == nil
+    after
+      :sys.resume(view)
+      :sys.resume(tracker)
+    end
+
+    assert_eventually_ok(fn -> turn!(turn.id).status == :completed end)
+    assert turn!(turn.id).error == nil
+  end
+
+  test "completion processing does not deadlock an agent spawning a child", %{
+    project: project,
+    bypass: bypass
+  } do
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("A")),
+      ResponsesFixture.assistant_message("child done"),
+      ResponsesFixture.assistant_message("parent noted")
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, a} = Projects.send_message(thread, "A")
+    assert_receive {:held, first}, 5_000
+    assert_eventually_ok(fn -> thread.kernel_thread_id in Projects.Tracker.in_flight() end)
+    tracker = Process.whereis(Projects.Tracker)
+    parent = Agent.whereis(thread.kernel_thread_id)
+    :ok = :sys.suspend(tracker)
+
+    try do
+      send(first, :go)
+      assert_eventually_ok(fn -> Agent.status(thread.kernel_thread_id) == :idle end)
+
+      assert_eventually_ok(fn ->
+        ThreadState.Store.meta(thread.kernel_thread_id).turns[a.kernel_turn_id]["status"] ==
+          "completed"
+      end)
+
+      spawning = Task.async(fn -> Agent.spawn(thread.kernel_thread_id, "child", "look") end)
+
+      assert_eventually_ok(fn ->
+        {:messages, messages} = Process.info(tracker, :messages)
+        Enum.any?(messages, &match?({:"$gen_call", _, {:track, _}}, &1))
+      end)
+
+      :ok = :sys.resume(tracker)
+      assert {:ok, _child} = Task.await(spawning, 5_000)
+      assert Agent.whereis(thread.kernel_thread_id) == parent
+      assert Process.whereis(Projects.Tracker) == tracker
+      assert_eventually_ok(fn -> turn!(a.id).status == :completed end)
+      assert turn!(a.id).error == nil
+
+      assert_eventually_ok(fn ->
+        length(Projects.list_turns!(thread)) == 2 and
+          Enum.all?(Projects.list_turns!(thread), &(&1.status == :completed))
+      end)
+    after
+      :sys.resume(tracker)
+    end
+  end
+
+  test "the watchdog recovers A by ID while B has already started", %{
+    project: project,
+    bypass: bypass
+  } do
+    script!(bypass, [
+      held(ResponsesFixture.assistant_message("A")),
+      held(ResponsesFixture.assistant_message("B"))
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, a} = Projects.send_message(thread, "A")
+    assert_receive {:held, first}, 5_000
+    assert_eventually_ok(fn -> thread.kernel_thread_id in Projects.Tracker.in_flight() end)
+    tracker = Process.whereis(Projects.Tracker)
+    :ok = :sys.suspend(tracker)
+    b_id = "turn_" <> Ash.UUID.generate()
+
+    try do
+      :sys.replace_state(tracker, fn state ->
+        put_in(
+          state.in_flight[thread.kernel_thread_id].last,
+          System.monotonic_time(:millisecond) - 3_600_000
+        )
+      end)
+
+      send(tracker, :tick)
+      send(first, :go)
+      assert_eventually_ok(fn -> Agent.status(thread.kernel_thread_id) == :idle end)
+      # An idle kernel may start the next turn before Projects consumes A's
+      # completion (e.g. a watch or waiting message, bypassing the page gate).
+      assert {:ok, _} = Agent.send(thread.kernel_thread_id, "B", turn_id: b_id)
+      assert_receive {:held, second}, 5_000
+
+      assert_eventually_ok(fn ->
+        ThreadState.Store.meta(thread.kernel_thread_id).turn["id"] == b_id
+      end)
+
+      :ok = :sys.resume(tracker)
+      assert_eventually_ok(fn -> turn!(a.id).status == :completed end)
+      assert turn!(a.id).error == nil
+      assert thread!(thread.id).status == :active
+      assert {:running, ^b_id} = Agent.status(thread.kernel_thread_id)
+      assert thread.kernel_thread_id in Projects.Tracker.in_flight()
+      send(second, :go)
+
+      assert_eventually_ok(fn ->
+        match?({:ok, %Turn{status: :completed}}, Projects.get_turn_by_kernel_id(b_id))
+      end)
+    after
+      :sys.resume(tracker)
+    end
+  end
+
+  test "late completion replay and interruption for A do not alter running B", %{
+    project: project,
+    bypass: bypass
+  } do
+    script!(bypass, [
+      ResponsesFixture.assistant_message("A"),
+      held(ResponsesFixture.assistant_message("B"))
+    ])
+
+    {:ok, thread} = Projects.start_thread(project)
+    {:ok, a} = Projects.send_message(thread, "A")
+    assert_eventually_ok(fn -> turn!(a.id).status == :completed end)
+    completed_at = turn!(a.id).completed_at
+    {:ok, b} = Projects.send_message(thread, "B")
+    assert_receive {:held, handler}, 5_000
+    assert {:error, :not_running} = Projects.interrupt_turn(thread, a.kernel_turn_id)
+    assert {:running, id} = Agent.status(thread.kernel_thread_id)
+    assert id == b.kernel_turn_id
+
+    ThreadState.ingest(thread.kernel_thread_id, "turn/completed", %{
+      "threadId" => thread.kernel_thread_id,
+      "turn" => %{"id" => a.kernel_turn_id, "status" => "completed"}
+    })
+
+    assert {:ok, _} = ThreadState.turn_result(thread.kernel_thread_id, a.kernel_turn_id)
+    _ = :sys.get_state(Projects.Tracker)
+    assert thread!(thread.id).status == :active
+
+    assert %{"id" => id, "status" => "inProgress"} =
+             ThreadState.Store.meta(thread.kernel_thread_id).turn
+
+    assert id == b.kernel_turn_id
+    assert turn!(a.id).completed_at == completed_at
+    assert turn!(b.id).status == :in_progress
+    assert thread.kernel_thread_id in Projects.Tracker.in_flight()
+    send(handler, :go)
+    assert_eventually_ok(fn -> turn!(b.id).status == :completed end)
   end
 
   test "the stall watchdog settles a turn whose agent is no longer running instead of leaving the thread active for ever",

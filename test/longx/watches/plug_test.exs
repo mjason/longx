@@ -195,20 +195,35 @@ defmodule Longx.Watches.PlugTest do
     assert [] == Path.wildcard(Path.join(dir, ".longx/local/watches/wait-*.exs"))
   end
 
-  test "wait_until binds its callback without putting the session on duty",
+  test "wait_until wakes its off-duty child creator after its process exits",
        %{bypass: bypass, dir: dir, project: project} do
     script!(bypass, [
       ResponsesFixture.function_call("wait_until", nil, %{
         "at" => "2030-01-01T09:00:00+08:00",
         "message" => "look again"
       }),
-      ResponsesFixture.assistant_message("later")
+      ResponsesFixture.assistant_message("later"),
+      ResponsesFixture.assistant_message("parent noted")
     ])
 
-    {:ok, thread} = Projects.start_thread(project)
+    {:ok, parent} = Projects.start_thread(project)
+
+    thread =
+      Projects.create_thread!(%{
+        kernel_thread_id: "native_" <> Ash.UUID.generate(),
+        project_id: project.id,
+        cwd: dir,
+        parent_thread_id: parent.id,
+        agent_path: "/root/callback-child"
+      })
+
     refute Projects.on_duty?(thread)
     {:ok, turn} = Projects.send_message(thread, "wait a bit")
     eventually(fn -> Ash.get!(Turn, turn.id).status == :completed end)
+
+    eventually(fn ->
+      match?([%Turn{status: :completed}], Projects.list_turns!(parent))
+    end)
 
     assert_receive {:request, _first}
     assert_receive {:request, second}
@@ -226,7 +241,12 @@ defmodule Longx.Watches.PlugTest do
     {:ok, thread} = Projects.set_handle(thread, "renamed")
     {:ok, thread} = Projects.set_handle(thread, nil)
     :ok = Longx.Agent.stop(thread.kernel_thread_id)
-    script!(bypass, [ResponsesFixture.assistant_message("back")])
+
+    script!(bypass, [
+      ResponsesFixture.assistant_message("back"),
+      ResponsesFixture.assistant_message("parent noted again")
+    ])
+
     assert {:ok, %{sends: 1, last_error: nil}} = Watches.run(watch)
 
     eventually(fn ->

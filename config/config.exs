@@ -148,7 +148,9 @@ config :longx, Longx.Upgrade, repo: "mjason/longx", tick: :timer.hours(6)
 # token refresh (Longx.Credentials.RefreshWorker) every five minutes, the
 # watches every minute, the HTTPS certificate's renewal once a day
 config :longx, Oban,
-  engine: Oban.Engines.Lite,
+  engine: Longx.ObanEngine,
+  prefix: false,
+  peer: Oban.Peers.Isolated,
   # the Postgres notifier is the default and needs postgrex; one BEAM, so PG
   notifier: Oban.Notifiers.PG,
   repo: Longx.Repo,
