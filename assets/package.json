@@ -12,6 +12,7 @@
     "test:projects": "node scripts/test-project-switch.mjs",
     "test:chat-projects": "node scripts/test-chat-projects.mjs",
     "test:queued-attachments": "node scripts/test-queued-attachments.mjs",
+    "test:composer-layout": "node scripts/test-composer-layout.mjs",
     "test:command-guards": "node scripts/test-command-guards.mjs",
     "test:file-changes": "node scripts/test-file-change-cards.mjs",
     "test:markdown": "node scripts/test-cjk-markdown.mjs",

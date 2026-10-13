@@ -170,9 +170,9 @@ export function JobWorkStatus() {
   const incomplete = pending.some(job => job.activity === "incomplete");
   const label = incomplete ? t.jobWork.states.incomplete : t.jobWork.states[processing ? "processing" : running ? "waiting" : "pending"];
   return <Popover open={expanded} onOpenChange={setExpanded}>
-    <span className="min-w-0" data-testid="job-work-status" role="status">
+    <span className="min-w-0 max-w-[50%] shrink-0" data-testid="job-work-status" role="status">
       <PopoverTrigger asChild>
-        <button type="button" className={`flex min-w-0 max-w-[32vw] items-center gap-1 truncate text-xs hover:underline ${incomplete ? "text-destructive" : "text-warning"}`} aria-label={`${t.jobWork.show} · ${t.jobWork.count(pending.length)}`} title={`${label} · ${t.jobWork.count(pending.length)}`}>
+        <button type="button" className={`flex min-w-0 max-w-full items-center gap-1 truncate text-xs hover:underline ${incomplete ? "text-destructive" : "text-warning"}`} aria-label={`${t.jobWork.show} · ${t.jobWork.count(pending.length)}`} title={`${label} · ${t.jobWork.count(pending.length)}`}>
           <Terminal className="size-3 shrink-0" /><span className="truncate">{label} </span><span className="shrink-0">· {pending.length}</span>
         </button>
       </PopoverTrigger>

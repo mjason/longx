@@ -26,26 +26,26 @@ import { useChat } from "./ChatProvider";
 const JobWorkStatus = lazy(() => import("./ThreadJobs").then(module => ({ default: module.JobWorkStatus })));
 
 /**
- * Left of the composer rail: what the turn is doing right now (running,
- * or waiting on the person to act).
+ * Above the controls on narrow screens, left of them on desktop: what the
+ * turn is doing right now (running, or waiting on the person to act).
  */
 export function ComposerLeading() {
     useTranslation();
   const { state, view } = useChat();
   return (
     <div
-      className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs"
+      className="text-muted-foreground order-first flex min-w-0 basis-full items-center gap-2 text-xs empty:hidden sm:order-none sm:basis-auto sm:flex-1"
       data-testid="turn-bar"
     >
       {state === "running" || state === "compacting" ? (
-        <span className="flex items-center gap-1">
-          <Loader2 className="size-3.5 animate-spin" />{" "}
-          {progressLabel(view.progress, t.turnRunning)}
+        <span className="flex min-w-0 items-center gap-1" title={progressLabel(view.progress, t.turnRunning)}>
+          <Loader2 className="size-3.5 shrink-0 animate-spin" />
+          <span className="truncate">{progressLabel(view.progress, t.turnRunning)}</span>
         </span>
       ) : state === "waiting" ? (
-        <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-          <ShieldAlert className="size-3.5" />{" "}
-          {t.awaitingAction}
+        <span className="flex min-w-0 items-center gap-1 text-amber-600 dark:text-amber-400" title={t.awaitingAction}>
+          <ShieldAlert className="size-3.5 shrink-0" />
+          <span className="truncate">{t.awaitingAction}</span>
         </span>
       ) : null}
       <Suspense fallback={null}><JobWorkStatus /></Suspense>

@@ -440,14 +440,16 @@ export const ComposerAction: FC = () => {
     useTranslation();
   const { ComposerLeading, ComposerTrailing } = useContext(ThreadComponentsContext);
   return (
-    <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-2">
+    <div className="aui-composer-action-wrapper relative flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:flex-nowrap">
+      <div className="flex shrink-0 items-center">
         <AuiIf condition={(s) => s.thread.capabilities.attachments}>
           <ComposerAddAttachment />
         </AuiIf>
+      </div>
+      <div className="contents">
         {ComposerLeading ? <ComposerLeading /> : null}
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="ms-auto flex min-w-0 items-center gap-1.5">
         {ComposerTrailing ? <ComposerTrailing /> : null}
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>
