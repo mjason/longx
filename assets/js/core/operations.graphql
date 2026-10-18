@@ -228,6 +228,8 @@ mutation DeleteProvider($id: ID!) { deleteProvider(id: $id) { result { id name s
 
 mutation DiscoverModels($input: DiscoverModelsInput!) { discoverModels(input: $input) { ok models error } }
 
+mutation PrepareProviderLogin($input: PrepareProviderLoginInput!) { prepareProviderLogin(input: $input)  }
+
 mutation CreateModel($input: CreateModelInput!) { createModel(input: $input) { result { id name slug upstreamId contextWindow default reasoningLevels reasoningEffort reasoningSummary verbosity hostedWebSearch imageGeneration maxOutputTokens insertedAt updatedAt providerId } } }
 
 mutation UpdateModel($id: ID!, $input: UpdateModelInput) { updateModel(id: $id, input: $input) { result { id name slug upstreamId contextWindow default reasoningLevels reasoningEffort reasoningSummary verbosity hostedWebSearch imageGeneration maxOutputTokens insertedAt updatedAt providerId } } }

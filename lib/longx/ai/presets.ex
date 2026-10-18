@@ -387,12 +387,70 @@ defmodule Longx.AI.Presets do
     end
   end
 
+  @doc "Prepares the built-in ChatGPT provider for explicit reauthentication without changing its models."
+  @spec prepare_login(Provider.t()) :: {:ok, String.t()} | {:error, term}
+  def prepare_login(%Provider{id: id}) do
+    :global.trans(
+      {{__MODULE__, :prepare_login, id}, self()},
+      fn ->
+        with {:ok, provider} <- Ash.get(Provider, id), do: prepare_login_current(provider)
+      end,
+      [node()]
+    )
+  end
+
+  defp prepare_login_current(provider) do
+    existing =
+      if provider.credential_id,
+        do:
+          Ash.get(Longx.Credentials.Credential, provider.credential_id, not_found_error?: false),
+        else: {:ok, nil}
+
+    case existing do
+      {:ok, %{kind: :oauth2} = cred} ->
+        {:ok, cred.id}
+
+      {:ok, nil} ->
+        recover_login(provider)
+
+      {:error, _} = error ->
+        error
+
+      _ ->
+        {:error, "the provider credential is not a ChatGPT OAuth2 login"}
+    end
+  end
+
+  defp recover_login(
+         %Provider{slug: "chatgpt", base_url: "https://chatgpt.com/backend-api/codex"} = provider
+       ) do
+    with {:ok, %{kind: :oauth2, device_flow: :openai} = cred} <-
+           upsert_credential(%{credential: true}),
+         {:ok, _} <- AI.update_provider(provider, %{credential_id: cred.id}) do
+      {:ok, cred.id}
+    else
+      {:ok, _} -> {:error, "the chatgpt credential is not a ChatGPT OAuth2 login"}
+      error -> error
+    end
+  end
+
+  defp recover_login(_provider),
+    do: {:error, "login recovery is only available for the built-in ChatGPT provider"}
+
   # a preset whose key is a login makes (or keeps) its OAuth2 credential
   defp upsert_credential(%{credential: true}) do
-    case Longx.Credentials.fetch(@chatgpt_credential.name) do
-      {:ok, cred} -> {:ok, cred}
-      {:error, _} -> Longx.Credentials.create_oauth2(@chatgpt_credential)
-    end
+    # Shared by template application and login recovery: never race two creates,
+    # and never upsert over a credential whose tokens the person already owns.
+    :global.trans(
+      {{__MODULE__, :credential, @chatgpt_credential.name}, self()},
+      fn ->
+        case Longx.Credentials.fetch(@chatgpt_credential.name) do
+          {:ok, cred} -> {:ok, cred}
+          {:error, _} -> Longx.Credentials.create_oauth2(@chatgpt_credential)
+        end
+      end,
+      [node()]
+    )
   end
 
   defp upsert_credential(_preset), do: {:ok, nil}

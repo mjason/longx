@@ -23,6 +23,7 @@ import {
   setModelAlias,
   setDefaultModel,
   applyPreset,
+  prepareProviderLogin,
   checkModel,
   createModel,
   createProvider,
@@ -437,13 +438,11 @@ describe("SettingsPage", () => {
       await user.click(within(login).getByRole("button", { name: "改用浏览器登录" }));
       await waitFor(() => expect(credentialLoginUrl).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ id: "cred-chatgpt" }) })));
       await user.type(within(login).getByLabelText("登录后的地址"), "http://localhost:1455/auth/callback?code=c1&state=s1");
+      vi.mocked(listCredentials).mockResolvedValue(ok([credential("chatgpt", { id: "cred-chatgpt", kind: "oauth2", status: "ready", hasSecret: false, deviceFlow: "openai" })]) as never);
       await user.click(within(login).getByRole("button", { name: "完成登录" }));
       await waitFor(() => expect(credentialCompleteUrl).toHaveBeenCalledWith(expect.objectContaining({ input: { url: "http://localhost:1455/auth/callback?code=c1&state=s1" } })));
 
-      // it polls; once the vendor says done the credential is refreshed and the dialog says so
-      vi.mocked(credentialDevicePoll).mockResolvedValue(ok({ status: "ok", message: null }) as never);
-      await waitFor(() => expect(credentialDevicePoll).toHaveBeenCalledWith(expect.objectContaining({ input: { state: "dev-state" } })), { timeout: 4000 });
-      vi.mocked(listCredentials).mockResolvedValue(ok([credential("chatgpt", { id: "cred-chatgpt", kind: "oauth2", status: "ready", hasSecret: false, deviceFlow: "openai" })]) as never);
+      // Only this attempt's successful completion says logged in.
       await waitFor(() => expect(login).toHaveTextContent("已登录"), { timeout: 4000 });
       await user.click(within(login).getByRole("button", { name: "完成" }));
 
@@ -457,6 +456,89 @@ describe("SettingsPage", () => {
       vi.mocked(listCredentials).mockResolvedValue(ok([credential("svc")]) as never);
     }
   }, 20_000);
+
+  test("providers: a missing ChatGPT credential is repaired before requesting a new device code", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listProviders).mockResolvedValue(ok([provider(3, { name: "ChatGPT", slug: "chatgpt", credentialId: "deleted-id" })]) as never);
+    vi.mocked(listCredentials).mockResolvedValue(ok([]) as never);
+    try {
+      renderAt("/settings/providers");
+      const card = await screen.findByTestId("provider-p3");
+      await user.click(within(card).getByRole("button", { name: "ChatGPT 的操作" }));
+      await user.click(await screen.findByRole("menuitem", { name: "登录 ChatGPT" }));
+      await waitFor(() => expect(prepareProviderLogin).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "p3" } })));
+      await waitFor(() => expect(credentialDeviceBegin).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "cred-chatgpt" } })));
+      expect(await screen.findByTestId("device-code")).toHaveTextContent("WXYZ-1234");
+    } finally {
+      vi.mocked(listProviders).mockResolvedValue(ok([provider(1), provider(2)]) as never);
+      vi.mocked(listCredentials).mockResolvedValue(ok([credential("svc")]) as never);
+    }
+  });
+
+  test("providers: ready is not a new login; a failed device code can be replaced and the new attempt completes", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listProviders).mockResolvedValue(ok([provider(3, { name: "ChatGPT", slug: "chatgpt", credentialId: "cred-chatgpt" })]) as never);
+    vi.mocked(listCredentials).mockResolvedValue(ok([credential("chatgpt", { id: "cred-chatgpt", status: "ready", deviceFlow: "openai" })]) as never);
+    vi.mocked(credentialDevicePoll)
+      .mockResolvedValueOnce(ok({ status: "error", message: "device code expired" }) as never)
+      .mockResolvedValue(ok({ status: "ok", message: null }) as never);
+    try {
+      renderAt("/settings/providers");
+      const card = await screen.findByTestId("provider-p3");
+      await user.click(within(card).getByRole("button", { name: "ChatGPT 的操作" }));
+      await user.click(await screen.findByRole("menuitem", { name: "登录 ChatGPT" }));
+      const login = await screen.findByRole("dialog", { name: /登录 ChatGPT/ });
+      expect(await within(login).findByTestId("device-code")).toHaveTextContent("WXYZ-1234");
+      expect(within(login).queryByTestId("chatgpt-logged-in")).not.toBeInTheDocument();
+      expect(await within(login).findByRole("alert", {}, { timeout: 3000 })).toHaveTextContent("device code expired");
+      vi.mocked(credentialDeviceBegin).mockResolvedValueOnce(ok({ state: "new-state", userCode: "NEW-CODE", verificationUrl: "https://auth.openai.com/codex/device", interval: 1 }) as never);
+      await user.click(within(login).getByRole("button", { name: "重新获取设备码" }));
+      expect(await within(login).findByTestId("device-code")).toHaveTextContent("NEW-CODE");
+      await within(login).findByTestId("chatgpt-logged-in", {}, { timeout: 3000 });
+      expect(credentialDevicePoll).toHaveBeenLastCalledWith(expect.objectContaining({ input: { state: "new-state" } }));
+    } finally {
+      vi.mocked(listProviders).mockResolvedValue(ok([provider(1), provider(2)]) as never);
+      vi.mocked(listCredentials).mockResolvedValue(ok([credential("svc")]) as never);
+      vi.mocked(credentialDevicePoll).mockResolvedValue(ok({ status: "pending", message: null }) as never);
+    }
+  }, 12_000);
+
+  test("providers: the built-in ChatGPT provider can recover when its credential id is null", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listProviders).mockResolvedValue(ok([provider(3, { name: "ChatGPT", slug: "chatgpt", baseUrl: "https://chatgpt.com/backend-api/codex", credentialId: null })]) as never);
+    try {
+      renderAt("/settings/providers");
+      const card = await screen.findByTestId("provider-p3");
+      await user.click(within(card).getByRole("button", { name: "ChatGPT 的操作" }));
+      await user.click(await screen.findByRole("menuitem", { name: "登录 ChatGPT" }));
+      await waitFor(() => expect(prepareProviderLogin).toHaveBeenCalledWith(expect.objectContaining({ input: { id: "p3" } })));
+      expect(await screen.findByTestId("device-code")).toHaveTextContent("WXYZ-1234");
+    } finally {
+      vi.mocked(listProviders).mockResolvedValue(ok([provider(1), provider(2)]) as never);
+    }
+  });
+
+  test("providers: a slow device poll does not overlap with another poll", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listProviders).mockResolvedValue(ok([provider(3, { name: "ChatGPT", slug: "chatgpt", credentialId: "cred-chatgpt" })]) as never);
+    vi.mocked(listCredentials).mockResolvedValue(ok([]) as never);
+    let finish!: (result: never) => void;
+    vi.mocked(credentialDevicePoll).mockClear().mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }) as never);
+    try {
+      renderAt("/settings/providers");
+      const card = await screen.findByTestId("provider-p3");
+      await user.click(within(card).getByRole("button", { name: "ChatGPT 的操作" }));
+      await user.click(await screen.findByRole("menuitem", { name: "登录 ChatGPT" }));
+      await waitFor(() => expect(credentialDevicePoll).toHaveBeenCalledTimes(1), { timeout: 3000 });
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      expect(credentialDevicePoll).toHaveBeenCalledTimes(1);
+      finish(ok({ status: "ok", message: null }) as never);
+      await screen.findByTestId("chatgpt-logged-in");
+    } finally {
+      vi.mocked(listProviders).mockResolvedValue(ok([provider(1), provider(2)]) as never);
+      vi.mocked(listCredentials).mockResolvedValue(ok([credential("svc")]) as never);
+    }
+  }, 10_000);
 
   test("providers: a provider's stream idle timeout — how long a begun stream may say nothing before it is asked again — is set in its advanced options (codex's 5 min by default)", async () => {
     setViewport(1280);

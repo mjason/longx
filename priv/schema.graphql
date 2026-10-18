@@ -2438,6 +2438,10 @@ type Model {
   provider: Provider!
 }
 
+input PrepareProviderLoginInput {
+  id: ID!
+}
+
 input DiscoverModelsInput {
   id: ID!
 }
@@ -4484,6 +4488,7 @@ type RootMutationType {
   updateProvider(id: ID!, input: UpdateProviderInput): UpdateProviderResult
   deleteProvider(id: ID!): DeleteProviderResult
   discoverModels(input: DiscoverModelsInput!): DiscoverModels!
+  prepareProviderLogin(input: PrepareProviderLoginInput!): ID!
   createModel(input: CreateModelInput!): CreateModelResult
   updateModel(id: ID!, input: UpdateModelInput): UpdateModelResult
   makeDefaultModel(id: ID!): MakeDefaultModelResult

@@ -241,6 +241,9 @@ defmodule Longx.Credentials.OAuthTest do
     assert {:ok, %{access_token: "at-1", refresh_token: "rt-1"}} = Credentials.reveal("oa")
 
     Bypass.expect_once(bypass, "POST", "/token", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      # Even a caller holding an old struct uses the rotated token from storage.
+      assert URI.decode_query(body)["refresh_token"] == "rt-1"
       Plug.Conn.send_resp(conn, 500, "down")
     end)
 
@@ -256,6 +259,162 @@ defmodule Longx.Credentials.OAuthTest do
       })
 
     assert {:error, :needs_login} = OAuth.refresh(plain)
+  end
+
+  test "concurrent refreshes serialize and reload a rotating token", %{bypass: bypass, cred: cred} do
+    {:ok, cred} =
+      Credentials.store_tokens(cred, %{
+        access_token: "old-access",
+        refresh_token: "rt-0",
+        expires_at: DateTime.add(DateTime.utc_now(), -1, :second)
+      })
+
+    # A model request has already decrypted this snapshot before the worker runs.
+    {:ok, snapshot} = Credentials.reveal(cred)
+    owner = self()
+
+    Bypass.stub(bypass, "POST", "/token", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      token = URI.decode_query(body)["refresh_token"]
+      send(owner, {:refresh_used, token, self()})
+
+      case token do
+        "rt-0" ->
+          receive do
+            :continue ->
+              json!(conn, 200, %{
+                access_token: "new-access",
+                refresh_token: "rt-1",
+                expires_in: 3600
+              })
+          after
+            5000 -> Plug.Conn.send_resp(conn, 500, "test timed out")
+          end
+
+        "rt-1" ->
+          json!(conn, 200, %{
+            access_token: "newest-access",
+            refresh_token: "rt-2",
+            expires_in: 3600
+          })
+      end
+    end)
+
+    first = Task.async(fn -> OAuth.refresh(snapshot) end)
+    assert_receive {:refresh_used, "rt-0", server}, 2000
+    second = Task.async(fn -> OAuth.refresh(snapshot) end)
+    refute_receive {:refresh_used, _, _}, 100
+    send(server, :continue)
+    assert {:ok, _} = Task.await(first)
+    assert_receive {:refresh_used, "rt-1", _}, 2000
+    assert {:ok, _} = Task.await(second)
+
+    assert {:ok, %{refresh_token: "rt-2", access_token: "newest-access"}} =
+             Credentials.reveal("oa")
+
+    assert [%{status: :ready}] = Credentials.list()
+  end
+
+  test "a device state consumed while a poll is in flight does not crash", %{
+    bypass: bypass,
+    cred: cred
+  } do
+    cred = Credentials.update_credential!(cred, %{device_flow: :openai})
+
+    Bypass.expect_once(bypass, "POST", "/api/accounts/deviceauth/usercode", fn conn ->
+      json!(conn, 200, %{device_auth_id: "device-id", user_code: "TEST-CODE", interval: 1})
+    end)
+
+    assert {:ok, %{state: state}} = OAuth.device_begin(cred)
+
+    Bypass.expect_once(bypass, "POST", "/api/accounts/deviceauth/token", fn conn ->
+      # Another poll or expiry wins the take while this request was away.
+      assert {:ok, _} = Longx.Credentials.Logins.take(state)
+      json!(conn, 200, %{authorization_code: "authorization-code", code_verifier: "verifier"})
+    end)
+
+    assert {:error, :unknown_state} = OAuth.device_poll(state)
+  end
+
+  test "automatic refresh waiters reuse a fresh token instead of rotating again", %{
+    bypass: bypass,
+    cred: cred
+  } do
+    cred =
+      Credentials.store_tokens!(cred, %{
+        access_token: "old",
+        refresh_token: "rt-old",
+        expires_at: DateTime.add(DateTime.utc_now(), -1, :second)
+      })
+
+    Bypass.expect_once(bypass, "POST", "/token", fn conn ->
+      json!(conn, 200, %{access_token: "fresh", refresh_token: "rt-fresh", expires_in: 3600})
+    end)
+
+    tasks = for _ <- 1..2, do: Task.async(fn -> OAuth.refresh(cred, within_seconds: 60) end)
+
+    for task <- tasks do
+      assert {:ok, fresh} = Task.await(task)
+      assert {:ok, %{access_token: "fresh"}} = Credentials.reveal(fresh)
+    end
+
+    assert [%{status: :ready}] = Credentials.list()
+  end
+
+  test "a new login waits for an old failing refresh and its tokens win", %{
+    bypass: bypass,
+    cred: cred,
+    base: base
+  } do
+    cred =
+      Credentials.store_tokens!(cred, %{
+        access_token: "old",
+        refresh_token: "old-refresh",
+        expires_at: DateTime.add(DateTime.utc_now(), -1, :second)
+      })
+
+    owner = self()
+
+    Bypass.stub(bypass, "POST", "/token", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+
+      case URI.decode_query(body)["grant_type"] do
+        "refresh_token" ->
+          send(owner, {:old_refresh, self()})
+
+          receive do
+            :continue -> json!(conn, 400, %{error: "invalid_grant"})
+          after
+            5000 -> Plug.Conn.send_resp(conn, 500, "test timed out")
+          end
+
+        "authorization_code" ->
+          send(owner, :new_login)
+
+          json!(conn, 200, %{
+            access_token: "new-login",
+            refresh_token: "new-refresh",
+            expires_in: 3600
+          })
+      end
+    end)
+
+    refresh = Task.async(fn -> OAuth.refresh(cred) end)
+    assert_receive {:old_refresh, server}, 2000
+
+    login =
+      Task.async(fn -> OAuth.exchange(cred, "new-code", "verifier", base <> "/callback") end)
+
+    refute_receive :new_login, 100
+    send(server, :continue)
+    assert {:error, _} = Task.await(refresh)
+    assert {:ok, _} = Task.await(login)
+    assert_receive :new_login
+
+    assert {:ok, %{access_token: "new-login", refresh_token: "new-refresh"}} =
+             Credentials.reveal("oa")
+
+    assert [%{status: :ready, last_error: nil}] = Credentials.list()
   end
 
   test "dynamic client registration (RFC 7591) runs before the first login when there is no client id",

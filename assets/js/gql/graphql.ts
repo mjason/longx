@@ -1118,6 +1118,10 @@ export type ModelSortInput = {
   order?: SortOrder | null | undefined;
 };
 
+export type PrepareProviderLoginInput = {
+  id: string | number;
+};
+
 export type ProjectFilterAgentSettings = {
   eq?: unknown;
   greaterThan?: unknown;
@@ -4107,6 +4111,13 @@ export type DiscoverModelsMutationVariables = Exact<{
 
 export type DiscoverModelsMutation = { discoverModels: { ok: boolean, models: Array<unknown>, error: string | null } };
 
+export type PrepareProviderLoginMutationVariables = Exact<{
+  input: PrepareProviderLoginInput;
+}>;
+
+
+export type PrepareProviderLoginMutation = { prepareProviderLogin: string };
+
 export type CreateModelMutationVariables = Exact<{
   input: CreateModelInput;
 }>;
@@ -6257,6 +6268,11 @@ export const DiscoverModelsDocument = /*#__PURE__*/ new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<DiscoverModelsMutation, DiscoverModelsMutationVariables>;
+export const PrepareProviderLoginDocument = /*#__PURE__*/ new TypedDocumentString(`
+    mutation PrepareProviderLogin($input: PrepareProviderLoginInput!) {
+  prepareProviderLogin(input: $input)
+}
+    `) as unknown as TypedDocumentString<PrepareProviderLoginMutation, PrepareProviderLoginMutationVariables>;
 export const CreateModelDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CreateModel($input: CreateModelInput!) {
   createModel(input: $input) {

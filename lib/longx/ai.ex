@@ -51,6 +51,7 @@ defmodule Longx.AI do
       update Longx.AI.Provider, :update_provider, :update
       destroy Longx.AI.Provider, :delete_provider, :delete
       action Longx.AI.Provider, :discover_models, :discover_models
+      action Longx.AI.Provider, :prepare_provider_login, :prepare_login
       create Longx.AI.Model, :create_model, :create
       update Longx.AI.Model, :update_model, :update
       update Longx.AI.Model, :make_default_model, :make_default
@@ -70,6 +71,7 @@ defmodule Longx.AI do
       define :update_provider, action: :update
       define :list_providers, action: :read
       define :get_provider_by_slug, action: :by_slug, args: [:slug]
+      define :prepare_provider_login, action: :prepare_login, args: [:id]
       define :record_provider_error, action: :record_error, args: [:message]
       define :clear_provider_error, action: :clear_error
       define :record_provider_check, action: :record_check, args: [:error]

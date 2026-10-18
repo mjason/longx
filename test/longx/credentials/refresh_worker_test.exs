@@ -44,6 +44,7 @@ defmodule Longx.Credentials.RefreshWorkerTest do
     _expired = make.("gone", -60, true)
 
     assert :ok = perform_job(RefreshWorker, %{})
+    assert :ok = perform_job(RefreshWorker, %{})
 
     ids = all_enqueued(worker: RefreshWorker) |> Enum.map(& &1.args["id"]) |> Enum.sort()
     gone = Credentials.fetch("gone") |> elem(1)
@@ -62,6 +63,12 @@ defmodule Longx.Credentials.RefreshWorkerTest do
 
     assert :ok = perform_job(RefreshWorker, %{"id" => cred.id})
     assert {:ok, %{access_token: "at-new", refresh_token: "rt-soon"}} = Credentials.reveal("soon")
+    # A duplicate/late job rechecks expiry inside the token lock.
+    assert :ok = perform_job(RefreshWorker, %{"id" => cred.id})
+
+    Credentials.store_tokens!(Ash.get!(Credential, cred.id), %{
+      expires_at: DateTime.add(DateTime.utc_now(), -1, :second)
+    })
 
     Bypass.expect_once(bypass, "POST", "/token", fn conn ->
       Plug.Conn.send_resp(conn, 401, "nope")

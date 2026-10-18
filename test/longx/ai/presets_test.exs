@@ -86,6 +86,60 @@ defmodule Longx.AI.PresetsTest do
   end
 
   describe "apply/2" do
+    test "login recovery replaces a deleted credential without resetting the provider or its models" do
+      {:ok, %{provider: provider, models: [model | _], credential: cred}} =
+        Presets.apply("chatgpt")
+
+      provider = AI.update_provider!(provider, %{name: "My ChatGPT", max_concurrent_requests: 3})
+      model = AI.update_model!(model, %{context_window: 123_456, reasoning_effort: "low"})
+      :ok = Longx.Credentials.delete(cred)
+      before_models = AI.list_models!()
+
+      assert {:ok, id} = AI.prepare_provider_login(provider.id)
+      refute id == cred.id
+      assert {:ok, same_id} = AI.prepare_provider_login(provider.id)
+      assert same_id == id
+      repaired = AI.get_provider_by_slug!("chatgpt")
+      assert repaired.id == provider.id
+      assert repaired.name == "My ChatGPT"
+      assert repaired.max_concurrent_requests == 3
+      assert repaired.credential_id == id
+
+      assert Enum.map(AI.list_models!(), &Map.delete(&1, :provider)) ==
+               Enum.map(before_models, &Map.delete(&1, :provider))
+
+      assert AI.get_model_by_slug!(model.slug).context_window == 123_456
+      assert {:ok, %{id: ^id, status: :needs_login}} = Longx.Credentials.fetch("chatgpt")
+    end
+
+    test "login recovery does not attach a subscription token to a changed endpoint" do
+      {:ok, %{provider: provider, credential: cred}} = Presets.apply("chatgpt")
+      provider = AI.update_provider!(provider, %{base_url: "https://other.example/v1"})
+      :ok = Longx.Credentials.delete(cred)
+      assert {:error, _} = AI.prepare_provider_login(provider.id)
+      assert {:error, :not_found} = Longx.Credentials.fetch("chatgpt")
+    end
+
+    test "concurrent login recovery keeps a single credential binding" do
+      {:ok, %{provider: provider, credential: cred}} = Presets.apply("chatgpt")
+      :ok = Longx.Credentials.delete(cred)
+      tasks = for _ <- 1..2, do: Task.async(fn -> AI.prepare_provider_login(provider.id) end)
+      assert [{:ok, id}, {:ok, same_id}] = Enum.map(tasks, &Task.await/1)
+      assert id == same_id
+      assert [%{id: ^id}] = Longx.Credentials.list()
+    end
+
+    test "login recovery and template application share credential creation" do
+      {:ok, %{provider: provider, credential: cred}} = Presets.apply("chatgpt")
+      :ok = Longx.Credentials.delete(cred)
+      recovery = Task.async(fn -> AI.prepare_provider_login(provider.id) end)
+      template = Task.async(fn -> Presets.apply("chatgpt", models: []) end)
+      assert {:ok, id} = Task.await(recovery)
+      assert {:ok, %{credential: %{id: ^id}}} = Task.await(template)
+      assert [%{id: ^id}] = Longx.Credentials.list()
+      assert AI.get_provider_by_slug!("chatgpt").credential_id == id
+    end
+
     test "chatgpt: a subscription — the Codex app's OAuth2 credential (fixed client, device-code login, the vendor's redirect), the provider on it, the models; idempotent" do
       assert {:ok, %{provider: provider, models: models, credential: cred}} =
                Presets.apply("chatgpt")

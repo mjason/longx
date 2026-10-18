@@ -33,6 +33,25 @@ defmodule Longx.AI.Provider do
   actions do
     defaults [:read, :destroy]
 
+    # Repair only the login binding, never reapply the template's model/settings
+    # defaults. A deleted credential otherwise leaves the login button on a dead id.
+    action :prepare_login, :uuid do
+      argument :id, :uuid, allow_nil?: false
+
+      run fn input, _ ->
+        with {:ok, provider} <- Ash.get(__MODULE__, input.arguments.id),
+             {:ok, credential_id} <- Longx.AI.Presets.prepare_login(provider) do
+          {:ok, credential_id}
+        else
+          {:error, message} when is_binary(message) ->
+            {:error, Ash.Error.Changes.InvalidArgument.exception(field: :id, message: message)}
+
+          other ->
+            other
+        end
+      end
+    end
+
     # the settings page's delete: its models go with it — unless one of them
     # is the default, then pick another first
     destroy :delete do

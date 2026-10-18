@@ -188,20 +188,53 @@ defmodule Longx.Credentials.OAuth do
   @spec exchange(Credential.t(), String.t(), String.t() | nil, String.t()) ::
           {:ok, Credential.t()} | {:error, String.t()}
   def exchange(%Credential{} = cred, code, verifier, redirect) do
-    {:ok, cred} = Credentials.reveal(cred)
+    token_lock(cred.id, fn ->
+      with {:ok, current} <- fetch_by_id(cred.id),
+           {:ok, current} <- Credentials.reveal(current) do
+        form =
+          %{"grant_type" => "authorization_code", "code" => code, "redirect_uri" => redirect}
+          |> put_if("code_verifier", verifier)
 
-    form =
-      %{"grant_type" => "authorization_code", "code" => code, "redirect_uri" => redirect}
-      |> put_if("code_verifier", verifier)
-
-    with {:ok, tokens} <- token_request(cred, form) do
-      Credentials.store_tokens(cred, tokens)
-    end
+        with {:ok, tokens} <- token_request(current, form) do
+          Credentials.store_tokens(current, tokens)
+        end
+      end
+    end)
   end
 
-  @doc "The refresh_token grant; the outcome lands on the row either way."
-  @spec refresh(Credential.t()) :: {:ok, Credential.t()} | {:error, :needs_login | String.t()}
-  def refresh(%Credential{} = cred) do
+  @doc """
+  The refresh_token grant; the outcome lands on the row either way.
+  Automatic callers pass `within_seconds:` so a preceding refresh or login
+  can satisfy them. Omitting it is the settings page's forced refresh.
+  """
+  @spec refresh(Credential.t(), keyword) ::
+          {:ok, Credential.t()} | {:error, :needs_login | String.t()}
+  def refresh(%Credential{} = cred, opts \\ []) do
+    # The worker, model calls and the settings page may all get here together.
+    # A rotating refresh token is single-use: serialize per credential, reload
+    # inside the lock, and serialize a new login's exchange with it as well.
+    # This is a process lock, never a SQLite transaction around the HTTP request.
+    token_lock(cred.id, fn ->
+      with {:ok, current} <- fetch_by_id(cred.id) do
+        within = Keyword.get(opts, :within_seconds)
+
+        if is_integer(within) and not expiring?(current, within),
+          do: {:ok, current},
+          else: refresh_current(current)
+      end
+    end)
+  end
+
+  defp expiring?(%{encrypted_access_token: nil}, _within), do: true
+  defp expiring?(%{expires_at: nil}, _within), do: false
+
+  defp expiring?(%{expires_at: at}, within),
+    do: DateTime.diff(at, DateTime.utc_now(), :second) <= within
+
+  defp token_lock(id, fun),
+    do: :global.trans({{__MODULE__, :tokens, id}, self()}, fun, [node()])
+
+  defp refresh_current(cred) do
     with :ok <- oauth2?(cred),
          {:ok, cred} <- Credentials.reveal(cred),
          :ok <- present(cred.refresh_token, :needs_login),
@@ -428,24 +461,33 @@ defmodule Longx.Credentials.OAuth do
              ) do
           {:ok, %{status: 200, body: %{"authorization_code" => auth_code} = body}}
           when is_binary(auth_code) ->
-            {:ok, _} = Logins.take(state)
+            case Logins.take(state) do
+              {:ok, _} ->
+                result =
+                  with {:ok, cred} <- fetch_by_id(login.credential_id) do
+                    exchange(
+                      cred,
+                      auth_code,
+                      body["code_verifier"],
+                      issuer <> "/deviceauth/callback"
+                    )
+                  end
 
-            result =
-              with {:ok, cred} <- fetch_by_id(login.credential_id) do
-                exchange(cred, auth_code, body["code_verifier"], issuer <> "/deviceauth/callback")
-              end
+                if is_pid(login[:notify]),
+                  do: send(login[:notify], {:credential_login, state, result})
 
-            if is_pid(login[:notify]),
-              do: send(login[:notify], {:credential_login, state, result})
+                if is_binary(login[:thread_id]), do: answer_ask(login[:thread_id], state, result)
+                result
 
-            if is_binary(login[:thread_id]), do: answer_ask(login[:thread_id], state, result)
-            result
+              :error ->
+                {:error, :unknown_state}
+            end
 
           {:ok, %{status: status}} when status in [403, 404] ->
             {:ok, :pending}
 
           {:ok, %{status: status, body: body}} ->
-            {:ok, _} = Logins.take(state)
+            Logins.take(state)
             {:error, "the device-code login answered #{status}: #{describe(body)}"}
 
           {:error, reason} ->

@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { Check, ExternalLink, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useCredentialActions, useCredentials } from "@/core/credentials";
+import { useCredentialActions } from "@/core/credentials";
 import { Button } from "@/ui/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/ui/components/ui/dialog";
 import { Input } from "@/ui/components/ui/input";
@@ -20,46 +20,49 @@ const s = t.chatgptLogin;
 export function ChatGptLoginDialog({ credentialId, onClose }: { credentialId: string; onClose: () => void }) {
     useTranslation();
   const actions = useCredentialActions();
-  const credentials = useCredentials({ refetchInterval: 3000 });
-  const credential = credentials.data?.find((c) => c.id === credentialId) ?? null;
-  const loggedIn = credential?.status === "ready";
+  // Opening this dialog is an explicit new login, even if the old token
+  // still looks ready locally (it may have been revoked upstream).
+  const [loggedIn, setLoggedIn] = useState(false);
   const [device, setDevice] = useState<{ state: string; userCode: string; verificationUrl: string; interval: number } | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [browser, setBrowser] = useState<{ url: string; redirectUri: string } | null>(null);
   const [pasted, setPasted] = useState("");
-  const done = useRef(false);
+  const [attempt, setAttempt] = useState(0);
+  const generation = useRef(0);
 
   // the device code, asked for as soon as the dialog opens
   useEffect(() => {
-    if (loggedIn) return;
+    const current = ++generation.current;
+    setLoggedIn(false);
+    setDevice(null);
+    setDeviceError(null);
     actions.deviceBegin.mutate(credentialId, {
-      onSuccess: (d) => setDevice(d),
-      onError: (e) => setDeviceError(e.message),
+      onSuccess: (d) => { if (generation.current === current) setDevice(d); },
+      onError: (e) => { if (generation.current === current) setDeviceError(e.message); },
     });
+    return () => { generation.current++; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [credentialId]);
+  }, [credentialId, attempt]);
 
   // polling at the vendor's interval until the person typed the code
   useEffect(() => {
-    if (!device || loggedIn || done.current) return;
-    const id = setInterval(() => {
-      actions.devicePoll.mutate(device.state, {
-        onSuccess: (r) => {
-          if (r.status === "ok") {
-            done.current = true;
-            clearInterval(id);
-          } else if (r.status === "error") {
-            setDeviceError(r.message ?? s.failed);
-            clearInterval(id);
-          }
-        },
-        onError: (e) => {
-          setDeviceError(e.message);
-          clearInterval(id);
-        },
-      });
-    }, Math.max(device.interval, 1) * 1000);
-    return () => clearInterval(id);
+    if (!device || loggedIn) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const r = await actions.devicePoll.mutateAsync(device.state);
+        if (cancelled) return;
+        if (r.status === "ok") setLoggedIn(true);
+        else if (r.status === "error") setDeviceError(r.message ?? s.failed);
+        else schedule();
+      } catch (e) {
+        if (!cancelled) setDeviceError(e instanceof Error ? e.message : s.failed);
+      }
+    };
+    const schedule = () => { timer = setTimeout(() => void poll(), Math.max(device.interval, 1) * 1000); };
+    schedule();
+    return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [device?.state, loggedIn]);
 
@@ -78,7 +81,7 @@ export function ChatGptLoginDialog({ credentialId, onClose }: { credentialId: st
 
   const completePasted = () => {
     actions.completeUrl.mutate(pasted.trim(), {
-      onSuccess: () => toast.success(s.loggedIn),
+      onSuccess: () => { setLoggedIn(true); toast.success(s.loggedIn); },
       onError: (e) => toast.error(e.message),
     });
   };
@@ -99,7 +102,10 @@ export function ChatGptLoginDialog({ credentialId, onClose }: { credentialId: st
             <section className="flex flex-col gap-2">
               <h3 className="text-sm font-medium">{s.deviceTitle}</h3>
               {deviceError ? (
-                <p className="text-destructive text-sm">{deviceError}</p>
+                <>
+                  <p className="text-destructive text-sm" role="alert">{deviceError}</p>
+                  <div><Button type="button" variant="outline" size="sm" onClick={() => setAttempt((n) => n + 1)}>{s.retryDevice}</Button></div>
+                </>
               ) : device ? (
                 <>
                   <p className="text-muted-foreground text-sm">{s.deviceHint}</p>

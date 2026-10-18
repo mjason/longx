@@ -417,6 +417,7 @@ export function rpcMock() {
     updateSearchProvider: vi.fn(async () => ok({ id: "s1", hasApiKey: true })),
     listPresets: vi.fn(async () => ok(presets())),
     applyPreset: vi.fn(async ({ input }: { input: { slug: string } }) => ok({ providerId: input.slug === "chatgpt" ? "p3" : "p9", modelIds: ["m9"], credentialId: input.slug === "chatgpt" ? "cred-chatgpt" : null })),
+    prepareProviderLogin: vi.fn(async () => ok("cred-chatgpt")),
     credentialDeviceBegin: vi.fn(async () => ok({ state: "dev-state", userCode: "WXYZ-1234", verificationUrl: "https://auth.openai.com/codex/device", interval: 1 })),
     credentialDevicePoll: vi.fn(async () => ok({ status: "pending", message: null })),
     gatewayRequests: vi.fn(async () =>

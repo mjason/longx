@@ -108,7 +108,7 @@ defmodule Longx.Credentials.Http do
         {:ok, cred.access_token}
 
       is_binary(cred.refresh_token) ->
-        case OAuth.refresh(cred) do
+        case OAuth.refresh(cred, within_seconds: @refresh_margin_s) do
           {:ok, fresh} ->
             {:ok, fresh} = Credentials.reveal(fresh)
             {:ok, fresh.access_token}

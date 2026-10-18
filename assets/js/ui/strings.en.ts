@@ -316,6 +316,7 @@ export const en = {
     deviceTitle: "Enter the device code",
     deviceHint: "Open the page below, enter this code, then return here and wait for sign-in to finish.",
     asking: "Requesting a device code from OpenAI…",
+    retryDevice: "Get a new device code",
     waiting: "Waiting for you to enter this code on OpenAI…",
     failed: "Sign-in did not complete",
     loggedIn: "Signed in",

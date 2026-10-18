@@ -506,8 +506,11 @@ function ProviderCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {provider.credentialId ? (
-              <DropdownMenuItem onSelect={() => onLogin(provider.credentialId!)}>{s.loginChatGpt}</DropdownMenuItem>
+            {provider.credentialId || (provider.slug === "chatgpt" && provider.baseUrl === "https://chatgpt.com/backend-api/codex") ? (
+              <DropdownMenuItem
+                disabled={actions.prepareProviderLogin.isPending}
+                onSelect={() => actions.prepareProviderLogin.mutate(provider.id, { onSuccess: onLogin, onError: fail })}
+              >{s.loginChatGpt}</DropdownMenuItem>
             ) : null}
             <DropdownMenuItem onSelect={onEdit}>{s.editProvider}</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setAdding("new")}>{s.addModel}</DropdownMenuItem>

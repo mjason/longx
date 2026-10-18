@@ -8,6 +8,7 @@ import {
   knowledgeRead,
   knowledgeWrite,
   applyPreset,
+  prepareProviderLogin,
   checkModel,
   createModel,
   createProvider,
@@ -283,6 +284,9 @@ export function useAiActions() {
     ),
     deleteProvider: useAiWrite(async (id: string) =>
       unwrap(await deleteProvider({ identity: id })),
+    ),
+    prepareProviderLogin: useAiWrite(async (id: string) =>
+      unwrap(await prepareProviderLogin({ input: { id } })) as string,
     ),
     applyPreset: useAiWrite(
       async (input: ApplyPresetInput) =>

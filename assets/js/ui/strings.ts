@@ -360,6 +360,7 @@ const zh = {
     deviceTitle: "输入设备码",
     deviceHint: "打开下面的页面，输入这串码，回到这里等它自动完成。",
     asking: "正在向 OpenAI 要设备码…",
+    retryDevice: "重新获取设备码",
     waiting: "等你在 OpenAI 的页面输入这串码…",
     failed: "登录没有完成",
     loggedIn: "已登录",

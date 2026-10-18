@@ -63,6 +63,18 @@ defmodule LongxWeb.AiRpcTest do
     assert %{"success" => true, "data" => []} = rpc(conn, "list_providers", %{"fields" => ["id"]})
   end
 
+  test "provider login recovery returns only the credential id", %{conn: conn} do
+    {:ok, %{provider: provider, credential: cred}} = AI.Presets.apply("chatgpt")
+    :ok = Longx.Credentials.delete(cred)
+
+    assert %{"success" => true, "data" => id} =
+             rpc(conn, "prepare_provider_login", %{"input" => %{"id" => provider.id}})
+
+    assert is_binary(id)
+    refute id == cred.id
+    assert AI.get_provider_by_slug!("chatgpt").credential_id == id
+  end
+
   test "models: create under a provider, edit, make default, delete — never the default; a provider goes with its models unless one is the default",
        %{conn: conn} do
     %{"success" => true, "data" => %{"id" => provider}} =
