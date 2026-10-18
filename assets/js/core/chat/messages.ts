@@ -14,6 +14,7 @@ import {
   type PendingRequest,
   type ThreadView,
 } from "./thread";
+import { citationsOf, citationSources } from "./citations";
 
 type Part = Exclude<ThreadMessageLike["content"], string>[number];
 type ToolPart = Extract<Part, { type: "tool-call" }>;
@@ -180,6 +181,14 @@ export function toMessages(
     if (!current || current.turnId !== item.turnId) {
       flush();
       current = { turnId: item.turnId, parts: [] };
+    }
+    if (item.type === "agentMessage") {
+      const citations = citationsOf(item["citations"]);
+      current.parts.push({
+        type: "text", text: typeof item["text"] === "string" ? item["text"] : "",
+        ...(citations.length ? { providerMetadata: { longx: { citations } } } : {}),
+      }, ...citationSources(item.id, citations));
+      continue;
     }
     const part =
       item.type === "subAgentActivity"
@@ -470,10 +479,6 @@ function userImages(item: ThreadItem): Part[] {
 
 function toPart(item: ThreadItem): Part | null {
   switch (item.type) {
-    case "agentMessage": {
-      const text = (item["text"] as string | undefined) ?? "";
-      return { type: "text", text };
-    }
     case "reasoning": {
       // summary/content are string[]; a bare string is a delta before item/started
       const text = joined(item["content"]) || joined(item["summary"]);

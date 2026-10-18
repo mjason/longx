@@ -123,7 +123,10 @@ defmodule Longx.Agent.Kernel.Stream do
   def fold(state, {:item_done, %{"type" => "message", "id" => id} = item}) do
     text = message_text(item)
     ui_id = ui_id(state, id)
-    ui = %{"id" => ui_id, "type" => "agentMessage", "turnId" => state.turn_id, "text" => text}
+
+    ui =
+      %{"id" => ui_id, "type" => "agentMessage", "turnId" => state.turn_id, "text" => text}
+      |> UI.with_citations(item)
 
     state
     |> UI.cite(item)

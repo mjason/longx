@@ -1518,7 +1518,11 @@ defmodule Longx.Projects do
           |> Enum.filter(&match?(%{ui: %{}}, &1))
           |> Enum.chunk_by(& &1.turn_id)
           |> Enum.map(fn [%{turn_id: turn_id} | _] = chunk ->
-            %{"id" => turn_id, "status" => "completed", "items" => Enum.map(chunk, & &1.ui)}
+            %{
+              "id" => turn_id,
+              "status" => "completed",
+              "items" => Enum.map(chunk, &Longx.Agent.Kernel.UI.with_citations(&1.ui, &1.input))
+            }
             |> Map.merge(Map.get(recorded, turn_id, %{}))
           end)
 

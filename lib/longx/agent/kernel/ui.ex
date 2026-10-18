@@ -6,6 +6,36 @@ defmodule Longx.Agent.Kernel.UI do
   alias Longx.Agent.Kernel.State
   import Longx.Agent.Kernel.State
 
+  # Keep citations on their message as well as on the search row. The latter
+  # is only a summary and cannot identify which inline reference cites a URL.
+  # Reused on replay so old transcripts with raw annotations need no migration.
+  def with_citations(%{"type" => "agentMessage"} = ui, %{"content" => content})
+      when is_list(content) do
+    {citations, _offset} =
+      Enum.reduce(content, {[], 0}, fn
+        %{"type" => "output_text", "text" => text} = part, {acc, offset}
+        when is_binary(text) ->
+          citations =
+            for %{"type" => "url_citation", "url" => url} = a <- List.wrap(part["annotations"]),
+                is_binary(url) do
+              a
+              |> Map.take(["url", "title", "start_index", "end_index"])
+              |> Map.put("offset", offset)
+            end
+
+          # Browser/Markdown source offsets are UTF-16 code units.
+          units = div(byte_size(:unicode.characters_to_binary(text, :utf8, {:utf16, :little})), 2)
+          {acc ++ citations, offset + units}
+
+        _, acc ->
+          acc
+      end)
+
+    if citations == [], do: ui, else: Map.put(ui, "citations", citations)
+  end
+
+  def with_citations(ui, _item), do: ui
+
   # the sources a hosted search found arrive as the message's url_citation
   # annotations: they become the results of the last search row of the step
   def cite(%State{last_search: %{} = search} = state, %{"content" => content})

@@ -1,5 +1,6 @@
 // English UI copy. Keep this tree aligned with strings.ts; tests check coverage.
 export const en = {
+  citations: { missing: "[Source unavailable]", loading: "[Resolving citation]" },
   computer: {
     title: "Computer use (Longx Computer)",
     add: "Add computer",

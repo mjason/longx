@@ -9,6 +9,8 @@ import {
 import { File } from "@/ui/components/assistant-ui/elements/file";
 import { Image } from "@/ui/components/assistant-ui/elements/image";
 import { MarkdownText } from "@/ui/components/assistant-ui/elements/markdown-text";
+import { Source } from "@/ui/components/assistant-ui/elements/source";
+import type { Citation } from "@/core/chat/citations";
 import { MessageTiming } from "@/ui/components/assistant-ui/elements/message-timing.aui";
 import {
   Reasoning,
@@ -570,7 +572,9 @@ export const AssistantParts: FC = () => {
             );
           }
           case "text":
-            return <MarkdownText />;
+            return <MarkdownText citations={part.providerMetadata?.longx?.citations as Citation[] | undefined} citationPending={part.status.type === "running"} />;
+          case "source":
+            return <Source {...part} />;
           case "reasoning":
             return <Reasoning {...part} />;
           case "tool-call":

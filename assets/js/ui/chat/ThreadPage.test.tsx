@@ -95,6 +95,25 @@ async function open(path = "/p/app-1/t/t1") {
 }
 
 describe("ThreadPage", () => {
+  test("message annotations render through source parts; opaque references never become invented links", async () => {
+    await open();
+    const marker = "citeturn0search2";
+    const text = `真实证据。${marker}\n\n无映射。citeturn9search8`;
+    act(() => {
+      channel.deliver("event", { seq: 4, method: "turn/started", params: { turn: { id: "turn_2", status: "inProgress" } } });
+      channel.deliver("event", { seq: 5, method: "item/completed", params: {
+        turnId: "turn_2", item: { id: "cited-message", type: "agentMessage", turnId: "turn_2", text,
+          citations: [{ url: "https://example.com/evidence", title: "真实来源", start_index: 5, end_index: 5 + marker.length }],
+        },
+      } });
+      channel.deliver("event", { seq: 6, method: "turn/completed", params: { turn: { id: "turn_2", status: "completed" } } });
+    });
+    expect(await screen.findByRole("link", { name: "[1]" })).toHaveAttribute("href", "https://example.com/evidence");
+    expect(await screen.findByTestId("message-source")).toHaveTextContent("真实来源");
+    expect(await screen.findByText("〔来源未提供〕")).toBeInTheDocument();
+    expect(screen.queryByText(/turn0search2|turn9search8/)).not.toBeInTheDocument();
+  });
+
   test("multiple required jobs keep an idle conversation unfinished; independent services stay top-right", async () => {
     const user = userEvent.setup();
     const job = (name: string, activity: string, purpose = "wait") => ({

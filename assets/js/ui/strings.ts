@@ -3,6 +3,7 @@ import i18n from "@/core/i18n";
 import { en } from "./strings.en";
 
 const zh = {
+  citations: { missing: "〔来源未提供〕", loading: "〔引用解析中〕" },
   computer: {
     title: "电脑操作（Longx Computer）",
     add: "添加电脑",

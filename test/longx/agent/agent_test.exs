@@ -2854,6 +2854,10 @@ defmodule Longx.AgentTest do
     refute "web_search" in Enum.map(first["tools"], & &1["name"])
     assert "web_fetch" in Enum.map(first["tools"], & &1["name"])
     assert :hosted_call in Enum.map(Transcript.items!(id), & &1.kind)
+    message = Enum.find(Transcript.items!(id), &(&1.kind == :agent_message))
+
+    assert [%{"url" => "https://elixir-lang.org/blog", "start_index" => 0, "end_index" => 8}] =
+             message.ui["citations"]
   end
 
   test "the thread's search switch off mounts nothing; reading pages stays", %{

@@ -20,9 +20,16 @@ import { SyntaxHighlighter } from "@/ui/components/assistant-ui/elements/shiki-h
 import { TooltipIconButton } from "@/ui/components/assistant-ui/elements/tooltip-icon-button";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
+import { remarkCitations } from "@/core/chat/remark-citations";
+import type { Citation } from "@/core/chat/citations";
+import { t } from "@/ui/strings";
+import { useTranslation } from "react-i18next";
+import type { PluggableList } from "unified";
 
 type MarkdownTextProps = Partial<TextMessagePartProps> & {
   components?: Parameters<typeof memoizeMarkdownComponents>[0];
+  citations?: Citation[];
+  citationPending?: boolean;
 };
 
 const useShallowStable = <T extends Record<string, unknown> | undefined>(
@@ -41,8 +48,14 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
   return ref.current;
 };
 
-const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
+const NO_CITATIONS: Citation[] = [];
+
+const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, citations = NO_CITATIONS, citationPending = false }) => {
+  useTranslation();
   const mathPlugins = useMath();
+  const remarkPlugins = useMemo<PluggableList>(() => [...markdownMathPlugins, [remarkCitations, {
+    citations, pending: citationPending, missing: t.citations.missing, loading: t.citations.loading,
+  }]], [citations, citationPending, t.citations.missing, t.citations.loading]);
   const stableComponents = useShallowStable(components);
   const markdownComponents = useMemo(() => {
     if (!stableComponents) return defaultComponents;
@@ -54,7 +67,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
 
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={markdownMathPlugins}
+      remarkPlugins={remarkPlugins}
       rehypePlugins={mathPlugins}
       preprocess={preprocessMath}
       className="aui-md"
