@@ -232,6 +232,8 @@ mutation PrepareProviderLogin($input: PrepareProviderLoginInput!) { prepareProvi
 
 mutation CreateModel($input: CreateModelInput!) { createModel(input: $input) { result { id name slug upstreamId contextWindow default reasoningLevels reasoningEffort reasoningSummary verbosity hostedWebSearch imageGeneration maxOutputTokens insertedAt updatedAt providerId } } }
 
+mutation ImportDiscoveredModel($input: ImportDiscoveredModelInput!) { importDiscoveredModel(input: $input) { id name slug upstreamId contextWindow default reasoningLevels reasoningEffort reasoningSummary verbosity hostedWebSearch imageGeneration maxOutputTokens insertedAt updatedAt providerId } }
+
 mutation UpdateModel($id: ID!, $input: UpdateModelInput) { updateModel(id: $id, input: $input) { result { id name slug upstreamId contextWindow default reasoningLevels reasoningEffort reasoningSummary verbosity hostedWebSearch imageGeneration maxOutputTokens insertedAt updatedAt providerId } } }
 
 mutation MakeDefaultModel($id: ID!) { makeDefaultModel(id: $id) { result { id name slug upstreamId contextWindow default reasoningLevels reasoningEffort reasoningSummary verbosity hostedWebSearch imageGeneration maxOutputTokens insertedAt updatedAt providerId } } }

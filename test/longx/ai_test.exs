@@ -816,7 +816,8 @@ defmodule Longx.AITest do
       assert_receive {:upstream, headers, body}
       assert {"authorization", "Bearer sk-ok"} in headers
       assert body["model"] == "real-model"
-      assert body["stream"] == false
+      assert body["stream"] == true
+      assert is_list(body["input"])
       assert body["store"] == false
       assert is_integer(body["max_output_tokens"])
 
@@ -863,7 +864,9 @@ defmodule Longx.AITest do
 
     test "accepts a slug too", %{bypass: bypass, model: model} do
       Bypass.expect_once(bypass, "POST", "/v1/responses", fn up ->
-        Plug.Conn.send_resp(up, 200, "{}")
+        up
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(200, ~s({"status":"completed"}))
       end)
 
       assert {:ok, _} = AI.check_model(model.slug)

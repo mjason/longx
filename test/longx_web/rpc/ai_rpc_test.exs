@@ -243,6 +243,54 @@ defmodule LongxWeb.AiRpcTest do
              })
   end
 
+  test "discovered imports allocate cross-provider names and retry idempotently", %{conn: conn} do
+    ls =
+      AI.create_provider!(%{name: "LS", slug: "ls-import", base_url: "https://example.test/v1"})
+
+    p =
+      AI.create_provider!(%{
+        name: "ChatGPT",
+        slug: "chatgpt-import",
+        base_url: "https://example.test/v1"
+      })
+
+    original =
+      AI.create_model!(%{
+        provider_id: ls.id,
+        name: "Shared",
+        upstream_id: "gpt-shared",
+        slug: "gpt-shared"
+      })
+
+    input = %{
+      "providerId" => p.id,
+      "upstreamId" => "gpt-shared",
+      "name" => "Shared",
+      "contextWindow" => 32000
+    }
+
+    assert %{
+             "success" => true,
+             "data" => %{
+               "id" => id,
+               "slug" => "chatgpt-import-gpt-shared",
+               "contextWindow" => 32000
+             }
+           } =
+             rpc(conn, "import_discovered_model", %{
+               "input" => input,
+               "fields" => ["id", "slug", "contextWindow"]
+             })
+
+    assert %{"success" => true, "data" => %{"id" => ^id, "contextWindow" => 32000}} =
+             rpc(conn, "import_discovered_model", %{
+               "input" => Map.put(input, "contextWindow", 99999),
+               "fields" => ["id", "contextWindow"]
+             })
+
+    assert AI.get_model_by_slug!("gpt-shared").id == original.id
+  end
+
   test "check_model answers with ok / latency or the error, never a failure", %{conn: conn} do
     %{"success" => true, "data" => %{"id" => provider}} =
       rpc(conn, "create_provider", %{

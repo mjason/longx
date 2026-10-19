@@ -1271,9 +1271,10 @@ function DiscoverDialog({
   const actions = useAiActions();
   const [filter, setFilter] = useState("");
   const [chosen, setChosen] = useState<string[]>([]);
+  const [imported, setImported] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const candidates = (discovery.data?.ok ? discovery.data.models : []).filter(
-    (m) => !m.installed,
+    (m) => !m.installed && !imported.includes(m.id),
   );
   const q = filter.trim().toLowerCase();
   const shown = q
@@ -1304,10 +1305,11 @@ function DiscoverDialog({
   const add = async () => {
     setBusy(true);
     try {
+      let added = 0;
       for (const id of chosen) {
         const m = candidates.find((c) => c.id === id);
         if (!m) continue;
-        await actions.createModel.mutateAsync({
+        await actions.importModel.mutateAsync({
           providerId: provider.id,
           upstreamId: m.id,
           name: m.name,
@@ -1317,8 +1319,11 @@ function DiscoverDialog({
             : {}),
           ...(m.reasoningEffort ? { reasoningEffort: m.reasoningEffort } : {}),
         });
+        added++;
+        setImported((ids) => [...ids, id]);
+        setChosen((ids) => ids.filter((value) => value !== id));
       }
-      toast.success(s.discoverAdded(chosen.length));
+      toast.success(s.discoverAdded(added));
       onClose();
     } catch (e) {
       fail(e);
@@ -1327,7 +1332,7 @@ function DiscoverDialog({
     }
   };
   return (
-    <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
+    <Dialog open onOpenChange={(open) => (open || busy ? null : onClose())}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{s.discoverTitle(provider.name)}</DialogTitle>
@@ -1345,7 +1350,7 @@ function DiscoverDialog({
           ) : candidates.length === 0 ? (
             <p className="text-muted-foreground text-sm">{s.discoverEmpty}</p>
           ) : (
-            <div className="flex flex-col gap-3">
+            <fieldset disabled={busy} className="flex flex-col gap-3">
               <Input
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
@@ -1358,11 +1363,11 @@ function DiscoverDialog({
                 onToggle={toggle}
                 className="max-w-none"
               />
-            </div>
+            </fieldset>
           )}
         </DialogBody>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
             {t.cancel}
           </Button>
           <Button

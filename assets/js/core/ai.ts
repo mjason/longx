@@ -11,6 +11,7 @@ import {
   prepareProviderLogin,
   checkModel,
   createModel,
+  importDiscoveredModel,
   createProvider,
   deleteModel,
   deleteProvider,
@@ -29,7 +30,7 @@ import {
   defaultModelSetting,
   setDefaultModel,
 } from "@/core/api";
-import type { CreateModelInput, CreateProviderInput, UpdateModelInput, UpdateProviderInput } from "@/gql/graphql";
+import type { CreateModelInput, CreateProviderInput, ImportDiscoveredModelInput, UpdateModelInput, UpdateProviderInput } from "@/gql/graphql";
 import { queryKeys, unwrap } from "./projects";
 
 export const aiKeys = {
@@ -296,6 +297,9 @@ export function useAiActions() {
     ),
     createModel: useAiWrite(async (input: ModelInput) =>
       unwrap(await createModel({ input })),
+    ),
+    importModel: useAiWrite(async (input: ImportDiscoveredModelInput) =>
+      unwrap(await importDiscoveredModel({ input })),
     ),
     updateModel: useAiWrite(
       async ({ id, input }: { id: string; input: ModelPatch }) =>

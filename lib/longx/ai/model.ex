@@ -53,6 +53,20 @@ defmodule Longx.AI.Model do
       validate Longx.AI.Model.Validations.EffortInLevels
     end
 
+    # Discovery retries must not duplicate a partially imported model or reset
+    # a model the person has already configured under another local name.
+    action :import_discovered, :struct do
+      constraints instance_of: __MODULE__
+      argument :provider_id, :uuid, allow_nil?: false
+      argument :upstream_id, :string, allow_nil?: false
+      argument :name, :string, allow_nil?: false
+      argument :context_window, :integer, constraints: [min: 1]
+      argument :reasoning_levels, {:array, :string}
+      argument :reasoning_effort, :string
+
+      run fn input, _ -> Longx.AI.Model.Import.run(input.arguments) end
+    end
+
     update :update do
       primary? true
       # EffortInLevels reads both attributes together
@@ -93,8 +107,11 @@ defmodule Longx.AI.Model do
       run fn input, _ ->
         with {:ok, model} <- Ash.get(__MODULE__, input.arguments.id) do
           case Longx.AI.check_model(model) do
-            {:ok, %{latency_ms: ms}} -> {:ok, %{ok: true, latency_ms: ms, error: nil}}
-            {:error, reason} -> {:ok, %{ok: false, latency_ms: nil, error: inspect(reason)}}
+            {:ok, %{latency_ms: ms}} ->
+              {:ok, %{ok: true, latency_ms: ms, error: nil}}
+
+            {:error, reason} ->
+              {:ok, %{ok: false, latency_ms: nil, error: Longx.AI.model_check_error(reason)}}
           end
         end
       end

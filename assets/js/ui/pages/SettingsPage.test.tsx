@@ -26,6 +26,7 @@ import {
   prepareProviderLogin,
   checkModel,
   createModel,
+  importDiscoveredModel,
   createProvider,
   deleteModel,
   discoverModels,
@@ -678,7 +679,7 @@ describe("SettingsPage", () => {
     await user.click(within(dialog).getByText("X Y"));
     await user.click(within(dialog).getByRole("button", { name: /添加 1 个/ }));
     await waitFor(() =>
-      expect(createModel).toHaveBeenCalledWith(
+      expect(importDiscoveredModel).toHaveBeenCalledWith(
         expect.objectContaining({ input: expect.objectContaining({ providerId: "p1", upstreamId: "x/y", name: "X Y", contextWindow: 32000, reasoningLevels: ["low", "high"], reasoningEffort: "low" }) }),
       ),
     );
@@ -960,6 +961,40 @@ describe("SettingsPage", () => {
   });
 
   // real timers: the download's progress ticks — a slow CI runner nears the 5 s default
+  test("providers: a partial discovery import retries only unfinished models", async () => {
+    setViewport(1280);
+    const user = userEvent.setup();
+    vi.mocked(discoverModels).mockResolvedValue(ok({ ok: true, error: null, models: [
+      { id: "model-a", name: "Model A", ownedBy: "vendor", contextWindow: null, reasoningLevels: [], reasoningEffort: null, imageInput: false, installed: false },
+      { id: "model-b", name: "Model B", ownedBy: "vendor", contextWindow: null, reasoningLevels: [], reasoningEffort: null, imageInput: false, installed: false },
+    ] }) as never);
+    vi.mocked(importDiscoveredModel).mockClear()
+      .mockResolvedValueOnce(ok(model(9)) as never)
+      .mockResolvedValueOnce({ success: false, errors: [{ message: "temporary import failure" }] } as never)
+      .mockResolvedValue(ok(model(10)) as never);
+    try {
+      renderAt("/settings/providers");
+      const card = await screen.findByTestId("provider-p1");
+      await user.click(within(card).getByRole("button", { name: "Prov 的操作" }));
+      await user.click(await screen.findByRole("menuitem", { name: "从接口获取模型" }));
+      const dialog = await screen.findByRole("dialog");
+      await user.click(await within(dialog).findByText("Model A"));
+      await user.click(within(dialog).getByText("Model B"));
+      await user.click(within(dialog).getByRole("button", { name: "添加 2 个" }));
+      await waitFor(() => expect(importDiscoveredModel).toHaveBeenCalledTimes(2));
+      const retry = await within(dialog).findByRole("button", { name: "添加 1 个" });
+      await waitFor(() => expect(retry).toBeEnabled());
+      expect(within(dialog).queryByText("Model A")).not.toBeInTheDocument();
+      await user.click(retry);
+      await waitFor(() => expect(importDiscoveredModel).toHaveBeenCalledTimes(3));
+      expect(vi.mocked(importDiscoveredModel).mock.calls.map(([args]) => args?.input?.upstreamId)).toEqual(["model-a", "model-b", "model-b"]);
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    } finally {
+      vi.mocked(discoverModels).mockResolvedValue(ok({ ok: true, error: null, models: [] }) as never);
+      vi.mocked(importDiscoveredModel).mockResolvedValue(ok(model(9)) as never);
+    }
+  });
+
   test("agent kernel: the browser is downloaded from its card, with a progress bar, and a failure offers a retry", async () => {
     setViewport(1280);
     const user = userEvent.setup();

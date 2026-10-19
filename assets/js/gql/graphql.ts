@@ -797,6 +797,15 @@ export type GitUndoCommitInput = {
   projectId: string | number;
 };
 
+export type ImportDiscoveredModelInput = {
+  contextWindow?: number | null | undefined;
+  name: string;
+  providerId: string | number;
+  reasoningEffort?: string | null | undefined;
+  reasoningLevels?: Array<string> | null | undefined;
+  upstreamId: string;
+};
+
 export type InitGitInput = {
   id: string | number;
 };
@@ -4125,6 +4134,13 @@ export type CreateModelMutationVariables = Exact<{
 
 export type CreateModelMutation = { createModel: { result: { id: string, name: string, slug: string | null, upstreamId: string, contextWindow: number, default: boolean, reasoningLevels: Array<string>, reasoningEffort: string | null, reasoningSummary: string | null, verbosity: string | null, hostedWebSearch: boolean | null, imageGeneration: boolean, maxOutputTokens: number | null, insertedAt: string, updatedAt: string, providerId: string } | null } | null };
 
+export type ImportDiscoveredModelMutationVariables = Exact<{
+  input: ImportDiscoveredModelInput;
+}>;
+
+
+export type ImportDiscoveredModelMutation = { importDiscoveredModel: { id: string, name: string, slug: string | null, upstreamId: string, contextWindow: number, default: boolean, reasoningLevels: Array<string>, reasoningEffort: string | null, reasoningSummary: string | null, verbosity: string | null, hostedWebSearch: boolean | null, imageGeneration: boolean, maxOutputTokens: number | null, insertedAt: string, updatedAt: string, providerId: string } };
+
 export type UpdateModelMutationVariables = Exact<{
   id: string | number;
   input?: UpdateModelInput | null | undefined;
@@ -6297,6 +6313,28 @@ export const CreateModelDocument = /*#__PURE__*/ new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CreateModelMutation, CreateModelMutationVariables>;
+export const ImportDiscoveredModelDocument = /*#__PURE__*/ new TypedDocumentString(`
+    mutation ImportDiscoveredModel($input: ImportDiscoveredModelInput!) {
+  importDiscoveredModel(input: $input) {
+    id
+    name
+    slug
+    upstreamId
+    contextWindow
+    default
+    reasoningLevels
+    reasoningEffort
+    reasoningSummary
+    verbosity
+    hostedWebSearch
+    imageGeneration
+    maxOutputTokens
+    insertedAt
+    updatedAt
+    providerId
+  }
+}
+    `) as unknown as TypedDocumentString<ImportDiscoveredModelMutation, ImportDiscoveredModelMutationVariables>;
 export const UpdateModelDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation UpdateModel($id: ID!, $input: UpdateModelInput) {
   updateModel(id: $id, input: $input) {

@@ -53,6 +53,7 @@ defmodule Longx.AI do
       action Longx.AI.Provider, :discover_models, :discover_models
       action Longx.AI.Provider, :prepare_provider_login, :prepare_login
       create Longx.AI.Model, :create_model, :create
+      action Longx.AI.Model, :import_discovered_model, :import_discovered
       update Longx.AI.Model, :update_model, :update
       update Longx.AI.Model, :make_default_model, :make_default
       action Longx.AI.Model, :set_default_model, :set_default_model
@@ -79,6 +80,7 @@ defmodule Longx.AI do
 
     resource Model do
       define :create_model, action: :create
+      define :import_discovered_model, action: :import_discovered
       define :update_model, action: :update
       define :list_models, action: :read, default_options: [load: [:provider]]
       define :default_model, action: :default, default_options: [not_found_error?: false]
@@ -477,12 +479,10 @@ defmodule Longx.AI do
 
   ## Health check
 
-  # enough for the model to answer "ok"; keeps the check cheap
-  @check_max_output_tokens 16
   @check_timeout :timer.seconds(30)
 
   @doc """
-  Sends one tiny non-streaming Responses request through the model's provider
+  Sends one tiny Responses request through the normal provider adapter
   and records the outcome on the provider (`last_checked_at`, `last_error`).
   Answers `{:ok, %{latency_ms: n}}`, `{:error, {:status, code, message}}`
   (the upstream refused), `{:error, {:unreachable, reason}}`, or the usual
@@ -705,42 +705,25 @@ defmodule Longx.AI do
   defp output_text(_), do: ""
 
   defp probe(%Target{} = target) do
-    started = System.monotonic_time(:millisecond)
-
-    request =
-      Req.new(
-        url: String.trim_trailing(target.base_url, "/") <> "/responses",
-        auth: {:bearer, target.api_key},
-        json: %{
-          model: target.model,
-          input: "Reply with the single word: ok",
-          max_output_tokens: @check_max_output_tokens,
-          stream: false,
-          store: false
-        },
-        retry: false,
-        receive_timeout: @check_timeout
-      )
-
-    case Req.post(request) do
-      {:ok, %Req.Response{status: status}} when status in 200..299 ->
-        {:ok, %{latency_ms: System.monotonic_time(:millisecond) - started}}
-
-      {:ok, %Req.Response{status: status, body: body}} ->
-        {:error, {:status, status, error_message(body)}}
-
-      {:error, exception} ->
-        {:error, {:unreachable, Exception.message(exception)}}
-    end
+    Longx.AI.Probe.run(target)
   end
 
   defp error_message(%{"error" => %{"message" => message}}) when is_binary(message), do: message
+  defp error_message(%{"detail" => message}) when is_binary(message), do: message
   defp error_message(body) when is_binary(body), do: String.slice(body, 0, 500)
   defp error_message(body), do: body |> inspect() |> String.slice(0, 500)
 
   defp check_error({:ok, _}), do: nil
-  defp check_error({:error, {:status, status, message}}), do: "#{status} #{message}"
-  defp check_error({:error, {:unreachable, reason}}), do: "unreachable: #{reason}"
+  defp check_error({:error, reason}), do: model_check_error(reason)
+
+  @doc false
+  def model_check_error({:status, status, message}) when status in 200..299,
+    do: "upstream response failed: #{message}"
+
+  def model_check_error({:status, status, message}), do: "HTTP #{status}: #{message}"
+  def model_check_error({:unreachable, reason}), do: "unreachable: #{reason}"
+  def model_check_error({:missing_api_key, _}), do: "no API key or usable sign-in; sign in again"
+  def model_check_error(reason), do: inspect(reason)
 
   @doc "The standalone web-search backend (`Plugs.WebSearch`): the default search provider and its key."
   @spec resolve_search_target() ::

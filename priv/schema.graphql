@@ -2094,6 +2094,15 @@ input UpdateModelInput {
   maxOutputTokens: Int
 }
 
+input ImportDiscoveredModelInput {
+  providerId: ID!
+  upstreamId: String!
+  name: String!
+  contextWindow: Int
+  reasoningLevels: [String!]
+  reasoningEffort: String
+}
+
 "The result of the :create_model mutation"
 type CreateModelResult {
   "The successful result of the mutation"
@@ -4490,6 +4499,7 @@ type RootMutationType {
   discoverModels(input: DiscoverModelsInput!): DiscoverModels!
   prepareProviderLogin(input: PrepareProviderLoginInput!): ID!
   createModel(input: CreateModelInput!): CreateModelResult
+  importDiscoveredModel(input: ImportDiscoveredModelInput!): Model!
   updateModel(id: ID!, input: UpdateModelInput): UpdateModelResult
   makeDefaultModel(id: ID!): MakeDefaultModelResult
   setDefaultModel(input: SetDefaultModelInput!): ModelDefault!
