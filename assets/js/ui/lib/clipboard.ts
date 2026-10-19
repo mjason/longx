@@ -36,7 +36,9 @@ function copyBySelection(text: string): boolean {
     ?? document.body;
   scope.appendChild(area);
   try {
-    area.focus();
+    // Copying must not reveal either the scratch selection or the previous
+    // focus target (e.g. an offscreen composer when a click retains focus).
+    area.focus({ preventScroll: true });
     area.select();
     area.setSelectionRange(0, text.length);
     return document.execCommand("copy");
@@ -44,7 +46,7 @@ function copyBySelection(text: string): boolean {
     return false;
   } finally {
     area.remove();
-    active?.focus?.();
+    active?.focus?.({ preventScroll: true });
   }
 }
 

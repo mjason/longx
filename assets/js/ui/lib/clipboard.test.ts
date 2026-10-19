@@ -62,6 +62,25 @@ describe("clipboard on a plain-http LAN address", () => {
     expect(exec).toHaveBeenCalledWith("copy");
   });
 
+  test.each([true, false])("selection copying does not scroll when restoring focus (copy succeeds: %s)", async (succeeds) => {
+    delete nav.clipboard;
+    const input = document.createElement("textarea");
+    document.body.appendChild(input);
+    input.focus();
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    (document as unknown as { execCommand: unknown }).execCommand = () => succeeds;
+    try {
+      if (succeeds) await expect(copyText("offscreen composer")).resolves.toBeUndefined();
+      else await expect(copyText("offscreen composer")).rejects.toThrow("clipboard unavailable");
+      expect(focus).toHaveBeenCalledTimes(2);
+      for (const [options] of focus.mock.calls) expect(options).toEqual({ preventScroll: true });
+      expect(document.activeElement).toBe(input);
+      expect(document.querySelectorAll("textarea")).toHaveLength(1);
+    } finally {
+      input.remove();
+    }
+  });
+
   test("installClipboardFallback gives the page a navigator.clipboard.writeText so every copy button works, and leaves a real one alone", async () => {
     delete nav.clipboard;
     const exec = vi.fn(() => true);

@@ -90,6 +90,7 @@ jobs:
           npm run test:scroll -- --webkit
           npm run test:clipboard
           npm run build
+          npm run test:copy-scroll
           npm run test:projects
           npm run test:chat-projects
           npm run test:queued-attachments
