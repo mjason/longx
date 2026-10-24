@@ -43,6 +43,10 @@ try {
       await page.route("**/gql", holdSave);
       await settings.getByRole("button", {name:"保存全局默认",exact:true}).click();
       await saveStarted;
+      // React Query batches observer updates onto a later tick. The request
+      // interception confirms transport state, not that React committed it.
+      // Keep the save blocked and wait for the pending UI before checking it.
+      await page.waitForFunction(() => document.getElementById("ak-extra-path")?.disabled === true);
       assert.equal(await settings.getByLabel("额外 PATH 目录").isDisabled(), true);
       assert.equal(await settings.getByLabel("命令使用的 Shell").isDisabled(), true);
       assert.equal(await settings.getByRole("button", {name:"恢复默认",exact:true}).isDisabled(), true);
