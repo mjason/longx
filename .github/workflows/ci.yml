@@ -99,7 +99,7 @@ jobs:
           npm run test:file-changes
           npm run test:file-changes -- --webkit
           npm run test:view-image
-      - name: Provider discovery and health browser regression
-        run: mix test --include integration test/longx_web/model_discovery_browser_test.exs
+      - name: Provider discovery, health and shell environment browser regressions
+        run: mix test --include integration test/longx_web/model_discovery_browser_test.exs test/longx_web/shell_environment_browser_test.exs
       # the bwrap probe passes on a dev box, not inside a GitHub runner
       - run: mix test --exclude host_sandbox

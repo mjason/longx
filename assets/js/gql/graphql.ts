@@ -3958,6 +3958,11 @@ export type SetAgentSettingsMutationVariables = Exact<{
 
 export type SetAgentSettingsMutation = { setAgentSettings: { modelRetries: number, memoryFloorPercent: number, maxDepth: number, maxChildren: number, idleMinutes: number, extraPath: string, defaultExtraPath: string, commandSwapLimitMb: number, commandShell: string, commandOomPriority: number, commandMemoryLimitPercent: number, commandCgroupMode: string, childModel: string | null, childEffort: string | null } };
 
+export type RefreshShellEnvironmentMutationVariables = Exact<{ [key: string]: never; }>;
+
+
+export type RefreshShellEnvironmentMutation = { refreshShellEnvironment: { shell: string, refreshedAt: string } };
+
 export type CheckDependenciesMutationVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -5886,6 +5891,14 @@ export const SetAgentSettingsDocument = /*#__PURE__*/ new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetAgentSettingsMutation, SetAgentSettingsMutationVariables>;
+export const RefreshShellEnvironmentDocument = /*#__PURE__*/ new TypedDocumentString(`
+    mutation RefreshShellEnvironment {
+  refreshShellEnvironment {
+    shell
+    refreshedAt
+  }
+}
+    `) as unknown as TypedDocumentString<RefreshShellEnvironmentMutation, RefreshShellEnvironmentMutationVariables>;
 export const CheckDependenciesDocument = /*#__PURE__*/ new TypedDocumentString(`
     mutation CheckDependencies {
   checkDependencies {

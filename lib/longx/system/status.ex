@@ -110,6 +110,21 @@ defmodule Longx.System.Status do
       run fn _input, _ -> {:ok, Longx.Agent.Definition.Settings.for_settings_page()} end
     end
 
+    action :refresh_shell_environment, Types.ShellEnvironmentRefresh do
+      run fn _input, _ ->
+        case Longx.Agent.Tools.ShellEnv.refresh_for_settings() do
+          {:ok, result} ->
+            {:ok, result}
+
+          {:error, :snapshot_failed} ->
+            argument_error(
+              :command_shell,
+              "Could not read the selected shell's environment; the existing snapshot was not changed."
+            )
+        end
+      end
+    end
+
     action :command_guard_status, Types.CommandGuardStatus do
       argument :project_id, :uuid
 

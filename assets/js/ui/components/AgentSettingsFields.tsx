@@ -85,6 +85,7 @@ export function AgentSettingsFields({
   models,
   inherited,
   group = "all",
+  disabled = false,
 }: {
   idPrefix: string;
   value: AgentSettingsForm;
@@ -93,6 +94,7 @@ export function AgentSettingsFields({
   /** the values in force when a field is left empty (a project's page) */
   inherited?: Partial<Record<keyof AgentSettingsForm, number | string | null>>;
   group?: "all" | "collaboration" | "resources";
+  disabled?: boolean;
 }) {
   const global = useAgentSettings();
   const copy = useSettingsCopy();
@@ -105,13 +107,13 @@ export function AgentSettingsFields({
   const source = (key: keyof AgentSettingsForm) => inherited ? (
     <div className="flex items-center gap-2 text-xs">
       <span className="text-muted-foreground">{value[key] ? copy.overridden : copy.inherited}</span>
-      {value[key] ? <Button size="sm" variant="ghost" className="h-6 px-1 text-xs" onClick={() => set(key, "")}>{copy.restore}</Button> : null}
+      {value[key] ? <Button size="sm" variant="ghost" disabled={disabled} className="h-6 px-1 text-xs" onClick={() => set(key, "")}>{copy.restore}</Button> : null}
     </div>
   ) : null;
   const number = (key: "maxDepth" | "maxChildren" | "idleMinutes" | "modelRetries" | "commandOomPriority" | "memoryFloorPercent" | "commandMemoryLimitPercent" | "commandSwapLimitMb", label: string, hint?: string, min = 1, max?: number) => (
     <div className="flex flex-col gap-1.5">
       <Label htmlFor={`${idPrefix}-${key}`}>{label}</Label>
-      <Input id={`${idPrefix}-${key}`} type="number" min={min} max={max} inputMode="numeric" value={value[key]} placeholder={placeholder(key)} onChange={(e) => set(key, e.target.value)} className="w-40" />
+      <Input id={`${idPrefix}-${key}`} type="number" disabled={disabled} min={min} max={max} inputMode="numeric" value={value[key]} placeholder={placeholder(key)} onChange={(e) => set(key, e.target.value)} className="w-40" />
       {source(key)}
       {hint ? <span className="text-muted-foreground text-xs">{hint}</span> : null}
     </div>
@@ -124,7 +126,7 @@ export function AgentSettingsFields({
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`${idPrefix}-${key}`}>{label}</Label>
         <div className="flex flex-wrap gap-2">
-          <Select value={value[key] || NONE} onValueChange={(v) => onChange({ ...value, [key]: v === NONE ? "" : v, [effortKey]: "" })}>
+          <Select disabled={disabled} value={value[key] || NONE} onValueChange={(v) => onChange({ ...value, [key]: v === NONE ? "" : v, [effortKey]: "" })}>
             <SelectTrigger id={`${idPrefix}-${key}`} className="w-56" aria-label={label}>
               <SelectValue />
             </SelectTrigger>
@@ -136,7 +138,7 @@ export function AgentSettingsFields({
             </SelectContent>
           </Select>
           {levels.length > 0 ? (
-            <Select value={value[effortKey] || NONE} onValueChange={(v) => set(effortKey, v === NONE ? "" : v)}>
+            <Select disabled={disabled} value={value[effortKey] || NONE} onValueChange={(v) => set(effortKey, v === NONE ? "" : v)}>
               <SelectTrigger className="w-40" aria-label={t.levelFor(label)}>
                 <SelectValue />
               </SelectTrigger>
@@ -172,7 +174,7 @@ export function AgentSettingsFields({
       {group !== "collaboration" ? <>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`${idPrefix}-commandCgroupMode`}>{s.commandCgroupMode}</Label>
-        <Select value={value.commandCgroupMode || NONE} onValueChange={(v) => set("commandCgroupMode", v === NONE ? "" : v)}>
+        <Select disabled={disabled} value={value.commandCgroupMode || NONE} onValueChange={(v) => set("commandCgroupMode", v === NONE ? "" : v)}>
           <SelectTrigger id={`${idPrefix}-commandCgroupMode`} className="w-56" aria-label={s.commandCgroupMode}>
             <SelectValue />
           </SelectTrigger>

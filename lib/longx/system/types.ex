@@ -76,6 +76,20 @@ defmodule Longx.System.Types do
     def graphql_type(_), do: :knowledge_read
   end
 
+  defmodule ShellEnvironmentRefresh do
+    @moduledoc "Safe metadata only: shell environment values never leave the node."
+    use Ash.Type.NewType,
+      subtype_of: :map,
+      constraints: [
+        fields: [
+          shell: [type: :string, allow_nil?: false],
+          refreshed_at: [type: :utc_datetime_usec, allow_nil?: false]
+        ]
+      ]
+
+    def graphql_type(_), do: :shell_environment_refresh
+  end
+
   defmodule AgentSettings do
     @moduledoc "`Longx.System.Status.agent_settings` and other actions returning `@agent_settings_fields`"
     use Ash.Type.NewType,

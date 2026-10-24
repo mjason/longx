@@ -288,6 +288,11 @@ type CommandGuardStatus {
   activeTasks: Int!
 }
 
+type ShellEnvironmentRefresh {
+  shell: String!
+  refreshedAt: DateTime!
+}
+
 type AgentSettings {
   modelRetries: Int!
   memoryFloorPercent: Int!
@@ -4472,6 +4477,7 @@ type RootMutationType {
   knowledgeWrite(input: KnowledgeWriteInput!): Boolean!
   knowledgeDelete(input: KnowledgeDeleteInput!): Boolean!
   setAgentSettings(input: SetAgentSettingsInput): AgentSettings!
+  refreshShellEnvironment: ShellEnvironmentRefresh!
   checkDependencies: Dependency!
   setPublicUrl(input: SetPublicUrlInput!): SetPublicUrl!
   setFileRules(input: SetFileRulesInput): FileRules!

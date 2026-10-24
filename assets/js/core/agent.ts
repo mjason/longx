@@ -10,6 +10,7 @@ import {
   promoteLocal,
   publicUrl,
   setAgentSettings,
+  refreshShellEnvironment,
   setPublicUrl,
 } from "@/core/api";
 import type { SetAgentSettingsInput } from "@/gql/graphql";
@@ -85,6 +86,10 @@ function useAgentWrite<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
 export function useAgentSettingsActions() {
   return {
     save: useAgentWrite(async (input: SetAgentSettingsInput) => unwrap(await setAgentSettings({ input })) as AgentSettings),
+    // Refreshing the process snapshot does not change saved settings/drafts.
+    refreshShell: useMutation({
+      mutationFn: async () => unwrap(await refreshShellEnvironment()) as { shell: string; refreshedAt: string },
+    }),
   };
 }
 

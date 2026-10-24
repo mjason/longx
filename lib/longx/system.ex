@@ -38,6 +38,7 @@ defmodule Longx.System do
       action Longx.System.Status, :knowledge_write, :knowledge_write
       action Longx.System.Status, :knowledge_delete, :knowledge_delete
       action Longx.System.Status, :set_agent_settings, :set_agent_settings
+      action Longx.System.Status, :refresh_shell_environment, :refresh_shell_environment
       action Longx.System.Status, :check_dependencies, :check_dependencies
       action Longx.System.Status, :set_public_url, :set_public_url
       action Longx.System.Status, :set_file_rules, :set_file_rules
@@ -67,6 +68,7 @@ defmodule Longx.System do
       define :list_directory, action: :list_directory
       define :create_directory, action: :create_directory
       define :command_guard_status, action: :command_guard_status
+      define :refresh_shell_environment, action: :refresh_shell_environment
       define :recent_faults, action: :recent_faults
       define :clear_faults, action: :clear_faults
     end

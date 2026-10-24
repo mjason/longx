@@ -147,7 +147,9 @@ function SettingsForm({ group, initial, commandShell: initialShell, extraPath: i
   const copy = useSettingsCopy();
   const location = useLocation();
   const [saved, setSaved] = useState(false);
-  useSettingsDraft(!saved && (JSON.stringify(initial) !== JSON.stringify(form) || commandShell !== initialShell || extraPath !== initialExtraPath));
+  const busy = actions.save.isPending || actions.refreshShell.isPending;
+  const dirty = !saved && (JSON.stringify(initial) !== JSON.stringify(form) || commandShell !== initialShell || extraPath !== initialExtraPath);
+  useSettingsDraft(dirty);
   const changeForm = (next: AgentSettingsForm) => { setSaved(false); setForm(next); };
   const save = () => {
     const values = agentSettingsInput(form);
@@ -162,12 +164,12 @@ function SettingsForm({ group, initial, commandShell: initialShell, extraPath: i
   };
   return (
     <section className="space-y-4 rounded-lg border p-4" data-testid="agent-settings">
-      {group !== "environment" ? <AgentSettingsFields idPrefix="ak" value={form} onChange={changeForm} models={models} group={group} /> : null}
+      {group !== "environment" ? <AgentSettingsFields idPrefix="ak" value={form} onChange={changeForm} models={models} group={group} disabled={busy} /> : null}
       {group === "resources" ? <div><Link className="text-primary text-xs underline" to={location.pathname.startsWith("/p/") ? "?scope=global&section=diagnostics" : "/settings/diagnostics"}>{copy.diagnostics}</Link></div> : null}
       {group === "all" || group === "environment" ? <>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="ak-command-shell">{s.commandShell}</Label>
-        <Select value={commandShell} onValueChange={(value) => { setSaved(false); setCommandShell(value as typeof commandShell); }}>
+        <Select value={commandShell} disabled={busy} onValueChange={(value) => { setSaved(false); setCommandShell(value as typeof commandShell); }}>
           <SelectTrigger id="ak-command-shell" className="w-40" aria-label={s.commandShell}>
             <SelectValue />
           </SelectTrigger>
@@ -187,7 +189,7 @@ function SettingsForm({ group, initial, commandShell: initialShell, extraPath: i
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor="ak-extra-path">{s.extraPath}</Label>
-          <Button size="sm" variant="outline" onClick={() => { setSaved(false); setExtraPath(defaultExtraPath); }}>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => { setSaved(false); setExtraPath(defaultExtraPath); }}>
             {s.extraPathReset}
           </Button>
         </div>
@@ -195,14 +197,34 @@ function SettingsForm({ group, initial, commandShell: initialShell, extraPath: i
           id="ak-extra-path"
           aria-label={s.extraPath}
           value={extraPath}
+          disabled={busy}
           onChange={(e) => { setSaved(false); setExtraPath(e.target.value); }}
           rows={3}
           className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border px-3 py-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         />
         <span className="text-muted-foreground text-xs">{s.extraPathHint}</span>
       </div>
+      <div className="space-y-2 border-t pt-3" data-testid="shell-environment-refresh">
+        <p className="text-muted-foreground text-xs">{s.shellEnvironmentHint}</p>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={dirty || busy}
+          onClick={() => actions.refreshShell.mutate()}
+        >
+          {actions.refreshShell.isPending ? s.shellEnvironmentRefreshing : s.shellEnvironmentRefresh}
+        </Button>
+        {dirty ? <p className="text-muted-foreground text-xs">{s.shellEnvironmentSaveFirst}</p> : null}
+        {actions.refreshShell.isSuccess ? (
+          <p className="text-muted-foreground text-xs break-all" role="status">
+            {s.shellEnvironmentRefreshed(actions.refreshShell.data.shell, new Date(actions.refreshShell.data.refreshedAt).toLocaleString())}
+          </p>
+        ) : null}
+        {actions.refreshShell.isError ? <p className="text-destructive text-xs" role="alert">{s.shellEnvironmentFailed}</p> : null}
+      </div>
       </> : null}
-      <Button size="sm" onClick={save} disabled={actions.save.isPending}>{copy.saveGlobal}</Button>
+      <Button size="sm" onClick={save} disabled={busy}>{copy.saveGlobal}</Button>
     </section>
   );
 }

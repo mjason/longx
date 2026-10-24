@@ -12,6 +12,8 @@ import {
   updateProvider,
   setFileRules,
   setAgentSettings,
+  agentSettings,
+  refreshShellEnvironment,
   dependencies,
   checkDependencies,
   setPublicUrl,
@@ -57,7 +59,7 @@ import {
   tlsStatus,
   modelAliases,
 } from "@/core/api";
-import { browserIdle, dependencyReport, dependencyTool, model, tlsIdle, upgradeIdle } from "@/ui/test-mocks";
+import { agentSettingsData, browserIdle, dependencyReport, dependencyTool, model, tlsIdle, upgradeIdle } from "@/ui/test-mocks";
 import { page } from "@/core/upgrade";
 import { within } from "@testing-library/react";
 
@@ -1189,6 +1191,91 @@ describe("SettingsPage", () => {
         expect.objectContaining({ input: { commandShell: "bash", extraPath: "/data/obscura/0.2.2/x86_64-linux" } }),
       ),
     );
+  });
+
+  test("command environment: unsaved changes prevent refresh and success reports the captured shell", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings/connections");
+    const settings = await screen.findByTestId("agent-settings");
+    const refresh = within(settings).getByRole("button", { name: "刷新 shell 环境" });
+    expect(settings).toHaveTextContent("不改变已有任务、用户组或权限");
+    const path = within(settings).getByLabelText("额外 PATH 目录");
+    const initialPath = (path as HTMLTextAreaElement).value;
+    await user.type(path, "/tmp/new-tools");
+    expect(refresh).toBeDisabled();
+    expect(settings).toHaveTextContent("请先保存");
+    await user.clear(path);
+    if (initialPath) await user.type(path, initialPath);
+    expect(refresh).toBeEnabled();
+    await user.click(refresh);
+    await waitFor(() => expect(refreshShellEnvironment).toHaveBeenCalled());
+    expect(await within(settings).findByRole("status")).toHaveTextContent("/bin/zsh");
+    expect(within(settings).getByRole("status")).toHaveTextContent("后续命令生效");
+  });
+
+  test("command environment: saving locks edits, then refresh uses the saved shell and later edits stay dirty", async () => {
+    const user = userEvent.setup();
+    let finish!: (value: Awaited<ReturnType<typeof setAgentSettings>>) => void;
+    vi.mocked(setAgentSettings).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    renderAt("/settings/connections");
+    const settings = await screen.findByTestId("agent-settings");
+    await user.click(within(settings).getByLabelText("命令使用的 Shell"));
+    await user.click(await screen.findByRole("option", { name: "bash" }));
+    const path = within(settings).getByLabelText("额外 PATH 目录");
+    await user.clear(path);
+    await user.type(path, "/fixture-tools");
+    await user.click(within(settings).getByRole("button", { name: "保存全局默认" }));
+    await waitFor(() => expect(setAgentSettings).toHaveBeenCalledWith({
+      input: { commandShell: "bash", extraPath: "/fixture-tools" },
+    }));
+    expect(path).toBeDisabled();
+    expect(within(settings).getByLabelText("命令使用的 Shell")).toBeDisabled();
+    expect(within(settings).getByRole("button", { name: "恢复默认" })).toBeDisabled();
+    expect(within(settings).getByRole("button", { name: "刷新 shell 环境" })).toBeDisabled();
+    await user.type(path, "/unsaved-during-save");
+    expect(path).toHaveValue("/fixture-tools");
+    const saved = { ...agentSettingsData(), commandShell: "bash" as const, extraPath: "/fixture-tools" };
+    vi.mocked(agentSettings).mockResolvedValueOnce(ok(saved));
+    finish(ok(saved));
+    await waitFor(() => expect(screen.getByLabelText("额外 PATH 目录")).toBeEnabled());
+    const current = screen.getByTestId("agent-settings");
+    expect(within(current).getByLabelText("命令使用的 Shell")).toHaveTextContent("bash");
+    vi.mocked(refreshShellEnvironment).mockResolvedValueOnce(ok({ shell: "/bin/bash", refreshedAt: "2026-10-24T00:00:00Z" }));
+    await user.click(within(current).getByRole("button", { name: "刷新 shell 环境" }));
+    expect(await within(current).findByRole("status")).toHaveTextContent("/bin/bash");
+    await user.type(within(current).getByLabelText("额外 PATH 目录"), "/new-draft");
+    expect(within(current).getByRole("button", { name: "刷新 shell 环境" })).toBeDisabled();
+    expect(current).toHaveTextContent("请先保存");
+  });
+
+  test.each(["agent", "resources"])("agent settings: every editable field is locked during a deferred save (%s)", async (group) => {
+    const user = userEvent.setup();
+    let finish!: (value: Awaited<ReturnType<typeof setAgentSettings>>) => void;
+    vi.mocked(setAgentSettings).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    renderAt(`/settings/${group}`);
+    const settings = await screen.findByTestId("agent-settings");
+    await user.click(within(settings).getByRole("button", { name: "保存全局默认" }));
+    await waitFor(() => expect(setAgentSettings).toHaveBeenCalled());
+    for (const field of settings.querySelectorAll("input, select, textarea, button")) {
+      expect(field).toBeDisabled();
+    }
+    finish(ok(agentSettingsData()));
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存全局默认" })).toBeEnabled());
+  });
+
+  test("command environment: pending prevents duplicate refresh and failures can be retried", async () => {
+    const user = userEvent.setup();
+    let finish!: (value: never) => void;
+    vi.mocked(refreshShellEnvironment).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }) as never);
+    renderAt("/settings/connections");
+    const settings = await screen.findByTestId("agent-settings");
+    await user.click(within(settings).getByRole("button", { name: "刷新 shell 环境" }));
+    expect(within(settings).getByRole("button", { name: "正在刷新 shell 环境…" })).toBeDisabled();
+    expect(within(settings).getByRole("button", { name: "保存全局默认" })).toBeDisabled();
+    finish({ success: false, errors: [{ message: "snapshot failed" }] } as never);
+    expect(await within(settings).findByRole("alert")).toHaveTextContent("未更新现有环境快照");
+    await user.click(within(settings).getByRole("button", { name: "刷新 shell 环境" }));
+    expect(await within(settings).findByRole("status")).toHaveTextContent("/bin/zsh");
   });
 
   test("agent kernel: command cgroup mode is optional and its saved off mode is sent", async () => {

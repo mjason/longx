@@ -178,6 +178,8 @@ mutation KnowledgeDelete($input: KnowledgeDeleteInput!) { knowledgeDelete(input:
 
 mutation SetAgentSettings($input: SetAgentSettingsInput) { setAgentSettings(input: $input) { modelRetries memoryFloorPercent maxDepth maxChildren idleMinutes extraPath defaultExtraPath commandSwapLimitMb commandShell commandOomPriority commandMemoryLimitPercent commandCgroupMode childModel childEffort } }
 
+mutation RefreshShellEnvironment { refreshShellEnvironment { shell refreshedAt } }
+
 mutation CheckDependencies { checkDependencies { tools os missing installCommand checkedAt } }
 
 mutation SetPublicUrl($input: SetPublicUrlInput!) { setPublicUrl(input: $input) { url setting } }

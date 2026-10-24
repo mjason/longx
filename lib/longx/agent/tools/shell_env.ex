@@ -42,7 +42,16 @@ defmodule Longx.Agent.Tools.ShellEnv do
         apply_extra_path(env)
 
       _ ->
-        {:ok, env} = refresh(shell)
+        {:ok, env} =
+          locked(fn ->
+            # Another first-use command or an explicit refresh may have
+            # populated the snapshot while this caller waited.
+            case :persistent_term.get(@key, nil) do
+              {^shell, env} -> {:ok, env}
+              _ -> capture_with_fallback(shell)
+            end
+          end)
+
         apply_extra_path(env)
     end
   end
@@ -79,6 +88,35 @@ defmodule Longx.Agent.Tools.ShellEnv do
 
   @doc false
   def refresh(shell) do
+    locked(fn -> capture_with_fallback(shell) end)
+  end
+
+  @doc """
+  Explicitly refreshes the saved command shell for the settings page.
+  Failure leaves the old snapshot intact; only safe metadata is returned.
+  """
+  @spec refresh_for_settings() ::
+          {:ok, %{shell: Path.t(), refreshed_at: DateTime.t()}} | {:error, :snapshot_failed}
+  def refresh_for_settings do
+    selected = shell()
+
+    locked(fn ->
+      case snapshot(selected) do
+        {:ok, env} ->
+          :persistent_term.put(@key, {selected, env})
+          {:ok, %{shell: selected, refreshed_at: DateTime.utc_now()}}
+
+        {:error, _} ->
+          # Startup files may print credentials on stderr. Do not return their
+          # output, or the captured environment, over the settings API.
+          {:error, :snapshot_failed}
+      end
+    end)
+  end
+
+  defp locked(fun), do: :global.trans({{__MODULE__, :refresh}, self()}, fun, [node()])
+
+  defp capture_with_fallback(shell) do
     env =
       case snapshot(shell) do
         {:ok, env} ->
