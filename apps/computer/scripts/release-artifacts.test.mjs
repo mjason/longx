@@ -35,3 +35,12 @@ test("macOS packaging keeps app alongside dmg and repair dispatch preserves tag"
   assert.equal((workflow.match(/ref: \$\{\{ inputs\.release_tag \|\| github\.ref \}\}/g) || []).length, 2);
   assert(workflow.includes("tag_name: ${{ inputs.release_tag || github.ref_name }}"));
 });
+test("release workflows use supported explicit macOS architectures", () => {
+  const release = readFileSync(new URL("../../../.github/workflows/release.yml", import.meta.url), "utf8");
+  const computer = readFileSync(new URL("../../../.github/workflows/computer.yml", import.meta.url), "utf8");
+  assert.match(release, /arch: arm64\s+os: darwin\s+runner: macos-15\n/);
+  assert.match(computer, /runner: macos-15\s+target: darwin-aarch64/);
+  assert.match(computer, /runner: macos-15-intel\s+target: darwin-x86_64/);
+  assert.doesNotMatch(release + computer, /runner: macos-14/);
+  assert(release.includes("ref: ${{ inputs.release_tag || github.ref }}"));
+});
