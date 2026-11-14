@@ -30,7 +30,11 @@ defmodule Longx.Agent.Plugs.Jobs do
           "A short name for the job, used to read, wait for or stop it: letters, digits, . _ - (up to 64).",
           required: true
 
-    param :cmd, :string, "Shell command to run.", required: true
+    param :cmd,
+          :string,
+          "Foreground command to run. Longx owns its lifecycle and applies configured resource guards. Do not wrap ordinary jobs in systemd-run, nohup, setsid, daemon mode or another background service manager, even to add resource limits: stopping the launcher does not stop an external service. Only manage an external service when the person explicitly asks for that service.",
+          required: true
+
     param :workdir, :string, "Working directory. Defaults to the turn cwd."
 
     param :notify,
@@ -82,7 +86,7 @@ defmodule Longx.Agent.Plugs.Jobs do
   end
 
   tool :stop_job,
-       "Stops a job: its whole process tree ends. Stop a job this way, never with kill or pkill." do
+       "Requests a job stop and waits up to 10 seconds for exit and output closure. A timeout means exit is unconfirmed, not that the work stopped. Longx stops its owned process group/task cgroup, not services delegated to external managers such as systemd. Stop jobs this way, never with kill or pkill." do
     param :name, :string, "The job's name.", required: true
   end
 
@@ -328,16 +332,24 @@ defmodule Longx.Agent.Plugs.Jobs do
   def stop_job(%{"name" => name}, ctx) do
     case Longx.Jobs.stop(ctx.thread_id || "", name) do
       {:ok, %{status: "running"}} ->
-        {:ok, ~s|Job "#{name}" is still ending.|}
+        {:error, ~s|Job "#{name}" has not confirmed exit. Do not claim it stopped or restart it.|}
 
       {:ok, %{status: "stopped"}} ->
-        {:ok, ~s|Job "#{name}" stopped: its whole process tree ended.|}
+        {:ok,
+         ~s|Job "#{name}" stopped: its command exited and output closed. This does not confirm that any externally managed service stopped.|}
 
       {:ok, info} ->
         {:ok, ~s|Job "#{name}" had already ended: | <> state(info)}
 
       {:error, :unknown} ->
         unknown(name)
+
+      {:error, :stale_run} ->
+        {:error, ~s|Job "#{name}" changed runs; no replacement run was stopped. Check jobs.|}
+
+      {:error, reason} when reason in [:stop_timeout, :stop_unconfirmed] ->
+        {:error,
+         ~s|Job "#{name}": stop is unconfirmed (#{reason}). Do not claim it stopped, restart it, or repeatedly retry stop_job. Inspect job_output and the original command: exit or output closure may still be pending. A service delegated to systemd or another manager is outside this job's process tree; stopping its launcher does not stop the service. Do not guess a PID or service name.|}
     end
   end
 

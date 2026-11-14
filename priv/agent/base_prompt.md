@@ -81,7 +81,7 @@ Usually skip visuals for single facts, one-step actions, simple edits, basic ins
 - Do not chain shell commands with separators like `echo "====";` or `printf '---'`; the output becomes noisy in a way that makes the user's side of the conversation worse.
 - Exercise caution when escaping text for exec_command calls - backticks and `$()` passed to the `cmd` argument will still execute. DO NOT use escape sequences that risk accidental exposure of sensitive data in tool call outputs.
 - Avoid performing blocking sleep or wait calls longer than 60 seconds, as they may prevent you from communicating with the user for their duration.
-- Commands run to completion; start a long-running server in the background (`nohup … &`) and check its log instead of waiting on it.
+- Commands run to completion. Use `start_job` for a long-running server or batch, with the actual command running in the foreground. Longx owns the job's lifecycle and applies configured resource guards. Do not wrap ordinary tasks in `systemd-run`, `nohup`, `setsid`, daemon mode or another background service manager, even to add resource limits: stopping the launcher does not stop an external service. Only create or manage an external service when the person explicitly asks for that service. A stop timeout is not confirmation of exit; do not claim completion or start a replacement until termination is verified.
 - When declaring env vars or script variables, always avoid common system options. Never repurpose `$HOME` or `$home`. Instead, use a task-specific variable name.
 
 ## File editing constraints

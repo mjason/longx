@@ -388,6 +388,140 @@ defmodule Longx.Projects.ThreadsTest do
     Longx.Jobs.delete(kept.kernel_thread_id)
   end
 
+  test "unconfirmed job stops prevent archive, thread deletion and project deletion", %{
+    project: project,
+    dir: dir
+  } do
+    {:ok, thread} = Projects.start_thread(project, [])
+    id = thread.kernel_thread_id
+    {:ok, job} = Longx.Jobs.start(id, "unconfirmed", "true", cwd: dir, notify: false)
+    {:ok, ended} = Longx.Jobs.wait(id, job.name, 5_000)
+    assert_eventually_ok(fn -> GenServer.whereis(Longx.Jobs.Job.via(id, job.name)) == nil end)
+    job_dir = Path.join([Longx.Jobs.dir(), id, job.name])
+    # Simulate a job whose host disappeared without confirming the command end.
+    Longx.Jobs.save_info(job_dir, %{ended | status: "running"})
+
+    try do
+      assert {:error, %Ash.Error.Invalid{}} = Projects.archive_thread(thread)
+      assert thread!(thread.id).status != :archived
+      assert {:error, {:jobs_not_stopped, [_]}} = Projects.delete_thread(thread)
+      assert thread!(thread.id)
+      assert {:error, %Ash.Error.Invalid{}} = Projects.delete_project(project, confirm: true)
+      assert Projects.get_project_by_slug!(project.slug).id == project.id
+      assert thread!(thread.id)
+      assert File.exists?(Path.join(job_dir, "job.json"))
+    after
+      Longx.Jobs.save_info(job_dir, ended)
+      Longx.Jobs.delete(id)
+    end
+  end
+
+  test "project deletion preserves every thread's job history if either stop is unconfirmed", %{
+    project: project,
+    dir: dir
+  } do
+    records =
+      for _ <- 1..2 do
+        {:ok, thread} = Projects.start_thread(project, [])
+
+        {:ok, job} =
+          Longx.Jobs.start(thread.kernel_thread_id, "history", "true", cwd: dir, notify: false)
+
+        {:ok, ended} = Longx.Jobs.wait(thread.kernel_thread_id, job.name, 5_000)
+
+        assert_eventually_ok(fn ->
+          GenServer.whereis(Longx.Jobs.Job.via(thread.kernel_thread_id, job.name)) == nil
+        end)
+
+        {thread, ended, Path.join([Longx.Jobs.dir(), thread.kernel_thread_id, job.name])}
+      end
+
+    try do
+      # Exercise both assignments, regardless of the query's iteration order.
+      for {_thread, ended, job_dir} <- records do
+        Longx.Jobs.save_info(job_dir, %{ended | status: "running"})
+        assert {:error, %Ash.Error.Invalid{}} = Projects.delete_project(project, confirm: true)
+        assert Projects.get_project_by_slug!(project.slug).id == project.id
+
+        for {kept, _, kept_dir} <- records do
+          assert thread!(kept.id)
+          assert File.exists?(Path.join(kept_dir, "job.json"))
+        end
+
+        Longx.Jobs.save_info(job_dir, ended)
+      end
+    after
+      for {thread, ended, job_dir} <- records do
+        if File.dir?(job_dir), do: Longx.Jobs.save_info(job_dir, ended)
+        Longx.Jobs.delete(thread.kernel_thread_id)
+      end
+    end
+  end
+
+  test "a parent stop failure preserves its child's rows, transcript and job history", %{
+    project: project,
+    dir: dir
+  } do
+    {:ok, parent} = Projects.start_thread(project, [])
+
+    child =
+      Projects.create_thread!(%{
+        project_id: project.id,
+        kernel_thread_id: "native_" <> Ash.UUID.generate(),
+        cwd: dir,
+        parent_thread_id: parent.id,
+        agent_path: "/root/preserved"
+      })
+
+    turn =
+      Projects.create_turn!(%{
+        thread_id: child.id,
+        kernel_turn_id: "turn_" <> Ash.UUID.generate(),
+        user_text: "keep child history",
+        started_at: DateTime.utc_now()
+      })
+
+    Transcript.append!(%{
+      thread_id: child.kernel_thread_id,
+      turn_id: turn.kernel_turn_id,
+      seq: 1,
+      kind: :user_message,
+      input: %{"role" => "user", "content" => "keep child history"}
+    })
+
+    :ok = Transcript.flush()
+
+    {:ok, child_job} =
+      Longx.Jobs.start(child.kernel_thread_id, "history", "true", cwd: dir, notify: false)
+
+    {:ok, _} = Longx.Jobs.wait(child.kernel_thread_id, child_job.name, 5_000)
+
+    {:ok, job} =
+      Longx.Jobs.start(parent.kernel_thread_id, "unconfirmed", "true", cwd: dir, notify: false)
+
+    {:ok, ended} = Longx.Jobs.wait(parent.kernel_thread_id, job.name, 5_000)
+
+    assert_eventually_ok(fn ->
+      GenServer.whereis(Longx.Jobs.Job.via(parent.kernel_thread_id, job.name)) == nil
+    end)
+
+    job_dir = Path.join([Longx.Jobs.dir(), parent.kernel_thread_id, job.name])
+    Longx.Jobs.save_info(job_dir, %{ended | status: "running"})
+
+    try do
+      assert {:error, {:jobs_not_stopped, [_]}} = Projects.delete_thread(parent)
+      assert thread!(parent.id)
+      assert thread!(child.id)
+      assert turn!(turn.id)
+      assert [_] = Transcript.items!(child.kernel_thread_id)
+      assert [_] = Longx.Jobs.list(child.kernel_thread_id)
+    after
+      Longx.Jobs.save_info(job_dir, ended)
+      Longx.Jobs.delete(parent.kernel_thread_id)
+      Longx.Jobs.delete(child.kernel_thread_id)
+    end
+  end
+
   test "search_files/2 walks the tree: the query as a subsequence, shortest paths first", %{
     project: project,
     dir: dir

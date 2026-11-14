@@ -62,6 +62,17 @@ defmodule Longx.Jobs.PlugTest do
     assert exec.description =~ "start_job"
   end
 
+  test "jobs keep ordinary workloads in the foreground and distinguish external services" do
+    cmd = tool!("start_job").schema["properties"]["cmd"]["description"]
+    assert cmd =~ "Foreground command"
+    assert cmd =~ "systemd-run"
+    assert cmd =~ "even to add resource limits"
+    assert tool!("stop_job").description =~ "exit is unconfirmed"
+    prompt = File.read!("priv/agent/base_prompt.md")
+    assert prompt =~ "Only create or manage an external service"
+    refute prompt =~ "(`nohup … &`)"
+  end
+
   test "the shipped pipeline has the jobs right after the shell" do
     names = Enum.map(Longx.Agent.Pipelines.Default.plugs(), &elem(&1, 0))
     assert [Shell, Jobs | _] = Enum.drop_while(names, &(&1 != Shell))

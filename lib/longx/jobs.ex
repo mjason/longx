@@ -172,28 +172,58 @@ defmodule Longx.Jobs do
     :exit, _ -> wait(thread_id, name, 0)
   end
 
-  @doc "Stops a job: its whole process tree ends; the agent knows, it is not told."
-  @spec stop(String.t(), String.t()) :: {:ok, info} | {:error, :unknown}
+  @doc """
+  Requests a stop of the exact current run and waits at most 10 seconds for
+  confirmation. `:timeout` may shorten that wait. A timeout is not proof of exit.
+  External service managers are not descendants owned by this job.
+  """
+  @spec stop(String.t(), String.t(), keyword) ::
+          {:ok, info} | {:error, :unknown | :stale_run | :stop_timeout | :stop_unconfirmed}
   def stop(thread_id, name, opts \\ []) do
+    case info(thread_id, name) do
+      nil ->
+        {:error, :unknown}
+
+      info ->
+        run = Keyword.get(opts, :run) || info.run
+
+        if run != info.run do
+          {:error, :stale_run}
+        else
+          stop_run(thread_id, name, run, opts)
+        end
+    end
+  end
+
+  defp stop_run(thread_id, name, run, opts) do
+    timeout = opts |> Keyword.get(:timeout, 10_000) |> max(0) |> min(10_000)
+    deadline = System.monotonic_time(:millisecond) + timeout
+
     case whereis(thread_id, name) do
       pid when is_pid(pid) ->
         GenServer.call(
           pid,
-          {:stop, Keyword.get(opts, :run), Keyword.get(opts, :by, :agent)},
-          30_000
+          {:stop, run, Keyword.get(opts, :by, :agent), deadline},
+          timeout + 1_000
         )
 
       nil ->
-        case info(thread_id, name) do
-          nil ->
-            {:error, :unknown}
-
-          info ->
-            if opts[:run] && opts[:run] != info.run, do: {:error, :stale_run}, else: {:ok, info}
-        end
+        stopped_run(thread_id, name, run, :stop_unconfirmed)
     end
   catch
-    :exit, _ -> stop(thread_id, name, opts)
+    # Never retry by name: a timeout may leave the same server alive, and a
+    # disappearing server may have been replaced by a different run meanwhile.
+    :exit, {:timeout, _} -> stopped_run(thread_id, name, run, :stop_timeout)
+    :exit, _ -> stopped_run(thread_id, name, run, :stop_unconfirmed)
+  end
+
+  defp stopped_run(thread_id, name, run, error) do
+    case info(thread_id, name) do
+      %{run: ^run, status: status} = info when status != "running" -> {:ok, info}
+      %{run: ^run} -> {:error, error}
+      nil -> {:error, :unknown}
+      _replacement -> {:error, :stale_run}
+    end
   end
 
   @doc "Whether the agent has seen this run's end."
@@ -412,18 +442,24 @@ defmodule Longx.Jobs do
   end
 
   @doc "Stops every job of a thread (its archive)."
-  @spec stop_all(String.t()) :: :ok
-  def stop_all(thread_id) do
-    for %{name: name, status: "running"} <- list(thread_id), do: stop(thread_id, name)
-    :ok
+  @spec stop_all(String.t(), keyword) :: :ok | {:error, term}
+  def stop_all(thread_id, opts \\ []) do
+    errors =
+      for %{name: name, run: run, status: "running"} <- list(thread_id),
+          result = stop(thread_id, name, Keyword.put(opts, :run, run)),
+          not match?({:ok, %{status: status}} when status != "running", result),
+          do: %{name: name, run: run, result: result}
+
+    if errors == [], do: :ok, else: {:error, {:jobs_not_stopped, errors}}
   end
 
   @doc "Stops a thread's jobs and removes their directories (the thread deleted)."
-  @spec delete(String.t()) :: :ok
-  def delete(thread_id) do
-    stop_all(thread_id)
-    File.rm_rf!(Path.join(dir(), thread_id))
-    :ok
+  @spec delete(String.t(), keyword) :: :ok | {:error, term}
+  def delete(thread_id, opts \\ []) do
+    with :ok <- stop_all(thread_id, opts) do
+      File.rm_rf!(Path.join(dir(), thread_id))
+      :ok
+    end
   end
 
   @doc "A boot: every job the previous run left running is `lost` (its process died with Longx). Answers how many."

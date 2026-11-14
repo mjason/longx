@@ -1447,34 +1447,67 @@ defmodule Longx.Projects do
   @spec delete_thread(Thread.t()) :: :ok | {:error, term}
   def delete_thread(%Thread{} = thread) do
     thread = Ash.get!(Thread, thread.id)
+    rows = all_subagents!(thread.id) ++ [thread]
 
-    with :ok <- refuse_while_running(thread) do
+    with :ok <- refuse_while_running(thread),
+         :ok <- prepare_thread_deletion(rows) do
       # the sub-agents first — the closed (archived) ones too: their rows point
       # at this one, and their processes stop with the parent anyway
-      for child <- all_subagents!(thread.id), do: delete_rows(child)
-      delete_rows(thread)
-      broadcast_changed(thread.project_id)
-      :ok
+      Enum.reduce_while(rows, :ok, fn row, :ok ->
+        case delete_rows(row) do
+          :ok -> {:cont, :ok}
+          error -> {:halt, error}
+        end
+      end)
+      |> case do
+        :ok ->
+          broadcast_changed(thread.project_id)
+          :ok
+
+        error ->
+          error
+      end
     end
   end
 
-  # the thread's spec first (a wake-up arriving now finds no agent to bring
-  # back), then its agent, its transcript, its turns and its row; a turn event
-  # still on its way to the Tracker finds the agent gone and writes nothing
-  # (`record_external_turn`)
+  @doc false
+  def prepare_thread_deletion(threads) do
+    # Quiesce the whole range before deleting any history. Otherwise a late
+    # stop failure on a parent/sibling leaves a partially deleted conversation.
+    for thread <- threads do
+      Longx.Agent.Kernel.Specs.delete(thread.kernel_thread_id)
+      Longx.Agent.stop(thread.kernel_thread_id)
+    end
+
+    errors =
+      Enum.flat_map(threads, fn thread ->
+        case Longx.Jobs.stop_all(thread.kernel_thread_id) do
+          :ok ->
+            []
+
+          {:error, {:jobs_not_stopped, errors}} ->
+            Enum.map(errors, &Map.put(&1, :thread_id, thread.kernel_thread_id))
+        end
+      end)
+
+    if errors == [], do: :ok, else: {:error, {:jobs_not_stopped, errors}}
+  end
+
+  # The whole range was quiesced by prepare_thread_deletion/1 before reaching
+  # this destructive phase. Specs are gone, so late wake-ups cannot revive an
+  # agent while its transcript, turns and row are removed.
   defp delete_rows(%Thread{} = thread) do
-    Longx.Agent.Kernel.Specs.delete(thread.kernel_thread_id)
-    Longx.Agent.stop(thread.kernel_thread_id)
     # its background jobs stop, their logs go
-    Longx.Jobs.delete(thread.kernel_thread_id)
-    Longx.Agent.Transcript.delete!(thread.kernel_thread_id)
+    with :ok <- Longx.Jobs.delete(thread.kernel_thread_id) do
+      Longx.Agent.Transcript.delete!(thread.kernel_thread_id)
 
-    Ash.bulk_destroy!(Ash.Query.filter(Turn, thread_id == ^thread.id), :destroy, %{},
-      authorize?: false
-    )
+      Ash.bulk_destroy!(Ash.Query.filter(Turn, thread_id == ^thread.id), :destroy, %{},
+        authorize?: false
+      )
 
-    Ash.destroy!(thread)
-    :ok
+      Ash.destroy!(thread)
+      :ok
+    end
   end
 
   defp refuse_while_running(%Thread{status: :active}), do: {:error, :turn_in_progress}

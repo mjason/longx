@@ -350,18 +350,22 @@ defmodule Longx.Projects.Thread do
     end
 
     update :archive do
-      # the jobs are stopped after the write: not an atomic update
+      # Stopping waits on processes, outside the transaction. A failed stop
+      # must leave the thread unarchived so its work remains visible.
       require_atomic? false
       change set_attribute(:status, :archived)
 
-      # its background jobs stop with it (after the write: stopping waits on processes)
-      change after_transaction(fn
-               _changeset, {:ok, thread}, _context ->
-                 Longx.Jobs.stop_all(thread.kernel_thread_id)
-                 {:ok, thread}
+      change before_transaction(fn changeset, _context ->
+               case Longx.Jobs.stop_all(changeset.data.kernel_thread_id) do
+                 :ok ->
+                   changeset
 
-               _changeset, result, _context ->
-                 result
+                 {:error, reason} ->
+                   Ash.Changeset.add_error(changeset,
+                     message:
+                       "Background jobs have not confirmed exit; thread was not archived: #{inspect(reason)}"
+                   )
+               end
              end)
     end
 

@@ -357,6 +357,177 @@ defmodule Longx.JobsTest do
     assert Jobs.observed?(thread, "tree", hd(Jobs.list(thread)).run)
   end
 
+  @tag :unix
+  test "stop waiting for an inherited output pipe is bounded and eventual exit is still reported",
+       %{thread: thread, opts: opts} do
+    # Model an external holder without creating a real service or persistent
+    # orphan: it exits on its own in one second. No task cgroup, deliberately.
+    if System.find_executable("setsid") do
+      {:ok, job} =
+        Jobs.start(
+          thread,
+          "held-output",
+          "setsid sh -c 'echo ready; sleep 1' & sleep 30",
+          Keyword.put(opts, :guards, cgroup: :off)
+        )
+
+      assert eventually(fn ->
+               {:ok, %{text: text}} = Jobs.output(thread, job.name, observe: false)
+               text =~ "ready"
+             end)
+
+      began = System.monotonic_time(:millisecond)
+      assert {:error, :stop_timeout} = Jobs.stop(thread, job.name, timeout: 20)
+      assert System.monotonic_time(:millisecond) - began < 1_000
+      pid = GenServer.whereis(Longx.Jobs.Job.via(thread, job.name))
+      assert :sys.get_state(pid).waiters == []
+      refute Jobs.observed?(thread, job.name, job.run)
+      assert_receive {:job_exited, %{name: "held-output", status: "stopped"}}, 5_000
+      assert {:ok, %{status: "stopped"}} = Jobs.stop(thread, job.name, run: job.run)
+    end
+  end
+
+  test "a nonresponsive job stop times out once, without recursively enqueueing more stops",
+       %{thread: thread, opts: opts} do
+    {:ok, job} = Jobs.start(thread, "suspended", "sleep 30", opts)
+    pid = GenServer.whereis(Longx.Jobs.Job.via(thread, job.name))
+    :ok = :sys.suspend(pid)
+
+    try do
+      began = System.monotonic_time(:millisecond)
+      assert {:error, :stop_timeout} = Jobs.stop(thread, job.name, timeout: 10)
+      assert System.monotonic_time(:millisecond) - began < 2_000
+      {:messages, messages} = Process.info(pid, :messages)
+      assert Enum.count(messages, &match?({:"$gen_call", _, {:stop, _, _, _}}, &1)) == 1
+    after
+      :sys.resume(pid)
+    end
+
+    assert_receive {:job_exited, %{name: "suspended", status: "stopped"}}, 5_000
+    refute Jobs.observed?(thread, job.name, job.run)
+  end
+
+  test "delete preserves files while a job's stop is unconfirmed",
+       %{thread: thread, opts: opts, dir: dir} do
+    {:ok, job} = Jobs.start(thread, "delete-pending", "sleep 30", opts)
+    pid = GenServer.whereis(Longx.Jobs.Job.via(thread, job.name))
+    :ok = :sys.suspend(pid)
+
+    try do
+      assert {:error, {:jobs_not_stopped, [%{run: run, result: {:error, :stop_timeout}}]}} =
+               Jobs.delete(thread, timeout: 10)
+
+      assert run == job.run
+      assert File.exists?(Path.join([dir, thread, job.name, "job.json"]))
+    after
+      :sys.resume(pid)
+    end
+
+    assert_receive {:job_exited, %{name: "delete-pending", status: "stopped"}}, 5_000
+    assert :ok = Jobs.delete(thread)
+    refute File.exists?(Path.join(dir, thread))
+  end
+
+  test "person stop attribution and notification survive either order of repeated stops",
+       %{thread: thread, opts: opts} do
+    if System.find_executable("setsid") do
+      for {first, second} <- [{:person, :agent}, {:agent, :person}] do
+        name = "order-#{first}"
+
+        {:ok, job} =
+          Jobs.start(
+            thread,
+            name,
+            "setsid sh -c 'echo ready; sleep 1' & sleep 30",
+            Keyword.put(opts, :guards, cgroup: :off)
+          )
+
+        assert eventually(fn ->
+                 {:ok, %{text: text}} = Jobs.output(thread, name, observe: false)
+                 text =~ "ready"
+               end)
+
+        assert {:error, :stop_timeout} = Jobs.stop(thread, name, by: first, timeout: 20)
+        assert {:ok, %{status: "stopped"}} = Jobs.stop(thread, name, by: second)
+        assert_receive {:job_exited, %{name: ^name, reason: reason}}, 5_000
+        assert reason =~ "stopped by the person"
+        assert reason =~ "do not restart"
+        refute Jobs.observed?(thread, name, job.run)
+      end
+    end
+  end
+
+  test "a requested stop cannot override a failed cgroup cleanup", %{thread: thread, opts: opts} do
+    {:ok, job} = Jobs.start(thread, "stop-cleanup", "sleep 30", opts)
+    [{pid, _}] = Registry.lookup(Longx.Jobs.Registry, {thread, job.name})
+    %{shim: shim} = :sys.get_state(pid)
+    %{port: port} = :sys.get_state(shim)
+    report = %{"oom_kill" => 0, "populated" => true, "cleanup_error" => "cleanup denied"}
+    send(shim, {port, {:data, <<26, Jason.encode!(report)::binary>>}})
+    :sys.get_state(shim)
+
+    assert {:ok, %{status: "failed", reason: reason}} =
+             Jobs.stop(thread, job.name, by: :person)
+
+    assert reason =~ "stopped by the person" and reason =~ "cleanup denied"
+  end
+
+  test "a missing job process with a running record is not reported as stopped",
+       %{thread: thread, opts: opts, dir: dir} do
+    {:ok, job} = Jobs.start(thread, "missing-process", "true", opts)
+    {:ok, ended} = Jobs.wait(thread, job.name, 5_000)
+    assert eventually(fn -> GenServer.whereis(Longx.Jobs.Job.via(thread, job.name)) == nil end)
+    Jobs.save_info(Path.join([dir, thread, job.name]), %{ended | status: "running"})
+    assert {:error, :stop_unconfirmed} = Jobs.stop(thread, job.name)
+  end
+
+  test "a stop without an explicit run still pins its snapshot and rejects a replacement",
+       %{thread: thread, opts: opts} do
+    {:ok, job} = Jobs.start(thread, "snapshot", "sleep 30", opts)
+    pid = GenServer.whereis(Longx.Jobs.Job.via(thread, job.name))
+
+    # Model a replacement registered after the API read its disk snapshot.
+    :sys.replace_state(pid, fn state -> put_in(state.info.run, "replacement") end)
+
+    try do
+      assert {:error, :stale_run} = Jobs.stop(thread, job.name)
+      assert :sys.get_state(pid).ending == nil
+    after
+      :sys.replace_state(pid, fn state -> put_in(state.info.run, job.run) end)
+    end
+
+    assert {:ok, %{status: "stopped"}} = Jobs.stop(thread, job.name)
+  end
+
+  test "timeout fallback refuses a replacement record and never resends stop to it",
+       %{thread: thread, opts: opts, dir: dir} do
+    {:ok, job} = Jobs.start(thread, "fallback", "sleep 30", opts)
+    pid = GenServer.whereis(Longx.Jobs.Job.via(thread, job.name))
+    :ok = :sys.suspend(pid)
+
+    try do
+      caller = Task.async(fn -> Jobs.stop(thread, job.name, timeout: 20) end)
+
+      assert eventually(fn ->
+               {:messages, messages} = Process.info(pid, :messages)
+               Enum.any?(messages, &match?({:"$gen_call", _, {:stop, _, _, _}}, &1))
+             end)
+
+      # Barrier: the old request is queued before a replacement becomes visible.
+      :sys.replace_state(pid, fn state -> put_in(state.info.run, "replacement") end)
+      Jobs.save_info(Path.join([dir, thread, job.name]), %{job | run: "replacement"})
+      assert {:error, :stale_run} = Task.await(caller, 5_000)
+      :sys.resume(pid)
+      assert :sys.get_state(pid).ending == nil
+    after
+      :sys.resume(pid)
+      :sys.replace_state(pid, fn state -> put_in(state.info.run, job.run) end)
+      Jobs.save_info(Path.join([dir, thread, job.name]), job)
+    end
+
+    assert {:ok, %{status: "stopped"}} = Jobs.stop(thread, job.name)
+  end
+
   test "a job is in the command ledger: the settings page lists it and stops it; the end says who",
        %{thread: thread, opts: opts} do
     {:ok, _} = Jobs.start(thread, "long", "sleep 30", opts)

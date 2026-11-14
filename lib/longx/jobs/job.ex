@@ -112,6 +112,7 @@ defmodule Longx.Jobs.Job do
            resource_exit: nil,
            guard_warning: warning,
            waiters: [],
+           stop_deadlines: %{},
            person_stop?: false,
            began: System.monotonic_time(:millisecond)
          }}
@@ -165,7 +166,7 @@ defmodule Longx.Jobs.Job do
   end
 
   # the agent stops it: it knows how it ended
-  def handle_call({:stop, run, by}, from, state) do
+  def handle_call({:stop, run, by, deadline}, from, state) do
     if run && run != state.info.run do
       {:reply, {:error, :stale_run}, state}
     else
@@ -174,9 +175,32 @@ defmodule Longx.Jobs.Job do
           do: "stopped by the person; the work is incomplete — do not restart it unless asked",
           else: "stopped by the agent (stop_job)"
 
-      state = ending(state, "stopped", reason, observed: by != :person)
-      ref = make_ref()
-      {:noreply, %{state | waiters: [{ref, from} | state.waiters], person_stop?: by == :person}}
+      # Only the reply confirming completion observes the end. If this caller
+      # times out, the eventual completion must still wake the agent.
+      state = ending(state, "stopped", reason)
+
+      # A person's stop upgrades attribution without issuing another kill.
+      state =
+        if by == :person and elem(state.ending, 0) == "stopped",
+          do: %{state | ending: {"stopped", reason, false}},
+          else: state
+
+      state = %{state | person_stop?: state.person_stop? or by == :person}
+      remaining = deadline - System.monotonic_time(:millisecond)
+
+      if remaining <= 0 do
+        {:reply, {:error, :stop_timeout}, state}
+      else
+        ref = make_ref()
+        Process.send_after(self(), {:stop_timeout, ref}, remaining)
+
+        {:noreply,
+         %{
+           state
+           | waiters: [{ref, from} | state.waiters],
+             stop_deadlines: Map.put(state.stop_deadlines, ref, deadline)
+         }}
+      end
     end
   end
 
@@ -218,6 +242,19 @@ defmodule Longx.Jobs.Job do
       {{^ref, from}, rest} ->
         GenServer.reply(from, {:ok, state.info})
         {:noreply, %{state | waiters: rest}}
+
+      nil ->
+        {:noreply, state}
+    end
+  end
+
+  def handle_info({:stop_timeout, ref}, state) do
+    case List.keytake(state.waiters, ref, 0) do
+      {{^ref, from}, rest} ->
+        GenServer.reply(from, {:error, :stop_timeout})
+
+        {:noreply,
+         %{state | waiters: rest, stop_deadlines: Map.delete(state.stop_deadlines, ref)}}
 
       nil ->
         {:noreply, state}
@@ -271,13 +308,27 @@ defmodule Longx.Jobs.Job do
     # (its ledger entry goes with this process, a moment from now)
     Jobs.save_info(state.spec.dir, info)
 
-    # the waiters see the end: that is the agent seeing it
+    # A queued timeout message may not have run yet, or the caller may have
+    # died. Neither is evidence that somebody saw the completion reply.
+    now = System.monotonic_time(:millisecond)
+
+    {waiters, expired} =
+      Enum.split_with(state.waiters, fn {ref, {pid, _tag}} ->
+        Process.alive?(pid) and
+          case Map.fetch(state.stop_deadlines, ref) do
+            {:ok, deadline} -> deadline > now
+            :error -> true
+          end
+      end)
+
+    # the live waiters see the end: that is the agent seeing it
     info =
-      if state.waiters != [] and not state.person_stop?,
+      if waiters != [] and not state.person_stop?,
         do: mark_observed(state.spec.dir, info),
         else: info
 
-    for {_ref, from} <- state.waiters, do: GenServer.reply(from, {:ok, info})
+    for {_ref, from} <- waiters, do: GenServer.reply(from, {:ok, info})
+    for {_ref, from} <- expired, do: GenServer.reply(from, {:error, :stop_timeout})
 
     if info.notify and not info.observed do
       notice = %{

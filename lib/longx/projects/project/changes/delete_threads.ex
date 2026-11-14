@@ -20,11 +20,20 @@ defmodule Longx.Projects.Project.Changes.DeleteThreads do
     # would hold could never answer — every other writer then saw "database
     # is locked" for the whole wait
     |> Ash.Changeset.before_transaction(fn changeset ->
-      for %{kernel_thread_id: id} <- threads(project_id) do
-        Longx.Agent.Kernel.Specs.delete(id)
-        Longx.Agent.stop(id)
-        Longx.Jobs.delete(id)
-      end
+      threads = threads(project_id)
+
+      changeset =
+        case Longx.Projects.prepare_thread_deletion(threads) do
+          :ok ->
+            for %{kernel_thread_id: id} <- threads, do: :ok = Longx.Jobs.delete(id)
+            changeset
+
+          {:error, reason} ->
+            Ash.Changeset.add_error(changeset,
+              message:
+                "Background jobs have not confirmed exit; project was not deleted: #{inspect(reason)}"
+            )
+        end
 
       # The writer needs its own SQLite connection. Flush outside the
       # transaction too: a pending item from another project would wait for

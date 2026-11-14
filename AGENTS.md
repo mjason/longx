@@ -856,7 +856,14 @@ on first use.
     `Longx.Jobs.Job` (`:temporary` under `Longx.Jobs.Supervisor`, `Longx.Jobs.Registry`)
     holding the shim with `stdin: :null`, so it outlives the call, the turn and the agent's
     idle exit; it registers in the command ledger (`Pressure`: Settings → 进程 lists and
-    ends it, the memory watchdog guards it — `[job name] cmd`). Its directory
+    ends it, the memory watchdog guards it — `[job name] cmd`). **Run the payload in the
+    foreground**: do not wrap ordinary jobs in `systemd-run`, `nohup`, `setsid` or daemon
+    mode, even for resource limits; use the configured guards. External services are not
+    owned descendants of their launcher. `stop/3` binds the snapshot's run, sends once
+    and waits on an absolute deadline (10 s, plus 1 s call slack); a timeout is not proof
+    of exit. Expired callers do not observe completion or suppress its later notice.
+    `stop_all/2` propagates unconfirmed stops; deletion preserves job files and rows,
+    and archive refuses to hide the thread, until stops are confirmed. Its directory
     `<dir>/<thread>/<name>/` (`config :longx, Longx.Jobs, dir:` — dev `data/jobs`, prod
     `$LONGX_DATA_DIR/jobs`) keeps `job.json` and **a bounded log** (`Longx.Jobs.Log`: the
     first 64 KB, then two rolling 1 MB segments of the latest lines and a partial line, `\r`
