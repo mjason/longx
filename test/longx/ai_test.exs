@@ -551,8 +551,9 @@ defmodule Longx.AITest do
           Jason.encode!(%{
             "models" => [
               %{
-                "slug" => "gpt-5.6-sol",
-                "display_name" => "GPT-5.6-Sol",
+                "slug" => "gpt-6.2-sol",
+                "display_name" => "GPT-6.2-Sol",
+                "minimal_client_version" => "0.166.0",
                 "visibility" => "list",
                 "context_window" => 272_000,
                 "input_modalities" => ["text", "image"],
@@ -585,12 +586,12 @@ defmodule Longx.AITest do
       assert_receive {:upstream, headers, query}
       assert {"authorization", "Bearer tok"} in headers
       assert {"originator", "codex_cli_rs"} in headers
-      assert query =~ "client_version="
+      assert URI.decode_query(query)["client_version"] == "0.169.1"
 
       assert [
                %{
-                 id: "gpt-5.6-sol",
-                 name: "GPT-5.6-Sol",
+                 id: "gpt-6.2-sol",
+                 name: "GPT-6.2-Sol",
                  context_window: 272_000,
                  reasoning_levels: ["low", "high", "xhigh"],
                  reasoning_effort: "low",

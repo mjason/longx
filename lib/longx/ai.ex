@@ -528,7 +528,7 @@ defmodule Longx.AI do
   获取模型".
   """
   # the Codex CLI version the catalog is asked for (a newer client sees newer models)
-  @codex_client_version "0.160.0"
+  @codex_client_version "0.169.1"
 
   @spec discover_models(Provider.t()) ::
           {:ok, [discovered_model]}
